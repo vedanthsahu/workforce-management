@@ -300,14 +300,18 @@ def get_available_seats(
     tenant_id: str,
     floor_id: str,
     booking_date: date,
+    amenity_ids: list[int] | None = None,
 ) -> list[AvailableSeatResponse]:
     """List seats available on one floor for one booking date."""
+    normalized_amenity_ids = sorted(set(amenity_ids or []))
+
     try:
         seats = fetch_available_seats(
             conn,
             tenant_id=tenant_id,
             floor_id=floor_id,
             booking_date=booking_date,
+            amenity_ids=normalized_amenity_ids,
         )
     except psycopg2.Error as exc:
         raise HTTPException(

@@ -9,6 +9,30 @@ from typing import Any
 from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
 
+from backend.core.enums import LayoutStatus
+
+
+FLOOR_LAYOUT_SELECT_FIELDS = """
+    fl.id::text AS layout_id,
+    fl.tenant_id::text AS tenant_id,
+    fl.site_id::text AS site_id,
+    fl.building_id::text AS building_id,
+    fl.floor_id::text AS floor_id,
+    fl.layout_name,
+    fl.layout_file_url,
+    fl.file_storage_provider,
+    fl.layout_type,
+    fl.version_no,
+    fl.is_published,
+    fl.layout_metadata,
+    fl.uploaded_by_user_id::text AS uploaded_by_user_id,
+    fl.published_by_user_id::text AS published_by_user_id,
+    fl.published_at,
+    fl.status,
+    fl.created_at,
+    fl.updated_at
+"""
+
 
 def fetch_floor_for_layout(
     conn: PGConnection,
@@ -51,21 +75,37 @@ def archive_existing_published_layout(
     tenant_id: str,
     floor_id: str,
 ) -> None:
+    archive_existing_published_layouts(
+        conn,
+        tenant_id=tenant_id,
+        floor_id=floor_id,
+    )
+
+
+def archive_existing_published_layouts(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+) -> None:
     with conn.cursor() as cur:
         cur.execute(
             """
             UPDATE floor_layouts
             SET
-                status = 'ARCHIVED',
+                status = %s,
                 is_published = FALSE,
                 updated_at = NOW()
             WHERE tenant_id = %s
               AND floor_id = %s
-              AND status = 'PUBLISHED'
+              AND is_published = TRUE
+              AND status = %s
             """,
             (
+                LayoutStatus.ARCHIVED.value,
                 tenant_id,
                 floor_id,
+                LayoutStatus.PUBLISHED.value,
             ),
         )
 
@@ -95,6 +135,115 @@ def get_next_layout_version(
     current_version = int(row[0] or 0)
 
     return current_version + 1
+
+
+def fetch_floor_layouts_by_floor(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+) -> list[dict[str, Any]]:
+    """Fetch all layouts for a tenant-scoped floor, newest version first."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT
+                {FLOOR_LAYOUT_SELECT_FIELDS}
+            FROM floor_layouts AS fl
+            WHERE fl.tenant_id = %s
+              AND fl.floor_id = %s
+            ORDER BY fl.version_no DESC, fl.created_at DESC, fl.id DESC
+            """,
+            (
+                tenant_id,
+                floor_id,
+            ),
+        )
+
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def fetch_floor_layout_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+) -> dict[str, Any] | None:
+    """Fetch one layout by id within a tenant."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT
+                {FLOOR_LAYOUT_SELECT_FIELDS}
+            FROM floor_layouts AS fl
+            WHERE fl.tenant_id = %s
+              AND fl.id = %s
+            """,
+            (
+                tenant_id,
+                layout_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+
+def activate_floor_layout(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    published_by_user_id: str,
+) -> dict[str, Any] | None:
+    """Mark one tenant-scoped layout as the published floor layout."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            UPDATE floor_layouts
+            SET
+                status = %s,
+                is_published = TRUE,
+                published_at = NOW(),
+                published_by_user_id = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING
+                id::text AS layout_id,
+                tenant_id::text AS tenant_id,
+                site_id::text AS site_id,
+                building_id::text AS building_id,
+                floor_id::text AS floor_id,
+                layout_name,
+                layout_file_url,
+                file_storage_provider,
+                layout_type,
+                version_no,
+                is_published,
+                layout_metadata,
+                uploaded_by_user_id::text AS uploaded_by_user_id,
+                published_by_user_id::text AS published_by_user_id,
+                published_at,
+                status,
+                created_at,
+                updated_at
+            """,
+            (
+                LayoutStatus.PUBLISHED.value,
+                published_by_user_id,
+                tenant_id,
+                layout_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
 
 def insert_floor_layout(
     conn: PGConnection,

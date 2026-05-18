@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Annotated
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Path, UploadFile
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import require_permission
@@ -20,7 +20,9 @@ from backend.schemas.floor_layout import (
     FloorLayoutResponse,
 )
 from backend.services.floor_layout_service import (
+    activate_floor_layout,
     create_floor_layout,
+    get_floor_layouts_by_floor,
 )
 router = APIRouter(
     prefix="/admin/floor-layouts",
@@ -48,6 +50,52 @@ def create_floor_layout_route(
         current_user=current_user,
         payload=payload,
     )
+
+
+@router.get(
+    "/floors/{floor_id}",
+    response_model=list[FloorLayoutResponse],
+)
+def list_floor_layouts_route(
+    floor_id: Annotated[int, Path(gt=0)],
+
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_permission("layout:upload")),
+    ],
+
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> list[FloorLayoutResponse]:
+
+    return get_floor_layouts_by_floor(
+        conn,
+        current_user=current_user,
+        floor_id=str(floor_id),
+    )
+
+
+@router.post(
+    "/{layout_id}/activate",
+    response_model=FloorLayoutResponse,
+)
+def activate_floor_layout_route(
+    layout_id: Annotated[int, Path(gt=0)],
+
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_permission("layout:publish")),
+    ],
+
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> FloorLayoutResponse:
+
+    return activate_floor_layout(
+        conn,
+        current_user=current_user,
+        layout_id=str(layout_id),
+    )
+
+
 @router.post(
     "/upload-svg",
     response_model=UploadFloorLayoutResponse,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Annotated
 
 from fastapi import APIRouter, Depends, Path, Query
@@ -57,11 +58,15 @@ def floors_by_office(
 @router.get("/floors/{floor_id}/seats", response_model=list[SeatResponse])
 def seats_by_floor(
     floor_id: Annotated[int, Path(gt=0)],
+    booking_date: Annotated[date, Query()],
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
+    amenity_ids: Annotated[list[int] | None, Query()] = None,
 ) -> list[SeatResponse]:
     return get_seats_by_floor(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         floor_id=str(floor_id),
+        booking_date=booking_date,
+        amenity_ids=amenity_ids,
     )
