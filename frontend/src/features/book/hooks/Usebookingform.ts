@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   BookingFormState,
   BookingStep,
@@ -17,7 +18,7 @@ import {
   fetchBuildings,
   fetchFloors,
   fetchPreferences,
-  fetchSeatsWithAvailability, // ← was fetchSeats (removed), use this instead
+  fetchSeatsWithAvailability,
   fetchSites,
 } from "../services/Bookingform.service";
 
@@ -41,25 +42,79 @@ const DEFAULT_STATE: BookingFormState = {
   selectedSeatId: null,
 };
 
-export function useBookingForm() {
-  const [step, setStep] = useState<BookingStep>(1);
-  const [form, setForm] = useState<BookingFormState>(DEFAULT_STATE);
+// ── Helpers to read/write URL params ─────────────────────────────────────────
 
-  const [sites, setSites] = useState<Site[]>([]);
-  const [buildings, setBuildings] = useState<Building[]>([]);
-  const [floors, setFloors] = useState<Floor[]>([]);
-  const [seats, setSeats] = useState<Seat[]>([]);
+function buildUrl(step: number, form: BookingFormState): string {
+  const params = new URLSearchParams();
+  params.set("step", String(step));
+  if (form.siteId)         params.set("siteId",    form.siteId);
+  if (form.buildingId)     params.set("buildingId", form.buildingId);
+  if (form.floorId)        params.set("floorId",    form.floorId);
+  if (form.fromDate)       params.set("fromDate",   form.fromDate);
+  if (form.toDate)         params.set("toDate",     form.toDate);
+  if (form.selectedSeatId) params.set("seatId",     form.selectedSeatId);
+  // preferences stored in sessionStorage (too long for URL)
+  return `/book?${params.toString()}`;
+}
+
+export function useBookingForm() {
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+
+  // ── Read initial state from URL ──────────────────────────────────────────
+  const stepFromUrl = parseInt(searchParams.get("step") ?? "1") as BookingStep;
+
+  const [form, setForm] = useState<BookingFormState>({
+    siteId:         searchParams.get("siteId")     ?? "",
+    buildingId:     searchParams.get("buildingId") ?? "",
+    floorId:        searchParams.get("floorId")    ?? "",
+    fromDate:       searchParams.get("fromDate")   ?? todayIso(),
+    toDate:         searchParams.get("toDate")     ?? plusDaysIso(2),
+    selectedSeatId: searchParams.get("seatId")     ?? null,
+    preferences:    [], // restored from sessionStorage below
+  });
+
+  const [step, setStepState] = useState<BookingStep>(stepFromUrl);
+
+  const [sites, setSites]                               = useState<Site[]>([]);
+  const [buildings, setBuildings]                       = useState<Building[]>([]);
+  const [floors, setFloors]                             = useState<Floor[]>([]);
+  const [seats, setSeats]                               = useState<Seat[]>([]);
   const [availablePreferences, setAvailablePreferences] = useState<Preference[]>([]);
 
-  const [loadingSites, setLoadingSites] = useState(false);
-  const [loadingBuildings, setLoadingBuildings] = useState(false);
-  const [loadingFloors, setLoadingFloors] = useState(false);
-  const [loadingSeats, setLoadingSeats] = useState(false);
+  const [loadingSites,       setLoadingSites]       = useState(false);
+  const [loadingBuildings,   setLoadingBuildings]   = useState(false);
+  const [loadingFloors,      setLoadingFloors]      = useState(false);
+  const [loadingSeats,       setLoadingSeats]       = useState(false);
   const [loadingPreferences, setLoadingPreferences] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting,         setSubmitting]         = useState(false);
 
-  const [error, setError] = useState<string | null>(null);
+  const [error,        setError]        = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<CreateBookingResponse | null>(null);
+
+  // ── Restore preferences from sessionStorage (client only) ───────────────
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("bookingPreferences");
+      if (saved) {
+        const prefs = JSON.parse(saved) as string[];
+        setForm((f) => ({ ...f, preferences: prefs }));
+      }
+    } catch {}
+  }, []);
+
+  // ── Persist preferences to sessionStorage whenever they change ───────────
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("bookingPreferences", JSON.stringify(form.preferences));
+    } catch {}
+  }, [form.preferences]);
+
+  // ── Navigate to new URL whenever step or key form fields change ──────────
+  const navigateTo = useCallback((nextStep: BookingStep, nextForm: BookingFormState) => {
+    setStepState(nextStep);
+    router.push(buildUrl(nextStep, nextForm));
+  }, [router]);
 
   // ── Load sites on mount ──────────────────────────────────────────────────
   useEffect(() => {
@@ -81,11 +136,7 @@ export function useBookingForm() {
 
   // ── Load buildings when siteId changes ──────────────────────────────────
   useEffect(() => {
-    if (!form.siteId) {
-      setBuildings([]);
-      setFloors([]);
-      return;
-    }
+    if (!form.siteId) { setBuildings([]); setFloors([]); return; }
     setBuildings([]);
     setFloors([]);
     setLoadingBuildings(true);
@@ -97,10 +148,7 @@ export function useBookingForm() {
 
   // ── Load floors when buildingId changes ─────────────────────────────────
   useEffect(() => {
-    if (!form.buildingId) {
-      setFloors([]);
-      return;
-    }
+    if (!form.buildingId) { setFloors([]); return; }
     setFloors([]);
     setLoadingFloors(true);
     fetchFloors(form.buildingId)
@@ -109,29 +157,51 @@ export function useBookingForm() {
       .finally(() => setLoadingFloors(false));
   }, [form.buildingId]);
 
+  // ── Re-fetch seats when landing on step 2 (e.g. after refresh) ──────────
+  useEffect(() => {
+    if (
+      step === 2 &&
+      seats.length === 0 &&
+      form.floorId &&
+      form.fromDate &&
+      form.toDate
+    ) {
+      setLoadingSeats(true);
+      fetchSeatsWithAvailability({
+        floorId:     form.floorId,
+        fromDate:    form.fromDate,
+        toDate:      form.toDate,
+        preferences: form.preferences,
+      })
+        .then(setSeats)
+        .catch((e) => setError(e.message))
+        .finally(() => setLoadingSeats(false));
+    }
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Field setters ────────────────────────────────────────────────────────
 
   const setSiteId = (v: string | null) =>
     setForm((f) => ({
       ...f,
-      siteId: v ?? "",
-      buildingId: "",
-      floorId: "",
+      siteId:         v ?? "",
+      buildingId:     "",
+      floorId:        "",
       selectedSeatId: null,
     }));
 
   const setBuildingId = (v: string | null) =>
     setForm((f) => ({
       ...f,
-      buildingId: v ?? "",
-      floorId: "",
+      buildingId:     v ?? "",
+      floorId:        "",
       selectedSeatId: null,
     }));
 
   const setFloorId = (v: string | null) =>
     setForm((f) => ({
       ...f,
-      floorId: v ?? "",
+      floorId:        v ?? "",
       selectedSeatId: null,
     }));
 
@@ -156,10 +226,7 @@ export function useBookingForm() {
   const clearAll = () =>
     setForm((f) => ({ ...f, preferences: [] }));
 
-  // ── Step 1 → Step 2: load seats ──────────────────────────────────────────
-  // Uses fetchSeatsWithAvailability — /bookings/available is the source of
-  // truth. Seats absent from that response are shown as "booked" in the UI.
-
+  // ── Step 1 → Step 2 ──────────────────────────────────────────────────────
   const findAvailableSeats = useCallback(async () => {
     if (!form.floorId || !form.fromDate || !form.toDate) return;
 
@@ -168,117 +235,96 @@ export function useBookingForm() {
 
     try {
       const data = await fetchSeatsWithAvailability({
-        floorId: form.floorId,
-        fromDate: form.fromDate,
-        toDate: form.toDate,
+        floorId:     form.floorId,
+        fromDate:    form.fromDate,
+        toDate:      form.toDate,
         preferences: form.preferences,
       });
       setSeats(data);
-      setStep(2);
+      navigateTo(2, form);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load seats");
     } finally {
       setLoadingSeats(false);
     }
-  }, [form]);
+  }, [form, navigateTo]);
 
   // ── Step 2: select seat ──────────────────────────────────────────────────
-
-  // const selectSeat = (seatId: string) =>
-  //   setForm((f) => ({ ...f, selectedSeatId: seatId }));
   const selectSeat = (seatId: string | null) => {
-  setForm((f) => ({ ...f, selectedSeatId: seatId }));
-};
+    setForm((f) => ({ ...f, selectedSeatId: seatId }));
+  };
 
+  // ── Step 2 → Step 3 ──────────────────────────────────────────────────────
   const goToReview = () => {
     if (!form.selectedSeatId) return;
-    setStep(3);
+    navigateTo(3, form);
   };
 
   // ── Step 3: confirm booking ──────────────────────────────────────────────
-
-  // const confirmBooking = useCallback(async () => {
-  //   if (!form.selectedSeatId) return;
-
-  //   setSubmitting(true);
-  //   setError(null);
-
-  //   try {
-  //     const result = await createBooking({
-  //       siteId: form.siteId,
-  //       buildingId: form.buildingId,
-  //       floorId: form.floorId,
-  //       seatId: form.selectedSeatId,
-  //       fromDate: form.fromDate,
-  //       toDate: form.toDate,
-  //       preferences: form.preferences,
-  //     });
-  //     setConfirmation(result);
-  //   } catch (e: unknown) {
-  //     setError(
-  //       e instanceof Error ? e.message : "Booking failed. Please try again."
-  //     );
-  //   } finally {
-  //     setSubmitting(false);
-  //   }
-  // }, [form]);
-
   const confirmBooking = useCallback(async () => {
-  if (!form.selectedSeatId) return;
+    if (!form.selectedSeatId) return;
 
-  setSubmitting(true);
-  setError(null);
+    setSubmitting(true);
+    setError(null);
 
-  try {
-    const result = await createBooking({
-      site_id:      Number(form.siteId),
-      building_id:  Number(form.buildingId),
-      floor_id:     Number(form.floorId),
-      seat_id:      Number(form.selectedSeatId),
-      booking_date: form.fromDate,   // "YYYY-MM-DD" string, backend expects `date`
-    });
-    setConfirmation(result);
-    setStep(3); // or however you signal success
-  // } catch (e: unknown) {
-  //   setError(
-  //     e instanceof Error ? e.message : "Booking failed. Please try again."
-  //   );
-  } catch (err: any) {
-  const status = err?.response?.status;
-  if (status === 409) {
-    setError("You already have a booking for this seat on the selected date. Please choose a different seat or date.");
-  } else if (status === 400) {
-    setError("Invalid booking details. Please go back and check your selection.");
-  } else if (status === 403) {
-    setError("You don't have permission to book this seat.");
-  } else if (status === 404) {
-    setError("The selected seat is no longer available. Please go back and choose another.");
-  } else {
-    setError(err?.response?.data?.message ?? err?.message ?? "Failed to confirm booking. Please try again.");
-  }
+    try {
+      const result = await createBooking({
+        site_id:      Number(form.siteId),
+        building_id:  Number(form.buildingId),
+        floor_id:     Number(form.floorId),
+        seat_id:      Number(form.selectedSeatId),
+        booking_date: form.fromDate,
+      });
 
-  } finally {
-    setSubmitting(false);
-  }
-}, [form]);
+      // ✅ FIX: Set confirmation state directly — do NOT navigate away.
+      // The confirmation UI is shown via the `confirmation` state flag in
+      // BookASeatPage, so we don't need a route change here.
+      // We also explicitly set step to 3 so the step indicator stays correct.
+      setConfirmation(result);
+      setStepState(3); // keep step in sync (already 3, but be explicit)
+
+      // Clear preferences from sessionStorage after successful booking
+      try { sessionStorage.removeItem("bookingPreferences"); } catch {}
+
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 409) {
+        setError("You already have a booking for this seat on the selected date. Please choose a different seat or date.");
+      } else if (status === 400) {
+        setError("Invalid booking details. Please go back and check your selection.");
+      } else if (status === 403) {
+        setError("You don't have permission to book this seat.");
+      } else if (status === 404) {
+        setError("The selected seat is no longer available. Please go back and choose another.");
+      } else {
+        setError(err?.response?.data?.message ?? err?.message ?? "Failed to confirm booking. Please try again.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }, [form]);
 
   // ── Navigation helpers ───────────────────────────────────────────────────
+  const goBack = () => {
+    const prevStep = (step > 1 ? step - 1 : 1) as BookingStep;
+    navigateTo(prevStep, form);
+  };
 
-  const goBack = () =>
-    setStep((s) => (s > 1 ? ((s - 1) as BookingStep) : s));
-
+  // ✅ FIX: resetForm now explicitly calls setStepState(1) so the step
+  // resets in memory even though useState() only reads its initialiser once.
   const resetForm = () => {
+    try { sessionStorage.removeItem("bookingPreferences"); } catch {}
     setForm(DEFAULT_STATE);
+    setStepState(1);      // ← THE FIX: force step back to 1 in React state
     setBuildings([]);
     setFloors([]);
     setSeats([]);
     setConfirmation(null);
     setError(null);
-    setStep(1);
+    router.push("/book"); // clean URL
   };
 
   // ── Derived ──────────────────────────────────────────────────────────────
-
   const selectedSite     = sites.find((s) => s.id === form.siteId);
   const selectedBuilding = buildings.find((b) => b.id === form.buildingId);
   const selectedFloor    = floors.find((f) => f.id === form.floorId);

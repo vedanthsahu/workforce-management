@@ -50,6 +50,28 @@ export interface ApiTeamGroup {
   members: ApiTeamMember[];
 }
 
+// ─── New: /dashboard/me response shape (matches DashboardMeResponse schema) ──
+
+export interface ApiFavouriteSeat {
+  seat_id: string;
+  seat_code?: string | null;
+  floor_id?: string | null;
+  floor_name?: string | null;
+  building_id?: string | null;
+  building_name?: string | null;
+  site_id?: string | null;
+  site_name?: string | null;
+}
+
+export interface ApiDashboardMe {
+  favorite_seat: ApiFavouriteSeat | null;
+  days_in_office_total: number;
+  days_in_office_current_month: number;
+  days_in_office_current_year: number;
+  team_rank_current_year: number | null;
+  team_member_count: number;
+}
+
 // ─── Frontend display types ───────────────────────────────────────────────────
 
 export interface Booking {
@@ -92,24 +114,13 @@ export interface FavouriteSeat {
   floor: string;
 }
 
-// export interface DashboardStats {
-//   daysInMonth: number;
-//   trend: number;
-//   teamInOffice: number;
-//   teamRemoteCount: number;
-//   nextSeat: string;
-//   nextSeatFloor: string;
-// }
-
 export interface DashboardStats {
   daysInMonth: number;
   trend: number;
   teamInOffice: number;
   teamRemoteCount: number;
-  // removed: nextSeat, nextSeatFloor
- officeVisitsThisYear: number;
+  officeVisitsThisYear: number;
   teamRank: number;
-
 }
 
 export interface WeekDay {
@@ -120,28 +131,12 @@ export interface WeekDay {
   hasDot: boolean;
 }
 
-// ─── Hero booking info ────────────────────────────────────────────────────────
-
 export interface TodayBookingInfo {
   hasTodayBooking: boolean;
   seatCode: string | null;
   floor: string | null;
   bookingId: string | null;
 }
-
-// export interface DashboardData {
-//   user: User;
-//   stats: DashboardStats;
-//   weekDays: WeekDay[];
-//   upcomingBookings: Booking[];
-//   teamInOfficeToday: TeamMember[];
-//   announcements: Announcement[];
-//   favouriteSeat: FavouriteSeat;
-//   teamOnlineCount: number;
-//   teamOfflineCount: number;
-//   nextBookingDate: string;
-//   todayBooking: TodayBookingInfo;
-// }
 
 export interface DashboardData {
   user: User;
@@ -150,11 +145,10 @@ export interface DashboardData {
   upcomingBookings: Booking[];
   teamInOfficeToday: TeamMember[];
   announcements: Announcement[];
-  favouriteSeat: FavouriteSeat | null;   // ← now nullable, from API
+  favouriteSeat: FavouriteSeat | null;
   teamOnlineCount: number;
   teamOfflineCount: number;
   nextBookingDate: string;
   todayBooking: TodayBookingInfo;
-  daysInOffice: number;                  // ← new, from /auth/me
+  daysInOffice: number;
 }
-

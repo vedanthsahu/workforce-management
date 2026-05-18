@@ -44,19 +44,19 @@ const PALETTES: Record<string, {
     opacity: "1",
   },
   booked: {
-  body: "#fca5a5", bodyStroke: "#ef4444",
-  armrest: "#f87171",
-  back: "#dc2626", backStroke: "#b91c1c",
-  curve: "#ef4444", arc: "#fca5a5",
-  opacity: "0.85",
-},
-unavailable: {
-  body: "#fca5a5", bodyStroke: "#ef4444",
-  armrest: "#f87171",
-  back: "#dc2626", backStroke: "#b91c1c",
-  curve: "#ef4444", arc: "#fca5a5",
-  opacity: "0.85",
-},
+    body: "#fca5a5", bodyStroke: "#ef4444",
+    armrest: "#f87171",
+    back: "#dc2626", backStroke: "#b91c1c",
+    curve: "#ef4444", arc: "#fca5a5",
+    opacity: "0.85",
+  },
+  unavailable: {
+    body: "#fca5a5", bodyStroke: "#ef4444",
+    armrest: "#f87171",
+    back: "#dc2626", backStroke: "#b91c1c",
+    curve: "#ef4444", arc: "#fca5a5",
+    opacity: "0.85",
+  },
   yours: {
     body: "#d1fae5", bodyStroke: "#10b981",
     armrest: "#6ee7b7",
@@ -71,20 +71,13 @@ unavailable: {
     curve: "#818cf8", arc: "#a5b4fc",
     opacity: "1",
   },
-//   unloaded: {
-//     body: "#C8C8C8", bodyStroke: "#888888",
-//     armrest: "#B0B0B0",
-//     back: "#616161", backStroke: "#424242",
-//     curve: "#707070", arc: "#A0A0A0",
-//     opacity: "0.35",
-//   },
-unloaded: {
-  body: "#fca5a5", bodyStroke: "#ef4444",
-  armrest: "#f87171",
-  back: "#dc2626", backStroke: "#b91c1c",
-  curve: "#ef4444", arc: "#fca5a5",
-  opacity: "0.85",
-},
+  unloaded: {
+    body: "#fca5a5", bodyStroke: "#ef4444",
+    armrest: "#f87171",
+    back: "#dc2626", backStroke: "#b91c1c",
+    curve: "#ef4444", arc: "#fca5a5",
+    opacity: "0.85",
+  },
 };
 
 // ─── Recolor one seat block inside the raw SVG string ────────────────────────
@@ -145,8 +138,6 @@ function buildColoredSvg(
       key = "unloaded";
     } else if (seat.id === selectedSeatId) {
       key = "selected";
-    } else if (seat.matchesPreferences && seat.status === "available") {
-      key = "preference";
     } else {
       key = seat.status;
     }
@@ -168,14 +159,6 @@ function getSvgIdFromClick(target: EventTarget | null): string | null {
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
-// interface SvgFloorMapPageProps {
-//   seats: SeatWithSvgId[];
-//   selectedSeatId: string | null;
-//   // ── CHANGED: accepts null to support deselect ──────────────────────────
-//   onSeatSelect: (seatId: string | null) => void;
-//   loading?: boolean;
-// }
-
 interface SvgFloorMapPageProps {
   seats: SeatWithSvgId[];
   selectedSeatId: string | null;
@@ -202,14 +185,19 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
   const panStart     = useRef({ x: 0, y: 0 });
   const mouseDownPos = useRef({ x: 0, y: 0 });
   const didDrag      = useRef(false);
+  const fitDoneRef   = useRef(false); // track if first fit has happened
 
   const [rawSvg,      setRawSvg]      = useState<string | null>(null);
   const [svgError,    setSvgError]    = useState(false);
   const [zoomDisplay, setZoomDisplay] = useState(100);
+  const [mapReady,    setMapReady]    = useState(false); // controls visibility
 
-  const coloredSvg = rawSvg
-    ? buildColoredSvg(rawSvg, seats, selectedSeatId)
-    : null;
+  // const coloredSvg = rawSvg
+  //   ? buildColoredSvg(rawSvg, seats, selectedSeatId)
+  //   : null;
+  const coloredSvg = rawSvg && !loading && seats.length > 0
+  ? buildColoredSvg(rawSvg, seats, selectedSeatId)
+  : null;
 
   // ── Fetch raw SVG once ────────────────────────────────────────────────────
   useEffect(() => {
@@ -234,6 +222,7 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
     const { width: wW, height: wH } = wrapper.getBoundingClientRect();
+    if (wW === 0 || wH === 0) return; // not ready yet
     const scale = Math.min(wW / SVG_W, wH / SVG_H);
     scaleRef.current     = scale;
     translateRef.current = {
@@ -244,9 +233,94 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     setZoomDisplay(Math.round(scale * 100));
   }, [applyTransform]);
 
+  // ── ResizeObserver: fitView when wrapper has real dimensions ─────────────
+  // This is the only place fitView is called — fires when wrapper is painted
+  // and also handles sidebar open/close resizes automatically.
+  // useEffect(() => {
+  //   const wrapper = wrapperRef.current;
+  //   if (!wrapper || !rawSvg || loading) return;
+
+  //   const observer = new ResizeObserver((entries) => {
+  //     for (const entry of entries) {
+  //       const { width, height } = entry.contentRect;
+  //       if (width > 0 && height > 0) {
+  //         fitView();
+  //         // On first successful fit, show the map
+  //         if (!fitDoneRef.current) {
+  //           fitDoneRef.current = true;
+  //           setMapReady(true);
+  //         }
+  //       }
+  //     }
+  //   });
+
+  //   observer.observe(wrapper);
+  //   return () => observer.disconnect();
+  // }, [rawSvg, loading, fitView]);
+
+// useEffect(() => {
+//   const wrapper = wrapperRef.current;
+//   if (!wrapper || !rawSvg) return;  // ← removed loading check
+
+//   const observer = new ResizeObserver((entries) => {
+//     for (const entry of entries) {
+//       const { width, height } = entry.contentRect;
+//       if (width > 0 && height > 0) {
+//         fitView();
+//         // Only reveal map when fitView is done AND seats are loaded
+//         if (!fitDoneRef.current && !loading) {
+//           fitDoneRef.current = true;
+//           setMapReady(true);
+//         }
+//       }
+//     }
+//   });
+
+//   observer.observe(wrapper);
+//   return () => observer.disconnect();
+// }, [rawSvg, loading, fitView]);
+
+// ── ResizeObserver: fitView when wrapper has real dimensions ─────────────
+useEffect(() => {
+  const wrapper = wrapperRef.current;
+  if (!wrapper || !rawSvg) return;
+
+  const observer = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) {
+        fitView();
+      }
+    }
+  });
+
+  observer.observe(wrapper);
+  return () => observer.disconnect();
+}, [rawSvg, fitView]); // ← no loading dependency — never reconnects
+
+// ── Reveal map only when BOTH fitView has fired AND seats are done ────────
+useEffect(() => {
+  if (!rawSvg || loading) {
+    setMapReady(false);
+    fitDoneRef.current = false;
+    return;
+  }
+  // rawSvg exists and loading is false — wait one frame for fitView to fire
+  const id = requestAnimationFrame(() => {
+    fitView();
+    fitDoneRef.current = true;
+    setMapReady(true);
+  });
+  return () => cancelAnimationFrame(id);
+}, [rawSvg, loading, fitView]); // ← this controls reveal, not the observer
+
+  // ── Reset mapReady when loading starts (e.g. date change) ────────────────
   useEffect(() => {
-    if (rawSvg) fitView();
-  }, [rawSvg, fitView]);
+    if (loading) {
+      setMapReady(false);
+      fitDoneRef.current = false;
+    }
+  }, [loading]);
 
   // ── Zoom step ─────────────────────────────────────────────────────────────
   const zoomStep = useCallback((factor: number) => {
@@ -332,10 +406,8 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     const seat = seats.find((s) => s.svgId === svgId);
     if (!seat) return;
 
-    // Only selectable if available or yours
     if (seat.status !== "available" && seat.status !== "yours") return;
 
-    // ── CHANGED: toggle — clicking the already-selected seat deselects it ──
     if (seat.id === selectedSeatId) {
       onSeatSelect(null);
     } else {
@@ -343,56 +415,64 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     }
   };
 
+  // ── Show spinner when: SVG not yet fetched OR seats loading ──────────────
+  const showSpinner = !rawSvg || loading || !mapReady;
+
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div
       className="relative bg-[#F7F8FC] border border-[#EBEBF5] rounded-xl overflow-hidden"
       style={{ width: "100%", height: 520 }}
     >
-      {/* Zoom controls */}
-      <div className="absolute top-3 right-3 z-20 flex flex-col gap-1.5">
-        {([
-          { icon: <ZoomIn    size={14} />, action: zoomIn,  title: "Zoom in"     },
-          { icon: <ZoomOut   size={14} />, action: zoomOut, title: "Zoom out"    },
-          { icon: <Maximize2 size={14} />, action: fitView, title: "Fit to view" },
-        ] as const).map(({ icon, action, title }) => (
-          <button
-            key={title}
-            onClick={(e) => { e.stopPropagation(); action(); }}
-            title={title}
-            className="w-8 h-8 rounded-lg bg-white border border-[#EBEBF5] shadow-sm flex items-center justify-center hover:bg-gray-50 text-gray-600 transition-colors"
-          >
-            {icon}
-          </button>
-        ))}
-      </div>
+      {/* Zoom controls — only show when map is ready */}
+      {mapReady && (
+        <div className="absolute top-3 right-3 z-20 flex flex-col gap-1.5">
+          {([
+            { icon: <ZoomIn    size={14} />, action: zoomIn,  title: "Zoom in"     },
+            { icon: <ZoomOut   size={14} />, action: zoomOut, title: "Zoom out"    },
+            { icon: <Maximize2 size={14} />, action: fitView, title: "Fit to view" },
+          ] as const).map(({ icon, action, title }) => (
+            <button
+              key={title}
+              onClick={(e) => { e.stopPropagation(); action(); }}
+              title={title}
+              className="w-8 h-8 rounded-lg bg-white border border-[#EBEBF5] shadow-sm flex items-center justify-center hover:bg-gray-50 text-gray-600 transition-colors"
+            >
+              {icon}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Zoom % */}
-      <div className="absolute top-3 left-3 z-20 text-[10px] font-semibold text-gray-400 bg-white/80 px-2 py-1 rounded-md border border-[#EBEBF5] select-none tabular-nums">
-        {zoomDisplay}%
-      </div>
+      {/* Zoom % — only show when map is ready */}
+      {mapReady && (
+        <div className="absolute top-3 left-3 z-20 text-[10px] font-semibold text-gray-400 bg-white/80 px-2 py-1 rounded-md border border-[#EBEBF5] select-none tabular-nums">
+          {zoomDisplay}%
+        </div>
+      )}
 
-      {/* Legend */}
-      <div className="absolute bottom-8 left-3 z-20 flex items-center gap-3 bg-white/80 px-3 py-1.5 rounded-md border border-[#EBEBF5] select-none">
-        {[
-          { color: "#059669", label: "Available"   },
-        //   { color: "#4f46e5", label: "Preference"  },
-        //   { color: "#6b7280", label: "Booked"      },
-          { color: "#dc2626", label: "Unavailable" }, // updated to match new red palette
-          { color: "#6366f1", label: "Selected"    },
-        //   { color: "#10b981", label: "Yours"       },
-        ].map(({ color, label }) => (
-          <span key={label} className="flex items-center gap-1 text-[10px] text-gray-500">
-            <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: color }} />
-            {label}
-          </span>
-        ))}
-      </div>
+      {/* Legend — only show when map is ready */}
+      {mapReady && (
+        <div className="absolute bottom-8 left-3 z-20 flex items-center gap-3 bg-white/80 px-3 py-1.5 rounded-md border border-[#EBEBF5] select-none">
+          {[
+            { color: "#059669", label: "Available"   },
+            { color: "#dc2626", label: "Unavailable" },
+            { color: "#6366f1", label: "Selected"    },
+          ].map(({ color, label }) => (
+            <span key={label} className="flex items-center gap-1 text-[10px] text-gray-500">
+              <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: color }} />
+              {label}
+            </span>
+          ))}
+        </div>
+      )}
 
-      {/* Hint */}
-      <div className="absolute bottom-2 left-3 z-20 text-[10px] text-gray-400 bg-white/80 px-2 py-1 rounded-md border border-[#EBEBF5] select-none">
-        Scroll to zoom · Drag to pan · Click a green seat to select / deselect
-      </div>
+      {/* Hint — only show when map is ready */}
+      {mapReady && (
+        <div className="absolute bottom-2 left-3 z-20 text-[10px] text-gray-400 bg-white/80 px-2 py-1 rounded-md border border-[#EBEBF5] select-none">
+          Scroll to zoom · Drag to pan · Click a green seat to select / deselect
+        </div>
+      )}
 
       {/* Map viewport */}
       <div
@@ -405,7 +485,8 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
         onClick={onMapClick}
         style={{ cursor: "grab" }}
       >
-        {loading && (
+        {/* Single spinner — shown while SVG fetching, seats loading, or fitView not done */}
+        {showSpinner && !svgError && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#F7F8FC] z-10">
             <div className="flex flex-col items-center gap-3">
               <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
@@ -414,6 +495,7 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
           </div>
         )}
 
+        {/* Error state */}
         {svgError && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
@@ -426,7 +508,8 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
           </div>
         )}
 
-        {coloredSvg && !loading && (
+        {/* SVG map — rendered but invisible until fitView fires correctly */}
+        {coloredSvg && (
           <div
             ref={transformRef}
             style={{
@@ -434,6 +517,9 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
               width: `${SVG_W}px`,
               height: `${SVG_H}px`,
               willChange: "transform",
+              // Hidden until ResizeObserver confirms wrapper has real size
+              // and fitView has been called — prevents the 25% flash
+              visibility: mapReady ? "visible" : "hidden",
             }}
             dangerouslySetInnerHTML={{ __html: coloredSvg }}
           />
