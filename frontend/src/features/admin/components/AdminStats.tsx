@@ -14,45 +14,57 @@ import {
   Ban,
 } from "lucide-react";
 
-const stats = [
-  {
-    title: "Total Offices",
-    value: "4",
-    subtitle: "All locations",
-    icon: Building2,
-    color: "bg-blue-100 text-blue-600",
-  },
-  {
-    title: "Total Floors",
-    value: "18",
-    subtitle: "Across all offices",
-    icon: Layers,
-    color: "bg-green-100 text-green-600",
-  },
-  {
-    title: "Total Seats",
-    value: "1,248",
-    subtitle: "Active seats",
-    icon: Armchair,
-    color: "bg-orange-100 text-orange-600",
-  },
-  {
-    title: "Booked Today",
-    value: "342",
-    subtitle: "27.4% occupancy",
-    icon: CalendarCheck,
-    color: "bg-blue-100 text-blue-600",
-  },
-  {
-    title: "Blocked Seats",
-    value: "56",
-    subtitle: "Maintenance / Other",
-    icon: Ban,
-    color: "bg-purple-100 text-purple-600",
-  },
-];
+type Props = {
+  data: any;
+};
 
-export default function AdminStats() {
+export default function AdminStats({ data }: Props) {
+
+  //  Map API → UI
+  // const [statsData, setStatsData] = useState<any>(null);
+  const stats = [
+    {
+      title: "Total Offices",
+      value: data?.total_offices ?? "-",
+      subtitle: "All locations",
+      icon: Building2,
+      color: "bg-blue-100 text-blue-600",
+    },
+    {
+      title: "Total Floors",
+      value: data?.total_floors ?? "-",
+      subtitle: "Across all offices",
+      icon: Layers,
+      color: "bg-green-100 text-green-600",
+    },
+    {
+      title: "Total Seats",
+      value: data?.total_seats ?? "-",
+      subtitle: "Active seats",
+      icon: Armchair,
+      color: "bg-orange-100 text-orange-600",
+    },
+    {
+      title: "Booked Today",
+      value: data?.booked_today ?? "-",
+      subtitle: `${data?.occupancy_percentage ?? 0}% occupancy`,
+      icon: CalendarCheck,
+      color: "bg-blue-100 text-blue-600",
+    },
+    {
+      title: "Blocked Seats",
+      value: data?.blocked_seats ?? "-",
+      subtitle: "Maintenance / Other",
+      icon: Ban,
+      color: "bg-purple-100 text-purple-600",
+    },
+  ];
+
+  // 🔥 Loading state
+  if (!data) {
+    return <div className="p-4">Loading...</div>;
+  }
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
       {stats.map((item, index) => {

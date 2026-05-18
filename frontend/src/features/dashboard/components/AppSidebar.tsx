@@ -228,8 +228,8 @@ function LogoutDialog({
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function AppSidebar({ user }: AppSidebarProps) {
-  const router   = useRouter();
-  const pathname = usePathname();                        // ← active state from URL
+ const router   = useRouter();
+ const pathname = usePathname();                        // ← active state from URL
 //  const isAdmin = user?.role === "admin"; //  check for admin role to conditionally render admin-specific items --- 13/5 chandana 
   const isAdmin = pathname.startsWith("/admin");// This is hardcoded,not from db 
   const [showLogout,  setShowLogout]  = useState(false);
