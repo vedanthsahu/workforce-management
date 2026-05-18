@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import psycopg2
 from fastapi import HTTPException, status
 from psycopg2.extensions import connection as PGConnection
@@ -70,7 +72,7 @@ def get_floors_by_building(
             },
         ) from exc
 
-    return [FloorResponse(**floor) for floor in floors]
+    return [_build_floor_response(floor) for floor in floors]
 
 
 def get_seats_by_floor(
@@ -78,10 +80,20 @@ def get_seats_by_floor(
     *,
     tenant_id: str,
     floor_id: str,
+    booking_date: date,
+    amenity_ids: list[int] | None,
 ) -> list[SeatResponse]:
     """Return tenant-scoped seats for a floor."""
+    normalized_amenity_ids = sorted(set(amenity_ids or []))
+
     try:
-        seats = fetch_seats_by_floor(conn, tenant_id=tenant_id, floor_id=floor_id)
+        seats = fetch_seats_by_floor(
+            conn,
+            tenant_id=tenant_id,
+            floor_id=floor_id,
+            booking_date=booking_date,
+            amenity_ids=normalized_amenity_ids,
+        )
     except psycopg2.Error as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -92,3 +104,26 @@ def get_seats_by_floor(
         ) from exc
 
     return [SeatResponse(**seat) for seat in seats]
+
+
+def _build_floor_response(floor: dict[str, object]) -> FloorResponse:
+    active_layout = None
+    layout_id = floor.get("layout_id")
+    layout_is_published = floor.get("layout_is_published")
+    layout_status = floor.get("layout_status")
+
+    if (
+        layout_id is not None
+        and layout_is_published is True
+        and layout_status == "PUBLISHED"
+    ):
+        active_layout = {
+            "layout_id": layout_id,
+            "layout_name": floor.get("layout_name"),
+            "layout_file_url": floor.get("layout_file_url"),
+        }
+
+    response_data = dict(floor)
+    response_data["active_layout"] = active_layout
+
+    return FloorResponse(**response_data)
