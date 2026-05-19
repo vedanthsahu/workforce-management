@@ -9,9 +9,9 @@ import psycopg2
 from fastapi import HTTPException, status
 from psycopg2 import errorcodes
 from psycopg2.extensions import connection as PGConnection
-
 from backend.repositories.booking_repository import (
     fetch_available_seats,
+    fetch_available_seats_by_range,
     fetch_past_bookings_for_user,
     fetch_current_bookings_for_user,
     fetch_cancelled_bookings_for_user,
@@ -24,7 +24,12 @@ from backend.repositories.booking_repository import (
     fetch_booking_by_id,
 )
 from backend.repositories.user_repository import fetch_user_by_id
-from backend.schemas.booking import AvailableSeatResponse, BookingResponse, CreateBookingRequest
+from backend.schemas.booking import (
+    AvailableSeatResponse,
+    BookingResponse,
+    CreateBookingRequest,
+    ModifyBookingRequest,
+)
 
 def _can_manage_booking(
     *,
@@ -324,28 +329,7 @@ def get_available_seats(
 
     return [AvailableSeatResponse(**seat) for seat in seats]
 
-def _can_manage_booking(
-    *,
-    current_user: dict[str, Any],
-    booking_user: dict[str, Any],
-) -> bool:
-    current_user_id = str(current_user["user_id"])
-    current_role = str(current_user.get("role") or "")
 
-    if current_user_id == str(booking_user["user_id"]):
-        return True
-
-    if booking_user.get("manager_user_id") == current_user_id:
-        return True
-
-    if current_role in {
-        "OFFICE_ADMIN",
-        "TENANT_ADMIN",
-        "SUPPORT_ADMIN",
-    }:
-        return True
-
-    return False
 def cancel_booking_by_id(
     conn: PGConnection,
     *,
@@ -465,6 +449,8 @@ def cancel_booking_by_id(
                 "message": "Failed to cancel booking.",
             },
         ) from exc
+    
+
 def modify_booking(
     conn: PGConnection,
     *,
@@ -670,3 +656,45 @@ def modify_booking(
                 "message": "Failed to modify booking.",
             },
         ) from exc
+    
+    
+def get_available_seats_by_range(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+    start_date: date,
+    end_date: date,
+    amenity_ids: list[int] | None = None,
+) -> list[AvailableSeatResponse]:
+    """
+    Fetch seat availability across a date range.
+    """
+
+    normalized_amenity_ids = sorted(set(amenity_ids or []))
+
+    try:
+
+        seats = fetch_available_seats_by_range(
+            conn,
+            tenant_id=tenant_id,
+            floor_id=floor_id,
+            start_date=start_date,
+            end_date=end_date,
+            amenity_ids=normalized_amenity_ids,
+        )
+
+    except psycopg2.Error as exc:
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "available_seats_lookup_failed",
+                "message": "Failed to fetch available seats.",
+            },
+        ) from exc
+
+    return [
+        AvailableSeatResponse(**seat)
+        for seat in seats
+    ]

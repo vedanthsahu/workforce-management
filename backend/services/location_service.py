@@ -75,36 +75,6 @@ def get_floors_by_building(
     return [_build_floor_response(floor) for floor in floors]
 
 
-def get_seats_by_floor(
-    conn: PGConnection,
-    *,
-    tenant_id: str,
-    floor_id: str,
-    booking_date: date,
-    amenity_ids: list[int] | None,
-) -> list[SeatResponse]:
-    """Return tenant-scoped seats for a floor."""
-    normalized_amenity_ids = sorted(set(amenity_ids or []))
-
-    try:
-        seats = fetch_seats_by_floor(
-            conn,
-            tenant_id=tenant_id,
-            floor_id=floor_id,
-            booking_date=booking_date,
-            amenity_ids=normalized_amenity_ids,
-        )
-    except psycopg2.Error as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "seat_lookup_failed",
-                "message": "Failed to fetch seats.",
-            },
-        ) from exc
-
-    return [SeatResponse(**seat) for seat in seats]
-
 
 def _build_floor_response(floor: dict[str, object]) -> FloorResponse:
     active_layout = None
