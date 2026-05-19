@@ -8,8 +8,9 @@ from pydantic import BaseModel, Field
 
 from backend.core.enums import (
     PreferenceMatchStatus,
-    SeatAvailabilityStatus,
     UISeatState,
+    DayAvailabilityStatus,
+    RangeAvailabilityStatus
 )
 
 
@@ -56,28 +57,67 @@ class BookingResponse(BaseModel):
 
 
 class AvailableSeatResponse(BaseModel):
-    """Public representation of an available seat."""
 
     seat_id: str
+
     id: str | None = None
+
     tenant_id: str | None = None
+
     site_id: str | None = None
+
     building_id: str | None = None
+
     floor_id: str
+
     seat_code: str | None = None
+
     code: str | None = None
+
     seat_type: str | None = None
+
     seat_neighborhood: str | None = None
+
     is_bookable: bool | None = None
+
     x: float | None = None
     y: float | None = None
     w: float | None = None
     h: float | None = None
+
     rotation_angle: float | None = None
-    status: SeatAvailabilityStatus | None = None
-    selectable: bool = False
-    matched_amenity_ids: list[int] = Field(default_factory=list)
+
+    matched_amenities: list[str] = Field(default_factory=list)
+
     matched_amenity_count: int = 0
+
     requested_amenity_count: int = 0
-    preference_match_status: PreferenceMatchStatus = PreferenceMatchStatus.NOT_APPLICABLE
-    ui_state: UISeatState = UISeatState.AVAILABLE
+
+    preference_match_status: PreferenceMatchStatus = (
+        PreferenceMatchStatus.NOT_APPLICABLE
+    )
+
+    availability: SeatAvailabilitySummary
+class SeatAvailabilityDay(BaseModel):
+    booking_date: date
+    status: DayAvailabilityStatus
+
+
+class SeatAvailabilitySummary(BaseModel):
+    status: RangeAvailabilityStatus
+
+    available_dates: list[date] = Field(default_factory=list)
+
+    unavailable_dates: list[date] = Field(default_factory=list)
+
+    booked_dates: list[date] = Field(default_factory=list)
+
+    blocked_dates: list[date] = Field(default_factory=list)
+
+    daily_statuses: list[SeatAvailabilityDay] = Field(default_factory=list)
+
+    total_requested_days: int
+
+    total_available_days: int
+
+    availability_percentage: float
