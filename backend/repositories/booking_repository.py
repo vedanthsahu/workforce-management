@@ -479,38 +479,141 @@ def fetch_available_seats(
     tenant_id: str,
     floor_id: str,
     booking_date: date,
+    amenity_ids: list[int],
 ) -> list[dict[str, Any]]:
-    """Fetch active bookable seats not occupied by active bookings that day."""
+    """Fetch computed availability and preference state for floor seats."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
+            WITH requested_amenities AS (
+                SELECT DISTINCT UNNEST(%s::bigint[]) AS amenity_id
+            ),
+            requested_count AS (
+                SELECT COUNT(*)::integer AS requested_amenity_count
+                FROM requested_amenities
+            ),
+            booked_seats AS (
+                SELECT DISTINCT bkg.seat_id
+                FROM bookings AS bkg
+                WHERE bkg.tenant_id = %s
+                  AND bkg.floor_id = %s
+                  AND bkg.booking_date = %s
+                  AND bkg.booking_status IN ('CONFIRMED', 'CHECKED_IN')
+            ),
+            blocked_seats AS (
+                SELECT DISTINCT bl.seat_id
+                FROM public.blocked_seats AS bl
+                WHERE bl.tenant_id = %s
+                  AND bl.floor_id = %s
+                  AND bl.status = 'ACTIVE'
+                  AND bl.blocked_from <= %s
+                  AND bl.blocked_to >= %s
+            ),
+            amenity_matches AS (
+                SELECT
+                    sa.seat_id,
+                    ARRAY_AGG(DISTINCT sa.amenity_id ORDER BY sa.amenity_id) AS matched_amenity_ids,
+                    COUNT(DISTINCT sa.amenity_id)::integer AS matched_amenity_count
+                FROM seat_amenities AS sa
+                INNER JOIN requested_amenities AS ra
+                    ON ra.amenity_id = sa.amenity_id
+                WHERE sa.tenant_id = %s
+                GROUP BY sa.seat_id
+            ),
+            seat_state AS (
+                SELECT
+                    s.id,
+                    s.tenant_id,
+                    s.site_id,
+                    s.building_id,
+                    s.floor_id,
+                    s.seat_code,
+                    s.seat_type,
+                    s.seat_neighborhood,
+                    s.is_bookable,
+                    s.map_x AS x,
+                    s.map_y AS y,
+                    s.map_width AS w,
+                    s.map_height AS h,
+                    s.rotation_angle,
+                    COALESCE(am.matched_amenity_ids, ARRAY[]::bigint[]) AS matched_amenity_ids,
+                    COALESCE(am.matched_amenity_count, 0)::integer AS matched_amenity_count,
+                    rc.requested_amenity_count,
+                    CASE
+                        WHEN s.status <> 'ACTIVE' OR s.is_bookable IS NOT TRUE
+                            THEN 'UNAVAILABLE'
+                        WHEN bs.seat_id IS NOT NULL
+                            THEN 'BOOKED'
+                        WHEN bls.seat_id IS NOT NULL
+                            THEN 'BLOCKED'
+                        ELSE 'AVAILABLE'
+                    END AS availability_status
+                FROM seats AS s
+                CROSS JOIN requested_count AS rc
+                LEFT JOIN booked_seats AS bs
+                    ON bs.seat_id = s.id
+                LEFT JOIN blocked_seats AS bls
+                    ON bls.seat_id = s.id
+                LEFT JOIN amenity_matches AS am
+                    ON am.seat_id = s.id
+                WHERE s.tenant_id = %s
+                  AND s.floor_id = %s
+            )
             SELECT
+                id::text AS id,
                 s.id::text AS seat_id,
                 s.tenant_id::text AS tenant_id,
                 s.site_id::text AS site_id,
                 s.building_id::text AS building_id,
                 s.floor_id::text AS floor_id,
                 s.seat_code,
+                s.seat_code AS code,
                 s.seat_type,
                 s.seat_neighborhood,
                 s.is_bookable,
-                s.status
-            FROM seats AS s
-            WHERE s.tenant_id = %s
-              AND s.floor_id = %s
-              AND s.status = 'ACTIVE'
-              AND s.is_bookable = TRUE
-              AND NOT EXISTS (
-                    SELECT 1
-                    FROM bookings AS bkg
-                    WHERE bkg.tenant_id = %s
-                      AND bkg.seat_id = s.id
-                      AND bkg.booking_date = %s
-                      AND bkg.booking_status IN ('CONFIRMED', 'CHECKED_IN')
-              )
+                x,
+                y,
+                w,
+                h,
+                rotation_angle,
+                availability_status AS status,
+                availability_status = 'AVAILABLE' AS selectable,
+                matched_amenity_ids,
+                matched_amenity_count,
+                requested_amenity_count,
+                CASE
+                    WHEN requested_amenity_count = 0
+                        THEN 'NOT_APPLICABLE'
+                    WHEN matched_amenity_count = requested_amenity_count
+                        THEN 'FULL_MATCH'
+                    WHEN matched_amenity_count > 0
+                        THEN 'PARTIAL_MATCH'
+                    ELSE 'NO_MATCH'
+                END AS preference_match_status,
+                CASE
+                    WHEN availability_status <> 'AVAILABLE'
+                        THEN 'UNAVAILABLE'
+                    WHEN requested_amenity_count > 0
+                         AND matched_amenity_count = requested_amenity_count
+                        THEN 'BEST_MATCH'
+                    ELSE 'AVAILABLE'
+                END AS ui_state
+            FROM seat_state AS s
             ORDER BY s.seat_code, s.id
             """,
-            (tenant_id, floor_id, tenant_id, booking_date),
+            (
+                amenity_ids,
+                tenant_id,
+                floor_id,
+                booking_date,
+                tenant_id,
+                floor_id,
+                booking_date,
+                booking_date,
+                tenant_id,
+                tenant_id,
+                floor_id,
+            ),
         )
         rows = cur.fetchall()
     return [dict(row) for row in rows]

@@ -6,6 +6,12 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
+from backend.core.enums import (
+    PreferenceMatchStatus,
+    SeatAvailabilityStatus,
+    UISeatState,
+)
+
 
 class CreateBookingRequest(BaseModel):
     """Request body for creating one seat booking for one day."""
@@ -53,12 +59,25 @@ class AvailableSeatResponse(BaseModel):
     """Public representation of an available seat."""
 
     seat_id: str
+    id: str | None = None
     tenant_id: str | None = None
     site_id: str | None = None
     building_id: str | None = None
     floor_id: str
     seat_code: str | None = None
+    code: str | None = None
     seat_type: str | None = None
     seat_neighborhood: str | None = None
     is_bookable: bool | None = None
-    status: str | None = None
+    x: float | None = None
+    y: float | None = None
+    w: float | None = None
+    h: float | None = None
+    rotation_angle: float | None = None
+    status: SeatAvailabilityStatus | None = None
+    selectable: bool = False
+    matched_amenity_ids: list[int] = Field(default_factory=list)
+    matched_amenity_count: int = 0
+    requested_amenity_count: int = 0
+    preference_match_status: PreferenceMatchStatus = PreferenceMatchStatus.NOT_APPLICABLE
+    ui_state: UISeatState = UISeatState.AVAILABLE

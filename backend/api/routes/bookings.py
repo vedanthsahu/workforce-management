@@ -62,6 +62,7 @@ def available_seats(
     booking_date: date | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
+    amenity_ids: Annotated[list[int] | None, Query()] = None,
 ) -> list[AvailableSeatResponse]:
     resolved_booking_date = _resolve_booking_date(booking_date, start_time, end_time)
     return get_available_seats(
@@ -69,6 +70,7 @@ def available_seats(
         tenant_id=str(current_user["tenant_id"]),
         floor_id=str(floor_id),
         booking_date=resolved_booking_date,
+        amenity_ids=amenity_ids,
     )
 @router.post("/{booking_id}/cancel", response_model=BookingResponse)
 def cancel_booking_route(
