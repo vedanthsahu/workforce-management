@@ -1260,7 +1260,7 @@ const StatCard: React.FC<StatCardProps> = ({
 const TABS: { id: BookingTab; label: string }[] = [
   { id: "upcoming",  label: "Upcoming"  },
   { id: "past",      label: "Past"      },
-  { id: "recurring", label: "Recurring" },
+  //{ id: "recurring", label: "Recurring" },
   { id: "cancelled", label: "Cancelled" },
 ];
 

@@ -70,3 +70,5 @@ def seats_by_floor(
         booking_date=booking_date,
         amenity_ids=amenity_ids,
     )
+
+
