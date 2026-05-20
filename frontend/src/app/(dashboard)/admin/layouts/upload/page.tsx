@@ -14,6 +14,9 @@ import { useLayoutForm } from "@/features/uploadlayouts/hooks/useLayoutForm";
 
 import Link from "next/dist/client/link";
 
+
+
+
 export default function UploadLayoutPage() {
     const { formData, setFormData } = useLayoutForm();
   return (
@@ -51,7 +54,10 @@ export default function UploadLayoutPage() {
             <div className="grid grid-cols-3 gap-6">
 
               {/* LEFT */}
-              <LayoutForm />
+              <LayoutForm
+  formData={formData}
+  setFormData={setFormData}
+/>
 
               {/* RIGHT */}
               <div className="space-y-6">

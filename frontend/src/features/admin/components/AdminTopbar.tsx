@@ -1,11 +1,29 @@
 "use client";
 
 import { Bell } from "lucide-react";
+import { useAuthContext } from "@/features/auth/context/AuthContext";
+import { getInitials } from "@/features/auth/types/auth.types";
 
 export default function AdminTopbar() {
-  return (
-    <div className="h-16  bg-white border-b flex items-center justify-end  px-6">
+  const { user } = useAuthContext();
 
+  // ✅ Resolve Name
+  const name =
+    user?.display_name ||
+    user?.full_name ||
+    user?.name ||
+    "Loading...";
+
+  // ✅ Resolve Role
+  const role =
+    user?.role === "TENANT_ADMIN" ? "Admin" : "Employee";
+
+  // ✅ Initials
+  const initials = name !== "Loading..." ? getInitials(name) : "?";
+
+  return (
+    <div className="h-16 bg-white border-b flex items-center justify-end px-6">
+      
       {/* RIGHT SIDE */}
       <div className="flex items-center gap-6">
 
@@ -20,14 +38,14 @@ export default function AdminTopbar() {
 
           {/* Avatar */}
           <div className="w-9 h-9 rounded-full bg-indigo-500 flex items-center justify-center text-white font-medium">
-            C
+            {initials}
           </div>
 
           {/* Name + Role */}
           <div className="text-sm">
-            <p className="font-medium">Chandana Gowda</p>
+            <p className="font-medium">{name}</p>
             <p className="text-xs text-muted-foreground">
-              Admin
+              {role}
             </p>
           </div>
 

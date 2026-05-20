@@ -1,5 +1,7 @@
 "use client";
 
+
+import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useState } from "react";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
@@ -227,11 +229,25 @@ function LogoutDialog({
 }
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function AppSidebar({ user }: AppSidebarProps) {
+export function AppSidebar({  }: AppSidebarProps) {
  const router   = useRouter();
  const pathname = usePathname();                        // ← active state from URL
 //  const isAdmin = user?.role === "admin"; //  check for admin role to conditionally render admin-specific items --- 13/5 chandana 
-  const isAdmin = pathname.startsWith("/admin");// This is hardcoded,not from db 
+const isAdmin = pathname.startsWith("/admin");// This is hardcoded,not from db 
+//  const isAdmin =user?.role === "TENANT_ADMIN"|| user?.permissions?.includes("layout:upload") ;
+// const isAdminRoute = pathname.startsWith("/admin");
+//  const isAdminRoute = pathname.startsWith("/admin");
+const { user } = useAuthContext();
+const currentUser = user ?? null;
+
+
+// useEffect(() => {
+//   if (!isAdmin && isAdminRoute) {
+//     router.push("/dashboard");
+//   }
+// }, [isAdmin, isAdminRoute, router]);
+
+
   const [showLogout,  setShowLogout]  = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { state } = useSidebar();
@@ -385,7 +401,20 @@ export function AppSidebar({ user }: AppSidebarProps) {
       <SidebarGroup>
         <SidebarGroupLabel>MANAGE</SidebarGroupLabel>
         <SidebarMenu>
-          {ADMIN_NAV.manage.map((item) => (
+          {ADMIN_NAV.manage
+  .filter((item) => {
+    const permissionMap: Record<string, string> = {
+      offices: "floor:view",
+      floors: "floor:view",
+      layouts: "layout:upload",
+      seats: "seat:create",
+      amenities: "floor:manage",
+      seatstatus: "seat:update",
+    };
+
+    return user?.permissions?.includes(permissionMap[item.id]);
+  })
+  .map((item) => (
             <SidebarMenuItem key={item.id}>
               <SidebarMenuButton
                 isActive={activeItem === item.id}
@@ -403,7 +432,17 @@ export function AppSidebar({ user }: AppSidebarProps) {
       <SidebarGroup>
         <SidebarGroupLabel>OPERATIONS</SidebarGroupLabel>
         <SidebarMenu>
-          {ADMIN_NAV.operations.map((item) => (
+          {ADMIN_NAV.operations
+  .filter((item) => {
+    const permissionMap: Record<string, string> = {
+      bookings: "booking:view_all",
+      users: "user:view",
+      notifications: "dashboard:view",
+    };
+
+    return user?.permissions?.includes(permissionMap[item.id]);
+  })
+  .map((item) => (
             <SidebarMenuItem key={item.id}>
               <SidebarMenuButton
                 isActive={activeItem === item.id}
@@ -421,7 +460,17 @@ export function AppSidebar({ user }: AppSidebarProps) {
       <SidebarGroup>
         <SidebarGroupLabel>REPORTS</SidebarGroupLabel>
         <SidebarMenu>
-          {ADMIN_NAV.reports.map((item) => (
+          {ADMIN_NAV.reports
+  .filter((item) => {
+    const permissionMap: Record<string, string> = {
+      occupancy: "dashboard:view",
+      utilization: "dashboard:view",
+      audit: "dashboard:view",
+    };
+
+    return user?.permissions?.includes(permissionMap[item.id]);
+  })
+  .map((item) => (
             <SidebarMenuItem key={item.id}>
               <SidebarMenuButton
                 isActive={activeItem === item.id}
@@ -439,7 +488,15 @@ export function AppSidebar({ user }: AppSidebarProps) {
       <SidebarGroup>
         <SidebarGroupLabel>SETTINGS</SidebarGroupLabel>
         <SidebarMenu>
-          {ADMIN_NAV.settings.map((item) => (
+          {ADMIN_NAV.settings
+  .filter((item) => {
+    const permissionMap: Record<string, string> = {
+      settings: "user:manage",
+    };
+
+    return user?.permissions?.includes(permissionMap[item.id]);
+  })
+  .map((item) => (
             <SidebarMenuItem key={item.id}>
               <SidebarMenuButton
                 isActive={activeItem === item.id}

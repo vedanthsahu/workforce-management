@@ -42,7 +42,7 @@ export default function AdminPage() {
             {!loading && !error && <AdminStats data={statsData} />}
 
             {/* Charts */}
-            <AdminCharts />
+            <AdminCharts data={statsData} />
 
             {/* Recent Bookings */}
             <AdminRecentBookings />

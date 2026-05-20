@@ -23,6 +23,7 @@ export interface User {
   job_title?: string | null;
   office_location?: string | null;
   // ← new fields
+  permissions?: string[];
   favorite_seat?: FavoriteSeatResponse | null;
   days_in_office?: number;
 }

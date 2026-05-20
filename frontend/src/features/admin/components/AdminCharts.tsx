@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -34,15 +35,13 @@ import {
 
 import { Info } from "lucide-react";
 
-// ✅ TYPE FIX (IMPORTANT)
 type WeekType = "this-week" | "last-week";
 
-// ---------- DATA ----------
-const totalSeats = 1248;
-const booked = 342;
-const available = 906;
+type Props = {
+  data: any;
+};
 
-// ✅ TYPE-SAFE DATA
+// ---------- STATIC (keep for now) ----------
 const weeklyData: Record<
   WeekType,
   { day: string; occupancy: number }[]
@@ -80,12 +79,23 @@ const extraOffices = [
 ];
 
 // ---------- COMPONENT ----------
-export default function AdminCharts() {
-  // ✅ FIXED STATE TYPE
+export default function AdminCharts({ data }: Props) {
+
   const [selectedWeek, setSelectedWeek] =
     useState<WeekType>("this-week");
 
   const [expanded, setExpanded] = useState(false);
+
+  // ✅ HANDLE LOADING
+  if (!data) {
+    return <div className="p-4">Loading charts...</div>;
+  }
+
+  // ✅ BACKEND DATA
+  const totalSeats = data.total_seats;
+  const booked = data.booked_today;
+  const available = totalSeats - booked;
+  const occupancy = data.occupancy_percentage;
 
   const offices = expanded
     ? [...baseOffices, ...extraOffices]
@@ -131,7 +141,7 @@ export default function AdminCharts() {
 
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <p className="text-2xl font-semibold">
-                {((booked / totalSeats) * 100).toFixed(1)}%
+                {occupancy.toFixed(1)}%
               </p>
               <p className="text-xs text-muted-foreground">
                 Occupancy
@@ -145,7 +155,7 @@ export default function AdminCharts() {
                 Booked Seats
               </p>
               <p className="font-medium">
-                {booked} ({((booked / totalSeats) * 100).toFixed(1)}%)
+                {booked} ({occupancy.toFixed(1)}%)
               </p>
             </div>
 
@@ -154,7 +164,7 @@ export default function AdminCharts() {
                 Available Seats
               </p>
               <p className="font-medium">
-                {available} ({((available / totalSeats) * 100).toFixed(1)}%)
+                {available}
               </p>
             </div>
 
@@ -181,10 +191,12 @@ export default function AdminCharts() {
             Occupancy Trend
           </CardTitle>
 
-          <Select value={selectedWeek} onValueChange={(value) => {
-    if (value) setSelectedWeek(value as WeekType);
-  }}
->
+          <Select
+            value={selectedWeek}
+            onValueChange={(value) => {
+              if (value) setSelectedWeek(value as WeekType);
+            }}
+          >
             <SelectTrigger className="h-8 w-[120px] text-xs">
               <SelectValue />
             </SelectTrigger>
@@ -206,13 +218,6 @@ export default function AdminCharts() {
             className="h-[240px]"
           >
             <AreaChart data={weeklyData[selectedWeek]}>
-              <defs>
-                <linearGradient id="occGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#4F46E5" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#4F46E5" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-
               <XAxis dataKey="day" axisLine={false} tickLine={false} />
               <YAxis
                 domain={[0, 100]}
@@ -227,7 +232,7 @@ export default function AdminCharts() {
                 type="monotone"
                 dataKey="occupancy"
                 stroke="#4F46E5"
-                fill="url(#occGradient)"
+                fillOpacity={0.3}
               />
             </AreaChart>
           </ChartContainer>
