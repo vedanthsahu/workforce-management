@@ -11,7 +11,6 @@ from psycopg2.extensions import connection as PGConnection
 from backend.repositories.location_repository import (
     fetch_buildings_by_site,
     fetch_floors_by_building,
-    fetch_seats_by_floor,
     fetch_sites,
 )
 from backend.schemas.location import BuildingResponse, FloorResponse, SeatResponse, SiteResponse
