@@ -69,7 +69,10 @@ def fetch_admin_dashboard_summary(
             ),
 
             booked_seats AS (
-                SELECT DISTINCT b.seat_id
+                SELECT
+                    b.id,
+                    b.seat_id,
+                    b.user_id
                 FROM bookings AS b
                 WHERE b.tenant_id = %(tenant_id)s
                   AND b.booking_date = %(selected_date)s
@@ -101,51 +104,74 @@ def fetch_admin_dashboard_summary(
                         %(floor_id)s IS NULL
                         OR bs.floor_id = %(floor_id)s::bigint
                   )
+            ),
+
+            summary_counts AS (
+                SELECT
+                    (
+                        SELECT COUNT(*)
+                        FROM filtered_sites
+                    ) AS total_offices,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM filtered_floors
+                    ) AS total_floors,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM filtered_seats
+                    ) AS total_seats,
+
+                    (
+                        SELECT COUNT(DISTINCT seat_id)
+                        FROM booked_seats
+                    ) AS booked_seats_count,
+
+                    (
+                        SELECT blocked_seats
+                        FROM blocked_seat_counts
+                    ) AS blocked_seats,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM booked_seats
+                    ) AS total_bookings,
+
+                    (
+                        SELECT COUNT(DISTINCT user_id)
+                        FROM booked_seats
+                    ) AS unique_users_booked
+            ),
+
+            utilization_metrics AS (
+                SELECT
+                    *,
+                    COALESCE(
+                        ROUND(
+                            (
+                                booked_seats_count::numeric
+                                /
+                                NULLIF(total_seats, 0)
+                            ) * 100,
+                            1
+                        ),
+                        0.0
+                    ) AS booking_utilization_percentage
+                FROM summary_counts
             )
 
             SELECT
-                (
-                    SELECT COUNT(*)
-                    FROM filtered_sites
-                ) AS total_offices,
-
-                (
-                    SELECT COUNT(*)
-                    FROM filtered_floors
-                ) AS total_floors,
-
-                (
-                    SELECT COUNT(*)
-                    FROM filtered_seats
-                ) AS total_seats,
-
-                (
-                    SELECT COUNT(*)
-                    FROM booked_seats
-                ) AS booked_today,
-
-                (
-                    SELECT blocked_seats
-                    FROM blocked_seat_counts
-                ) AS blocked_seats,
-
-                ROUND(
-                    (
-                        (
-                            SELECT COUNT(*)
-                            FROM booked_seats
-                        )::numeric
-                        /
-                        NULLIF(
-                            (
-                                SELECT COUNT(*)
-                                FROM filtered_seats
-                            ),
-                            0
-                        )
-                    ) * 100,
-                    1
-                ) AS occupancy_percentage
+                total_offices,
+                total_floors,
+                total_seats,
+                booked_seats_count AS booked_today,
+                blocked_seats,
+                booking_utilization_percentage AS occupancy_percentage,
+                total_bookings,
+                unique_users_booked,
+                booking_utilization_percentage
+            FROM utilization_metrics
             """,
             {
                 "tenant_id": tenant_id,

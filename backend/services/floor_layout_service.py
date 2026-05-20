@@ -7,10 +7,13 @@ from __future__ import annotations
 from typing import Any
 
 import psycopg2
-from fastapi import HTTPException, status
+from boto3.exceptions import S3UploadFailedError
+from botocore.exceptions import BotoCoreError, ClientError
+from fastapi import HTTPException, UploadFile, status
 from psycopg2.extensions import connection as PGConnection
 
 from backend.core.enums import LayoutStatus
+from backend.core.storage import upload_svg_to_s3
 from backend.repositories.floor_layout_repository import (
     activate_floor_layout as activate_floor_layout_record,
     archive_existing_published_layout,
@@ -32,6 +35,7 @@ def create_floor_layout(
     *,
     current_user: dict[str, Any],
     payload: CreateFloorLayoutRequest,
+    file: UploadFile,
 ) -> FloorLayoutResponse:
 
     tenant_id = str(current_user["tenant_id"])
@@ -55,18 +59,27 @@ def create_floor_layout(
                 },
             )
 
+        version_no = get_next_layout_version(
+            conn,
+            tenant_id=tenant_id,
+            floor_id=str(payload.floor_id),
+        )
+
+        layout_file_url = upload_svg_to_s3(
+            file=file,
+            tenant_id=tenant_id,
+            site_id=str(payload.site_id),
+            building_id=str(payload.building_id),
+            floor_id=str(payload.floor_id),
+            version_no=version_no,
+        )
+
         if payload.status == "PUBLISHED":
             archive_existing_published_layout(
                 conn,
                 tenant_id=tenant_id,
                 floor_id=str(payload.floor_id),
             )
-
-        version_no = get_next_layout_version(
-            conn,
-            tenant_id=tenant_id,
-            floor_id=str(payload.floor_id),
-        )
 
         created_layout = insert_floor_layout(
             conn,
@@ -75,7 +88,7 @@ def create_floor_layout(
             building_id=str(payload.building_id),
             floor_id=str(payload.floor_id),
             layout_name=payload.layout_name,
-            layout_file_url=payload.layout_file_url,
+            layout_file_url=layout_file_url,
             version_no=version_no,
             status=payload.status,
             layout_metadata=payload.layout_metadata,
@@ -96,6 +109,17 @@ def create_floor_layout(
             detail={
                 "code": "floor_layout_create_failed",
                 "message": "Failed to create floor layout.",
+            },
+        ) from exc
+
+    except (BotoCoreError, ClientError, S3UploadFailedError) as exc:
+        conn.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "floor_layout_upload_failed",
+                "message": "Failed to upload floor layout SVG.",
             },
         ) from exc
 

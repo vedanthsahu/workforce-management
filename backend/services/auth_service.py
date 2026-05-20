@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
-from uuid import uuid4
 
 import psycopg2
 from fastapi import HTTPException, status
@@ -17,12 +16,11 @@ from backend.core.security import (
     TokenError,
     build_jwt_payload,
     create_scoped_refresh_token,
-    create_scoped_refresh_token,
     hash_token,
-    parse_refresh_token,
     parse_refresh_token,
     sign_jwt,
 )
+from backend.repositories.permission_repository import fetch_permissions_for_role
 from backend.repositories.token_repository import (
     create_user_session,
     fetch_session_by_refresh_token,
@@ -30,7 +28,6 @@ from backend.repositories.token_repository import (
     revoke_user_session,
     rotate_refresh_token,
 )
-from backend.repositories.user_repository import fetch_user_by_id
 from backend.repositories.user_repository import fetch_user_by_id
 
 
@@ -56,14 +53,33 @@ def _build_access_token_for_user(user: dict[str, Any], *, session_id: str) -> st
         "session_id": session_id,
     }
 
-    role = str(user.get("role") or "").strip()
+    role = str(user.get("role_name") or user.get("role") or "").strip()
     if role:
         extra_claims["role"] = role
 
     payload = build_jwt_payload(user, extra_claims=extra_claims)
-    payload = build_jwt_payload(user, extra_claims=extra_claims)
     return sign_jwt(payload)
 
+
+def attach_permissions_to_user(
+    conn: PGConnection,
+    user: dict[str, Any],
+) -> dict[str, Any]:
+    """Attach tenant-scoped database permissions to a loaded user record."""
+    role_name = str(user.get("role_name") or user.get("role") or "").strip()
+
+    user["role_name"] = role_name
+    user["permissions"] = (
+        fetch_permissions_for_role(
+            conn,
+            tenant_id=str(user["tenant_id"]),
+            role_name=role_name,
+        )
+        if role_name
+        else []
+    )
+
+    return user
 
 
 def issue_tokens_for_user(
@@ -263,6 +279,8 @@ def refresh_auth_tokens(
                 "message": "Failed to refresh authentication tokens.",
             },
         ) from exc
+
+
 def logout_user_session(
     conn: PGConnection,
     refresh_token: str,
