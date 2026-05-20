@@ -198,6 +198,8 @@ class Settings:
     aws_region: str
     aws_s3_bucket_name: str
     aws_s3_public_base_url: str
+    app_log_level: str
+    app_trace_functions: bool
 
     @property
     def db_config(self) -> dict[str, object]:
@@ -294,4 +296,6 @@ def get_settings() -> Settings:
         aws_region=_require_env("AWS_REGION"),
         aws_s3_bucket_name=_require_env("AWS_S3_BUCKET_NAME"),
         aws_s3_public_base_url=_require_env("AWS_S3_PUBLIC_BASE_URL"),
+        app_log_level=os.getenv("APP_LOG_LEVEL", "INFO"),
+        app_trace_functions=_parse_bool_env("APP_TRACE_FUNCTIONS", False),
     )

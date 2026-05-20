@@ -12,7 +12,10 @@ and repository helpers that keep authentication-related tables in sync with the
 expectations of the API layer.
 """
 
+import logging
+from time import perf_counter
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,6 +27,11 @@ from backend.api.routes.bookings import router as bookings_router
 from backend.api.routes.locations import router as locations_router
 from backend.api.routes.sso import router as sso_router
 from backend.core.config import get_settings
+from backend.core.logging import (
+    LOGGER_NAME,
+    configure_console_logging,
+    enable_backend_function_trace,
+)
 from backend.db.connection import get_db_connection
 from backend.repositories.token_repository import (
     ensure_refresh_tokens_table,
@@ -37,6 +45,13 @@ from backend.api.routes.admin_dashboard import router as admin_dashboard_router
 from backend.api.routes.floor_layouts import router as floor_layout_router
 
 settings = get_settings()
+configure_console_logging(
+    "DEBUG" if settings.app_trace_functions else settings.app_log_level,
+)
+if settings.app_trace_functions:
+    enable_backend_function_trace()
+
+request_logger = logging.getLogger(f"{LOGGER_NAME}.requests")
 
 # The application exposes a single frontend origin and composes feature routers
 # from the authentication, SSO, booking, and location modules.
@@ -58,8 +73,61 @@ app.include_router(admin_dashboard_router)
 app.include_router(preferences_router)
 app.include_router(floor_layout_router)
 
+
+@app.middleware("http")
+async def log_http_requests(request: Request, call_next):
+    """Log every HTTP request to the command window."""
+    request_id = uuid4().hex[:8]
+    started_at = perf_counter()
+    method = request.method
+    path = request.url.path
+    query = _safe_query_string(request)
+    client = request.client.host if request.client else "-"
+
+    request_logger.info(
+        "request.start id=%s method=%s path=%s query=%s client=%s",
+        request_id,
+        method,
+        path,
+        query,
+        client,
+    )
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = (perf_counter() - started_at) * 1000
+        request_logger.exception(
+            "request.error id=%s method=%s path=%s endpoint=%s duration_ms=%.2f",
+            request_id,
+            method,
+            path,
+            _endpoint_name(request),
+            duration_ms,
+        )
+        raise
+
+    duration_ms = (perf_counter() - started_at) * 1000
+    tenant_id, user_id = _request_identity(request)
+    request_logger.info(
+        (
+            "request.end id=%s method=%s path=%s endpoint=%s "
+            "status=%s duration_ms=%.2f tenant_id=%s user_id=%s"
+        ),
+        request_id,
+        method,
+        path,
+        _endpoint_name(request),
+        response.status_code,
+        duration_ms,
+        tenant_id,
+        user_id,
+    )
+    return response
+
+
 @app.exception_handler(HTTPException)
-async def http_exception_handler(_: Request, exc: HTTPException) -> JSONResponse:
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """Convert FastAPI HTTP exceptions into a consistent error envelope.
 
     Args:
@@ -81,10 +149,25 @@ async def http_exception_handler(_: Request, exc: HTTPException) -> JSONResponse
         Any unexpected failure would come from response serialization or from
         invalid exception detail values that cannot be coerced to strings.
     """
+    payload = _normalize_http_error(exc.detail)
+    error = payload.get("error", {})
+    request_logger.warning(
+        (
+            "request.http_exception method=%s path=%s endpoint=%s "
+            "status=%s code=%s message=%s"
+        ),
+        request.method,
+        request.url.path,
+        _endpoint_name(request),
+        exc.status_code,
+        error.get("code", "-") if isinstance(error, dict) else "-",
+        error.get("message", "-") if isinstance(error, dict) else "-",
+    )
+
     return JSONResponse(
         status_code=exc.status_code,
         headers=exc.headers,
-        content=_normalize_http_error(exc.detail),
+        content=payload,
     )
 
 
@@ -223,6 +306,62 @@ def _normalize_http_error(detail: Any) -> dict[str, Any]:
             "message": str(detail),
         }
     }
+
+
+def _endpoint_name(request: Request) -> str:
+    endpoint = request.scope.get("endpoint")
+    if endpoint is None:
+        return "-"
+    module_name = getattr(endpoint, "__module__", "")
+    function_name = getattr(endpoint, "__name__", str(endpoint))
+    return f"{module_name}.{function_name}" if module_name else function_name
+
+
+def _request_identity(request: Request) -> tuple[str, str]:
+    current_user = getattr(request.state, "current_user", None)
+    if isinstance(current_user, dict):
+        return (
+            str(current_user.get("tenant_id") or "-"),
+            str(current_user.get("user_id") or "-"),
+        )
+
+    auth_claims = getattr(request.state, "auth_claims", None)
+    if isinstance(auth_claims, dict):
+        return (
+            str(auth_claims.get("tenant_id") or "-"),
+            str(auth_claims.get("user_id") or auth_claims.get("sub") or "-"),
+        )
+
+    return "-", "-"
+
+
+def _safe_query_string(request: Request) -> str:
+    if not request.query_params:
+        return "-"
+
+    sensitive_fragments = {
+        "authorization",
+        "code",
+        "cookie",
+        "password",
+        "secret",
+        "state",
+        "token",
+    }
+    parts: list[str] = []
+    for key, value in request.query_params.multi_items():
+        normalized_key = key.lower()
+        safe_value = (
+            "<redacted>"
+            if any(fragment in normalized_key for fragment in sensitive_fragments)
+            else value
+        )
+        parts.append(f"{key}={safe_value}")
+
+    query_string = "&".join(parts)
+    if len(query_string) > 500:
+        return f"{query_string[:500]}..."
+    return query_string
 
 
 if __name__ == "__main__":

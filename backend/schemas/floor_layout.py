@@ -10,18 +10,12 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class UploadFloorLayoutResponse(BaseModel):
-    object_url: str
-
-
 class CreateFloorLayoutRequest(BaseModel):
     site_id: int = Field(gt=0)
     building_id: int = Field(gt=0)
     floor_id: int = Field(gt=0)
 
     layout_name: str = Field(min_length=1, max_length=255)
-
-    layout_file_url: str
 
     status: str = Field(pattern="^(DRAFT|PUBLISHED)$")
 
@@ -50,6 +44,11 @@ class FloorLayoutResponse(BaseModel):
     layout_metadata: dict[str, Any] | None = None
 
     uploaded_by_user_id: str
+    uploaded_by_name: str | None = None
+    uploaded_by_email: str | None = None
+    uploaded_by_role: str | None = None
+    uploaded_by_department: str | None = None
+    uploaded_by_job_title: str | None = None
 
     published_by_user_id: str | None = None
 

@@ -7,7 +7,6 @@ from typing import Any, Annotated
 import psycopg2
 from fastapi import Depends, HTTPException, Request, Response, status
 from psycopg2.extensions import connection as PGConnection
-from fastapi import HTTPException, status
 
 from backend.core.config import get_settings
 from backend.core.security import (
@@ -19,12 +18,14 @@ from backend.core.security import (
     build_auth_cookie_settings,
     decode_token,
     is_microsoft_token,
-    is_microsoft_token,
 )
 from backend.db.connection import get_db
 from backend.repositories.user_repository import fetch_user_by_id
-from backend.services.auth_service import AuthTokens, refresh_auth_tokens
-from backend.core.permissions import resolve_permissions
+from backend.services.auth_service import (
+    AuthTokens,
+    attach_permissions_to_user,
+    refresh_auth_tokens,
+)
 
 def get_auth_context(
     request: Request,
@@ -50,7 +51,6 @@ def get_auth_context(
             detail={
                 "code": "missing_access_token",
                 "message": "Access token is missing.",
-                "message": "Access token is missing.",
             },
         )
 
@@ -69,12 +69,6 @@ def get_auth_context(
             )
 
         try:
-            auth_tokens = refresh_auth_tokens(
-                conn,
-                refresh_token,
-                user_agent=request.headers.get("user-agent"),
-                ip_address=request.client.host if request.client else None,
-            )
             auth_tokens = refresh_auth_tokens(
                 conn,
                 refresh_token,
@@ -111,12 +105,12 @@ def get_current_user(
 ) -> dict[str, Any]:
     """Load the current authenticated user record from the database."""
     tenant_id = auth_context["claims"]["tenant_id"]
-    """Load the current authenticated user record from the database."""
-    tenant_id = auth_context["claims"]["tenant_id"]
     user_id = auth_context["claims"]["user_id"]
 
     try:
         user = fetch_user_by_id(conn, tenant_id=tenant_id, user_id=user_id)
+        if user is not None:
+            user = attach_permissions_to_user(conn, user)
     except psycopg2.Error as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -134,10 +128,6 @@ def get_current_user(
                 "message": "Authenticated user no longer exists.",
             },
         )
-    
-    permissions = resolve_permissions(user.get("role"))
-    user["permissions"] = permissions
-
     request.state.current_user = user
     return user
 
@@ -180,7 +170,6 @@ def _parse_auth_claims(token_payload: dict[str, Any]) -> dict[str, Any]:
         claims["role"] = str(role)
 
     return claims
-
 
 
 def _extract_bearer_token(request: Request) -> str | None:
@@ -238,6 +227,8 @@ def _access_token_ttl_seconds() -> int:
 
 def _refresh_token_ttl_seconds() -> int:
     return get_settings().jwt_refresh_token_ttl
+
+
 def require_permission(permission: str):
     def dependency(
         current_user: Annotated[dict[str, Any], Depends(get_current_user)],

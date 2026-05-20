@@ -16,3 +16,7 @@ class AdminDashboardSummaryResponse(BaseModel):
     blocked_seats: int = 0
 
     occupancy_percentage: float = 0.0
+
+    total_bookings: int = 0
+    unique_users_booked: int = 0
+    booking_utilization_percentage: float = 0.0

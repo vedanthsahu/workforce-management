@@ -4,17 +4,23 @@ Routes for floor layout management.
 
 from __future__ import annotations
 
+import json
 from typing import Any, Annotated
 
-from fastapi import APIRouter, Depends, File, Form, Path, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Path,
+    UploadFile,
+    status,
+)
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import require_permission
-from backend.core.storage import upload_svg_to_s3
 from backend.db.connection import get_db
-from backend.schemas.floor_layout import (
-    UploadFloorLayoutResponse,
-)
 from backend.schemas.floor_layout import (
     CreateFloorLayoutRequest,
     FloorLayoutResponse,
@@ -35,20 +41,36 @@ router = APIRouter(
     status_code=201,
 )
 def create_floor_layout_route(
-    payload: CreateFloorLayoutRequest,
-
     current_user: Annotated[
         dict[str, Any],
         Depends(require_permission("layout:upload")),
     ],
 
     conn: Annotated[PGConnection, Depends(get_db)],
+
+    file: UploadFile = File(...),
+    site_id: int = Form(gt=0),
+    building_id: int = Form(gt=0),
+    floor_id: int = Form(gt=0),
+    layout_name: str = Form(min_length=1, max_length=255),
+    status: str = Form(pattern="^(DRAFT|PUBLISHED)$"),
+    layout_metadata: str | None = Form(default=None),
 ) -> FloorLayoutResponse:
+
+    payload = CreateFloorLayoutRequest(
+        site_id=site_id,
+        building_id=building_id,
+        floor_id=floor_id,
+        layout_name=layout_name,
+        status=status,
+        layout_metadata=_parse_layout_metadata(layout_metadata),
+    )
 
     return create_floor_layout(
         conn,
         current_user=current_user,
         payload=payload,
+        file=file,
     )
 
 
@@ -96,33 +118,30 @@ def activate_floor_layout_route(
     )
 
 
-@router.post(
-    "/upload-svg",
-    response_model=UploadFloorLayoutResponse,
-)
-def upload_floor_layout_svg(
-    file: UploadFile = File(...),
+def _parse_layout_metadata(
+    layout_metadata: str | None,
+) -> dict[str, Any] | None:
+    if layout_metadata is None or layout_metadata.strip() == "":
+        return None
 
-    site_id: int = Form(gt=0),
-    building_id: int = Form(gt=0),
-    floor_id: int = Form(gt=0),
+    try:
+        parsed_metadata = json.loads(layout_metadata)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_layout_metadata",
+                "message": "layout_metadata must be valid JSON.",
+            },
+        ) from exc
 
-    current_user: Annotated[
-        dict[str, Any],
-        Depends(require_permission("layout:upload")),
-    ] = None,
+    if not isinstance(parsed_metadata, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_layout_metadata",
+                "message": "layout_metadata must be a JSON object.",
+            },
+        )
 
-    conn: Annotated[PGConnection, Depends(get_db)] = None,
-) -> UploadFloorLayoutResponse:
-
-    object_url = upload_svg_to_s3(
-        file=file,
-        tenant_id=str(current_user["tenant_id"]),
-        site_id=str(site_id),
-        building_id=str(building_id),
-        floor_id=str(floor_id),
-    )
-
-    return UploadFloorLayoutResponse(
-        object_url=object_url,
-    )
+    return parsed_metadata
