@@ -22,6 +22,8 @@ from backend.repositories.booking_repository import (
     cancel_booking,
     fetch_booking_by_id_for_update,
     fetch_booking_by_id,
+    user_has_active_booking_in_range,
+    user_has_active_booking_on_date,
 )
 from backend.repositories.user_repository import fetch_user_by_id
 from backend.schemas.booking import (
@@ -31,29 +33,122 @@ from backend.schemas.booking import (
     ModifyBookingRequest,
 )
 
+ELEVATED_BOOKING_ROLES = {
+    "MANAGER",
+    "TENANT_ADMIN",
+    "PRODUCT_ADMIN",
+    "OFFICE_ADMIN",
+    "SUPPORT_ADMIN",
+}
+
+
+def _current_user_id(current_user: dict[str, Any]) -> str:
+    return str(current_user.get("user_id") or current_user.get("id") or "")
+
+
+def _user_role(user: dict[str, Any]) -> str:
+    return str(user.get("role_name") or user.get("role") or "").strip().upper()
+
+
+def _can_book_for_user(
+    *,
+    current_user: dict[str, Any],
+    booking_user: dict[str, Any],
+) -> bool:
+    current_user_id = _current_user_id(current_user)
+
+    if current_user_id == str(booking_user["user_id"]):
+        return True
+
+    if str(booking_user.get("manager_user_id") or "") == current_user_id:
+        return True
+
+    return _user_role(current_user) in ELEVATED_BOOKING_ROLES
+
+
 def _can_manage_booking(
     *,
     current_user: dict[str, Any],
     booking_user: dict[str, Any],
 ) -> bool:
     """Return whether current user can mutate target user's bookings."""
-    current_user_id = str(current_user["user_id"])
-    current_role = str(current_user.get("role") or "")
+    return _can_book_for_user(
+        current_user=current_user,
+        booking_user=booking_user,
+    )
 
-    if current_user_id == str(booking_user["user_id"]):
-        return True
 
-    if booking_user.get("manager_user_id") == current_user_id:
-        return True
+def _resolve_booked_for_user(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    current_user: dict[str, Any],
+    booked_for_user_id: str,
+    forbidden_message: str,
+) -> dict[str, Any]:
+    target_user = fetch_user_by_id(
+        conn,
+        tenant_id=tenant_id,
+        user_id=booked_for_user_id,
+    )
 
-    if current_role in {
-        "OFFICE_ADMIN",
-        "TENANT_ADMIN",
-        "SUPPORT_ADMIN",
-    }:
-        return True
+    if target_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "booking_user_not_found",
+                "message": "The booking user was not found in this tenant.",
+            },
+        )
 
-    return False
+    if target_user.get("status") != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "booking_user_inactive",
+                "message": "Bookings can only be created for ACTIVE users.",
+            },
+        )
+
+    if not _can_book_for_user(
+        current_user=current_user,
+        booking_user=target_user,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "booking_forbidden",
+                "message": forbidden_message,
+            },
+        )
+
+    return target_user
+
+
+def _raise_user_booking_conflict(
+    message: str = "The booking owner already has an active booking for that day.",
+) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "booking_user_conflict",
+            "message": message,
+        },
+    )
+
+
+def _booking_conflict_detail(constraint_name: str | None) -> dict[str, str]:
+    if constraint_name == "uq_bookings_tenant_user_date_active":
+        return {
+            "code": "booking_user_conflict",
+            "message": "The booking owner already has an active booking for that day.",
+        }
+
+    return {
+        "code": "booking_conflict",
+        "message": "The requested seat already has an active booking for that day.",
+    }
+
 
 def book_seat(
     conn: PGConnection,
@@ -63,26 +158,17 @@ def book_seat(
 ) -> BookingResponse:
     """Create one tenant-scoped booking and handle DB constraint failures."""
     tenant_id = str(current_user["tenant_id"])
-    user_id = str(current_user["user_id"])
+    booked_by_user_id = _current_user_id(current_user)
+    booked_for_user_id = str(payload.booked_for_user_id)
 
     try:
-        target_user = fetch_user_by_id(conn, tenant_id=tenant_id, user_id=user_id)
-        if target_user is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "code": "booking_user_not_found",
-                    "message": "The booking user was not found in this tenant.",
-                },
-            )
-        if target_user.get("status") != "ACTIVE":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "code": "booking_user_inactive",
-                    "message": "Bookings can only be created for ACTIVE users.",
-                },
-            )
+        _resolve_booked_for_user(
+            conn,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            booked_for_user_id=booked_for_user_id,
+            forbidden_message="You are not allowed to create bookings for this user.",
+        )
 
         seat = fetch_seat_for_booking(
             conn,
@@ -124,6 +210,13 @@ def book_seat(
                     "message": "The requested seat is not bookable.",
                 },
             )
+        if user_has_active_booking_on_date(
+            conn,
+            tenant_id=tenant_id,
+            booked_for_user_id=booked_for_user_id,
+            booking_date=payload.booking_date,
+        ):
+            _raise_user_booking_conflict()
         if has_active_booking_conflict(
             conn,
             tenant_id=tenant_id,
@@ -141,7 +234,8 @@ def book_seat(
         booking = insert_booking(
             conn,
             tenant_id=tenant_id,
-            user_id=user_id,
+            booked_for_user_id=booked_for_user_id,
+            booked_by_user_id=booked_by_user_id,
             seat=seat,
             booking_date=payload.booking_date,
         )
@@ -172,10 +266,9 @@ def book_seat(
         if exc.pgcode in {errorcodes.UNIQUE_VIOLATION, errorcodes.EXCLUSION_VIOLATION}:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "code": "booking_conflict",
-                    "message": "The requested seat already has an active booking for that day.",
-                },
+                detail=_booking_conflict_detail(
+                    getattr(exc.diag, "constraint_name", None),
+                ),
             ) from exc
         if exc.pgcode == errorcodes.FOREIGN_KEY_VIOLATION:
             raise HTTPException(
@@ -306,11 +399,37 @@ def get_available_seats(
     floor_id: str,
     booking_date: date,
     amenity_ids: list[int] | None = None,
+    current_user: dict[str, Any] | None = None,
+    booked_for_user_id: str | None = None,
 ) -> list[AvailableSeatResponse]:
     """List seats available on one floor for one booking date."""
     normalized_amenity_ids = sorted(set(amenity_ids or []))
 
     try:
+        if booked_for_user_id is not None:
+            if current_user is None:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "code": "booking_forbidden",
+                        "message": "Authenticated user context is required for delegated availability checks.",
+                    },
+                )
+            _resolve_booked_for_user(
+                conn,
+                tenant_id=tenant_id,
+                current_user=current_user,
+                booked_for_user_id=booked_for_user_id,
+                forbidden_message="You are not allowed to check availability for this user.",
+            )
+            if user_has_active_booking_on_date(
+                conn,
+                tenant_id=tenant_id,
+                booked_for_user_id=booked_for_user_id,
+                booking_date=booking_date,
+            ):
+                _raise_user_booking_conflict()
+
         seats = fetch_available_seats(
             conn,
             tenant_id=tenant_id,
@@ -381,7 +500,7 @@ def cancel_booking_by_id(
         booking_user = fetch_user_by_id(
             conn,
             tenant_id=tenant_id,
-            user_id=str(booking["user_id"]),
+            user_id=str(booking["booked_for_user_id"]),
         )
 
         if booking_user is None:
@@ -503,7 +622,7 @@ def modify_booking(
         booking_user = fetch_user_by_id(
             conn,
             tenant_id=tenant_id,
-            user_id=str(booking["user_id"]),
+            user_id=str(booking["booked_for_user_id"]),
         )
 
         if booking_user is None:
@@ -575,6 +694,14 @@ def modify_booking(
                 },
             )
 
+        if user_has_active_booking_on_date(
+            conn,
+            tenant_id=tenant_id,
+            booked_for_user_id=str(booking["booked_for_user_id"]),
+            booking_date=payload.booking_date,
+            exclude_booking_id=booking_id,
+        ):
+            _raise_user_booking_conflict()
         if has_active_booking_conflict(
             conn,
             tenant_id=tenant_id,
@@ -599,7 +726,8 @@ def modify_booking(
         new_booking = insert_booking(
             conn,
             tenant_id=tenant_id,
-            user_id=str(booking["user_id"]),
+            booked_for_user_id=str(booking["booked_for_user_id"]),
+            booked_by_user_id=_current_user_id(current_user),
             seat=target_seat,
             booking_date=payload.booking_date,
         )
@@ -643,10 +771,9 @@ def modify_booking(
         }:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "code": "booking_conflict",
-                    "message": "The requested seat already has an active booking.",
-                },
+                detail=_booking_conflict_detail(
+                    getattr(exc.diag, "constraint_name", None),
+                ),
             ) from exc
 
         raise HTTPException(
@@ -666,6 +793,8 @@ def get_available_seats_by_range(
     start_date: date,
     end_date: date,
     amenity_ids: list[int] | None = None,
+    current_user: dict[str, Any] | None = None,
+    booked_for_user_id: str | None = None,
 ) -> list[AvailableSeatResponse]:
     """
     Fetch seat availability across a date range.
@@ -674,6 +803,32 @@ def get_available_seats_by_range(
     normalized_amenity_ids = sorted(set(amenity_ids or []))
 
     try:
+        if booked_for_user_id is not None:
+            if current_user is None:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "code": "booking_forbidden",
+                        "message": "Authenticated user context is required for delegated availability checks.",
+                    },
+                )
+            _resolve_booked_for_user(
+                conn,
+                tenant_id=tenant_id,
+                current_user=current_user,
+                booked_for_user_id=booked_for_user_id,
+                forbidden_message="You are not allowed to check availability for this user.",
+            )
+            if user_has_active_booking_in_range(
+                conn,
+                tenant_id=tenant_id,
+                booked_for_user_id=booked_for_user_id,
+                start_date=start_date,
+                end_date=end_date,
+            ):
+                _raise_user_booking_conflict(
+                    "The booking owner already has an active booking in the requested date range.",
+                )
 
         seats = fetch_available_seats_by_range(
             conn,
