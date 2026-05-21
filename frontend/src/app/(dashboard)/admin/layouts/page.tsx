@@ -8,14 +8,38 @@ import LayoutFilters from "@/features/adminlayouts1/components/LayoutFilters";
 import FloorTree from "@/features/adminlayouts1/components/FloorTree";
 import LayoutTable from "@/features/adminlayouts1/components/LayoutTable";
 
+import { getLayoutsByFloor } from "@/features/adminlayouts1/services/locationService";
+
 
 import { useLayoutSelection } from "@/features/adminlayouts1/hooks/useLayoutSelection";
 
+
+import { LayoutSelection } from "@/features/adminlayouts1/hooks/useLayoutSelection";
+
 import Link from "next/dist/client/link";
+import { useState } from "react";
 
 
 export default function FloorLayoutsPage() {
   const { selection, setSelection } = useLayoutSelection();
+  const [layouts, setLayouts] = useState([]);
+
+  const handleFilterChange = async (filters: any) => {
+  // only call API when floor is selected
+  if (!filters.floorId) {
+    setLayouts([]);
+    return;
+  }
+
+  const data = await getLayoutsByFloor(filters.floorId);
+
+  // apply status filter here
+  const filtered = filters.status
+    ? data.filter((l: any) => l.status === filters.status)
+    : data;
+
+  setLayouts(filtered);
+};
 
   return (
     <SidebarProvider>
@@ -57,19 +81,32 @@ export default function FloorLayoutsPage() {
             </div>
 
             {/* FILTERS */}
-            <LayoutFilters />
+           <LayoutFilters onChange={handleFilterChange} />
 
             {/* MAIN CONTENT */}
             <div className="grid grid-cols-12 gap-6">
 
             {/* LEFT (slightly bigger) */}
               <div className="col-span-3">
-           <FloorTree onSelect={setSelection}/>
+           <FloorTree
+  onSelect={(data: any) =>
+    setSelection({
+      siteId: data.siteId || "",
+      buildingId: data.buildingId || "",
+      floorId: data.floorId || "",
+
+      siteName: data.siteName || data.office || "",
+      buildingName: data.buildingName || data.tower || "",
+      floorName: data.floorName || data.floor || "",
+    })
+  }
+/>
               </div>
 
           {/* RIGHT */}
              <div className="col-span-9">
             <LayoutTable selection={selection} />
+            
                 </div>
 
 </div>

@@ -3,20 +3,23 @@
 import { useState } from "react";
 
 export type LayoutSelection = {
-  office: string;
-  tower: string;
-  floor: string;
+  siteId: string;
+  buildingId: string;
+  floorId: string;
+  siteName: string;
+  buildingName: string;
+  floorName: string;
 };
 
 export const useLayoutSelection = () => {
   const [selection, setSelection] = useState<LayoutSelection>({
-    office: "Hyderabad Office",
-    tower: "Tower 1",
-    floor: "3rd Floor",
+    siteId: "",
+    buildingId: "",
+    floorId: "",
+    siteName: "",
+    buildingName: "",
+    floorName: "",
   });
 
-  return {
-    selection,
-    setSelection,
-  };
+  return { selection, setSelection };
 };

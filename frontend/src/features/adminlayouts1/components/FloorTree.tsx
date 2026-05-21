@@ -1,88 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Building2, Search } from "lucide-react";
+import {
+  getSites,
+  getBuildings,
+  getFloors,
+} from "@/features/adminlayouts1/services/locationService";
+import {
+  Site,
+  Building,
+  Floor,
+} from "@/features/adminlayouts1/types/layout.types";
 
-type Floor = {
-  name: string;
-};
-
-type Tower = {
-  name: string;
-  floors: Floor[];
-};
-
-type Office = {
-  name: string;
-  towers: Tower[];
-};
-
-const offices: Office[] = [
-  {
-    name: "Hyderabad Office",
-    towers: [
-      {
-        name: "Tower 1",
-        floors: [
-          { name: "1st Floor" },
-          { name: "2nd Floor" },
-          { name: "3rd Floor" },
-          { name: "4th Floor" },
-        ],
-      },
-      {
-        name: "Tower 2",
-        floors: [
-          { name: "1st Floor" },
-          { name: "2nd Floor" },
-          { name: "3rd Floor" },
-          { name: "4th Floor" },
-        ],
-      },
-      {
-        name: "Tower 3",
-        floors: [
-          { name: "1st Floor" },
-          { name: "2nd Floor" },
-          { name: "3rd Floor" },
-          { name: "4th Floor" },
-        ],
-      },
-    ],
-  },
-  {
-    name: "Bangalore Office",
-    towers: [
-      {
-        name: "Tower 1",
-        floors: [
-          { name: "1st Floor" },
-          { name: "2nd Floor" },
-          { name: "3rd Floor" },
-          { name: "4th Floor" },
-        ],
-      },
-      {
-        name: "Tower 2",
-        floors: [
-          { name: "1st Floor" },
-          { name: "2nd Floor" },
-          { name: "3rd Floor" },
-          { name: "4th Floor" },
-        ],
-      },
-      {
-        name: "Tower 3",
-        floors: [
-          { name: "1st Floor" },
-          { name: "2nd Floor" },
-          { name: "3rd Floor" },
-          { name: "4th Floor" },
-        ],
-      },
-    ],
-  },
-];
 type Props = {
   onSelect: (data: {
     office: string;
@@ -92,14 +22,27 @@ type Props = {
 };
 
 export default function FloorTree({ onSelect }: Props) {
-  const [expandedOffice, setExpandedOffice] = useState<string | null>("Hyderabad Office");
-  const [expandedTower, setExpandedTower] = useState<string | null>("Tower 1");
-  const [selectedFloor, setSelectedFloor] = useState<string>("3rd Floor");
+  const [expandedOffice, setExpandedOffice] = useState<string | null>(null);
+  const [expandedTower, setExpandedTower] = useState<string | null>(null);
+  const [selectedFloor, setSelectedFloor] = useState<string>("");
   const [search, setSearch] = useState("");
 
-  return (
-    <div className="bg-white border rounded-lg p-4 ">
+  const [sites, setSites] = useState<Site[]>([]);
+  const [buildings, setBuildings] = useState<Record<string, Building[]>>({});
+  const [floors, setFloors] = useState<Record<string, Floor[]>>({});
 
+  useEffect(() => {
+    loadSites();
+  }, []);
+
+const loadSites = async () => {
+  const data = await getSites();
+  console.log("SITES API RESPONSE:", data); // 👈 ADD THIS
+  setSites(data);
+};
+
+  return (
+    <div className="bg-white border rounded-lg p-4">
       {/* TITLE */}
       <h3 className="font-medium mb-3">Floors</h3>
 
@@ -116,25 +59,31 @@ export default function FloorTree({ onSelect }: Props) {
 
       {/* TREE */}
       <div className="text-sm space-y-3">
-
-        {offices.map((office) => (
-          <div key={office.name}>
-
+        {sites.map((site) => (
+          <div key={site.site_id}>
             {/* OFFICE */}
             <div
               className="flex items-center justify-between cursor-pointer"
-              onClick={() =>
-                setExpandedOffice(
-                  expandedOffice === office.name ? null : office.name
-                )
-              }
+              onClick={async () => {
+                const isOpen = expandedOffice === site.site_id;
+
+                setExpandedOffice(isOpen ? null : site.site_id);
+
+                if (!isOpen && !buildings[site.site_id]) {
+                  const data = await getBuildings(site.site_id);
+                  setBuildings((prev) => ({
+                    ...prev,
+                    [site.site_id]: data,
+                  }));
+                }
+              }}
             >
               <div className="flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-muted-foreground" />
-                <span className="font-medium">{office.name}</span>
+                <span className="font-medium">{site.site_name}</span>
               </div>
 
-              {expandedOffice === office.name ? (
+              {expandedOffice === site.site_id ? (
                 <ChevronDown className="w-4 h-4" />
               ) : (
                 <ChevronRight className="w-4 h-4" />
@@ -142,24 +91,30 @@ export default function FloorTree({ onSelect }: Props) {
             </div>
 
             {/* TOWERS */}
-            {expandedOffice === office.name && (
+            {expandedOffice === site.site_id && (
               <div className="ml-5 mt-2 space-y-2">
-
-                {office.towers.map((tower) => (
-                  <div key={tower.name}>
-
+                {(buildings[site.site_id] || []).map((building) => (
+                  <div key={building.building_id}>
                     {/* TOWER */}
-                    <div
-                      className="flex items-center justify-between cursor-pointer"
-                      onClick={() =>
-                        setExpandedTower(
-                          expandedTower === tower.name ? null : tower.name
-                        )
-                      }
-                    >
-                      <span>{tower.name}</span>
+                   <div
+  className="flex items-center justify-between cursor-pointer"
+  onClick={async () => {
+    const isOpen = expandedTower === building.building_id;
 
-                      {expandedTower === tower.name ? (
+    setExpandedTower(isOpen ? null : building.building_id);
+
+    if (!isOpen && !floors[building.building_id]) {
+      const data = await getFloors(building.building_id);
+      setFloors((prev) => ({
+        ...prev,
+        [building.building_id]: data,
+      }));
+    }
+  }}
+>
+                      <span>{building.building_name}</span>
+
+                      {expandedTower === building.building_id ? (
                         <ChevronDown className="w-4 h-4" />
                       ) : (
                         <ChevronRight className="w-4 h-4" />
@@ -167,47 +122,43 @@ export default function FloorTree({ onSelect }: Props) {
                     </div>
 
                     {/* FLOORS */}
-                    {expandedTower === tower.name && (
+                    {expandedTower === building.building_id && (
                       <div className="ml-5 mt-2 space-y-1">
-
-                        {tower.floors
-                          .filter((f) =>
-                            f.name.toLowerCase().includes(search.toLowerCase())
+                        {(floors[building.building_id] || [])
+                          .filter((f: Floor) =>
+                            f.floor_name
+                              ?.toLowerCase()
+                              .includes(search.toLowerCase())
                           )
-                          .map((floor) => (
+                          .map((floor: Floor) => (
                             <div
-                              key={floor.name}
+                              key={floor.floor_id}
                               onClick={() => {
-  setSelectedFloor(floor.name);
+                                setSelectedFloor(floor.floor_id);
 
-  onSelect({
-    office: office.name,
-    tower: tower.name,
-    floor: floor.name,
-  });
-}}
+                                onSelect({
+                                  office: site.site_name,
+                                  tower: building.building_name,
+                                  floor: floor.floor_name,
+                                });
+                              }}
                               className={`cursor-pointer px-2 py-1 rounded ${
-                                selectedFloor === floor.name
+                                selectedFloor === floor.floor_id
                                   ? "bg-indigo-100 text-indigo-600"
                                   : "hover:bg-gray-100"
                               }`}
                             >
-                              {floor.name}
+                              {floor.floor_name}
                             </div>
                           ))}
-
                       </div>
                     )}
-
                   </div>
                 ))}
-
               </div>
             )}
-
           </div>
         ))}
-
       </div>
     </div>
   );
