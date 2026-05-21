@@ -472,6 +472,386 @@ def fetch_future_bookings_for_user(
         rows = cur.fetchall()
     return [dict(row) for row in rows]
 
+def fetch_available_seats_by_range(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+    start_date: date,
+    end_date: date,
+    amenity_ids: list[int],
+) -> list[dict[str, Any]]:
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+        cur.execute(
+            """
+            WITH requested_dates AS (
+
+                SELECT
+                    generate_series(
+                        %s::date,
+                        %s::date,
+                        interval '1 day'
+                    )::date AS booking_date
+            ),
+
+            requested_amenities AS (
+
+                SELECT DISTINCT
+                    UNNEST(%s::bigint[]) AS amenity_id
+            ),
+
+            requested_count AS (
+
+                SELECT
+                    COUNT(*)::integer AS requested_amenity_count
+                FROM requested_amenities
+            ),
+
+            seat_dates AS (
+
+                SELECT
+                    s.id AS seat_id,
+                    rd.booking_date
+                FROM seats s
+                CROSS JOIN requested_dates rd
+                WHERE s.tenant_id = %s
+                  AND s.floor_id = %s
+            ),
+
+            booked_seat_dates AS (
+
+                SELECT
+                    bkg.seat_id,
+                    bkg.booking_date
+                FROM bookings bkg
+                WHERE bkg.tenant_id = %s
+                  AND bkg.floor_id = %s
+                  AND bkg.booking_date BETWEEN %s AND %s
+                  AND bkg.booking_status IN (
+                        'CONFIRMED',
+                        'CHECKED_IN'
+                  )
+            ),
+
+            blocked_seat_dates AS (
+
+                SELECT
+                    sd.seat_id,
+                    sd.booking_date
+                FROM seat_dates sd
+
+                INNER JOIN blocked_seats bl
+                    ON bl.seat_id = sd.seat_id
+                   AND bl.tenant_id = %s
+                   AND bl.status = 'ACTIVE'
+                   AND sd.booking_date
+                        BETWEEN bl.blocked_from
+                        AND bl.blocked_to
+            ),
+
+            amenity_matches AS (
+
+                SELECT
+                    sa.seat_id,
+
+                    ARRAY_AGG(
+                        DISTINCT a.amenity_name
+                        ORDER BY a.amenity_name
+                    ) AS matched_amenities,
+
+                    COUNT(
+                        DISTINCT sa.amenity_id
+                    )::integer AS matched_amenity_count
+
+                FROM seat_amenities sa
+
+                INNER JOIN requested_amenities ra
+                    ON ra.amenity_id = sa.amenity_id
+
+                INNER JOIN amenities a
+                    ON a.id = sa.amenity_id
+                   AND a.tenant_id = sa.tenant_id
+
+                WHERE sa.tenant_id = %s
+
+                GROUP BY sa.seat_id
+            ),
+
+            seat_day_state AS (
+
+                SELECT
+
+                    s.id,
+                    s.tenant_id,
+                    s.site_id,
+                    s.building_id,
+                    s.floor_id,
+                    s.seat_code,
+                    s.seat_type,
+                    s.seat_neighborhood,
+                    s.is_bookable,
+                    s.map_x AS x,
+                    s.map_y AS y,
+                    s.map_width AS w,
+                    s.map_height AS h,
+                    s.rotation_angle,
+
+                    sd.booking_date,
+
+                    COALESCE(
+                        am.matched_amenities,
+                        ARRAY[]::text[]
+                    ) AS matched_amenities,
+
+                    COALESCE(
+                        am.matched_amenity_count,
+                        0
+                    )::integer AS matched_amenity_count,
+
+                    rc.requested_amenity_count,
+
+                    CASE
+
+                        WHEN s.status <> 'ACTIVE'
+                             OR s.is_bookable IS NOT TRUE
+                            THEN 'UNAVAILABLE'
+
+                        WHEN bsd.seat_id IS NOT NULL
+                            THEN 'BOOKED'
+
+                        WHEN blsd.seat_id IS NOT NULL
+                            THEN 'BLOCKED'
+
+                        ELSE 'AVAILABLE'
+
+                    END AS daily_status
+
+                FROM seats s
+
+                INNER JOIN seat_dates sd
+                    ON sd.seat_id = s.id
+
+                CROSS JOIN requested_count rc
+
+                LEFT JOIN booked_seat_dates bsd
+                    ON bsd.seat_id = s.id
+                   AND bsd.booking_date = sd.booking_date
+
+                LEFT JOIN blocked_seat_dates blsd
+                    ON blsd.seat_id = s.id
+                   AND blsd.booking_date = sd.booking_date
+
+                LEFT JOIN amenity_matches am
+                    ON am.seat_id = s.id
+
+                WHERE s.tenant_id = %s
+                  AND s.floor_id = %s
+            )
+
+            SELECT
+
+                sds.id::text AS id,
+                sds.id::text AS seat_id,
+
+                sds.tenant_id::text AS tenant_id,
+                sds.site_id::text AS site_id,
+                sds.building_id::text AS building_id,
+                sds.floor_id::text AS floor_id,
+
+                sds.seat_code,
+                sds.seat_code AS code,
+
+                sds.seat_type,
+                sds.seat_neighborhood,
+                sds.is_bookable,
+
+                sds.x,
+                sds.y,
+                sds.w,
+                sds.h,
+
+                sds.rotation_angle,
+
+                MAX(sds.matched_amenities)
+                    AS matched_amenities,
+
+                MAX(sds.matched_amenity_count)
+                    AS matched_amenity_count,
+
+                MAX(sds.requested_amenity_count)
+                    AS requested_amenity_count,
+
+                CASE
+
+                    WHEN MAX(sds.requested_amenity_count) = 0
+                        THEN 'NOT_APPLICABLE'
+
+                    WHEN MAX(sds.matched_amenity_count)
+                         =
+                         MAX(sds.requested_amenity_count)
+                        THEN 'FULL_MATCH'
+
+                    WHEN MAX(sds.matched_amenity_count) > 0
+                        THEN 'PARTIAL_MATCH'
+
+                    ELSE 'NO_MATCH'
+
+                END AS preference_match_status,
+
+                json_build_object(
+
+                    'status',
+
+                    CASE
+
+                        WHEN COUNT(*) FILTER (
+                            WHERE sds.daily_status = 'AVAILABLE'
+                        ) = COUNT(*)
+
+                            THEN 'FULLY_AVAILABLE'
+
+                        WHEN COUNT(*) FILTER (
+                            WHERE sds.daily_status = 'AVAILABLE'
+                        ) = 0
+
+                            THEN 'FULLY_UNAVAILABLE'
+
+                        ELSE 'PARTIALLY_AVAILABLE'
+
+                    END,
+
+                    'available_dates',
+
+                    ARRAY_REMOVE(
+                        ARRAY_AGG(
+                            CASE
+                                WHEN sds.daily_status = 'AVAILABLE'
+                                THEN sds.booking_date
+                            END
+                        ),
+                        NULL
+                    ),
+
+                    'booked_dates',
+
+                    ARRAY_REMOVE(
+                        ARRAY_AGG(
+                            CASE
+                                WHEN sds.daily_status = 'BOOKED'
+                                THEN sds.booking_date
+                            END
+                        ),
+                        NULL
+                    ),
+
+                    'blocked_dates',
+
+                    ARRAY_REMOVE(
+                        ARRAY_AGG(
+                            CASE
+                                WHEN sds.daily_status = 'BLOCKED'
+                                THEN sds.booking_date
+                            END
+                        ),
+                        NULL
+                    ),
+
+                    'unavailable_dates',
+
+                    ARRAY_REMOVE(
+                        ARRAY_AGG(
+                            CASE
+                                WHEN sds.daily_status = 'UNAVAILABLE'
+                                THEN sds.booking_date
+                            END
+                        ),
+                        NULL
+                    ),
+
+                    'daily_statuses',
+
+                    json_agg(
+                        json_build_object(
+                            'booking_date',
+                            sds.booking_date,
+                            'status',
+                            sds.daily_status
+                        )
+                        ORDER BY sds.booking_date
+                    ),
+
+                    'total_requested_days',
+                    COUNT(*),
+
+                    'total_available_days',
+
+                    COUNT(*) FILTER (
+                        WHERE sds.daily_status = 'AVAILABLE'
+                    ),
+
+                    'availability_percentage',
+
+                    ROUND(
+                        (
+                            COUNT(*) FILTER (
+                                WHERE sds.daily_status = 'AVAILABLE'
+                            )::numeric
+                            /
+                            COUNT(*)::numeric
+                        ) * 100,
+                        2
+                    )
+
+                ) AS availability
+
+            FROM seat_day_state sds
+
+            GROUP BY
+                sds.id,
+                sds.tenant_id,
+                sds.site_id,
+                sds.building_id,
+                sds.floor_id,
+                sds.seat_code,
+                sds.seat_type,
+                sds.seat_neighborhood,
+                sds.is_bookable,
+                sds.x,
+                sds.y,
+                sds.w,
+                sds.h,
+                sds.rotation_angle
+
+            ORDER BY sds.seat_code
+            """,
+            (
+                start_date,
+                end_date,
+
+                amenity_ids,
+
+                tenant_id,
+                floor_id,
+
+                tenant_id,
+                floor_id,
+                start_date,
+                end_date,
+
+                tenant_id,
+
+                tenant_id,
+
+                tenant_id,
+                floor_id,
+            ),
+        )
+
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
 
 def fetch_available_seats(
     conn: PGConnection,

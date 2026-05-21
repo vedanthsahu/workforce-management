@@ -5,17 +5,36 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Path,
+    Query,
+    status,
+)
+
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user
 from backend.db.connection import get_db
-from backend.schemas.location import BuildingResponse, FloorResponse, SeatResponse, SiteResponse
+
+from backend.schemas.booking import AvailableSeatResponse
+
+from backend.schemas.location import (
+    BuildingResponse,
+    FloorResponse,
+    SeatResponse,
+    SiteResponse,
+)
 from backend.services.location_service import (
     get_buildings_by_site,
     get_floors_by_building,
-    get_seats_by_floor,
     get_sites,
+)
+
+from backend.services.booking_service import (
+    get_available_seats_by_range,
 )
 
 router = APIRouter(tags=["locations"])
@@ -23,18 +42,38 @@ router = APIRouter(tags=["locations"])
 
 @router.get("/sites", response_model=list[SiteResponse])
 def sites(
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
-    conn: Annotated[PGConnection, Depends(get_db)],
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
 ) -> list[SiteResponse]:
-    return get_sites(conn, tenant_id=str(current_user["tenant_id"]))
+
+    return get_sites(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+    )
 
 
 @router.get("/buildings", response_model=list[BuildingResponse])
 def buildings(
     site_id: Annotated[int, Query(gt=0)],
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
-    conn: Annotated[PGConnection, Depends(get_db)],
+
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+
 ) -> list[BuildingResponse]:
+
     return get_buildings_by_site(
         conn,
         tenant_id=str(current_user["tenant_id"]),
@@ -42,12 +81,25 @@ def buildings(
     )
 
 
-@router.get("/buildings/{building_id}/floors", response_model=list[FloorResponse])
-def floors_by_office(
-    building_id: Annotated[int, Path(alias="building_id", gt=0)],
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
-    conn: Annotated[PGConnection, Depends(get_db)],
+@router.get(
+    "/buildings/{building_id}/floors",
+    response_model=list[FloorResponse],
+)
+def floors_by_building(
+    building_id: Annotated[int, Path(gt=0)],
+
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+
 ) -> list[FloorResponse]:
+
     return get_floors_by_building(
         conn,
         tenant_id=str(current_user["tenant_id"]),
@@ -55,18 +107,58 @@ def floors_by_office(
     )
 
 
-@router.get("/floors/{floor_id}/seats", response_model=list[SeatResponse])
-def seats_by_floor(
+@router.get(
+    "/floors/{floor_id}/seats",
+    response_model=list[AvailableSeatResponse],
+)
+def available_seats(
     floor_id: Annotated[int, Path(gt=0)],
-    booking_date: Annotated[date, Query()],
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
-    conn: Annotated[PGConnection, Depends(get_db)],
-    amenity_ids: Annotated[list[int] | None, Query()] = None,
-) -> list[SeatResponse]:
-    return get_seats_by_floor(
+
+    start_date: date,
+    end_date: date,
+
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+
+    amenity_ids: Annotated[
+        list[int] | None,
+        Query(),
+    ] = None,
+
+) -> list[AvailableSeatResponse]:
+
+    if start_date > end_date:
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_date_range",
+                "message": "start_date must be earlier than end_date.",
+            },
+        )
+
+    if (end_date - start_date).days > 31:
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "date_range_too_large",
+                "message": "Maximum allowed range is 31 days.",
+            },
+        )
+
+    return get_available_seats_by_range(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         floor_id=str(floor_id),
-        booking_date=booking_date,
+        start_date=start_date,
+        end_date=end_date,
         amenity_ids=amenity_ids,
     )
