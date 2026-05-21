@@ -451,23 +451,228 @@ def cancel_booking_by_id(
         ) from exc
     
 
-def modify_booking(
-    conn: PGConnection,
-    *,
-    current_user: dict[str, Any],
-    booking_id: str,
-    payload: ModifyBookingRequest,
-) -> BookingResponse:
-    """Modify a future booking by cancelling old booking and creating a new one."""
-    tenant_id = str(current_user["tenant_id"])
+# def modify_booking(
+#     conn: PGConnection,
+#     *,
+#     current_user: dict[str, Any],
+#     booking_id: str,
+#     payload: ModifyBookingRequest,
+# ) -> BookingResponse:
+#     """Modify a future booking by cancelling old booking and creating a new one."""
+#     tenant_id = str(current_user["tenant_id"])
 
+#     try:
+#         booking = fetch_booking_by_id_for_update(
+#             conn,
+#             tenant_id=tenant_id,
+#             booking_id=booking_id,
+#         )
+
+#         if booking is None:
+#             raise HTTPException(
+#                 status_code=status.HTTP_404_NOT_FOUND,
+#                 detail={
+#                     "code": "booking_not_found",
+#                     "message": "Booking was not found.",
+#                 },
+#             )
+
+#         if booking["booking_date"] <= date.today():
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail={
+#                     "code": "booking_not_mutable",
+#                     "message": "Only future bookings can be modified.",
+#                 },
+#             )
+
+#         if booking["booking_status"] in {
+#             "CANCELLED",
+#             "CHECKED_IN",
+#             "COMPLETED",
+#             "NO_SHOW",
+#         }:
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail={
+#                     "code": "booking_not_mutable",
+#                     "message": "This booking can no longer be modified.",
+#                 },
+#             )
+
+#         booking_user = fetch_user_by_id(
+#             conn,
+#             tenant_id=tenant_id,
+#             user_id=str(booking["user_id"]),
+#         )
+
+#         if booking_user is None:
+#             raise HTTPException(
+#                 status_code=status.HTTP_404_NOT_FOUND,
+#                 detail={
+#                     "code": "booking_user_not_found",
+#                     "message": "Booking owner was not found.",
+#                 },
+#             )
+
+#         if not _can_manage_booking(
+#             current_user=current_user,
+#             booking_user=booking_user,
+#         ):
+#             raise HTTPException(
+#                 status_code=status.HTTP_403_FORBIDDEN,
+#                 detail={
+#                     "code": "booking_forbidden",
+#                     "message": "You are not allowed to modify this booking.",
+#                 },
+#             )
+
+#         if (
+#             str(booking["seat_id"]) == str(payload.seat_id)
+#             and booking["booking_date"] == payload.booking_date
+#         ):
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail={
+#                     "code": "booking_no_effect",
+#                     "message": "Modification request does not change booking details.",
+#                 },
+#             )
+
+#         target_seat = fetch_seat_for_booking(
+#             conn,
+#             tenant_id=tenant_id,
+#             site_id=str(payload.site_id),
+#             building_id=str(payload.building_id),
+#             floor_id=str(payload.floor_id),
+#             seat_id=str(payload.seat_id),
+#         )
+
+#         if target_seat is None:
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail={
+#                     "code": "booking_hierarchy_invalid",
+#                     "message": "The requested seat does not match the submitted hierarchy.",
+#                 },
+#             )
+
+#         if target_seat.get("status") != "ACTIVE":
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail={
+#                     "code": "booking_seat_inactive",
+#                     "message": "Bookings can only target ACTIVE seats.",
+#                 },
+#             )
+
+#         if target_seat.get("is_bookable") is not True:
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail={
+#                     "code": "booking_seat_not_bookable",
+#                     "message": "The requested seat is not bookable.",
+#                 },
+#             )
+
+#         if has_active_booking_conflict(
+#             conn,
+#             tenant_id=tenant_id,
+#             seat_id=str(payload.seat_id),
+#             booking_date=payload.booking_date,
+#         ):
+#             raise HTTPException(
+#                 status_code=status.HTTP_409_CONFLICT,
+#                 detail={
+#                     "code": "booking_conflict",
+#                     "message": "The requested seat already has an active booking.",
+#                 },
+#             )
+
+#         cancel_booking(
+#             conn,
+#             tenant_id=tenant_id,
+#             booking_id=booking_id,
+#             cancellation_reason="MODIFIED",
+#         )
+
+#         new_booking = insert_booking(
+#             conn,
+#             tenant_id=tenant_id,
+#             user_id=str(booking["user_id"]),
+#             seat=target_seat,
+#             booking_date=payload.booking_date,
+#         )
+
+#         conn.commit()
+
+#         return BookingResponse(**new_booking)
+
+#     except HTTPException:
+#         conn.rollback()
+#         raise
+
+#     except ValueError as exc:
+#         conn.rollback()
+
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST,
+#             detail={
+#                 "code": "invalid_booking_value",
+#                 "message": str(exc),
+#             },
+#         ) from exc
+
+#     except LookupError as exc:
+#         conn.rollback()
+
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail={
+#                 "code": "booking_modify_failed",
+#                 "message": str(exc),
+#             },
+#         ) from exc
+
+#     except psycopg2.Error as exc:
+#         conn.rollback()
+
+#         if exc.pgcode in {
+#             errorcodes.UNIQUE_VIOLATION,
+#             errorcodes.EXCLUSION_VIOLATION,
+#         }:
+#             raise HTTPException(
+#                 status_code=status.HTTP_409_CONFLICT,
+#                 detail={
+#                     "code": "booking_conflict",
+#                     "message": "The requested seat already has an active booking.",
+#                 },
+#             ) from exc
+
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail={
+#                 "code": "booking_modify_failed",
+#                 "message": "Failed to modify booking.",
+#             },
+#         ) from exc
+    
+def modify_booking(conn, *, current_user, booking_id, payload):
+    """Modify a future booking by cancelling old booking and creating a new one."""
+    from datetime import date
+    from fastapi import HTTPException, status
+    import psycopg2
+    from psycopg2 import errorcodes
+ 
+    tenant_id = str(current_user["tenant_id"])
+ 
     try:
         booking = fetch_booking_by_id_for_update(
             conn,
             tenant_id=tenant_id,
             booking_id=booking_id,
         )
-
+ 
         if booking is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -476,7 +681,7 @@ def modify_booking(
                     "message": "Booking was not found.",
                 },
             )
-
+ 
         if booking["booking_date"] <= date.today():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -485,7 +690,7 @@ def modify_booking(
                     "message": "Only future bookings can be modified.",
                 },
             )
-
+ 
         if booking["booking_status"] in {
             "CANCELLED",
             "CHECKED_IN",
@@ -499,13 +704,13 @@ def modify_booking(
                     "message": "This booking can no longer be modified.",
                 },
             )
-
+ 
         booking_user = fetch_user_by_id(
             conn,
             tenant_id=tenant_id,
             user_id=str(booking["user_id"]),
         )
-
+ 
         if booking_user is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -514,7 +719,7 @@ def modify_booking(
                     "message": "Booking owner was not found.",
                 },
             )
-
+ 
         if not _can_manage_booking(
             current_user=current_user,
             booking_user=booking_user,
@@ -526,7 +731,7 @@ def modify_booking(
                     "message": "You are not allowed to modify this booking.",
                 },
             )
-
+ 
         if (
             str(booking["seat_id"]) == str(payload.seat_id)
             and booking["booking_date"] == payload.booking_date
@@ -538,7 +743,7 @@ def modify_booking(
                     "message": "Modification request does not change booking details.",
                 },
             )
-
+ 
         target_seat = fetch_seat_for_booking(
             conn,
             tenant_id=tenant_id,
@@ -547,7 +752,7 @@ def modify_booking(
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
         )
-
+ 
         if target_seat is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -556,7 +761,7 @@ def modify_booking(
                     "message": "The requested seat does not match the submitted hierarchy.",
                 },
             )
-
+ 
         if target_seat.get("status") != "ACTIVE":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -565,7 +770,7 @@ def modify_booking(
                     "message": "Bookings can only target ACTIVE seats.",
                 },
             )
-
+ 
         if target_seat.get("is_bookable") is not True:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -574,12 +779,16 @@ def modify_booking(
                     "message": "The requested seat is not bookable.",
                 },
             )
-
+ 
+        # ── KEY FIX: exclude the booking being modified ───────────────────
+        # Without exclude_booking_id the query finds the original booking
+        # (still CONFIRMED at this point) and raises 409 incorrectly.
         if has_active_booking_conflict(
             conn,
             tenant_id=tenant_id,
             seat_id=str(payload.seat_id),
             booking_date=payload.booking_date,
+            exclude_booking_id=booking_id,          # ← pass original id
         ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -588,14 +797,14 @@ def modify_booking(
                     "message": "The requested seat already has an active booking.",
                 },
             )
-
+ 
         cancel_booking(
             conn,
             tenant_id=tenant_id,
             booking_id=booking_id,
             cancellation_reason="MODIFIED",
         )
-
+ 
         new_booking = insert_booking(
             conn,
             tenant_id=tenant_id,
@@ -603,18 +812,17 @@ def modify_booking(
             seat=target_seat,
             booking_date=payload.booking_date,
         )
-
+ 
         conn.commit()
-
+ 
         return BookingResponse(**new_booking)
-
+ 
     except HTTPException:
         conn.rollback()
         raise
-
+ 
     except ValueError as exc:
         conn.rollback()
-
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -622,10 +830,9 @@ def modify_booking(
                 "message": str(exc),
             },
         ) from exc
-
+ 
     except LookupError as exc:
         conn.rollback()
-
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -633,10 +840,9 @@ def modify_booking(
                 "message": str(exc),
             },
         ) from exc
-
+ 
     except psycopg2.Error as exc:
         conn.rollback()
-
         if exc.pgcode in {
             errorcodes.UNIQUE_VIOLATION,
             errorcodes.EXCLUSION_VIOLATION,
@@ -648,7 +854,7 @@ def modify_booking(
                     "message": "The requested seat already has an active booking.",
                 },
             ) from exc
-
+ 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -656,8 +862,7 @@ def modify_booking(
                 "message": "Failed to modify booking.",
             },
         ) from exc
-    
-    
+
 def get_available_seats_by_range(
     conn: PGConnection,
     *,

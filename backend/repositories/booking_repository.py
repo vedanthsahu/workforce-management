@@ -45,27 +45,70 @@ def fetch_seat_for_booking(
     return dict(row) if row else None
 
 
+# def has_active_booking_conflict(
+#     conn: PGConnection,
+#     *,
+#     tenant_id: str,
+#     seat_id: str,
+#     booking_date: date,
+# ) -> bool:
+#     """Return whether a seat is already actively booked for a date."""
+#     with conn.cursor() as cur:
+#         cur.execute(
+#             """
+#             SELECT 1
+#             FROM bookings
+#             WHERE tenant_id = %s
+#               AND seat_id = %s
+#               AND booking_date = %s
+#               AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
+#             LIMIT 1
+#             """,
+#             (tenant_id, seat_id, booking_date),
+#         )
+#         return cur.fetchone() is not None
+
 def has_active_booking_conflict(
-    conn: PGConnection,
+    conn,
     *,
     tenant_id: str,
     seat_id: str,
-    booking_date: date,
+    booking_date,
+    exclude_booking_id: str | None = None,   # ← NEW optional param
 ) -> bool:
-    """Return whether a seat is already actively booked for a date."""
+    """Return whether a seat is already actively booked for a date.
+ 
+    Pass exclude_booking_id when modifying an existing booking so the
+    original booking row is not treated as a conflict with itself.
+    """
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT 1
-            FROM bookings
-            WHERE tenant_id = %s
-              AND seat_id = %s
-              AND booking_date = %s
-              AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
-            LIMIT 1
-            """,
-            (tenant_id, seat_id, booking_date),
-        )
+        if exclude_booking_id:
+            cur.execute(
+                """
+                SELECT 1
+                FROM bookings
+                WHERE tenant_id = %s
+                  AND seat_id = %s
+                  AND booking_date = %s
+                  AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
+                  AND id <> %s          -- exclude the booking being modified
+                LIMIT 1
+                """,
+                (tenant_id, seat_id, booking_date, exclude_booking_id),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT 1
+                FROM bookings
+                WHERE tenant_id = %s
+                  AND seat_id = %s
+                  AND booking_date = %s
+                  AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
+                LIMIT 1
+                """,
+                (tenant_id, seat_id, booking_date),
+            )
         return cur.fetchone() is not None
 
 

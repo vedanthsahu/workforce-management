@@ -564,6 +564,7 @@
 
 // export type BookingStep = 1 | 2 | 3;
 
+//book a seat types
 
 export interface Preference {
   id: string;
@@ -698,6 +699,7 @@ export interface FetchSeatsParams {
   preferences?: string[];
   /** Numeric amenity IDs sent as repeated query params */
   amenityIds?: number[];
+   currentSeatId?: string;  
 }
 
 // ── Booking payload / response ────────────────────────────────────────────────
