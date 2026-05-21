@@ -4,15 +4,19 @@ Service layer for floor layout workflows.
 
 from __future__ import annotations
 
+import logging
+from datetime import date, datetime
 from typing import Any
 
 import psycopg2
 from boto3.exceptions import S3UploadFailedError
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import HTTPException, UploadFile, status
+from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from psycopg2.extensions import connection as PGConnection
 
+from backend.core.config import get_settings
 from backend.core.enums import LayoutStatus
+from backend.core.logging import LOGGER_NAME
 from backend.core.storage import upload_svg_to_s3
 from backend.repositories.floor_layout_repository import (
     activate_floor_layout as activate_floor_layout_record,
@@ -24,10 +28,14 @@ from backend.repositories.floor_layout_repository import (
     get_next_layout_version,
     insert_floor_layout,
 )
+from backend.repositories.user_repository import fetch_admin_notification_emails
 from backend.schemas.floor_layout import (
     CreateFloorLayoutRequest,
     FloorLayoutResponse,
 )
+from backend.services.notification_service import queue_floor_layout_uploaded_notification
+
+logger = logging.getLogger(f"{LOGGER_NAME}.floor_layouts")
 
 
 def create_floor_layout(
@@ -36,6 +44,7 @@ def create_floor_layout(
     current_user: dict[str, Any],
     payload: CreateFloorLayoutRequest,
     file: UploadFile,
+    background_tasks: BackgroundTasks | None = None,
 ) -> FloorLayoutResponse:
 
     tenant_id = str(current_user["tenant_id"])
@@ -97,6 +106,13 @@ def create_floor_layout(
 
         conn.commit()
 
+        _queue_floor_layout_uploaded_email(
+            background_tasks,
+            conn=conn,
+            tenant_id=tenant_id,
+            layout=created_layout,
+        )
+
     except HTTPException:
         conn.rollback()
         raise
@@ -156,6 +172,7 @@ def activate_floor_layout(
     *,
     current_user: dict[str, Any],
     layout_id: str,
+    background_tasks: BackgroundTasks | None = None,
 ) -> FloorLayoutResponse:
     """Publish one layout and archive any currently active layout on the floor."""
     tenant_id = str(current_user["tenant_id"])
@@ -207,6 +224,13 @@ def activate_floor_layout(
 
         conn.commit()
 
+        _queue_floor_layout_uploaded_email(
+            background_tasks,
+            conn=conn,
+            tenant_id=tenant_id,
+            layout=activated_layout,
+        )
+
     except HTTPException:
         conn.rollback()
         raise
@@ -223,3 +247,96 @@ def activate_floor_layout(
         ) from exc
 
     return FloorLayoutResponse(**activated_layout)
+
+
+def _queue_floor_layout_uploaded_email(
+    background_tasks: BackgroundTasks | None,
+    *,
+    conn: PGConnection,
+    tenant_id: str,
+    layout: dict[str, Any],
+) -> None:
+    if background_tasks is None:
+        return
+
+    try:
+        queue_floor_layout_uploaded_notification(
+            background_tasks,
+            to_emails=_resolve_admin_notification_recipients(
+                conn,
+                tenant_id=tenant_id,
+            ),
+            context=_floor_layout_email_context(layout),
+        )
+    except Exception:
+        logger.exception(
+            "notification.queue_failed event=floor_layout_uploaded layout_id=%s tenant_id=%s",
+            layout.get("layout_id"),
+            tenant_id,
+        )
+
+
+def _resolve_admin_notification_recipients(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+) -> list[str]:
+    settings = get_settings()
+    recipients = list(settings.notification_admin_emails)
+
+    try:
+        recipients.extend(
+            fetch_admin_notification_emails(
+                conn,
+                tenant_id=tenant_id,
+            )
+        )
+    except psycopg2.Error:
+        logger.exception(
+            "notification.recipient_lookup_failed event=floor_layout_uploaded tenant_id=%s",
+            tenant_id,
+        )
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for email in recipients:
+        candidate = str(email or "").strip()
+        if not candidate:
+            continue
+        key = candidate.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(candidate)
+    return normalized
+
+
+def _floor_layout_email_context(layout: dict[str, Any]) -> dict[str, str]:
+    uploader_name = (
+        layout.get("uploaded_by_name")
+        or layout.get("uploaded_by_email")
+        or layout.get("uploaded_by_user_id")
+        or "Unknown"
+    )
+    return {
+        "layout_name": _format_template_value(layout.get("layout_name")),
+        "version_no": _format_template_value(layout.get("version_no")),
+        "layout_type": _format_template_value(layout.get("layout_type")),
+        "uploaded_by": str(uploader_name),
+        "uploaded_by_email": _format_template_value(layout.get("uploaded_by_email")),
+        "floor_name": _format_template_value(layout.get("floor_name") or layout.get("floor_id")),
+        "building_name": _format_template_value(layout.get("building_name") or layout.get("building_id")),
+        "site_name": _format_template_value(layout.get("site_name") or layout.get("site_id")),
+        "uploaded_at": _format_template_value(layout.get("created_at")),
+        "status": _format_template_value(layout.get("status")),
+    }
+
+
+def _format_template_value(value: Any) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat(sep=" ", timespec="seconds")
+    if isinstance(value, date):
+        return value.isoformat()
+    if value is None:
+        return "Not available"
+    return str(value)

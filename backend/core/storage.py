@@ -4,16 +4,25 @@ S3 storage helpers for floor layout uploads.
 
 from __future__ import annotations
 
+import logging
+from functools import lru_cache
+
 import boto3
+from boto3.exceptions import S3UploadFailedError
 from botocore.client import BaseClient
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import HTTPException, UploadFile, status
 
 from backend.core.config import get_settings
+from backend.core.logging import LOGGER_NAME
+from backend.core.retry import aws_retry
 
-settings = get_settings()
+logger = logging.getLogger(f"{LOGGER_NAME}.storage")
 
 
+@lru_cache
 def get_s3_client() -> BaseClient:
+    settings = get_settings()
     return boto3.client(
         "s3",
         region_name=settings.aws_region,
@@ -76,6 +85,7 @@ def upload_svg_to_s3(
     version_no: int,
 ) -> str:
     validate_svg_file(file)
+    settings = get_settings()
 
     object_key = build_layout_object_key(
         tenant_id=tenant_id,
@@ -87,13 +97,53 @@ def upload_svg_to_s3(
 
     s3_client = get_s3_client()
 
-    s3_client.upload_fileobj(
-        Fileobj=file.file,
-        Bucket=settings.aws_s3_bucket_name,
-        Key=object_key,
-        ExtraArgs={
-            "ContentType": "image/svg+xml",
-        },
+    @aws_retry(
+        logger=logger,
+        operation_name="s3.upload_floor_layout_svg",
+        max_retries=settings.aws_s3_max_retries,
+        initial_delay_seconds=settings.aws_retry_initial_delay_seconds,
+        max_delay_seconds=settings.aws_retry_max_delay_seconds,
+    )
+    def upload_with_retry() -> None:
+        file.file.seek(0)
+        s3_client.upload_fileobj(
+            Fileobj=file.file,
+            Bucket=settings.aws_s3_bucket_name,
+            Key=object_key,
+            ExtraArgs={
+                "ContentType": "image/svg+xml",
+            },
+        )
+
+    logger.info(
+        "s3.upload.start bucket=%s key=%s tenant_id=%s floor_id=%s version_no=%s",
+        settings.aws_s3_bucket_name,
+        object_key,
+        tenant_id,
+        floor_id,
+        version_no,
+    )
+
+    try:
+        upload_with_retry()
+    except (BotoCoreError, ClientError, S3UploadFailedError):
+        logger.exception(
+            "s3.upload.failed bucket=%s key=%s tenant_id=%s floor_id=%s version_no=%s",
+            settings.aws_s3_bucket_name,
+            object_key,
+            tenant_id,
+            floor_id,
+            version_no,
+        )
+        raise
+
+    logger.info(
+        "s3.upload.success bucket=%s key=%s tenant_id=%s floor_id=%s version_no=%s",
+        settings.aws_s3_bucket_name,
+        object_key,
+        tenant_id,
+        floor_id,
+        version_no,
     )
 
     return f"{settings.aws_s3_public_base_url}/{object_key}"

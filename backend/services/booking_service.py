@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import date
+import logging
+from datetime import date, datetime
 from typing import Any
 
 import psycopg2
-from fastapi import HTTPException, status
+from fastapi import BackgroundTasks, HTTPException, status
 from psycopg2 import errorcodes
 from psycopg2.extensions import connection as PGConnection
+from backend.core.logging import LOGGER_NAME
 from backend.repositories.booking_repository import (
     fetch_available_seats,
     fetch_available_seats_by_range,
@@ -32,6 +34,13 @@ from backend.schemas.booking import (
     CreateBookingRequest,
     ModifyBookingRequest,
 )
+from backend.services.notification_service import (
+    queue_booking_cancelled_notification,
+    queue_booking_created_notification,
+    queue_booking_modified_notification,
+)
+
+logger = logging.getLogger(f"{LOGGER_NAME}.bookings")
 
 ELEVATED_BOOKING_ROLES = {
     "MANAGER",
@@ -150,11 +159,133 @@ def _booking_conflict_detail(constraint_name: str | None) -> dict[str, str]:
     }
 
 
+def _queue_booking_created_email(
+    background_tasks: BackgroundTasks | None,
+    *,
+    booking: dict[str, Any],
+    booked_for_user: dict[str, Any],
+) -> None:
+    if background_tasks is None:
+        return
+
+    try:
+        queue_booking_created_notification(
+            background_tasks,
+            to_emails=_user_email_list(booked_for_user),
+            context={
+                "user_name": _user_display_name(booked_for_user),
+                **_booking_email_details(booking),
+            },
+        )
+    except Exception:
+        logger.exception(
+            "notification.queue_failed event=booking_created booking_id=%s",
+            booking.get("booking_id"),
+        )
+
+
+def _queue_booking_cancelled_email(
+    background_tasks: BackgroundTasks | None,
+    *,
+    booking: dict[str, Any],
+    booked_for_user: dict[str, Any],
+) -> None:
+    if background_tasks is None:
+        return
+
+    try:
+        queue_booking_cancelled_notification(
+            background_tasks,
+            to_emails=_user_email_list(booked_for_user),
+            context={
+                "user_name": _user_display_name(booked_for_user),
+                "cancellation_reason": booking.get("cancellation_reason") or "Cancelled",
+                **_booking_email_details(booking),
+            },
+        )
+    except Exception:
+        logger.exception(
+            "notification.queue_failed event=booking_cancelled booking_id=%s",
+            booking.get("booking_id"),
+        )
+
+
+def _queue_booking_modified_email(
+    background_tasks: BackgroundTasks | None,
+    *,
+    old_booking: dict[str, Any],
+    new_booking: dict[str, Any],
+    booked_for_user: dict[str, Any],
+) -> None:
+    if background_tasks is None:
+        return
+
+    try:
+        queue_booking_modified_notification(
+            background_tasks,
+            to_emails=_user_email_list(booked_for_user),
+            context={
+                "user_name": _user_display_name(booked_for_user),
+                "old_booking": _booking_email_details(old_booking),
+                "new_booking": _booking_email_details(new_booking),
+            },
+        )
+    except Exception:
+        logger.exception(
+            "notification.queue_failed event=booking_modified old_booking_id=%s new_booking_id=%s",
+            old_booking.get("booking_id"),
+            new_booking.get("booking_id"),
+        )
+
+
+def _booking_email_details(booking: dict[str, Any]) -> dict[str, str]:
+    return {
+        "seat_name": str(booking.get("seat_code") or booking.get("seat_id") or "Not available"),
+        "booking_date": _format_template_value(booking.get("booking_date")),
+        "location": _format_booking_location(booking),
+    }
+
+
+def _format_booking_location(booking: dict[str, Any]) -> str:
+    parts = [
+        booking.get("floor_name"),
+        booking.get("building_name"),
+        booking.get("site_name"),
+    ]
+    location = ", ".join(str(part) for part in parts if part)
+    return location or "Not available"
+
+
+def _format_template_value(value: Any) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat(sep=" ", timespec="seconds")
+    if isinstance(value, date):
+        return value.isoformat()
+    if value is None:
+        return "Not available"
+    return str(value)
+
+
+def _user_display_name(user: dict[str, Any]) -> str:
+    return str(
+        user.get("full_name")
+        or user.get("display_name")
+        or user.get("email")
+        or "there"
+    )
+
+
+def _user_email_list(user: dict[str, Any]) -> list[str]:
+    email = str(user.get("email") or "").strip()
+    return [email] if email else []
+
+
 def book_seat(
     conn: PGConnection,
     *,
     current_user: dict[str, Any],
     payload: CreateBookingRequest,
+    background_tasks: BackgroundTasks | None = None,
 ) -> BookingResponse:
     """Create one tenant-scoped booking and handle DB constraint failures."""
     tenant_id = str(current_user["tenant_id"])
@@ -162,7 +293,7 @@ def book_seat(
     booked_for_user_id = str(payload.booked_for_user_id)
 
     try:
-        _resolve_booked_for_user(
+        booked_for_user = _resolve_booked_for_user(
             conn,
             tenant_id=tenant_id,
             current_user=current_user,
@@ -293,6 +424,12 @@ def book_seat(
                 "message": "Failed to create booking.",
             },
         ) from exc
+
+    _queue_booking_created_email(
+        background_tasks,
+        booking=booking,
+        booked_for_user=booked_for_user,
+    )
 
     return BookingResponse(**booking)
 
@@ -455,6 +592,7 @@ def cancel_booking_by_id(
     current_user: dict[str, Any],
     booking_id: str,
     cancellation_reason: str | None,
+    background_tasks: BackgroundTasks | None = None,
 ) -> BookingResponse:
     """Cancel one future booking using soft-cancellation."""
     tenant_id = str(current_user["tenant_id"])
@@ -552,6 +690,12 @@ def cancel_booking_by_id(
                 },
             )
 
+        _queue_booking_cancelled_email(
+            background_tasks,
+            booking=updated_booking,
+            booked_for_user=booking_user,
+        )
+
         return BookingResponse(**updated_booking)
 
     except HTTPException:
@@ -576,6 +720,7 @@ def modify_booking(
     current_user: dict[str, Any],
     booking_id: str,
     payload: ModifyBookingRequest,
+    background_tasks: BackgroundTasks | None = None,
 ) -> BookingResponse:
     """Modify a future booking by cancelling old booking and creating a new one."""
     tenant_id = str(current_user["tenant_id"])
@@ -658,6 +803,12 @@ def modify_booking(
                 },
             )
 
+        old_booking_for_email = fetch_booking_by_id(
+            conn,
+            tenant_id=tenant_id,
+            booking_id=booking_id,
+        ) or booking
+
         target_seat = fetch_seat_for_booking(
             conn,
             tenant_id=tenant_id,
@@ -733,6 +884,13 @@ def modify_booking(
         )
 
         conn.commit()
+
+        _queue_booking_modified_email(
+            background_tasks,
+            old_booking=old_booking_for_email,
+            new_booking=new_booking,
+            booked_for_user=booking_user,
+        )
 
         return BookingResponse(**new_booking)
 
