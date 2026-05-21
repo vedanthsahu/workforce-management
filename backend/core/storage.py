@@ -4,8 +4,6 @@ S3 storage helpers for floor layout uploads.
 
 from __future__ import annotations
 
-import uuid
-
 import boto3
 from botocore.client import BaseClient
 from fastapi import HTTPException, UploadFile, status
@@ -55,16 +53,16 @@ def build_layout_object_key(
     site_id: str,
     building_id: str,
     floor_id: str,
+    version_no: int,
 ) -> str:
-    unique_id = uuid.uuid4().hex
-
     return (
         f"tenant_{tenant_id}/"
         f"site_{site_id}/"
         f"building_{building_id}/"
         f"floor_{floor_id}/"
-        f"layouts/temp/"
-        f"{unique_id}.svg"
+        f"layouts/"
+        f"v{version_no}/"
+        f"layout.svg"
     )
 
 
@@ -75,6 +73,7 @@ def upload_svg_to_s3(
     site_id: str,
     building_id: str,
     floor_id: str,
+    version_no: int,
 ) -> str:
     validate_svg_file(file)
 
@@ -83,6 +82,7 @@ def upload_svg_to_s3(
         site_id=site_id,
         building_id=building_id,
         floor_id=floor_id,
+        version_no=version_no,
     )
 
     s3_client = get_s3_client()

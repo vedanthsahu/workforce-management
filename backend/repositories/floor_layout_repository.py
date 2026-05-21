@@ -26,11 +26,23 @@ FLOOR_LAYOUT_SELECT_FIELDS = """
     fl.is_published,
     fl.layout_metadata,
     fl.uploaded_by_user_id::text AS uploaded_by_user_id,
+    au.full_name AS uploaded_by_name,
+    au.email AS uploaded_by_email,
+    au.role_name AS uploaded_by_role,
+    au.department AS uploaded_by_department,
+    au.job_title AS uploaded_by_job_title,
     fl.published_by_user_id::text AS published_by_user_id,
     fl.published_at,
     fl.status,
     fl.created_at,
     fl.updated_at
+"""
+
+
+FLOOR_LAYOUT_UPLOADER_JOIN = """
+    LEFT JOIN app_users AS au
+        ON au.id = fl.uploaded_by_user_id
+       AND au.tenant_id = fl.tenant_id
 """
 
 
@@ -150,6 +162,7 @@ def fetch_floor_layouts_by_floor(
             SELECT
                 {FLOOR_LAYOUT_SELECT_FIELDS}
             FROM floor_layouts AS fl
+            {FLOOR_LAYOUT_UPLOADER_JOIN}
             WHERE fl.tenant_id = %s
               AND fl.floor_id = %s
             ORDER BY fl.version_no DESC, fl.created_at DESC, fl.id DESC
@@ -178,6 +191,7 @@ def fetch_floor_layout_by_id(
             SELECT
                 {FLOOR_LAYOUT_SELECT_FIELDS}
             FROM floor_layouts AS fl
+            {FLOOR_LAYOUT_UPLOADER_JOIN}
             WHERE fl.tenant_id = %s
               AND fl.id = %s
             """,
@@ -213,24 +227,7 @@ def activate_floor_layout(
             WHERE tenant_id = %s
               AND id = %s
             RETURNING
-                id::text AS layout_id,
-                tenant_id::text AS tenant_id,
-                site_id::text AS site_id,
-                building_id::text AS building_id,
-                floor_id::text AS floor_id,
-                layout_name,
-                layout_file_url,
-                file_storage_provider,
-                layout_type,
-                version_no,
-                is_published,
-                layout_metadata,
-                uploaded_by_user_id::text AS uploaded_by_user_id,
-                published_by_user_id::text AS published_by_user_id,
-                published_at,
-                status,
-                created_at,
-                updated_at
+                id::text AS layout_id
             """,
             (
                 LayoutStatus.PUBLISHED.value,
@@ -242,7 +239,14 @@ def activate_floor_layout(
 
         row = cur.fetchone()
 
-    return dict(row) if row else None
+    if row is None:
+        return None
+
+    return fetch_floor_layout_by_id(
+        conn,
+        tenant_id=tenant_id,
+        layout_id=str(row["layout_id"]),
+    )
 
 
 def insert_floor_layout(
@@ -304,24 +308,7 @@ def insert_floor_layout(
                 %s
             )
             RETURNING
-                id::text AS layout_id,
-                tenant_id::text AS tenant_id,
-                site_id::text AS site_id,
-                building_id::text AS building_id,
-                floor_id::text AS floor_id,
-                layout_name,
-                layout_file_url,
-                file_storage_provider,
-                layout_type,
-                version_no,
-                is_published,
-                layout_metadata,
-                uploaded_by_user_id::text AS uploaded_by_user_id,
-                published_by_user_id::text AS published_by_user_id,
-                published_at,
-                status,
-                created_at,
-                updated_at
+                id::text AS layout_id
             """,
             (
                 tenant_id,
@@ -347,4 +334,13 @@ def insert_floor_layout(
     if row is None:
         raise LookupError("Failed to create floor layout.")
 
-    return dict(row)
+    created_layout = fetch_floor_layout_by_id(
+        conn,
+        tenant_id=tenant_id,
+        layout_id=str(row["layout_id"]),
+    )
+
+    if created_layout is None:
+        raise LookupError("Created floor layout could not be reloaded.")
+
+    return created_layout

@@ -116,6 +116,7 @@ def available_seats(
 
     start_date: date,
     end_date: date,
+    booked_for_user_id: Annotated[int, Query(gt=0)],
 
     current_user: Annotated[
         dict[str, Any],
@@ -160,6 +161,8 @@ def available_seats(
         floor_id=str(floor_id),
         start_date=start_date,
         end_date=end_date,
+        current_user=current_user,
+        booked_for_user_id=str(booked_for_user_id),
         amenity_ids=amenity_ids,
     )
 
