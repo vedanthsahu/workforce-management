@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Annotated
+from typing import Any, Annotated, Iterable
 
 import psycopg2
 from fastapi import Depends, HTTPException, Request, Response, status
@@ -246,5 +246,45 @@ def require_permission(permission: str):
             )
 
         return current_user
+
+    return dependency
+
+
+ADMIN_ROLE_NAMES = {
+    "PRODUCT_ADMIN",
+    "TENANT_ADMIN",
+}
+
+
+def require_any_permission(permissions: Iterable[str]):
+    required_permissions = tuple(permissions)
+    if not required_permissions:
+        raise ValueError("At least one permission is required.")
+
+    def dependency(
+        current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    ) -> dict[str, Any]:
+        role_name = str(
+            current_user.get("role_name")
+            or current_user.get("role")
+            or ""
+        ).strip().upper()
+        if role_name in ADMIN_ROLE_NAMES:
+            return current_user
+
+        user_permissions = set(current_user.get("permissions", []))
+        if any(permission in user_permissions for permission in required_permissions):
+            return current_user
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "insufficient_permissions",
+                "message": (
+                    "Missing one of the required permissions: "
+                    f"{', '.join(required_permissions)}"
+                ),
+            },
+        )
 
     return dependency
