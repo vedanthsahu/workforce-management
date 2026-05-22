@@ -63,6 +63,12 @@ USER_RETURNING_FIELDS = """
 
 ROLE_NAMES = {"EMPLOYEE", "OFFICE_ADMIN", "TENANT_ADMIN", "SUPPORT_ADMIN"}
 USER_STATUSES = {"ACTIVE", "INACTIVE", "LOCKED"}
+ADMIN_NOTIFICATION_ROLES = (
+    "TENANT_ADMIN",
+    "OFFICE_ADMIN",
+    "PRODUCT_ADMIN",
+    "SUPPORT_ADMIN",
+)
 
 
 def _normalize_email(value: str) -> str:
@@ -197,6 +203,34 @@ def fetch_user_by_id(
         )
         result = cur.fetchone()
     return dict(result) if result else None
+
+
+def fetch_admin_notification_emails(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+) -> list[str]:
+    """Fetch active tenant admins who can receive system notifications."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT au.email
+            FROM app_users AS au
+            WHERE au.tenant_id = %s
+              AND au.status = 'ACTIVE'
+              AND au.email IS NOT NULL
+              AND au.email <> ''
+              AND au.role_name = ANY(%s::text[])
+            ORDER BY au.email
+            """,
+            (
+                tenant_id,
+                list(ADMIN_NOTIFICATION_ROLES),
+            ),
+        )
+        rows = cur.fetchall()
+
+    return [str(row[0]) for row in rows if row and row[0]]
 
 
 def fetch_user_by_microsoft_object_id(

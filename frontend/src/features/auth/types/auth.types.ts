@@ -1,31 +1,35 @@
+
 export interface FavoriteSeatResponse {
-  seat_id: string;
-  seat_code: string;
-  floor_id?: string | null;
-  floor_name?: string | null;
-  site_id?: string | null;
-  site_name?: string | null;
-  building_id?: string | null;
+  seat_id:       string;
+  seat_code:     string;
+  floor_id?:     string | null;
+  floor_name?:   string | null;
+  site_id?:      string | null;
+  site_name?:    string | null;
+  building_id?:  string | null;
   building_name?: string | null;
 }
 
 export interface User {
-  user_id: string;
-  tenant_id: string;
-  email: string;
-  full_name?: string | null;
-  display_name?: string | null;
-  name?: string | null;
-  role?: string | null;
-  status?: string | null;
-  home_site_id?: string | null;
-  department?: string | null;
-  job_title?: string | null;
+  user_id:          string;
+  tenant_id:        string;
+  email:            string;
+  full_name?:       string | null;
+  display_name?:    string | null;
+  name?:            string | null;
+  role?:            string | null;
+  status?:          string | null;
+  home_site_id?:    string | null;
+  department?:      string | null;
+  job_title?:       string | null;
   office_location?: string | null;
-  // ← new fields
-  permissions?: string[];
-  favorite_seat?: FavoriteSeatResponse | null;
-  days_in_office?: number;
+  // Granular permission strings returned by /auth/me.
+  // e.g. ["seat:book_self", "booking:view_own", "booking:book_for_someone"]
+  // usePermissions reads this array — if empty/absent, all guarded nav
+  // items are hidden.
+  permissions?:     string[];
+  favorite_seat?:   FavoriteSeatResponse | null;
+  days_in_office?:  number;
 }
 
 export function getInitials(name: string): string {
@@ -38,8 +42,8 @@ export function getInitials(name: string): string {
 }
 
 export interface AuthContextType {
-  user: User | null;
-  isLoading: boolean;
+  user:            User | null;
+  isLoading:       boolean;
   isAuthenticated: boolean;
-  logout: () => Promise<void>;
+  logout:          () => Promise<void>;
 }

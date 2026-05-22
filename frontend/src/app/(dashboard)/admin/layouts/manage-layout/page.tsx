@@ -17,12 +17,10 @@ export default function ManageLayoutPage() {
   const floorId = params.get("floorId");
 
   return (
-    <SidebarProvider>
+    
       <div className="flex h-screen w-full">
 
-        {/* Sidebar */}
-        <AppSidebar user={null} />
-
+      
         {/* RIGHT SIDE */}
         <div className="flex flex-col flex-1 min-w-0">
 
@@ -57,6 +55,6 @@ export default function ManageLayoutPage() {
 
         </div>
       </div>
-    </SidebarProvider>
+   
   );
 }

@@ -18,6 +18,7 @@ from backend.core.security import (
     SESSION_TOKEN_COOKIE_NAME,
     build_auth_cookie_settings,
 )
+from backend.core.logging import LOGGER_NAME
 from backend.core.sso import (
     GraphAPIError,
     SSOError,
@@ -43,6 +44,7 @@ from backend.services.auth_service import AuthTokens, issue_tokens_for_user
 import logging
 
 router = APIRouter(tags=["SSO"])
+logger = logging.getLogger(f"{LOGGER_NAME}.sso")
 
 STATE_COOKIE_NAME = "oauth_state"
 MICROSOFT_PROVIDER = "MICROSOFT"
@@ -74,10 +76,8 @@ def auth_callback(
     error: str | None = None,
     error_description: str | None = None,
 ):
-    import sys
-
     def debug(msg):
-        print(f"[SSO DEBUG] {msg}", file=sys.stderr, flush=True)
+        logger.debug("sso.callback %s", msg)
 
     debug("=== auth_callback started ===")
 

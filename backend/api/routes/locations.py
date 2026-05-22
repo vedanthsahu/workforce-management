@@ -106,17 +106,14 @@ def floors_by_building(
         building_id=str(building_id),
     )
 
-
 @router.get(
     "/floors/{floor_id}/seats",
     response_model=list[AvailableSeatResponse],
 )
 def available_seats(
     floor_id: Annotated[int, Path(gt=0)],
-
     start_date: date,
     end_date: date,
-    booked_for_user_id: Annotated[int, Query(gt=0)],
 
     current_user: Annotated[
         dict[str, Any],
@@ -127,6 +124,11 @@ def available_seats(
         PGConnection,
         Depends(get_db),
     ],
+
+    booked_for_user_id: Annotated[
+        int | None,
+        Query(),
+    ] = None,
 
     amenity_ids: Annotated[
         list[int] | None,
@@ -155,6 +157,12 @@ def available_seats(
             },
         )
 
+    effective_user_id = (
+        booked_for_user_id
+        if booked_for_user_id is not None
+        else current_user["user_id"]
+    )
+
     return get_available_seats_by_range(
         conn,
         tenant_id=str(current_user["tenant_id"]),
@@ -162,6 +170,6 @@ def available_seats(
         start_date=start_date,
         end_date=end_date,
         current_user=current_user,
-        booked_for_user_id=str(booked_for_user_id),
+        booked_for_user_id=str(effective_user_id),
         amenity_ids=amenity_ids,
     )
