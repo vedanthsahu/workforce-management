@@ -11,7 +11,7 @@ export type CreateLayoutPayload = {
   floor_id: number;
   layout_name: string;
   layout_file_url: string;
-  status: "DRAFT" | "PUBLISHED";
+  status: "DRAFT" ;
   layout_metadata: Record<string, any>;
 };
 
@@ -23,3 +23,12 @@ export type Props = {
     layoutName: string;
   };
 };
+
+// export type createLayout = {
+//   file: File;
+//   site_id: number;
+//   building_id: number;
+//   floor_id: number;
+//   layout_name: string;
+//   status: "DRAFT" | "PUBLISHED";
+// }

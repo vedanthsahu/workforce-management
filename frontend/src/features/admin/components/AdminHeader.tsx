@@ -1,8 +1,12 @@
 "use client";
 
 import { Calendar } from "lucide-react";
+type Props = {
+  selectedDate: string;
+  setSelectedDate: (date: string) => void;
+};
+export default function AdminHeader({ selectedDate, setSelectedDate }: Props) {
 
-export default function AdminHeader() {
   return (
     <div className="flex items-center justify-between">
 
@@ -30,7 +34,11 @@ export default function AdminHeader() {
         {/* Date */}
         <div className="flex items-center gap-2 h-9 px-3 rounded-md border bg-white text-sm">
           <Calendar className="w-4 h-4 text-muted-foreground" />
-          May 17, 2026
+          <input
+  type="date"
+  value={selectedDate}
+  onChange={(e) => setSelectedDate(e.target.value)}
+/>
         </div>
 
       </div>

@@ -15,21 +15,29 @@ export default function LayoutForm({ formData, setFormData }: Props) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-
-
-
-
-   // ✅ NEW STATE
+   // NEW STATE
   const [sites, setSites] = useState<any[]>([]);
   const [buildings, setBuildings] = useState<any[]>([]);
   const [floors, setFloors] = useState<any[]>([]);
 
-  // ✅ LOAD SITES
+
+  const resetForm = () => {
+  setFormData({
+    site: null,
+    building: null,
+    floor: null,
+    layoutName: "",
+    file: null,
+    isSubmitting: false,
+  });
+};
+
+  //LOAD SITES
   useEffect(() => {
     layoutService.getSites().then(setSites);
   }, []);
 
-  // ✅ LOAD BUILDINGS
+  // LOAD BUILDINGS
   useEffect(() => {
     if (formData.site?.id) {
       layoutService.getBuildings(formData.site.id).then(setBuildings);
@@ -38,7 +46,7 @@ export default function LayoutForm({ formData, setFormData }: Props) {
     }
   }, [formData.site]);
 
-  // ✅ LOAD FLOORS
+  //  LOAD FLOORS
   useEffect(() => {
     if (formData.building?.id) {
       layoutService.getFloors(formData.building.id).then(setFloors);
@@ -46,28 +54,6 @@ export default function LayoutForm({ formData, setFormData }: Props) {
       setFloors([]);
     }
   }, [formData.building]);
-
-
-
-
-
-  // 🔹 Handle file
-  // const handleFileChange = (selectedFile: File) => {
-  //   if (selectedFile.type !== "image/svg+xml") {
-  //     alert("Only SVG files are allowed");
-  //     return;
-  //   }
-
-  //   if (selectedFile.size > 10 * 1024 * 1024) {
-  //     alert("File size should be less than 10MB");
-  //     return;
-  //   }
-
-  //   setFormData({
-  //     ...formData,
-  //     file: selectedFile,
-  //   });
-  // };
 
 
    const handleFileChange = (file: File) => {
@@ -88,10 +74,8 @@ export default function LayoutForm({ formData, setFormData }: Props) {
     e.preventDefault();
   };
 
-  //  SUBMIT HANDLER
 const handleSubmit = async () => {
   try {
-    // ✅ VALIDATION
     if (!formData.site || !formData.building || !formData.floor) {
       alert("Please select Site, Building and Floor");
       return;
@@ -102,70 +86,38 @@ const handleSubmit = async () => {
       return;
     }
 
-    if (!formData.floor) {
-  alert("Please select valid floor for selected building");
-  return;
-}
-
-    if (!formData.layoutName || formData.layoutName.trim() === "") {
+    if (!formData.layoutName.trim()) {
       alert("Enter layout name");
       return;
     }
-
     setIsSubmitting(true);
+    alert("Before API");
+   
 
-    // ✅ STEP 1: Upload SVG
-    const uploadRes = await layoutService.uploadSvg({
+    const res = await layoutService.createLayout({
       file: formData.file,
       site_id: formData.site.id,
       building_id: formData.building.id,
       floor_id: formData.floor.id,
+      layout_name: formData.layoutName,
+      status: "DRAFT",
     });
+    alert("after API");
 
-    console.log("UPLOAD RESPONSE:", uploadRes);
-
-
-    const fileUrl = uploadRes.object_url;
-
-    // 🚨 CRITICAL CHECK
-    if (!fileUrl) {
-      alert("Upload failed. No URL returned.");
-      return;
-    }
-
-    // ✅ STEP 2: CREATE LAYOUT
-   
-    const payload = {
-        site_id: formData.site.id,
-        building_id: formData.building.id,
-        floor_id: formData.floor.id,
-        layout_name: formData.layoutName,
-        layout_file_url: fileUrl,
-        status: "DRAFT",
-        layout_metadata: {},
-      };
-
-
-    // console.log("FINAL PAYLOAD:", payload);
-    // console.log("CALLING CREATE API...");
-    // alert("Before API");
-    const res = await layoutService.createLayout(payload);
-    // alert("After API");
-    // console.log("CREATE RESPONSE:", res);
-    
+    console.log("SUCCESS:", res);
 
     alert("Layout saved successfully ");
+    formData
+    resetForm();
+   
+
+    console.log ("FILE TYPE:", formData.file?.type);
 
   } catch (err: any) {
-  console.log(" ERROR RESPONSE FULL:", err?.response);
-  console.log(" ERROR DATA:", err?.response?.data);
-  console.log(" ERROR MESSAGE:", err?.message);
-
-  alert(JSON.stringify(err?.response?.data || "Unknown error"));
-}finally {
-      setIsSubmitting(false);
-    }
+    console.error("ERROR:", err?.response?.data || err.message);
+  }
 };
+
   return (
     <Card className="col-span-2">
 
@@ -283,42 +235,6 @@ const handleSubmit = async () => {
           </div>
         </div>
 
-{/* ROW 3  */}
-<div className="grid grid-cols-2 gap-4">
-
-  <div>
-    <label className="text-sm font-medium flex items-center gap-1">
-      Version Number
-      <span className="text-xs text-muted-foreground">ⓘ</span>
-    </label>
-
-    <input
-      value="1.0"
-      readOnly
-      className="w-full mt-1 h-10 border rounded-md px-3 bg-gray-100"
-    />
-
-    <p className="text-xs text-muted-foreground mt-1">
-      Next version number will be auto-generated
-    </p>
-  </div>
-
-  <div>
-    <label className="text-sm font-medium">
-      Layout Type
-    </label>
-
-    <select className="w-full mt-1 h-10 border rounded-md px-3 bg-white">
-      <option>SVG</option>
-    </select>
-
-    <p className="text-xs text-muted-foreground mt-1">
-      Only SVG format is supported
-    </p>
-  </div>
-
-</div>
-
         {/* FILE UPLOAD */}
         <div>
           <label className="text-sm font-medium">
@@ -390,18 +306,22 @@ const handleSubmit = async () => {
 </div>
         {/* BUTTONS */}
         <div className="flex justify-end gap-3 pt-4">
-          <button className="px-4 py-2 border rounded-md">
+          <button  onClick={resetForm} 
+          className="px-4 py-2 border rounded-md">
             Cancel
           </button>
 
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={isSubmitting}
+           
             className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-60"
           >
-            {isSubmitting ? "Saving..." : "Save as Draft"}
+            {/* {isSubmitting ? "Saving..." : "Save as Draft"} */}
+            Save as Draft
           </button>
+          
+          
         </div>
 
       </CardContent>

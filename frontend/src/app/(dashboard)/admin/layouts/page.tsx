@@ -38,7 +38,7 @@ export default function FloorLayoutsPage() {
     ? data.filter((l: any) => l.status === filters.status)
     : data;
 
-  setLayouts(filtered);
+  // setLayouts(filtered);
 };
 
   return (
@@ -81,25 +81,26 @@ export default function FloorLayoutsPage() {
             </div>
 
             {/* FILTERS */}
-           <LayoutFilters onChange={handleFilterChange} />
+           {/* <LayoutFilters onChange={handleFilterChange} /> */}
 
             {/* MAIN CONTENT */}
             <div className="grid grid-cols-12 gap-6">
 
             {/* LEFT (slightly bigger) */}
               <div className="col-span-3">
-           <FloorTree
-  onSelect={(data: any) =>
-    setSelection({
-      siteId: data.siteId || "",
-      buildingId: data.buildingId || "",
-      floorId: data.floorId || "",
+           <FloorTree onSelect={(data: any) => {
+  console.log("DATA FROM TREE:", data);
 
-      siteName: data.siteName || data.office || "",
-      buildingName: data.buildingName || data.tower || "",
-      floorName: data.floorName || data.floor || "",
-    })
-  }
+  setSelection({
+    siteId: data.siteId || "",
+    buildingId: data.buildingId || "",
+    floorId: data.floorId || "",
+
+    siteName: data.siteName || data.office || "",
+    buildingName: data.buildingName || data.tower || "",
+    floorName: data.floorName || data.floor || "",
+  });
+}}
 />
               </div>
 

@@ -1,43 +1,34 @@
 import { axiosInstance } from "@/lib/http/axios";
 
-import type { CreateLayoutPayload, UploadPayload } from "@/features/uploadlayouts/types/layout.types";
-import { Payload } from "recharts/types/component/DefaultTooltipContent";
-
-
 export const layoutService = {
 
-  async uploadSvg(payload: UploadPayload) {
-    const formData = new FormData();
+async createLayout(payload: any) {
+  const formData = new FormData();
 
-    formData.append("file", payload.file);
-    formData.append("site_id", String(payload.site_id));
-    formData.append("building_id", String(payload.building_id));
-    formData.append("floor_id", String(payload.floor_id));
+  formData.append("file", payload.file);
+  formData.append("site_id", String(payload.site_id));
+  formData.append("building_id", String(payload.building_id));
+  formData.append("floor_id", String(payload.floor_id));
+  formData.append("layout_name", payload.layout_name);
+  formData.append("status", payload.status);
 
-    const { data } = await axiosInstance.post(
-      "/admin/floor-layouts/upload-svg",
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      }
-    );
+  // ✅ IMPORTANT: MUST MATCH SWAGGER
+  formData.append("layout_metadata", "{}");
 
-    return data; // { object_url: string }
-  },
+  const { data } = await axiosInstance.post(
+    "/admin/floor-layouts",
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }
+  );
 
-  async createLayout(payload: any) {
-    const { data } = await axiosInstance.post(
-      "/admin/floor-layouts",
-      payload
-    );
+  return data;
+},
 
-    return data;
-  },
-
-
-  async getSites() {
+async getSites() {
   const { data } = await axiosInstance.get("/sites");
   return data;
 },

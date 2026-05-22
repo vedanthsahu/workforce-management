@@ -48,10 +48,10 @@ type Props = {
             <span>{formData.layoutName || "-"}</span>
           </div>
 
-          <div className="flex justify-between">
+          {/* <div className="flex justify-between">
             <span className="text-muted-foreground">Version</span>
             <span>1.0 (New)</span>
-          </div>
+          </div> */}
 
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Status</span>

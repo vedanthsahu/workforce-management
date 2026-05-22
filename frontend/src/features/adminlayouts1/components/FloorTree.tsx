@@ -15,9 +15,13 @@ import {
 
 type Props = {
   onSelect: (data: {
-    office: string;
-    tower: string;
-    floor: string;
+    siteId: string;
+    buildingId: string;
+    floorId: string;
+
+    siteName: string;
+    buildingName: string;
+    floorName: string;
   }) => void;
 };
 
@@ -134,14 +138,18 @@ const loadSites = async () => {
                             <div
                               key={floor.floor_id}
                               onClick={() => {
-                                setSelectedFloor(floor.floor_id);
+  setSelectedFloor(floor.floor_id);
 
-                                onSelect({
-                                  office: site.site_name,
-                                  tower: building.building_name,
-                                  floor: floor.floor_name,
-                                });
-                              }}
+  onSelect({
+    siteId: site.site_id,
+    buildingId: building.building_id,
+    floorId: floor.floor_id,   // ✅ IMPORTANT FIX
+
+    siteName: site.site_name,
+    buildingName: building.building_name,
+    floorName: floor.floor_name,
+  });
+}}
                               className={`cursor-pointer px-2 py-1 rounded ${
                                 selectedFloor === floor.floor_id
                                   ? "bg-indigo-100 text-indigo-600"

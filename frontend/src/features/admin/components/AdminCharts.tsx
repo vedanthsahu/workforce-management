@@ -35,10 +35,12 @@ import {
 
 import { Info } from "lucide-react";
 
+
 type WeekType = "this-week" | "last-week";
 
 type Props = {
   data: any;
+  buildings: any[]; 
 };
 
 // ---------- STATIC (keep for now) ----------
@@ -66,40 +68,44 @@ const weeklyData: Record<
   ],
 };
 
-const baseOffices = [
-  { name: "Bengaluru (HQ)", value: 78.6 },
-  { name: "Hyderabad", value: 54.2 },
-  { name: "Pune", value: 32.8 },
-  { name: "Chennai", value: 28.1 },
-];
 
-const extraOffices = [
-  { name: "Mumbai", value: 48.5 },
-  { name: "Indore", value: 36.2 },
-];
+
+
 
 // ---------- COMPONENT ----------
-export default function AdminCharts({ data }: Props) {
+export default function AdminCharts({ data ,buildings }: Props) {
 
   const [selectedWeek, setSelectedWeek] =
     useState<WeekType>("this-week");
 
   const [expanded, setExpanded] = useState(false);
+  const [selectedDate, setSelectedDate] = useState("2026-05-21");
 
-  // ✅ HANDLE LOADING
+  const dynamicOffices = (buildings || []).map((b: any) => ({
+  name: b.building_name,
+  value: Math.floor(Math.random() * 80) + 20, // temp %
+}));
+
+const offices = dynamicOffices;
+
+
+//  const offices = expanded
+//   ? dynamicOffices
+//   : dynamicOffices.slice(0, 4);
+
+  // HANDLE LOADING
   if (!data) {
     return <div className="p-4">Loading charts...</div>;
   }
 
-  // ✅ BACKEND DATA
+  // ✅BACKEND DATA
   const totalSeats = data.total_seats;
   const booked = data.booked_today;
   const available = totalSeats - booked;
   const occupancy = data.occupancy_percentage;
 
-  const offices = expanded
-    ? [...baseOffices, ...extraOffices]
-    : baseOffices;
+
+
 
   return (
     <div className="grid grid-cols-3 gap-4">
@@ -248,7 +254,7 @@ export default function AdminCharts({ data }: Props) {
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {offices.map((item, i) => (
+          {offices.map((item: any, i: number) => (
             <div key={i}>
               <div className="flex justify-between text-sm">
                 <span>{item.name}</span>
@@ -266,12 +272,12 @@ export default function AdminCharts({ data }: Props) {
             </div>
           ))}
 
-          <button
+          {/* <button
             onClick={() => setExpanded(!expanded)}
             className="text-sm text-indigo-600"
           >
             {expanded ? "Show less" : "View all offices →"}
-          </button>
+          </button> */}
         </CardContent>
       </Card>
 

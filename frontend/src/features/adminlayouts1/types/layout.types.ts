@@ -22,18 +22,16 @@ export type Floor = {
   building_id: string;
 };
 
-export type LayoutSelection = {
-  siteId: string;
-  // office: string;
-  // tower: string;
-  // floor: string;
-  buildingId: string;
-  floorId: string;
-  siteName: string;
-  buildingName: string;
-  floorName: string;
+export type LayoutTableItem = {
+  id: string;
+  name: string;
+  version: number;
+  status: string;
+  published: string;
+  date: string;
+  user: string;
+  file: string;
 };
-
 export type LayoutApiResponse = {
   layout_id: string;
   layout_name: string;
@@ -45,13 +43,11 @@ export type LayoutApiResponse = {
   uploaded_by_user_id: string;
 };
 
-export type LayoutTableItem = {
-  id: string;
-  name: string;
-  version: number;
-  status: string;
-  published: string;
-  date: string;
-  user: string;
-  file: string;
+export type LayoutSelection = {
+  siteId: string;
+  buildingId: string;
+  floorId: string;
+  siteName: string;
+  buildingName: string;
+  floorName: string;
 };
