@@ -1,100 +1,106 @@
 "use client";
 
-type Props = {
-  layout: any;
-};
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
-export default function LayoutDetails({ layout }: Props) {
-  if (!layout) {
-    return (
-      <div className="border rounded-md p-5 bg-white">
-        <p className="text-sm text-gray-400">No layout selected</p>
-      </div>
-    );
-  }
-
+export default function LayoutDetails() {
   return (
-    <div className="border rounded-md p-5 bg-white space-y-5">
+    <Card className="h-full">
 
-      {/* HEADER */}
-      <div>
-        <h2 className="font-semibold text-gray-800 text-sm">
-          Layout Details
-        </h2>
+      <CardContent className="p-4 space-y-5">
 
-        <p className="text-xs text-gray-500 mt-1">
-          {layout.layout_name || "No description available"}
-        </p>
-      </div>
+        {/* ---------------- HEADER ---------------- */}
+        <div className="flex justify-between items-center">
+          <h2 className="font-semibold text-sm">Layout Details</h2>
 
-      {/* DIVIDER */}
-      <div className="border-t" />
-
-      {/* METRICS (like your image) */}
-      <div className="space-y-4">
-
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Total Seats</span>
-          <span className="font-semibold">--</span>
+          <Button variant="outline" size="sm">
+            Edit
+          </Button>
         </div>
 
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Available</span>
-          <span className="font-semibold text-green-600">--</span>
+        {/* ---------------- BASIC INFO ---------------- */}
+        <div className="text-sm space-y-2">
+          <p className="font-medium">8th Floor Layout</p>
+
+          <p className="text-gray-500 text-xs">
+            Main work floor with cabins, meeting rooms and collaboration area.
+          </p>
         </div>
 
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Booked</span>
-          <span className="font-semibold text-red-500">--</span>
+        {/* ---------------- STATS GRID ---------------- */}
+        <div className="grid grid-cols-2 gap-4 text-sm">
+
+          <div>
+            <p className="text-gray-500">Total Seats</p>
+            <p className="font-semibold">48</p>
+          </div>
+
+          <div>
+            <p className="text-gray-500">Bookable Seats</p>
+            <p className="font-semibold text-green-600">42</p>
+          </div>
+
+          <div>
+            <p className="text-gray-500">Blocked Seats</p>
+            <p className="font-semibold text-red-500">2</p>
+          </div>
+
+          <div>
+            <p className="text-gray-500">Amenities Count</p>
+            <p className="font-semibold">0</p>
+          </div>
+
         </div>
 
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Blocked</span>
-          <span className="font-semibold text-gray-600">--</span>
+        {/* ---------------- LAYOUT FILE ---------------- */}
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Layout File</p>
+
+          <div className="border rounded-md p-2 flex justify-between items-center text-sm">
+
+            <span className="truncate">
+              BGM_HQ_Floor8_v1.png
+            </span>
+
+            <Button variant="ghost" size="sm">
+              ⬇
+            </Button>
+
+          </div>
         </div>
 
-      </div>
+        {/* ---------------- QUICK ACTIONS ---------------- */}
+        <div className="space-y-2">
 
-      {/* DIVIDER */}
-      <div className="border-t" />
+          <p className="text-sm font-medium">Quick Actions</p>
 
-      {/* EXTRA DETAILS */}
-      <div className="space-y-2 text-sm">
+          <Button variant="outline" className="w-full">
+            Edit Layout
+          </Button>
 
-        <div className="flex justify-between">
-          <span className="text-gray-500">Version</span>
-          <span className="font-medium">v{layout.version_no}</span>
+          <Button variant="outline" className="w-full">
+            Manage Seats
+          </Button>
+
+          <Button variant="outline" className="w-full">
+            Manage Amenities
+          </Button>
+
+          <Button
+            variant="outline"
+            className="w-full border-red-300 text-red-500"
+          >
+            Manage Blocked Areas
+          </Button>
+
         </div>
 
-        <div className="flex justify-between">
-          <span className="text-gray-500">Status</span>
-          <span className="font-medium">{layout.status}</span>
-        </div>
+        {/* ---------------- PUBLISH BUTTON ---------------- */}
+        <Button className="w-full bg-indigo-600 text-white">
+          Publish Layout
+        </Button>
 
-        <div className="flex justify-between">
-          <span className="text-gray-500">Uploaded By</span>
-          <span className="font-medium">{layout.uploaded_by_name}</span>
-        </div>
-
-      </div>
-
-      {/* ACTION BUTTONS */}
-      <div className="pt-2 space-y-2">
-
-        <button className="w-full border rounded-md p-2 text-sm hover:bg-gray-50">
-          Manage Seats
-        </button>
-
-        <button className="w-full border rounded-md p-2 text-sm hover:bg-gray-50">
-          Manage Amenities
-        </button>
-
-        <button className="w-full border rounded-md p-2 text-sm hover:bg-gray-50">
-          Manage Blocked Areas
-        </button>
-
-      </div>
-
-    </div>
+      </CardContent>
+    </Card>
   );
 }

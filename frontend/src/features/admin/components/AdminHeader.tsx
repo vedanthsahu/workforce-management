@@ -22,23 +22,23 @@ export default function AdminHeader({ selectedDate, setSelectedDate }: Props) {
       <div className="flex items-center gap-3">
 
         {/* Offices Dropdown */}
-        <select className="h-9 px-3 rounded-md border bg-white text-sm">
+        {/* <select className="h-9 px-3 rounded-md border bg-white text-sm">
           <option>All Offices</option>
-        </select>
+        </select> */}
 
         {/* Floors Dropdown */}
-        <select className="h-9 px-3 rounded-md border bg-white text-sm">
+        {/* <select className="h-9 px-3 rounded-md border bg-white text-sm">
           <option>All Floors</option>
-        </select>
+        </select> */}
 
         {/* Date */}
         <div className="flex items-center gap-2 h-9 px-3 rounded-md border bg-white text-sm">
-          <Calendar className="w-4 h-4 text-muted-foreground" />
+         
           <input
   type="date"
   value={selectedDate}
   onChange={(e) => setSelectedDate(e.target.value)}
-/>
+/> Filter by date
         </div>
 
       </div>
