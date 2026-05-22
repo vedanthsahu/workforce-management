@@ -165,3 +165,5 @@ def available_seats(
         booked_for_user_id=str(booked_for_user_id),
         amenity_ids=amenity_ids,
     )
+
+

@@ -45,27 +45,70 @@ def fetch_seat_for_booking(
     return dict(row) if row else None
 
 
+# def has_active_booking_conflict(
+#     conn: PGConnection,
+#     *,
+#     tenant_id: str,
+#     seat_id: str,
+#     booking_date: date,
+# ) -> bool:
+#     """Return whether a seat is already actively booked for a date."""
+#     with conn.cursor() as cur:
+#         cur.execute(
+#             """
+#             SELECT 1
+#             FROM bookings
+#             WHERE tenant_id = %s
+#               AND seat_id = %s
+#               AND booking_date = %s
+#               AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
+#             LIMIT 1
+#             """,
+#             (tenant_id, seat_id, booking_date),
+#         )
+#         return cur.fetchone() is not None
+
 def has_active_booking_conflict(
-    conn: PGConnection,
+    conn,
     *,
     tenant_id: str,
     seat_id: str,
-    booking_date: date,
+    booking_date,
+    exclude_booking_id: str | None = None,
 ) -> bool:
-    """Return whether a seat is already actively booked for a date."""
+    """Return whether a seat is already actively booked for a date.
+ 
+    Pass exclude_booking_id when modifying an existing booking so the
+    original booking row is not treated as a conflict with itself.
+    """
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT 1
-            FROM bookings
-            WHERE tenant_id = %s
-              AND seat_id = %s
-              AND booking_date = %s
-              AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
-            LIMIT 1
-            """,
-            (tenant_id, seat_id, booking_date),
-        )
+        if exclude_booking_id:
+            cur.execute(
+                """
+                SELECT 1
+                FROM bookings
+                WHERE tenant_id = %s
+                  AND seat_id = %s
+                  AND booking_date = %s
+                  AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
+                  AND id::text <> %s
+                LIMIT 1
+                """,
+                (tenant_id, seat_id, booking_date, exclude_booking_id),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT 1
+                FROM bookings
+                WHERE tenant_id = %s
+                  AND seat_id = %s
+                  AND booking_date = %s
+                  AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
+                LIMIT 1
+                """,
+                (tenant_id, seat_id, booking_date),
+            )
         return cur.fetchone() is not None
 
 
@@ -209,6 +252,8 @@ def fetch_booking_by_id(
                 b.id::text AS booking_id,
                 b.tenant_id::text AS tenant_id,
                 b.booked_for_user_id::text AS user_id,
+                b.booked_for_user_id::text AS booked_for_user_id,
+                b.booked_by_user_id::text AS booked_by_user_id,
                 b.seat_id::text AS seat_id,
                 b.site_id::text AS site_id,
                 b.building_id::text AS building_id,
@@ -336,6 +381,8 @@ def fetch_past_bookings_for_user(
                 b.id::text AS booking_id,
                 b.tenant_id::text AS tenant_id,
                 b.booked_for_user_id::text AS user_id,
+                b.booked_for_user_id::text AS booked_for_user_id,
+                b.booked_by_user_id::text AS booked_by_user_id,
                 b.seat_id::text AS seat_id,
                 b.site_id::text AS site_id,
                 b.building_id::text AS building_id,
@@ -391,6 +438,8 @@ def fetch_current_bookings_for_user(
                 b.id::text AS booking_id,
                 b.tenant_id::text AS tenant_id,
                 b.booked_for_user_id::text AS user_id,
+                b.booked_for_user_id::text AS booked_for_user_id,
+                b.booked_by_user_id::text AS booked_by_user_id,
                 b.seat_id::text AS seat_id,
                 b.site_id::text AS site_id,
                 b.building_id::text AS building_id,
@@ -446,6 +495,8 @@ def fetch_cancelled_bookings_for_user(
                 b.id::text AS booking_id,
                 b.tenant_id::text AS tenant_id,
                 b.booked_for_user_id::text AS user_id,
+                b.booked_for_user_id::text AS booked_for_user_id,
+                b.booked_by_user_id::text AS booked_by_user_id,
                 b.seat_id::text AS seat_id,
                 b.site_id::text AS site_id,
                 b.building_id::text AS building_id,
@@ -500,6 +551,8 @@ def fetch_future_bookings_for_user(
                 b.id::text AS booking_id,
                 b.tenant_id::text AS tenant_id,
                 b.booked_for_user_id::text AS user_id,
+                b.booked_for_user_id::text AS booked_for_user_id,
+                b.booked_by_user_id::text AS booked_by_user_id,
                 b.seat_id::text AS seat_id,
                 b.site_id::text AS site_id,
                 b.building_id::text AS building_id,

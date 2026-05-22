@@ -1,26 +1,54 @@
-
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Booking, BookingTab } from "../types/bookings.types";
 import { useBookings } from "../hooks/useBookings";
 import { AppSidebar } from "@/features/dashboard/components/AppSidebar";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import {
+  cancelBooking,
+  fetchSeatAmenities,
+} from "../services/bookings.service";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button }   from "@/components/ui/button";
+import { Label }    from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string): string {
-  // Append T00:00:00 so it's treated as local time, not UTC midnight
   const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month:   "short",
+    day:     "numeric",
+  });
 }
 
 function isUpcoming(isoDate: string): boolean {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return new Date(isoDate + "T00:00:00") >= today;
+}
+
+function sortByDate(bookings: Booking[], ascending = true): Booking[] {
+  return [...bookings].sort((a, b) => {
+    const da = new Date(a.date + "T00:00:00").getTime();
+    const db = new Date(b.date + "T00:00:00").getTime();
+    return ascending ? da - db : db - da;
+  });
 }
 
 // ── Tag chip ──────────────────────────────────────────────────────────────────
@@ -38,30 +66,112 @@ const TAG_STYLES: Record<string, string> = {
 const BookingTagChip: React.FC<TagProps> = ({ label, variant }) => (
   <span className={cn(
     "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium whitespace-nowrap",
-    TAG_STYLES[variant] ?? TAG_STYLES.zone
+    TAG_STYLES[variant] ?? TAG_STYLES.zone,
   )}>
     {label}
   </span>
 );
 
+// ── Cancel Dialog ─────────────────────────────────────────────────────────────
+
+interface CancelDialogProps {
+  open:      boolean;
+  booking:   Booking | null;
+  onConfirm: (reason: string) => Promise<void>;
+  onClose:   () => void;
+}
+
+const CancelDialog: React.FC<CancelDialogProps> = ({
+  open, booking, onConfirm, onClose,
+}) => {
+  const [reason,  setReason]  = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleConfirm = async () => {
+    setLoading(true);
+    try {
+      await onConfirm(reason);
+      setReason("");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenChange = (val: boolean) => {
+    if (!val) { setReason(""); onClose(); }
+  };
+
+  return (
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
+      <AlertDialogContent className="max-w-md">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="text-[#1A1A2E]">Cancel Booking</AlertDialogTitle>
+          <AlertDialogDescription className="text-gray-500 text-[13px]">
+            {booking && (
+              <span>
+                Are you sure you want to cancel your booking at{" "}
+                <strong className="text-gray-700">
+                  {booking.location} · {booking.floor} · Seat {booking.seat}
+                </strong>{" "}
+                on <strong className="text-gray-700">{formatDate(booking.date)}</strong>?
+                This action cannot be undone.
+              </span>
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <div className="py-2">
+          <Label
+            htmlFor="cancel-reason"
+            className="text-[12.5px] font-medium text-gray-600 mb-1.5 block"
+          >
+            Reason for cancellation{" "}
+            <span className="text-gray-400 font-normal">(optional)</span>
+          </Label>
+          <Textarea
+            id="cancel-reason"
+            placeholder="e.g. Working from home, schedule change…"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            className="text-[13px] resize-none h-20"
+          />
+        </div>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            onClick={() => { setReason(""); onClose(); }}
+            className="text-[12.5px]"
+          >
+            Keep Booking
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleConfirm}
+            disabled={loading}
+            className="bg-red-500 hover:bg-red-600 text-white text-[12.5px] disabled:opacity-50"
+          >
+            {loading ? "Cancelling…" : "Yes, Cancel"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+};
+
 // ── Booking card ──────────────────────────────────────────────────────────────
 
 interface BookingCardProps {
-  booking: Booking;
-  onCancel: (id: string) => Promise<void>;
-  showActions?: boolean;
+  booking:       Booking;
+  onCancelClick: (booking: Booking) => void;
+  onModifyClick: (booking: Booking) => void;
+  showActions?:  boolean;
 }
 
-const BookingCard: React.FC<BookingCardProps> = ({ booking, onCancel, showActions = true }) => {
-  const [cancelling, setCancelling] = useState(false);
-
-  const handleCancel = async () => {
-    if (!window.confirm("Cancel this booking?")) return;
-    setCancelling(true);
-    try { await onCancel(booking.id); }
-    finally { setCancelling(false); }
-  };
-
+const BookingCard: React.FC<BookingCardProps> = ({
+  booking,
+  onCancelClick,
+  onModifyClick,
+  showActions = true,
+}) => {
   const isCancelled = booking.status === "cancelled";
 
   return (
@@ -70,8 +180,11 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking, onCancel, showAction
         {/* Left accent bar */}
         <div className={cn(
           "w-[3px] shrink-0",
-          isCancelled   ? "bg-gray-200"  :
-          booking.status === "pending" ? "bg-amber-400" : "bg-indigo-500"
+          isCancelled
+            ? "bg-gray-200"
+            : booking.status === "pending"
+              ? "bg-amber-400"
+              : "bg-indigo-500",
         )} />
 
         <div className="flex-1 px-5 py-4">
@@ -100,7 +213,7 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking, onCancel, showAction
           </div>
 
           {/* Row 2: tags */}
-          <div className="flex gap-1.5 flex-wrap mt-2.5 ">
+          <div className="flex gap-1.5 flex-wrap mt-2.5">
             {booking.tags.map((tag, i) => (
               <BookingTagChip key={i} label={tag.label} variant={tag.variant} />
             ))}
@@ -114,24 +227,30 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking, onCancel, showAction
       {/* Action footer */}
       {showActions && !isCancelled && (
         <div className="flex justify-end gap-2 px-5 py-2.5 border-t border-gray-100 bg-[#F7F8FC]">
-          <button className="px-4 py-1.5 rounded-lg border border-gray-200 bg-white text-[12.5px] font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-            Modify
-          </button>
-          <button
-            onClick={handleCancel}
-            disabled={cancelling}
-            className="px-4 py-1.5 rounded-lg border border-red-200 bg-red-50 text-[12.5px] font-medium text-red-500 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-4 text-[12.5px] text-gray-600"
+            onClick={() => onModifyClick(booking)}
           >
-            {cancelling ? "Cancelling…" : "Cancel"}
-          </button>
+            Modify
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-4 text-[12.5px] border-red-200 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-600 hover:border-red-300"
+            onClick={() => onCancelClick(booking)}
+          >
+            Cancel
+          </Button>
         </div>
       )}
 
       {showActions && isCancelled && (
         <div className="flex justify-end px-5 py-2.5 border-t border-gray-100">
-          <button className="px-4 py-1.5 rounded-lg border border-gray-200 bg-white text-[12.5px] font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+          <Button variant="outline" size="sm" className="h-7 px-4 text-[12.5px] text-gray-600">
             View details
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -141,17 +260,19 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking, onCancel, showAction
 // ── Stat card ─────────────────────────────────────────────────────────────────
 
 interface StatCardProps {
-  label: string;
-  value: number | string;
-  subLabel?: string;
-  icon: React.ReactNode;
+  label:       string;
+  value:       number | string;
+  subLabel?:   string;
+  icon:        React.ReactNode;
   accentClass: string;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ label, value, subLabel, icon, accentClass }) => (
+const StatCard: React.FC<StatCardProps> = ({
+  label, value, subLabel, icon, accentClass,
+}) => (
   <div className={cn(
     "flex-1 bg-white border border-[#EBEBF5] rounded-xl p-4 flex flex-col gap-1 min-w-[160px]",
-    "border-l-[3px]", accentClass
+    "border-l-[3px]", accentClass,
   )}>
     <div className="flex justify-between items-center mb-1">
       <span className="text-[10px] font-semibold tracking-widest uppercase text-gray-400">
@@ -171,7 +292,6 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, subLabel, icon, accen
 const TABS: { id: BookingTab; label: string }[] = [
   { id: "upcoming",  label: "Upcoming"  },
   { id: "past",      label: "Past"      },
-  { id: "recurring", label: "Recurring" },
   { id: "cancelled", label: "Cancelled" },
 ];
 
@@ -179,16 +299,15 @@ const TABS: { id: BookingTab; label: string }[] = [
 
 const CalIcon = () => (
   <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-    <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <path d="M16 2v4M8 2v4M3 10h18" />
   </svg>
 );
-
 const CheckIcon = () => (
   <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
     <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
-
 const UsersIcon = () => (
   <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" strokeLinecap="round" strokeLinejoin="round" />
@@ -197,11 +316,13 @@ const UsersIcon = () => (
     <path d="M16 3.13a4 4 0 0 1 0 7.75" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
-
 const RefreshIcon = () => (
   <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-    <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-      strokeLinecap="round" strokeLinejoin="round" />
+    <path
+      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
@@ -216,48 +337,224 @@ const MyBookingsPage: React.FC = () => {
     error,
     setActiveTab,
     handleCancelBooking,
+    refreshBookings,
   } = useBookings();
+
   const { user } = useAuthContext();
 
-  // For the "upcoming" tab: split into future and past using the date field
-  const upcomingCards = displayedBookings.filter(
-    (b) => b.status !== "cancelled" && isUpcoming(b.date)
+  const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
+  const router = useRouter();
+
+  // Upcoming tab: split into future (ascending) + past section (descending)
+  const upcomingCards = sortByDate(
+    displayedBookings.filter((b) => b.status !== "cancelled" && isUpcoming(b.date)),
+    true,
   );
-  const pastCards = displayedBookings.filter(
-    (b) => b.status !== "cancelled" && !isUpcoming(b.date)
+  const pastCards = sortByDate(
+    displayedBookings.filter((b) => b.status !== "cancelled" && !isUpcoming(b.date)),
+    false,
   );
+
+  // All other tabs — descending for past, ascending otherwise
+  const sortedDisplayed = sortByDate(displayedBookings, activeTab !== "past");
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
+  const handleConfirmCancel = async (reason: string) => {
+    if (!cancelTarget) return;
+    await cancelBooking(cancelTarget.id, reason);
+    await handleCancelBooking(cancelTarget.id);
+    setCancelTarget(null);
+  };
+
+  // const handleModify = (booking: Booking) => {
+  //   // Extract preference keys from the booking's tags so they can be
+  //   // prefilled on the Book a Seat page. Tags whose variant matches a
+  //   // known preference variant are passed; others are ignored by the hook.
+  //   // If you store actual preference keys in booking.tags, map them here.
+  //   // For now we pass an empty string so the hook falls back to sessionStorage.
+  //   //
+  //   // If your Booking type carries preference keys (e.g. booking.preferences),
+  //   // change the line below to: booking.preferences?.join(",") ?? ""
+  //   const preferencesParam = ""; // or booking.preferences?.join(",") if available
+
+  //   const params = new URLSearchParams({
+  //     modifyBookingId: booking.id,
+  //     fromDate:        booking.date,
+  //     // toDate = fromDate for single-day modify bookings
+  //     toDate:          booking.date,
+  //     locationName:    booking.location,
+  //     buildingName:    booking.building,
+  //     floorName:       booking.floor,
+  //     seatLabel:       booking.seat,
+  //   });
+
+  //   // Only append preferences param when there's something to pass,
+  //   // so the hook knows to use it (non-empty string = URL-provided preferences).
+  //   if (preferencesParam) {
+  //     params.set("preferences", preferencesParam);
+  //   } else {
+  //     // Clear sessionStorage so stale preferences from a previous booking
+  //     // session don't bleed into this modify flow.
+  //     try { sessionStorage.removeItem("bookingPreferences"); } catch {}
+  //   }
+
+  //   router.push(`/book?${params.toString()}`);
+  // };
+
+//   const handleModify = (booking: Booking) => {
+//   // Build preference keys from the booking's stored preferences array.
+//   // Falls back to empty string if the API didn't return preference data,
+//   // in which case sessionStorage is cleared so stale prefs don't bleed in.
+//   const preferencesParam = (booking.preferences ?? []).join(",");
+
+//   const params = new URLSearchParams({
+//     modifyBookingId: booking.id,
+//     fromDate:        booking.fromDate,  // ← was booking.date (same for single-day, correct for multi-day)
+//     toDate:          booking.toDate,    // ← was booking.date
+//     locationName:    booking.location,
+//     buildingName:    booking.building,
+//     floorName:       booking.floor,
+//     seatLabel:       booking.seat,
+//   });
+
+//   if (preferencesParam) {
+//     params.set("preferences", preferencesParam);
+//   } else {
+//     // No preferences to restore — clear sessionStorage so stale data
+//     // from a previous booking session doesn't bleed into this modify flow.
+//     try { sessionStorage.removeItem("bookingPreferences"); } catch {}
+//   }
+
+//   router.push(`/book?${params.toString()}`);
+// };
+
+// const handleModify = async (booking: Booking) => {
+//   // 1. Try amenities already stored on the booking object first (fast path)
+//   let prefKeys = booking.preferences ?? [];
+
+//   // 2. If empty, fetch from the seat endpoint using floor_id + seat_id
+//   //    The Booking type needs `floorId` and `seatId` raw fields — see step 3.
+//   if (prefKeys.length === 0 && booking.floorId && booking.seatId) {
+//     prefKeys = await fetchSeatAmenities(
+//       booking.floorId,
+//       booking.seatId,
+//       booking.fromDate,
+//     );
+//   }
+// const handleModify = async (booking: Booking) => {
+//   let prefKeys = booking.preferences ?? [];
+  
+//   console.log("booking.preferences:", booking.preferences);
+//   console.log("booking.floorId:", booking.floorId);
+//   console.log("booking.seatId:", booking.seatId);
+
+//   if (prefKeys.length === 0 && booking.floorId && booking.seatId) {
+//     prefKeys = await fetchSeatAmenities(booking.floorId, booking.seatId, booking.fromDate);
+//     console.log("fetched prefKeys:", prefKeys);
+//   }
+//   const preferencesParam = prefKeys.join(",");
+// console.log("final preferencesParam:", prefKeys.join(","));
+//   const params = new URLSearchParams({
+//     modifyBookingId: booking.id,
+//     fromDate:        booking.fromDate,
+//     toDate:          booking.toDate,
+//     locationName:    booking.location,
+//     buildingName:    booking.building,
+//     floorName:       booking.floor,
+//     seatLabel:       booking.seat,
+//      seatId:          booking.seatId ?? "", 
+//   });
+
+//   if (preferencesParam) {
+//     params.set("preferences", preferencesParam);
+//   } else {
+//     try { sessionStorage.removeItem("bookingPreferences"); } catch {}
+//   }
+
+//   router.push(`/book?${params.toString()}`);
+// };
+
+  const handleModify = async (booking: Booking) => {
+    let prefKeys = booking.preferences ?? [];
+ 
+    if (prefKeys.length === 0 && booking.floorId && booking.seatId) {
+      prefKeys = await fetchSeatAmenities(booking.floorId, booking.seatId, booking.fromDate);
+    }
+ 
+    const preferencesParam = prefKeys.join(",");
+ 
+    const params = new URLSearchParams({
+      modifyBookingId: booking.id,
+      fromDate:        booking.fromDate,
+      toDate:          booking.toDate,
+      locationName:    booking.location,
+      buildingName:    booking.building,
+      floorName:       booking.floor,
+      // seatLabel → prefill-by-label effect (displays "Seat A-12" in step 1)
+      seatLabel:       booking.seat,
+      // seatId → numeric ID → fetchSeatsWithAvailability → marks seat as "yours"
+      seatId:          booking.seatId ?? "",
+    });
+ 
+    if (preferencesParam) {
+      params.set("preferences", preferencesParam);
+    } else {
+      try { sessionStorage.removeItem("bookingPreferences"); } catch {}
+    }
+ 
+    router.push(`/book?${params.toString()}`);
+  };
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <SidebarProvider>
       <div className="flex h-screen bg-[#F7F8FC] font-sans overflow-hidden w-full">
-
         <AppSidebar user={user} />
 
         <main className="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-5">
 
-          {/* ── Header ── */}
+          {/* Header */}
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-[20px] font-bold text-[#1A1A2E] leading-tight">My Bookings</h1>
+              <h1 className="text-[20px] font-bold text-[#1A1A2E] leading-tight">
+                My Bookings
+              </h1>
               <p className="text-[12.5px] text-gray-400 mt-0.5">
                 Your upcoming and past seat reservations
               </p>
             </div>
             <div className="flex gap-2.5 items-center">
-              <button className="h-8 px-3.5 rounded-lg border border-gray-200 bg-white text-[12.5px] font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+              {/* <Button variant="outline" size="sm" className="h-8 text-[12.5px] text-gray-600">
                 Export CSV
-              </button>
-              <button className="h-8 px-4 rounded-lg bg-indigo-600 text-white text-[12.5px] font-semibold hover:bg-indigo-700 transition-colors flex items-center gap-1.5">
+              </Button> */}
+              {/* <Button
+                size="sm"
+                className="h-8 bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-semibold gap-1.5"
+              >
                 <span className="text-base leading-none">+</span>
                 New booking
-              </button>
-              <button className="h-8 w-8 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:bg-gray-50 transition-colors">
+              </Button> */}
+              <Button 
+                size="sm"
+                className="h-8 bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-semibold gap-1.5"
+                onClick={() => router.push("/book")}
+              >
+                <span className="text-base leading-none">+</span>
+                New booking
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 text-gray-400"
+                onClick={refreshBookings}
+              >
                 <RefreshIcon />
-              </button>
+              </Button>
             </div>
           </div>
 
-          {/* ── Stat cards ── */}
+          {/* Stat cards */}
           <div className="flex gap-4">
             <StatCard
               label="Upcoming"
@@ -286,7 +583,7 @@ const MyBookingsPage: React.FC = () => {
             />
           </div>
 
-          {/* ── Tabs ── */}
+          {/* Tabs */}
           <div className="flex border-b border-[#EBEBF5]">
             {TABS.map((tab) => (
               <button
@@ -296,7 +593,7 @@ const MyBookingsPage: React.FC = () => {
                   "px-5 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-colors duration-150",
                   activeTab === tab.id
                     ? "border-indigo-600 text-indigo-600 font-semibold"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
+                    : "border-transparent text-gray-500 hover:text-gray-700",
                 )}
               >
                 {tab.label}
@@ -304,31 +601,28 @@ const MyBookingsPage: React.FC = () => {
             ))}
           </div>
 
-          {/* ── Content ── */}
+          {/* Content */}
           <div className="flex flex-col gap-3">
 
-            {/* Loading */}
             {isLoading && (
               <div className="text-center py-12 text-gray-400 text-[13.5px]">
                 Loading bookings…
               </div>
             )}
 
-            {/* Error */}
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-red-500 text-[13px]">
                 {error}
               </div>
             )}
 
-            {/* Empty state */}
             {!isLoading && !error && displayedBookings.length === 0 && (
               <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
                 No {activeTab} bookings found.
               </div>
             )}
 
-            {/* ── Upcoming tab ── */}
+            {/* Upcoming tab */}
             {!isLoading && !error && activeTab === "upcoming" && (
               <>
                 {upcomingCards.length > 0 ? (
@@ -336,7 +630,8 @@ const MyBookingsPage: React.FC = () => {
                     <BookingCard
                       key={booking.id}
                       booking={booking}
-                      onCancel={handleCancelBooking}
+                      onCancelClick={setCancelTarget}
+                      onModifyClick={handleModify}
                       showActions
                     />
                   ))
@@ -346,7 +641,6 @@ const MyBookingsPage: React.FC = () => {
                   </div>
                 )}
 
-                {/* Past bookings section below upcoming */}
                 {pastCards.length > 0 && (
                   <>
                     <p className="text-[11px] font-semibold tracking-widest uppercase text-gray-400 mt-2">
@@ -356,7 +650,8 @@ const MyBookingsPage: React.FC = () => {
                       <BookingCard
                         key={booking.id}
                         booking={booking}
-                        onCancel={handleCancelBooking}
+                        onCancelClick={setCancelTarget}
+                        onModifyClick={handleModify}
                         showActions={false}
                       />
                     ))}
@@ -365,13 +660,14 @@ const MyBookingsPage: React.FC = () => {
               </>
             )}
 
-            {/* ── All other tabs: flat list ── */}
+            {/* All other tabs */}
             {!isLoading && !error && activeTab !== "upcoming" &&
-              displayedBookings.map((booking) => (
+              sortedDisplayed.map((booking) => (
                 <BookingCard
                   key={booking.id}
                   booking={booking}
-                  onCancel={handleCancelBooking}
+                  onCancelClick={setCancelTarget}
+                  onModifyClick={handleModify}
                   showActions={activeTab !== "past"}
                 />
               ))
@@ -379,6 +675,14 @@ const MyBookingsPage: React.FC = () => {
           </div>
         </main>
       </div>
+
+      {/* Dialogs */}
+      <CancelDialog
+        open={cancelTarget !== null}
+        booking={cancelTarget}
+        onConfirm={handleConfirmCancel}
+        onClose={() => setCancelTarget(null)}
+      />
     </SidebarProvider>
   );
 };

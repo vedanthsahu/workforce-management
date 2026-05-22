@@ -39,7 +39,10 @@ class BookingResponse(BaseModel):
 
     booking_id: str
     tenant_id: str
+    # Kept for existing clients: in booking responses this is the booking owner.
     user_id: str
+    booked_for_user_id: str | None = None
+    booked_by_user_id: str | None = None
     seat_id: str
     site_id: str | None = None
     building_id: str | None = None
