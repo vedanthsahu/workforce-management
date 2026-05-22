@@ -1,8 +1,13 @@
-
-
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { authService } from "../services/auth.service";
 import type { AuthContextType, User } from "../types/auth.types";
@@ -11,8 +16,12 @@ type UserState = User | null | undefined;
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const PUBLIC_ROUTES = ["/login", "/auth/callback"];
-const ROOT_ROUTE    = "/";
+// Routes where the /me fetch is skipped entirely (truly public pages)
+const SKIP_AUTH_ROUTES = ["/login", "/auth/callback"];
+
+// Routes where the redirect guard does NOT fire
+// "/" is included because the root page handles its own redirect via useAuthContext
+const PUBLIC_ROUTES = ["/login", "/auth/callback", "/"];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router   = useRouter();
@@ -24,12 +33,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const didInitialCheck = useRef(false);
 
-  // ── Initial auth check — runs once on mount only ─────────────────────────
+  // ── Initial auth check — runs once on mount ──────────────────────────────
   useEffect(() => {
     if (didInitialCheck.current) return;
     didInitialCheck.current = true;
 
-    if (PUBLIC_ROUTES.includes(pathname)) {
+    // Only skip /me for truly public pages (login, callback)
+    // NOT for "/" — the root page needs /me to know where to send the user
+    if (SKIP_AUTH_ROUTES.includes(pathname)) {
       setIsLoading(false);
       return;
     }
@@ -49,7 +60,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser((prev) => prev);
         } else if (status === 401) {
           // Interceptor owns the refresh + redirect for 401.
-          // Do not clear user here — it would race the interceptor.
           setUser((prev) => prev);
         } else if (status === 403) {
           setUser(null);
@@ -63,18 +73,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Listen for refresh lifecycle events from axios.ts ────────────────────
+  // ── Listen for refresh lifecycle events from axios ────────────────────────
   useEffect(() => {
-    const onRefreshStart = () => {
-      setIsRefreshing(true);
-    };
+    const onRefreshStart = () => setIsRefreshing(true);
 
     const onRefreshEnd = (e: Event) => {
       const success = (e as CustomEvent<{ success: boolean }>).detail?.success;
       setIsRefreshing(false);
-      if (!success) {
-        setUser(null);
-      }
+      if (!success) setUser(null);
     };
 
     window.addEventListener("auth:refresh-start", onRefreshStart);
@@ -86,27 +92,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // ── Redirect guard ───────────────────────────────────────────────────────
+  // ── Redirect guard ────────────────────────────────────────────────────────
   useEffect(() => {
+    // Wait until /me has fully resolved
     if (isLoading || isRefreshing || user === undefined) return;
 
-    if (pathname === ROOT_ROUTE) {
-      router.replace(user ? "/dashboard" : "/login");
-      return;
-    }
+    // Skip guard on public routes — they handle their own navigation
+    if (PUBLIC_ROUTES.includes(pathname)) return;
 
-    if (user && PUBLIC_ROUTES.includes(pathname)) {
-      router.replace("/dashboard");
-      return;
-    }
+    const isAdmin = user?.role === "TENANT_ADMIN";
+    const home    = isAdmin ? "/admin" : "/dashboard";
 
-    if (user === null && !PUBLIC_ROUTES.includes(pathname)) {
+    // Not logged in on a protected route → login
+    if (user === null) {
       router.replace("/login");
+      return;
+    }
+
+    // Admin accidentally on /dashboard/* → correct to /admin
+    if (isAdmin && pathname.startsWith("/dashboard")) {
+      router.replace("/admin");
+      return;
+    }
+
+    // Non-admin accidentally on /admin/* → correct to /dashboard
+    if (!isAdmin && pathname.startsWith("/admin")) {
+      router.replace("/dashboard");
       return;
     }
   }, [isLoading, isRefreshing, user, pathname, router]);
 
-  // ── Logout ───────────────────────────────────────────────────────────────
+  // ── Logout ────────────────────────────────────────────────────────────────
   const logout = useCallback(async () => {
     await authService.logout().catch(() => {});
     setUser(null);
@@ -116,8 +132,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider
       value={{
-        user: user ?? null,
-        isLoading,
+        user:            user ?? null,
+        // isLoading is true until /me resolves AND user state is set.
+        // This prevents any layout from rendering before we know who the user is.
+        isLoading:       isLoading || user === undefined,
         isAuthenticated: !!user,
         logout,
       }}
