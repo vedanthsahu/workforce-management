@@ -9,6 +9,7 @@ from typing import Any, Annotated
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     File,
     Form,
@@ -41,6 +42,8 @@ router = APIRouter(
     status_code=201,
 )
 def create_floor_layout_route(
+    background_tasks: BackgroundTasks,
+
     current_user: Annotated[
         dict[str, Any],
         Depends(require_permission("layout:upload")),
@@ -71,6 +74,7 @@ def create_floor_layout_route(
         current_user=current_user,
         payload=payload,
         file=file,
+        background_tasks=background_tasks,
     )
 
 
@@ -103,6 +107,8 @@ def list_floor_layouts_route(
 def activate_floor_layout_route(
     layout_id: Annotated[int, Path(gt=0)],
 
+    background_tasks: BackgroundTasks,
+
     current_user: Annotated[
         dict[str, Any],
         Depends(require_permission("layout:publish")),
@@ -115,6 +121,7 @@ def activate_floor_layout_route(
         conn,
         current_user=current_user,
         layout_id=str(layout_id),
+        background_tasks=background_tasks,
     )
 
 

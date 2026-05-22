@@ -30,6 +30,9 @@ class FloorLayoutResponse(BaseModel):
     site_id: str
     building_id: str
     floor_id: str
+    site_name: str | None = None
+    building_name: str | None = None
+    floor_name: str | None = None
 
     layout_name: str
     layout_file_url: str

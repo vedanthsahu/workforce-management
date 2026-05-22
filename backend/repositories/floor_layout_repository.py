@@ -18,6 +18,9 @@ FLOOR_LAYOUT_SELECT_FIELDS = """
     fl.site_id::text AS site_id,
     fl.building_id::text AS building_id,
     fl.floor_id::text AS floor_id,
+    si.site_name,
+    bu.building_name,
+    f.floor_name,
     fl.layout_name,
     fl.layout_file_url,
     fl.file_storage_provider,
@@ -43,6 +46,19 @@ FLOOR_LAYOUT_UPLOADER_JOIN = """
     LEFT JOIN app_users AS au
         ON au.id = fl.uploaded_by_user_id
        AND au.tenant_id = fl.tenant_id
+"""
+
+
+FLOOR_LAYOUT_LOCATION_JOINS = """
+    LEFT JOIN sites AS si
+        ON si.id = fl.site_id
+       AND si.tenant_id = fl.tenant_id
+    LEFT JOIN buildings AS bu
+        ON bu.id = fl.building_id
+       AND bu.tenant_id = fl.tenant_id
+    LEFT JOIN floors AS f
+        ON f.id = fl.floor_id
+       AND f.tenant_id = fl.tenant_id
 """
 
 
@@ -163,6 +179,7 @@ def fetch_floor_layouts_by_floor(
                 {FLOOR_LAYOUT_SELECT_FIELDS}
             FROM floor_layouts AS fl
             {FLOOR_LAYOUT_UPLOADER_JOIN}
+            {FLOOR_LAYOUT_LOCATION_JOINS}
             WHERE fl.tenant_id = %s
               AND fl.floor_id = %s
             ORDER BY fl.version_no DESC, fl.created_at DESC, fl.id DESC
@@ -192,6 +209,7 @@ def fetch_floor_layout_by_id(
                 {FLOOR_LAYOUT_SELECT_FIELDS}
             FROM floor_layouts AS fl
             {FLOOR_LAYOUT_UPLOADER_JOIN}
+            {FLOOR_LAYOUT_LOCATION_JOINS}
             WHERE fl.tenant_id = %s
               AND fl.id = %s
             """,

@@ -21,6 +21,7 @@ class CreateBookingRequest(BaseModel):
     building_id: int = Field(gt=0)
     floor_id: int = Field(gt=0)
     seat_id: int = Field(gt=0)
+    booked_for_user_id: int = Field(gt=0)
     booking_date: date
 
 class CancelBookingRequest(BaseModel):

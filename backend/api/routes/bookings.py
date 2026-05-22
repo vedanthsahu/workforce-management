@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from psycopg2.extensions import connection as PGConnection
 from datetime import timedelta
 
@@ -20,10 +20,16 @@ router = APIRouter(prefix="/bookings", tags=["bookings"])
 @router.post("", response_model=BookingResponse, status_code=201)
 def create_booking(
     payload: CreateBookingRequest,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> BookingResponse:
-    return book_seat(conn, current_user=current_user, payload=payload)
+    return book_seat(
+        conn,
+        current_user=current_user,
+        payload=payload,
+        background_tasks=background_tasks,
+    )
 
 
 @router.get("/me/past", response_model=list[BookingResponse])
@@ -116,6 +122,7 @@ def fetch_my_bookings(
 def cancel_booking_route(
     booking_id: str,
     payload: CancelBookingRequest,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> BookingResponse:
@@ -124,11 +131,13 @@ def cancel_booking_route(
         current_user=current_user,
         booking_id=booking_id,
         cancellation_reason=payload.cancellation_reason,
+        background_tasks=background_tasks,
     )
 @router.post("/{booking_id}/modify", response_model=BookingResponse)
 def modify_booking_route(
     booking_id: str,
     payload: ModifyBookingRequest,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> BookingResponse:
@@ -137,6 +146,7 @@ def modify_booking_route(
         current_user=current_user,
         booking_id=booking_id,
         payload=payload,
+        background_tasks=background_tasks,
     )
 
 def _resolve_booking_date(
