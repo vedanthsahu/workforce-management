@@ -8,10 +8,7 @@ import { AppSidebar } from "@/features/dashboard/components/AppSidebar";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
-import {
-  cancelBooking,
-  fetchSeatAmenities,
-} from "../services/bookings.service";
+import { cancelBooking } from "../services/bookings.service";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +22,13 @@ import {
 import { Button }   from "@/components/ui/button";
 import { Label }    from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+
+// ── Fallback preference NAMES (not keys) ──────────────────────────────────────
+// These are display names that will be matched against the loaded preference list
+// by name in useBookingForm, so they work even when keys aren't known ahead of time.
+// Only used when the booking API doesn't return preference data.
+
+const FALLBACK_PREFERENCE_NAMES = ["Window Seat", "Near Cafeteria"];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -42,7 +46,14 @@ function isUpcoming(isoDate: string): boolean {
   today.setHours(0, 0, 0, 0);
   return new Date(isoDate + "T00:00:00") >= today;
 }
-function isToday(isoDate: string): boolean {   const today = new Date();   today.setHours(0, 0, 0, 0);   const d = new Date(isoDate + "T00:00:00");   d.setHours(0, 0, 0, 0);   return d.getTime() === today.getTime(); }
+
+function isToday(isoDate: string): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(isoDate + "T00:00:00");
+  d.setHours(0, 0, 0, 0);
+  return d.getTime() === today.getTime();
+}
 
 function sortByDate(bookings: Booking[], ascending = true): Booking[] {
   return [...bookings].sort((a, b) => {
@@ -246,14 +257,6 @@ const BookingCard: React.FC<BookingCardProps> = ({
           </Button>
         </div>
       )}
-
-      {/* {showActions && isCancelled && (
-        <div className="flex justify-end px-5 py-2.5 border-t border-gray-100">
-          <Button variant="outline" size="sm" className="h-7 px-4 text-[12.5px] text-gray-600">
-            View details
-          </Button>
-        </div>
-      )} */}
     </div>
   );
 };
@@ -342,11 +345,9 @@ const MyBookingsPage: React.FC = () => {
   } = useBookings();
 
   const { user } = useAuthContext();
-
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
   const router = useRouter();
 
-  // Upcoming tab: split into future (ascending) + past section (descending)
   const upcomingCards = sortByDate(
     displayedBookings.filter((b) => b.status !== "cancelled" && isUpcoming(b.date)),
     true,
@@ -356,7 +357,6 @@ const MyBookingsPage: React.FC = () => {
     false,
   );
 
-  // All other tabs — descending for past, ascending otherwise
   const sortedDisplayed = sortByDate(displayedBookings, activeTab !== "past");
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -368,123 +368,12 @@ const MyBookingsPage: React.FC = () => {
     setCancelTarget(null);
   };
 
-  // const handleModify = (booking: Booking) => {
-  //   // Extract preference keys from the booking's tags so they can be
-  //   // prefilled on the Book a Seat page. Tags whose variant matches a
-  //   // known preference variant are passed; others are ignored by the hook.
-  //   // If you store actual preference keys in booking.tags, map them here.
-  //   // For now we pass an empty string so the hook falls back to sessionStorage.
-  //   //
-  //   // If your Booking type carries preference keys (e.g. booking.preferences),
-  //   // change the line below to: booking.preferences?.join(",") ?? ""
-  //   const preferencesParam = ""; // or booking.preferences?.join(",") if available
+  const handleModify = (booking: Booking) => {
+    // If the booking has real preference keys from the API, use those directly.
+    // Otherwise pass fallback preference NAMES so useBookingForm can resolve
+    // them to real keys once the /preferences API responds.
+    const hasRealPrefs = (booking.preferences ?? []).length > 0;
 
-  //   const params = new URLSearchParams({
-  //     modifyBookingId: booking.id,
-  //     fromDate:        booking.date,
-  //     // toDate = fromDate for single-day modify bookings
-  //     toDate:          booking.date,
-  //     locationName:    booking.location,
-  //     buildingName:    booking.building,
-  //     floorName:       booking.floor,
-  //     seatLabel:       booking.seat,
-  //   });
-
-  //   // Only append preferences param when there's something to pass,
-  //   // so the hook knows to use it (non-empty string = URL-provided preferences).
-  //   if (preferencesParam) {
-  //     params.set("preferences", preferencesParam);
-  //   } else {
-  //     // Clear sessionStorage so stale preferences from a previous booking
-  //     // session don't bleed into this modify flow.
-  //     try { sessionStorage.removeItem("bookingPreferences"); } catch {}
-  //   }
-
-  //   router.push(`/book?${params.toString()}`);
-  // };
-
-//   const handleModify = (booking: Booking) => {
-//   // Build preference keys from the booking's stored preferences array.
-//   // Falls back to empty string if the API didn't return preference data,
-//   // in which case sessionStorage is cleared so stale prefs don't bleed in.
-//   const preferencesParam = (booking.preferences ?? []).join(",");
-
-//   const params = new URLSearchParams({
-//     modifyBookingId: booking.id,
-//     fromDate:        booking.fromDate,  // ← was booking.date (same for single-day, correct for multi-day)
-//     toDate:          booking.toDate,    // ← was booking.date
-//     locationName:    booking.location,
-//     buildingName:    booking.building,
-//     floorName:       booking.floor,
-//     seatLabel:       booking.seat,
-//   });
-
-//   if (preferencesParam) {
-//     params.set("preferences", preferencesParam);
-//   } else {
-//     // No preferences to restore — clear sessionStorage so stale data
-//     // from a previous booking session doesn't bleed into this modify flow.
-//     try { sessionStorage.removeItem("bookingPreferences"); } catch {}
-//   }
-
-//   router.push(`/book?${params.toString()}`);
-// };
-
-// const handleModify = async (booking: Booking) => {
-//   // 1. Try amenities already stored on the booking object first (fast path)
-//   let prefKeys = booking.preferences ?? [];
-
-//   // 2. If empty, fetch from the seat endpoint using floor_id + seat_id
-//   //    The Booking type needs `floorId` and `seatId` raw fields — see step 3.
-//   if (prefKeys.length === 0 && booking.floorId && booking.seatId) {
-//     prefKeys = await fetchSeatAmenities(
-//       booking.floorId,
-//       booking.seatId,
-//       booking.fromDate,
-//     );
-//   }
-// const handleModify = async (booking: Booking) => {
-//   let prefKeys = booking.preferences ?? [];
-  
-//   console.log("booking.preferences:", booking.preferences);
-//   console.log("booking.floorId:", booking.floorId);
-//   console.log("booking.seatId:", booking.seatId);
-
-//   if (prefKeys.length === 0 && booking.floorId && booking.seatId) {
-//     prefKeys = await fetchSeatAmenities(booking.floorId, booking.seatId, booking.fromDate);
-//     console.log("fetched prefKeys:", prefKeys);
-//   }
-//   const preferencesParam = prefKeys.join(",");
-// console.log("final preferencesParam:", prefKeys.join(","));
-//   const params = new URLSearchParams({
-//     modifyBookingId: booking.id,
-//     fromDate:        booking.fromDate,
-//     toDate:          booking.toDate,
-//     locationName:    booking.location,
-//     buildingName:    booking.building,
-//     floorName:       booking.floor,
-//     seatLabel:       booking.seat,
-//      seatId:          booking.seatId ?? "", 
-//   });
-
-//   if (preferencesParam) {
-//     params.set("preferences", preferencesParam);
-//   } else {
-//     try { sessionStorage.removeItem("bookingPreferences"); } catch {}
-//   }
-
-//   router.push(`/book?${params.toString()}`);
-// };
-
-  const handleModify = async (booking: Booking) => {
-    let prefKeys = booking.preferences ?? [];
- 
-    if (prefKeys.length === 0 && booking.floorId && booking.seatId) {
-      prefKeys = await fetchSeatAmenities(booking.floorId, booking.seatId, booking.fromDate);
-    }
- 
-    const preferencesParam = prefKeys.join(",");
- 
     const params = new URLSearchParams({
       modifyBookingId: booking.id,
       fromDate:        booking.fromDate,
@@ -492,20 +381,21 @@ const MyBookingsPage: React.FC = () => {
       locationName:    booking.location,
       buildingName:    booking.building,
       floorName:       booking.floor,
-      // seatLabel → prefill-by-label effect (displays "Seat A-12" in step 1)
       seatLabel:       booking.seat,
-      // seatId → numeric ID → fetchSeatsWithAvailability → marks seat as "yours"
       seatId:          booking.seatId ?? "",
     });
- 
-    if (preferencesParam) {
-      params.set("preferences", preferencesParam);
+
+    if (hasRealPrefs) {
+      // Real keys from the API — pass as-is
+      params.set("preferences", booking.preferences!.join(","));
     } else {
-      try { sessionStorage.removeItem("bookingPreferences"); } catch {}
+      // No preference data from API — pass fallback names for resolution
+      params.set("preferenceNames", FALLBACK_PREFERENCE_NAMES.join(","));
     }
- 
+
     router.push(`/book?${params.toString()}`);
   };
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -526,17 +416,7 @@ const MyBookingsPage: React.FC = () => {
               </p>
             </div>
             <div className="flex gap-2.5 items-center">
-              {/* <Button variant="outline" size="sm" className="h-8 text-[12.5px] text-gray-600">
-                Export CSV
-              </Button> */}
-              {/* <Button
-                size="sm"
-                className="h-8 bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-semibold gap-1.5"
-              >
-                <span className="text-base leading-none">+</span>
-                New booking
-              </Button> */}
-              <Button 
+              <Button
                 size="sm"
                 className="h-8 bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-semibold gap-1.5"
                 onClick={() => router.push("/book")}

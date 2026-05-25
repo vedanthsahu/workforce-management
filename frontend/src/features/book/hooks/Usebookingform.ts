@@ -42,19 +42,14 @@ const DEFAULT_STATE: BookingFormState = {
 };
 
 // ── URL builder ───────────────────────────────────────────────────────────────
-// modifyBookingId is threaded through every step navigation so that
-// isModifyMode remains true all the way to confirmBooking on step 3.
-// Without it the param is dropped on the first navigateTo call and
-// confirmBooking falls through to POST /bookings instead of PATCH /bookings/{id}/modify.
 
 function buildUrl(
   step: number,
   form: BookingFormState,
-  modifyBookingId?: string | null,  // ← carry through every navigation
+  modifyBookingId?: string | null,
 ): string {
   const params = new URLSearchParams();
   params.set("step", String(step));
-  // Preserve modifyBookingId so isModifyMode stays true on steps 2 and 3
   if (modifyBookingId)             params.set("modifyBookingId", modifyBookingId);
   if (form.siteId)                 params.set("siteId",          form.siteId);
   if (form.buildingId)             params.set("buildingId",      form.buildingId);
@@ -72,7 +67,7 @@ export function useBookingForm() {
   const router       = useRouter();
   const searchParams = useSearchParams();
 
-  // ── Read params once up-front ───────────────────────────────────────────────
+  // ── Read params once up-front ─────────────────────────────────────────────
 
   const modifyBookingId = searchParams.get("modifyBookingId");
   const isModifyMode    = Boolean(modifyBookingId);
@@ -85,14 +80,20 @@ export function useBookingForm() {
   const prefillFromDate = searchParams.get("fromDate") ?? null;
   const prefillToDate   = searchParams.get("toDate")   ?? null;
 
+  // preferences passed as keys (when API returned real data)
   const prefillPreferencesParam = searchParams.get("preferences") ?? null;
   const prefillPreferences: string[] = prefillPreferencesParam
     ? prefillPreferencesParam.split(",").filter(Boolean)
     : [];
 
-  const stepFromUrl = parseInt(searchParams.get("step") ?? "1") as BookingStep;
+  // preferenceNames passed as display names (when using fallback from MyBookingsPage)
+  // These are resolved to real keys once the /preferences API responds.
+  const prefillPreferenceNamesParam = searchParams.get("preferenceNames") ?? null;
+  const prefillPreferenceNames: string[] = prefillPreferenceNamesParam
+    ? prefillPreferenceNamesParam.split(",").filter(Boolean)
+    : [];
 
-  // ── Detect a clean /book navigation (sidebar click, no params) ─────────────
+  const stepFromUrl = parseInt(searchParams.get("step") ?? "1") as BookingStep;
 
   const hasAnyParam = Boolean(
     searchParams.get("modifyBookingId") ||
@@ -101,12 +102,12 @@ export function useBookingForm() {
     searchParams.get("fromDate")
   );
 
-  // ── Initial form values ─────────────────────────────────────────────────────
+  // ── Initial form values ───────────────────────────────────────────────────
 
   const initialFromDate = prefillFromDate ?? todayIso();
   const initialToDate   = prefillToDate ?? (isModifyMode ? initialFromDate : todayIso());
 
-  // ── State ───────────────────────────────────────────────────────────────────
+  // ── State ─────────────────────────────────────────────────────────────────
 
   const [form, setForm] = useState<BookingFormState>(() => {
     if (!hasAnyParam) return { ...DEFAULT_STATE, fromDate: todayIso(), toDate: todayIso() };
@@ -117,6 +118,7 @@ export function useBookingForm() {
       fromDate:       initialFromDate,
       toDate:         initialToDate,
       selectedSeatId: searchParams.get("seatId")     ?? null,
+      // Only seed preferences from keys — name-based prefill happens after API loads
       preferences:    prefillPreferences,
     };
   });
@@ -141,7 +143,7 @@ export function useBookingForm() {
   const [error,        setError]        = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<CreateBookingResponse | null>(null);
 
-  // ── Reset on clean /book navigation ─────────────────────────────────────────
+  // ── Reset on clean /book navigation ──────────────────────────────────────
 
   useEffect(() => {
     if (hasAnyParam) return;
@@ -155,34 +157,64 @@ export function useBookingForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.toString()]);
 
-  // ── Re-validate prefill preferences once available list loads ───────────────
+  // ── Resolve prefill preferences once the API list is available ───────────
+  //
+  // Two resolution paths:
+  //
+  //  1. `preferences` param (real keys from API) — filter to only valid keys.
+  //  2. `preferenceNames` param (display names, fallback) — match by name
+  //     case-insensitively and resolve to keys.
+  //
+  // Path 2 runs only when there are no real keys already set, so it never
+  // overrides a legitimate selection.
 
   useEffect(() => {
-    if (prefillPreferences.length === 0) return;
     if (availablePreferences.length === 0) return;
-    const validKeys = prefillPreferences.filter((k) =>
-      availablePreferences.some((p) => p.key === k)
-    );
-    if (validKeys.length > 0) {
-      setForm((f) => ({ ...f, preferences: validKeys }));
+
+    // Path 1: validate prefill keys that came from the API
+    if (prefillPreferences.length > 0) {
+      const validKeys = prefillPreferences.filter((k) =>
+        availablePreferences.some((p) => p.key === k)
+      );
+      if (validKeys.length > 0) {
+        setForm((f) => ({ ...f, preferences: validKeys }));
+      }
+      return;
+    }
+
+    // Path 2: resolve display names → keys (fallback path from MyBookingsPage)
+    if (prefillPreferenceNames.length > 0) {
+      const resolvedKeys = prefillPreferenceNames
+        .map((name) =>
+          availablePreferences.find(
+            (p) => p.name.toLowerCase() === name.toLowerCase()
+          )
+        )
+        .filter((p): p is Preference => p !== undefined)
+        .map((p) => p.key);
+
+      if (resolvedKeys.length > 0) {
+        setForm((f) => ({
+          ...f,
+          // Only set if the form has no preferences yet (don't overwrite user picks)
+          preferences: f.preferences.length === 0 ? resolvedKeys : f.preferences,
+        }));
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availablePreferences]);
 
-  // ── Navigate helper ──────────────────────────────────────────────────────────
-  // modifyBookingId is included in every URL so isModifyMode stays true
-  // on steps 2 and 3 — without this it gets dropped on the first push
-  // and confirmBooking calls POST /bookings instead of PATCH /bookings/{id}/modify.
+  // ── Navigate helper ───────────────────────────────────────────────────────
 
   const navigateTo = useCallback(
     (nextStep: BookingStep, nextForm: BookingFormState) => {
       setStepState(nextStep);
-      router.push(buildUrl(nextStep, nextForm, modifyBookingId)); // ← pass modifyBookingId
+      router.push(buildUrl(nextStep, nextForm, modifyBookingId));
     },
-    [router, modifyBookingId], // ← modifyBookingId in deps
+    [router, modifyBookingId],
   );
 
-  // ── Data fetching ────────────────────────────────────────────────────────────
+  // ── Data fetching ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     setLoadingSites(true);
@@ -221,7 +253,7 @@ export function useBookingForm() {
       .finally(() => setLoadingFloors(false));
   }, [form.buildingId]);
 
-  // ── Prefill resolution: display names → IDs ──────────────────────────────────
+  // ── Prefill resolution: display names → IDs ──────────────────────────────
 
   useEffect(() => {
     if (!prefillLocationName || sites.length === 0 || form.siteId) return;
@@ -265,7 +297,7 @@ export function useBookingForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seats, prefillSeatLabel]);
 
-  // ── Re-fetch seats on step 2 page refresh ────────────────────────────────────
+  // ── Re-fetch seats on step 2 page refresh ────────────────────────────────
 
   useEffect(() => {
     if (step === 2 && seats.length === 0 && form.floorId && form.fromDate && form.toDate) {
@@ -286,7 +318,7 @@ export function useBookingForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
-  // ── Preference resolver ───────────────────────────────────────────────────────
+  // ── Preference resolver ───────────────────────────────────────────────────
 
   const resolveAmenityIds = useCallback(
     (preferenceKeys: string[]): number[] =>
@@ -298,7 +330,7 @@ export function useBookingForm() {
     [availablePreferences],
   );
 
-  // ── Field setters ─────────────────────────────────────────────────────────────
+  // ── Field setters ─────────────────────────────────────────────────────────
 
   const setSiteId = (v: string | null) =>
     setForm((f) => ({ ...f, siteId: v ?? "", buildingId: "", floorId: "", selectedSeatId: null }));
@@ -329,7 +361,7 @@ export function useBookingForm() {
 
   const clearAll = () => setForm((f) => ({ ...f, preferences: [] }));
 
-  // ── Step 1 → Step 2 ───────────────────────────────────────────────────────────
+  // ── Step 1 → Step 2 ───────────────────────────────────────────────────────
 
   const findAvailableSeats = useCallback(async () => {
     if (!form.floorId || !form.fromDate || !form.toDate) return;
@@ -352,33 +384,26 @@ export function useBookingForm() {
       if (status === 409) {
         setError("This seat is already booked for the selected date. Please choose a different seat.");
       } else if (status === 400) {
-      setError(e instanceof Error ? e.message : "Failed to load seats");
+        setError(e instanceof Error ? e.message : "Failed to load seats");
       }
     } finally {
       setLoadingSeats(false);
-    
     }
   }, [form, resolveAmenityIds, navigateTo, searchParams]);
 
-  // ── Step 2: select seat ───────────────────────────────────────────────────────
+  // ── Step 2: select seat ───────────────────────────────────────────────────
 
   const selectSeat = (seatId: string | null) =>
     setForm((f) => ({ ...f, selectedSeatId: seatId }));
 
-  // ── Step 2 → Step 3 ───────────────────────────────────────────────────────────
+  // ── Step 2 → Step 3 ───────────────────────────────────────────────────────
 
   const goToReview = () => {
     if (!form.selectedSeatId) return;
     navigateTo(3, form);
   };
 
-  // ── Step 3: confirm ───────────────────────────────────────────────────────────
-  // Modify mode → PATCH /bookings/{id}/modify
-  // Normal mode → POST  /bookings
-  //
-  // isModifyMode and modifyBookingId are derived fresh from searchParams on
-  // every render, so they are always current as long as buildUrl/navigateTo
-  // carry modifyBookingId through every step URL (which they now do).
+  // ── Step 3: confirm ───────────────────────────────────────────────────────
 
   const confirmBooking = useCallback(async () => {
     if (!form.selectedSeatId) return;
@@ -434,7 +459,7 @@ export function useBookingForm() {
     }
   }, [form, isModifyMode, modifyBookingId]);
 
-  // ── Navigation helpers ────────────────────────────────────────────────────────
+  // ── Navigation helpers ────────────────────────────────────────────────────
 
   const goBack = () => {
     const prevStep    = (step > 1 ? step - 1 : 1) as BookingStep;
@@ -455,7 +480,7 @@ export function useBookingForm() {
     router.push("/book");
   };
 
-  // ── Derived values ────────────────────────────────────────────────────────────
+  // ── Derived values ────────────────────────────────────────────────────────
 
   const selectedSite     = sites.find((s) => s.id === form.siteId);
   const selectedBuilding = buildings.find((b) => b.id === form.buildingId);
