@@ -7,32 +7,65 @@ import { useEffect, useState } from "react";
 import { getLayoutsByFloor } from "../services/locationService";
 import { LayoutSelection, LayoutApiResponse } from "../types/layout.types";
 import { useRouter } from "next/navigation";
+import SvgViewer from "./SvgViewer";
+import { toast } from "sonner";
 
 type Props = {
   selection: LayoutSelection;
+  refreshKey: number;
 };
 
-export default function LayoutTable({ selection }: Props) {
+export default function LayoutTable({ selection, refreshKey }: Props) {
   const [data, setData] = useState<LayoutApiResponse[]>([]);
-
-  const handleView = (row: any) => {
-  window.open(row.layout_file_url, "_blank");
-};
-
-const handleDownload = (row: any) => {
-  const link = document.createElement("a");
-  link.href = row.layout_file_url;
-  link.download = row.layout_name || "layout.svg";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  
 
 const router = useRouter();
 
+
+const handleView = (row: any) => {
+  setPreviewUrl(row.layout_file_url);
+};
+
+const handleDownloadSvg = () => {
+  try {
+    // 🔥 get SVG element from DOM
+    const svgElement = document.querySelector("svg");
+
+    if (!svgElement) {
+      alert("SVG not found");
+      return;
+    }
+
+    // 🔥 convert SVG → string
+    const serializer = new XMLSerializer();
+    const svgString = serializer.serializeToString(svgElement);
+
+    // 🔥 create blob
+    const blob = new Blob([svgString], {
+      type: "image/svg+xml",
+    });
+
+    // 🔥 create download link
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "layout.svg";
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+
+  } catch (err) {
+    console.error("Download failed", err);
+  }
+};
+
 const handleManage = (row: any) => {
   router.push(`/admin/layouts/manage-layout`);
-  // router.push(`/admin/layouts/manage-layout?layoutId=${row.layout_id}`);
 };
 
   useEffect(() => {
@@ -41,7 +74,7 @@ const handleManage = (row: any) => {
     if (!selection?.floorId) return;
 
     loadLayouts();
-  }, [selection.floorId]);
+  }, [selection.floorId, refreshKey]);
 
   
 
@@ -96,7 +129,7 @@ const handleManage = (row: any) => {
             {paginated.length === 0 ? (
               <tr>
                 <td colSpan={6} className="text-center py-6 text-gray-400">
-                  No layouts found
+                  No layouts found , select a layout to view details
                 </td>
               </tr>
             ) : (
@@ -134,13 +167,6 @@ const handleManage = (row: any) => {
                       </button>
 
                       <button
-                        onClick={() => handleDownload(row)}
-                        className="p-2 border rounded-md hover:bg-gray-100"
-                      >
-                        <Download className="w-4 h-4 text-gray-600" />
-                      </button>
-
-                      <button
                         onClick={() => handleManage(row)}
                         className="p-2 border rounded-md hover:bg-gray-100"
                       >
@@ -156,6 +182,7 @@ const handleManage = (row: any) => {
           </tbody>
 
         </table>
+        
       </div>
 
       <LayoutPagination
@@ -168,6 +195,57 @@ const handleManage = (row: any) => {
           setPage(1);
         }}
       />
+
+     {previewUrl && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+
+    {/* MODAL CONTAINER */}
+    <div className="bg-white rounded-xl w-[50%] h-[95%] flex flex-col shadow-xl">
+
+      {/* 🔥 HEADER */}
+      <div className="flex items-center justify-between px-4 py-3 border-b">
+
+        <h2 className="text-sm font-semibold">
+          Layout Preview
+        </h2>
+
+        <div className="flex items-center gap-2">
+
+          {/* DOWNLOAD */}
+          <button
+            onClick={handleDownloadSvg}
+            className="p-2 border rounded-md hover:bg-gray-100"
+          >
+            <Download className="w-4 h-4 text-gray-600" />
+          </button>
+
+          {/* CLOSE */}
+          <button
+            onClick={() => setPreviewUrl(null)}
+            className="p-2 border rounded-md hover:bg-gray-100"
+          >
+            ✕
+          </button>
+
+        </div>
+      </div>
+
+      {/* 🔥 SVG AREA */}
+      <div className="flex-1 overflow-auto bg-gray-100 flex items-center justify-center">
+
+        <div className="p-4">
+
+          <SvgViewer url={previewUrl} />
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+)}
+
     </div>
   );
 }
