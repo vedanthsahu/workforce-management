@@ -412,8 +412,8 @@ export async function fetchSeatAmenities(
       })
       .filter(Boolean) as string[];
 
-  } catch (e) {
-    console.error("fetchSeatAmenities failed:", e);
+  } catch {
+    // console.error("fetchSeatAmenities failed:", e);
     return [];
   }
 }
