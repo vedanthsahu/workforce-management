@@ -23,14 +23,31 @@ from backend.schemas.booking import AvailableSeatResponse
 
 from backend.schemas.location import (
     BuildingResponse,
+    CreateBuildingRequest,
+    CreateFloorRequest,
+    CreateSiteRequest,
     FloorResponse,
+    SeatConfigurationResponse,
+    SeatConfigurationUpdateRequest,
     SeatResponse,
+    SiteDetailsResponse,
     SiteResponse,
+    UpdateBuildingRequest,
+    UpdateFloorRequest,
+    UpdateSiteRequest,
 )
 from backend.services.location_service import (
+    create_building,
+    create_floor,
+    create_site,
     get_buildings_by_site,
     get_floors_by_building,
+    get_site_details,
     get_sites,
+    update_building_metadata,
+    update_floor_metadata,
+    update_seat_configuration_metadata,
+    update_site_metadata,
 )
 
 from backend.services.booking_service import (
@@ -50,11 +67,83 @@ def sites(
         PGConnection,
         Depends(get_db),
     ],
+
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int | None, Query(ge=1, le=200)] = None,
+    search: Annotated[str | None, Query()] = None,
+    status_filter: Annotated[str | None, Query(alias="status")] = None,
 ) -> list[SiteResponse]:
 
     return get_sites(
         conn,
         tenant_id=str(current_user["tenant_id"]),
+        page=page,
+        limit=limit,
+        search=search,
+        status_filter=status_filter,
+    )
+
+
+@router.post(
+    "/sites",
+    response_model=SiteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_site_route(
+    payload: CreateSiteRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+) -> SiteResponse:
+    return create_site(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        payload=payload,
+    )
+
+
+@router.get("/sites/{site_id}", response_model=SiteDetailsResponse)
+def site_details(
+    site_id: Annotated[int, Path(gt=0)],
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+) -> SiteDetailsResponse:
+    return get_site_details(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        site_id=str(site_id),
+    )
+
+
+@router.patch("/sites/{site_id}", response_model=SiteResponse)
+def update_site_route(
+    site_id: Annotated[int, Path(gt=0)],
+    payload: UpdateSiteRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+) -> SiteResponse:
+    return update_site_metadata(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        site_id=str(site_id),
+        payload=payload,
     )
 
 
@@ -72,12 +161,64 @@ def buildings(
         Depends(get_db),
     ],
 
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int | None, Query(ge=1, le=200)] = None,
+    search: Annotated[str | None, Query()] = None,
+    status_filter: Annotated[str | None, Query(alias="status")] = None,
 ) -> list[BuildingResponse]:
 
     return get_buildings_by_site(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         site_id=str(site_id),
+        page=page,
+        limit=limit,
+        search=search,
+        status_filter=status_filter,
+    )
+
+
+@router.post(
+    "/buildings",
+    response_model=BuildingResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_building_route(
+    payload: CreateBuildingRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+) -> BuildingResponse:
+    return create_building(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        payload=payload,
+    )
+
+
+@router.patch("/buildings/{building_id}", response_model=BuildingResponse)
+def update_building_route(
+    building_id: Annotated[int, Path(gt=0)],
+    payload: UpdateBuildingRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+) -> BuildingResponse:
+    return update_building_metadata(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        building_id=str(building_id),
+        payload=payload,
     )
 
 
@@ -98,13 +239,123 @@ def floors_by_building(
         Depends(get_db),
     ],
 
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int | None, Query(ge=1, le=200)] = None,
+    search: Annotated[str | None, Query()] = None,
+    status_filter: Annotated[str | None, Query(alias="status")] = None,
 ) -> list[FloorResponse]:
 
     return get_floors_by_building(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         building_id=str(building_id),
+        page=page,
+        limit=limit,
+        search=search,
+        status_filter=status_filter,
     )
+
+
+@router.get(
+    "/offices/{office_id}/floors",
+    response_model=list[FloorResponse],
+)
+def floors_by_office(
+    office_id: Annotated[int, Path(gt=0)],
+
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int | None, Query(ge=1, le=200)] = None,
+    search: Annotated[str | None, Query()] = None,
+    status_filter: Annotated[str | None, Query(alias="status")] = None,
+) -> list[FloorResponse]:
+    return get_floors_by_building(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        building_id=str(office_id),
+        page=page,
+        limit=limit,
+        search=search,
+        status_filter=status_filter,
+    )
+
+
+@router.post(
+    "/floors",
+    response_model=FloorResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_floor_route(
+    payload: CreateFloorRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+) -> FloorResponse:
+    return create_floor(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        payload=payload,
+    )
+
+
+@router.patch("/floors/{floor_id}", response_model=FloorResponse)
+def update_floor_route(
+    floor_id: Annotated[int, Path(gt=0)],
+    payload: UpdateFloorRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+) -> FloorResponse:
+    return update_floor_metadata(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        floor_id=str(floor_id),
+        payload=payload,
+    )
+
+
+@router.patch(
+    "/seats/{seat_id}/configuration",
+    response_model=SeatConfigurationResponse,
+)
+def update_seat_configuration_route(
+    seat_id: Annotated[int, Path(gt=0)],
+    payload: SeatConfigurationUpdateRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+) -> SeatConfigurationResponse:
+    return update_seat_configuration_metadata(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        seat_id=str(seat_id),
+        payload=payload,
+    )
+
 
 @router.get(
     "/floors/{floor_id}/seats",

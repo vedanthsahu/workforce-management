@@ -68,9 +68,11 @@ class FavoriteSeatResponse(BaseModel):
 #             return payload
 #         return value
 class UserResponse(BaseModel):
+    """Public representation of a tenant-scoped authenticated user."""
+
     user_id: str
     tenant_id: str
-
+    tenant_name: str | None = None
     email: str
 
     full_name: str | None = None
@@ -92,6 +94,7 @@ class UserResponse(BaseModel):
     home_site_id: str | None = None
 
     role: str | None = None
+    role_name: str | None = None
     status: str | None = None
 
     graph_last_synced_at: datetime | None = None
@@ -105,9 +108,14 @@ class UserResponse(BaseModel):
     def populate_compatibility_fields(cls, value):
         if isinstance(value, dict):
             payload = dict(value)
+            role = payload.get("role") or payload.get("role_name")
+            payload["role"] = role
+            payload["role_name"] = payload.get("role_name") or role
 
             if payload.get("display_name") is None:
-                payload["display_name"] = payload.get("full_name")
+                payload["display_name"] = (
+                    payload.get("full_name")
+                )
 
             if payload.get("name") is None:
                 payload["name"] = (

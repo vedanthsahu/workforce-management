@@ -205,6 +205,83 @@ def fetch_user_by_id(
     return dict(result) if result else None
 
 
+def fetch_tenant_name_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+) -> str | None:
+    """Fetch the display name for one tenant."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT tenant_name
+            FROM tenants
+            WHERE id = %s
+            """,
+            (tenant_id,),
+        )
+        row = cur.fetchone()
+    return str(row[0]) if row and row[0] is not None else None
+
+
+def fetch_user_profile_context(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+) -> dict[str, Any] | None:
+    """Fetch profile UI context for the authenticated user."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                au.id::text AS user_id,
+                au.tenant_id::text AS tenant_id,
+                t.tenant_name,
+                au.email,
+                au.full_name,
+                au.display_name,
+                au.mobile_phone,
+                au.office_location,
+                au.department,
+                au.job_title,
+                au.company_name,
+                au.employee_id,
+                au.microsoft_object_id,
+                au.user_principal_name,
+                au.manager_user_id::text AS manager_user_id,
+                manager.email AS manager_email,
+                manager.full_name AS manager_full_name,
+                manager.display_name AS manager_display_name,
+                au.role_name,
+                au.status,
+                au.home_site_id::text AS home_site_id,
+                site.site_code AS home_site_code,
+                site.site_name AS home_site_name,
+                site.city AS home_site_city,
+                site.country AS home_site_country,
+                site.timezone AS home_site_timezone,
+                au.graph_last_synced_at,
+                au.created_at,
+                au.updated_at
+            FROM app_users AS au
+            INNER JOIN tenants AS t
+                ON t.id = au.tenant_id
+            LEFT JOIN app_users AS manager
+                ON manager.id = au.manager_user_id
+               AND manager.tenant_id = au.tenant_id
+            LEFT JOIN sites AS site
+                ON site.id = au.home_site_id
+               AND site.tenant_id = au.tenant_id
+            WHERE au.tenant_id = %s
+              AND au.id = %s
+            """,
+            (tenant_id, user_id),
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
 def fetch_admin_notification_emails(
     conn: PGConnection,
     *,
