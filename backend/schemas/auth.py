@@ -73,7 +73,7 @@ class UserResponse(BaseModel):
     user_id: str
     tenant_id: str
     tenant_name: str | None = None
-    role_name: str | None = None
+    role: str | None = None
     permissions: list[str] = []
     email: str
     display_name: str | None = None

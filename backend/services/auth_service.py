@@ -108,7 +108,7 @@ def get_auth_me_payload(
         "user_id": str(current_user["user_id"]),
         "tenant_id": tenant_id,
         "tenant_name": tenant_name,
-        "role_name": current_user.get("role_name") or current_user.get("role"),
+        "role": current_user.get("role_name") or current_user.get("role"),
         "permissions": current_user.get("permissions", []),
         "email": current_user.get("email"),
         "display_name": (

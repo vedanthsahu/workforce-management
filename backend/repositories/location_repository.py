@@ -16,7 +16,7 @@ def fetch_sites(
     page: int | None = None,
     limit: int | None = None,
     search: str | None = None,
-    status_filter: str | None = "ACTIVE",
+    status_filter: str | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch tenant-scoped sites with additive admin aggregate fields."""
     query = """
