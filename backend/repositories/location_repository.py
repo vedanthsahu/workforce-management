@@ -87,7 +87,7 @@ def fetch_buildings_by_site(
     page: int | None = None,
     limit: int | None = None,
     search: str | None = None,
-    status_filter: str | None = "ACTIVE",
+    status_filter: str | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch buildings under one active tenant-scoped site."""
     query = """
@@ -125,7 +125,6 @@ def fetch_buildings_by_site(
         ) AS seat_counts ON TRUE
         WHERE b.tenant_id = %s
           AND b.site_id = %s
-          AND s.status = 'ACTIVE'
     """
     params: list[Any] = [tenant_id, site_id]
     query, params = _apply_status_filter(query, params, "b.status", status_filter)
@@ -232,7 +231,6 @@ def fetch_floors_by_building(
         ) AS fl ON TRUE
         WHERE b.id = %s
           AND f.tenant_id = %s
-          AND b.status = 'ACTIVE'
     """
     params: list[Any] = [building_id, tenant_id]
     query, params = _apply_status_filter(query, params, "f.status", status_filter)

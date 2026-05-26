@@ -106,15 +106,7 @@ def get_dashboard_me(
         job_title=profile.get("job_title"),
         mobile_phone=profile.get("mobile_phone"),
         manager=_build_manager(profile),
-        office_info=DashboardOfficeInfoResponse(
-            office_location=profile.get("office_location"),
-            home_site_id=profile.get("home_site_id"),
-            home_site_code=profile.get("home_site_code"),
-            home_site_name=profile.get("home_site_name"),
-            city=profile.get("home_site_city"),
-            country=profile.get("home_site_country"),
-            timezone=profile.get("home_site_timezone"),
-        ),
+        office_info=_build_office_info(profile),
         preferences=DashboardPreferencesResponse(amenities=amenities),
         profile_metadata=DashboardProfileMetadataResponse(
             status=profile.get("status"),
@@ -151,3 +143,18 @@ def _build_manager(profile: dict[str, Any]) -> DashboardManagerResponse | None:
             or profile.get("manager_email")
         ),
     )
+
+
+def _build_office_info(profile: dict[str, Any]) -> DashboardOfficeInfoResponse | None:
+    office_fields = {
+        "office_location": profile.get("office_location"),
+        "home_site_id": profile.get("home_site_id"),
+        "home_site_code": profile.get("home_site_code"),
+        "home_site_name": profile.get("home_site_name"),
+        "city": profile.get("home_site_city"),
+        "country": profile.get("home_site_country"),
+        "timezone": profile.get("home_site_timezone"),
+    }
+    if not any(value is not None for value in office_fields.values()):
+        return None
+    return DashboardOfficeInfoResponse(**office_fields)

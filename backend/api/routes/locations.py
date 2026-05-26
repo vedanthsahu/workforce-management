@@ -71,7 +71,7 @@ def sites(
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int | None, Query(ge=1, le=200)] = None,
     search: Annotated[str | None, Query()] = None,
-    status_filter: Annotated[str | None, Query(alias="status")] = "ACTIVE",
+    status_filter: Annotated[str | None, Query(alias="status")] = None,
 ) -> list[SiteResponse]:
 
     return get_sites(
@@ -164,7 +164,7 @@ def buildings(
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int | None, Query(ge=1, le=200)] = None,
     search: Annotated[str | None, Query()] = None,
-    status_filter: Annotated[str | None, Query(alias="status")] = "ACTIVE",
+    status_filter: Annotated[str | None, Query(alias="status")] = None,
 ) -> list[BuildingResponse]:
 
     return get_buildings_by_site(

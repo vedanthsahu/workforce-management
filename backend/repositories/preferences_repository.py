@@ -17,11 +17,11 @@ def fetch_active_amenities(
             """
             SELECT
                 amenities.id::text AS id,
-                amenity_key AS key,
-                amenity_name AS name,
+                amenities.amenity_key AS key,
+                amenities.amenity_name AS name,
                 COALESCE(ac.category_name, amenities.category) AS category,
-                description,
-                icon_name AS icon
+                amenities.description,
+                amenities.icon_name AS icon
             FROM amenities
             LEFT JOIN amenity_categories AS ac
                 ON ac.id = amenities.category_id
@@ -33,7 +33,7 @@ def fetch_active_amenities(
               AND amenities.is_active = true
             ORDER BY
                 COALESCE(ac.category_name, amenities.category),
-                amenity_name
+                amenities.amenity_name
             """,
             (tenant_id,),
         )

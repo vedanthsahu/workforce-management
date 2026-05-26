@@ -90,8 +90,19 @@ class AdminManagementRepositoryTests(unittest.TestCase):
         self.assertIn("floor_count", sql)
         self.assertIn("COUNT(*) FILTER (WHERE st.status = 'ACTIVE')", sql)
         self.assertIn("st.is_bookable = TRUE", sql)
-        self.assertIn("s.status = 'ACTIVE'", sql)
+        self.assertNotIn("AND b.status = %s", sql)
+        self.assertNotIn("s.status = 'ACTIVE'", sql)
         self.assertEqual(params[:2], ["1", "2"])
+
+    def test_site_listing_without_status_filter_does_not_default_active(self) -> None:
+        cursor = FakeCursor(fetchall_values=[[]])
+        conn = FakeConnection(cursor)
+
+        fetch_sites(conn, tenant_id="1")
+
+        sql, params = cursor.executions[0]
+        self.assertNotIn("AND s.status = %s", sql)
+        self.assertEqual(params, ["1"])
 
     def test_floor_listing_adds_layout_and_seat_aggregates(self) -> None:
         cursor = FakeCursor(fetchall_values=[[]])

@@ -88,7 +88,7 @@ def get_auth_me_payload(
     *,
     current_user: dict[str, Any],
 ) -> UserResponse:
-    """Return lightweight identity/auth context for frontend bootstrap."""
+    """Return the authenticated user while preserving legacy auth fields."""
     tenant_id = str(current_user["tenant_id"])
     try:
         tenant_name = current_user.get("tenant_name") or fetch_tenant_name_by_id(
@@ -104,19 +104,18 @@ def get_auth_me_payload(
             },
         ) from exc
 
-    payload = {
-        "user_id": str(current_user["user_id"]),
-        "tenant_id": tenant_id,
-        "tenant_name": tenant_name,
-        "role": current_user.get("role_name") or current_user.get("role"),
-        "permissions": current_user.get("permissions", []),
-        "email": current_user.get("email"),
-        "display_name": (
-            current_user.get("display_name")
-            or current_user.get("full_name")
-            or current_user.get("email")
-        ),
-    }
+    role = current_user.get("role") or current_user.get("role_name")
+    payload = dict(current_user)
+    payload.update(
+        {
+            "user_id": str(current_user["user_id"]),
+            "tenant_id": tenant_id,
+            "tenant_name": tenant_name,
+            "role": role,
+            "role_name": current_user.get("role_name") or role,
+            "permissions": current_user.get("permissions", []),
+        }
+    )
     return UserResponse(**payload)
 
 

@@ -112,7 +112,7 @@ def get_sites(
     page: int | None = None,
     limit: int | None = None,
     search: str | None = None,
-    status_filter: str | None = "ACTIVE",
+    status_filter: str | None = None,
 ) -> list[SiteResponse]:
     """Return tenant-scoped sites without changing the legacy list envelope."""
     status_filter = _normalize_status_filter(status_filter)
@@ -285,7 +285,7 @@ def get_buildings_by_site(
     page: int | None = None,
     limit: int | None = None,
     search: str | None = None,
-    status_filter: str | None = "ACTIVE",
+    status_filter: str | None = None,
 ) -> list[BuildingResponse]:
     """Return tenant-scoped active buildings for one site."""
     status_filter = _normalize_status_filter(status_filter)
@@ -663,6 +663,8 @@ def _normalize_status_filter(status_filter: str | None) -> str | None:
         return None
 
     normalized = status_filter.strip().upper()
+    if not normalized:
+        return None
     if normalized in {"ACTIVE", "INACTIVE"}:
         return normalized
 

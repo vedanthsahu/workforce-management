@@ -232,6 +232,8 @@ def _status_filter_to_bool(status_filter: str | None) -> bool | None:
         return None
 
     normalized = status_filter.strip().upper()
+    if not normalized:
+        return None
     if normalized == "ACTIVE":
         return True
     if normalized == "INACTIVE":
