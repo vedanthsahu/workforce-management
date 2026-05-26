@@ -8,7 +8,6 @@ export const useOffices = () => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
 
-  // 🔥 API CALL
   const load = async (searchValue: string = "") => {
     try {
       setLoading(true);
@@ -22,18 +21,16 @@ export const useOffices = () => {
     }
   };
 
-  // 🔥 INITIAL LOAD
   useEffect(() => {
     load();
   }, []);
 
-  // 🔥 SEARCH TRIGGER (with debounce)
   useEffect(() => {
-    const delayDebounce = setTimeout(() => {
+    const delay = setTimeout(() => {
       load(search);
-    }, 500); // 500ms debounce
+    }, 500);
 
-    return () => clearTimeout(delayDebounce);
+    return () => clearTimeout(delay);
   }, [search]);
 
   return {
