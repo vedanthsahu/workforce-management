@@ -28,7 +28,8 @@ from backend.repositories.token_repository import (
     revoke_user_session,
     rotate_refresh_token,
 )
-from backend.repositories.user_repository import fetch_user_by_id
+from backend.repositories.user_repository import fetch_tenant_name_by_id, fetch_user_by_id
+from backend.schemas.auth import UserResponse
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,43 @@ def attach_permissions_to_user(
     )
 
     return user
+
+
+def get_auth_me_payload(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+) -> UserResponse:
+    """Return lightweight identity/auth context for frontend bootstrap."""
+    tenant_id = str(current_user["tenant_id"])
+    try:
+        tenant_name = current_user.get("tenant_name") or fetch_tenant_name_by_id(
+            conn,
+            tenant_id=tenant_id,
+        )
+    except psycopg2.Error as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "tenant_lookup_failed",
+                "message": "Failed to load tenant context.",
+            },
+        ) from exc
+
+    payload = {
+        "user_id": str(current_user["user_id"]),
+        "tenant_id": tenant_id,
+        "tenant_name": tenant_name,
+        "role_name": current_user.get("role_name") or current_user.get("role"),
+        "permissions": current_user.get("permissions", []),
+        "email": current_user.get("email"),
+        "display_name": (
+            current_user.get("display_name")
+            or current_user.get("full_name")
+            or current_user.get("email")
+        ),
+    }
+    return UserResponse(**payload)
 
 
 def issue_tokens_for_user(

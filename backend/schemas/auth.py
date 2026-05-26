@@ -68,51 +68,30 @@ class FavoriteSeatResponse(BaseModel):
 #             return payload
 #         return value
 class UserResponse(BaseModel):
+    """Lightweight authenticated identity context for auth bootstrap."""
+
     user_id: str
     tenant_id: str
-
-    email: str
-
-    full_name: str | None = None
-    display_name: str | None = None
-    name: str | None = None
-
-    microsoft_object_id: str | None = None
-    user_principal_name: str | None = None
-
-    mobile_phone: str | None = None
-    office_location: str | None = None
-
-    department: str | None = None
-    job_title: str | None = None
-    company_name: str | None = None
-    employee_id: str | None = None
-
-    manager_user_id: str | None = None
-    home_site_id: str | None = None
-
-    role: str | None = None
-    status: str | None = None
-
-    graph_last_synced_at: datetime | None = None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-
+    tenant_name: str | None = None
+    role_name: str | None = None
     permissions: list[str] = []
+    email: str
+    display_name: str | None = None
 
     @model_validator(mode="before")
     @classmethod
     def populate_compatibility_fields(cls, value):
         if isinstance(value, dict):
             payload = dict(value)
+            payload["role_name"] = (
+                payload.get("role_name")
+                or payload.get("role")
+            )
 
             if payload.get("display_name") is None:
-                payload["display_name"] = payload.get("full_name")
-
-            if payload.get("name") is None:
-                payload["name"] = (
-                    payload.get("display_name")
-                    or payload.get("full_name")
+                payload["display_name"] = (
+                    payload.get("full_name")
+                    or payload.get("email")
                 )
 
             return payload
