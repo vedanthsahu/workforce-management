@@ -34,16 +34,100 @@ export default function FloorTree({ onSelect }: Props) {
   const [sites, setSites] = useState<Site[]>([]);
   const [buildings, setBuildings] = useState<Record<string, Building[]>>({});
   const [floors, setFloors] = useState<Record<string, Floor[]>>({});
+  const [allFloorsFlat, setAllFloorsFlat] = useState<any[]>([]);
 
-  useEffect(() => {
-    loadSites();
-  }, []);
+//  useEffect(() => {
+//   loadSites();
+// }, []);
 
 const loadSites = async () => {
   const data = await getSites();
   console.log("SITES API RESPONSE:", data); // 👈 ADD THIS
   setSites(data);
 };
+
+const preloadAllFloors = async () => {
+  const sitesData = await getSites();
+
+  let all: any[] = [];
+
+  for (const site of sitesData) {
+    const blds = await getBuildings(site.site_id);
+
+    for (const b of blds) {
+      const flrs = await getFloors(b.building_id);
+
+      all.push(
+        ...flrs.map((f: any) => ({
+          ...f,
+          siteId: site.site_id,
+          siteName: site.site_name,
+          buildingId: b.building_id,
+          buildingName: b.building_name,
+        }))
+      );
+    }
+  }
+
+  setAllFloorsFlat(all);
+};
+
+
+useEffect(() => {
+  loadSites();           // UI tree
+  preloadAllFloors();    // search data
+}, []);
+
+
+ useEffect(() => {
+    if (!search) return;
+
+    const run = async () => {
+      const match = allFloorsFlat.find((floor) =>
+        floor.floor_name
+          ?.toLowerCase()
+          .includes(search.toLowerCase())
+      );
+
+      if (!match) return;
+
+      // 🔥 expand tree
+      setExpandedOffice(match.siteId);
+      setExpandedTower(match.buildingId);
+
+      // 🔥 load UI data if not present
+      if (!buildings[match.siteId]) {
+        const blds = await getBuildings(match.siteId);
+        setBuildings((prev) => ({
+          ...prev,
+          [match.siteId]: blds,
+        }));
+      }
+
+      if (!floors[match.buildingId]) {
+        const flrs = await getFloors(match.buildingId);
+        setFloors((prev) => ({
+          ...prev,
+          [match.buildingId]: flrs,
+        }));
+      }
+
+      // 🔥 highlight
+      setSelectedFloor(match.floor_id);
+
+      // 🔥 trigger parent (VERY IMPORTANT)
+      onSelect({
+        siteId: match.siteId,
+        buildingId: match.buildingId,
+        floorId: match.floor_id,
+        siteName: match.siteName,
+        buildingName: match.buildingName,
+        floorName: match.floor_name,
+      });
+    };
+
+    run();
+  }, [search]);
 
   return (
     <div className="bg-white border rounded-lg p-4">

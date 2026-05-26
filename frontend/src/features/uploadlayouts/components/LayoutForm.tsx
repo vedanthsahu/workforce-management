@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { UploadCloud } from "lucide-react";
 import { layoutService } from "@/features/uploadlayouts/services/layout.service";
+import { toast } from "sonner";
 
 type Props = {
   formData: any;
@@ -77,23 +78,21 @@ export default function LayoutForm({ formData, setFormData }: Props) {
 const handleSubmit = async () => {
   try {
     if (!formData.site || !formData.building || !formData.floor) {
-      alert("Please select Site, Building and Floor");
+       toast.error("Please select Site, Building and Floor");
       return;
     }
 
     if (!formData.file) {
-      alert("Upload SVG file");
+      toast.error("Upload SVG file");
       return;
     }
 
     if (!formData.layoutName.trim()) {
-      alert("Enter layout name");
+      toast.error("Enter layout name");
       return;
     }
     setIsSubmitting(true);
-    alert("Before API");
-   
-
+  
     const res = await layoutService.createLayout({
       file: formData.file,
       site_id: formData.site.id,
@@ -102,11 +101,10 @@ const handleSubmit = async () => {
       layout_name: formData.layoutName,
       status: "DRAFT",
     });
-    alert("after API");
 
     console.log("SUCCESS:", res);
 
-    alert("Layout saved successfully ");
+    toast.success("Layout saved successfully ");
     formData
     resetForm();
    
@@ -114,7 +112,13 @@ const handleSubmit = async () => {
     console.log ("FILE TYPE:", formData.file?.type);
 
   } catch (err: any) {
-    console.error("ERROR:", err?.response?.data || err.message);
+  console.error("ERROR:", err?.response?.data || err.message);
+
+  toast.error(
+    err?.response?.data?.message || "Failed to save layout"
+  );
+} finally {
+    setIsSubmitting(false);
   }
 };
 
@@ -291,7 +295,7 @@ const handleSubmit = async () => {
 {/* DESCRIPTION */}
 <div>
   <label className="text-sm font-medium">
-    Description / Notes
+    Description <span className="text-muted-foreground">(optional)</span>
   </label>
 
   <textarea
@@ -312,14 +316,12 @@ const handleSubmit = async () => {
           </button>
 
           <button
-            type="button"
-            onClick={handleSubmit}
-           
-            className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-60"
-          >
-            {/* {isSubmitting ? "Saving..." : "Save as Draft"} */}
-            Save as Draft
-          </button>
+  onClick={handleSubmit}
+  disabled={isSubmitting}
+  className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-60"
+>
+  {isSubmitting ? "Saving..." : "Save as Draft"}
+</button>
           
           
         </div>

@@ -41,57 +41,24 @@ type WeekType = "this-week" | "last-week";
 type Props = {
   data: any;
   buildings: any[]; 
+  trendData: any[];
+  selectedWeek: WeekType;
+  setSelectedWeek: (week: WeekType) => void;
+  topOffices: any[];
 };
-
-// ---------- STATIC (keep for now) ----------
-const weeklyData: Record<
-  WeekType,
-  { day: string; occupancy: number }[]
-> = {
-  "this-week": [
-    { day: "Mon 11", occupancy: 40 },
-    { day: "Tue 12", occupancy: 60 },
-    { day: "Wed 13", occupancy: 90 },
-    { day: "Thu 14", occupancy: 85 },
-    { day: "Fri 15", occupancy: 50 },
-    { day: "Sat 16", occupancy: 30 },
-    { day: "Sun 17", occupancy: 20 },
-  ],
-  "last-week": [
-    { day: "Mon", occupancy: 20 },
-    { day: "Tue", occupancy: 30 },
-    { day: "Wed", occupancy: 50 },
-    { day: "Thu", occupancy: 70 },
-    { day: "Fri", occupancy: 60 },
-    { day: "Sat", occupancy: 40 },
-    { day: "Sun", occupancy: 25 },
-  ],
-};
-
-
-
-
 
 // ---------- COMPONENT ----------
-export default function AdminCharts({ data ,buildings }: Props) {
+export default function AdminCharts({ data ,buildings, trendData, selectedWeek, setSelectedWeek ,topOffices}: Props) {
 
-  const [selectedWeek, setSelectedWeek] =
-    useState<WeekType>("this-week");
+  // HANDLE LOADING
 
-  const [expanded, setExpanded] = useState(false);
-  const [selectedDate, setSelectedDate] = useState("2026-05-21");
+// const dynamicOffices = (buildings || []).map((b: any) => ({
+//   name: b.building_name,
+//   value: Math.floor(Math.random() * 80) + 20, // temp %
+// }));
 
-  const dynamicOffices = (buildings || []).map((b: any) => ({
-  name: b.building_name,
-  value: Math.floor(Math.random() * 80) + 20, // temp %
-}));
+// const offices = dynamicOffices;
 
-const offices = dynamicOffices;
-
-
-//  const offices = expanded
-//   ? dynamicOffices
-//   : dynamicOffices.slice(0, 4);
 
   // HANDLE LOADING
   if (!data) {
@@ -103,9 +70,6 @@ const offices = dynamicOffices;
   const booked = data.booked_today;
   const available = totalSeats - booked;
   const occupancy = data.occupancy_percentage;
-
-
-
 
   return (
     <div className="grid grid-cols-3 gap-4">
@@ -207,8 +171,8 @@ const offices = dynamicOffices;
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="this-week">This Week</SelectItem>
-              <SelectItem value="last-week">Last Week</SelectItem>
+              <SelectItem value="This-week">This Week</SelectItem>
+              <SelectItem value="Last-week">Last Week</SelectItem>
             </SelectContent>
           </Select>
         </CardHeader>
@@ -217,19 +181,18 @@ const offices = dynamicOffices;
           <ChartContainer
             config={{
               occupancy: {
-                label: "Occupancy",
+                label: "Occupancy %",
                 color: "#4F46E5",
               },
             }}
-            className="h-[240px]"
+            className="h-[240px] w-full"
           >
-            <AreaChart data={weeklyData[selectedWeek]}>
+            <AreaChart data={trendData}>
               <XAxis dataKey="day" axisLine={false} tickLine={false} />
               <YAxis
-                domain={[0, 100]}
-                tickFormatter={(v) => `${v}%`}
-                axisLine={false}
-                tickLine={false}
+                domain={[0, 10]}
+                axisLine={true}
+                tickLine={true}
               />
 
               <ChartTooltip content={<ChartTooltipContent />} />
@@ -254,7 +217,7 @@ const offices = dynamicOffices;
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {offices.map((item: any, i: number) => (
+         {topOffices.map((item: any, i: number) => (
             <div key={i}>
               <div className="flex justify-between text-sm">
                 <span>{item.name}</span>
@@ -272,12 +235,7 @@ const offices = dynamicOffices;
             </div>
           ))}
 
-          {/* <button
-            onClick={() => setExpanded(!expanded)}
-            className="text-sm text-indigo-600"
-          >
-            {expanded ? "Show less" : "View all offices →"}
-          </button> */}
+        
         </CardContent>
       </Card>
 

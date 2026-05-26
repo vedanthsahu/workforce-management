@@ -7,42 +7,12 @@ import {
   CardContent,
 } from "@/components/ui/card";
 
-const bookings = [
-  {
-    name: "John Doe",
-    email: "john@example.com",
-    office: "Bengaluru",
-    seat: "A-102",
-    date: "May 17, 2026",
-    status: "Booked",
-  },
-  {
-    name: "Sarah Lee",
-    email: "sarah@example.com",
-    office: "Hyderabad",
-    seat: "B-210",
-    date: "May 17, 2026",
-    status: "Cancelled",
-  },
-  {
-    name: "Arjun Mehta",
-    email: "arjun@example.com",
-    office: "Pune",
-    seat: "C-55",
-    date: "May 17, 2026",
-    status: "Booked",
-  },
-  {
-    name: "Priya Sharma",
-    email: "priya@example.com",
-    office: "Chennai",
-    seat: "D-88",
-    date: "May 17, 2026",
-    status: "Booked",
-  },
-];
 
-export default function AdminBookings() {
+type Props = {
+  bookings: any[];
+};
+
+export default function AdminBookings({ bookings }: Props) {  
   return (
     <Card>
 
@@ -70,7 +40,7 @@ export default function AdminBookings() {
           {/* TABLE BODY */}
           <tbody>
 
-            {bookings.map((item, index) => (
+           {bookings?.map((item, index) => (
               <tr
                 key={index}
                 className="border-b hover:bg-gray-50 transition"
@@ -107,11 +77,12 @@ export default function AdminBookings() {
 
                   <span
                     className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      item.status === "Booked"
+                      item.status === "Booked" || item.status === "CONFIRMED"
                         ? "bg-green-100 text-green-600"
                         : "bg-red-100 text-red-600"
                     }`}
                   >
+                    
                     {item.status}
                   </span>
 
@@ -119,6 +90,14 @@ export default function AdminBookings() {
 
               </tr>
             ))}
+            {bookings.length === 0 && (
+  <tr>
+    <td colSpan={5} className="text-center py-6 text-gray-400">
+      No bookings found
+    </td>
+  </tr>
+)}
+
 
           </tbody>
         </table>

@@ -57,6 +57,9 @@
 // }
 
 // app/(dashboard)/admin/page.tsx
+
+
+
 "use client";
 
 import AdminTopbar from "@/features/admin/components/AdminTopbar";
@@ -66,22 +69,28 @@ import AdminCharts from "@/features/admin/components/AdminCharts";
 import AdminRecentBookings from "@/features/admin/components/AdminRecentBookings";
 import { useAdminDashboard } from "@/features/admin/hooks/useAdminDashboard";
 import { useState } from "react";
+import AdminQuickActions from "@/features/admin/components/AdminQuickActions";
 
 export default function AdminDashboardPage() {
   
 
- const [selectedDate, setSelectedDate] = useState(
-  new Date().toISOString().split("T")[0]
-);
-  const { statsData, loading, error ,buildings} = useAdminDashboard(selectedDate);
+const getLocalDate = () => {
+  const today = new Date();
+  const offset = today.getTimezoneOffset();
+  const localDate = new Date(today.getTime() - offset * 60 * 1000);
+  return localDate.toISOString().split("T")[0];
+};
+const [selectedDate, setSelectedDate] = useState(getLocalDate());
+
+
+  const { statsData, loading, error ,buildings, trendData , selectedWeek, setSelectedWeek, topOffices,recentBookings, } = useAdminDashboard(selectedDate);
   return (
     <>
       <AdminTopbar />
       <main className="flex-1 bg-gray-50 p-6 space-y-6 overflow-y-auto">
-         <AdminHeader
-  selectedDate={selectedDate}
-  setSelectedDate={setSelectedDate}
-/>
+        <AdminHeader 
+        selectedDate={selectedDate}
+         setSelectedDate={setSelectedDate}  />
         {loading && (
           <div className="flex items-center gap-2 text-sm text-gray-400">
             <div className="w-4 h-4 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
@@ -94,8 +103,24 @@ export default function AdminDashboardPage() {
           </div>
         )}
         {!loading && !error && <AdminStats data={statsData} />}
-        <AdminCharts data={statsData} buildings={buildings} />
-        <AdminRecentBookings />
+        <AdminCharts data={statsData} buildings={buildings} trendData={trendData}  selectedWeek={selectedWeek}
+  setSelectedWeek={setSelectedWeek}    topOffices={topOffices}   />
+        
+        <AdminRecentBookings bookings={recentBookings} />
+
+                    {/* <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"> */}
+                      {/* LEFT SIDE - BOOKINGS */}
+                      {/* <div className="lg:col-span-2">
+                        <AdminRecentBookings bookings={recentBookings} />
+                      </div> */}
+                      {/* RIGHT SIDE - QUICK ACTIONS */}
+                      {/* <div>
+                        <AdminQuickActions />
+                      </div>
+                    </div>  */}
+
+
+        
       </main>
     </>
   );

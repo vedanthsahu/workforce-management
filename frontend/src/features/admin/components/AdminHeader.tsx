@@ -4,8 +4,9 @@ import { Calendar } from "lucide-react";
 type Props = {
   selectedDate: string;
   setSelectedDate: (date: string) => void;
+ 
 };
-export default function AdminHeader({ selectedDate, setSelectedDate }: Props) {
+export default function AdminHeader({ selectedDate, setSelectedDate}: Props) {
 
   return (
     <div className="flex items-center justify-between">
@@ -22,7 +23,8 @@ export default function AdminHeader({ selectedDate, setSelectedDate }: Props) {
       <div className="flex items-center gap-3">
 
         {/* Offices Dropdown */}
-        {/* <select className="h-9 px-3 rounded-md border bg-white text-sm">
+        {/* <select 
+        className="h-9 px-3 rounded-md border bg-white text-sm">
           <option>All Offices</option>
         </select> */}
 
