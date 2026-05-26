@@ -78,6 +78,7 @@ const ROUTE_MAP: Record<string, string> = {
   // Admin
   admin_dashboard: "/admin",
   offices:         "/admin/offices",
+  buildings:       "/admin/building",
   floors:          "/admin/floors",
   layouts:         "/admin/layouts",
   seats:           "/admin/seats",
@@ -164,6 +165,7 @@ const ADMIN_DASHBOARD: NavItem[] = [
 
 const ADMIN_MANAGE_NAV: NavItem[] = [
   { id: "offices",    label: "Offices",       icon: Building2   },
+  {id: "buildings",  label: "Buildings",     icon: Building2   },
   { id: "floors",     label: "Floors",        icon: MapPin      },
   { id: "layouts",    label: "Floor Layouts", icon: ClipboardList },
   { id: "seats",      label: "Seats",         icon: CalendarDays },
