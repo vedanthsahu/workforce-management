@@ -1,32 +1,33 @@
+import axios from "axios";
 import { Office } from "../types/office.types";
 
-export const getOffices = async (): Promise<Office[]> => {
-  return [
-    {
-      id: "1",
-      code: "HYD",
-      name: "Hyderabad Office",
-      city: "Hyderabad",
-      country: "India",
-      timezone: "Asia/Kolkata",
-      offices: 2,
-      floors: 8,
-      seats: 1250,
+const API_URL = "http://localhost:8000";
+
+// 🔥 GET OFFICES (WITH SEARCH)
+export const getOffices = async (
+  search: string = ""
+): Promise<Office[]> => {
+  const response = await axios.get(`${API_URL}/sites`, {
+    params: {
+      page: 1,
       status: "ACTIVE",
-      createdOn: "09 Apr 2026",
+      search: search || undefined, // only send if exists
     },
-    {
-      id: "2",
-      code: "BLR",
-      name: "Bangalore Office",
-      city: "Bangalore",
-      country: "India",
-      timezone: "Asia/Kolkata",
-      offices: 3,
-      floors: 12,
-      seats: 1850,
-      status: "ACTIVE",
-      createdOn: "09 Apr 2026",
-    },
-  ];
+  });
+
+  // 🔥 TRANSFORM BACKEND → FRONTEND
+  return response.data.map((item: any) => ({
+    id: item.site_id,
+    code: item.site_code,
+    name: item.site_name,
+    city: item.city,
+    country: item.country,
+    timezone: item.timezone,
+
+    buildings: item.building_count,
+    floors: item.floor_count,
+    seats: item.seat_count,
+
+    status: item.status,
+  }));
 };

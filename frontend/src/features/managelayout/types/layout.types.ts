@@ -1,4 +1,3 @@
-// types/layout.types.ts
 
 export type Layout = {
   layout_id: string;

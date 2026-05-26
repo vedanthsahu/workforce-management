@@ -5,19 +5,41 @@ import { toast } from "sonner";
 
 export const useOffices = () => {
   const [data, setData] = useState<Office[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
 
+  // 🔥 API CALL
+  const load = async (searchValue: string = "") => {
+    try {
+      setLoading(true);
+      const res = await getOffices(searchValue);
+      setData(res);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load offices");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🔥 INITIAL LOAD
   useEffect(() => {
     load();
   }, []);
 
-  const load = async () => {
-    try {
-      const res = await getOffices();
-      setData(res);
-    } catch {
-      toast.error("Failed to load offices");
-    }
-  };
+  // 🔥 SEARCH TRIGGER (with debounce)
+  useEffect(() => {
+    const delayDebounce = setTimeout(() => {
+      load(search);
+    }, 500); // 500ms debounce
 
-  return { data };
+    return () => clearTimeout(delayDebounce);
+  }, [search]);
+
+  return {
+    data,
+    loading,
+    search,
+    setSearch,
+  };
 };
