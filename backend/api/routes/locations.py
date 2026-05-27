@@ -35,6 +35,8 @@ from backend.schemas.location import (
     UpdateBuildingRequest,
     UpdateFloorRequest,
     UpdateSiteRequest,
+    LayoutSeatConfigurationUpdateRequest,
+    LayoutSeatConfigurationResponse,
 )
 from backend.services.location_service import (
     create_building,
@@ -48,6 +50,7 @@ from backend.services.location_service import (
     update_floor_metadata,
     update_seat_configuration_metadata,
     update_site_metadata,
+    update_layout_seat_configuration,
 )
 
 from backend.services.booking_service import (
@@ -105,8 +108,6 @@ def create_site_route(
         tenant_id=str(current_user["tenant_id"]),
         payload=payload,
     )
-
-
 @router.get("/sites/{site_id}", response_model=SiteDetailsResponse)
 def site_details(
     site_id: Annotated[int, Path(gt=0)],
@@ -423,4 +424,38 @@ def available_seats(
         current_user=current_user,
         booked_for_user_id=str(effective_user_id),
         amenity_ids=amenity_ids,
+    )
+
+
+@router.patch(
+    "/layout-seats/{layout_seat_mapping_id}/configuration",
+    response_model=LayoutSeatConfigurationResponse,
+)
+def update_layout_seat_configuration_route(
+
+    layout_seat_mapping_id: Annotated[
+        int,
+        Path(gt=0),
+    ],
+
+    payload: LayoutSeatConfigurationUpdateRequest,
+
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+
+) -> LayoutSeatConfigurationResponse:
+
+    return update_layout_seat_configuration(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        layout_seat_mapping_id=str(layout_seat_mapping_id),
+        payload=payload,
+        current_user=current_user,
     )

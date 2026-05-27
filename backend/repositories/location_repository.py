@@ -726,6 +726,244 @@ def fetch_floor_duplicates(
         rows = cur.fetchall()
     return [dict(row) for row in rows]
 
+def fetch_layout_seat_mapping_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_seat_mapping_id: str,
+) -> dict[str, Any] | None:
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+        cur.execute(
+            """
+            SELECT
+                *
+            FROM layout_seat_mappings
+            WHERE tenant_id = %s
+              AND id = %s
+            """,
+            (
+                tenant_id,
+                layout_seat_mapping_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+def update_layout_seat_mapping_configuration(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_seat_mapping_id: str,
+    seat_name: str | None,
+    seat_type: str | None,
+    status: str | None,
+    is_bookable: bool | None,
+    is_reserved: bool | None,
+    updated_by: str,
+) -> dict[str, Any]:
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+        cur.execute(
+            """
+            UPDATE layout_seat_mappings
+            SET
+                seat_name = COALESCE(%s, seat_name),
+                seat_type = COALESCE(%s, seat_type),
+                status = COALESCE(%s, status),
+                is_bookable = COALESCE(%s, is_bookable),
+                is_reserved = COALESCE(%s, is_reserved),
+                is_configured = TRUE,
+                configuration_status = 'COMPLETED',
+                updated_by = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING *
+            """,
+            (
+                seat_name,
+                seat_type,
+                status,
+                is_bookable,
+                is_reserved,
+                updated_by,
+                tenant_id,
+                layout_seat_mapping_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    if row is None:
+        raise LookupError("Layout seat mapping update failed.")
+
+    return dict(row)
+def upsert_operational_seat(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    site_id: str,
+    building_id: str,
+    floor_id: str,
+    seat_code: str,
+    seat_type: str | None,
+    status: str | None,
+    is_bookable: bool | None,
+    svg_element_id: str,
+) -> dict[str, Any]:
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+        cur.execute(
+            """
+            INSERT INTO seats (
+                tenant_id,
+                layout_id,
+                site_id,
+                building_id,
+                floor_id,
+                seat_code,
+                seat_type,
+                is_bookable,
+                status,
+                svg_element_id
+            )
+            VALUES (
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s
+            )
+
+            ON CONFLICT (
+                floor_id,
+                seat_code
+            )
+
+            DO UPDATE SET
+                layout_id = EXCLUDED.layout_id,
+                seat_type = EXCLUDED.seat_type,
+                is_bookable = EXCLUDED.is_bookable,
+                status = EXCLUDED.status,
+                svg_element_id = EXCLUDED.svg_element_id,
+                updated_at = NOW()
+
+            RETURNING
+                id::text AS seat_id
+            """,
+            (
+                tenant_id,
+                layout_id,
+                site_id,
+                building_id,
+                floor_id,
+                seat_code,
+                seat_type,
+                is_bookable,
+                status,
+                svg_element_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    if row is None:
+        raise LookupError("Seat upsert failed.")
+
+    return dict(row)
+def replace_seat_amenities(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seat_id: str,
+    amenity_ids: list[int],
+    assigned_by_user_id: str,
+) -> None:
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            """
+            DELETE FROM seat_amenities
+            WHERE tenant_id = %s
+              AND seat_id = %s
+            """,
+            (
+                tenant_id,
+                seat_id,
+            ),
+        )
+
+        if not amenity_ids:
+            return
+
+        values = [
+            (
+                tenant_id,
+                seat_id,
+                amenity_id,
+                assigned_by_user_id,
+            )
+            for amenity_id in amenity_ids
+        ]
+
+        cur.executemany(
+            """
+            INSERT INTO seat_amenities (
+                tenant_id,
+                seat_id,
+                amenity_id,
+                assigned_by_user_id
+            )
+            VALUES (%s, %s, %s, %s)
+            """,
+            values,
+        )
+
+def fetch_seat_amenity_ids(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seat_id: str,
+) -> list[str]:
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            """
+            SELECT amenity_id
+            FROM seat_amenities
+            WHERE tenant_id = %s
+              AND seat_id = %s
+            ORDER BY amenity_id
+            """,
+            (
+                tenant_id,
+                seat_id,
+            ),
+        )
+
+        rows = cur.fetchall()
+
+    return [int(row[0]) for row in rows]
+
+
+
+
+
+
 
 def insert_floor(
     conn: PGConnection,

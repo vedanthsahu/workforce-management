@@ -293,6 +293,62 @@ class SeatResponse(BaseModel):
     ui_state: UISeatState
 
 
+class LayoutSeatConfigurationUpdateRequest(BaseModel):
+
+    seat_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+    )
+
+    seat_type: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+    )
+
+    status: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=50,
+    )
+
+    is_bookable: bool | None = None
+
+    is_reserved: bool | None = None
+
+    amenity_ids: list[int] | None = None
+
+
+class LayoutSeatConfigurationResponse(BaseModel):
+
+    layout_seat_mapping_id: str
+
+    seat_id: str
+
+    layout_id: str
+
+    floor_id: str
+
+    seat_code: str
+
+    seat_name: str | None = None
+
+    seat_type: str
+
+    status: str
+
+    is_bookable: bool
+
+    is_reserved: bool
+
+    is_configured: bool
+
+    configuration_status: str
+
+    amenity_ids: list[int]
+
+
 class SeatConfigurationUpdateRequest(BaseModel):
     """Payload for soft seat configuration changes."""
 
