@@ -4,7 +4,7 @@
 import { useBuildings } from "@/features/building/hooks/useBuildings";
 import BuildingHeader from "@/features/building/components/buildingHeader";
 import BuildingStatsCards from "@/features/building/components/buildingStatsCards";
-import BuildingTable from "@/features/building/components/buildingTable";
+// import BuildingTable from "@/features/building/components/buildingTable";
 import Pagination from "@/features/building/components/Pagination";
 import AdminTopbar from "@/features/admin/components/AdminTopbar";
 
@@ -22,7 +22,7 @@ export default function BuildingsPage() {
       {loading ? (
         <p>Loading...</p>
       ) : (
-        <BuildingTable data={data} />
+        <></>
       )}
 </div>
       </main>

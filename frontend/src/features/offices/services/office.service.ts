@@ -1,42 +1,45 @@
-import axios from "axios";
-import { Office } from "../types/office.types";
+import { axiosInstance } from "@/lib/http/axios";
+import { Office ,UpdateOfficePayload ,OfficeStatsSummary,} from "../types/office.types";
 
-const API_URL = "http://localhost:8000";
 
-export const getOffices = async (
-  search: string = ""
-): Promise<Office[]> => {
-  try {
-    const response = await axios.get(`${API_URL}/sites`, {
-      params: {
-        page: 1,
-        search: search || undefined,
-      },
+export const officeService = {
+  // GET ALL SITES
+  async getSites(params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }): Promise<Office[]> {
+    const { data } = await axiosInstance.get("/sites", {
+      params,
     });
+    return data;
+  },
+  //  UPDATE SITE
+  async updateSite(
+    site_id: string,
+    payload: UpdateOfficePayload
+  ) {
 
-    console.log("API RAW DATA:", response.data); // 🔥 DEBUG
+    const { data } = await axiosInstance.patch(
+      `/sites/${site_id}`,
+      payload
+    );
 
-    // 🔥 IMPORTANT: ensure it's array
-    const apiData = Array.isArray(response.data)
-      ? response.data
-      : response.data.data || [];
+    return data;
+  },
 
-    return apiData.map((item: any) => ({
-      id: item.site_id,
-      code: item.site_code,
-      name: item.site_name,
-      city: item.city,
-      country: item.country,
-      timezone: item.timezone,
+  async getOfficeStats(): Promise<OfficeStatsSummary> {
 
-      buildings: item.building_count,
-      floors: item.floor_count,
-      seats: item.seat_count,
+  const { data } = await axiosInstance.get(
+    "/admin/dashboard/summary"
+  );
 
-      status: item.status,
-    }));
-  } catch (error) {
-    console.error("API ERROR:", error);
-    return [];
-  }
+  return {
+    total_offices: data.total_offices,
+    active_sites: data.active_sites,
+    inactive_sites: data.inactive_sites,
+    total_seats: data.total_seats,
+  };
+},
 };

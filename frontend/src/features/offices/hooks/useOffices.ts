@@ -1,42 +1,74 @@
+"use client";
+
 import { useEffect, useState } from "react";
-import { getOffices } from "../services/office.service";
-import { Office } from "../types/office.types";
-import { toast } from "sonner";
+import { Office , OfficeStatsSummary,} from "../types/office.types";
+import { officeService } from "../services/office.service";
 
-export const useOffices = () => {
-  const [data, setData] = useState<Office[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState("");
+export default function useOffices() {
 
-  const load = async (searchValue: string = "") => {
+  //OFFICE DATA STATE
+  const [offices, setOffices] = useState<Office[]>([]);
+
+  //  LOADING STATE
+  const [loading, setLoading] = useState(true);
+
+  // ERROR STATE
+  const [error, setError] = useState<string | null>(null);
+
+  const [stats, setStats] = useState<OfficeStatsSummary | null>(null);
+
+  //  REUSABLE FETCH FUNCTION
+  const fetchOffices = async () => {
     try {
+
       setLoading(true);
-      const res = await getOffices(searchValue);
-      setData(res);
+
+      const data = await officeService.getSites({
+        page: 1,
+        limit: 10,
+      });
+
+      setOffices(data);
+
     } catch (err) {
-      console.error(err);
-      toast.error("Failed to load offices");
+
+      console.error("OFFICE API ERROR:", err);
+
+      setError("Failed to fetch offices");
+
     } finally {
+
       setLoading(false);
+
     }
   };
+  const fetchStats = async () => {
+  try {
 
+    const data =
+      await officeService.getOfficeStats();
+
+    setStats(data);
+
+  } catch (err) {
+
+    console.error("STATS API ERROR:", err);
+
+  }
+};
+
+  //  INITIAL API CALL
   useEffect(() => {
-    load();
+    fetchOffices();
+    fetchStats();
   }, []);
 
-  useEffect(() => {
-    const delay = setTimeout(() => {
-      load(search);
-    }, 500);
-
-    return () => clearTimeout(delay);
-  }, [search]);
-
+  //  RETURN EVERYTHING
   return {
-    data,
+    offices,
     loading,
-    search,
-    setSearch,
+    error,
+    fetchOffices, // REFRESH AFTER UPDATE
+    stats,
   };
-};
+}

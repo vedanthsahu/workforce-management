@@ -1,94 +1,35 @@
-import { Card, CardContent } from "@/components/ui/card";
-import { MapPin, ShieldCheck, Building2, Layers } from "lucide-react";
-import { Office } from "../types/office.types";
+"use client";
 
-export default function OfficeStats({ data }: { data: Office[] }) {
-  const total = data.length;
-  const active = data.filter((d) => d.status === "ACTIVE").length;
-  const inactive = data.filter((d) => d.status === "INACTIVE").length;
-  const seats = data.reduce((a, b) => a + b.seats, 0);
+import { Building2, CheckCircle, PauseCircle, Armchair } from "lucide-react";
+import { OfficeStatsSummary } from "../types/office.types";
+
+export default function OfficeStats({ stats }: { stats: OfficeStatsSummary | null }) {
+  if (!stats) {
+    return null;
+  }
 
   return (
     <div className="grid grid-cols-4 gap-6">
 
-      {/* TOTAL offices */}
-      <Card className="rounded-2xl border shadow-sm hover:shadow-md transition">
-        <CardContent className="flex items-center gap-4 p-6">
+      <Stat icon={<Building2 className="text-blue-600" />} bg="bg-blue-100" label="Total Offices" value={stats.total_offices.toString()} sub="Across all tenants" />
+      <Stat icon={<CheckCircle className="text-green-600" />} bg="bg-green-100" label="Active Offices" value={stats.active_sites.toString()} sub="Currently active" />
+      <Stat icon={<PauseCircle className="text-yellow-600" />} bg="bg-yellow-100" label="Inactive Offices" value={stats.inactive_sites.toString()} sub="Currently inactive" />
+      <Stat icon={<Armchair className="text-purple-600" />} bg="bg-purple-100" label="Total Seats" value={stats.total_seats.toString()} sub="Across all offices" />
 
-          <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-blue-100">
-            <MapPin className="w-5 h-5 text-blue-600" />
-          </div>
+    </div>
+  );
+}
 
-          <div>
-            <p className="text-sm text-gray-500">Total Offices</p>
-            <p className="text-2xl font-semibold">{total}</p>
-            <p className="text-xs text-gray-400 mt-1">
-              Across all tenants
-            </p>
-          </div>
+function Stat({ icon, bg, label, value, sub }: any) {
+  return (
+    <div className="flex items-center gap-4 p-5 bg-white border rounded-2xl shadow-sm">
+      <div className={`p-3 rounded-xl ${bg}`}>{icon}</div>
 
-        </CardContent>
-      </Card>
-
-      {/* ACTIVE */}
-      <Card className="rounded-2xl border shadow-sm hover:shadow-md transition">
-        <CardContent className="flex items-center gap-4 p-6">
-
-          <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-green-100">
-            <ShieldCheck className="w-5 h-5 text-green-600" />
-          </div>
-
-          <div>
-            <p className="text-sm text-gray-500">Active Offices</p>
-            <p className="text-2xl font-semibold text-green-600">
-              {active}
-            </p>
-            <p className="text-xs text-gray-400 mt-1">
-              Currently active
-            </p>
-          </div>
-
-        </CardContent>
-      </Card>
-
-      {/* INACTIVE */}
-      <Card className="rounded-2xl border shadow-sm hover:shadow-md transition">
-        <CardContent className="flex items-center gap-4 p-6">
-
-          <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-orange-100">
-            <Building2 className="w-5 h-5 text-orange-600" />
-          </div>
-
-          <div>
-            <p className="text-sm text-gray-500">Inactive Offices</p>
-            <p className="text-2xl font-semibold">{inactive}</p>
-            <p className="text-xs text-gray-400 mt-1">
-              Currently inactive
-            </p>
-          </div>
-
-        </CardContent>
-      </Card>
-
-      {/* TOTAL OFFICES / SEATS */}
-      <Card className="rounded-2xl border shadow-sm hover:shadow-md transition">
-        <CardContent className="flex items-center gap-4 p-6">
-
-          <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-purple-100">
-            <Layers className="w-5 h-5 text-purple-600" />
-          </div>
-
-          <div>
-            <p className="text-sm text-gray-500">Total Seats</p>
-            <p className="text-2xl font-semibold">{seats}</p>
-            <p className="text-xs text-gray-400 mt-1">
-              Across all offices
-            </p>
-          </div>
-
-        </CardContent>
-      </Card>
-
+      <div>
+        <p className="text-sm text-gray-500">{label}</p>
+        <p className="text-xl font-semibold text-gray-900">{value}</p>
+        <p className="text-xs text-gray-400 mt-1">{sub}</p>
+      </div>
     </div>
   );
 }
