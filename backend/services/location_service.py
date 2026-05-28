@@ -17,6 +17,11 @@ from backend.repositories.location_repository import (
     fetch_floor_duplicates,
     fetch_floors_by_building,
     fetch_seat_configuration,
+    fetch_layout_seat_mapping_by_id,
+    update_layout_seat_mapping_configuration,
+    upsert_operational_seat,
+    replace_seat_amenities,
+    fetch_seat_amenity_ids,
     fetch_site_by_id,
     fetch_site_duplicates,
     fetch_sites,
@@ -28,12 +33,15 @@ from backend.repositories.location_repository import (
     update_seat_configuration,
     update_site,
 )
+
 from backend.schemas.location import (
     BuildingResponse,
     CreateBuildingRequest,
     CreateFloorRequest,
     CreateSiteRequest,
     FloorResponse,
+    LayoutSeatConfigurationResponse,
+    LayoutSeatConfigurationUpdateRequest,
     SeatConfigurationResponse,
     SeatConfigurationUpdateRequest,
     SiteDetailsResponse,
@@ -126,6 +134,7 @@ def get_sites(
             status_filter=status_filter,
         )
     except psycopg2.Error as exc:
+        print("DEBUG_DB_ERROR", repr(exc))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -183,6 +192,7 @@ def create_site(
         ) from exc
     except psycopg2.Error as exc:
         conn.rollback()
+        print("DEBUG_DB_ERROR", repr(exc))
         _raise_write_error(
             exc,
             duplicate_code="site_duplicate",
@@ -236,6 +246,7 @@ def update_site_metadata(
         raise
     except psycopg2.Error as exc:
         conn.rollback()
+        print("DEBUG_DB_ERROR", repr(exc))
         _raise_write_error(
             exc,
             duplicate_code="site_duplicate",
@@ -244,6 +255,103 @@ def update_site_metadata(
         )
 
     return SiteResponse(**updated_site)
+
+
+
+def update_layout_seat_configuration(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_seat_mapping_id: str,
+    payload: LayoutSeatConfigurationUpdateRequest,
+    current_user: dict[str, Any],
+) -> LayoutSeatConfigurationResponse:
+
+    try:
+
+        mapping = fetch_layout_seat_mapping_by_id(
+            conn,
+            tenant_id=tenant_id,
+            layout_seat_mapping_id=layout_seat_mapping_id,
+        )
+
+        if mapping is None:
+            _raise_not_found("layout seat mapping")
+
+        amenity_ids = payload.amenity_ids or []
+
+        updated_mapping = update_layout_seat_mapping_configuration(
+            conn,
+            tenant_id=tenant_id,
+            layout_seat_mapping_id=layout_seat_mapping_id,
+            seat_name=payload.seat_name,
+            seat_type=payload.seat_type,
+            status=payload.status,
+            is_bookable=payload.is_bookable,
+            is_reserved=payload.is_reserved,
+            updated_by=str(current_user["user_id"]),
+        )
+
+        seat = upsert_operational_seat(
+            conn,
+            tenant_id=tenant_id,
+            layout_id=str(mapping["layout_id"]),
+            site_id=str(mapping["site_id"]),
+            building_id=str(mapping["building_id"]),
+            floor_id=str(mapping["floor_id"]),
+            seat_code=str(mapping["seat_code"]),
+            seat_type=payload.seat_type,
+            status=payload.status,
+            is_bookable=payload.is_bookable,
+            svg_element_id=str(mapping["svg_element_id"]),
+        )
+
+        replace_seat_amenities(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(seat["seat_id"]),
+            amenity_ids=amenity_ids,
+            assigned_by_user_id=str(current_user["user_id"]),
+        )
+
+        final_amenity_ids = fetch_seat_amenity_ids(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(seat["seat_id"]),
+        )
+
+        conn.commit()
+
+        return LayoutSeatConfigurationResponse(
+            layout_seat_mapping_id=str(updated_mapping["id"]),
+            seat_id=str(seat["seat_id"]),
+            layout_id=str(mapping["layout_id"]),
+            floor_id=str(mapping["floor_id"]),
+            seat_code=str(mapping["seat_code"]),
+            seat_name=updated_mapping.get("seat_name"),
+            seat_type=updated_mapping["seat_type"],
+            status=updated_mapping["status"],
+            is_bookable=updated_mapping["is_bookable"],
+            is_reserved=updated_mapping["is_reserved"],
+            is_configured=True,
+            configuration_status="COMPLETED",
+            amenity_ids=final_amenity_ids,
+        )
+
+    except HTTPException:
+        conn.rollback()
+        raise
+
+    except psycopg2.Error as exc:
+        conn.rollback()
+        print("DEBUG_DB_ERROR", repr(exc))
+
+        _raise_write_error(
+            exc,
+            duplicate_code="seat_configuration_conflict",
+            fallback_code="seat_configuration_failed",
+            fallback_message="Failed to configure layout seat.",
+        )
 
 
 def get_site_details(
@@ -256,6 +364,7 @@ def get_site_details(
     try:
         site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=site_id)
     except psycopg2.Error as exc:
+        print("DEBUG_DB_ERROR", repr(exc))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -300,6 +409,7 @@ def get_buildings_by_site(
             status_filter=status_filter,
         )
     except psycopg2.Error as exc:
+        print("DEBUG_DB_ERROR", repr(exc))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -358,6 +468,7 @@ def create_building(
         ) from exc
     except psycopg2.Error as exc:
         conn.rollback()
+        print("DEBUG_DB_ERROR", repr(exc))
         _raise_write_error(
             exc,
             duplicate_code="building_duplicate",
@@ -415,6 +526,7 @@ def update_building_metadata(
         raise
     except psycopg2.Error as exc:
         conn.rollback()
+        print("DEBUG_DB_ERROR", repr(exc))
         _raise_write_error(
             exc,
             duplicate_code="building_duplicate",
@@ -448,6 +560,7 @@ def get_floors_by_building(
             status_filter=status_filter,
         )
     except psycopg2.Error as exc:
+        print("DEBUG_DB_ERROR", repr(exc))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -516,6 +629,7 @@ def create_floor(
         ) from exc
     except psycopg2.Error as exc:
         conn.rollback()
+        print("DEBUG_DB_ERROR", repr(exc))
         _raise_write_error(
             exc,
             duplicate_code="floor_duplicate",
@@ -569,6 +683,7 @@ def update_floor_metadata(
         raise
     except psycopg2.Error as exc:
         conn.rollback()
+        print("DEBUG_DB_ERROR", repr(exc))
         _raise_write_error(
             exc,
             duplicate_code="floor_duplicate",
@@ -615,6 +730,7 @@ def update_seat_configuration_metadata(
         raise
     except psycopg2.Error as exc:
         conn.rollback()
+        print("DEBUG_DB_ERROR", repr(exc))
         _raise_write_error(
             exc,
             duplicate_code="seat_conflict",

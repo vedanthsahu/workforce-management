@@ -25,6 +25,7 @@ from backend.repositories.floor_layout_repository import (
     fetch_floor_for_layout,
     fetch_floor_layout_by_id,
     fetch_floor_layouts_by_floor,
+    fetch_layout_seats_by_layout_id,
     get_next_layout_version,
     insert_floor_layout,
 )
@@ -32,8 +33,13 @@ from backend.repositories.user_repository import fetch_admin_notification_emails
 from backend.schemas.floor_layout import (
     CreateFloorLayoutRequest,
     FloorLayoutResponse,
+    LayoutSeatListResponse,
+    LayoutSeatResponse,
 )
 from backend.services.notification_service import queue_floor_layout_uploaded_notification
+from backend.repositories.layout_seat_mapping_repository import (
+    bulk_insert_layout_seat_mappings,
+)
 
 logger = logging.getLogger(f"{LOGGER_NAME}.floor_layouts")
 
@@ -103,6 +109,18 @@ def create_floor_layout(
             layout_metadata=payload.layout_metadata,
             uploaded_by_user_id=user_id,
         )
+        print("DEBUG_SEAT_IDS", payload.seat_ids)
+        print("DEBUG_SEAT_IDS_TYPE", type(payload.seat_ids))
+        bulk_insert_layout_seat_mappings(
+            conn,
+            tenant_id=tenant_id,
+            layout_id=str(created_layout["layout_id"]),
+            site_id=str(payload.site_id),
+            building_id=str(payload.building_id),
+            floor_id=str(payload.floor_id),
+            seat_ids=payload.seat_ids,
+            created_by=user_id,
+        )
 
         conn.commit()
 
@@ -166,6 +184,50 @@ def get_floor_layouts_by_floor(
 
     return [FloorLayoutResponse(**layout) for layout in layouts]
 
+
+def get_floor_layout_seats(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    layout_id: str,
+) -> LayoutSeatListResponse:
+
+    try:
+
+        seats = fetch_layout_seats_by_layout_id(
+            conn,
+            tenant_id=str(current_user["tenant_id"]),
+            layout_id=layout_id,
+        )
+
+    except psycopg2.Error as exc:
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "layout_seat_lookup_failed",
+                "message": "Failed to fetch layout seats.",
+            },
+        ) from exc
+
+    configured_count = sum(
+        1
+        for seat in seats
+        if seat.get("is_configured") is True
+    )
+
+    items = [
+        LayoutSeatResponse(**seat)
+        for seat in seats
+    ]
+
+    return LayoutSeatListResponse(
+        layout_id=layout_id,
+        total_seats=len(items),
+        configured_seats=configured_count,
+        pending_seats=len(items) - configured_count,
+        items=items,
+    )
 
 def activate_floor_layout(
     conn: PGConnection,
