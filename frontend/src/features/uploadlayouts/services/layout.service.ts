@@ -12,7 +12,7 @@ async createLayout(payload: any) {
   formData.append("layout_name", payload.layout_name);
   formData.append("status", payload.status);
 
-  // ✅ IMPORTANT: MUST MATCH SWAGGER
+  // IMPORTANT: MUST MATCH SWAGGER
   formData.append("layout_metadata", "{}");
 
   const { data } = await axiosInstance.post(
