@@ -1,3 +1,5 @@
+
+
 "use client";
 
 import React, { useState } from "react";
@@ -14,6 +16,7 @@ import {
   Waves,
   Wind,
   X,
+  Pencil,
 } from "lucide-react";
 
 import { AppSidebar } from "@/features/dashboard/components/AppSidebar";
@@ -33,7 +36,6 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
 import { useBookingForm } from "../hooks/Usebookingform";
-// Import the SVG floor map component
 import { SvgFloorMapPage, SeatWithSvgId } from "./SvgFloorMapPage";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -126,8 +128,9 @@ const DateInput: React.FC<{
   label: string;
   value: string;
   min?: string;
+  disabled?: boolean;
   onChange: (v: string) => void;
-}> = ({ label, value, min, onChange }) => (
+}> = ({ label, value, min, disabled, onChange }) => (
   <div className="flex-1 min-w-0">
     <p className="text-[11px] font-medium text-gray-500 mb-1.5">{label}</p>
     <div className="relative">
@@ -139,11 +142,12 @@ const DateInput: React.FC<{
         type="date"
         value={value}
         min={min}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         className={cn(
           "w-full h-10 pl-8 pr-3 rounded-lg border border-[#EBEBF5] bg-white",
           "text-[13px] text-[#1A1A2E] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent",
-          "cursor-pointer"
+          disabled ? "opacity-60 cursor-not-allowed bg-gray-50" : "cursor-pointer"
         )}
       />
     </div>
@@ -174,6 +178,9 @@ const BookASeatPage: React.FC = () => {
     selectedSeat,
     dayCount,
     step1Valid,
+    // modify mode
+    isModifyMode,
+    modifyBookingId,
     setSiteId,
     setBuildingId,
     setFloorId,
@@ -209,9 +216,6 @@ const BookASeatPage: React.FC = () => {
     return floors.find((x) => x.id === form.floorId)?.name ?? form.floorId;
   }, [form.floorId, floors]);
 
-  // ── Cast seats to SeatWithSvgId ───────────────────────────────────────────
-  // The base Seat type should have svgId added (see integration guide in SvgFloorMapPage.tsx).
-  // This cast is safe once you add svgId to the Seat interface in Bookingform.types.ts.
   const seatsWithSvgId = seats as unknown as SeatWithSvgId[];
 
   return (
@@ -224,8 +228,14 @@ const BookASeatPage: React.FC = () => {
           {/* ── Header ── */}
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-[20px] font-bold text-[#1A1A2E] leading-tight">Book a Seat</h1>
-              <p className="text-[12.5px] text-gray-400 mt-0.5">Reserve your workspace in a few steps</p>
+              <h1 className="text-[20px] font-bold text-[#1A1A2E] leading-tight">
+                {isModifyMode ? "Modify Booking" : "Book a Seat"}
+              </h1>
+              <p className="text-[12.5px] text-gray-400 mt-0.5">
+                {isModifyMode
+                  ? "Select a new seat to replace your existing booking"
+                  : "Reserve your workspace in a few steps"}
+              </p>
             </div>
             <Button
               variant="outline"
@@ -234,9 +244,25 @@ const BookASeatPage: React.FC = () => {
               className="h-8 gap-1.5 text-[12.5px] text-gray-600"
             >
               <RefreshCw size={13} />
-              Start over
+              {isModifyMode ? "Cancel modify" : "Start over"}
             </Button>
           </div>
+
+          {/* ── Modify mode banner ── */}
+          {isModifyMode && (
+            <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-5 py-3">
+              <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                <Pencil size={13} className="text-amber-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-semibold text-amber-800">Modifying existing booking</p>
+                <p className="text-[12px] text-amber-600 mt-0.5">
+                  Your original booking will be cancelled once you confirm a new seat.
+                  The date is pre-filled from your original booking.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* ── Step indicator ── */}
           <div className="flex items-center gap-3 bg-white border border-[#EBEBF5] rounded-xl px-6 py-4">
@@ -281,7 +307,6 @@ const BookASeatPage: React.FC = () => {
           {step === 1 && (
             <div className="bg-white border border-[#EBEBF5] rounded-xl p-6 flex flex-col gap-7">
 
-              {/* Title */}
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center">
                   <Building2 size={20} className="text-indigo-600" />
@@ -370,7 +395,11 @@ const BookASeatPage: React.FC = () => {
                 <SectionHeader
                   icon={<CalendarDays size={15} />}
                   title="2. Select Dates"
-                  subtitle="Choose the dates you'll be coming to the office"
+                  subtitle={
+                    isModifyMode
+                      ? "Date is pre-filled from your original booking — you can change it if needed"
+                      : "Choose the dates you'll be coming to the office"
+                  }
                 />
                 <div className="flex gap-4 items-end">
                   <div className="flex gap-3 flex-1 items-center">
@@ -380,13 +409,18 @@ const BookASeatPage: React.FC = () => {
                       min={todayIso}
                       onChange={setFromDate}
                     />
-                    <ChevronRight size={16} className="text-gray-300 shrink-0 mt-5" />
-                    <DateInput
-                      label="To"
-                      value={form.toDate}
-                      min={form.fromDate}
-                      onChange={setToDate}
-                    />
+                    {/* In modify mode, hide the To date — single-day booking only */}
+                    {/* {!isModifyMode && ( */}
+                      <>
+                        <ChevronRight size={16} className="text-gray-300 shrink-0 mt-5" />
+                        <DateInput
+                          label="To"
+                          value={form.toDate}
+                          min={form.fromDate}
+                          onChange={setToDate}
+                        />
+                      </>
+                    {/* )} */}
                   </div>
 
                   {/* Day count summary */}
@@ -395,15 +429,21 @@ const BookASeatPage: React.FC = () => {
                       <div className="flex items-center gap-2 mb-1">
                         <CalendarDays size={14} className="text-indigo-500" />
                         <span className="text-[13px] font-semibold text-indigo-700">
-                          {dayCount} {dayCount === 1 ? "day" : "days"} selected
+                          {isModifyMode
+                            ? fmtDate(form.fromDate)
+                            : `${dayCount} ${dayCount === 1 ? "day" : "days"} selected`}
                         </span>
                       </div>
-                      <p className="text-[11.5px] text-indigo-500">
-                        {fmtDate(form.fromDate)} – {fmtDate(form.toDate)}
-                      </p>
-                      <p className="text-[11px] text-indigo-400 mt-1">
-                        You will be able to select a seat for all days in the next step.
-                      </p>
+                      {!isModifyMode && (
+                        <>
+                          <p className="text-[11.5px] text-indigo-500">
+                            {fmtDate(form.fromDate)} – {fmtDate(form.toDate)}
+                          </p>
+                          <p className="text-[11px] text-indigo-400 mt-1">
+                            You will be able to select a seat for all days in the next step.
+                          </p>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -487,8 +527,9 @@ const BookASeatPage: React.FC = () => {
                 <div>
                   <p className="text-[12.5px] font-semibold text-[#1A1A2E]">What happens next?</p>
                   <p className="text-[12px] text-gray-400 mt-0.5">
-                    You'll be taken to the floor map to view and select your preferred seats based on
-                    availability and your preferences.
+                    {isModifyMode
+                      ? "You'll see the floor map to pick your new seat. Once you confirm, your original booking will be cancelled and the new one created."
+                      : "You'll be taken to the floor map to view and select your preferred seats based on availability and your preferences."}
                   </p>
                 </div>
               </div>
@@ -497,22 +538,9 @@ const BookASeatPage: React.FC = () => {
 
           {/* ════════════════════════════════════════════════════
               STEP 2 – Select a Seat (SVG Floor Map)
-              Replaced the old grid-tile map with SvgFloorMapPage.
-              All state (seats, selectedSeatId, selectSeat) flows
-              from useBookingForm() exactly as before.
           ════════════════════════════════════════════════════ */}
           {step === 2 && (
             <div className="bg-white border border-[#EBEBF5] rounded-xl p-6 flex flex-col gap-5">
-
-              {/*
-                SvgFloorMapPage handles:
-                  - Fetching & rendering /public/floor-IT.svg
-                  - Painting each <g id="N"> with available / booked / selected colours
-                  - Tooltip on hover
-                  - Zoom + pan controls
-                  - Selected seat banner
-                It calls onSeatSelect(seat.id) → selectSeat() → updates form.selectedSeatId
-              */}
               <SvgFloorMapPage
                 seats={seatsWithSvgId}
                 selectedSeatId={form.selectedSeatId}
@@ -523,14 +551,8 @@ const BookASeatPage: React.FC = () => {
                 floorName={selectedFloor?.name}
               />
 
-              {/* Step navigation — unchanged from original */}
               <div className="flex justify-between pt-1 border-t border-[#EBEBF5]">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goBack}
-                  className="text-[12.5px]"
-                >
+                <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px]">
                   ← Back
                 </Button>
                 <Button
@@ -547,97 +569,121 @@ const BookASeatPage: React.FC = () => {
           {/* ════════════════════════════════════════════════════
               STEP 3 – Review & Confirm
           ════════════════════════════════════════════════════ */}
-        {step === 3 && !confirmation && (
-  <div className="flex justify-center">
-    <div className="bg-white border border-[#EBEBF5] rounded-xl p-6 flex flex-col gap-5 w-full max-w-2xl">
-      <div>
-        <p className="text-[15px] font-bold text-[#1A1A2E]">Review & Confirm</p>
-        <p className="text-[12px] text-gray-400 mt-0.5">
-          Please review your booking details before confirming
-        </p>
-      </div>
+          {step === 3 && !confirmation && (
+            <div className="flex justify-center">
+              <div className="bg-white border border-[#EBEBF5] rounded-xl p-6 flex flex-col gap-5 w-full max-w-2xl">
+                <div>
+                  <p className="text-[15px] font-bold text-[#1A1A2E]">Review & Confirm</p>
+                  <p className="text-[12px] text-gray-400 mt-0.5">
+                    {isModifyMode
+                      ? "Confirming will cancel your original booking and create this new one"
+                      : "Please review your booking details before confirming"}
+                  </p>
+                </div>
 
-      <Separator />
+                <Separator />
 
-      <div>
-        <SummaryRow label="Location"   value={selectedSite?.name ?? "—"} />
-        <SummaryRow label="Building"   value={selectedBuilding?.name ?? "—"} />
-        <SummaryRow label="Floor"      value={selectedFloor?.name ?? "—"} />
-        <SummaryRow label="Seat"       value={`Seat ${selectedSeat?.label ?? "—"}`} />
-        <SummaryRow label="From"       value={fmtDate(form.fromDate)} />
-        <SummaryRow label="To"         value={fmtDate(form.toDate)} />
-        <SummaryRow label="Duration"   value={`${dayCount} ${dayCount === 1 ? "day" : "days"}`} />
-        <div className="py-3 flex justify-between items-center">
-          <span className="text-[12.5px] text-gray-500">Preferences</span>
-          <div className="flex gap-1.5 flex-wrap justify-end">
-            {form.preferences.length > 0
-              ? form.preferences.map((p) => {
-                  const pref = availablePreferences.find((x) => x.key === p);
-                  return pref ? (
-                    <Badge key={p} variant="secondary" className="text-[11px]">
-                      {pref.name}
-                    </Badge>
-                  ) : null;
-                })
-              : <span className="text-[12.5px] font-semibold text-[#1A1A2E]">None selected</span>
-            }
-          </div>
-        </div>
-      </div>
+                <div>
+                  <SummaryRow label="Location"   value={selectedSite?.name ?? "—"} />
+                  <SummaryRow label="Building"   value={selectedBuilding?.name ?? "—"} />
+                  <SummaryRow label="Floor"      value={selectedFloor?.name ?? "—"} />
+                  <SummaryRow label="Seat"       value={`Seat ${selectedSeat?.label ?? "—"}`} />
+                  <SummaryRow label="Date"       value={fmtDate(form.fromDate)} />
+                  {!isModifyMode && (
+                    <>
+                      <SummaryRow label="To"       value={fmtDate(form.toDate)} />
+                      <SummaryRow label="Duration" value={`${dayCount} ${dayCount === 1 ? "day" : "days"}`} />
+                    </>
+                  )}
+                  <div className="py-3 flex justify-between items-center">
+                    <span className="text-[12.5px] text-gray-500">Preferences</span>
+                    <div className="flex gap-1.5 flex-wrap justify-end">
+                      {form.preferences.length > 0
+                        ? form.preferences.map((p) => {
+                            const pref = availablePreferences.find((x) => x.key === p);
+                            return pref ? (
+                              <Badge key={p} variant="secondary" className="text-[11px]">
+                                {pref.name}
+                              </Badge>
+                            ) : null;
+                          })
+                        : <span className="text-[12.5px] font-semibold text-[#1A1A2E]">None selected</span>
+                      }
+                    </div>
+                  </div>
+                </div>
 
-      <div className="flex justify-between pt-1 border-t border-[#EBEBF5]">
-        <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px]">
-          ← Back
-        </Button>
-        <Button
-          onClick={confirmBooking}
-          disabled={submitting}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 text-[13px] font-semibold"
-        >
-          {submitting ? "Confirming…" : "Confirm Booking"}
-        </Button>
-      </div>
-    </div>
-  </div>
-)}
+                {/* Modify warning */}
+                {isModifyMode && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-2.5">
+                    <Pencil size={13} className="text-amber-500 mt-0.5 shrink-0" />
+                    <p className="text-[12px] text-amber-700">
+                      Your original booking <strong>#{modifyBookingId?.slice(0, 8)}</strong> will be
+                      cancelled and this new booking will be created in its place.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex justify-between pt-1 border-t border-[#EBEBF5]">
+                  <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px]">
+                    ← Back
+                  </Button>
+                  <Button
+                    onClick={confirmBooking}
+                    disabled={submitting}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 text-[13px] font-semibold"
+                  >
+                    {submitting
+                      ? isModifyMode ? "Modifying…" : "Confirming…"
+                      : isModifyMode ? "Confirm Modification" : "Confirm Booking"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ════════════════════════════════════════════════════
               Confirmation success
           ════════════════════════════════════════════════════ */}
-        {confirmation && (
-  <div className="flex justify-center">
-    <div className="bg-white border border-[#EBEBF5] rounded-xl p-8 flex flex-col items-center gap-4 w-full max-w-2xl text-center">
-      <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center">
-        <CheckCircle2 size={28} className="text-emerald-500" />
-      </div>
-      <div>
-        <p className="text-[18px] font-bold text-[#1A1A2E]">Booking Confirmed!</p>
-        <p className="text-[12.5px] text-gray-400 mt-1">
-          Your seat has been reserved successfully.
-        </p>
-      </div>
-      <div className="bg-[#F7F8FC] border border-[#EBEBF5] rounded-xl px-6 py-4 w-full text-left">
-        <p className="text-[11px] font-semibold tracking-widest uppercase text-gray-400 mb-3">
-          Booking Details
-        </p>
-        <SummaryRow label="Booking ID" value={confirmation.booking_id} />
-        <SummaryRow label="Location"   value={confirmation.site_name ?? "—"} />
-        <SummaryRow label="Building"   value={confirmation.building_name ?? "—"} />
-        <SummaryRow label="Floor"      value={confirmation.floor_name ?? "—"} />
-        <SummaryRow label="Seat"       value={confirmation.seat_code ?? "—"} />
-        <SummaryRow label="Date"       value={fmtDate(confirmation.booking_date)} />
-        <SummaryRow label="Status"     value={confirmation.booking_status} />
-      </div>
-      <Button
-        onClick={resetForm}
-        variant="outline"
-        className="text-[13px] font-medium w-full"
-      >
-        Book another seat
-      </Button>
-    </div>
-  </div>
-)}
+          {confirmation && (
+            <div className="flex justify-center">
+              <div className="bg-white border border-[#EBEBF5] rounded-xl p-8 flex flex-col items-center gap-4 w-full max-w-2xl text-center">
+                <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center">
+                  <CheckCircle2 size={28} className="text-emerald-500" />
+                </div>
+                <div>
+                  <p className="text-[18px] font-bold text-[#1A1A2E]">
+                    {isModifyMode ? "Booking Modified!" : "Booking Confirmed!"}
+                  </p>
+                  <p className="text-[12.5px] text-gray-400 mt-1">
+                    {isModifyMode
+                      ? "Your booking has been updated successfully."
+                      : "Your seat has been reserved successfully."}
+                  </p>
+                </div>
+                <div className="bg-[#F7F8FC] border border-[#EBEBF5] rounded-xl px-6 py-4 w-full text-left">
+                  <p className="text-[11px] font-semibold tracking-widest uppercase text-gray-400 mb-3">
+                    Booking Details
+                  </p>
+                  <SummaryRow label="Booking ID" value={confirmation.booking_id} />
+                  <SummaryRow label="Location"   value={confirmation.site_name ?? "—"} />
+                  <SummaryRow label="Building"   value={confirmation.building_name ?? "—"} />
+                  <SummaryRow label="Floor"      value={confirmation.floor_name ?? "—"} />
+                  <SummaryRow label="Seat"       value={confirmation.seat_code ?? "—"} />
+                  <SummaryRow label="Date"       value={fmtDate(confirmation.booking_date)} />
+                  <SummaryRow label="Status"     value={confirmation.booking_status} />
+                </div>
+                <Button
+                  onClick={resetForm}
+                  variant="outline"
+                  className="text-[13px] font-medium w-full"
+                >
+                  {isModifyMode ? "Back to My Bookings" : "Book another seat"}
+                </Button>
+              </div>
+            </div>
+          )}
+
         </main>
       </div>
     </SidebarProvider>

@@ -9,19 +9,27 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 class CreateFloorLayoutRequest(BaseModel):
     site_id: int = Field(gt=0)
+
     building_id: int = Field(gt=0)
+
     floor_id: int = Field(gt=0)
 
-    layout_name: str = Field(min_length=1, max_length=255)
+    layout_name: str = Field(
+        min_length=1,
+        max_length=255,
+    )
 
-    status: str = Field(pattern="^(DRAFT|PUBLISHED)$")
+    status: str = Field(
+        pattern="^(DRAFT|PUBLISHED)$",
+    )
 
     layout_metadata: dict[str, Any] | None = None
 
-
+    seat_ids: list[str] = Field(
+        min_length=1,
+    )
 class FloorLayoutResponse(BaseModel):
     layout_id: str
 
@@ -61,3 +69,57 @@ class FloorLayoutResponse(BaseModel):
 
     created_at: datetime
     updated_at: datetime
+
+    
+class LayoutSeatResponse(BaseModel):
+
+    layout_seat_mapping_id: str
+
+    layout_id: str
+
+    site_id: str
+    building_id: str
+    floor_id: str
+
+    seat_id: str | None = None
+
+    svg_element_id: str
+
+    seat_code: str
+
+    seat_name: str | None = None
+
+    seat_type: str
+
+    status: str
+
+    is_bookable: bool
+
+    is_reserved: bool
+
+    is_configured: bool
+
+    configuration_status: str
+
+    notes: str | None = None
+
+    amenity_ids: list[int]
+
+    created_at: datetime
+
+    updated_at: datetime
+
+
+
+
+class LayoutSeatListResponse(BaseModel):
+
+    layout_id: str
+
+    total_seats: int
+
+    configured_seats: int
+
+    pending_seats: int
+
+    items: list[LayoutSeatResponse]

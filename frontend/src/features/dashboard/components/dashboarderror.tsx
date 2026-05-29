@@ -79,11 +79,20 @@ export function FatalErrorScreen({
 // Inline notice inside a section when only that section's data failed.
 // Sits at the top of the section card, doesn't remove other content.
 
+// const SECTION_LABELS: Record<DashboardSectionError["section"], string> = {
+//   user: "Profile",
+//   currentBookings: "Today's booking",
+//   futureBookings: "Upcoming bookings",
+//   team: "Team data",
+// };
+
+
 const SECTION_LABELS: Record<DashboardSectionError["section"], string> = {
-  user: "Profile",
+  user:            "Profile",
+  dashboardMe:     "Dashboard stats",   // ← add this
   currentBookings: "Today's booking",
-  futureBookings: "Upcoming bookings",
-  team: "Team data",
+  futureBookings:  "Upcoming bookings",
+  team:            "Team data",
 };
 
 export function SectionErrorBanner({ errors }: { errors: DashboardSectionError[] }) {

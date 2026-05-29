@@ -121,22 +121,57 @@ def fetch_admin_dashboard_summary(
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
-            WITH filtered_sites AS (
-                SELECT s.id
+            WITH scoped_sites AS (
+                SELECT
+                    s.id,
+                    s.status
                 FROM sites AS s
                 WHERE s.tenant_id = %(tenant_id)s
-                  AND s.status = 'ACTIVE'
                   AND (
                         %(site_id)s IS NULL
                         OR s.id = %(site_id)s::bigint
                   )
+                  AND (
+                        %(floor_id)s IS NULL
+                        OR EXISTS (
+                            SELECT 1
+                            FROM floors AS f
+                            WHERE f.tenant_id = s.tenant_id
+                              AND f.site_id = s.id
+                              AND f.id = %(floor_id)s::bigint
+                        )
+                  )
             ),
 
-            filtered_floors AS (
-                SELECT f.id
+            scoped_buildings AS (
+                SELECT
+                    b.id,
+                    b.status
+                FROM buildings AS b
+                WHERE b.tenant_id = %(tenant_id)s
+                  AND (
+                        %(site_id)s IS NULL
+                        OR b.site_id = %(site_id)s::bigint
+                  )
+                  AND (
+                        %(floor_id)s IS NULL
+                        OR EXISTS (
+                            SELECT 1
+                            FROM floors AS f
+                            WHERE f.tenant_id = b.tenant_id
+                              AND f.site_id = b.site_id
+                              AND f.building_id = b.id
+                              AND f.id = %(floor_id)s::bigint
+                        )
+                  )
+            ),
+
+            scoped_floors AS (
+                SELECT
+                    f.id,
+                    f.status
                 FROM floors AS f
                 WHERE f.tenant_id = %(tenant_id)s
-                  AND f.status = 'ACTIVE'
                   AND (
                         %(site_id)s IS NULL
                         OR f.site_id = %(site_id)s::bigint
@@ -147,12 +182,13 @@ def fetch_admin_dashboard_summary(
                   )
             ),
 
-            filtered_seats AS (
-                SELECT st.id
+            scoped_seats AS (
+                SELECT
+                    st.id,
+                    st.status,
+                    st.is_bookable
                 FROM seats AS st
                 WHERE st.tenant_id = %(tenant_id)s
-                  AND st.status = 'ACTIVE'
-                  AND st.is_bookable = TRUE
                   AND (
                         %(site_id)s IS NULL
                         OR st.site_id = %(site_id)s::bigint
@@ -205,18 +241,70 @@ def fetch_admin_dashboard_summary(
                 SELECT
                     (
                         SELECT COUNT(*)
-                        FROM filtered_sites
+                        FROM scoped_sites
+                        WHERE status = 'ACTIVE'
                     ) AS total_offices,
 
                     (
                         SELECT COUNT(*)
-                        FROM filtered_floors
+                        FROM scoped_floors
+                        WHERE status = 'ACTIVE'
                     ) AS total_floors,
 
                     (
                         SELECT COUNT(*)
-                        FROM filtered_seats
+                        FROM scoped_seats
+                        WHERE status = 'ACTIVE'
+                          AND is_bookable = TRUE
                     ) AS total_seats,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM scoped_sites
+                        WHERE status = 'ACTIVE'
+                    ) AS active_sites,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM scoped_sites
+                        WHERE status = 'INACTIVE'
+                    ) AS inactive_sites,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM scoped_buildings
+                        WHERE status = 'ACTIVE'
+                    ) AS active_buildings,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM scoped_buildings
+                        WHERE status = 'INACTIVE'
+                    ) AS inactive_buildings,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM scoped_floors
+                        WHERE status = 'ACTIVE'
+                    ) AS active_floors,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM scoped_floors
+                        WHERE status = 'INACTIVE'
+                    ) AS inactive_floors,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM scoped_seats
+                        WHERE status = 'ACTIVE'
+                    ) AS active_seats,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM scoped_seats
+                        WHERE status = 'INACTIVE'
+                    ) AS inactive_seats,
 
                     (
                         SELECT COUNT(DISTINCT seat_id)
@@ -261,11 +349,21 @@ def fetch_admin_dashboard_summary(
                 total_floors,
                 total_seats,
                 booked_seats_count AS booked_today,
+                booked_seats_count AS booked_seats_today,
                 blocked_seats,
+                blocked_seats AS blocked_seats_today,
                 booking_utilization_percentage AS occupancy_percentage,
                 total_bookings,
                 unique_users_booked,
-                booking_utilization_percentage
+                booking_utilization_percentage,
+                active_sites,
+                inactive_sites,
+                active_buildings,
+                inactive_buildings,
+                active_floors,
+                inactive_floors,
+                active_seats,
+                inactive_seats
             FROM utilization_metrics
             """,
             {

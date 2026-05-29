@@ -1,22 +1,26 @@
+
+
 import { axiosInstance } from "@/lib/http/axios";
 import type {
-  DashboardData,
-  Booking,
-  TeamMember,
-  Announcement,
-  FavouriteSeat,
-  DashboardStats,
-  WeekDay,
   ApiBooking,
+  ApiDashboardMe,
+  ApiFavouriteSeat,
   ApiTeamGroup,
+  Announcement,
+  Booking,
+  DashboardData,
+  DashboardStats,
+  FavouriteSeat,
+  TeamMember,
   TodayBookingInfo,
+  WeekDay,
 } from "../types/dashboard.types";
 import type { User } from "@/features/auth/types/auth.types";
 
-// ─── Error Types ──────────────────────────────────────────────────────────────
+// ─── Error types ──────────────────────────────────────────────────────────────
 
 export type DashboardSectionError = {
-  section: "user" | "currentBookings" | "futureBookings" | "team";
+  section: "user" | "dashboardMe" | "currentBookings" | "futureBookings" | "team";
   code: string;
   message: string;
   status?: number;
@@ -30,7 +34,7 @@ export type DashboardResult =
 
 function mapBookingStatus(status: string): "Confirmed" | "Pending" | "Cancelled" {
   const s = status.toUpperCase();
-  if (s === "CONFIRMED" || s === "ACTIVE") return "Confirmed";
+  if (s === "CONFIRMED" || s === "ACTIVE")   return "Confirmed";
   if (s === "CANCELLED" || s === "CANCELED") return "Cancelled";
   return "Pending";
 }
@@ -67,78 +71,57 @@ function buildWeekDays(bookedDates: Set<string>): WeekDay[] {
     const d = new Date(today);
     d.setDate(today.getDate() - 3 + i);
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const isToday = i === 3;
-    const hasBooking = bookedDates.has(iso);
     return {
-      date: d.getDate(),
-      dayLabel: DAY_LABELS[d.getDay()],
-      isToday,
-      hasBooking,
-      hasDot: isToday || hasBooking,
+      date:       d.getDate(),
+      dayLabel:   DAY_LABELS[d.getDay()],
+      isToday:    i === 3,
+      hasBooking: bookedDates.has(iso),
+      hasDot:     i === 3 || bookedDates.has(iso),
     };
   });
 }
 
-function deriveOccupancy(
-  teamGroups: ApiTeamGroup[],
-  currentUserId: string,
-): { officeOccupancy: number; occupancyLabel: string } {
-  const totalCapacity = teamGroups.reduce((acc, g) => acc + g.total_members, 0);
-  const bookedToday = teamGroups.reduce((acc, g) => acc + g.booked_today_count, 0);
-  const pct = totalCapacity > 0 ? Math.round((bookedToday / totalCapacity) * 100) : 0;
-  let occupancyLabel: string;
-  if (pct >= 85) occupancyLabel = "High traffic today";
-  else if (pct >= 50) occupancyLabel = "Moderate traffic today";
-  else occupancyLabel = "Light traffic today";
-  return { officeOccupancy: pct, occupancyLabel };
-}
-
-function mapFavouriteSeat(user: User): FavouriteSeat | null {
-  const s = user.favorite_seat;
-  if (!s) return null;
-  const floor = s.floor_name ?? (s.floor_id ? `Floor ${s.floor_id}` : "");
-  const site = s.site_name ?? s.building_name ?? "Office";
+function mapFavouriteSeat(seat: ApiFavouriteSeat | null): FavouriteSeat | null {
+  if (!seat) return null;
+  const floor = seat.floor_name ?? (seat.floor_id ? `Floor ${seat.floor_id}` : "");
+  const site  = seat.site_name ?? seat.building_name ?? "Office";
   return {
-    id: s.seat_id,
-    label: s.seat_code ?? s.seat_id,
-    location: [floor, site].filter(Boolean).join(" · "),
+    id:          seat.seat_id,
+    label:       seat.seat_code ?? seat.seat_id,
+    location:    [floor, site].filter(Boolean).join(" · "),
     description: "Favourite seat",
     floor,
   };
 }
 
 function mapApiBooking(b: ApiBooking): Booking {
+  // For single-day bookings from_date/to_date may not exist — fall back to booking_date
+  const fromDate = b.from_date ?? b.booking_date;
+  const toDate   = b.to_date   ?? b.booking_date;
+
   return {
-    id: b.booking_id,
-    location: b.site_name ?? "Office",
-    floor: b.floor_name ?? (b.floor_id ? `Floor ${b.floor_id}` : ""),
-    date: formatBookingDate(b.booking_date),
-    startTime: "9:00 AM",
-    endTime: "6:00 PM",
-    status: mapBookingStatus(b.booking_status),
+    id:          b.booking_id,
+    location:    b.site_name      ?? "Office",
+    building:    b.building_name  ?? "",
+    floor:       b.floor_name     ?? (b.floor_id ? `Floor ${b.floor_id}` : ""),
+    // Human-readable display date
+    date:        formatBookingDate(b.booking_date),
+    // ISO strings preserved for the modify / amenity-fetch flow
+    fromDate,
+    toDate,
+    startTime:   "9:00 AM",
+    endTime:     "6:00 PM",
+    status:      mapBookingStatus(b.booking_status),
     isRecurring: false,
-    seatId: b.seat_code ?? b.seat_id,
+    // Display label (seat_code preferred, falls back to seat_id)
+    seatId:      b.seat_code ?? b.seat_id,
+    // Raw IDs for fetchSeatAmenities and the /book?seatId= param
+    rawSeatId:   b.seat_id  ? String(b.seat_id)  : undefined,
+    floorId:     b.floor_id ? String(b.floor_id) : undefined,
     managerNote: "",
   };
 }
 
-// function mapApiTeamToMembers(groups: ApiTeamGroup[], currentUserId: string): TeamMember[] {
-//   const members: TeamMember[] = [];
-//   let colorIndex = 0;
-//   for (const group of groups) {
-//     for (const m of group.members) {
-//       if (m.user_id === currentUserId) continue;
-//       members.push({
-//         id: m.user_id,
-//         name: m.full_name,
-//         initials: toInitials(m.full_name),
-//         floor: m.seat?.floor_id ? `Floor ${m.seat.floor_id}` : "—",
-//         avatarColor: pickAvatarColor(colorIndex++),
-//       });
-//     }
-//   }
-//   return members;
-// }
 function mapApiTeamToMembers(groups: ApiTeamGroup[], currentUserId: string): TeamMember[] {
   const members: TeamMember[] = [];
   let colorIndex = 0;
@@ -147,14 +130,14 @@ function mapApiTeamToMembers(groups: ApiTeamGroup[], currentUserId: string): Tea
       if (m.user_id === currentUserId) continue;
       if (!m.seat) continue;
       members.push({
-        id: m.user_id,
-        name: m.full_name,
-        initials: toInitials(m.full_name),
-        floor: m.seat?.floor_id ? `Floor ${m.seat.floor_id}` : "—",
+        id:          m.user_id,
+        name:        m.full_name,
+        initials:    toInitials(m.full_name),
+        floor:       m.seat.floor_id ? `Floor ${m.seat.floor_id}` : "—",
         avatarColor: pickAvatarColor(colorIndex++),
-        seatCode: m.seat?.seat_code ?? undefined,   
-        email: m.email ?? undefined,                 
-        buildingId: m.seat?.building_id ?? undefined,
+        seatCode:    m.seat.seat_code ?? undefined,
+        email:       m.email ?? undefined,
+        buildingId:  m.seat.building_id ?? undefined,
       });
     }
   }
@@ -168,15 +151,16 @@ function extractTodayBookingInfo(currentBookings: ApiBooking[]): TodayBookingInf
   const b = currentBookings[0];
   return {
     hasTodayBooking: true,
-    seatCode: b.seat_code ?? b.seat_id,
-    floor: b.floor_name ?? (b.floor_id ? `Floor ${b.floor_id}` : null),
-    bookingId: b.booking_id,
+    seatCode:        b.seat_code ?? b.seat_id,
+    floor:           b.floor_name ?? (b.floor_id ? `Floor ${b.floor_id}` : null),
+    bookingId:       b.booking_id,
   };
 }
 
 function deriveStats(
   currentBookings: ApiBooking[],
   teamGroups: ApiTeamGroup[],
+  dashboardMe: ApiDashboardMe,
   currentUserId: string,
 ): DashboardStats {
   const totalMembers = teamGroups.reduce((acc, g) => {
@@ -185,31 +169,27 @@ function deriveStats(
   }, 0);
 
   const bookedToday = teamGroups.reduce((acc, g) => {
-    const selfMember = g.members.find((m) => m.user_id === currentUserId);
+    const selfMember      = g.members.find((m) => m.user_id === currentUserId);
     const selfBookedToday = selfMember?.seat != null;
     return acc + g.booked_today_count - (selfBookedToday ? 1 : 0);
   }, 0);
 
-  const { officeOccupancy, occupancyLabel } = deriveOccupancy(teamGroups, currentUserId);
-
   return {
-    daysInMonth: currentBookings.length,
-    trend: 0,
-    teamInOffice: bookedToday,
-    teamRemoteCount: totalMembers - bookedToday,
-    // officeOccupancy,
-    // occupancyLabel,
-    officeVisitsThisYear: 0,
-    teamRank: 0,
+    daysInMonth:          currentBookings.length,
+    trend:                0,
+    teamInOffice:         bookedToday,
+    teamRemoteCount:      totalMembers - bookedToday,
+    officeVisitsThisYear: dashboardMe.days_in_office_current_year,
+    teamRank:             dashboardMe.team_rank_current_year ?? 0,
   };
 }
 
-// ─── Static mock data ─────────────────────────────────────────────────────────
+// ─── Static mock announcements ────────────────────────────────────────────────
 
 const MOCK_ANNOUNCEMENTS: Announcement[] = [
-  { id: "1", title: "Floor 4 maintenance – Apr 17", description: "Bookings paused from 10am – 1pm", type: "warning" },
-  { id: "2", title: "Parking lot B closed this week", description: "Use parking lot D as alternate", type: "info" },
-  { id: "3", title: "Austin Hub now open for bookings", description: "100 Congress Ave · 45 seats available", type: "success" },
+  { id: "1", title: "Floor 4 maintenance – Apr 17",     description: "Bookings paused from 10am – 1pm",        type: "warning" },
+  { id: "2", title: "Parking lot B closed this week",   description: "Use parking lot D as alternate",          type: "info"    },
+  { id: "3", title: "Austin Hub now open for bookings", description: "100 Congress Ave · 45 seats available",   type: "success" },
 ];
 
 // ─── Error classifier ─────────────────────────────────────────────────────────
@@ -218,43 +198,35 @@ function classifyError(
   err: unknown,
   section: DashboardSectionError["section"],
 ): DashboardSectionError {
-
-   console.log("[classifyError]", {
-    hasResponse: !!(err as any)?.response,
-    status: (err as any)?.response?.status,
-    message: (err as any)?.message,
-    code: (err as any)?.code,
-  });
   if (err && typeof err === "object" && "response" in err) {
-    const axiosErr = err as { response?: { status?: number; data?: { detail?: { code?: string; message?: string } | string } } };
+    const axiosErr = err as {
+      response?: { status?: number; data?: { detail?: { code?: string; message?: string } | string } };
+    };
     const status = axiosErr.response?.status;
     const detail = axiosErr.response?.data?.detail;
 
-    // 401 — user needs to re-authenticate
-    if (status === 401) {
-      return { section, code: "unauthenticated", message: "Your session has expired. Please log in again.", status };
-    }
-    // 403 — access denied
-    if (status === 403) {
-      return { section, code: "forbidden", message: "You don't have permission to access this data.", status };
-    }
-    // Structured backend error
+    if (status === 401) return { section, code: "unauthenticated", message: "Your session has expired. Please log in again.", status };
+    if (status === 403) return { section, code: "forbidden",       message: "You don't have permission to access this data.", status };
+
     if (detail && typeof detail === "object" && detail.code) {
       return { section, code: detail.code, message: detail.message ?? "An error occurred.", status };
     }
-    // Generic HTTP error
     if (status) {
       return { section, code: `http_${status}`, message: `Request failed (${status}). Please try again.`, status };
     }
   }
-  // Network / unknown
-  return { section, code: "network_error", message: "Could not connect to the server. Check your connection.", };
+  return { section, code: "network_error", message: "Could not connect to the server. Check your connection." };
 }
 
 // ─── API fetchers ─────────────────────────────────────────────────────────────
 
-async function getCurrentUser(): Promise<User> {
+async function fetchCurrentUser(): Promise<User> {
   const { data } = await axiosInstance.get<User>("/auth/me");
+  return data;
+}
+
+async function fetchDashboardMe(): Promise<ApiDashboardMe> {
+  const { data } = await axiosInstance.get<ApiDashboardMe>("/dashboard/me");
   return data;
 }
 
@@ -276,26 +248,37 @@ async function fetchTeamGroupsRaw(): Promise<ApiTeamGroup[]> {
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export async function getDashboardData(): Promise<DashboardResult> {
-  // Step 1: User is fatal — nothing renders without it
   let user: User;
   try {
-    user = await getCurrentUser();
+    user = await fetchCurrentUser();
   } catch (err) {
-    const fatal = classifyError(err, "user");
-    return { ok: false, fatal };
+    return { ok: false, fatal: classifyError(err, "user") };
   }
 
-  const currentUserId = user.user_id;
+  const currentUserId  = user.user_id;
   const sectionErrors: DashboardSectionError[] = [];
 
-  // Step 2: Fetch remaining sections independently — failures are non-fatal
-  const [currentRawResult, futureRawResult, teamGroupsResult] = await Promise.allSettled([
-    fetchCurrentBookingsRaw(),
-    fetchFutureBookingsRaw(),
-    fetchTeamGroupsRaw(),
-  ]);
+  const [dashboardMeResult, currentRawResult, futureRawResult, teamGroupsResult] =
+    await Promise.allSettled([
+      fetchDashboardMe(),
+      fetchCurrentBookingsRaw(),
+      fetchFutureBookingsRaw(),
+      fetchTeamGroupsRaw(),
+    ]);
 
-  // Unwrap with fallbacks + collect non-fatal errors
+  const dashboardMe: ApiDashboardMe = (() => {
+    if (dashboardMeResult.status === "fulfilled") return dashboardMeResult.value;
+    sectionErrors.push(classifyError(dashboardMeResult.reason, "dashboardMe"));
+    return {
+      favorite_seat:                null,
+      days_in_office_total:         0,
+      days_in_office_current_month: 0,
+      days_in_office_current_year:  0,
+      team_rank_current_year:       null,
+      team_member_count:            0,
+    };
+  })();
+
   const currentRaw: ApiBooking[] = (() => {
     if (currentRawResult.status === "fulfilled") return currentRawResult.value;
     sectionErrors.push(classifyError(currentRawResult.reason, "currentBookings"));
@@ -314,38 +297,34 @@ export async function getDashboardData(): Promise<DashboardResult> {
     return [];
   })();
 
-  // Step 3: Assemble dashboard data
   const teamInOfficeToday = mapApiTeamToMembers(teamGroups, currentUserId);
-  const stats = deriveStats(currentRaw, teamGroups, currentUserId);
-  const todayBooking = extractTodayBookingInfo(currentRaw);
+  const stats             = deriveStats(currentRaw, teamGroups, dashboardMe, currentUserId);
+  const todayBooking      = extractTodayBookingInfo(currentRaw);
 
   const allBookedDates = new Set([
     ...currentRaw.map((b) => b.booking_date),
-    ...futureRaw.map((b) => b.booking_date),
+    ...futureRaw.map((b)  => b.booking_date),
   ]);
-  const weekDays = buildWeekDays(allBookedDates);
 
   const upcomingBookings = [...futureRaw]
     .sort((a, b) => new Date(a.booking_date).getTime() - new Date(b.booking_date).getTime())
     .map(mapApiBooking);
-
-  const nextBookingDate = upcomingBookings[0]?.date ?? "—";
 
   return {
     ok: true,
     data: {
       user,
       stats,
-      weekDays,
+      weekDays:         buildWeekDays(allBookedDates),
       upcomingBookings,
       teamInOfficeToday,
-      announcements: MOCK_ANNOUNCEMENTS,
-      favouriteSeat: mapFavouriteSeat(user),
-      teamOnlineCount: stats.teamInOffice,
+      announcements:    MOCK_ANNOUNCEMENTS,
+      favouriteSeat:    mapFavouriteSeat(dashboardMe.favorite_seat),
+      teamOnlineCount:  stats.teamInOffice,
       teamOfflineCount: stats.teamRemoteCount,
-      nextBookingDate,
+      nextBookingDate:  upcomingBookings[0]?.date ?? "—",
       todayBooking,
-      daysInOffice: user.days_in_office ?? 0,
+      daysInOffice:     dashboardMe.days_in_office_current_month,
     },
     errors: sectionErrors,
   };
@@ -359,8 +338,7 @@ export async function getUpcomingBookings(): Promise<Booking[]> {
 }
 
 export async function getTeamInOfficeToday(): Promise<TeamMember[]> {
-  const user = await getCurrentUser();
-  const groups = await fetchTeamGroupsRaw();
+  const [user, groups] = await Promise.all([fetchCurrentUser(), fetchTeamGroupsRaw()]);
   return mapApiTeamToMembers(groups, user.user_id);
 }
 
@@ -369,16 +347,11 @@ export async function getAnnouncements(): Promise<Announcement[]> {
 }
 
 export async function getFavouriteSeats(): Promise<FavouriteSeat[]> {
-  const user = await getCurrentUser();
-  const seat = mapFavouriteSeat(user);
+  const dashboardMe = await fetchDashboardMe();
+  const seat = mapFavouriteSeat(dashboardMe.favorite_seat);
   return seat ? [seat] : [];
 }
 
-export async function bookSeat(seatId: string, date: string): Promise<{ success: boolean }> {
-  return Promise.resolve({ success: true });
-}
-
-export async function cancelBooking(bookingId: string): Promise<{ success: boolean }> {
-  await axiosInstance.delete(`/bookings/${bookingId}`);
-  return { success: true };
-}
+// ✅ cancelBooking is intentionally absent from this service.
+// Use cancelBooking from @/features/bookings/services/bookings.service
+// which calls POST /bookings/{id}/cancel with an optional cancellation_reason.
