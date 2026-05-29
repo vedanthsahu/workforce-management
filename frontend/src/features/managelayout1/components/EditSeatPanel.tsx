@@ -12,13 +12,15 @@ interface Props {
   onClose: () => void;
 }
 
-const SEAT_TYPES: SeatType[] = ["Workstation", "Meeting Room", "Cabin", "Phone Booth"];
-const SEAT_STATUSES: SeatStatus[] = ["Active", "Inactive", "Maintenance"];
+// const SEAT_TYPES: SeatType[] = ["Workstation", "Meeting Room", "Cabin", "Phone Booth"];
+// const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
+const SEAT_TYPES: SeatType[] = ["STANDARD" , "WINDOW" , "CABIN" ,"ACCESSIBLE", "HOT_DESK"];
+const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
 
 export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Props) {
-  const [seatType,    setSeatType]    = useState<SeatType>("Workstation");
+  const [seatType,    setSeatType]    = useState<SeatType>("STANDARD");
   const [bookable,    setBookable]    = useState<boolean>(true);
-  const [status,      setStatus]      = useState<SeatStatus>("Active");
+  const [status,      setStatus]      = useState<SeatStatus>("ACTIVE");
   const [amenityIds,  setAmenityIds]  = useState<string[]>([]);
   const [notes,       setNotes]       = useState<string>("");
   const [saving,      setSaving]      = useState(false);
@@ -148,7 +150,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
                   {SEAT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <span className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none ${
-                  status === "Active" ? "bg-emerald-500" : status === "Maintenance" ? "bg-amber-500" : "bg-gray-400"
+                  status === "ACTIVE" ? "bg-emerald-500" : "bg-gray-400"
                 }`} />
               </div>
             </div>

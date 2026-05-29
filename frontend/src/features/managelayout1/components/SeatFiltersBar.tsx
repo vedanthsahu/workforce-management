@@ -1,9 +1,21 @@
 "use client";
+// SeatFiltersBar.tsx  – unchanged UI, exports defaultFilters helper
 
 import React from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { SeatFilters } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
+
+/** Call this to get a fresh "no filters applied" object */
+export function defaultFilters(): SeatFilters {
+  return {
+    search:    "",
+    seat_type: "All",
+    status:    "All",
+    bookable:  "All",
+    amenity:   "All",
+  };
+}
 
 interface Props {
   filters: SeatFilters;
@@ -14,7 +26,10 @@ interface Props {
 }
 
 function FilterSelect({
-  label, value, options, onChange,
+  label,
+  value,
+  options,
+  onChange,
 }: {
   label: string;
   value: string;
@@ -23,7 +38,9 @@ function FilterSelect({
 }) {
   return (
     <div className="flex flex-col gap-1 min-w-[130px]">
-      <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</label>
+      <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+        {label}
+      </label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -35,7 +52,9 @@ function FilterSelect({
         }}
       >
         {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
         ))}
       </select>
     </div>
@@ -43,9 +62,14 @@ function FilterSelect({
 }
 
 export default function SeatFiltersBar({
-  filters, seatTypes, preferences, onUpdate, onReset,
+  filters,
+  seatTypes,
+  preferences,
+  onUpdate,
+  onReset,
 }: Props) {
   const activeCount = [
+    filters.search.trim() !== "",
     filters.seat_type !== "All",
     filters.status !== "All",
     filters.bookable !== "All",
@@ -54,16 +78,24 @@ export default function SeatFiltersBar({
 
   const amenityOptions = [
     { value: "All", label: "All Amenities" },
-    ...preferences.map((p) => ({ value: p.preference_id, label: p.preference_name })),
+    ...preferences.map((p) => ({
+      value: p.preference_id,
+      label: p.preference_name,
+    })),
   ];
 
   return (
     <div className="flex items-end gap-3 flex-wrap">
       {/* Search */}
       <div className="flex flex-col gap-1">
-        <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Search</label>
+        <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+          Search
+        </label>
         <div className="relative">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search
+            size={13}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+          />
           <input
             type="text"
             placeholder="Search by seat code…"
@@ -125,7 +157,6 @@ export default function SeatFiltersBar({
         </button>
       )}
 
-      {/* Filter icon badge */}
       {activeCount === 0 && (
         <div className="h-9 mt-auto w-9 flex items-center justify-center border border-gray-200 rounded-lg bg-white text-gray-400">
           <SlidersHorizontal size={14} />

@@ -17,9 +17,10 @@ interface Props {
   onSave: (payload: BulkUpdatePayload) => Promise<void>;
 }
 
-const SEAT_TYPES: SeatType[] = ["Workstation", "Meeting Room", "Cabin", "Phone Booth"];
-const SEAT_STATUSES: SeatStatus[] = ["Active", "Inactive", "Maintenance"];
-
+// const SEAT_TYPES: SeatType[] = ["Workstation", "Meeting Room", "Cabin", "Phone Booth"];
+// const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
+const SEAT_TYPES: SeatType[] = ["STANDARD" , "WINDOW" , "CABIN" ,"ACCESSIBLE", "HOT_DESK"];
+const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
 export default function BulkEditModal({
   open, onClose, selectedIds, layoutId, preferences, onSave,
 }: Props) {

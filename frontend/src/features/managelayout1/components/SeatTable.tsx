@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { Pencil, ChevronLeft, ChevronRight } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { Pencil, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Seat } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
 
@@ -36,13 +36,17 @@ function BookablePill({ bookable }: { bookable: boolean }) {
 
 function StatusPill({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    Active:      "bg-emerald-50 text-emerald-700 border-emerald-200",
-    Inactive:    "bg-gray-100 text-gray-500 border-gray-200",
-    Maintenance: "bg-amber-50 text-amber-700 border-amber-200",
+    ACTIVE:      "bg-emerald-50 text-emerald-700 border-emerald-200",
+    INACTIVE:    "bg-gray-100 text-gray-500 border-gray-200",
+    MAINTENANCE: "bg-amber-50 text-amber-700 border-amber-200",
   };
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${styles[status] ?? "bg-gray-100 text-gray-500 border-gray-200"}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${status === "Active" ? "bg-emerald-500" : status === "Maintenance" ? "bg-amber-500" : "bg-gray-400"}`} />
+      <span className={`w-1.5 h-1.5 rounded-full ${
+        status === "ACTIVE" ? "bg-emerald-500" :
+        status === "MAINTENANCE" ? "bg-amber-500" :
+        "bg-gray-400"
+      }`} />
       {status}
     </span>
   );
@@ -52,14 +56,35 @@ export default function SeatTable({
   seats, preferences, selected, isAllSelected, isIndeterminate,
   onToggleSelect, onSelectAll, onClearSelection, onEditSeat, onBulkEdit,
 }: Props) {
-  const [page, setPage]           = useState(1);
-  const [pageSize, setPageSize]   = useState(10);
-
+  const [page, setPage]         = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  //const [sortOrder, setSortOrder] = useState<"asc" | "desc" | null>(null);
+const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const prefMap = Object.fromEntries(preferences.map((p) => [p.preference_id, p.preference_name]));
 
-  const totalPages = Math.max(1, Math.ceil(seats.length / pageSize));
+  // const toggleSort = () => {
+  //   setSortOrder((prev) => (prev === "asc" ? "desc" : prev === "desc" ? null : "asc"));
+  // };
+  const toggleSort = () => {
+  setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+};
+
+  const sortedSeats = useMemo(() => {
+    if (!sortOrder) return seats;
+    return [...seats].sort((a, b) => {
+      const aNum = parseInt(a.seat_code, 10);
+      const bNum = parseInt(b.seat_code, 10);
+      const aVal = isNaN(aNum) ? a.seat_code : aNum;
+      const bVal = isNaN(bNum) ? b.seat_code : bNum;
+      if (aVal < bVal) return sortOrder === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [seats, sortOrder]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedSeats.length / pageSize));
   const start      = (page - 1) * pageSize;
-  const pageSeats  = seats.slice(start, start + pageSize);
+  const pageSeats  = sortedSeats.slice(start, start + pageSize);
 
   // Reset page on seat list change
   React.useEffect(() => { setPage(1); }, [seats.length]);
@@ -68,6 +93,8 @@ export default function SeatTable({
     if (isAllSelected) onClearSelection();
     else onSelectAll();
   };
+
+  const COLUMNS = ["Seat Code", "Seat Type", "Amenities", "Bookable", "Status", "Actions"];
 
   return (
     <div className="flex flex-col">
@@ -106,12 +133,30 @@ export default function SeatTable({
                   className="w-4 h-4 rounded border-gray-300 accent-indigo-600 cursor-pointer"
                 />
               </th>
-              {["Seat Code", "Seat Type", "Amenities", "Bookable", "Status", "Actions"].map((h) => (
+              {COLUMNS.map((h) => (
                 <th
                   key={h}
                   className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500"
                 >
-                  {h}
+                  {h === "Seat Code" ? (
+                    <button
+                      onClick={toggleSort}
+                      className="flex items-center gap-1 hover:text-gray-800 transition-colors"
+                    >
+                      Seat Code
+                      {/* {sortOrder === "asc"  ? (
+                        <ArrowUp size={11} className="text-indigo-500" />
+                      ) : sortOrder === "desc" ? (
+                        <ArrowDown size={11} className="text-indigo-500" />
+                      ) : (
+                        <ArrowUpDown size={11} className="opacity-40" />
+                      )} */}
+                      {sortOrder === "asc"
+                          ? <ArrowUp size={11} className="text-indigo-500" />
+                          : <ArrowDown size={11} className="text-indigo-500" />
+                        }
+                    </button>
+                  ) : h}
                 </th>
               ))}
             </tr>
@@ -224,7 +269,6 @@ export default function SeatTable({
             </button>
 
             {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              // show pages around current
               let pg = i + 1;
               if (totalPages > 5) {
                 if (page <= 3) pg = i + 1;
