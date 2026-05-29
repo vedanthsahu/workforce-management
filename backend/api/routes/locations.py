@@ -349,7 +349,7 @@ def update_seat_configuration_route(
         PGConnection,
         Depends(get_db),
     ],
-) -> SeatConfigurationResponse:
+) -> SeatConfigurationResponse:  
     return update_seat_configuration_metadata(
         conn,
         tenant_id=str(current_user["tenant_id"]),

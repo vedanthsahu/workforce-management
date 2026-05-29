@@ -51,16 +51,6 @@ type Props = {
 export default function AdminCharts({ data ,buildings, trendData, selectedWeek, setSelectedWeek ,topOffices}: Props) {
 
   // HANDLE LOADING
-
-// const dynamicOffices = (buildings || []).map((b: any) => ({
-//   name: b.building_name,
-//   value: Math.floor(Math.random() * 80) + 20, // temp %
-// }));
-
-// const offices = dynamicOffices;
-
-
-  // HANDLE LOADING
   if (!data) {
     return <div className="p-4">Loading charts...</div>;
   }

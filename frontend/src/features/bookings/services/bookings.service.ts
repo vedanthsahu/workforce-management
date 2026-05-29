@@ -1,7 +1,3 @@
-
-
-// bookings.service.ts
-
 import { axiosInstance } from "@/lib/http/axios";
 import { Booking, BookingSummary, RawBooking } from "../types/bookings.types";
 import type { ApiTeamGroup } from "@/features/dashboard/types/dashboard.types";
@@ -412,8 +408,8 @@ export async function fetchSeatAmenities(
       })
       .filter(Boolean) as string[];
 
-  } catch (e) {
-    console.error("fetchSeatAmenities failed:", e);
+  } catch {
+    // console.error("fetchSeatAmenities failed:", e);
     return [];
   }
 }

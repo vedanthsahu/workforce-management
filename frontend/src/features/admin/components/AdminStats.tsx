@@ -16,13 +16,26 @@ import {
 
 type Props = {
   data: any;
+  selectedDate: string;
 };
 
-export default function AdminStats({ data }: Props) {
+export default function AdminStats({ data , selectedDate}: Props) {
 
-  //  Map API → UI
-  // const [statsData, setStatsData] = useState<any>(null);
-  const stats = [
+  
+  const today = new Date()
+  .toISOString()
+  .split("T")[0];
+
+const isToday = selectedDate === today;
+
+//  FORMAT DATE
+const formattedDate = selectedDate
+  ?.split("-")
+  .reverse()
+  .join("-");
+
+
+const stats = [
     {
       title: "Total Offices",
       value: data?.total_offices ?? "-",
@@ -45,7 +58,7 @@ export default function AdminStats({ data }: Props) {
       color: "bg-orange-100 text-orange-600",
     },
     {
-      title: "Booked Today",
+      title: isToday? "Booked Today" : `Booked on ${formattedDate}`,
       value: data?.booked_today ?? "-",
       subtitle: `${data?.occupancy_percentage ?? 0}% occupancy`,
       icon: CalendarCheck,

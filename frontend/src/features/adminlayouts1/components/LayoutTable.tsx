@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, Download, MoreVertical } from "lucide-react";
+import { Eye, Download, MoreVertical,Settings } from "lucide-react";
 import { useLayoutsTable } from "@/features/adminlayouts1/hooks/useLayoutsTable";
 import LayoutPagination from "./LayoutPagination";
 import { useEffect, useState } from "react";
@@ -64,8 +64,18 @@ const handleDownloadSvg = () => {
   }
 };
 
+// const handleManage = (row: any) => {
+//   router.push(`/admin/layouts/manage-layout`);
+// };
+
 const handleManage = (row: any) => {
-  router.push(`/admin/layouts/manage-layout`);
+  const params = new URLSearchParams({
+    layoutId: row.layout_id,
+    floorId: String(row.floor_id),       // include if LayoutApiResponse has it
+    buildingId: String(row.building_id), // include if available
+    siteId: String(row.site_id),         // include if available
+  });
+  router.push(`/admin/layouts/manage-layout?${params.toString()}`);
 };
 
   useEffect(() => {
@@ -170,7 +180,7 @@ const handleManage = (row: any) => {
                         onClick={() => handleManage(row)}
                         className="p-2 border rounded-md hover:bg-gray-100"
                       >
-                        <MoreVertical className="w-4 h-4 text-gray-600" />
+                        <Settings className="w-4 h-4 text-gray-600" />
                       </button>
 
                     </div>

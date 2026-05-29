@@ -14,11 +14,11 @@ export default function AdminTopbar() {
     user?.name ||
     "Loading...";
 
-  // ✅ Resolve Role
+  //  Resolve Role
   const role =
     user?.role === "TENANT_ADMIN" ? "Admin" : "Employee";
 
-  // ✅ Initials
+  //  Initials
   const initials = name !== "Loading..." ? getInitials(name) : "?";
 
   return (
