@@ -362,3 +362,135 @@ def insert_floor_layout(
         raise LookupError("Created floor layout could not be reloaded.")
 
     return created_layout
+def fetch_layout_seats_by_layout_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+) -> list[dict[str, Any]]:
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+        cur.execute(
+            """
+            SELECT
+                lsm.id::text AS layout_seat_mapping_id,
+
+                lsm.layout_id::text AS layout_id,
+
+                lsm.site_id::text AS site_id,
+                lsm.building_id::text AS building_id,
+                lsm.floor_id::text AS floor_id,
+
+                s.id::text AS seat_id,
+
+                lsm.svg_element_id,
+
+                lsm.seat_code,
+
+                lsm.seat_name,
+
+                lsm.seat_type,
+
+                lsm.status,
+
+                lsm.is_bookable,
+
+                lsm.is_reserved,
+
+                lsm.is_configured,
+
+                lsm.configuration_status,
+
+                lsm.notes,
+
+                COALESCE(
+                    ARRAY_AGG(sa.amenity_id)
+                    FILTER (
+                        WHERE sa.amenity_id IS NOT NULL
+                    ),
+                    '{}'
+                ) AS amenity_ids,
+
+                lsm.created_at,
+
+                lsm.updated_at
+
+            FROM layout_seat_mappings AS lsm
+
+            LEFT JOIN seats AS s
+                ON s.tenant_id = lsm.tenant_id
+               AND s.floor_id = lsm.floor_id
+               AND s.seat_code = lsm.seat_code
+
+            LEFT JOIN seat_amenities AS sa
+                ON sa.tenant_id = s.tenant_id
+               AND sa.seat_id = s.id
+
+            WHERE lsm.tenant_id = %s
+              AND lsm.layout_id = %s
+
+            GROUP BY
+                lsm.id,
+                s.id
+
+            ORDER BY
+                lsm.seat_code ASC
+            """,
+            (
+                tenant_id,
+                layout_id,
+            ),
+        )
+
+        rows = cur.fetchall()
+
+    return [
+        dict(row)
+        for row in rows
+    ]
+
+def sync_published_layout_seats(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+    layout_id: str,
+) -> None:
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            """
+            UPDATE seats
+            SET
+                status = 'INACTIVE',
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND floor_id = %s
+              AND layout_id IS NOT NULL
+              AND layout_id <> %s
+            """,
+            (
+                tenant_id,
+                floor_id,
+                layout_id,
+            ),
+        )
+
+        cur.execute(
+            """
+            UPDATE seats
+            SET
+                status = 'ACTIVE',
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND floor_id = %s
+              AND layout_id = %s
+            """,
+            (
+                tenant_id,
+                floor_id,
+                layout_id,
+            ),
+        )

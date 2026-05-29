@@ -61,13 +61,18 @@ USER_RETURNING_FIELDS = """
     updated_at
 """
 
-ROLE_NAMES = {"EMPLOYEE", "OFFICE_ADMIN", "TENANT_ADMIN", "SUPPORT_ADMIN"}
+ROLE_NAMES = {
+    "EMPLOYEE",
+    "MANAGER",
+    "TALENT",
+    "SECURITY",
+    "TENANT_ADMIN",
+}
+
 USER_STATUSES = {"ACTIVE", "INACTIVE", "LOCKED"}
+
 ADMIN_NOTIFICATION_ROLES = (
     "TENANT_ADMIN",
-    "OFFICE_ADMIN",
-    "PRODUCT_ADMIN",
-    "SUPPORT_ADMIN",
 )
 
 
@@ -203,6 +208,83 @@ def fetch_user_by_id(
         )
         result = cur.fetchone()
     return dict(result) if result else None
+
+
+def fetch_tenant_name_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+) -> str | None:
+    """Fetch the display name for one tenant."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT tenant_name
+            FROM tenants
+            WHERE id = %s
+            """,
+            (tenant_id,),
+        )
+        row = cur.fetchone()
+    return str(row[0]) if row and row[0] is not None else None
+
+
+def fetch_user_profile_context(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+) -> dict[str, Any] | None:
+    """Fetch profile UI context for the authenticated user."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                au.id::text AS user_id,
+                au.tenant_id::text AS tenant_id,
+                t.tenant_name,
+                au.email,
+                au.full_name,
+                au.display_name,
+                au.mobile_phone,
+                au.office_location,
+                au.department,
+                au.job_title,
+                au.company_name,
+                au.employee_id,
+                au.microsoft_object_id,
+                au.user_principal_name,
+                au.manager_user_id::text AS manager_user_id,
+                manager.email AS manager_email,
+                manager.full_name AS manager_full_name,
+                manager.display_name AS manager_display_name,
+                au.role_name,
+                au.status,
+                au.home_site_id::text AS home_site_id,
+                site.site_code AS home_site_code,
+                site.site_name AS home_site_name,
+                site.city AS home_site_city,
+                site.country AS home_site_country,
+                site.timezone AS home_site_timezone,
+                au.graph_last_synced_at,
+                au.created_at,
+                au.updated_at
+            FROM app_users AS au
+            INNER JOIN tenants AS t
+                ON t.id = au.tenant_id
+            LEFT JOIN app_users AS manager
+                ON manager.id = au.manager_user_id
+               AND manager.tenant_id = au.tenant_id
+            LEFT JOIN sites AS site
+                ON site.id = au.home_site_id
+               AND site.tenant_id = au.tenant_id
+            WHERE au.tenant_id = %s
+              AND au.id = %s
+            """,
+            (tenant_id, user_id),
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
 
 
 def fetch_admin_notification_emails(
@@ -571,6 +653,87 @@ def sync_graph_groups_for_user(
                 (tenant_id, team["team_id"], user_id),
             )
 
+
+def update_user_profile(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    full_name: str | None = None,
+    display_name: str | None = None,
+    mobile_phone: str | None = None,
+    office_location: str | None = None,
+) -> dict[str, Any] | None:
+    """Update self-editable profile fields."""
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            UPDATE app_users
+            SET
+                full_name = COALESCE(%s, full_name),
+                display_name = COALESCE(%s, display_name),
+                mobile_phone = COALESCE(%s, mobile_phone),
+                office_location = COALESCE(%s, office_location),
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING {USER_RETURNING_FIELDS}
+            """,
+            (
+                _normalize_text(full_name, max_length=200),
+                _normalize_text(display_name, max_length=200),
+                _normalize_text(mobile_phone, max_length=50),
+                _normalize_text(office_location, max_length=200),
+                tenant_id,
+                user_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+
+def admin_update_user_access(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    role_name: str | None = None,
+    status: str | None = None,
+) -> dict[str, Any] | None:
+    """Update admin-managed access fields."""
+
+    if role_name is not None and role_name not in ROLE_NAMES:
+        raise ValueError("Invalid role_name.")
+
+    if status is not None and status not in USER_STATUSES:
+        raise ValueError("Invalid status.")
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            UPDATE app_users
+            SET
+                role_name = COALESCE(%s, role_name),
+                status = COALESCE(%s, status),
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING {USER_RETURNING_FIELDS}
+            """,
+            (
+                role_name,
+                status,
+                tenant_id,
+                user_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    return dict(row) if row else None
 
 def fetch_favorite_seat(
     conn: PGConnection,

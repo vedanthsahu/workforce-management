@@ -1,3 +1,14 @@
+export interface Preference {
+  id: string;
+  key: string;
+  name: string;
+  category?: string | null;
+  description?: string | null;
+  icon?: string | null;
+}
+
+// ── Sites / Buildings / Floors ────────────────────────────────────────────────
+
 export interface Site {
   id: string;
   name: string;
@@ -19,84 +30,118 @@ export interface Floor {
   number: number;
 }
 
-// ── Preferences (fetched from API) ────────────────────────────────────────────
-
-export interface Preference {
-  id: string;
-  key: string;
-  name: string;
-  category?: string | null;
-  description?: string | null;
-  icon?: string | null;
-}
-
 // ── Booking form state ────────────────────────────────────────────────────────
 
 export interface BookingFormState {
-  // Step 1
   siteId: string;
   buildingId: string;
   floorId: string;
   fromDate: string;
   toDate: string;
-  preferences: string[];       // ← was PreferenceKey[]
-
-  // Step 2
+  preferences: string[];
   selectedSeatId: string | null;
 }
 
-// ── Seat (for floor map step) ─────────────────────────────────────────────────
+// ── Preference match status (from backend) ────────────────────────────────────
+
+export type PreferenceMatchStatus =
+  | "FULL_MATCH"
+  | "PARTIAL_MATCH"
+  | "NO_MATCH"
+  | "NOT_APPLICABLE";
+
+export type UiState = "BEST_MATCH" | "AVAILABLE" | "UNAVAILABLE";
+
+// ── Seat ──────────────────────────────────────────────────────────────────────
 
 export type SeatStatus = "available" | "booked" | "unavailable" | "yours";
 
-// export interface Seat {
-//   id: string;
-//   label: string;
-//   row: number;
-//   col: number;
-//   status: SeatStatus;
-//   matchesPreferences: boolean;
-//   amenities: string[];         // ← was PreferenceKey[]
-// }
 export interface Seat {
-  id:                 string;
-  svgId:              string;   // ← add this if missing
-  label:              string;
-  row?:               number;
-  col?:               number;
-  status:             "available" | "booked" | "unavailable" | "yours";
+  id: string;
+  svgId: string;
+  label: string;
+  row?: number;
+  col?: number;
+  status: SeatStatus;
+
+  /** true when backend returns FULL_MATCH or PARTIAL_MATCH */
   matchesPreferences: boolean;
-  amenities:          string[];
+
+  /** Amenity tags for display in tooltip */
+  amenities: string[];
+
+  // ── Preference-match fields ───────────────────────────────────────────────
+  /** Amenity names that matched the user's request (display only) */
+  matchedAmenityNames?: string[];
+  /** How many amenities matched */
+  matchedAmenityCount?: number;
+  /** How many amenities the user requested */
+  requestedAmenityCount?: number;
+  /** Backend-provided match status */
+  preferenceMatchStatus?: PreferenceMatchStatus;
+  /** Backend-provided UI state */
+  uiState?: UiState;
 }
 
-// ── Booking confirmation payload ──────────────────────────────────────────────
+// ── Raw API shape from GET /floors/{floor_id}/seats ──────────────────────────
 
-// export interface CreateBookingPayload {
-//   siteId: string;
-//   buildingId: string;
-//   floorId: string;
-//   seatId: string;
-//   fromDate: string;
-//   toDate: string;
-//   preferences: string[];       // ← was PreferenceKey[]
-// }
+export interface SeatAvailability {
+  /** Seat identifier */
+  seat_id: string | number;
 
-// export interface CreateBookingResponse {
-//   bookingId: string;
-//   confirmationCode: string;
-//   seat: string;
-//   location: string;
-//   floor: string;
-//   fromDate: string;
-//   toDate: string;
-// }
+  /** Human-readable seat code, e.g. "T3-13-001" */
+  code: string;
+
+  /** SVG/canvas position (kept for future dynamic layouts) */
+  x?: number | null;
+  y?: number | null;
+  w?: number | null;
+  h?: number | null;
+  rotation_angle?: number;
+
+  /** "AVAILABLE" | "BOOKED" | "BLOCKED" | "YOURS" */
+  status: string;
+
+  /** Whether the seat can be booked right now (replaces is_bookable) */
+  selectable: boolean;
+
+  /** IDs of amenities that matched the request */
+  matched_amenity_ids?: number[];
+  /** How many amenities matched */
+  matched_amenity_count?: number;
+  /** How many amenities were requested */
+  requested_amenity_count?: number;
+  /** Backend-computed match bucket */
+  preference_match_status?: PreferenceMatchStatus;
+  /** Backend-computed rendering hint */
+  ui_state?: UiState;
+
+  // Optional — may not be returned by this endpoint
+  seat_type?: string;
+  seat_neighborhood?: string;
+  matched_amenity_names?: string[];
+}
+
+// ── Parameters for fetchSeatsWithAvailability ─────────────────────────────────
+
+export interface FetchSeatsParams {
+  floorId: string;
+  fromDate: string;
+  toDate: string;
+  preferences?: string[];
+  /** Numeric amenity IDs sent as repeated query params */
+  amenityIds?: number[];
+   currentSeatId?: string;  
+}
+
+// ── Booking payload / response ────────────────────────────────────────────────
 
 export interface CreateBookingPayload {
   site_id: number;
   building_id: number;
   floor_id: number;
   seat_id: number;
-  booking_date: string; // "YYYY-MM-DD"
+  booking_date: string;
 }
 
 export interface CreateBookingResponse {
@@ -118,7 +163,5 @@ export interface CreateBookingResponse {
   cancellation_reason: string | null;
   created_at: string | null;
 }
-
-// ── Step enum ─────────────────────────────────────────────────────────────────
 
 export type BookingStep = 1 | 2 | 3;

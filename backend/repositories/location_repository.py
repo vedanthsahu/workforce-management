@@ -9,28 +9,72 @@ from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
 
 
-def fetch_sites(conn: PGConnection, *, tenant_id: str) -> list[dict[str, Any]]:
-    """Fetch active sites for one tenant."""
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            """
+def fetch_sites(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    page: int | None = None,
+    limit: int | None = None,
+    search: str | None = None,
+    status_filter: str | None = None,
+) -> list[dict[str, Any]]:
+    """Fetch tenant-scoped sites with additive admin aggregate fields."""
+    query = """
+        SELECT
+            s.id::text AS site_id,
+            s.site_code,
+            s.site_name,
+            s.city,
+            s.country,
+            s.timezone,
+            s.address_line1,
+            s.address_line2,
+            s.status,
+            COALESCE(building_counts.building_count, 0)::integer AS building_count,
+            COALESCE(floor_counts.floor_count, 0)::integer AS floor_count,
+            COALESCE(seat_counts.seat_count, 0)::integer AS seat_count,
+            COALESCE(seat_counts.active_seat_count, 0)::integer AS active_seat_count,
+            COALESCE(seat_counts.bookable_seat_count, 0)::integer AS bookable_seat_count
+        FROM sites AS s
+        LEFT JOIN LATERAL (
+            SELECT COUNT(*)::integer AS building_count
+            FROM buildings AS b
+            WHERE b.tenant_id = s.tenant_id
+              AND b.site_id = s.id
+        ) AS building_counts ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT COUNT(*)::integer AS floor_count
+            FROM floors AS f
+            WHERE f.tenant_id = s.tenant_id
+              AND f.site_id = s.id
+        ) AS floor_counts ON TRUE
+        LEFT JOIN LATERAL (
             SELECT
-                id::text AS site_id,
-                site_code,
-                site_name,
-                city,
-                country,
-                timezone,
-                address_line1,
-                address_line2,
-                status
-            FROM sites
-            WHERE tenant_id = %s
-              AND status = 'ACTIVE'
-            ORDER BY site_name, site_code, id
-            """,
-            (tenant_id,),
-        )
+                COUNT(*)::integer AS seat_count,
+                COUNT(*) FILTER (WHERE st.status = 'ACTIVE')::integer AS active_seat_count,
+                COUNT(*) FILTER (
+                    WHERE st.status = 'ACTIVE'
+                      AND st.is_bookable = TRUE
+                )::integer AS bookable_seat_count
+            FROM seats AS st
+            WHERE st.tenant_id = s.tenant_id
+              AND st.site_id = s.id
+        ) AS seat_counts ON TRUE
+        WHERE s.tenant_id = %s
+    """
+    params: list[Any] = [tenant_id]
+    query, params = _apply_status_filter(query, params, "s.status", status_filter)
+    query, params = _apply_search_filter(
+        query,
+        params,
+        search,
+        ("s.site_code", "s.site_name", "s.city", "s.country"),
+    )
+    query += " ORDER BY s.site_name, s.site_code, s.id"
+    query, params = _apply_pagination(query, params, page=page, limit=limit)
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(query, params)
         rows = cur.fetchall()
     return [dict(row) for row in rows]
 
@@ -40,29 +84,61 @@ def fetch_buildings_by_site(
     *,
     tenant_id: str,
     site_id: str,
+    page: int | None = None,
+    limit: int | None = None,
+    search: str | None = None,
+    status_filter: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Fetch active buildings under one active tenant-scoped site."""
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            """
+    """Fetch buildings under one active tenant-scoped site."""
+    query = """
+        SELECT
+            b.id::text AS building_id,
+            b.site_id::text AS site_id,
+            b.building_code,
+            b.building_name,
+            b.status,
+            COALESCE(floor_counts.floor_count, 0)::integer AS floor_count,
+            COALESCE(seat_counts.seat_count, 0)::integer AS seat_count,
+            COALESCE(seat_counts.active_seat_count, 0)::integer AS active_seat_count,
+            COALESCE(seat_counts.bookable_seat_count, 0)::integer AS bookable_seat_count
+        FROM buildings AS b
+        INNER JOIN sites AS s
+            ON s.tenant_id = b.tenant_id
+           AND s.id = b.site_id
+        LEFT JOIN LATERAL (
+            SELECT COUNT(*)::integer AS floor_count
+            FROM floors AS f
+            WHERE f.tenant_id = b.tenant_id
+              AND f.building_id = b.id
+        ) AS floor_counts ON TRUE
+        LEFT JOIN LATERAL (
             SELECT
-                b.id::text AS building_id,
-                b.site_id::text AS site_id,
-                b.building_code,
-                b.building_name,
-                b.status
-            FROM buildings AS b
-            INNER JOIN sites AS s
-                ON s.tenant_id = b.tenant_id
-               AND s.id = b.site_id
-            WHERE b.tenant_id = %s
-              AND b.site_id = %s
-              AND b.status = 'ACTIVE'
-              AND s.status = 'ACTIVE'
-            ORDER BY b.building_code, b.id
-            """,
-            (tenant_id, site_id),
-        )
+                COUNT(*)::integer AS seat_count,
+                COUNT(*) FILTER (WHERE st.status = 'ACTIVE')::integer AS active_seat_count,
+                COUNT(*) FILTER (
+                    WHERE st.status = 'ACTIVE'
+                      AND st.is_bookable = TRUE
+                )::integer AS bookable_seat_count
+            FROM seats AS st
+            WHERE st.tenant_id = b.tenant_id
+              AND st.building_id = b.id
+        ) AS seat_counts ON TRUE
+        WHERE b.tenant_id = %s
+          AND b.site_id = %s
+    """
+    params: list[Any] = [tenant_id, site_id]
+    query, params = _apply_status_filter(query, params, "b.status", status_filter)
+    query, params = _apply_search_filter(
+        query,
+        params,
+        search,
+        ("b.building_code", "b.building_name"),
+    )
+    query += " ORDER BY b.building_code, b.id"
+    query, params = _apply_pagination(query, params, page=page, limit=limit)
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(query, params)
         rows = cur.fetchall()
     return [dict(row) for row in rows]
 
@@ -72,8 +148,463 @@ def fetch_floors_by_building(
     *,
     tenant_id: str,
     building_id: str,
+    page: int | None = None,
+    limit: int | None = None,
+    search: str | None = None,
+    status_filter: str | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch floors under given building for one tenant-scoped site."""
+    query = """
+        SELECT
+            f.id::text AS floor_id,
+            f.site_id::text AS site_id,
+            f.building_id::text AS building_id,
+            b.building_code,
+            b.building_name,
+            f.floor_code,
+            f.floor_name,
+            f.status,
+            COALESCE(seat_counts.seat_count, 0)::integer AS seat_count,
+            COALESCE(seat_counts.active_seat_count, 0)::integer AS active_seat_count,
+            COALESCE(seat_counts.bookable_seat_count, 0)::integer AS bookable_seat_count,
+            COALESCE(layout_counts.layout_count, 0)::integer AS layout_count,
+            COALESCE(layout_counts.published_layout_exists, FALSE) AS published_layout_exists,
+            fl.id::text AS layout_id,
+            fl.layout_name,
+            fl.layout_file_url,
+            fl.status AS layout_status,
+            fl.is_published AS layout_is_published,
+            fl.version_no AS layout_version_no
+        FROM floors AS f
+        JOIN buildings AS b
+            ON f.building_id = b.id
+           AND f.tenant_id = b.tenant_id
+           AND f.site_id = b.site_id
+        LEFT JOIN LATERAL (
+            SELECT
+                COUNT(*)::integer AS seat_count,
+                COUNT(*) FILTER (WHERE st.status = 'ACTIVE')::integer AS active_seat_count,
+                COUNT(*) FILTER (
+                    WHERE st.status = 'ACTIVE'
+                      AND st.is_bookable = TRUE
+                )::integer AS bookable_seat_count
+            FROM seats AS st
+            WHERE st.tenant_id = f.tenant_id
+              AND st.floor_id = f.id
+        ) AS seat_counts ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT
+                COUNT(*)::integer AS layout_count,
+                BOOL_OR(
+                    flc.is_published = TRUE
+                    AND flc.status = 'PUBLISHED'
+                ) AS published_layout_exists
+            FROM floor_layouts AS flc
+            WHERE flc.tenant_id = f.tenant_id
+              AND flc.floor_id = f.id
+        ) AS layout_counts ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT
+                fl.id,
+                fl.layout_name,
+                fl.layout_file_url,
+                fl.status,
+                fl.is_published,
+                fl.version_no,
+                fl.created_at
+            FROM floor_layouts AS fl
+            WHERE fl.tenant_id = f.tenant_id
+              AND fl.site_id = f.site_id
+              AND fl.building_id = f.building_id
+              AND fl.floor_id = f.id
+            ORDER BY
+                CASE
+                    WHEN fl.is_published = TRUE
+                         AND fl.status = 'PUBLISHED'
+                        THEN 0
+                    ELSE 1
+                END,
+                fl.version_no DESC,
+                fl.created_at DESC,
+                fl.id DESC
+            LIMIT 1
+        ) AS fl ON TRUE
+        WHERE b.id = %s
+          AND f.tenant_id = %s
+    """
+    params: list[Any] = [building_id, tenant_id]
+    query, params = _apply_status_filter(query, params, "f.status", status_filter)
+    query, params = _apply_search_filter(
+        query,
+        params,
+        search,
+        ("f.floor_code", "f.floor_name"),
+    )
+    query += " ORDER BY b.building_code, f.floor_code, f.id"
+    query, params = _apply_pagination(query, params, page=page, limit=limit)
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(query, params)
+        rows = cur.fetchall()
+    return [dict(row) for row in rows]
+
+
+def fetch_site_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+) -> dict[str, Any] | None:
+    """Fetch one tenant-scoped site with aggregate counts."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                s.id::text AS site_id,
+                s.site_code,
+                s.site_name,
+                s.city,
+                s.country,
+                s.timezone,
+                s.address_line1,
+                s.address_line2,
+                s.status,
+                COALESCE(building_counts.building_count, 0)::integer AS building_count,
+                COALESCE(floor_counts.floor_count, 0)::integer AS floor_count,
+                COALESCE(seat_counts.seat_count, 0)::integer AS seat_count,
+                COALESCE(seat_counts.active_seat_count, 0)::integer AS active_seat_count,
+                COALESCE(seat_counts.bookable_seat_count, 0)::integer AS bookable_seat_count
+            FROM sites AS s
+            LEFT JOIN LATERAL (
+                SELECT COUNT(*)::integer AS building_count
+                FROM buildings AS b
+                WHERE b.tenant_id = s.tenant_id
+                  AND b.site_id = s.id
+            ) AS building_counts ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT COUNT(*)::integer AS floor_count
+                FROM floors AS f
+                WHERE f.tenant_id = s.tenant_id
+                  AND f.site_id = s.id
+            ) AS floor_counts ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT
+                    COUNT(*)::integer AS seat_count,
+                    COUNT(*) FILTER (WHERE st.status = 'ACTIVE')::integer AS active_seat_count,
+                    COUNT(*) FILTER (
+                        WHERE st.status = 'ACTIVE'
+                          AND st.is_bookable = TRUE
+                    )::integer AS bookable_seat_count
+                FROM seats AS st
+                WHERE st.tenant_id = s.tenant_id
+                  AND st.site_id = s.id
+            ) AS seat_counts ON TRUE
+            WHERE s.tenant_id = %s
+              AND s.id = %s
+            """,
+            (tenant_id, site_id),
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def fetch_site_duplicates(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_code: str | None = None,
+    site_name: str | None = None,
+    exclude_site_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Find site code/name conflicts within a tenant."""
+    query = """
+        SELECT
+            id::text AS site_id,
+            site_code,
+            site_name
+        FROM sites
+        WHERE tenant_id = %s
+          AND (
+                (%s IS NOT NULL AND site_code = %s)
+                OR (%s IS NOT NULL AND site_name = %s)
+          )
+    """
+    params: list[Any] = [tenant_id, site_code, site_code, site_name, site_name]
+    if exclude_site_id is not None:
+        query += " AND id <> %s"
+        params.append(exclude_site_id)
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(query, params)
+        rows = cur.fetchall()
+    return [dict(row) for row in rows]
+
+
+def insert_site(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_code: str,
+    site_name: str,
+    city: str,
+    country: str,
+    timezone: str,
+    address_line1: str | None,
+    address_line2: str | None,
+    status: str,
+) -> dict[str, Any]:
+    """Insert one tenant-scoped site and reload it with aggregate fields."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            INSERT INTO sites (
+                tenant_id,
+                site_code,
+                site_name,
+                city,
+                country,
+                timezone,
+                address_line1,
+                address_line2,
+                status
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id::text AS site_id
+            """,
+            (
+                tenant_id,
+                site_code,
+                site_name,
+                city,
+                country,
+                timezone,
+                address_line1,
+                address_line2,
+                status,
+            ),
+        )
+        row = cur.fetchone()
+
+    if row is None:
+        raise LookupError("Created site could not be resolved.")
+
+    site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=str(row["site_id"]))
+    if site is None:
+        raise LookupError("Created site could not be reloaded.")
+    return site
+
+
+def update_site(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+    updates: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Update mutable site metadata only."""
+    assignments: list[str] = []
+    params: list[Any] = []
+    for field_name, value in updates.items():
+        assignments.append(f"{field_name} = %s")
+        params.append(value)
+    assignments.append("updated_at = NOW()")
+    params.extend([tenant_id, site_id])
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            UPDATE sites
+            SET {", ".join(assignments)}
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING id::text AS site_id
+            """,
+            params,
+        )
+        row = cur.fetchone()
+
+    if row is None:
+        return None
+    return fetch_site_by_id(conn, tenant_id=tenant_id, site_id=str(row["site_id"]))
+
+
+def fetch_building_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    building_id: str,
+) -> dict[str, Any] | None:
+    """Fetch one tenant-scoped building with aggregate counts."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                b.id::text AS building_id,
+                b.site_id::text AS site_id,
+                b.building_code,
+                b.building_name,
+                b.status,
+                COALESCE(floor_counts.floor_count, 0)::integer AS floor_count,
+                COALESCE(seat_counts.seat_count, 0)::integer AS seat_count,
+                COALESCE(seat_counts.active_seat_count, 0)::integer AS active_seat_count,
+                COALESCE(seat_counts.bookable_seat_count, 0)::integer AS bookable_seat_count
+            FROM buildings AS b
+            LEFT JOIN LATERAL (
+                SELECT COUNT(*)::integer AS floor_count
+                FROM floors AS f
+                WHERE f.tenant_id = b.tenant_id
+                  AND f.building_id = b.id
+            ) AS floor_counts ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT
+                    COUNT(*)::integer AS seat_count,
+                    COUNT(*) FILTER (WHERE st.status = 'ACTIVE')::integer AS active_seat_count,
+                    COUNT(*) FILTER (
+                        WHERE st.status = 'ACTIVE'
+                          AND st.is_bookable = TRUE
+                    )::integer AS bookable_seat_count
+                FROM seats AS st
+                WHERE st.tenant_id = b.tenant_id
+                  AND st.building_id = b.id
+            ) AS seat_counts ON TRUE
+            WHERE b.tenant_id = %s
+              AND b.id = %s
+            """,
+            (tenant_id, building_id),
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def fetch_building_duplicates(
+    conn: PGConnection,
+    *,
+    site_id: str,
+    building_code: str | None = None,
+    building_name: str | None = None,
+    exclude_building_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Find building code/name conflicts within a site."""
+    query = """
+        SELECT
+            id::text AS building_id,
+            building_code,
+            building_name
+        FROM buildings
+        WHERE site_id = %s
+          AND (
+                (%s IS NOT NULL AND building_code = %s)
+                OR (%s IS NOT NULL AND building_name = %s)
+          )
+    """
+    params: list[Any] = [
+        site_id,
+        building_code,
+        building_code,
+        building_name,
+        building_name,
+    ]
+    if exclude_building_id is not None:
+        query += " AND id <> %s"
+        params.append(exclude_building_id)
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(query, params)
+        rows = cur.fetchall()
+    return [dict(row) for row in rows]
+
+
+def insert_building(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+    building_code: str,
+    building_name: str,
+    status: str,
+) -> dict[str, Any]:
+    """Insert one building and reload it with aggregate fields."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            INSERT INTO buildings (
+                tenant_id,
+                site_id,
+                building_code,
+                building_name,
+                status
+            )
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id::text AS building_id
+            """,
+            (
+                tenant_id,
+                site_id,
+                building_code,
+                building_name,
+                status,
+            ),
+        )
+        row = cur.fetchone()
+
+    if row is None:
+        raise LookupError("Created building could not be resolved.")
+
+    building = fetch_building_by_id(
+        conn,
+        tenant_id=tenant_id,
+        building_id=str(row["building_id"]),
+    )
+    if building is None:
+        raise LookupError("Created building could not be reloaded.")
+    return building
+
+
+def update_building(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    building_id: str,
+    updates: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Update mutable building metadata only."""
+    assignments: list[str] = []
+    params: list[Any] = []
+    for field_name, value in updates.items():
+        assignments.append(f"{field_name} = %s")
+        params.append(value)
+    assignments.append("updated_at = NOW()")
+    params.extend([tenant_id, building_id])
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            UPDATE buildings
+            SET {", ".join(assignments)}
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING id::text AS building_id
+            """,
+            params,
+        )
+        row = cur.fetchone()
+
+    if row is None:
+        return None
+    return fetch_building_by_id(
+        conn,
+        tenant_id=tenant_id,
+        building_id=str(row["building_id"]),
+    )
+
+
+def fetch_floor_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+) -> dict[str, Any] | None:
+    """Fetch one tenant-scoped floor with aggregate counts."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
@@ -86,6 +617,11 @@ def fetch_floors_by_building(
                 f.floor_code,
                 f.floor_name,
                 f.status,
+                COALESCE(seat_counts.seat_count, 0)::integer AS seat_count,
+                COALESCE(seat_counts.active_seat_count, 0)::integer AS active_seat_count,
+                COALESCE(seat_counts.bookable_seat_count, 0)::integer AS bookable_seat_count,
+                COALESCE(layout_counts.layout_count, 0)::integer AS layout_count,
+                COALESCE(layout_counts.published_layout_exists, FALSE) AS published_layout_exists,
                 fl.id::text AS layout_id,
                 fl.layout_name,
                 fl.layout_file_url,
@@ -93,10 +629,33 @@ def fetch_floors_by_building(
                 fl.is_published AS layout_is_published,
                 fl.version_no AS layout_version_no
             FROM floors AS f
-            JOIN buildings AS b
-                ON f.building_id = b.id
-               AND f.tenant_id = b.tenant_id
-               AND f.site_id = b.site_id
+            INNER JOIN buildings AS b
+                ON b.id = f.building_id
+               AND b.tenant_id = f.tenant_id
+               AND b.site_id = f.site_id
+            LEFT JOIN LATERAL (
+                SELECT
+                    COUNT(*)::integer AS seat_count,
+                    COUNT(*) FILTER (WHERE st.status = 'ACTIVE')::integer AS active_seat_count,
+                    COUNT(*) FILTER (
+                        WHERE st.status = 'ACTIVE'
+                          AND st.is_bookable = TRUE
+                    )::integer AS bookable_seat_count
+                FROM seats AS st
+                WHERE st.tenant_id = f.tenant_id
+                  AND st.floor_id = f.id
+            ) AS seat_counts ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT
+                    COUNT(*)::integer AS layout_count,
+                    BOOL_OR(
+                        flc.is_published = TRUE
+                        AND flc.status = 'PUBLISHED'
+                    ) AS published_layout_exists
+                FROM floor_layouts AS flc
+                WHERE flc.tenant_id = f.tenant_id
+                  AND flc.floor_id = f.id
+            ) AS layout_counts ON TRUE
             LEFT JOIN LATERAL (
                 SELECT
                     fl.id,
@@ -108,8 +667,6 @@ def fetch_floors_by_building(
                     fl.created_at
                 FROM floor_layouts AS fl
                 WHERE fl.tenant_id = f.tenant_id
-                  AND fl.site_id = f.site_id
-                  AND fl.building_id = f.building_id
                   AND fl.floor_id = f.id
                 ORDER BY
                     CASE
@@ -123,15 +680,479 @@ def fetch_floors_by_building(
                     fl.id DESC
                 LIMIT 1
             ) AS fl ON TRUE
-            WHERE b.id = %s
-              AND f.tenant_id = %s
-              AND b.status = %s
-            ORDER BY b.building_code, f.floor_code, f.id
+            WHERE f.tenant_id = %s
+              AND f.id = %s
             """,
-            (building_id, tenant_id,"ACTIVE"),
+            (tenant_id, floor_id),
         )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def fetch_floor_duplicates(
+    conn: PGConnection,
+    *,
+    building_id: str,
+    floor_code: str | None = None,
+    floor_name: str | None = None,
+    exclude_floor_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Find floor code/name conflicts within a building."""
+    query = """
+        SELECT
+            id::text AS floor_id,
+            floor_code,
+            floor_name
+        FROM floors
+        WHERE building_id = %s
+          AND (
+                (%s IS NOT NULL AND floor_code = %s)
+                OR (%s IS NOT NULL AND floor_name = %s)
+          )
+    """
+    params: list[Any] = [
+        building_id,
+        floor_code,
+        floor_code,
+        floor_name,
+        floor_name,
+    ]
+    if exclude_floor_id is not None:
+        query += " AND id <> %s"
+        params.append(exclude_floor_id)
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(query, params)
         rows = cur.fetchall()
     return [dict(row) for row in rows]
+
+def fetch_layout_seat_mapping_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_seat_mapping_id: str,
+) -> dict[str, Any] | None:
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+        cur.execute(
+            """
+            SELECT
+                *
+            FROM layout_seat_mappings
+            WHERE tenant_id = %s
+              AND id = %s
+            """,
+            (
+                tenant_id,
+                layout_seat_mapping_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+def update_layout_seat_mapping_configuration(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_seat_mapping_id: str,
+    seat_name: str | None,
+    seat_type: str | None,
+    status: str | None,
+    is_bookable: bool | None,
+    is_reserved: bool | None,
+    updated_by: str,
+) -> dict[str, Any]:
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+        cur.execute(
+            """
+            UPDATE layout_seat_mappings
+            SET
+                seat_name = COALESCE(%s, seat_name),
+                seat_type = COALESCE(%s, seat_type),
+                status = COALESCE(%s, status),
+                is_bookable = COALESCE(%s, is_bookable),
+                is_reserved = COALESCE(%s, is_reserved),
+                is_configured = TRUE,
+                configuration_status = 'COMPLETED',
+                updated_by = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING *
+            """,
+            (
+                seat_name,
+                seat_type,
+                status,
+                is_bookable,
+                is_reserved,
+                updated_by,
+                tenant_id,
+                layout_seat_mapping_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    if row is None:
+        raise LookupError("Layout seat mapping update failed.")
+
+    return dict(row)
+def upsert_operational_seat(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    site_id: str,
+    building_id: str,
+    floor_id: str,
+    seat_code: str,
+    seat_type: str | None,
+    status: str | None,
+    is_bookable: bool | None,
+    svg_element_id: str,
+) -> dict[str, Any]:
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+        cur.execute(
+            """
+            INSERT INTO seats (
+                tenant_id,
+                layout_id,
+                site_id,
+                building_id,
+                floor_id,
+                seat_code,
+                seat_type,
+                is_bookable,
+                status,
+                svg_element_id
+            )
+            VALUES (
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s
+            )
+
+            ON CONFLICT (
+                floor_id,
+                seat_code
+            )
+
+            DO UPDATE SET
+                layout_id = EXCLUDED.layout_id,
+                seat_type = EXCLUDED.seat_type,
+                is_bookable = EXCLUDED.is_bookable,
+                status = EXCLUDED.status,
+                svg_element_id = EXCLUDED.svg_element_id,
+                updated_at = NOW()
+
+            RETURNING
+                id::text AS seat_id
+            """,
+            (
+                tenant_id,
+                layout_id,
+                site_id,
+                building_id,
+                floor_id,
+                seat_code,
+                seat_type,
+                is_bookable,
+                status,
+                svg_element_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    if row is None:
+        raise LookupError("Seat upsert failed.")
+
+    return dict(row)
+def replace_seat_amenities(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seat_id: str,
+    amenity_ids: list[int],
+    assigned_by_user_id: str,
+) -> None:
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            """
+            DELETE FROM seat_amenities
+            WHERE tenant_id = %s
+              AND seat_id = %s
+            """,
+            (
+                tenant_id,
+                seat_id,
+            ),
+        )
+
+        if not amenity_ids:
+            return
+
+        values = [
+            (
+                tenant_id,
+                seat_id,
+                amenity_id,
+                assigned_by_user_id,
+            )
+            for amenity_id in amenity_ids
+        ]
+
+        cur.executemany(
+            """
+            INSERT INTO seat_amenities (
+                tenant_id,
+                seat_id,
+                amenity_id,
+                assigned_by_user_id
+            )
+            VALUES (%s, %s, %s, %s)
+            """,
+            values,
+        )
+
+def fetch_seat_amenity_ids(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seat_id: str,
+) -> list[str]:
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            """
+            SELECT amenity_id
+            FROM seat_amenities
+            WHERE tenant_id = %s
+              AND seat_id = %s
+            ORDER BY amenity_id
+            """,
+            (
+                tenant_id,
+                seat_id,
+            ),
+        )
+
+        rows = cur.fetchall()
+
+    return [int(row[0]) for row in rows]
+
+
+
+
+
+
+
+def insert_floor(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+    building_id: str,
+    floor_code: str,
+    floor_name: str,
+    status: str,
+) -> dict[str, Any]:
+    """Insert one floor and reload it with aggregate fields."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            INSERT INTO floors (
+                tenant_id,
+                site_id,
+                building_id,
+                floor_code,
+                floor_name,
+                status
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id::text AS floor_id
+            """,
+            (
+                tenant_id,
+                site_id,
+                building_id,
+                floor_code,
+                floor_name,
+                status,
+            ),
+        )
+        row = cur.fetchone()
+
+    if row is None:
+        raise LookupError("Created floor could not be resolved.")
+
+    floor = fetch_floor_by_id(conn, tenant_id=tenant_id, floor_id=str(row["floor_id"]))
+    if floor is None:
+        raise LookupError("Created floor could not be reloaded.")
+    return floor
+
+
+def update_floor(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+    updates: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Update mutable floor metadata only."""
+    assignments: list[str] = []
+    params: list[Any] = []
+    for field_name, value in updates.items():
+        assignments.append(f"{field_name} = %s")
+        params.append(value)
+    assignments.append("updated_at = NOW()")
+    params.extend([tenant_id, floor_id])
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            UPDATE floors
+            SET {", ".join(assignments)}
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING id::text AS floor_id
+            """,
+            params,
+        )
+        row = cur.fetchone()
+
+    if row is None:
+        return None
+    return fetch_floor_by_id(conn, tenant_id=tenant_id, floor_id=str(row["floor_id"]))
+
+
+def fetch_seat_configuration(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seat_id: str,
+) -> dict[str, Any] | None:
+    """Fetch one tenant-scoped seat for configuration updates."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                id::text AS seat_id,
+                site_id::text AS site_id,
+                building_id::text AS building_id,
+                floor_id::text AS floor_id,
+                seat_code,
+                status,
+                is_bookable
+            FROM seats
+            WHERE tenant_id = %s
+              AND id = %s
+            """,
+            (tenant_id, seat_id),
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def update_seat_configuration(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seat_id: str,
+    updates: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Update soft seat configuration flags only."""
+    assignments: list[str] = []
+    params: list[Any] = []
+    for field_name, value in updates.items():
+        assignments.append(f"{field_name} = %s")
+        params.append(value)
+    assignments.append("updated_at = NOW()")
+    params.extend([tenant_id, seat_id])
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            UPDATE seats
+            SET {", ".join(assignments)}
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING
+                id::text AS seat_id,
+                site_id::text AS site_id,
+                building_id::text AS building_id,
+                floor_id::text AS floor_id,
+                seat_code,
+                status,
+                is_bookable
+            """,
+            params,
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def _apply_status_filter(
+    query: str,
+    params: list[Any],
+    column: str,
+    status_filter: str | None,
+) -> tuple[str, list[Any]]:
+    if status_filter is None:
+        return query, params
+    query += f" AND {column} = %s"
+    params.append(status_filter)
+    return query, params
+
+
+def _apply_search_filter(
+    query: str,
+    params: list[Any],
+    search: str | None,
+    columns: tuple[str, ...],
+) -> tuple[str, list[Any]]:
+    normalized = str(search or "").strip()
+    if not normalized:
+        return query, params
+
+    query += " AND (" + " OR ".join(f"{column} ILIKE %s" for column in columns) + ")"
+    params.extend([f"%{normalized}%" for _ in columns])
+    return query, params
+
+
+def _apply_pagination(
+    query: str,
+    params: list[Any],
+    *,
+    page: int | None,
+    limit: int | None,
+) -> tuple[str, list[Any]]:
+    if limit is None:
+        return query, params
+
+    effective_page = page or 1
+    offset = (effective_page - 1) * limit
+    query += " LIMIT %s OFFSET %s"
+    params.extend([limit, offset])
+    return query, params
 
 
 def fetch_seats_by_floor(

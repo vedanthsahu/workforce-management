@@ -1,12 +1,18 @@
+
+
 import { axiosInstance } from "@/lib/http/axios";
 import {
   Site,
   Building,
   Floor,
   Seat,
+  SeatAvailability,
   CreateBookingPayload,
   CreateBookingResponse,
   Preference,
+  PreferenceMatchStatus,
+  UiState,
+  FetchSeatsParams,
 } from "../types/Bookingform.types";
 
 // ── Sites ─────────────────────────────────────────────────────────────────────
@@ -49,21 +55,8 @@ export async function fetchFloors(buildingId: string): Promise<Floor[]> {
   }));
 }
 
-// ── Seat ID → SVG id mapping ─────────────────────────────────────────────────
-//
-// WHY seat_id and NOT seat_code:
-//
-// seat_code (e.g. "A-F2-001", "T3-7-001") is zone-relative — the last segment
-// is the seat number WITHIN that zone only. Every zone has its own seat "001",
-// "002" etc., so parsing seat_code causes many-to-one collisions on svgId "1".
-//
-// seat_id is the globally unique backend PK and maps 1-to-1 with SVG <g> nodes:
-//   seat_id=1  → <g id="1">
-//   seat_id=24 → <g id="s24">
-//   seat_id=N  → <g id="N">
-//
-// Always use seat_id to derive svgId.
-//
+// ── Seat ID → SVG id mapping ──────────────────────────────────────────────────
+
 export function seatIdToSvgId(seatId: string | number): string {
   const num = parseInt(String(seatId), 10);
   if (isNaN(num)) {
@@ -73,176 +66,237 @@ export function seatIdToSvgId(seatId: string | number): string {
   return num === 24 ? "s24" : String(num);
 }
 
-// Kept for backwards compatibility — always delegates to seatIdToSvgId
-export function seatCodeToSvgId(_seatCode: string, fallbackId: string | number): string {
+export function seatCodeToSvgId(
+  _seatCode: string,
+  fallbackId: string | number
+): string {
   return seatIdToSvgId(fallbackId);
 }
 
-// ── Normalise status ──────────────────────────────────────────────────────────
+// ── Normalise range availability status → seat status ────────────────────────
 
-export function normalizeStatus(
-  raw: string | undefined,
-  isBookable?: boolean
+export function normalizeRangeStatus(
+  rangeStatus: string | undefined
 ): "available" | "booked" | "unavailable" | "yours" {
-  switch ((raw ?? "").toUpperCase()) {
-    case "ACTIVE":
-    case "AVAILABLE": return "available";
-    case "BOOKED":
-    case "CONFIRMED": return "booked";
-    case "YOURS":     return "yours";
-    default:          return isBookable ? "available" : "unavailable";
+  switch ((rangeStatus ?? "").toUpperCase()) {
+    case "FULLY_AVAILABLE":
+      return "available";
+    case "PARTIALLY_AVAILABLE":
+      return "available";
+    case "FULLY_BOOKED":
+      return "booked";
+    case "UNAVAILABLE":
+      return "unavailable";
+    case "YOURS":
+      return "yours";
+    default:
+      return "unavailable";
   }
 }
 
-// ── Seat Availability ─────────────────────────────────────────────────────────
-//
-// Backend route: GET /bookings/available
-// Params:
-//   floor_id     (int, required)
-//   booking_date (date string "YYYY-MM-DD", required)
-//
-// This is the SINGLE SOURCE OF TRUTH for seat availability on a given date.
-// Only seats returned here are available. Everything else is booked/unavailable.
+// ── Legacy single-date normalizer (kept for backward compat) ──────────────────
 
-export interface SeatAvailability {
-  seat_id: string | number;
-  seat_code: string;
+export function normalizeStatus(
+  raw: string | undefined,
+  selectable?: boolean
+): "available" | "booked" | "unavailable" | "yours" {
+  switch ((raw ?? "").toUpperCase()) {
+    case "AVAILABLE":
+      return selectable ? "available" : "unavailable";
+    case "ACTIVE":
+      return "available";
+    case "BOOKED":
+    case "CONFIRMED":
+      return "booked";
+    case "YOURS":
+      return "yours";
+    default:
+      return selectable ? "available" : "unavailable";
+  }
+}
+
+// ── Response shape from GET /floors/{floor_id}/seats ─────────────────────────
+
+interface DailyStatus {
+  booking_date: string;
+  status: string;
+}
+
+interface SeatAvailabilitySummary {
+  status: string;
+  available_dates: string[];
+  unavailable_dates: string[];
+  booked_dates: string[];
+  blocked_dates: string[];
+  daily_statuses: DailyStatus[];
+  total_requested_days: number;
+  total_available_days: number;
+  availability_percentage: number;
+}
+
+interface AvailableSeatResponse {
+  seat_id: string;
+  id?: string;
+  tenant_id?: string;
+  site_id?: string;
+  building_id?: string;
+  floor_id: string;
+  seat_code?: string;
+  code?: string;
   seat_type?: string;
   seat_neighborhood?: string;
-  status: string;
   is_bookable?: boolean;
+  x?: number | null;
+  y?: number | null;
+  w?: number | null;
+  h?: number | null;
+  rotation_angle?: number;
+  matched_amenities: string[];
+  matched_amenity_count: number;
+  requested_amenity_count: number;
+  preference_match_status: string;
+  availability: SeatAvailabilitySummary;
 }
+
+// ── Seat Availability — GET /floors/{floor_id}/seats ──────────────────────────
 
 export async function fetchAvailability(params: {
   floorId: string;
   fromDate: string;
-}): Promise<SeatAvailability[]> {
-  const { data } = await axiosInstance.get<SeatAvailability[]>("/bookings/available", {
-    params: {
-      floor_id:     params.floorId,
-      booking_date: params.fromDate,
-    },
-  });
+  toDate?: string;
+  amenityIds?: number[];
+}): Promise<AvailableSeatResponse[]> {
+  const { data } = await axiosInstance.get<AvailableSeatResponse[]>(
+    `/floors/${params.floorId}/seats`,
+    {
+      params: {
+        start_date: params.fromDate,
+        end_date: params.toDate ?? params.fromDate,
+        ...(params.amenityIds?.length
+          ? { amenity_ids: params.amenityIds }
+          : {}),
+      },
+      paramsSerializer: (p) => {
+        const parts: string[] = [];
+        Object.entries(p).forEach(([key, value]) => {
+          if (Array.isArray(value)) {
+            value.forEach((v) =>
+              parts.push(`${key}=${encodeURIComponent(v)}`)
+            );
+          } else {
+            parts.push(`${key}=${encodeURIComponent(String(value))}`);
+          }
+        });
+        return parts.join("&");
+      },
+    }
+  );
+  console.log("[fetchAvailability] raw response:", data);
   return data;
 }
 
-// ── Seats ─────────────────────────────────────────────────────────────────────
-//
-// NOTE: fetchSeats (GET /floors/:id/seats) is intentionally NOT used for
-// availability checks anymore. It returns ALL seats regardless of booking
-// status and caused UI mismatches. Use fetchSeatsWithAvailability instead.
-
-export interface FetchSeatsParams {
-  floorId: string;
-  fromDate: string;
-  toDate: string;
-  preferences?: string[];
-}
-
 // ── Seats + Availability ──────────────────────────────────────────────────────
-//
-// /bookings/available is the sole source of truth.
-//
-// Rule:
-//   - Seat returned by /available  → status from backend (available/yours/etc.)
-//   - Seat NOT returned            → "booked" (backend excluded it intentionally)
-//
-// We get the full seat list from /floors/:id/seats only to know which SVG
-// nodes exist on this floor, then we overlay availability on top.
-// The availability status always wins — no fallback to the seats-list status.
 
 export async function fetchSeatsWithAvailability(
   params: FetchSeatsParams
 ): Promise<Seat[]> {
-  // Step 1 — get the full seat roster for this floor (for SVG node list only)
-  const { data: seatListRaw } = await axiosInstance.get<any[]>(
-    `/floors/${params.floorId}/seats`,
-    {
-      params: {
-        fromDate: params.fromDate,
-        toDate:   params.toDate,
-        ...(params.preferences?.length
-          ? { preferences: params.preferences.join(",") }
-          : {}),
-      },
-    }
-  );
-
-  // Step 2 — get availability (source of truth for status)
-  const availability = await fetchAvailability({
-    floorId:  params.floorId,
+  const rawSeats = await fetchAvailability({
+    floorId: params.floorId,
     fromDate: params.fromDate,
+    toDate: (params as any).toDate ?? params.fromDate,
+    amenityIds: params.amenityIds,
   });
 
-  // Build svgId → availability entry map from /available response.
-  // Key insight: use seat_id (globally unique PK) not seat_code (zone-relative).
-  const availMap = new Map<string, SeatAvailability>();
-  availability.forEach((a) => {
-    const svgId = seatIdToSvgId(a.seat_id);  // seat_id=1 → "1", seat_id=24 → "s24"
-    availMap.set(svgId, a);
-    console.log(
-      `[fetchAvailability] seat_id="${a.seat_id}" seat_code="${a.seat_code}" → svgId="${svgId}" status="${a.status}"`
-    );
-  });
-
-  // Normalise selected preferences to lowercase for comparison
   const selectedPrefs = (params.preferences ?? []).map((p) => p.toLowerCase());
 
-  // Step 3 — map every seat from the roster, overlaying availability status
-  return seatListRaw.map((s) => {
-    const seatCode = s.seat_code ?? "";
-    const svgId    = seatIdToSvgId(s.seat_id);  // use seat_id, not seat_code
+  return rawSeats.map((a) => {
+    const svgId = seatIdToSvgId(a.seat_id);
 
-    // Look up this seat in /available
-    const availEntry = availMap.get(svgId);
+    const currentSeatId = (params as any).currentSeatId ?? null;
 
-    // ⚠️  KEY RULE: if not in availMap, backend excluded it → it is booked.
-    // Never fall back to the /floors/seats status — that endpoint doesn't
-    // reflect per-date booking state.
-    // const status: "available" | "booked" | "unavailable" | "yours" = availEntry
-    //   ? normalizeStatus(availEntry.status, availEntry.is_bookable)
-    //   : "booked";
-    const status: "available" | "booked" | "unavailable" | "yours" = availEntry
-  ? normalizeStatus(availEntry.status, availEntry.is_bookable)
-  : "unavailable";  // ← was "booked"
+    const status = (() => {
+      const raw = normalizeRangeStatus(a.availability?.status);
+      if (
+        currentSeatId &&
+        String(a.seat_id) === String(currentSeatId) &&
+        raw === "unavailable"
+      ) {
+        return "yours" as const;
+      }
+      return raw;
+    })();
 
-    // Build amenities list from seat_type and seat_neighborhood.
-    // These are used to match against user-selected preferences.
-    const amenities: string[] = [];
-    const seatType         = (availEntry?.seat_type         ?? s.seat_type         ?? "").toLowerCase();
-    const seatNeighborhood = (availEntry?.seat_neighborhood ?? s.seat_neighborhood ?? "").toLowerCase();
-    if (seatType)         amenities.push(seatType);
-    if (seatNeighborhood) amenities.push(seatNeighborhood);
+    const matchedAmenityNames: string[] = a.matched_amenities ?? [];
 
-    // Seat matches preferences when it is available AND at least one selected
-    // preference matches this seat's amenity tokens (type or neighborhood).
+    const seatType         = (a.seat_type        ?? "").toLowerCase();
+    const seatNeighborhood = (a.seat_neighborhood ?? "").toLowerCase();
+
+    const amenities: string[] =
+      matchedAmenityNames.length > 0
+        ? matchedAmenityNames
+        : [seatType, seatNeighborhood].filter(Boolean);
+
+    const rawMatchStatus = (a.preference_match_status ?? "").toUpperCase();
+
+    const preferenceMatchStatus: PreferenceMatchStatus =
+      rawMatchStatus === "NOT_APPLICABLE" || rawMatchStatus === ""
+        ? (() => {
+            if (!selectedPrefs.length) return "NO_MATCH" as PreferenceMatchStatus;
+            const matched = amenities.filter((am) =>
+              selectedPrefs.some(
+                (p) => am.toLowerCase().includes(p) || p.includes(am.toLowerCase())
+              )
+            ).length;
+            if (matched === 0) return "NO_MATCH" as PreferenceMatchStatus;
+            if (matched >= selectedPrefs.length)
+              return "FULL_MATCH" as PreferenceMatchStatus;
+            return "PARTIAL_MATCH" as PreferenceMatchStatus;
+          })()
+        : (rawMatchStatus as PreferenceMatchStatus);
+
+    const uiState: UiState =
+      status !== "available"
+        ? "UNAVAILABLE"
+        : preferenceMatchStatus === "FULL_MATCH"
+          ? "BEST_MATCH"
+          : "AVAILABLE";
+
     const matchesPreferences =
       status === "available" &&
-      selectedPrefs.length > 0 &&
-      selectedPrefs.some((pref) =>
-        amenities.some((a) => a.includes(pref) || pref.includes(a))
-      );
+      (preferenceMatchStatus === "FULL_MATCH" ||
+        preferenceMatchStatus === "PARTIAL_MATCH");
+
+    const availabilitySummary = a.availability ?? null;
 
     console.log(
-      `[fetchSeatsWithAvailability] seat_code="${seatCode}" svgId="${svgId}" ` +
-      `inAvailable=${!!availEntry} status="${status}" ` +
-      `amenities=${JSON.stringify(amenities)} matchesPreferences=${matchesPreferences}`
+      `[fetchSeatsWithAvailability] seat_id="${a.seat_id}" svgId="${svgId}" ` +
+        `rangeStatus="${a.availability?.status}" → status="${status}" ` +
+        `match="${preferenceMatchStatus}" ui="${uiState}" ` +
+        `amenities=${JSON.stringify(amenities)} ` +
+        `matchedNames=${JSON.stringify(matchedAmenityNames)} ` +
+        `avail%=${a.availability?.availability_percentage ?? "n/a"}`
     );
 
     return {
-      id:                 String(s.seat_id),
+      id: String(a.seat_id),
       svgId,
-      label:              seatCode || `Seat ${s.seat_id}`,
-      row:                0,
-      col:                0,
+      label: a.code || a.seat_code || `Seat ${a.seat_id}`,
+      row: 0,
+      col: 0,
       status,
       matchesPreferences,
       amenities,
-    };
+      matchedAmenityNames,
+      matchedAmenityCount:   a.matched_amenity_count   ?? matchedAmenityNames.length,
+      requestedAmenityCount: a.requested_amenity_count ?? selectedPrefs.length,
+      preferenceMatchStatus,
+      uiState,
+      availabilitySummary,
+    } as Seat & { availabilitySummary: SeatAvailabilitySummary | null };
   });
 }
 
-// ── Create booking ────────────────────────────────────────────────────────────
+// ── Create booking — POST /bookings ───────────────────────────────────────────
 
 export async function createBooking(
   payload: CreateBookingPayload
@@ -254,16 +308,39 @@ export async function createBooking(
   return data;
 }
 
+// ── Modify booking — PATCH /bookings/{booking_id}/modify ──────────────────────
+// Replaces the old cancel-then-create pattern.  The backend atomically updates
+// the existing booking so history, audit trail, and booking_id are all preserved.
+
+export interface ModifyBookingPayload {
+  site_id:      number;
+  building_id:  number;
+  floor_id:     number;
+  seat_id:      number;
+  booking_date: string; // "YYYY-MM-DD"
+}
+
+export async function modifyBooking(
+  bookingId: string,
+  payload: ModifyBookingPayload
+): Promise<CreateBookingResponse> {
+  const { data } = await axiosInstance.post<CreateBookingResponse>(
+    `/bookings/${bookingId}/modify`,
+    payload
+  );
+  return data;
+}
+
 // ── Preferences ───────────────────────────────────────────────────────────────
 
 export async function fetchPreferences(): Promise<Preference[]> {
   const { data } = await axiosInstance.get<{ amenities: any[] }>("/preferences");
   return data.amenities.map((a) => ({
-    id:          a.id,
-    key:         a.key,
-    name:        a.name,
-    category:    a.category    ?? null,
+    id: a.id,
+    key: a.key,
+    name: a.name,
+    category: a.category ?? null,
     description: a.description ?? null,
-    icon:        a.icon        ?? null,
+    icon: a.icon ?? null,
   }));
 }
