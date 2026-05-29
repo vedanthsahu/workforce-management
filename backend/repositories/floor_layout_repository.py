@@ -449,3 +449,48 @@ def fetch_layout_seats_by_layout_id(
         dict(row)
         for row in rows
     ]
+
+def sync_published_layout_seats(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+    layout_id: str,
+) -> None:
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            """
+            UPDATE seats
+            SET
+                status = 'INACTIVE',
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND floor_id = %s
+              AND layout_id IS NOT NULL
+              AND layout_id <> %s
+            """,
+            (
+                tenant_id,
+                floor_id,
+                layout_id,
+            ),
+        )
+
+        cur.execute(
+            """
+            UPDATE seats
+            SET
+                status = 'ACTIVE',
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND floor_id = %s
+              AND layout_id = %s
+            """,
+            (
+                tenant_id,
+                floor_id,
+                layout_id,
+            ),
+        )

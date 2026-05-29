@@ -22,6 +22,7 @@ from backend.repositories.floor_layout_repository import (
     activate_floor_layout as activate_floor_layout_record,
     archive_existing_published_layout,
     archive_existing_published_layouts,
+    sync_published_layout_seats,
     fetch_floor_for_layout,
     fetch_floor_layout_by_id,
     fetch_floor_layouts_by_floor,
@@ -282,6 +283,12 @@ def activate_floor_layout(
                     "code": "floor_layout_not_found",
                     "message": "Floor layout was not found.",
                 },
+            )
+        sync_published_layout_seats(
+                conn,
+                tenant_id=tenant_id,
+                floor_id=str(layout["floor_id"]),
+                layout_id=layout_id,
             )
 
         conn.commit()

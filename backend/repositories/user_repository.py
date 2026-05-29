@@ -61,13 +61,18 @@ USER_RETURNING_FIELDS = """
     updated_at
 """
 
-ROLE_NAMES = {"EMPLOYEE", "OFFICE_ADMIN", "TENANT_ADMIN", "SUPPORT_ADMIN"}
+ROLE_NAMES = {
+    "EMPLOYEE",
+    "MANAGER",
+    "TALENT",
+    "SECURITY",
+    "TENANT_ADMIN",
+}
+
 USER_STATUSES = {"ACTIVE", "INACTIVE", "LOCKED"}
+
 ADMIN_NOTIFICATION_ROLES = (
     "TENANT_ADMIN",
-    "OFFICE_ADMIN",
-    "PRODUCT_ADMIN",
-    "SUPPORT_ADMIN",
 )
 
 
@@ -648,6 +653,87 @@ def sync_graph_groups_for_user(
                 (tenant_id, team["team_id"], user_id),
             )
 
+
+def update_user_profile(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    full_name: str | None = None,
+    display_name: str | None = None,
+    mobile_phone: str | None = None,
+    office_location: str | None = None,
+) -> dict[str, Any] | None:
+    """Update self-editable profile fields."""
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            UPDATE app_users
+            SET
+                full_name = COALESCE(%s, full_name),
+                display_name = COALESCE(%s, display_name),
+                mobile_phone = COALESCE(%s, mobile_phone),
+                office_location = COALESCE(%s, office_location),
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING {USER_RETURNING_FIELDS}
+            """,
+            (
+                _normalize_text(full_name, max_length=200),
+                _normalize_text(display_name, max_length=200),
+                _normalize_text(mobile_phone, max_length=50),
+                _normalize_text(office_location, max_length=200),
+                tenant_id,
+                user_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+
+def admin_update_user_access(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    role_name: str | None = None,
+    status: str | None = None,
+) -> dict[str, Any] | None:
+    """Update admin-managed access fields."""
+
+    if role_name is not None and role_name not in ROLE_NAMES:
+        raise ValueError("Invalid role_name.")
+
+    if status is not None and status not in USER_STATUSES:
+        raise ValueError("Invalid status.")
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            UPDATE app_users
+            SET
+                role_name = COALESCE(%s, role_name),
+                status = COALESCE(%s, status),
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING {USER_RETURNING_FIELDS}
+            """,
+            (
+                role_name,
+                status,
+                tenant_id,
+                user_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    return dict(row) if row else None
 
 def fetch_favorite_seat(
     conn: PGConnection,
