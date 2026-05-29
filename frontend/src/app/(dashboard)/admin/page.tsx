@@ -40,7 +40,8 @@ const [selectedDate, setSelectedDate] = useState(getLocalDate());
             {error}
           </div>
         )}
-        {!loading && !error && <AdminStats data={statsData} />}
+        {!loading && !error && <AdminStats data={statsData}   selectedDate={selectedDate}
+ />}
         <AdminCharts data={statsData} buildings={buildings} trendData={trendData}  selectedWeek={selectedWeek}
   setSelectedWeek={setSelectedWeek}    topOffices={topOffices}   />
         
@@ -56,10 +57,8 @@ const [selectedDate, setSelectedDate] = useState(getLocalDate());
                         <AdminQuickActions />
                       </div>
                     </div>  */}
-
-
         
       </main>
     </>
   );
-}
+}   

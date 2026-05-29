@@ -87,20 +87,19 @@ const ROUTE_MAP: Record<string, string> = {
   favourites: "/favourites",
 
   admin_dashboard: "/admin",
-  offices: "/admin/offices",
-  floors: "/admin/floors",
-  layouts: "/admin/layouts",
-  seats: "/admin/seats",
-  amenities: "/admin/amenities",
-  seatstatus: "/admin/seat-status",
-  bookings: "/admin/bookings",
-  users: "/admin/users",
-  occupancy: "/admin/occupancy",
-  utilization: "/admin/utilization",
-  audit: "/admin/audit",
-  settings: "/admin/settings",
-
-  profile: "/profile",
+  offices:         "/admin/offices",
+  buildings:       "/admin/building",
+  floors:          "/admin/floors",
+  layouts:         "/admin/layouts",
+  seats:           "/admin/seats",
+  amenities:       "/admin/amenities",
+  seatstatus:      "/admin/seat-status",
+  bookings:        "/admin/bookings",
+  users:           "/admin/users",
+  occupancy:       "/admin/occupancy",
+  utilization:     "/admin/utilization",
+  audit:           "/admin/audit",
+  settings:        "/admin/settings",
 };
 
 // ─── Employee nav config ──────────────────────────────────────────────────────
@@ -172,12 +171,13 @@ const ADMIN_DASHBOARD: NavItem[] = [
 ];
 
 const ADMIN_MANAGE_NAV: NavItem[] = [
-  { id: "offices", label: "Offices", icon: Building2 },
-  { id: "floors", label: "Floors", icon: MapPin },
-  { id: "layouts", label: "Floor Layouts", icon: ClipboardList },
-  { id: "seats", label: "Seats", icon: CalendarDays },
-  { id: "amenities", label: "Amenities", icon: Star },
-  { id: "seatstatus", label: "Seat Status", icon: Settings },
+  { id: "offices",    label: "Offices",       icon: Building2   },
+  {id: "buildings",  label: "Buildings",     icon: Building2   },
+  { id: "floors",     label: "Floors",        icon: MapPin      },
+  { id: "layouts",    label: "Floor Layouts", icon: ClipboardList },
+  { id: "seats",      label: "Seats",         icon: CalendarDays },
+  { id: "amenities",  label: "Amenities",     icon: Star        },
+  { id: "seatstatus", label: "Seat Status",   icon: Settings    },
 ];
 
 const ADMIN_OPERATIONS_NAV: NavItem[] = [
