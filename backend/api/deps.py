@@ -7,7 +7,7 @@ from typing import Any, Annotated, Iterable
 import psycopg2
 from fastapi import Depends, HTTPException, Request, Response, status
 from psycopg2.extensions import connection as PGConnection
-
+from backend.repositories.token_repository import fetch_active_session
 from backend.core.config import get_settings
 from backend.core.security import (
     ACCESS_TOKEN_COOKIE_NAME,
@@ -91,6 +91,26 @@ def get_auth_context(
         ) from exc
 
     claims = _parse_auth_claims(token_payload)
+    session_id = claims.get("session_id")
+
+    if session_id:
+        active_session = fetch_active_session(
+            conn,
+            tenant_id=claims["tenant_id"],
+            user_id=claims["user_id"],
+            session_id=session_id,
+        )
+
+        if active_session is None:
+            _clear_auth_cookies(response)
+
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "code": "session_revoked",
+                    "message": "Session has been revoked.",
+                },
+            )
     request.state.auth_claims = claims
     return {
         "claims": claims,
@@ -100,6 +120,7 @@ def get_auth_context(
 
 def get_current_user(
     request: Request,
+    response: Response,
     auth_context: Annotated[dict[str, Any], Depends(get_auth_context)],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> dict[str, Any]:
@@ -121,6 +142,16 @@ def get_current_user(
         ) from exc
 
     if user is None:
+        if user["status"] != "ACTIVE":
+            _clear_auth_cookies(response)
+
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "code": "inactive_user",
+                    "message": "User account is inactive.",
+                },
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
