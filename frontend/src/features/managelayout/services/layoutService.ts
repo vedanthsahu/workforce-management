@@ -134,17 +134,34 @@ export interface LayoutSeatsApiResponse {
   items: any[];
 }
 
+// export async function fetchLayoutSeatStats(layoutId: string): Promise<LayoutSeatStats> {
+//   const { data } = await axiosInstance.get<LayoutSeatsApiResponse>(
+//     `/admin/floor-layouts/${layoutId}/seats`
+//   );
+
+//   return {
+//     layout_id:          data.layout_id,
+//     total_seats:        data.total_seats,
+//     configured_seats:   data.configured_seats,
+//     unconfigured_seats: data.pending_seats,          // map pending → unconfigured
+//     non_bookable_seats: data.items.filter((s) => !s.is_bookable).length,
+//     bookable_seats:     data.items.filter((s) => s.is_bookable).length,
+//   };
+// }
+
 export async function fetchLayoutSeatStats(layoutId: string): Promise<LayoutSeatStats> {
   const { data } = await axiosInstance.get<LayoutSeatsApiResponse>(
     `/admin/floor-layouts/${layoutId}/seats`
   );
 
+  const items = data.items ?? []; // guard against null/undefined
+
   return {
     layout_id:          data.layout_id,
     total_seats:        data.total_seats,
     configured_seats:   data.configured_seats,
-    unconfigured_seats: data.pending_seats,          // map pending → unconfigured
-    non_bookable_seats: data.items.filter((s) => !s.is_bookable).length,
-    bookable_seats:     data.items.filter((s) => s.is_bookable).length,
+    unconfigured_seats: data.pending_seats,
+    non_bookable_seats: items.filter((s) => !s.is_bookable).length,
+    bookable_seats:     items.filter((s) => s.is_bookable).length,
   };
 }

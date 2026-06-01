@@ -120,7 +120,7 @@ export default function SeatFiltersBar({
           { value: "All", label: "All Status" },
           { value: "Active", label: "Active" },
           { value: "Inactive", label: "Inactive" },
-          { value: "Maintenance", label: "Maintenance" },
+          // { value: "Maintenance", label: "Maintenance" },
         ]}
         onChange={(v) => onUpdate("status", v)}
       />
