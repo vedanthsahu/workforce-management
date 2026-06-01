@@ -7,7 +7,7 @@ from typing import Any
 
 from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
-
+from psycopg2.extras import Json
 
 def fetch_sites(
     conn: PGConnection,
@@ -753,6 +753,7 @@ def fetch_layout_seat_mapping_by_id(
 
     return dict(row) if row else None
 
+
 def update_layout_seat_mapping_configuration(
     conn: PGConnection,
     *,
@@ -763,6 +764,7 @@ def update_layout_seat_mapping_configuration(
     status: str | None,
     is_bookable: bool | None,
     is_reserved: bool | None,
+    amenity_ids: list[int] | None,
     updated_by: str,
 ) -> dict[str, Any]:
 
@@ -777,12 +779,18 @@ def update_layout_seat_mapping_configuration(
                 status = COALESCE(%s, status),
                 is_bookable = COALESCE(%s, is_bookable),
                 is_reserved = COALESCE(%s, is_reserved),
+
+                amenity_ids = COALESCE(%s::jsonb, amenity_ids),
+
                 is_configured = TRUE,
                 configuration_status = 'COMPLETED',
+
                 updated_by = %s,
                 updated_at = NOW()
+
             WHERE tenant_id = %s
               AND id = %s
+
             RETURNING *
             """,
             (
@@ -791,6 +799,9 @@ def update_layout_seat_mapping_configuration(
                 status,
                 is_bookable,
                 is_reserved,
+
+                Json(amenity_ids) if amenity_ids is not None else None,
+
                 updated_by,
                 tenant_id,
                 layout_seat_mapping_id,
@@ -803,6 +814,7 @@ def update_layout_seat_mapping_configuration(
         raise LookupError("Layout seat mapping update failed.")
 
     return dict(row)
+
 def upsert_operational_seat(
     conn: PGConnection,
     *,

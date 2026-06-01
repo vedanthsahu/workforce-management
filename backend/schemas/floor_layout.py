@@ -89,7 +89,7 @@ class LayoutSeatResponse(BaseModel):
 
     seat_name: str | None = None
 
-    seat_type: str
+    seat_type: str | None = None
 
     status: str
 

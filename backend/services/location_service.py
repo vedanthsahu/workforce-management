@@ -281,50 +281,45 @@ def update_layout_seat_configuration(
         amenity_ids = payload.amenity_ids or []
 
         updated_mapping = update_layout_seat_mapping_configuration(
-            conn,
-            tenant_id=tenant_id,
-            layout_seat_mapping_id=layout_seat_mapping_id,
-            seat_name=payload.seat_name,
-            seat_type=payload.seat_type,
-            status=payload.status,
-            is_bookable=payload.is_bookable,
-            is_reserved=payload.is_reserved,
-            updated_by=str(current_user["user_id"]),
-        )
+                conn,
+                tenant_id=tenant_id,
+                layout_seat_mapping_id=layout_seat_mapping_id,
+                seat_name=payload.seat_name,
+                seat_type=payload.seat_type,
+                status=payload.status,
+                is_bookable=payload.is_bookable,
+                is_reserved=payload.is_reserved,
+                amenity_ids=amenity_ids,
+                updated_by=str(current_user["user_id"]),
+            )
 
-        seat = upsert_operational_seat(
-            conn,
-            tenant_id=tenant_id,
-            layout_id=str(mapping["layout_id"]),
-            site_id=str(mapping["site_id"]),
-            building_id=str(mapping["building_id"]),
-            floor_id=str(mapping["floor_id"]),
-            seat_code=str(mapping["seat_code"]),
-            seat_type=payload.seat_type,
-            status=payload.status,
-            is_bookable=payload.is_bookable,
-            svg_element_id=str(mapping["svg_element_id"]),
-        )
+        # seat = upsert_operational_seat(
+        #     conn,
+        #     tenant_id=tenant_id,
+        #     layout_id=str(mapping["layout_id"]),
+        #     site_id=str(mapping["site_id"]),
+        #     building_id=str(mapping["building_id"]),
+        #     floor_id=str(mapping["floor_id"]),
+        #     seat_code=str(mapping["seat_code"]),
+        #     seat_type=payload.seat_type,
+        #     status=payload.status,
+        #     is_bookable=payload.is_bookable,
+        #     svg_element_id=str(mapping["svg_element_id"]),
+        # )
 
-        replace_seat_amenities(
-            conn,
-            tenant_id=tenant_id,
-            seat_id=str(seat["seat_id"]),
-            amenity_ids=amenity_ids,
-            assigned_by_user_id=str(current_user["user_id"]),
-        )
-
-        final_amenity_ids = fetch_seat_amenity_ids(
-            conn,
-            tenant_id=tenant_id,
-            seat_id=str(seat["seat_id"]),
-        )
+        # replace_seat_amenities(
+        #     conn,
+        #     tenant_id=tenant_id,
+        #     seat_id=str(seat["seat_id"]),
+        #     amenity_ids=amenity_ids,
+        #     assigned_by_user_id=str(current_user["user_id"]),
+        # )
 
         conn.commit()
 
         return LayoutSeatConfigurationResponse(
             layout_seat_mapping_id=str(updated_mapping["id"]),
-            seat_id=str(seat["seat_id"]),
+            seat_id=None,
             layout_id=str(mapping["layout_id"]),
             floor_id=str(mapping["floor_id"]),
             seat_code=str(mapping["seat_code"]),
@@ -335,7 +330,7 @@ def update_layout_seat_configuration(
             is_reserved=updated_mapping["is_reserved"],
             is_configured=True,
             configuration_status="COMPLETED",
-            amenity_ids=final_amenity_ids,
+            amenity_ids=updated_mapping.get("amenity_ids") or [],
         )
 
     except HTTPException:
