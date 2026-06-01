@@ -10,7 +10,10 @@ from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
 
 from backend.core.enums import LayoutStatus
-
+from backend.repositories.location_repository import (
+    upsert_operational_seat,
+    replace_seat_amenities,
+)
 
 FLOOR_LAYOUT_SELECT_FIELDS = """
     fl.id::text AS layout_id,
@@ -362,6 +365,7 @@ def insert_floor_layout(
         raise LookupError("Created floor layout could not be reloaded.")
 
     return created_layout
+
 def fetch_layout_seats_by_layout_id(
     conn: PGConnection,
     *,
@@ -405,10 +409,7 @@ def fetch_layout_seats_by_layout_id(
                 lsm.notes,
 
                 COALESCE(
-                    ARRAY_AGG(sa.amenity_id)
-                    FILTER (
-                        WHERE sa.amenity_id IS NOT NULL
-                    ),
+                    lsm.amenity_ids,
                     '{}'
                 ) AS amenity_ids,
 
@@ -423,16 +424,8 @@ def fetch_layout_seats_by_layout_id(
                AND s.floor_id = lsm.floor_id
                AND s.seat_code = lsm.seat_code
 
-            LEFT JOIN seat_amenities AS sa
-                ON sa.tenant_id = s.tenant_id
-               AND sa.seat_id = s.id
-
             WHERE lsm.tenant_id = %s
               AND lsm.layout_id = %s
-
-            GROUP BY
-                lsm.id,
-                s.id
 
             ORDER BY
                 lsm.seat_code ASC
@@ -449,3 +442,99 @@ def fetch_layout_seats_by_layout_id(
         dict(row)
         for row in rows
     ]
+
+def sync_published_layout_seats(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+    layout_id: str,
+) -> None:
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            """
+            UPDATE seats
+            SET
+                status = 'INACTIVE',
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND floor_id = %s
+              AND layout_id IS NOT NULL
+              AND layout_id <> %s
+            """,
+            (
+                tenant_id,
+                floor_id,
+                layout_id,
+            ),
+        )
+
+        cur.execute(
+            """
+            UPDATE seats
+            SET
+                status = 'ACTIVE',
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND floor_id = %s
+              AND layout_id = %s
+            """,
+            (
+                tenant_id,
+                floor_id,
+                layout_id,
+            ),
+        )
+
+def publish_layout_seat_configurations(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    published_by_user_id: str,
+) -> None:
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+        cur.execute(
+            """
+            SELECT
+                *
+            FROM layout_seat_mappings
+            WHERE tenant_id = %s
+              AND layout_id = %s
+              AND is_configured = TRUE
+            """,
+            (
+                tenant_id,
+                layout_id,
+            ),
+        )
+
+        mappings = cur.fetchall()
+
+    for mapping in mappings:
+
+        seat = upsert_operational_seat(
+            conn,
+            tenant_id=tenant_id,
+            layout_id=str(mapping["layout_id"]),
+            site_id=str(mapping["site_id"]),
+            building_id=str(mapping["building_id"]),
+            floor_id=str(mapping["floor_id"]),
+            seat_code=str(mapping["seat_code"]),
+            seat_type=mapping["seat_type"],
+            status=mapping["status"],
+            is_bookable=mapping["is_bookable"],
+            svg_element_id=str(mapping["svg_element_id"]),
+        )
+
+        replace_seat_amenities(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(seat["seat_id"]),
+            amenity_ids=mapping.get("amenity_ids") or [],
+            assigned_by_user_id=published_by_user_id,
+        )

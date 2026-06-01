@@ -22,6 +22,8 @@ from backend.repositories.floor_layout_repository import (
     activate_floor_layout as activate_floor_layout_record,
     archive_existing_published_layout,
     archive_existing_published_layouts,
+    sync_published_layout_seats,
+    publish_layout_seat_configurations,
     fetch_floor_for_layout,
     fetch_floor_layout_by_id,
     fetch_floor_layouts_by_floor,
@@ -275,14 +277,19 @@ def activate_floor_layout(
             published_by_user_id=user_id,
         )
 
-        if activated_layout is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "code": "floor_layout_not_found",
-                    "message": "Floor layout was not found.",
-                },
-            )
+        publish_layout_seat_configurations(
+            conn,
+            tenant_id=tenant_id,
+            layout_id=layout_id,
+            published_by_user_id=user_id,
+        )
+
+        sync_published_layout_seats(
+            conn,
+            tenant_id=tenant_id,
+            floor_id=str(layout["floor_id"]),
+            layout_id=layout_id,
+        )
 
         conn.commit()
 

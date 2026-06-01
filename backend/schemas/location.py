@@ -324,7 +324,7 @@ class LayoutSeatConfigurationResponse(BaseModel):
 
     layout_seat_mapping_id: str
 
-    seat_id: str
+    seat_id: str | None = None
 
     layout_id: str
 
