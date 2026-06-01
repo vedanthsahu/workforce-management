@@ -57,23 +57,52 @@ const stats = [
       icon: Armchair,
       color: "bg-orange-100 text-orange-600",
     },
+    // {
+    //   title: isToday? "Booked Today" : `Booked on ${formattedDate}`,
+    //   value: data?.booked_today ?? "-",
+    //   subtitle: `${data?.occupancy_percentage ?? 0}% occupancy`,
+    //   icon: CalendarCheck,
+    //   color: "bg-blue-100 text-blue-600",
+    // },
+
     {
-      title: isToday? "Booked Today" : `Booked on ${formattedDate}`,
-      value: data?.booked_today ?? "-",
-      subtitle: `${data?.occupancy_percentage ?? 0}% occupancy`,
-      icon: CalendarCheck,
-      color: "bg-blue-100 text-blue-600",
-    },
+  title: "Bookings",
+  value: data?.booked_today ?? "-",
+  subtitle: isToday
+    ? `For ${new Date(selectedDate).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })}`
+    : `For ${new Date(selectedDate).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })}`,
+  icon: CalendarCheck,
+  color: "bg-blue-100 text-blue-600",
+},
+    // {
+    //   title: "Blocked Seats",
+    //   value: data?.blocked_seats ?? "-",
+    //   subtitle: "Maintenance / Other",
+    //   icon: Ban,
+    //   color: "bg-purple-100 text-purple-600",
+    // },
     {
-      title: "Blocked Seats",
-      value: data?.blocked_seats ?? "-",
-      subtitle: "Maintenance / Other",
-      icon: Ban,
-      color: "bg-purple-100 text-purple-600",
-    },
+  title: "Blocked ",
+  value: data?.blocked_seats ?? "-",
+  subtitle: `For ${new Date(selectedDate).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  })}`,
+  icon: Ban,
+  color: "bg-purple-100 text-purple-600",
+},
   ];
 
-  // 🔥 Loading state
+  //  Loading state
   if (!data) {
     return <div className="p-4">Loading...</div>;
   }
@@ -88,7 +117,9 @@ const stats = [
 
             {/* HEADER */}
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle>{item.title}</CardTitle>
+              <CardTitle className="text-sm font-bold text-gray-700">
+  {item.title}
+</CardTitle>
 
               <div
                 className={`w-10 h-10 rounded-full flex items-center justify-center ${item.color}`}
@@ -99,11 +130,11 @@ const stats = [
 
             {/* CONTENT */}
             <CardContent>
-              <div className="text-2xl font-semibold">
+              <div className="text-4xl font-semibold">
                 {item.value}
               </div>
 
-              <CardDescription>
+              <CardDescription className="text-sm text-gray-600 mt-1">
                 {item.subtitle}
               </CardDescription>
             </CardContent>

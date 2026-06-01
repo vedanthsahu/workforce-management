@@ -30,3 +30,13 @@ export interface OfficeStatsSummary {
   inactive_sites: number;
   total_seats: number;
 }
+export interface CreateOfficePayload {
+  site_code: string;
+  site_name: string;
+  city: string;
+  country: string;
+  timezone: string;
+  address_line1: string;
+  address_line2?: string;
+  status: "ACTIVE" | "INACTIVE";
+}

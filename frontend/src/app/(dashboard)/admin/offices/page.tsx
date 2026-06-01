@@ -21,6 +21,8 @@ export default function OfficesPage() {
 } = useOffices();
 
  const [search, setSearch] = useState("");
+
+ const [currentPage, setCurrentPage] = useState(1);
  const [selectedOffice, setSelectedOffice] = useState<any>(null);
 
 const [open, setOpen] = useState(false);
@@ -47,6 +49,24 @@ const filteredOffices = offices.filter((o: any) => {
 
   return query.length === 0;
 });
+
+const itemsPerPage = 5;
+
+const totalPages = Math.ceil(
+  filteredOffices.length / itemsPerPage
+);
+
+const startIndex =
+  (currentPage - 1) * itemsPerPage;
+
+const paginatedOffices =
+  filteredOffices.slice(
+    startIndex,
+    startIndex + itemsPerPage
+  );
+
+
+  
   return (
     <div className="p-6 space-y-6 bg-[#f8fafc] min-h-screen">
 
@@ -66,10 +86,7 @@ const filteredOffices = offices.filter((o: any) => {
           </p>
         </div>
 
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-sm">
-          <Plus size={16} />
-          Add Office
-        </button>
+        <AddOfficeForm />
       </div>
 
       {/* 🔹 CARDS */}
@@ -101,8 +118,13 @@ const filteredOffices = offices.filter((o: any) => {
   ) : error ? (
     <div className="p-6 text-sm text-red-500">{error}</div>
   ) : (
-    <OfficeTable
-  data={filteredOffices}
+//     <OfficeTable
+//   data={filteredOffices}
+//   onEdit={handleEdit}
+// />
+
+<OfficeTable
+  data={paginatedOffices}
   onEdit={handleEdit}
 />
   )}
@@ -119,9 +141,22 @@ const filteredOffices = offices.filter((o: any) => {
 
         {/* 🔸 FOOTER */}
         <div className="flex justify-between items-center px-6 py-4 border-t text-sm text-gray-500">
-          <span>Showing 1 to {offices.length} of {offices.length} entries</span>
-          <Pagination />
-        </div>
+
+  <span>
+    Showing {startIndex + 1} to{" "}
+    {Math.min(
+      startIndex + itemsPerPage,
+      filteredOffices.length
+    )} of {filteredOffices.length} entries
+  </span>
+
+  <Pagination
+    currentPage={currentPage}
+    totalPages={totalPages}
+    onPageChange={setCurrentPage}
+  />
+
+</div>
 
       </div>
     </div>
