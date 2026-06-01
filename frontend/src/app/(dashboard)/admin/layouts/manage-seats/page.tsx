@@ -104,7 +104,7 @@ export default function ManageSeatsPage() {
           <SeatFiltersBar
             filters={filters}
             seatTypes={seatTypes}
-            preferences={preferences}
+            preferences={preferences} 
             onUpdate={updateFilter}
             onReset={resetFilters}
           />

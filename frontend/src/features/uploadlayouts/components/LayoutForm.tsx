@@ -123,14 +123,21 @@ export default function LayoutForm({ formData, setFormData }: Props) {
   //     setCountingSeats(false);
   //   }
   // };
+  
+const isFormValid =
+  !!formData.site &&
+  !!formData.building &&
+  !!formData.floor &&
+  !!formData.file &&
+  !!formData.layoutName?.trim();
 
   const handleFileChange = async (file: File) => {
   if (file.type !== "image/svg+xml") {
-    toast.error("Only SVG files are allowed");
+     toast.error("Only SVG files are allowed");
     return;
   }
   if (file.size > 10 * 1024 * 1024) {
-    toast.error("Maximum file size is 10 MB");
+     toast.error("Maximum file size is 10 MB");
     return;
   }
 
@@ -162,15 +169,15 @@ export default function LayoutForm({ formData, setFormData }: Props) {
 
   const handleSubmit = async () => {
     if (!formData.site || !formData.building || !formData.floor) {
-      toast.error("Please select Site, Building and Floor");
+      // toast.error("Please select Site, Building and Floor");
       return;
     }
     if (!formData.file) {
-      toast.error("Upload an SVG file");
+      // toast.error("Upload an SVG file");
       return;
     }
     if (!formData.layoutName.trim()) {
-      toast.error("Enter a layout name");
+      // toast.error("Enter a layout name");
       return;
     }
 
@@ -443,14 +450,28 @@ export default function LayoutForm({ formData, setFormData }: Props) {
           >
             Cancel
           </button>
-          <button
+          {/* <button
             type="button"
             onClick={handleSubmit}
             disabled={isSubmitting}
             className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm disabled:opacity-60 hover:bg-indigo-700 transition-colors"
           >
             {isSubmitting ? "Saving…" : "Save as Draft"}
-          </button>
+          </button> */}
+
+          <button
+  type="button"
+  onClick={handleSubmit}
+  disabled={isSubmitting || !isFormValid}
+  className={`px-4 py-2 rounded-md text-sm transition-colors text-white
+    ${
+      isFormValid
+        ? "bg-indigo-600 hover:bg-indigo-700"
+        : "bg-gray-300 cursor-not-allowed opacity-60"
+    }`}
+>
+  {isSubmitting ? "Saving…" : "Save as Draft"}
+</button>
         </div>
 
       </CardContent>

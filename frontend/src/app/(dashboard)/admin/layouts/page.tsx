@@ -1,7 +1,7 @@
 
 "use client";
 
-import AdminTopbar from "@/features/admin/components/AdminTopbar";
+// import AdminTopbar from "@/features/admin/components/AdminTopbar";
 import FloorTree from "@/features/adminlayouts1/components/FloorTree";
 import LayoutTable from "@/features/adminlayouts1/components/LayoutTable";
 import { getLayoutsByFloor } from "@/features/adminlayouts1/services/locationService";
@@ -40,7 +40,7 @@ export default function FloorLayoutsPage() {
 
   return (
     <>
-      <AdminTopbar />
+      {/* <AdminTopbar /> */}
       <main className="flex-1 bg-[#f8fafc] p-6 space-y-6 overflow-y-auto">
         <div className="flex items-center justify-between">
           <div>

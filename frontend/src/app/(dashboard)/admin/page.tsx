@@ -1,6 +1,6 @@
 "use client";
 
-import AdminTopbar from "@/features/admin/components/AdminTopbar";
+// import AdminTopbar from "@/features/admin/components/AdminTopbar";
 import AdminHeader from "@/features/admin/components/AdminHeader";
 import AdminStats from "@/features/admin/components/AdminStats";
 import AdminCharts from "@/features/admin/components/AdminCharts";
@@ -24,7 +24,7 @@ const [selectedDate, setSelectedDate] = useState(getLocalDate());
   const { statsData, loading, error ,buildings, trendData , selectedWeek, setSelectedWeek, topOffices,recentBookings, } = useAdminDashboard(selectedDate);
   return (
     <>
-      <AdminTopbar />
+      {/* <AdminTopbar /> */}
       <main className="flex-1 bg-gray-50 p-6 space-y-6 overflow-y-auto">
         <AdminHeader 
         selectedDate={selectedDate}
