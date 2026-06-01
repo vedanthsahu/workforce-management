@@ -8,7 +8,7 @@ import Pagination from "./Pagination";
 export default function BuildingTable({ data }: { data: Building[] }) {
   const [currentPage, setCurrentPage] = useState(1);
 
-  const itemsPerPage = 3; // ✅ IMPORTANT (so pagination shows)
+  const itemsPerPage = 3; //  IMPORTANT (so pagination shows)
   const totalPages = Math.ceil(data.length / itemsPerPage);
 
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -22,9 +22,9 @@ export default function BuildingTable({ data }: { data: Building[] }) {
         <h3 className="text-lg font-semibold">Buildings List</h3>
 
         <div className="flex gap-3 items-center">
-          <select className="border rounded-lg px-3 py-2 text-sm">
+          {/* <select className="border rounded-lg px-3 py-2 text-sm">
             <option>All Sites</option>
-          </select>
+          </select> */}
 
           <div className="relative">
             <Search className="absolute left-2 top-2.5 w-4 h-4 text-gray-400" />
@@ -33,11 +33,11 @@ export default function BuildingTable({ data }: { data: Building[] }) {
               className="border rounded-lg pl-8 pr-3 py-2 text-sm"
             />
           </div>
-
+{/* 
           <button className="flex items-center gap-2 border px-3 py-2 rounded-lg text-sm">
             <Filter className="w-4 h-4" />
             Filters
-          </button>
+          </button> */}
         </div>
       </div>
 
@@ -50,7 +50,7 @@ export default function BuildingTable({ data }: { data: Building[] }) {
     <th className="text-left py-3 px-5">Address</th>
     <th className="text-left py-3 px-5">Capacity (Seats)</th>
     <th className="text-left py-3 px-5">Status</th>
-    <th className="text-left py-3 px-5">Created On</th>
+    
     <th className="text-center py-3 px-5">Actions</th>
   </tr>
 </thead>
@@ -80,7 +80,7 @@ export default function BuildingTable({ data }: { data: Building[] }) {
         </span>
       </td>
 
-      <td className="px-5">{item.createdOn}</td>
+     
 
       <td className="px-5 text-center">
         <div className="flex justify-center gap-2">
@@ -88,9 +88,7 @@ export default function BuildingTable({ data }: { data: Building[] }) {
             <Pencil className="w-4 h-4 text-blue-600" />
           </button>
 
-          <button className="p-2 border rounded-lg hover:bg-red-50">
-            <Trash2 className="w-4 h-4 text-red-600" />
-          </button>
+          
         </div>
       </td>
 

@@ -14,7 +14,7 @@ import LayoutPreview      from "@/features/managelayout/components/LayoutPreview
 import LayoutSidebar      from "@/features/managelayout/components/LayoutSidebar";
 import ManageLayoutHeader from "@/features/managelayout/components/ManageLayoutHeader";
 import LayoutFilters      from "@/features/managelayout/components/LayoutFilters";
-import AdminTopbar        from "@/features/admin/components/AdminTopbar";
+// import AdminTopbar        from "@/features/admin/components/AdminTopbar";
 import LayoutStatCards    from "@/features/managelayout/components/Layoutstatcards";
 
 export default function ManageLayoutPage() {
@@ -55,7 +55,7 @@ export default function ManageLayoutPage() {
     <div className="flex h-screen w-full">
       <div className="flex flex-col flex-1 min-w-0">
 
-        <AdminTopbar />
+        {/* <AdminTopbar /> */}
 
         <main className="flex-1 bg-gray-50 p-6 space-y-5 overflow-y-auto">
 

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import AdminTopbar from "@/features/admin/components/AdminTopbar";
+// import AdminTopbar from "@/features/admin/components/AdminTopbar";
 import LayoutForm from "@/features/uploadlayouts/components/LayoutForm";
 import LayoutGuidelines from "@/features/uploadlayouts/components/LayoutGuidelines";
 import LayoutSummary from "@/features/uploadlayouts/components/LayoutSummary";
@@ -15,7 +15,7 @@ export default function UploadLayoutPage() {
 
   return (
     <>
-      <AdminTopbar />
+      {/* <AdminTopbar /> */}
       <main className="flex-1 p-6 bg-gray-50 space-y-6 overflow-y-auto">
         <div className="flex justify-between items-center">
           <div>
