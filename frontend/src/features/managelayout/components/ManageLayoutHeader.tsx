@@ -591,15 +591,8 @@ export default function ManageLayoutHeader({
           Upload New Layout
         </button>
 
-        {showPublishButton && (
+        {/* {showPublishButton && (
           <div className="flex items-center gap-2">
-
-            {/* Warn when seats exist but some are unconfigured */}
-            {/* {!allConfigured && stats && stats.total_seats > 0 && (
-              <span className="text-xs text-amber-600 font-medium whitespace-nowrap">
-                {unconfiguredCount} seat{unconfiguredCount !== 1 ? "s" : ""} unconfigured
-              </span>
-            )} */}
 
             {publishError && (
               <span className="text-xs text-red-500 font-medium whitespace-nowrap">
@@ -622,7 +615,7 @@ export default function ManageLayoutHeader({
             </button>
 
           </div>
-        )}
+        )} */}
       </div>
     </div>
   );
