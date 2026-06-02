@@ -50,7 +50,7 @@ const filteredOffices = offices.filter((o: any) => {
   return query.length === 0;
 });
 
-const itemsPerPage = 5;
+const itemsPerPage = 10;
 
 const totalPages = Math.ceil(
   filteredOffices.length / itemsPerPage

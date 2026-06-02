@@ -23,9 +23,14 @@ type Props = {
     buildingName: string;
     floorName: string;
   }) => void;
+  initialSiteId?: string;
+  initialBuildingId?: string;
+  initialFloorId?: string;
 };
 
-export default function FloorTree({ onSelect }: Props) {
+export default function FloorTree({ onSelect, initialSiteId,
+  initialBuildingId,
+  initialFloorId, }: Props) {
   const [expandedOffice, setExpandedOffice] = useState<string | null>(null);
   const [expandedTower, setExpandedTower] = useState<string | null>(null);
   const [selectedFloor, setSelectedFloor] = useState<string>("");
@@ -39,7 +44,33 @@ export default function FloorTree({ onSelect }: Props) {
 //  useEffect(() => {
 //   loadSites();
 // }, []);
+useEffect(() => {
+  if (!initialSiteId) return;
 
+  const expandTree = async () => {
+    setExpandedOffice(initialSiteId);
+    setExpandedTower(initialBuildingId || null);
+    setSelectedFloor(initialFloorId || "");
+
+    const blds = await getBuildings(initialSiteId);
+
+    setBuildings((prev) => ({
+      ...prev,
+      [initialSiteId]: blds,
+    }));
+
+    if (initialBuildingId) {
+      const flrs = await getFloors(initialBuildingId);
+
+      setFloors((prev) => ({
+        ...prev,
+        [initialBuildingId]: flrs,
+      }));
+    }
+  };
+
+  expandTree();
+}, [initialSiteId]);
 const loadSites = async () => {
   const data = await getSites();
   console.log("SITES API RESPONSE:", data); // ADD THIS
