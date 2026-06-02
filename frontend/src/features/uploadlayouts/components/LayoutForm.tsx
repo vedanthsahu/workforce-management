@@ -97,33 +97,7 @@ export default function LayoutForm({ formData, setFormData }: Props) {
     }
   }, [formData.building]);
 
-  // ── File handling ────────────────────────────────────────────────────────
-
-  // const handleFileChange = async (file: File) => {
-  //   if (file.type !== "image/svg+xml") {
-  //     toast.error("Only SVG files are allowed");
-  //     return;
-  //   }
-  //   if (file.size > 10 * 1024 * 1024) {
-  //     toast.error("Maximum file size is 10 MB");
-  //     return;
-  //   }
-
-  //   setFormData({ ...formData, file });
-  //   setSeatCount(null);
-
-  //   // Count seats asynchronously so UI stays responsive
-  //   setCountingSeats(true);
-  //   try {
-  //     const count = await countSeatsInSvgFile(file);
-  //     setSeatCount(count);
-  //   } catch (err) {
-  //     console.warn("[LayoutForm] Could not count seats:", err);
-  //   } finally {
-  //     setCountingSeats(false);
-  //   }
-  // };
-  
+  // ── Form handling ────────────────────────────────────────────────────────
 const isFormValid =
   !!formData.site &&
   !!formData.building &&
@@ -443,13 +417,13 @@ const isFormValid =
 
         {/* BUTTONS */}
         <div className="flex justify-end gap-3 pt-2">
-          <button
+          {/* <button
             type="button"
             onClick={resetForm}
             className="px-4 py-2 border rounded-md text-sm hover:bg-gray-50 transition-colors"
           >
             Cancel
-          </button>
+          </button> */}
           {/* <button
             type="button"
             onClick={handleSubmit}
