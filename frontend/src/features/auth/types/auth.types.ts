@@ -30,6 +30,7 @@ export interface User {
   permissions?:     string[];
   favorite_seat?:   FavoriteSeatResponse | null;
   days_in_office?:  number;
+   avatar_url?:  string;
 }
 
 export function getInitials(name: string): string {

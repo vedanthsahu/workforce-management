@@ -1,13 +1,13 @@
 
 "use client";
 
-import AdminTopbar from "@/features/admin/components/AdminTopbar";
+// import AdminTopbar from "@/features/admin/components/AdminTopbar";
 import FloorTree from "@/features/adminlayouts1/components/FloorTree";
 import LayoutTable from "@/features/adminlayouts1/components/LayoutTable";
 import { getLayoutsByFloor } from "@/features/adminlayouts1/services/locationService";
 import { useLayoutSelection } from "@/features/adminlayouts1/hooks/useLayoutSelection";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Toaster , toast } from "sonner";
 
 
@@ -15,6 +15,14 @@ export default function FloorLayoutsPage() {
   const { selection, setSelection } = useLayoutSelection();
   const [layouts, setLayouts] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+  const saved = localStorage.getItem("selectedLayoutFloor");
+
+  if (saved) {
+    setSelection(JSON.parse(saved));
+  }
+}, []);
 
   const handleRefresh = () => {
   setRefreshKey((prev) => prev + 1);
@@ -40,7 +48,7 @@ export default function FloorLayoutsPage() {
 
   return (
     <>
-      <AdminTopbar />
+      {/* <AdminTopbar /> */}
       <main className="flex-1 bg-[#f8fafc] p-6 space-y-6 overflow-y-auto">
         <div className="flex items-center justify-between">
           <div>

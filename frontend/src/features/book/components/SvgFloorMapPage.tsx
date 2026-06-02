@@ -1,6 +1,3 @@
-
-
-
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { Seat } from "../types/Bookingform.types";

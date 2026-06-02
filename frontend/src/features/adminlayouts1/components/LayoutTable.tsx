@@ -64,8 +64,18 @@ const handleDownloadSvg = () => {
   }
 };
 
+// const handleManage = (row: any) => {
+//   router.push(`/admin/layouts/manage-layout`);
+// };
+
 const handleManage = (row: any) => {
-  router.push(`/admin/layouts/manage-layout`);
+  const params = new URLSearchParams({
+    layoutId: row.layout_id,
+    floorId: String(row.floor_id),       // include if LayoutApiResponse has it
+    buildingId: String(row.building_id), // include if available
+    siteId: String(row.site_id),         // include if available
+  });
+  router.push(`/admin/layouts/manage-layout?${params.toString()}`);
 };
 
   useEffect(() => {
