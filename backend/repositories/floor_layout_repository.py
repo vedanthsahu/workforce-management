@@ -471,23 +471,6 @@ def sync_published_layout_seats(
             ),
         )
 
-        cur.execute(
-            """
-            UPDATE seats
-            SET
-                status = 'ACTIVE',
-                updated_at = NOW()
-            WHERE tenant_id = %s
-              AND floor_id = %s
-              AND layout_id = %s
-            """,
-            (
-                tenant_id,
-                floor_id,
-                layout_id,
-            ),
-        )
-
 def publish_layout_seat_configurations(
     conn: PGConnection,
     *,

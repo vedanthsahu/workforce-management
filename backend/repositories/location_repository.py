@@ -94,6 +94,7 @@ def fetch_buildings_by_site(
         SELECT
             b.id::text AS building_id,
             b.site_id::text AS site_id,
+            s.site_name,
             b.building_code,
             b.building_name,
             b.status,
@@ -1260,7 +1261,7 @@ def fetch_seats_by_floor(
             )
             SELECT
                 id::text AS seat_id,
-                code,
+                code AS seat_code,
                 x,
                 y,
                 w,
