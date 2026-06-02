@@ -1,8 +1,7 @@
 
-
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Office,
   UpdateOfficePayload,
@@ -28,17 +27,30 @@ export default function EditOfficeModal({
 
   const [loading, setLoading] = useState(false);
 
-  const [formData, setFormData] =
-    useState<UpdateOfficePayload>({
-      site_name: office.site_name,
-      city: office.city,
-      country: office.country,
-      timezone: office.timezone,
-      address_line1: office.address_line1,
-      address_line2: office.address_line2,
-      status: office.status,
-    });
+ const [formData, setFormData] =
+  useState<UpdateOfficePayload>({
+    site_name: "",
+    city: "",
+    country: "",
+    timezone: "",
+    address_line1: "",
+    address_line2: "",
+    status: "ACTIVE",
+  });
 
+useEffect(() => {
+  if (office) {
+    setFormData({
+      site_name: office.site_name || "",
+      city: office.city || "",
+      country: office.country || "",
+      timezone: office.timezone || "",
+      address_line1: office.address_line1 || "",
+      address_line2: office.address_line2 || "",
+      status: office.status || "ACTIVE",
+    });
+  }
+}, [office]);
   // 🔹 INPUT CHANGE
   const handleChange = (
     e: React.ChangeEvent<
@@ -120,7 +132,7 @@ export default function EditOfficeModal({
 
               <input
                 name="site_name"
-                value={formData.site_name}
+                value={formData.site_name || ""}
                 onChange={handleChange}
                 className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Enter office name"
@@ -135,7 +147,7 @@ export default function EditOfficeModal({
 
               <input
                 name="city"
-                value={formData.city}
+                value={formData.city || ""}
                 onChange={handleChange}
                 className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Enter city"
@@ -143,7 +155,7 @@ export default function EditOfficeModal({
             </div>
 
             {/* COUNTRY */}
-            <div className="space-y-2">
+            {/* <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">
                 Country
               </label>
@@ -155,27 +167,27 @@ export default function EditOfficeModal({
                 className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Enter country"
               />
-            </div>
+            </div> */}
 
             {/* TIMEZONE */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">
-                Timezone
-              </label>
+            {/* <div className="space-y-2">
+             <label className="text-sm font-medium text-gray-700">
+               Timezone
+            </label>
 
-              <input
-                name="timezone"
-                value={formData.timezone}
+               <input
+                 name="timezone"
+                 value={formData.timezone}
                 onChange={handleChange}
-                className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter timezone"
-              />
-            </div>
+                 className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                 placeholder="Enter timezone"
+               />
+            </div> */}
 
           </div>
 
           {/* ADDRESS */}
-          <div className="space-y-2">
+          {/* <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700">
               Address Line 1
             </label>
@@ -187,7 +199,7 @@ export default function EditOfficeModal({
               className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Enter address"
             />
-          </div>
+          </div> */}
 
           {/* STATUS */}
           <div className="space-y-2">
@@ -197,7 +209,8 @@ export default function EditOfficeModal({
 
             <select
               name="status"
-              value={formData.status}
+              // value={formData.status}
+              value={formData.status || "ACTIVE"}
               onChange={handleChange}
               className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >

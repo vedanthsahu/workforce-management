@@ -55,7 +55,7 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
     return <div className="p-4">Loading charts...</div>;
   }
 
-  // ✅BACKEND DATA
+  // BACKEND DATA
   const totalSeats = data.total_seats;
   const booked = data.booked_today;
   const available = totalSeats - booked;

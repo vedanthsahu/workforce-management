@@ -54,6 +54,7 @@ import {
   CreateOfficePayload,
 } from "../types/office.types";
 
+
 export const officeService = {
   // GET ALL SITES
   async getSites(params?: {
@@ -78,8 +79,23 @@ export const officeService = {
       payload
     );
 
+
     return data;
   },
+
+  // CREATE SITE
+  // async createSite(
+  //   payload: CreateOfficePayload
+  // ) {
+  //   const { data } = await axiosInstance.post(
+  //     "/sites",
+  //     payload
+  //   );
+
+  //   return data;
+  // },
+
+  
 
   // UPDATE SITE
   async updateSite(
