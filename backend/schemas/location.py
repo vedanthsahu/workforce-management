@@ -139,6 +139,7 @@ class BuildingResponse(BaseModel):
 
     building_id: str
     site_id: str
+    site_name: str
     building_code: str
     building_name: str
     status: str | None = None
@@ -324,7 +325,7 @@ class LayoutSeatConfigurationResponse(BaseModel):
 
     layout_seat_mapping_id: str
 
-    seat_id: str
+    seat_id: str | None = None
 
     layout_id: str
 

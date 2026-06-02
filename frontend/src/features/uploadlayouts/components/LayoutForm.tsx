@@ -433,7 +433,20 @@ const isFormValid =
             {isSubmitting ? "Saving…" : "Save as Draft"}
           </button> */}
 
-          <button
+          {/* <button
+  type="button"
+  onClick={handleSubmit}
+  disabled={isSubmitting || !isFormValid}
+  className={`px-4 py-2 rounded-md text-sm transition-colors text-white
+    ${
+      isFormValid
+        ? "bg-indigo-600 hover:bg-indigo-700"
+        : "bg-gray-300 cursor-not-allowed opacity-60"
+    }`}
+>
+  {isSubmitting ? "Saving…" : "Save as Draft"}
+</button>*/}
+ <button 
   type="button"
   onClick={handleSubmit}
   disabled={isSubmitting || !isFormValid}

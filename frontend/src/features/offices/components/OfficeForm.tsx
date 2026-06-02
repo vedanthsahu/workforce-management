@@ -8,8 +8,7 @@ import useCreateSite from "../hooks/useCreateSite";
 
 export default function OfficeForm() {
   const router = useRouter();
-  // const timezones = Intl.supportedValuesOf("timeZone");
-  // console.log(timezones.includes("Asia/Kolkata"));
+  
 
   const timezones = [
   "Asia/Kolkata",

@@ -25,6 +25,7 @@ class CamelModel(BaseModel):
 
 class AdminDashboardSummaryResponse(BaseModel):
     total_offices: int = 0
+    total_buildings : int = 0
     total_floors: int = 0
     total_seats: int = 0
 
