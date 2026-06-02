@@ -42,7 +42,7 @@ export default function FloorTree({ onSelect }: Props) {
 
 const loadSites = async () => {
   const data = await getSites();
-  console.log("SITES API RESPONSE:", data); // 👈 ADD THIS
+  console.log("SITES API RESPONSE:", data); // ADD THIS
   setSites(data);
 };
 
@@ -91,11 +91,11 @@ useEffect(() => {
 
       if (!match) return;
 
-      // 🔥 expand tree
+      // expand tree
       setExpandedOffice(match.siteId);
       setExpandedTower(match.buildingId);
 
-      // 🔥 load UI data if not present
+      // load UI data if not present
       if (!buildings[match.siteId]) {
         const blds = await getBuildings(match.siteId);
         setBuildings((prev) => ({
@@ -112,10 +112,10 @@ useEffect(() => {
         }));
       }
 
-      // 🔥 highlight
+      //  highlight
       setSelectedFloor(match.floor_id);
 
-      // 🔥 trigger parent (VERY IMPORTANT)
+      // trigger parent (VERY IMPORTANT)
       onSelect({
         siteId: match.siteId,
         buildingId: match.buildingId,

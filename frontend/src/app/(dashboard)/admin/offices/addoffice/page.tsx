@@ -1,0 +1,9 @@
+import OfficeForm from "@/features/offices/components/OfficeForm";
+
+export default function AddOfficePage() {
+  return (
+    <div className="p-6">
+      <OfficeForm />
+    </div>
+  );
+}

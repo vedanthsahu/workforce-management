@@ -25,17 +25,29 @@ class CamelModel(BaseModel):
 
 class AdminDashboardSummaryResponse(BaseModel):
     total_offices: int = 0
+    total_buildings : int = 0
     total_floors: int = 0
     total_seats: int = 0
 
     booked_today: int = 0
     blocked_seats: int = 0
+    booked_seats_today: int = 0
+    blocked_seats_today: int = 0
 
     occupancy_percentage: float = 0.0
 
     total_bookings: int = 0
     unique_users_booked: int = 0
     booking_utilization_percentage: float = 0.0
+
+    active_sites: int = 0
+    inactive_sites: int = 0
+    active_buildings: int = 0
+    inactive_buildings: int = 0
+    active_floors: int = 0
+    inactive_floors: int = 0
+    active_seats: int = 0
+    inactive_seats: int = 0
 
 
 class AdminBookingListQuery(CamelModel):

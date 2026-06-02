@@ -6,7 +6,7 @@ from typing import Any, Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from psycopg2.extensions import connection as PGConnection
-from backend.services.auth_service import logout_user_session
+from backend.services.auth_service import get_auth_me_payload, logout_user_session
 from backend.api.deps import get_current_user
 from backend.core.config import get_settings
 from backend.core.security import (
@@ -66,10 +66,15 @@ def refresh_token(
 
 
 @router.get("/auth/me", response_model=UserResponse)
-def me(current_user: Annotated[dict[str, Any], Depends(get_current_user)]) -> UserResponse:
+def me(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> UserResponse:
     """Return the user represented by the backend access token."""
-    """Return the user represented by the backend access token."""
-    return UserResponse(**current_user)
+    return get_auth_me_payload(
+        conn,
+        current_user=current_user,
+    )
 
 
 def _set_auth_cookies(response: Response, auth_tokens: AuthTokens) -> None:

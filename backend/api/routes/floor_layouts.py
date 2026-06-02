@@ -22,13 +22,17 @@ from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import require_permission
 from backend.db.connection import get_db
+
 from backend.schemas.floor_layout import (
     CreateFloorLayoutRequest,
     FloorLayoutResponse,
+    LayoutSeatListResponse,
 )
+
 from backend.services.floor_layout_service import (
     activate_floor_layout,
     create_floor_layout,
+    get_floor_layout_seats,
     get_floor_layouts_by_floor,
 )
 router = APIRouter(
@@ -58,16 +62,19 @@ def create_floor_layout_route(
     layout_name: str = Form(min_length=1, max_length=255),
     status: str = Form(pattern="^(DRAFT|PUBLISHED)$"),
     layout_metadata: str | None = Form(default=None),
+    seat_ids: list[str] = Form(...),
 ) -> FloorLayoutResponse:
 
     payload = CreateFloorLayoutRequest(
-        site_id=site_id,
-        building_id=building_id,
-        floor_id=floor_id,
-        layout_name=layout_name,
-        status=status,
-        layout_metadata=_parse_layout_metadata(layout_metadata),
+    site_id=site_id,
+    building_id=building_id,
+    floor_id=floor_id,
+    layout_name=layout_name,
+    status=status,
+    layout_metadata=_parse_layout_metadata(layout_metadata),
+    seat_ids=_normalize_seat_ids(seat_ids),
     )
+
 
     return create_floor_layout(
         conn,
@@ -124,6 +131,31 @@ def activate_floor_layout_route(
         background_tasks=background_tasks,
     )
 
+@router.get(
+    "/{layout_id}/seats",
+    response_model=LayoutSeatListResponse,
+)
+def get_floor_layout_seats_route(
+
+    layout_id: Annotated[int, Path(gt=0)],
+
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_permission("layout:upload")),
+    ],
+
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+
+) -> LayoutSeatListResponse:
+
+    return get_floor_layout_seats(
+        conn,
+        current_user=current_user,
+        layout_id=str(layout_id),
+    )
 
 def _parse_layout_metadata(
     layout_metadata: str | None,
@@ -152,3 +184,55 @@ def _parse_layout_metadata(
         )
 
     return parsed_metadata
+
+
+def _normalize_seat_ids(
+    seat_ids: list[str],
+) -> list[str]:
+
+    normalized: list[str] = []
+
+    seen: set[str] = set()
+
+    expanded_seat_ids: list[str] = []
+
+    for raw_value in seat_ids:
+
+        split_values = str(raw_value).split(",")
+
+        for split_value in split_values:
+            expanded_seat_ids.append(split_value)
+
+    print("DEBUG_EXPANDED_SEAT_IDS", expanded_seat_ids)
+
+    for raw_value in expanded_seat_ids:
+
+        candidate = str(raw_value or "").strip()
+
+        if not candidate:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "invalid_seat_id",
+                    "message": "Seat IDs cannot be empty.",
+                },
+            )
+
+        normalized_candidate = candidate.upper()
+
+        if normalized_candidate in seen:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "duplicate_seat_id",
+                    "message": f"Duplicate seat ID detected: {normalized_candidate}",
+                },
+            )
+
+        seen.add(normalized_candidate)
+
+        normalized.append(normalized_candidate)
+
+    print("DEBUG_NORMALIZED_SEAT_IDS", normalized)
+
+    return normalized

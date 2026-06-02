@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from backend.repositories.dashboard_repository import (
     fetch_admin_booking_list,
+    fetch_admin_dashboard_summary,
     fetch_date_range_occupancy,
 )
 
@@ -50,6 +51,48 @@ class FakeConnection:
 
 
 class AdminDashboardRepositoryTests(unittest.TestCase):
+    def test_summary_query_preserves_existing_fields_and_adds_status_metrics(self) -> None:
+        cursor = FakeCursor(
+            fetchone_values=[
+                {
+                    "total_offices": 1,
+                    "total_floors": 2,
+                    "total_seats": 10,
+                    "booked_today": 3,
+                    "blocked_seats": 1,
+                    "booked_seats_today": 3,
+                    "blocked_seats_today": 1,
+                    "active_sites": 1,
+                    "inactive_sites": 0,
+                    "active_buildings": 1,
+                    "inactive_buildings": 0,
+                    "active_floors": 2,
+                    "inactive_floors": 0,
+                    "active_seats": 10,
+                    "inactive_seats": 1,
+                }
+            ],
+        )
+        conn = FakeConnection(cursor)
+
+        result = fetch_admin_dashboard_summary(
+            conn,
+            tenant_id="1",
+            selected_date=date(2026, 5, 22),
+            site_id="2",
+            floor_id="4",
+        )
+
+        sql = cursor.executions[0][0]
+        params = cursor.executions[0][1]
+        self.assertIn("active_sites", sql)
+        self.assertIn("inactive_buildings", sql)
+        self.assertIn("booked_seats_count AS booked_seats_today", sql)
+        self.assertIn("blocked_seats AS blocked_seats_today", sql)
+        self.assertEqual(params["tenant_id"], "1")
+        self.assertEqual(result["booked_today"], 3)
+        self.assertEqual(result["active_seats"], 10)
+
     def test_booking_list_query_is_tenant_scoped_and_paginated(self) -> None:
         cursor = FakeCursor(
             fetchone_values=[{"total": 0}],
