@@ -300,13 +300,14 @@ export function useBookingForm() {
       setLoadingSeats(true);
       const amenityIds = resolveAmenityIds(form.preferences);
       fetchSeatsWithAvailability({
-        floorId:       form.floorId,
-        fromDate:      form.fromDate,
-        toDate:        form.toDate,
-        preferences:   form.preferences,
+        floorId:         form.floorId,
+        fromDate:        form.fromDate,
+        toDate:          form.toDate,
+        preferences:     form.preferences,
         amenityIds,
-        currentSeatId: searchParams.get("seatId") ?? undefined,
-      })
+        currentSeatId:   searchParams.get("seatId") ?? undefined,
+        modifyBookingId: modifyBookingId ?? null,
+      } as any)
         .then(setSeats)
         .catch((e) => setError(e.message))
         .finally(() => setLoadingSeats(false));
@@ -366,13 +367,14 @@ export function useBookingForm() {
     try {
       const amenityIds = resolveAmenityIds(form.preferences);
       const data = await fetchSeatsWithAvailability({
-        floorId:       form.floorId,
-        fromDate:      form.fromDate,
-        toDate:        form.toDate,
-        preferences:   form.preferences,
+        floorId:         form.floorId,
+        fromDate:        form.fromDate,
+        toDate:          form.toDate,
+        preferences:     form.preferences,
         amenityIds,
-        currentSeatId: searchParams.get("seatId") ?? undefined,
-      });
+        currentSeatId:   searchParams.get("seatId") ?? undefined,
+        modifyBookingId: modifyBookingId ?? null,
+      } as any);
       setSeats(data);
       navigateTo(2, form);
     } catch (e: any) {
@@ -385,7 +387,7 @@ export function useBookingForm() {
     } finally {
       setLoadingSeats(false);
     }
-  }, [form, resolveAmenityIds, navigateTo, searchParams]);
+  }, [form, resolveAmenityIds, navigateTo, searchParams, modifyBookingId]);
 
   // ── Step 2: select seat ───────────────────────────────────────────────────
 
