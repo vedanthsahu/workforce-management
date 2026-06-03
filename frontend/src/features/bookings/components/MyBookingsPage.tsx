@@ -236,7 +236,27 @@ const BookingCard: React.FC<BookingCardProps> = ({
         </div>
       </div>
 
-      {/* Action footer */}
+      {/* ── Cancelled badge — renders instantly when status flips ── */}
+      {isCancelled && (
+        <div className="flex justify-end px-5 py-2.5 border-t border-gray-100 bg-[#F7F8FC]">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-semibold bg-red-50 text-red-500 border border-red-200">
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M15 9l-6 6M9 9l6 6" strokeLinecap="round" />
+            </svg>
+            Cancelled
+          </span>
+        </div>
+      )}
+
+      {/* ── Action footer — only for non-cancelled bookings ── */}
       {showActions && !isCancelled && (
         <div className="flex justify-end gap-2 px-5 py-2.5 border-t border-gray-100 bg-[#F7F8FC]">
           <Button
@@ -369,9 +389,6 @@ const MyBookingsPage: React.FC = () => {
   };
 
   const handleModify = (booking: Booking) => {
-    // If the booking has real preference keys from the API, use those directly.
-    // Otherwise pass fallback preference NAMES so useBookingForm can resolve
-    // them to real keys once the /preferences API responds.
     const hasRealPrefs = (booking.preferences ?? []).length > 0;
 
     const params = new URLSearchParams({
@@ -386,10 +403,8 @@ const MyBookingsPage: React.FC = () => {
     });
 
     if (hasRealPrefs) {
-      // Real keys from the API — pass as-is
       params.set("preferences", booking.preferences!.join(","));
     } else {
-      // No preference data from API — pass fallback names for resolution
       params.set("preferenceNames", FALLBACK_PREFERENCE_NAMES.join(","));
     }
 
@@ -497,13 +512,7 @@ const MyBookingsPage: React.FC = () => {
               </div>
             )}
 
-            {!isLoading && !error && displayedBookings.length === 0 && (
-              <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
-                No {activeTab} bookings found.
-              </div>
-            )}
-
-            {/* Upcoming tab */}
+            {/* ── Upcoming tab ── */}
             {!isLoading && !error && activeTab === "upcoming" && (
               <>
                 {upcomingCards.length > 0 ? (
@@ -517,8 +526,9 @@ const MyBookingsPage: React.FC = () => {
                     />
                   ))
                 ) : (
+                  // ✅ Single empty state — only shown when there are truly no upcoming cards
                   <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
-                    No upcoming bookings.
+                    No upcoming bookings found.
                   </div>
                 )}
 
@@ -541,18 +551,26 @@ const MyBookingsPage: React.FC = () => {
               </>
             )}
 
-            {/* All other tabs */}
-            {!isLoading && !error && activeTab !== "upcoming" &&
-              sortedDisplayed.map((booking) => (
-                <BookingCard
-                  key={booking.id}
-                  booking={booking}
-                  onCancelClick={setCancelTarget}
-                  onModifyClick={handleModify}
-                  showActions={activeTab !== "past"}
-                />
-              ))
-            }
+            {/* ── Past & Cancelled tabs ── */}
+            {!isLoading && !error && activeTab !== "upcoming" && (
+              sortedDisplayed.length === 0 ? (
+                // ✅ Single empty state per tab — no duplicate
+                <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
+                  No {activeTab} bookings found.
+                </div>
+              ) : (
+                sortedDisplayed.map((booking) => (
+                  <BookingCard
+                    key={booking.id}
+                    booking={booking}
+                    onCancelClick={setCancelTarget}
+                    onModifyClick={handleModify}
+                    showActions={activeTab !== "past" && activeTab !== "cancelled"}
+                  />
+                ))
+              )
+            )}
+
           </div>
         </main>
       </div>

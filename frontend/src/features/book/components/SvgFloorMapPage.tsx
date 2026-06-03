@@ -808,17 +808,17 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
             <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
               <span className="w-2.5 h-2.5 rounded-full inline-block bg-amber-400 ring-1 ring-amber-500" />
               Best Match
-              {bestMatchCount > 0 && (
+              {/* {bestMatchCount > 0 && (
                 <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-semibold">{bestMatchCount}</span>
-              )}
+              )} */}
             </span>
           )}
           <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
             <span className="w-2.5 h-2.5 rounded-full inline-block bg-emerald-500" />
             Available
-            {availableCount > 0 && (
+            {/* {availableCount > 0 && (
               <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">{availableCount}</span>
-            )}
+            )} */}
           </span>
           {hasPreferences && partialMatchCount > 0 && (
             <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
@@ -827,7 +827,7 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
                 <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 border border-white" />
               </span>
               Partial Match
-              <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">{partialMatchCount}</span>
+              {/* <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">{partialMatchCount}</span> */}
             </span>
           )}
           <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">

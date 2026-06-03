@@ -740,6 +740,44 @@ function getSeatIdFromClick(target: EventTarget | null, knownIds: Set<string>): 
   return null;
 }
 
+// function colorSeats(svgText: string, seats: Seat[], filteredIds?: Set<string>): string {
+//   let result = svgText;
+//   const hasFilter = filteredIds !== undefined && filteredIds.size !== seats.length;
+
+//   seats.forEach((seat) => {
+//     const id = seat.seat_svg_id;
+//     let fill: string;
+
+//     if (hasFilter && filteredIds!.has(id)) {
+//       fill = "#FEF9C3"; // light yellow for filtered/matching seats
+//     } else if (hasFilter && !filteredIds!.has(id)) {
+//       // non-matching seats keep normal colors
+//       if (!seat.is_configured) {
+//         fill = "#D1D5DB";
+//       } else if (!seat.is_bookable) {
+//         fill = "#EF4444";
+//       } else {
+//         fill = "#22C55E";
+//       }
+//     } else if (!seat.is_configured) {
+//       fill = "#D1D5DB";
+//     } else if (!seat.is_bookable) {
+//       fill = "#EF4444";
+//     } else {
+//       fill = "#22C55E";
+//     }
+
+//     const groupRegex = new RegExp(`(<g[^>]*id="${id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "m");
+//     result = result.replace(groupRegex, (match, open, inner, close) => {
+//       const colored = inner
+//         .replace(/fill="[^"]*"/g, `fill="${fill}"`)
+//         .replace(/fill:[^;"}]*/g, `fill:${fill}`);
+//       return `${open}${colored}${close}`;
+//     });
+//   });
+//   return result;
+// }
+
 function colorSeats(svgText: string, seats: Seat[], filteredIds?: Set<string>): string {
   let result = svgText;
   const hasFilter = filteredIds !== undefined && filteredIds.size !== seats.length;
@@ -749,32 +787,37 @@ function colorSeats(svgText: string, seats: Seat[], filteredIds?: Set<string>): 
     let fill: string;
 
     if (hasFilter && filteredIds!.has(id)) {
-      fill = "#FEF9C3"; // light yellow for filtered/matching seats
+      fill = "#FEF9C3"; // Highlight matching seats
     } else if (hasFilter && !filteredIds!.has(id)) {
-      // non-matching seats keep normal colors
       if (!seat.is_configured) {
-        fill = "#D1D5DB";
-      } else if (!seat.is_bookable) {
-        fill = "#EF4444";
+        fill = "#D1D5DB"; // Gray
+      } else if (seat.status === "INACTIVE") {
+        fill = "#EF4444"; // Red
       } else {
-        fill = "#22C55E";
+        fill = "#22C55E"; // Green
       }
     } else if (!seat.is_configured) {
-      fill = "#D1D5DB";
-    } else if (!seat.is_bookable) {
-      fill = "#EF4444";
+      fill = "#D1D5DB"; // Gray
+    } else if (seat.status === "INACTIVE") {
+      fill = "#EF4444"; // Red
     } else {
-      fill = "#22C55E";
+      fill = "#22C55E"; // Green
     }
 
-    const groupRegex = new RegExp(`(<g[^>]*id="${id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "m");
+    const groupRegex = new RegExp(
+      `(<g[^>]*id="${id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`,
+      "m"
+    );
+
     result = result.replace(groupRegex, (match, open, inner, close) => {
       const colored = inner
         .replace(/fill="[^"]*"/g, `fill="${fill}"`)
         .replace(/fill:[^;"}]*/g, `fill:${fill}`);
+
       return `${open}${colored}${close}`;
     });
   });
+
   return result;
 }
 

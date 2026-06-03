@@ -1275,6 +1275,10 @@ export default function ManageSeatsPage() {
     layout,
     layoutLoading,
     layoutError,
+     siteId,
+  buildingId,
+  floorId,
+  layoutId,
     stats,
     statsLoading,
     seats,
@@ -1311,7 +1315,10 @@ const {
   layout,
   stats,
    () => {
-    router.push("/admin/layouts");
+    // router.push("/admin/layouts");
+     router.push(
+      `/admin/layouts?siteId=${siteId}&buildingId=${buildingId}&floorId=${floorId}&layoutId=${layout?.layout_id}`
+    );
   }
 );
   const panelOpen = !!editingSeat;

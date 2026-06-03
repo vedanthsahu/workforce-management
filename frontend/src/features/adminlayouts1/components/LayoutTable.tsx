@@ -10,12 +10,14 @@ import { useRouter } from "next/navigation";
 import SvgViewer from "./SvgViewer";
 import { toast } from "sonner";
 
+
 type Props = {
   selection: LayoutSelection;
   refreshKey: number;
+  selectedLayoutId?: string;
 };
 
-export default function LayoutTable({ selection, refreshKey }: Props) {
+export default function LayoutTable({ selection, refreshKey , selectedLayoutId,}: Props) {
   const [data, setData] = useState<LayoutApiResponse[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   
@@ -134,7 +136,7 @@ const handleManage = (row: any) => {
               <th className="text-center">Actions</th>
             </tr>
           </thead>
-
+{/* 
           <tbody>
             {paginated.length === 0 ? (
               <tr>
@@ -188,8 +190,70 @@ const handleManage = (row: any) => {
 
                 </tr>
               ))
-            )}
-          </tbody>
+            )
+            
+            }
+          </tbody> */}
+          <tbody>
+  {paginated.length === 0 ? (
+    <tr>
+      <td colSpan={6} className="text-center py-6 text-gray-400">
+        No layouts found, select a layout to view details
+      </td>
+    </tr>
+  ) : (
+    paginated.map((row) => (
+      <tr
+        key={row.layout_id}
+        className={` hover:bg-gray-50 ${
+          String(row.layout_id) === String(selectedLayoutId)
+            ? "bg-indigo-50 "
+            : ""
+        }`}
+      >
+        <td className="py-4">{row.layout_name}</td>
+
+        <td>{row.version_no}</td>
+
+        <td>
+          <span
+            className={`px-2 py-1 rounded text-xs font-medium ${
+              row.status === "PUBLISHED"
+                ? "bg-green-100 text-green-600"
+                : row.status === "DRAFT"
+                ? "bg-blue-100 text-blue-600"
+                : "bg-gray-100 text-gray-600"
+            }`}
+          >
+            {row.status}
+          </span>
+        </td>
+
+        <td>{row.is_published ? "Yes" : "No"}</td>
+
+        <td>{row.uploaded_by_name}</td>
+
+        <td>
+          <div className="flex justify-center gap-2">
+            <button
+              onClick={() => handleView(row)}
+              className="p-2 border rounded-md hover:bg-gray-100"
+            >
+              <Eye className="w-4 h-4 text-indigo-600" />
+            </button>
+
+            <button
+              onClick={() => handleManage(row)}
+              className="p-2 border rounded-md hover:bg-gray-100"
+            >
+              <Settings className="w-4 h-4 text-gray-600" />
+            </button>
+          </div>
+        </td>
+      </tr>
+    ))
+  )}
+</tbody>
 
         </table>
         
