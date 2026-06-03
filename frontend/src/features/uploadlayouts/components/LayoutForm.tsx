@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { UploadCloud, FileCheck2, X } from "lucide-react";
 import { layoutService } from "@/features/uploadlayouts/services/layout.service";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 type Props = {
   formData: any;
@@ -153,50 +154,122 @@ const isFormValid =
 
   // ── Submit ───────────────────────────────────────────────────────────────
 
-  const handleSubmit = async () => {
-    if (!formData.site || !formData.building || !formData.floor) {
-      // toast.error("Please select Site, Building and Floor");
-      return;
-    }
-    if (!formData.file) {
-      // toast.error("Upload an SVG file");
-      return;
-    }
-    if (!formData.layoutName.trim()) {
-      // toast.error("Enter a layout name");
-      return;
-    }
+  // const handleSubmit = async () => {
+  //   if (!formData.site || !formData.building || !formData.floor) {
+  //     // toast.error("Please select Site, Building and Floor");
+  //     return;
+  //   }
+  //   if (!formData.file) {
+  //     // toast.error("Upload an SVG file");
+  //     return;
+  //   }
+  //   if (!formData.layoutName.trim()) {
+  //     // toast.error("Enter a layout name");
+  //     return;
+  //   }
 
-    setIsSubmitting(true);
-    try {
-      // TODO: include seat_count in the payload once the API supports it.
-      // For now it is logged to the console (see countSeatsInSvgFile above)
-      // and kept as a comment below so it's ready to wire up:
-      //
-      // seat_count: seatCount ?? 0,
+  //   setIsSubmitting(true);
+  //   try {
+  //     // TODO: include seat_count in the payload once the API supports it.
+  //     // For now it is logged to the console (see countSeatsInSvgFile above)
+  //     // and kept as a comment below so it's ready to wire up:
+  //     //
+  //     // seat_count: seatCount ?? 0,
 
-      const res = await layoutService.createLayout({
-        file:        formData.file,
-        site_id:     formData.site.id,
-        building_id: formData.building.id,
-        floor_id:    formData.floor.id,
-        layout_name: formData.layoutName,
-        status:      "DRAFT",
-        seat_ids:    seatIds, 
-        // seat_count: seatCount ?? 0,   ← uncomment when API is ready
-      });
+  //     const res = await layoutService.createLayout({
+  //       file:        formData.file,
+  //       site_id:     formData.site.id,
+  //       building_id: formData.building.id,
+  //       floor_id:    formData.floor.id,
+  //       layout_name: formData.layoutName,
+  //       status:      "DRAFT",
+  //       seat_ids:    seatIds, 
+  //       // seat_count: seatCount ?? 0,   ← uncomment when API is ready
+  //     });
 
-      console.log("[LayoutForm] Upload success:", res);
+  //     console.log("[LayoutForm] Upload success:", res);
 
-      toast.success("Layout saved successfully");
+  //     toast.success("Layout saved successfully");
+  //     resetForm();
+  //   } catch (err: any) {
+  //     console.error("[LayoutForm] Upload error:", err?.response?.data || err.message);
+  //     toast.error(err?.response?.data?.message || "Failed to save layout");
+  //   } finally {
+  //     setIsSubmitting(false);
+  //   }
+  // };
+
+  const router = useRouter();
+
+const handleSubmit = async () => {
+  if (!formData.site || !formData.building || !formData.floor) {
+    return;
+  }
+
+  if (!formData.file) {
+    return;
+  }
+
+  if (!formData.layoutName.trim()) {
+    return;
+  }
+
+  setIsSubmitting(true);
+
+  try {
+    const res = await layoutService.createLayout({
+      file: formData.file,
+      site_id: formData.site.id,
+      building_id: formData.building.id,
+      floor_id: formData.floor.id,
+      layout_name: formData.layoutName,
+      status: "DRAFT",
+      seat_ids: seatIds,
+    });
+
+    console.log("[LayoutForm] Upload success:", res);
+
+    toast.success("Layout saved successfully");
+
+    const layoutId =
+      res?.layout_id ||
+      res?.id ||
+      res?.data?.layout_id;
+
+    if (!layoutId) {
+      console.error(
+        "layout_id not returned from createLayout response",
+        res
+      );
       resetForm();
-    } catch (err: any) {
-      console.error("[LayoutForm] Upload error:", err?.response?.data || err.message);
-      toast.error(err?.response?.data?.message || "Failed to save layout");
-    } finally {
-      setIsSubmitting(false);
+      return;
     }
-  };
+
+    const params = new URLSearchParams({
+      layoutId: String(layoutId),
+      floorId: String(formData.floor.id),
+      buildingId: String(formData.building.id),
+      siteId: String(formData.site.id),
+    });
+
+    router.push(
+      `/admin/layouts/manage-layout?${params.toString()}`
+    );
+
+  } catch (err: any) {
+    console.error(
+      "[LayoutForm] Upload error:",
+      err?.response?.data || err.message
+    );
+
+    toast.error(
+      err?.response?.data?.message ||
+      "Failed to save layout"
+    );
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   // ── Render ───────────────────────────────────────────────────────────────
 

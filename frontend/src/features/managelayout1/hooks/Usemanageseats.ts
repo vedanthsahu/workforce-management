@@ -763,10 +763,11 @@ export function useManageSeats() {
 
     updateSeat(updated);
     markDirty();
+    setEditingSeat(null);
 
-    setEditingSeat((prev) =>
-      prev?.seat_svg_id === updated.seat_svg_id ? updated : prev
-    );
+    // setEditingSeat((prev) =>
+    //   prev?.seat_svg_id === updated.seat_svg_id ? updated : prev
+    // );
 
     return updated;
   }, [seats, updateSeat, markDirty]);

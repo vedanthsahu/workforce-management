@@ -1483,11 +1483,18 @@ export function usePublishLayout(
     stats.total_seats > 0 &&
     stats.configured_seats === stats.total_seats;
 
-  const canPublish = !!layout && allConfigured && (
-    !layout.is_published   // draft or archived → just need allConfigured
-    || isDirty             // published → only enable after edits
+  // const canPublish = !!layout && allConfigured && (
+  //   !layout.is_published   // draft or archived → just need allConfigured
+  //   || isDirty             // published → only enable after edits
+  // );
+const canPublish =
+  !!layout &&
+  allConfigured &&
+  (
+    layout.status === "DRAFT" ||
+    layout.status === "ARCHIVED" ||
+    (layout.is_published && isDirty)
   );
-
   const publishLayout = useCallback(async () => {
     if (!layout?.layout_id) return;
     setPublishing(true);
