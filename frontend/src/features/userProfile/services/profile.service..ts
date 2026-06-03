@@ -11,6 +11,16 @@ import type {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function safeStr(val: unknown): string {
+  if (typeof val === "string") return val;
+  if (val === null || val === undefined) return "—";
+  if (typeof val === "object") {
+    const o = val as Record<string, unknown>;
+    return String(o.display_name ?? o.full_name ?? o.name ?? o.email ?? "—");
+  }
+  return String(val);
+}
+
 function classifyError(
   err: unknown,
   section: ProfileSectionError["section"],
@@ -39,17 +49,15 @@ function classifyError(
 
 function mapDashboardMe(api: ApiDashboardMe): ProfileData {
   return {
-    // From API
-    displayName:      api.display_name ?? api.full_name,
-    email:            api.email,
-    phone:            api.mobile_phone     ?? "—",
-    role:             api.profile_metadata.role_name,
-    jobTitle:         api.title ?? api.job_title ?? "—",
-    department:       api.department       ?? "—",
-    workLocation:     api.office_info      ?? "—",
-    employeeId:       api.profile_metadata.employee_id ?? "—",
-    reportingManager: api.manager          ?? "—",
-    // Not in API yet
+    displayName:      safeStr(api.display_name ?? api.full_name),
+    email:            safeStr(api.email),
+    phone:            safeStr(api.mobile_phone) === "—" ? "—" : safeStr(api.mobile_phone),
+    role:             safeStr(api.profile_metadata?.role_name),
+    jobTitle:         safeStr(api.title ?? api.job_title) === "—" ? "—" : safeStr(api.title ?? api.job_title),
+    department:       safeStr(api.department),
+    workLocation:     safeStr(api.office_info),
+    employeeId:       safeStr(api.profile_metadata?.employee_id),
+    reportingManager: safeStr(api.manager),
     avatarUrl:        null,
     dateOfJoining:    "—",
     dateOfBirth:      "—",
