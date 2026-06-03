@@ -386,6 +386,10 @@ def available_seats(
         list[int] | None,
         Query(),
     ] = None,
+    modify_booking_id: Annotated[
+    str | None,
+    Query(alias="modifyBookingId"),
+] = None,
 
 ) -> list[AvailableSeatResponse]:
 
@@ -424,6 +428,7 @@ def available_seats(
         current_user=current_user,
         booked_for_user_id=str(effective_user_id),
         amenity_ids=amenity_ids,
+        exclude_booking_id=modify_booking_id
     )
 
 
