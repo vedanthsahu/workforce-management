@@ -1,5 +1,3 @@
-
-
 import { axiosInstance } from "@/lib/http/axios";
 import {
   Site,
@@ -42,6 +40,9 @@ export async function fetchBuildings(siteId: string): Promise<Building[]> {
 }
 
 // ── Floors ────────────────────────────────────────────────────────────────────
+// GET /buildings/{building_id}/floors already returns layout_file_url and
+// active_layout, so we extract layoutFileUrl here and drop the separate
+// fetchFloorLayout / PATCH call entirely.
 
 export async function fetchFloors(buildingId: string): Promise<Floor[]> {
   const { data } = await axiosInstance.get<any[]>(
@@ -52,25 +53,18 @@ export async function fetchFloors(buildingId: string): Promise<Floor[]> {
     buildingId: f.building_id ?? buildingId,
     name: f.floor_name ?? f.floor_code ?? `Floor ${f.floor_id}`,
     number: parseInt(f.floor_code ?? "0", 10),
+    // Prefer active_layout URL; fall back to top-level layout_file_url
+    layoutFileUrl:
+      f.active_layout?.layout_file_url ?? f.layout_file_url ?? null,
   }));
 }
 
-// ── Seat ID → SVG id mapping ──────────────────────────────────────────────────
+// ── Seat Code → SVG id mapping ────────────────────────────────────────────────
+// The SVG <g id="..."> values match seat_code directly (e.g. "A1", "B3").
+// No numeric parsing or hardcoded exceptions needed.
 
-export function seatIdToSvgId(seatId: string | number): string {
-  const num = parseInt(String(seatId), 10);
-  if (isNaN(num)) {
-    console.warn(`[seatIdToSvgId] cannot parse seat_id "${seatId}"`);
-    return String(seatId);
-  }
-  return num === 24 ? "s24" : String(num);
-}
-
-export function seatCodeToSvgId(
-  _seatCode: string,
-  fallbackId: string | number
-): string {
-  return seatIdToSvgId(fallbackId);
+export function seatCodeToSvgId(seatCode: string): string {
+  return seatCode;
 }
 
 // ── Normalise range availability status → seat status ────────────────────────
@@ -85,6 +79,7 @@ export function normalizeRangeStatus(
       return "available";
     case "FULLY_BOOKED":
       return "booked";
+    case "FULLY_UNAVAILABLE":
     case "UNAVAILABLE":
       return "unavailable";
     case "YOURS":
@@ -158,7 +153,7 @@ interface AvailableSeatResponse {
   availability: SeatAvailabilitySummary;
 }
 
-// ── Seat Availability — GET /floors/{floor_id}/seats ──────────────────────────
+// ── Seat Availability — GET /floors/{floor_id}/seats ─────────────────────────
 
 export async function fetchAvailability(params: {
   floorId: string;
@@ -210,7 +205,9 @@ export async function fetchSeatsWithAvailability(
   const selectedPrefs = (params.preferences ?? []).map((p) => p.toLowerCase());
 
   return rawSeats.map((a) => {
-    const svgId = seatIdToSvgId(a.seat_id);
+    // Use seat_code (or code) as the SVG id — matches <g id="..."> in the SVG directly.
+    const seatCode = a.code || a.seat_code || String(a.seat_id);
+    const svgId = seatCodeToSvgId(seatCode);
 
     const currentSeatId = (params as any).currentSeatId ?? null;
 
@@ -238,21 +235,25 @@ export async function fetchSeatsWithAvailability(
 
     const rawMatchStatus = (a.preference_match_status ?? "").toUpperCase();
 
+    // Force NO_MATCH for seats that aren't selectable — the API sometimes
+    // returns PARTIAL_MATCH / FULL_MATCH even for unavailable / booked seats.
     const preferenceMatchStatus: PreferenceMatchStatus =
-      rawMatchStatus === "NOT_APPLICABLE" || rawMatchStatus === ""
-        ? (() => {
-            if (!selectedPrefs.length) return "NO_MATCH" as PreferenceMatchStatus;
-            const matched = amenities.filter((am) =>
-              selectedPrefs.some(
-                (p) => am.toLowerCase().includes(p) || p.includes(am.toLowerCase())
-              )
-            ).length;
-            if (matched === 0) return "NO_MATCH" as PreferenceMatchStatus;
-            if (matched >= selectedPrefs.length)
-              return "FULL_MATCH" as PreferenceMatchStatus;
-            return "PARTIAL_MATCH" as PreferenceMatchStatus;
-          })()
-        : (rawMatchStatus as PreferenceMatchStatus);
+      status !== "available" && status !== "yours"
+        ? "NO_MATCH"
+        : rawMatchStatus === "NOT_APPLICABLE" || rawMatchStatus === ""
+          ? (() => {
+              if (!selectedPrefs.length) return "NO_MATCH" as PreferenceMatchStatus;
+              const matched = amenities.filter((am) =>
+                selectedPrefs.some(
+                  (p) => am.toLowerCase().includes(p) || p.includes(am.toLowerCase())
+                )
+              ).length;
+              if (matched === 0) return "NO_MATCH" as PreferenceMatchStatus;
+              if (matched >= selectedPrefs.length)
+                return "FULL_MATCH" as PreferenceMatchStatus;
+              return "PARTIAL_MATCH" as PreferenceMatchStatus;
+            })()
+          : (rawMatchStatus as PreferenceMatchStatus);
 
     const uiState: UiState =
       status !== "available"
@@ -269,7 +270,7 @@ export async function fetchSeatsWithAvailability(
     const availabilitySummary = a.availability ?? null;
 
     console.log(
-      `[fetchSeatsWithAvailability] seat_id="${a.seat_id}" svgId="${svgId}" ` +
+      `[fetchSeatsWithAvailability] seat_id="${a.seat_id}" seat_code="${seatCode}" svgId="${svgId}" ` +
         `rangeStatus="${a.availability?.status}" → status="${status}" ` +
         `match="${preferenceMatchStatus}" ui="${uiState}" ` +
         `amenities=${JSON.stringify(amenities)} ` +
@@ -280,7 +281,7 @@ export async function fetchSeatsWithAvailability(
     return {
       id: String(a.seat_id),
       svgId,
-      label: a.code || a.seat_code || `Seat ${a.seat_id}`,
+      label: seatCode,
       row: 0,
       col: 0,
       status,
@@ -308,16 +309,14 @@ export async function createBooking(
   return data;
 }
 
-// ── Modify booking — PATCH /bookings/{booking_id}/modify ──────────────────────
-// Replaces the old cancel-then-create pattern.  The backend atomically updates
-// the existing booking so history, audit trail, and booking_id are all preserved.
+// ── Modify booking — POST /bookings/{booking_id}/modify ──────────────────────
 
 export interface ModifyBookingPayload {
   site_id:      number;
   building_id:  number;
   floor_id:     number;
   seat_id:      number;
-  booking_date: string; // "YYYY-MM-DD"
+  booking_date: string;
 }
 
 export async function modifyBooking(

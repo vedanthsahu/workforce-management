@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import React, { useState } from "react";
@@ -181,6 +179,8 @@ const BookASeatPage: React.FC = () => {
     // modify mode
     isModifyMode,
     modifyBookingId,
+    // floor layout URL
+    floorLayoutUrl,
     setSiteId,
     setBuildingId,
     setFloorId,
@@ -409,18 +409,15 @@ const BookASeatPage: React.FC = () => {
                       min={todayIso}
                       onChange={setFromDate}
                     />
-                    {/* In modify mode, hide the To date — single-day booking only */}
-                    {/* {!isModifyMode && ( */}
-                      <>
-                        <ChevronRight size={16} className="text-gray-300 shrink-0 mt-5" />
-                        <DateInput
-                          label="To"
-                          value={form.toDate}
-                          min={form.fromDate}
-                          onChange={setToDate}
-                        />
-                      </>
-                    {/* )} */}
+                    <>
+                      <ChevronRight size={16} className="text-gray-300 shrink-0 mt-5" />
+                      <DateInput
+                        label="To"
+                        value={form.toDate}
+                        min={form.fromDate}
+                        onChange={setToDate}
+                      />
+                    </>
                   </div>
 
                   {/* Day count summary */}
@@ -546,6 +543,7 @@ const BookASeatPage: React.FC = () => {
                 selectedSeatId={form.selectedSeatId}
                 onSeatSelect={selectSeat}
                 loading={loadingSeats}
+                svgUrl={floorLayoutUrl}
                 siteName={selectedSite?.name}
                 buildingName={selectedBuilding?.name}
                 floorName={selectedFloor?.name}
