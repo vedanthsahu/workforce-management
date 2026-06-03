@@ -9,12 +9,31 @@ import { useLayoutSelection } from "@/features/adminlayouts1/hooks/useLayoutSele
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Toaster , toast } from "sonner";
-
+import { useSearchParams } from "next/navigation";
 
 export default function FloorLayoutsPage() {
   const { selection, setSelection } = useLayoutSelection();
   const [layouts, setLayouts] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const searchParams = useSearchParams();
+
+const siteIdParam = searchParams.get("siteId") ?? "";
+const buildingIdParam = searchParams.get("buildingId") ?? "";
+const floorIdParam = searchParams.get("floorId") ?? "";
+const layoutIdParam = searchParams.get("layoutId") ?? "";
+useEffect(() => {
+  if (!floorIdParam) return;
+
+  setSelection({
+    siteId: siteIdParam,
+    buildingId: buildingIdParam,
+    floorId: floorIdParam,
+
+    siteName: "",
+    buildingName: "",
+    floorName: "",
+  });
+}, []);
 
   useEffect(() => {
   const saved = localStorage.getItem("selectedLayoutFloor");
@@ -23,6 +42,8 @@ export default function FloorLayoutsPage() {
     setSelection(JSON.parse(saved));
   }
 }, []);
+
+
 
   const handleRefresh = () => {
   setRefreshKey((prev) => prev + 1);
@@ -80,7 +101,10 @@ export default function FloorLayoutsPage() {
 
             {/* LEFT (slightly bigger) */}
               <div className="col-span-3">
-           <FloorTree onSelect={(data: any) => {
+           <FloorTree  initialSiteId={siteIdParam}
+  initialBuildingId={buildingIdParam}
+  initialFloorId={floorIdParam}
+  onSelect={(data: any) => {
   console.log("DATA FROM TREE:", data);
 
   setSelection({
@@ -103,6 +127,7 @@ export default function FloorLayoutsPage() {
   key={refreshKey}
   selection={selection}
   refreshKey={refreshKey}
+  selectedLayoutId={layoutIdParam}
 />
             <Toaster richColors position="top-right" />
           </div>
