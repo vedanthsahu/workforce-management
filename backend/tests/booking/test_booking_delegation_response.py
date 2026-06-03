@@ -6,10 +6,13 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from fastapi import HTTPException
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from backend.repositories.booking_repository import has_active_booking_conflict
 from backend.schemas.booking import BookingResponse
+from backend.services.booking_service import _normalize_cancellation_reason
 
 
 class FakeCursor:
@@ -72,6 +75,22 @@ class BookingDelegationResponseTests(unittest.TestCase):
         sql, params = cursor.executions[0]
         self.assertIn("id::text <> %s", sql)
         self.assertEqual(params[-1], "100")
+
+    def test_user_cancellation_cannot_use_modified_audit_reason(self) -> None:
+        with self.assertRaises(HTTPException) as context:
+            _normalize_cancellation_reason(" modified ")
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertEqual(
+            context.exception.detail["code"],
+            "invalid_cancellation_reason",
+        )
+
+    def test_empty_cancellation_reason_defaults_to_user_cancelled(self) -> None:
+        self.assertEqual(
+            _normalize_cancellation_reason("  "),
+            "USER_CANCELLED",
+        )
 
 
 if __name__ == "__main__":
