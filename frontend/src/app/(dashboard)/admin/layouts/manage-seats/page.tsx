@@ -1263,6 +1263,7 @@ import BulkEditModal   from "@/features/managelayout1/components/BulkEditModal";
 import ViewToggle      from "@/features/managelayout1/components/ViewToggle";
 import { useManageSeats } from "@/features/managelayout1/hooks/Usemanageseats";
 import LayoutStatCards from "@/features/managelayout/components/Layoutstatcards";
+import { usePublishLayout } from "@/features/managelayout/hooks/useLayoutDetails";
 
 export default function ManageSeatsPage() {
   const router = useRouter();
@@ -1274,6 +1275,10 @@ export default function ManageSeatsPage() {
     layout,
     layoutLoading,
     layoutError,
+     siteId,
+  buildingId,
+  floorId,
+  layoutId,
     stats,
     statsLoading,
     seats,
@@ -1300,7 +1305,22 @@ export default function ManageSeatsPage() {
     view,
     setView,
   } = useManageSeats();
-
+const {
+  publishing,
+  publishError,
+  canPublish,
+  allConfigured,
+  publishLayout,
+} = usePublishLayout(
+  layout,
+  stats,
+   () => {
+    // router.push("/admin/layouts");
+     router.push(
+      `/admin/layouts?siteId=${siteId}&buildingId=${buildingId}&floorId=${floorId}&layoutId=${layout?.layout_id}`
+    );
+  }
+);
   const panelOpen = !!editingSeat;
 
   // Detect mobile breakpoint
@@ -1363,10 +1383,32 @@ export default function ManageSeatsPage() {
             <ArrowLeft size={14} />
             <span className="hidden sm:inline">Back to Layout</span>
           </button>
-          <button className="flex items-center gap-2 px-3 lg:px-4 py-2 text-xs font-semibold border border-gray-200 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+          {/* <button className="flex items-center gap-2 px-3 lg:px-4 py-2 text-xs font-semibold border border-gray-200 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
             <MoreHorizontal size={14} />
             <span className="hidden sm:inline">More Actions</span>
-          </button>
+          </button> */}
+          <button
+  onClick={publishLayout}
+  disabled={!canPublish || publishing}
+  title={
+    !allConfigured
+      ? `Configure all seats before publishing`
+      : undefined
+  }
+  className="flex items-center gap-2 px-3 lg:px-4 py-2 text-xs font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+>
+  {publishing ? (
+    <>
+      <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+      Publishing...
+    </>
+  ) : (
+    <>
+      
+      <span className="hidden sm:inline">Publish Layout</span>
+    </>
+  )}
+</button>
         </div>
       </div>
 
