@@ -13,6 +13,8 @@ import {
 
 import { Amenity } from "../types/amenities.types";
 
+import { amenitiesService } from "../services/amenitiesService";
+
 type Props = {
   data: Amenity[];
   onEdit: (amenity: Amenity) => void;

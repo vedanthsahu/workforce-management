@@ -76,3 +76,15 @@ export interface AmenityStats {
   inactive_amenities: number;
   assigned_amenities: number;
 }
+
+export interface AmenityCategory {
+  category_id: string;
+  category_key: string;
+  category_name: string;
+  description: string;
+  is_active: boolean;
+}
+
+export interface AmenityCategoryResponse {
+  items: AmenityCategory[];
+}
