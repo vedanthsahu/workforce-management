@@ -447,6 +447,7 @@ def fetch_building_by_id(
             SELECT
                 b.id::text AS building_id,
                 b.site_id::text AS site_id,
+                s.site_name,
                 b.building_code,
                 b.building_name,
                 b.status,
@@ -455,6 +456,9 @@ def fetch_building_by_id(
                 COALESCE(seat_counts.active_seat_count, 0)::integer AS active_seat_count,
                 COALESCE(seat_counts.bookable_seat_count, 0)::integer AS bookable_seat_count
             FROM buildings AS b
+            INNER JOIN sites AS s
+                ON s.id = b.site_id
+            AND s.tenant_id = b.tenant_id
             LEFT JOIN LATERAL (
                 SELECT COUNT(*)::integer AS floor_count
                 FROM floors AS f
