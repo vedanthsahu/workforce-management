@@ -59,4 +59,19 @@ export const amenitiesService = {
 
     return data;
   },
+
+  // Get categories for dropdown
+  async getCategories() {
+    const { data } = await axiosInstance.get(
+      "/amenity-categories",
+      {
+        params: {
+          "is_active": true,
+           page: 1,
+           limit: 100,
+        },
+      }
+    );
+    return data;
+  },
 };

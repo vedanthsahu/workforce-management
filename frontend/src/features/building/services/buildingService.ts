@@ -37,7 +37,9 @@ export const buildingService = {
     const { data } = await axiosInstance.get(
       "/sites",
       {
-        params,
+        params: {
+        status: "ACTIVE",
+      },
       }
     );
 
@@ -57,17 +59,51 @@ export const buildingService = {
   },
 
   // UPDATE BUILDING
-  async updateBuilding(
-    building_id: string,
-    payload: UpdateBuildingPayload
-  ) {
+  // async updateBuilding(
+  //   building_id: string,
+  //   payload: UpdateBuildingPayload
+  // ) {
+  //   const { data } = await axiosInstance.patch(
+  //     `/buildings/${building_id}`,
+  //     payload
+  //   );
+
+  //   return data;
+  // },
+
+//   async updateBuilding(
+//   building_id: string,
+//   payload: UpdateBuildingPayload
+// ) {
+//   console.log("Building ID:", building_id);
+//   console.log("Payload:", payload);
+
+//   const { data } = await axiosInstance.patch(
+//     `/buildings/${building_id}`,
+//     payload
+//   );
+
+//   return data;
+// },
+
+async updateBuilding(
+  building_id: string,
+  payload: UpdateBuildingPayload
+) {
+  try {
     const { data } = await axiosInstance.patch(
       `/buildings/${building_id}`,
       payload
     );
 
     return data;
-  },
+  } catch (error: any) {
+    console.log("Axios Error:", error);
+    console.log("Response:", error?.response);
+    console.log("Request:", error?.request);
+    throw error;
+  }
+},
 
   // DASHBOARD STATS
   async getBuildingStats(): Promise<BuildingStatsSummary> {

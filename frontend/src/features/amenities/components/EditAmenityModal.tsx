@@ -1,7 +1,8 @@
+
 "use client";
 
 import { X } from "lucide-react";
-
+import { useState } from "react";
 import { Amenity } from "../types/amenities.types";
 import { useEditAmenity } from "../hooks/useEditAmenity";
 
@@ -21,26 +22,32 @@ export default function EditAmenityModal({
   const {
     loading,
     formData,
+    categories,
     handleChange,
     handleUpdate,
   } = useEditAmenity(
     amenity,
     onSuccess
   );
+  const [successMessage, setSuccessMessage] =
+  useState("");
 
   if (!open) return null;
 
+  
+
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
 
       {/* MODAL */}
-      <div className="w-full max-w-2xl rounded-3xl bg-white shadow-2xl overflow-hidden">
+      <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden">
 
         {/* HEADER */}
-        <div className="flex items-center justify-between border-b px-6 py-5">
+        <div className="flex items-center justify-between px-8 py-6 border-b">
 
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-2xl font-semibold text-gray-900">
               Edit Amenity
             </h2>
 
@@ -60,16 +67,30 @@ export default function EditAmenityModal({
           </button>
 
         </div>
-
+{successMessage && (
+  <div className="mx-8 mt-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+    ✅ {successMessage}
+  </div>
+)}
         {/* BODY */}
-        <div className="p-6 space-y-5">
+        <div className="p-8">
 
-          <div className="grid grid-cols-2 gap-5">
+          {/* SECTION TITLE */}
+          <div className="mb-6 pb-4 border-b">
+            <h3 className="text-xs font-semibold tracking-widest uppercase text-gray-400">
+              Basic Information
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
             {/* AMENITY NAME */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">
-                Amenity Name
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Amenity Name{" "}
+                <span className="text-red-500">
+                  *
+                </span>
               </label>
 
               <input
@@ -82,127 +103,173 @@ export default function EditAmenityModal({
                     e.target.value
                   )
                 }
-                className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-11 rounded-lg border border-gray-300 px-4 text-sm"
                 placeholder="Enter amenity name"
               />
+
+              <p className="text-xs text-gray-400 mt-2">
+                Example: High Speed Wi-Fi
+              </p>
             </div>
 
-            {/* ICON */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">
-                Icon Name
+            {/* CATEGORY */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Category{" "}
+                <span className="text-red-500">
+                  *
+                </span>
               </label>
 
-              <input
+              <select
                 value={
-                  formData.icon_name
+                  formData.category_id
                 }
                 onChange={(e) =>
                   handleChange(
-                    "icon_name",
+                    "category_id",
                     e.target.value
                   )
                 }
-                className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="wifi / coffee / monitor"
-              />
+                className="w-full h-11 rounded-lg border border-gray-300 px-4 text-sm"
+              >
+                <option value="">
+                  Select Category
+                </option>
+
+                {categories.map(
+                  (category) => (
+                    <option
+                      key={
+                        category.category_id
+                      }
+                      value={
+                        category.category_id
+                      }
+                    >
+                      {
+                        category.category_name
+                      }
+                    </option>
+                  )
+                )}
+              </select>
+
+              <p className="text-xs text-gray-400 mt-2">
+                Select the most relevant
+                category
+              </p>
             </div>
 
-          </div>
+            {/* DESCRIPTION */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Description{" "}
+                <span className="text-red-500">
+                  *
+                </span>
+              </label>
 
-          {/* DESCRIPTION */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">
-              Description
-            </label>
+              <textarea
+                rows={5}
+                value={
+                  formData.description
+                }
+                onChange={(e) =>
+                  handleChange(
+                    "description",
+                    e.target.value
+                  )
+                }
+                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm resize-none"
+                placeholder="Enter short description"
+              />
 
-            <textarea
-              value={
-                formData.description
-              }
-              onChange={(e) =>
-                handleChange(
-                  "description",
-                  e.target.value
-                )
-              }
-              rows={4}
-              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              placeholder="Enter description"
-            />
-          </div>
+              <p className="text-xs text-gray-400 mt-2">
+                Briefly describe what
+                this amenity provides
+              </p>
+            </div>
 
-          {/* CATEGORY */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">
-              Category ID
-            </label>
+            {/* STATUS */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Status{" "}
+                <span className="text-red-500">
+                  *
+                </span>
+              </label>
 
-            <input
-              value={
-                formData.category_id
-              }
-              onChange={(e) =>
-                handleChange(
-                  "category_id",
-                  e.target.value
-                )
-              }
-              className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter category id"
-            />
-          </div>
+              <select
+                value={
+                  formData.is_active
+                    ? "ACTIVE"
+                    : "INACTIVE"
+                }
+                onChange={(e) =>
+                  handleChange(
+                    "is_active",
+                    e.target.value ===
+                      "ACTIVE"
+                  )
+                }
+                className="w-full h-11 rounded-lg border border-gray-300 px-4 text-sm"
+              >
+                <option value="ACTIVE">
+                  Active
+                </option>
 
-          {/* STATUS */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">
-              Status
-            </label>
+                <option value="INACTIVE">
+                  Inactive
+                </option>
+              </select>
 
-            <select
-              value={
-                formData.is_active
-                  ? "ACTIVE"
-                  : "INACTIVE"
-              }
-              onChange={(e) =>
-                handleChange(
-                  "is_active",
-                  e.target.value ===
-                    "ACTIVE"
-                )
-              }
-              className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="ACTIVE">
-                ACTIVE
-              </option>
+              <p className="text-xs text-gray-400 mt-2">
+                Inactive amenities
+                will not be available
+                for selection
+              </p>
+            </div>
 
-              <option value="INACTIVE">
-                INACTIVE
-              </option>
-            </select>
           </div>
 
         </div>
 
         {/* FOOTER */}
-        <div className="flex justify-end gap-3 border-t px-6 py-4 bg-gray-50">
+        <div className="flex justify-end gap-3 px-8 py-5 border-t bg-gray-50">
 
           <button
             onClick={onClose}
-            className="h-11 rounded-xl border border-gray-200 px-5 text-sm font-medium hover:bg-gray-100 transition"
+            className="h-11 px-5 rounded-xl border border-gray-300 text-sm font-medium hover:bg-gray-100"
           >
             Cancel
           </button>
 
           <button
             onClick={async () => {
-              await handleUpdate();
-              onClose();
-            }}
+
+  const success =
+  await handleUpdate();
+
+if (success) {
+  setSuccessMessage(
+    "Amenity updated successfully"
+  );
+
+  setTimeout(() => {
+    setSuccessMessage("");
+    onSuccess();
+    onClose();
+  }, 1200);
+}
+}}
+
+// onClick={async () => {
+//   await handleUpdate();
+//   onClose();
+// }}
             disabled={loading}
-            className="h-11 rounded-xl bg-blue-600 px-5 text-sm font-medium text-white hover:bg-blue-700 transition disabled:opacity-50"
+            className="h-11 px-5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
           >
             {loading
               ? "Saving..."
@@ -212,6 +279,7 @@ export default function EditAmenityModal({
         </div>
 
       </div>
+
     </div>
   );
 }

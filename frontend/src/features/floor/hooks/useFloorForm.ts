@@ -1,0 +1,119 @@
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+
+import { floorService } from "../services/floorService";
+
+export const useFloorForm = () => {
+  const [loading, setLoading] = useState(false);
+
+  const [sites, setSites] = useState<any[]>([]);
+  const [buildings, setBuildings] =
+    useState<any[]>([]);
+
+  const [formData, setFormData] =
+    useState({
+      site_id: "",
+      building_id: "",
+      floor_code: "",
+      floor_name: "",
+      status: "ACTIVE",
+    });
+
+  useEffect(() => {
+    fetchSites();
+  }, []);
+
+  const fetchSites = async () => {
+    try {
+      const response =
+        await floorService.getSites();
+
+      setSites(
+        response.filter(
+          (site: any) =>
+            site.status === "ACTIVE"
+        )
+      );
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const fetchBuildings = async (
+    siteId: string
+  ) => {
+    try {
+      const response =
+        await floorService.getBuildings(
+          Number(siteId)
+        );
+
+      setBuildings(response);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleChange = async (
+    field: string,
+    value: string
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+
+    if (field === "site_id") {
+      setFormData((prev) => ({
+        ...prev,
+        site_id: value,
+        building_id: "",
+      }));
+
+      await fetchBuildings(value);
+    }
+  };
+
+  const handleSubmit = async () => {
+    try {
+      setLoading(true);
+
+      await floorService.createFloor({
+        site_id: Number(
+          formData.site_id
+        ),
+        building_id: Number(
+          formData.building_id
+        ),
+        floor_code:
+          formData.floor_code,
+        floor_name:
+          formData.floor_name,
+        status: formData.status,
+      });
+
+      toast.success(
+        "Floor created successfully"
+      );
+
+      return true;
+    } catch (error) {
+      toast.error(
+        "Failed to create floor"
+      );
+
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return {
+    loading,
+    sites,
+    buildings,
+    formData,
+    handleChange,
+    handleSubmit,
+  };
+};
