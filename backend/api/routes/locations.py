@@ -150,31 +150,27 @@ def update_site_route(
 
 @router.get("/buildings", response_model=list[BuildingResponse])
 def buildings(
-    site_id: Annotated[int, Query(gt=0)],
-
     current_user: Annotated[
         dict[str, Any],
         Depends(get_current_user),
     ],
-
     conn: Annotated[
         PGConnection,
         Depends(get_db),
     ],
-
+    site_id: Annotated[int | None, Query(gt=0)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int | None, Query(ge=1, le=200)] = None,
     search: Annotated[str | None, Query()] = None,
     status_filter: Annotated[str | None, Query(alias="status")] = None,
 ) -> list[BuildingResponse]:
-
     return get_buildings_by_site(
         conn,
         tenant_id=str(current_user["tenant_id"]),
-        site_id=str(site_id),
+        site_id=site_id,
         page=page,
         limit=limit,
-        search=search,
+        search=search,  
         status_filter=status_filter,
     )
 
