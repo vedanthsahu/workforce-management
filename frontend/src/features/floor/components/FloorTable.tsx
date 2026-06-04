@@ -1,53 +1,41 @@
 "use client";
 
 import {
-  Building2,
+  Layers,
   Pencil,
 } from "lucide-react";
 
-import { Building } from "../types/building.types";
-
-
 type Props = {
-  data: Building[];
+  data: any[];
   onEdit: (
-    building: Building
+    floor: any
   ) => void;
 };
 
-
-export default function BuildingTable({
+export default function FloorTable({
   data,
   onEdit,
 }: Props) {
-
-  
   return (
     <div className="w-full overflow-x-auto">
-      <table className="w-full text-sm table-auto">
+      <table className="w-full text-sm">
 
-        {/* HEADER */}
-        <thead className="text-xs text-gray-500 bg-gray-50 border-b">
+        <thead className="bg-gray-50 border-b text-xs text-gray-500">
           <tr>
-
             <th className="px-6 py-4 text-left">
-              Building Code
+              Floor Code
             </th>
 
             <th className="px-6 py-4 text-left">
-              Building Name
+              Floor Name
             </th>
 
             <th className="px-6 py-4 text-left">
-              Site Name
+              Building
             </th>
 
             <th className="px-6 py-4 text-center">
-              Floors
-            </th>
-
-            <th className="px-6 py-4 text-center">
-              Total Seats
+              Seats
             </th>
 
             <th className="px-6 py-4 text-center">
@@ -59,18 +47,20 @@ export default function BuildingTable({
             </th>
 
             <th className="px-6 py-4 text-center">
+              Layouts
+            </th>
+
+            <th className="px-6 py-4 text-center">
               Status
             </th>
 
             <th className="px-6 py-4 text-center">
               Actions
             </th>
-
           </tr>
         </thead>
 
-        {/* BODY */}
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y">
 
           {data.length === 0 ? (
             <tr>
@@ -78,100 +68,100 @@ export default function BuildingTable({
                 colSpan={9}
                 className="py-10 text-center text-gray-500"
               >
-                No buildings found
+                No floors found
               </td>
             </tr>
           ) : (
-            data.map((building) => (
+            data.map((floor) => (
               <tr
-                key={building.building_id}
-                className="hover:bg-gray-50"
+                key={
+                  floor.floor_id
+                }
               >
-
-                {/* BUILDING CODE */}
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-
-                    <div className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-100">
-                      <Building2 className="w-4 h-4 text-blue-600" />
+                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                      <Layers className="w-4 h-4 text-blue-600" />
                     </div>
 
-                    <span className="font-medium whitespace-nowrap">
-                      {building.building_code}
+                    <span>
+                      {
+                        floor.floor_code
+                      }
                     </span>
-
                   </div>
                 </td>
 
-                {/* BUILDING NAME */}
-                <td className="px-6 py-4 font-medium whitespace-nowrap">
-                  {building.building_name}
+                <td className="px-6 py-4">
+                  {
+                    floor.floor_name
+                  }
                 </td>
 
-                {/* SITE NAME */}
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {building.site_name}
+                <td className="px-6 py-4">
+                  {
+                    floor.building_name
+                  }
                 </td>
 
-                {/* FLOORS */}
                 <td className="px-6 py-4 text-center">
-                  {building.floor_count}
+                  {
+                    floor.seat_count
+                  }
                 </td>
 
-                {/* TOTAL SEATS */}
                 <td className="px-6 py-4 text-center">
-                  {building.seat_count}
+                  {
+                    floor.active_seat_count
+                  }
                 </td>
 
-                {/* ACTIVE SEATS */}
                 <td className="px-6 py-4 text-center">
-                  {building.active_seat_count}
+                  {
+                    floor.bookable_seat_count
+                  }
                 </td>
 
-                {/* BOOKABLE SEATS */}
                 <td className="px-6 py-4 text-center">
-                  {building.bookable_seat_count}
+                  {
+                    floor.layout_count
+                  }
                 </td>
 
-                {/* STATUS */}
                 <td className="px-6 py-4 text-center">
-
                   <span
-                    className={`px-3 py-1 text-xs rounded-full whitespace-nowrap ${
-                      building.status ===
+                    className={`px-3 py-1 rounded-full text-xs ${
+                      floor.status ===
                       "ACTIVE"
                         ? "bg-green-100 text-green-700"
                         : "bg-gray-100 text-gray-600"
                     }`}
                   >
-                    {building.status}
+                    {
+                      floor.status
+                    }
                   </span>
-
                 </td>
 
-                {/* ACTION */}
                 <td className="px-6 py-4 text-center">
-
                   <button
                     onClick={() =>
-                      onEdit(building)
+                      onEdit(
+                        floor
+                      )
                     }
-                    className="p-2 border rounded-lg hover:bg-gray-100 transition"
+                    className="p-2 border rounded-lg hover:bg-gray-100"
                   >
                     <Pencil
                       size={14}
                       className="text-blue-600"
                     />
                   </button>
-
                 </td>
-
               </tr>
             ))
           )}
-
         </tbody>
-
       </table>
     </div>
   );

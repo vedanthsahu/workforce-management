@@ -1,35 +1,32 @@
+
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
+import { Toaster } from "sonner";
+import AmenitiesCards from "@/features/amenities/components/AmenitiesCards";
+import AmenitiesFilters from "@/features/amenities/components/AmenitiesFilters";
+import AmenitiesTable from "@/features/amenities/components/AmenitiesTable";
+import EditAmenityModal from "@/features/amenities/components/EditAmenityModal";
+import AmenitiesPagination from "@/features/amenities/components/AmenitiesPagination";
 
-import BuildingCards from "@/features/building/components/BuildingCards";
-import BuildingFilters from "@/features/building/components/BuildingFilters";
-import BuildingTable from "@/features/building/components/buildingTable"
-import BuildingPagination from "@/features/building/components/BuildingPagination";
-import EditBuildingModal from "@/features/building/components/EditBuildingModal";
+import { useAmenities } from "@/features/amenities/hooks/useAmenities";
 
-
-import { useBuildings } from "@/features/building/hooks/useBuildings";
-
-export default function BuildingsPage() {
+export default function AmenitiesPage() {
   const router = useRouter();
 
   const {
-    buildings,
-    sites,
-    stats,
+    data,
     loading,
-    error,
     search,
     setSearch,
-    selectedSiteId,
-    setSelectedSiteId,
-    fetchBuildings,
-  } = useBuildings();
+    status,
+    setStatus,
+    fetchAmenities,
+  } = useAmenities();
 
-  const [selectedBuilding, setSelectedBuilding] =
+  const [selectedAmenity, setSelectedAmenity] =
     useState<any>(null);
 
   const [openModal, setOpenModal] =
@@ -38,38 +35,38 @@ export default function BuildingsPage() {
   const [currentPage, setCurrentPage] =
     useState(1);
 
-  const handleEdit = (building: any) => {
-    setSelectedBuilding(building);
+  const handleEdit = (amenity: any) => {
+    setSelectedAmenity(amenity);
     setOpenModal(true);
   };
 
-  const filteredBuildings = buildings.filter(
-    (building: any) => {
-      const name = (
-        building.building_name || ""
-      ).toLowerCase();
+  const filteredAmenities =
+    (data?.items || []).filter(
+      (a: any) => {
+        const name = (
+          a.amenity_name || ""
+        ).toLowerCase();
 
-      const query =
-        search.toLowerCase();
+        const query =
+          search.toLowerCase();
 
-      let i = 0;
+        let i = 0;
 
-      for (const char of name) {
-        if (char === query[i]) i++;
+        for (const char of name) {
+          if (char === query[i]) i++;
 
-        if (i === query.length) {
-          return true;
+          if (i === query.length)
+            return true;
         }
+
+        return query.length === 0;
       }
+    );
 
-      return query.length === 0;
-    }
-  );
-
-  const itemsPerPage = 5;
+  const itemsPerPage = 10;
 
   const totalPages = Math.ceil(
-    filteredBuildings.length /
+    filteredAmenities.length /
       itemsPerPage
   );
 
@@ -77,8 +74,8 @@ export default function BuildingsPage() {
     (currentPage - 1) *
     itemsPerPage;
 
-  const paginatedBuildings =
-    filteredBuildings.slice(
+  const paginatedAmenities =
+    filteredAmenities.slice(
       startIndex,
       startIndex + itemsPerPage
     );
@@ -88,9 +85,9 @@ export default function BuildingsPage() {
 
       {/* BREADCRUMB */}
       <div className="text-sm text-gray-500">
-        Admin / Buildings /{" "}
+        Admin / Amenities /{" "}
         <span className="text-gray-800">
-          Manage Buildings
+          Manage Amenities
         </span>
       </div>
 
@@ -99,31 +96,46 @@ export default function BuildingsPage() {
 
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">
-            Manage Buildings
+            Manage Amenities
           </h1>
 
           <p className="text-sm text-gray-500 mt-1">
-            View, add, edit and manage all
-            buildings across the organization.
+            Create, edit and manage all amenities
+            available in your workspace.
           </p>
         </div>
 
         <button
           onClick={() =>
             router.push(
-              "/admin/building/add"
+              "/admin/amenities/add"
             )
           }
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-sm"
         >
           <Plus size={16} />
-          Add Building
+          Add Amenity
         </button>
 
       </div>
 
-      {/* STATS */}
-      <BuildingCards stats={stats} />
+      {/* CARDS */}
+      <AmenitiesCards
+        stats={
+          data
+            ? {
+                total_amenities:
+                  data.total_amenities,
+                active_amenities:
+                  data.active_amenities,
+                inactive_amenities:
+                  data.inactive_amenities,
+                assigned_amenities:
+                  data.assigned_amenities,
+              }
+            : null
+        }
+      />
 
       {/* TABLE CARD */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm">
@@ -132,37 +144,30 @@ export default function BuildingsPage() {
         <div className="flex justify-between items-center px-6 py-4 border-b">
 
           <h2 className="text-base font-semibold text-gray-800">
-            Buildings List
+            Amenities List
           </h2>
 
-          <BuildingFilters
-            sites={sites}
-            selectedSiteId={
-              selectedSiteId
-            }
-            setSelectedSiteId={
-              setSelectedSiteId
-            }
+          <AmenitiesFilters
             search={search}
             setSearch={setSearch}
+            status={status}
+            setStatus={setStatus}
           />
 
         </div>
-
-        {/* TABLE */}
+<Toaster richColors position="top-right" />
+        {/* TABLE BODY */}
         {loading ? (
           <div className="p-6 text-sm text-gray-500">
             Loading...
           </div>
-        ) : error ? (
-          <div className="p-6 text-sm text-red-500">
-            {error}
-          </div>
         ) : (
-          <BuildingTable
-            data={paginatedBuildings}
-            onEdit={handleEdit}
-          />
+          <div className="max-h-[420px] overflow-y-auto">
+  <AmenitiesTable
+    data={paginatedAmenities}
+    onEdit={handleEdit}
+  />
+</div>
         )}
 
         {/* FOOTER */}
@@ -173,14 +178,14 @@ export default function BuildingsPage() {
             {Math.min(
               startIndex +
                 itemsPerPage,
-              filteredBuildings.length
+              filteredAmenities.length
             )}{" "}
             of{" "}
-            {filteredBuildings.length}{" "}
+            {filteredAmenities.length}{" "}
             entries
           </span>
 
-          <BuildingPagination
+          <AmenitiesPagination
             currentPage={currentPage}
             totalPages={totalPages}
             onPageChange={setCurrentPage}
@@ -191,17 +196,15 @@ export default function BuildingsPage() {
       </div>
 
       {/* EDIT MODAL */}
-      {selectedBuilding && (
-        <EditBuildingModal
-          building={selectedBuilding}
+      {selectedAmenity && (
+        <EditAmenityModal
+          amenity={selectedAmenity}
           open={openModal}
           onClose={() =>
             setOpenModal(false)
           }
           onSuccess={() => {
-            fetchBuildings(
-              selectedSiteId
-            );
+            fetchAmenities();
           }}
         />
       )}
