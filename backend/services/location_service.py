@@ -385,7 +385,7 @@ def get_buildings_by_site(
     conn: PGConnection,
     *,
     tenant_id: str,
-    site_id: str,
+    site_id: str | None = None,
     page: int | None = None,
     limit: int | None = None,
     search: str | None = None,

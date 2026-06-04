@@ -150,31 +150,27 @@ def update_site_route(
 
 @router.get("/buildings", response_model=list[BuildingResponse])
 def buildings(
-    site_id: Annotated[int, Query(gt=0)],
-
     current_user: Annotated[
         dict[str, Any],
         Depends(get_current_user),
     ],
-
     conn: Annotated[
         PGConnection,
         Depends(get_db),
     ],
-
+    site_id: Annotated[int | None, Query(gt=0)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int | None, Query(ge=1, le=200)] = None,
     search: Annotated[str | None, Query()] = None,
     status_filter: Annotated[str | None, Query(alias="status")] = None,
 ) -> list[BuildingResponse]:
-
     return get_buildings_by_site(
         conn,
         tenant_id=str(current_user["tenant_id"]),
-        site_id=str(site_id),
+        site_id=site_id,
         page=page,
         limit=limit,
-        search=search,
+        search=search,  
         status_filter=status_filter,
     )
 
@@ -386,6 +382,10 @@ def available_seats(
         list[int] | None,
         Query(),
     ] = None,
+    modify_booking_id: Annotated[
+    str | None,
+    Query(alias="modifyBookingId"),
+] = None,
 
 ) -> list[AvailableSeatResponse]:
 
@@ -424,6 +424,7 @@ def available_seats(
         current_user=current_user,
         booked_for_user_id=str(effective_user_id),
         amenity_ids=amenity_ids,
+        exclude_booking_id=modify_booking_id
     )
 
 
