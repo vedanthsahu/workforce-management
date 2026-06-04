@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
+import { useEffect } from "react";
 
 import BuildingCards from "@/features/building/components/BuildingCards";
 import BuildingFilters from "@/features/building/components/BuildingFilters";
@@ -38,6 +39,14 @@ export default function BuildingsPage() {
   const [currentPage, setCurrentPage] =
     useState(1);
 
+
+useEffect(() => {
+  setCurrentPage(1);
+}, [
+  search,
+  selectedSiteId,
+]);
+
   const handleEdit = (building: any) => {
     setSelectedBuilding(building);
     setOpenModal(true);
@@ -66,7 +75,7 @@ export default function BuildingsPage() {
     }
   );
 
-  const itemsPerPage = 5;
+  const itemsPerPage = 10;
 
   const totalPages = Math.ceil(
     filteredBuildings.length /
@@ -126,7 +135,7 @@ export default function BuildingsPage() {
       <BuildingCards stats={stats} />
 
       {/* TABLE CARD */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm">
+     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
 
         {/* TABLE HEADER */}
         <div className="flex justify-between items-center px-6 py-4 border-b">
@@ -149,42 +158,55 @@ export default function BuildingsPage() {
 
         </div>
 
-        {/* TABLE */}
-        {loading ? (
-          <div className="p-6 text-sm text-gray-500">
-            Loading...
-          </div>
-        ) : error ? (
-          <div className="p-6 text-sm text-red-500">
-            {error}
-          </div>
-        ) : (
-          <BuildingTable
-            data={paginatedBuildings}
-            onEdit={handleEdit}
-          />
-        )}
+        {/* TABLE BODY */}
+<div
+  className="w-full overflow-x-auto overflow-y-auto"
+  style={{
+    maxHeight: "calc(100vh - 420px)",
+    minHeight: "200px",
+  }}
+>
+  {loading ? (
+    <div className="p-6 text-sm text-gray-500">
+      Loading...
+    </div>
+  ) : error ? (
+    <div className="p-6 text-sm text-red-500">
+      {error}
+    </div>
+  ) : (
+    <BuildingTable
+      data={paginatedBuildings}
+      onEdit={handleEdit}
+    />
+  )}
+</div>
 
         {/* FOOTER */}
-        <div className="flex justify-between items-center px-6 py-4 border-t text-sm text-gray-500">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
 
           <span>
-            Showing {startIndex + 1} to{" "}
-            {Math.min(
-              startIndex +
-                itemsPerPage,
-              filteredBuildings.length
-            )}{" "}
-            of{" "}
-            {filteredBuildings.length}{" "}
-            entries
-          </span>
+  Showing{" "}
+  {filteredBuildings.length === 0
+    ? 0
+    : startIndex + 1}{" "}
+  to{" "}
+  {Math.min(
+    startIndex + itemsPerPage,
+    filteredBuildings.length
+  )}{" "}
+  of {filteredBuildings.length} entries
+</span>
 
-          <BuildingPagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setCurrentPage}
-          />
+         <div className="self-center sm:self-auto">
+  <BuildingPagination
+    currentPage={currentPage}
+    totalPages={totalPages}
+    onPageChange={(page) => {
+      setCurrentPage(page);
+    }}
+  />
+</div>
 
         </div>
 

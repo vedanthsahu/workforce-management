@@ -11,7 +11,7 @@ import {
 export const buildingService = {
   // GET BUILDINGS
   async getBuildings(params: {
-    site_id: number;
+    site_id?: number;
     page?: number;
     limit?: number;
     search?: string;

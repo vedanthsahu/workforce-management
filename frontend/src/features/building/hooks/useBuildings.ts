@@ -45,47 +45,45 @@ export const useBuildings = () => {
       setSites(data);
 
       // auto-select first site
-      if (
-        data.length > 0 &&
-        !selectedSiteId
-      ) {
-        setSelectedSiteId(
-          data[0].site_id
-        );
-      }
+      // if (
+      //   data.length > 0 &&
+      //   !selectedSiteId
+      // ) {
+      //   setSelectedSiteId(
+      //     data[0].site_id
+      //   );
+      // }
     } catch (err) {
       console.error(err);
     }
   };
 
-  // FETCH BUILDINGS
+// FETCH BUILDINGS
   const fetchBuildings = async (
-    siteId?: string
-  ) => {
-    try {
-      if (!siteId) return;
+  siteId?: string
+) => {
+  try {
+    setLoading(true);
+    setError("");
 
-      setLoading(true);
-      setError("");
+    const data =
+      await buildingService.getBuildings({
+        site_id: siteId
+          ? Number(siteId)
+          : undefined,
+        page: 1,
+      });
 
-      const data =
-        await buildingService.getBuildings(
-          {
-            site_id: Number(siteId),
-            page: 1,
-          }
-        );
-
-      setBuildings(data);
-    } catch (err: any) {
-      setError(
-        err?.message ||
-          "Failed to fetch buildings"
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+    setBuildings(data);
+  } catch (err: any) {
+    setError(
+      err?.message ||
+      "Failed to fetch buildings"
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   // FETCH STATS
   const fetchStats = async () => {
@@ -103,15 +101,16 @@ export const useBuildings = () => {
   useEffect(() => {
     fetchSites();
     fetchStats();
+    fetchBuildings(); 
   }, []);
 
   // FETCH BUILDINGS WHEN SITE CHANGES
   useEffect(() => {
-    if (selectedSiteId) {
+    
       fetchBuildings(
-        selectedSiteId
+        selectedSiteId || undefined
       );
-    }
+    
   }, [selectedSiteId]);
 
   return {
