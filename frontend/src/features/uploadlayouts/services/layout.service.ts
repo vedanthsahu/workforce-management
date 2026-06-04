@@ -52,9 +52,18 @@ async createLayout(payload: any) {
 },
 
 async getSites() {
-  const { data } = await axiosInstance.get("/sites");
+  const { data } = await axiosInstance.get(
+    "/sites",
+    {
+      params: {
+        status: "ACTIVE",
+      },
+    }
+  );
+
   return data;
 },
+// only select active sites.
 
 async getBuildings(site_id: number) {
   const { data } = await axiosInstance.get("/buildings", {

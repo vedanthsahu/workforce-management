@@ -44,15 +44,32 @@ export const useAdminDashboard = (
   }
 };
 
+
 const fetchTrend = async () => {
   try {
     const today = new Date();
 
-    const start = new Date(today);
-    start.setDate(today.getDate() - 6);
+    let start: Date;
+    let end: Date;
+
+    if (selectedWeek === "this-week") {
+      end = new Date(today);
+
+      start = new Date(today);
+      start.setDate(today.getDate() - 6);
+    } else {
+      end = new Date(today);
+      end.setDate(today.getDate() - 7);
+
+      start = new Date(end);
+      start.setDate(end.getDate() - 6);
+    }
 
     const startDate = start.toISOString().split("T")[0];
-    const endDate = today.toISOString().split("T")[0];
+    const endDate = end.toISOString().split("T")[0];
+
+    console.log("Week:", selectedWeek);
+    console.log("Range:", startDate, endDate);
 
     const res = await adminService.getOccupancyRange(
       startDate,
@@ -71,6 +88,8 @@ const fetchTrend = async () => {
     console.error(err);
   }
 };
+
+
 const fetchTopOffices = async () => {
   try {
     const res = await adminService.getOccupancyHierarchy({

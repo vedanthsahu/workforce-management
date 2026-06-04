@@ -2766,6 +2766,18 @@ export default function LayoutForm({ formData, setFormData }: Props) {
     layoutService.getSites().then(setSites);
   }, []);
 
+//   useEffect(() => {
+//   layoutService.getSites().then((data) => {
+//     const activeSites = data.filter(
+//       (site: any) =>
+//         site.status === "ACTIVE"
+//     );
+
+//     setSites(activeSites);
+//   });
+// }, []);
+
+
   // ── 2. Resolve site name once sites list arrives (pre-seed case) ───────
   useEffect(() => {
     if (!sites.length || !formData.site?.id || formData.site.name) return;
@@ -3144,18 +3156,48 @@ export default function LayoutForm({ formData, setFormData }: Props) {
 
         {/* BUTTONS */}
         <div className="flex justify-end gap-3 pt-2">
-          <button
+          {/* <button
+            type="button"
+            onClick={resetForm}
+            className="px-4 py-2 border rounded-md text-sm hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button> */}
+          {/* <button
             type="button"
             onClick={handleSubmit}
-            disabled={isSubmitting || !isFormValid}
-            className={`px-4 py-2 rounded-md text-sm transition-colors text-white ${
-              isFormValid
-                ? "bg-indigo-600 hover:bg-indigo-700"
-                : "bg-gray-300 cursor-not-allowed opacity-60"
-            }`}
+            disabled={isSubmitting}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm disabled:opacity-60 hover:bg-indigo-700 transition-colors"
           >
             {isSubmitting ? "Saving…" : "Save as Draft"}
-          </button>
+          </button> */}
+
+          {/* <button
+  type="button"
+  onClick={handleSubmit}
+  disabled={isSubmitting || !isFormValid}
+  className={`px-4 py-2 rounded-md text-sm transition-colors text-white
+    ${
+      isFormValid
+        ? "bg-indigo-600 hover:bg-indigo-700"
+        : "bg-gray-300 cursor-not-allowed opacity-60"
+    }`}
+>
+  {isSubmitting ? "Saving…" : "Save as Draft"}
+</button>*/}
+ <button 
+  type="button"
+  onClick={handleSubmit}
+  disabled={isSubmitting || !isFormValid}
+  className={`px-4 py-2 rounded-md text-sm transition-colors text-white
+    ${
+      isFormValid
+        ? "bg-indigo-600 hover:bg-indigo-700"
+        : "bg-gray-300 cursor-not-allowed opacity-60"
+    }`}
+>
+  {isSubmitting ? "Saving…" : "Save as Draft"}
+</button>
         </div>
 
       </CardContent>

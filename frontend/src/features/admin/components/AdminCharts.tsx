@@ -161,8 +161,8 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="This-week">This Week</SelectItem>
-              <SelectItem value="Last-week">Last Week</SelectItem>
+              <SelectItem value="this-week">This Week</SelectItem>
+              <SelectItem value="last-week">Last Week</SelectItem>
             </SelectContent>
           </Select>
         </CardHeader>
@@ -180,7 +180,7 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
             <AreaChart data={trendData}>
               <XAxis dataKey="day" axisLine={false} tickLine={false} />
               <YAxis
-                domain={[0, 10]}
+                domain={[0, 100]}
                 axisLine={true}
                 tickLine={true}
               />
