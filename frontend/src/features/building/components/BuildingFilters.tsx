@@ -36,12 +36,16 @@ export default function BuildingFilters({
             e.target.value
           )
         }
-        className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+         className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
+         <option value="">
+    All Offices
+  </option>
         {sites.map((site) => (
+          
           <option
             key={site.site_id}
-            value={site.site_id}
+            value={String(site.site_id)}
           >
             {site.site_name}
           </option>

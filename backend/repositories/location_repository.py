@@ -141,9 +141,7 @@ def fetch_buildings_by_site(
     )
     query += " ORDER BY b.building_code, b.id"
     query, params = _apply_pagination(query, params, page=page, limit=limit)
-    print("*************************")
-    print(query)
-    print("*************************")
+  
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(query, params)
