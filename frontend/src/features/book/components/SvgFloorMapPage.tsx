@@ -17,15 +17,18 @@ export interface SeatWithSvgId extends Seat {
   } | null;
 }
 
-// ─── All seat <g> ids present in floor-IT.svg ────────────────────────────────
-const ALL_SVG_SEAT_IDS = [
-  "1","2","3","4","5","6","7","8","9","10",
-  "11","12","13","14","15","16","17","18","19","20",
-  "21","22","23","s24","25","26","27","28","29","30","31",
-];
-
 const SVG_W = 2466;
 const SVG_H = 2039;
+
+// ─── Extract all <g id="..."> values from raw SVG text ───────────────────────
+
+function extractSeatIds(svgText: string): string[] {
+  const ids: string[] = [];
+  const regex = /<g\s+id="([^"]+)"/g;
+  let match;
+  while ((match = regex.exec(svgText)) !== null) ids.push(match[1]);
+  return ids;
+}
 
 // ─── Color palettes ───────────────────────────────────────────────────────────
 const PALETTES: Record<string, {
@@ -93,26 +96,12 @@ const PALETTES: Record<string, {
   },
 };
 
-// function getPaletteKey(seat: SeatWithSvgId, isSelected: boolean): string {
-//   if (isSelected) return "selected";
-//   if (seat.status !== "available" && seat.status !== "yours") return seat.status;
-//   if (seat.status === "yours") return "yours";
-//   const match = seat.preferenceMatchStatus;
-//   if (match === "FULL_MATCH" || seat.uiState === "BEST_MATCH") return "best_match";
-//   if (match === "PARTIAL_MATCH") return "partial_match";
-//   return "available";
-// }
-
 function getPaletteKey(seat: SeatWithSvgId, isSelected: boolean): string {
   if (isSelected) return "selected";
-  // Non-selectable statuses get their own palette directly
   if (seat.status !== "available" && seat.status !== "yours") return seat.status;
-  // Preference match takes priority over the "yours" green —
-  // so a best-match seat that was previously yours shows yellow, not green
   const match = seat.preferenceMatchStatus;
   if (match === "FULL_MATCH" || seat.uiState === "BEST_MATCH") return "best_match";
   if (match === "PARTIAL_MATCH") return "partial_match";
-  // "yours" only wins when there's no preference match signal
   if (seat.status === "yours") return "yours";
   return "available";
 }
@@ -132,7 +121,7 @@ function recolorSeat(svg: string, svgId: string, paletteKey: string): string {
   block = block.replace(/fill="#616161" stroke="#424242"/g, `fill="${p.back}" stroke="${p.backStroke}"`);
   block = block.replace(/stroke="#707070"/g, `stroke="${p.curve}"`);
   block = block.replace(/stroke="#A0A0A0"/g, `stroke="${p.arc}"`);
-  const isClickable = ["available","best_match","partial_match","yours","selected"].includes(paletteKey);
+  const isClickable = ["available", "best_match", "partial_match", "yours", "selected"].includes(paletteKey);
   block = block.replace(
     `<g id="${svgId}">`,
     `<g id="${svgId}" style="opacity:${p.opacity};cursor:${isClickable ? "pointer" : "default"}">`
@@ -140,11 +129,17 @@ function recolorSeat(svg: string, svgId: string, paletteKey: string): string {
   return before + block + after;
 }
 
-function buildColoredSvg(rawSvg: string, seats: SeatWithSvgId[], selectedSeatId: string | null): string {
+// svgSeatIds: dynamically extracted from the fetched SVG, not hardcoded
+function buildColoredSvg(
+  rawSvg: string,
+  svgSeatIds: string[],
+  seats: SeatWithSvgId[],
+  selectedSeatId: string | null
+): string {
   const seatMap = new Map<string, SeatWithSvgId>();
   seats.forEach((s) => seatMap.set(s.svgId, s));
   let svg = rawSvg;
-  ALL_SVG_SEAT_IDS.forEach((svgId) => {
+  svgSeatIds.forEach((svgId) => {
     const seat = seatMap.get(svgId);
     const key = !seat ? "unloaded" : getPaletteKey(seat, seat.id === selectedSeatId);
     svg = recolorSeat(svg, svgId, key);
@@ -152,12 +147,13 @@ function buildColoredSvg(rawSvg: string, seats: SeatWithSvgId[], selectedSeatId:
   return svg;
 }
 
-function getSvgIdFromClick(target: EventTarget | null): string | null {
+// svgSeatIds passed in so we don't rely on a hardcoded list
+function getSvgIdFromClick(target: EventTarget | null, svgSeatIds: Set<string>): string | null {
   let el = target as Element | null;
   while (el) {
     if (el.tagName?.toLowerCase() === "svg") return null;
     const id = el.getAttribute("id");
-    if (id && ALL_SVG_SEAT_IDS.includes(id)) return id;
+    if (id && svgSeatIds.has(id)) return id;
     el = el.parentElement;
   }
   return null;
@@ -202,11 +198,11 @@ const AvailabilityRing: React.FC<{ pct: number; available: number; total: number
 // ─── Day calendar strip ───────────────────────────────────────────────────────
 
 const DAY_STATUS_CONFIG: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-  AVAILABLE:   { bg: "#d1fae5", text: "#065f46", dot: "#10b981", label: "Available"   },
-  BOOKED:      { bg: "#fee2e2", text: "#991b1b", dot: "#ef4444", label: "Booked"      },
-  BLOCKED:     { bg: "#f3f4f6", text: "#374151", dot: "#9ca3af", label: "Blocked"     },
-  UNAVAILABLE: { bg: "#f3f4f6", text: "#374151", dot: "#9ca3af", label: "Unavailable" },
-  YOURS:       { bg: "#dbeafe", text: "#1e40af", dot: "#3b82f6", label: "Your Booking"},
+  AVAILABLE:   { bg: "#d1fae5", text: "#065f46", dot: "#10b981", label: "Available"    },
+  BOOKED:      { bg: "#fee2e2", text: "#991b1b", dot: "#ef4444", label: "Booked"       },
+  BLOCKED:     { bg: "#f3f4f6", text: "#374151", dot: "#9ca3af", label: "Blocked"      },
+  UNAVAILABLE: { bg: "#f3f4f6", text: "#374151", dot: "#9ca3af", label: "Unavailable"  },
+  YOURS:       { bg: "#dbeafe", text: "#1e40af", dot: "#3b82f6", label: "Your Booking" },
 };
 
 function fmtShortDate(iso: string): { day: string; date: string; month: string } {
@@ -222,10 +218,7 @@ const DayCalendarStrip: React.FC<{
   dailyStatuses: { booking_date: string; status: string }[];
 }> = ({ dailyStatuses }) => {
   if (!dailyStatuses || dailyStatuses.length === 0) return null;
-
-  // Show max 7 days to keep tooltip compact
   const shown = dailyStatuses.slice(0, 7);
-
   return (
     <div>
       <div style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
@@ -240,26 +233,13 @@ const DayCalendarStrip: React.FC<{
               key={booking_date}
               title={`${booking_date}: ${cfg.label}`}
               style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 2,
-                background: cfg.bg,
-                borderRadius: 6,
-                padding: "4px 5px",
-                minWidth: 28,
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                background: cfg.bg, borderRadius: 6, padding: "4px 5px", minWidth: 28,
               }}
             >
               <span style={{ fontSize: 9, color: cfg.text, fontWeight: 600, lineHeight: 1 }}>{day}</span>
               <span style={{ fontSize: 11, color: cfg.text, fontWeight: 800, lineHeight: 1 }}>{date}</span>
-              <span
-                style={{
-                  width: 5, height: 5,
-                  borderRadius: "50%",
-                  background: cfg.dot,
-                  flexShrink: 0,
-                }}
-              />
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: cfg.dot, flexShrink: 0 }} />
             </div>
           );
         })}
@@ -296,10 +276,10 @@ const SeatTooltip: React.FC<{
   const avail = seat.availabilitySummary;
 
   const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
-    available:   { label: "Available",     color: "#059669", bg: "#d1fae5" },
-    booked:      { label: "Booked",        color: "#dc2626", bg: "#fee2e2" },
-    unavailable: { label: "Unavailable",   color: "#6b7280", bg: "#f3f4f6" },
-    yours:       { label: "Your Booking",  color: "#1d4ed8", bg: "#dbeafe" },
+    available:   { label: "Available",    color: "#059669", bg: "#d1fae5" },
+    booked:      { label: "Booked",       color: "#dc2626", bg: "#fee2e2" },
+    unavailable: { label: "Unavailable",  color: "#6b7280", bg: "#f3f4f6" },
+    yours:       { label: "Your Booking", color: "#1d4ed8", bg: "#dbeafe" },
   };
 
   const matchConfig: Record<string, { label: string; color: string; bg: string; icon: string }> = {
@@ -312,7 +292,6 @@ const SeatTooltip: React.FC<{
   const mc  = seat.preferenceMatchStatus ? matchConfig[seat.preferenceMatchStatus] : null;
   const pct = avail?.availability_percentage ?? null;
 
-  // Tooltip dimensions — wider now to accommodate the calendar
   const TIP_W  = 248;
   const PADDING = 12;
 
@@ -326,7 +305,6 @@ const SeatTooltip: React.FC<{
 
   return (
     <div style={{ position: "absolute", left, top, width: TIP_W, pointerEvents: "none", zIndex: 50 }}>
-      {/* Arrow */}
       <div style={{
         position: "absolute",
         left:  arrowOnRight ? "auto" : -6,
@@ -342,7 +320,6 @@ const SeatTooltip: React.FC<{
         transform: arrowOnRight ? "rotate(-45deg)" : "rotate(135deg)",
       }} />
 
-      {/* Card */}
       <div style={{
         background: "white",
         border: "1px solid #e5e7eb",
@@ -350,12 +327,10 @@ const SeatTooltip: React.FC<{
         padding: "13px 14px",
         boxShadow: "0 12px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)",
         fontFamily: "'DM Sans', 'Outfit', system-ui, sans-serif",
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
+        display: "flex", flexDirection: "column", gap: 10,
       }}>
 
-        {/* ── Header row: seat label + status badge ── */}
+        {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 800, color: "#111827", letterSpacing: "-0.02em" }}>
@@ -369,34 +344,21 @@ const SeatTooltip: React.FC<{
             fontSize: 10, fontWeight: 700,
             color: sc.color, background: sc.bg,
             borderRadius: 6, padding: "3px 8px",
-            letterSpacing: "0.02em", textTransform: "uppercase",
-            flexShrink: 0,
+            letterSpacing: "0.02em", textTransform: "uppercase", flexShrink: 0,
           }}>
             {sc.label}
           </span>
         </div>
 
-        {/* ── Availability ring + stats (only when we have multi-day data) ── */}
+        {/* Availability ring */}
         {avail && avail.total_requested_days > 1 && pct !== null && (
           <>
             <div style={{ borderTop: "1px solid #f3f4f6" }} />
-            <AvailabilityRing
-              pct={pct}
-              available={avail.total_available_days}
-              total={avail.total_requested_days}
-            />
+            <AvailabilityRing pct={pct} available={avail.total_available_days} total={avail.total_requested_days} />
           </>
         )}
 
-        {/* ── Daily calendar strip ── */}
-        {/* {avail && avail.daily_statuses && avail.daily_statuses.length > 0 && (
-          <>
-            <div style={{ borderTop: "1px solid #f3f4f6" }} />
-            <DayCalendarStrip dailyStatuses={avail.daily_statuses} />
-          </>
-        )} */}
-
-        {/* ── Preference match badge ── */}
+        {/* Preference match badge */}
         {mc && seat.preferenceMatchStatus !== "NO_MATCH" && (
           <>
             <div style={{ borderTop: "1px solid #f3f4f6" }} />
@@ -415,7 +377,7 @@ const SeatTooltip: React.FC<{
           </>
         )}
 
-        {/* ── Matched amenities ── */}
+        {/* Matched amenities */}
         {(seat.matchedAmenityNames ?? []).length > 0 && (
           <>
             <div style={{ borderTop: "1px solid #f3f4f6" }} />
@@ -439,7 +401,7 @@ const SeatTooltip: React.FC<{
           </>
         )}
 
-        {/* ── All seat amenities (when different from matched) ── */}
+        {/* All seat amenities */}
         {seat.amenities.length > 0 &&
           JSON.stringify(seat.amenities) !== JSON.stringify(seat.matchedAmenityNames ?? []) && (
           <>
@@ -458,8 +420,7 @@ const SeatTooltip: React.FC<{
                       fontSize: 10, fontWeight: 500,
                       color: isMatched ? "#047857" : "#374151",
                       background: isMatched ? "#d1fae5" : "#f3f4f6",
-                      borderRadius: 5, padding: "2px 8px",
-                      textTransform: "capitalize",
+                      borderRadius: 5, padding: "2px 8px", textTransform: "capitalize",
                     }}>
                       {a}
                     </span>
@@ -470,7 +431,7 @@ const SeatTooltip: React.FC<{
           </>
         )}
 
-        {/* ── Seat metadata ── */}
+        {/* No amenity fallback */}
         {(seat.amenities.length === 0 && (seat.matchedAmenityNames ?? []).length === 0) && (
           <>
             <div style={{ borderTop: "1px solid #f3f4f6" }} />
@@ -480,15 +441,11 @@ const SeatTooltip: React.FC<{
           </>
         )}
 
-        {/* ── Click hint ── */}
+        {/* Click hint */}
         {(seat.status === "available" || seat.status === "yours") && (
           <div style={{
-            marginTop: 2,
-            fontSize: 10, color: "#9ca3af",
-            textAlign: "center",
-            background: "#f9fafb",
-            borderRadius: 6,
-            padding: "4px 0",
+            marginTop: 2, fontSize: 10, color: "#9ca3af", textAlign: "center",
+            background: "#f9fafb", borderRadius: 6, padding: "4px 0",
           }}>
             {seat.status === "yours" ? "↩ Click to deselect" : "↵ Click to select this seat"}
           </div>
@@ -504,6 +461,7 @@ interface SvgFloorMapPageProps {
   selectedSeatId: string | null;
   onSeatSelect: (seatId: string | null) => void;
   loading?: boolean;
+  svgUrl?: string | null;
   siteName?: string;
   buildingName?: string;
   floorName?: string;
@@ -515,6 +473,7 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
   selectedSeatId,
   onSeatSelect,
   loading = false,
+  svgUrl,
 }) => {
   const wrapperRef   = useRef<HTMLDivElement>(null);
   const transformRef = useRef<HTMLDivElement>(null);
@@ -532,6 +491,10 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
   const [zoomDisplay, setZoomDisplay] = useState(100);
   const [mapReady,    setMapReady]    = useState(false);
 
+  // Dynamically extracted seat IDs from the SVG — no hardcoding
+  const [svgSeatIds,    setSvgSeatIds]    = useState<string[]>([]);
+  const svgSeatIdsSet = useRef<Set<string>>(new Set());
+
   const [tooltip, setTooltip] = useState<TooltipState>({
     visible: false, x: 0, y: 0, seat: null,
   });
@@ -539,20 +502,37 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
   const tooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const coloredSvg =
-    rawSvg && !loading && seats.length > 0
-      ? buildColoredSvg(rawSvg, seats, selectedSeatId)
-      : null;
+    rawSvg && !loading && seats.length > 0 && svgSeatIds.length > 0
+      ? buildColoredSvg(rawSvg, svgSeatIds, seats, selectedSeatId)
+      : rawSvg && !loading && svgSeatIds.length > 0
+        ? rawSvg  // show uncolored SVG while seats are still loading
+        : null;
 
-  // ── Fetch raw SVG once ────────────────────────────────────────────────────
+  // ── Fetch SVG from dynamic URL ────────────────────────────────────────────
   useEffect(() => {
-    fetch("/floor-IT.svg")
+    setRawSvg(null);
+    setSvgError(false);
+    setMapReady(false);
+    setSvgSeatIds([]);
+    svgSeatIdsSet.current = new Set();
+    fitDoneRef.current = false;
+
+    if (!svgUrl) return;
+
+    fetch(svgUrl)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.text();
       })
-      .then(setRawSvg)
+      .then((text) => {
+        // Extract <g id="..."> values dynamically — these are the seat IDs
+        const ids = extractSeatIds(text);
+        setSvgSeatIds(ids);
+        svgSeatIdsSet.current = new Set(ids);
+        setRawSvg(text);
+      })
       .catch(() => setSvgError(true));
-  }, []);
+  }, [svgUrl]);
 
   // ── applyTransform ────────────────────────────────────────────────────────
   const applyTransform = useCallback(() => {
@@ -661,27 +641,16 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     setTooltip((t) => ({ ...t, visible: false, seat: null }));
   }, []);
 
-  // const showTooltipForSvgId = useCallback(
-  //   (svgId: string, x: number, y: number) => {
-  //     const seat = seats.find((s) => s.svgId === svgId);
-  //     if (!seat) return;
-  //     if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
-  //     setTooltip({ visible: true, x, y, seat });
-  //   },
-  //   [seats]
-  // );
-
   const showTooltipForSvgId = useCallback(
-  (svgId: string, x: number, y: number) => {
-    const seat = seats.find((s) => s.svgId === svgId);
-    if (!seat) return;
-    // ← ADD THIS: no tooltip for non-interactive states
-    if (seat.status === "booked" || seat.status === "unavailable") return;
-    if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
-    setTooltip({ visible: true, x, y, seat });
-  },
-  [seats]
-);
+    (svgId: string, x: number, y: number) => {
+      const seat = seats.find((s) => s.svgId === svgId);
+      if (!seat) return;
+      if (seat.status === "booked" || seat.status === "unavailable") return;
+      if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
+      setTooltip({ visible: true, x, y, seat });
+    },
+    [seats]
+  );
 
   // ── Pan handlers ──────────────────────────────────────────────────────────
   const onMouseDown = (e: React.MouseEvent) => {
@@ -696,14 +665,9 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     if (!isPanning.current) return;
     const dx = e.clientX - mouseDownPos.current.x;
     const dy = e.clientY - mouseDownPos.current.y;
-    if (!didDrag.current && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
-      didDrag.current = true;
-    }
+    if (!didDrag.current && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) didDrag.current = true;
     if (didDrag.current) {
-      translateRef.current = {
-        x: panStart.current.x + dx,
-        y: panStart.current.y + dy,
-      };
+      translateRef.current = { x: panStart.current.x + dx, y: panStart.current.y + dy };
       applyTransform();
     }
   };
@@ -715,10 +679,8 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
 
   const onMapMouseMove = (e: React.MouseEvent) => {
     if (isPanning.current && didDrag.current) return;
-    if (wrapperRef.current) {
-      containerRectRef.current = wrapperRef.current.getBoundingClientRect();
-    }
-    const svgId = getSvgIdFromClick(e.target);
+    if (wrapperRef.current) containerRectRef.current = wrapperRef.current.getBoundingClientRect();
+    const svgId = getSvgIdFromClick(e.target, svgSeatIdsSet.current);
     if (!svgId) {
       if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
       tooltipTimeoutRef.current = setTimeout(hideTooltip, 120);
@@ -736,36 +698,24 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     tooltipTimeoutRef.current = setTimeout(hideTooltip, 200);
   };
 
-  // const onMapClick = (e: React.MouseEvent) => {
-  //   if (didDrag.current) { didDrag.current = false; return; }
-  //   const svgId = getSvgIdFromClick(e.target);
-  //   if (!svgId) return;
-  //   const seat = seats.find((s) => s.svgId === svgId);
-  //   if (!seat) return;
-  //   if (seat.status !== "available" && seat.status !== "yours") return;
-  //   hideTooltip();
-  //   onSeatSelect(seat.id === selectedSeatId ? null : seat.id);
-  // };
-
   const onMapClick = (e: React.MouseEvent) => {
-  if (didDrag.current) { didDrag.current = false; return; }
-  const svgId = getSvgIdFromClick(e.target);
-  if (!svgId) return;
-  const seat = seats.find((s) => s.svgId === svgId);
-  console.log("clicked seat:", seat?.id, "status:", seat?.status, "svgId:", svgId);  // ← ADD
-  if (!seat) return;
-  if (seat.status !== "available" && seat.status !== "yours") return;
-  hideTooltip();
-  onSeatSelect(seat.id === selectedSeatId ? null : seat.id);
-};
+    if (didDrag.current) { didDrag.current = false; return; }
+    const svgId = getSvgIdFromClick(e.target, svgSeatIdsSet.current);
+    if (!svgId) return;
+    const seat = seats.find((s) => s.svgId === svgId);
+    console.log("clicked seat:", seat?.id, "status:", seat?.status, "svgId:", svgId);
+    if (!seat) return;
+    if (seat.status !== "available" && seat.status !== "yours") return;
+    hideTooltip();
+    onSeatSelect(seat.id === selectedSeatId ? null : seat.id);
+  };
 
   // ── Legend counts ─────────────────────────────────────────────────────────
   const hasPreferences    = seats.some((s) => s.preferenceMatchStatus === "FULL_MATCH" || s.preferenceMatchStatus === "PARTIAL_MATCH");
-  const bestMatchCount    = seats.filter((s) => s.preferenceMatchStatus === "FULL_MATCH"    && s.status === "available").length;
   const partialMatchCount = seats.filter((s) => s.preferenceMatchStatus === "PARTIAL_MATCH" && s.status === "available").length;
-  const availableCount    = seats.filter((s) => s.status === "available").length;
 
-  const showSpinner = !rawSvg || loading || !mapReady;
+  const showSpinner  = (!!svgUrl && !rawSvg && !svgError) || loading || (!!rawSvg && !mapReady);
+  const showNoLayout = !svgUrl && !loading;
 
   return (
     <div
@@ -808,17 +758,11 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
             <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
               <span className="w-2.5 h-2.5 rounded-full inline-block bg-amber-400 ring-1 ring-amber-500" />
               Best Match
-              {/* {bestMatchCount > 0 && (
-                <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-semibold">{bestMatchCount}</span>
-              )} */}
             </span>
           )}
           <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
             <span className="w-2.5 h-2.5 rounded-full inline-block bg-emerald-500" />
             Available
-            {/* {availableCount > 0 && (
-              <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">{availableCount}</span>
-            )} */}
           </span>
           {hasPreferences && partialMatchCount > 0 && (
             <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
@@ -827,7 +771,6 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
                 <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 border border-white" />
               </span>
               Partial Match
-              {/* <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">{partialMatchCount}</span> */}
             </span>
           )}
           <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
@@ -859,6 +802,7 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
         onMouseLeave={onMapMouseLeave}
         onClick={onMapClick}
       >
+        {/* Loading spinner */}
         {showSpinner && !svgError && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#F7F8FC] z-10">
             <div className="flex flex-col items-center gap-3">
@@ -868,12 +812,25 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
           </div>
         )}
 
+        {/* Fetch error */}
         {svgError && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
               <p className="text-[13px] text-gray-500 mb-1">Floor plan unavailable</p>
               <p className="text-[11.5px] text-gray-400">
-                Place SVG at <code className="bg-gray-100 px-1 rounded">/public/floor-IT.svg</code>
+                The layout file could not be loaded. Please try again or contact support.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* No layout configured */}
+        {showNoLayout && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-[13px] text-gray-500 mb-1">No floor plan available</p>
+              <p className="text-[11.5px] text-gray-400">
+                No published layout has been configured for this floor.
               </p>
             </div>
           </div>

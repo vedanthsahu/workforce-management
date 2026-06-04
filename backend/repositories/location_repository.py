@@ -83,7 +83,7 @@ def fetch_buildings_by_site(
     conn: PGConnection,
     *,
     tenant_id: str,
-    site_id: str,
+    site_id: str | None = None,
     page: int | None = None,
     limit: int | None = None,
     search: str | None = None,
@@ -125,9 +125,13 @@ def fetch_buildings_by_site(
               AND st.building_id = b.id
         ) AS seat_counts ON TRUE
         WHERE b.tenant_id = %s
-          AND b.site_id = %s
     """
-    params: list[Any] = [tenant_id, site_id]
+    params: list[Any] = [tenant_id]
+    if site_id is not None:
+        query += """
+        AND b.site_id = %s
+    """
+        params.append(site_id)
     query, params = _apply_status_filter(query, params, "b.status", status_filter)
     query, params = _apply_search_filter(
         query,
@@ -137,6 +141,7 @@ def fetch_buildings_by_site(
     )
     query += " ORDER BY b.building_code, b.id"
     query, params = _apply_pagination(query, params, page=page, limit=limit)
+  
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(query, params)

@@ -1,118 +1,178 @@
 "use client";
 
-import { useState } from "react";
-import { Building } from "../types/building";
-import { Building2, Pencil, Trash2, Search, Filter } from "lucide-react";
-import Pagination from "./Pagination";
+import {
+  Building2,
+  Pencil,
+} from "lucide-react";
 
-export default function BuildingTable({ data }: { data: Building[] }) {
-  const [currentPage, setCurrentPage] = useState(1);
+import { Building } from "../types/building.types";
 
-  const itemsPerPage = 3; //  IMPORTANT (so pagination shows)
-  const totalPages = Math.ceil(data.length / itemsPerPage);
 
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentData = data.slice(startIndex, startIndex + itemsPerPage);
+type Props = {
+  data: Building[];
+  onEdit: (
+    building: Building
+  ) => void;
+};
 
+
+export default function BuildingTable({
+  data,
+  onEdit,
+}: Props) {
+
+  
   return (
-    <div className="bg-white border rounded-xl">
+    <div className="w-full overflow-x-auto">
+      <table className="w-full text-sm table-auto">
 
-      {/* Header */}
-      <div className="flex justify-between items-center p-5 border-b">
-        <h3 className="text-lg font-semibold">Buildings List</h3>
+        {/* HEADER */}
+        <thead className="text-xs text-gray-500 bg-gray-50 border-b">
+          <tr>
 
-        <div className="flex gap-3 items-center">
-          {/* <select className="border rounded-lg px-3 py-2 text-sm">
-            <option>All Sites</option>
-          </select> */}
+            <th className="px-6 py-4 text-left">
+              Building Code
+            </th>
 
-          <div className="relative">
-            <Search className="absolute left-2 top-2.5 w-4 h-4 text-gray-400" />
-            <input
-              placeholder="Search building..."
-              className="border rounded-lg pl-8 pr-3 py-2 text-sm"
-            />
-          </div>
-{/* 
-          <button className="flex items-center gap-2 border px-3 py-2 rounded-lg text-sm">
-            <Filter className="w-4 h-4" />
-            Filters
-          </button> */}
-        </div>
-      </div>
+            <th className="px-6 py-4 text-left">
+              Building Name
+            </th>
 
-      {/* Table */}
-      <table className="w-full text-sm">
-        <thead className="text-gray-500 border-b">
-  <tr>
-    <th className="text-left py-3 px-5">Building Name</th>
-    <th className="text-left py-3 px-5">Site</th>
-    <th className="text-left py-3 px-5">Address</th>
-    <th className="text-left py-3 px-5">Capacity (Seats)</th>
-    <th className="text-left py-3 px-5">Status</th>
-    
-    <th className="text-center py-3 px-5">Actions</th>
-  </tr>
-</thead>
+            <th className="px-6 py-4 text-left">
+              Site Name
+            </th>
 
-<tbody>
-  {currentData.map((item) => (
-    <tr key={item.id} className="border-b hover:bg-gray-50">
+            <th className="px-6 py-4 text-center">
+              Floors
+            </th>
 
-      <td className="py-4 px-5 flex items-center gap-3">
-        <div className="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center">
-          <Building2 className="w-4 h-4 text-gray-600" />
-        </div>
-        {item.name}
-      </td>
+            <th className="px-6 py-4 text-center">
+              Total Seats
+            </th>
 
-      <td className="px-5">{item.site}</td>
-      <td className="px-5">{item.address}</td>
-      <td className="px-5">{item.capacity}</td>
+            <th className="px-6 py-4 text-center">
+              Active Seats
+            </th>
 
-      <td className="px-5">
-        <span className={`px-3 py-1 text-xs rounded-full ${
-          item.status === "Active"
-            ? "bg-green-100 text-green-600"
-            : "bg-gray-200 text-gray-600"
-        }`}>
-          {item.status}
-        </span>
-      </td>
+            <th className="px-6 py-4 text-center">
+              Bookable Seats
+            </th>
 
-     
+            <th className="px-6 py-4 text-center">
+              Status
+            </th>
 
-      <td className="px-5 text-center">
-        <div className="flex justify-center gap-2">
-          <button className="p-2 border rounded-lg hover:bg-blue-50">
-            <Pencil className="w-4 h-4 text-blue-600" />
-          </button>
+            <th className="px-6 py-4 text-center">
+              Actions
+            </th>
 
-          
-        </div>
-      </td>
+          </tr>
+        </thead>
 
-    </tr>
-  ))}
-</tbody>
+        {/* BODY */}
+        <tbody className="divide-y divide-gray-100">
+
+          {data.length === 0 ? (
+            <tr>
+              <td
+                colSpan={9}
+                className="py-10 text-center text-gray-500"
+              >
+                No buildings found
+              </td>
+            </tr>
+          ) : (
+            data.map((building) => (
+              <tr
+                key={building.building_id}
+                className="hover:bg-gray-50"
+              >
+
+                {/* BUILDING CODE */}
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-3">
+
+                    <div className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-100">
+                      <Building2 className="w-4 h-4 text-blue-600" />
+                    </div>
+
+                    <span className="font-medium whitespace-nowrap">
+                      {building.building_code}
+                    </span>
+
+                  </div>
+                </td>
+
+                {/* BUILDING NAME */}
+                <td className="px-6 py-4 font-medium whitespace-nowrap">
+                  {building.building_name}
+                </td>
+
+                {/* SITE NAME */}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {building.site_name}
+                </td>
+
+                {/* FLOORS */}
+                <td className="px-6 py-4 text-center">
+                  {building.floor_count}
+                </td>
+
+                {/* TOTAL SEATS */}
+                <td className="px-6 py-4 text-center">
+                  {building.seat_count}
+                </td>
+
+                {/* ACTIVE SEATS */}
+                <td className="px-6 py-4 text-center">
+                  {building.active_seat_count}
+                </td>
+
+                {/* BOOKABLE SEATS */}
+                <td className="px-6 py-4 text-center">
+                  {building.bookable_seat_count}
+                </td>
+
+                {/* STATUS */}
+                <td className="px-6 py-4 text-center">
+
+                  <span
+                    className={`px-3 py-1 text-xs rounded-full whitespace-nowrap ${
+                      building.status ===
+                      "ACTIVE"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-100 text-gray-600"
+                    }`}
+                  >
+                    {building.status}
+                  </span>
+
+                </td>
+
+                {/* ACTION */}
+                <td className="px-6 py-4 text-center">
+
+                  <button
+                    onClick={() =>
+                      onEdit(building)
+                    }
+                    className="p-2 border rounded-lg hover:bg-gray-100 transition"
+                  >
+                    <Pencil
+                      size={14}
+                      className="text-blue-600"
+                    />
+                  </button>
+
+                </td>
+
+              </tr>
+            ))
+          )}
+
+        </tbody>
+
       </table>
-
-      {/* Footer */}
-      <div className="flex justify-between items-center p-4">
-
-        {/* Showing text */}
-        <p className="text-sm text-gray-500">
-          Showing {startIndex + 1} to{" "}
-          {Math.min(startIndex + itemsPerPage, data.length)} of {data.length} entries
-        </p>
-
-        {/* Pagination */}
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={setCurrentPage}
-        />
-      </div>
     </div>
   );
 }
