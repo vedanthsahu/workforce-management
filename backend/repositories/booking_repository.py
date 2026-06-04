@@ -403,6 +403,8 @@ def cancel_booking(
     tenant_id: str,
     booking_id: str,
     cancellation_reason: str,
+    booking_status: str = "CANCELLED",
+
 ) -> None:
     """Soft-cancel one booking."""
     with conn.cursor() as cur:
@@ -410,7 +412,7 @@ def cancel_booking(
             """
             UPDATE bookings
             SET
-                booking_status = 'CANCELLED',
+                booking_status = %s,
                 cancelled_at = NOW(),
                 cancellation_reason = %s,
                 updated_at = NOW()
@@ -418,6 +420,7 @@ def cancel_booking(
               AND tenant_id = %s
             """,
             (
+                booking_status,
                 cancellation_reason,
                 booking_id,
                 tenant_id,
@@ -668,6 +671,7 @@ def fetch_available_seats_by_range(
     start_date: date,
     end_date: date,
     amenity_ids: list[int],
+    exclude_booking_id: str | None = None,
 ) -> list[dict[str, Any]]:
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -710,18 +714,22 @@ def fetch_available_seats_by_range(
 
             booked_seat_dates AS (
 
-                SELECT
-                    bkg.seat_id,
-                    bkg.booking_date
-                FROM bookings bkg
-                WHERE bkg.tenant_id = %s
-                  AND bkg.floor_id = %s
-                  AND bkg.booking_date BETWEEN %s AND %s
-                  AND bkg.booking_status IN (
-                        'CONFIRMED',
-                        'CHECKED_IN'
-                  )
-            ),
+                    SELECT
+                        bkg.seat_id,
+                        bkg.booking_date
+                    FROM bookings bkg
+                    WHERE bkg.tenant_id = %s
+                    AND bkg.floor_id = %s
+                    AND bkg.booking_date BETWEEN %s AND %s
+                    AND bkg.booking_status IN (
+                            'CONFIRMED',
+                            'CHECKED_IN'
+                    )
+                    AND (
+                            %s IS NULL
+                            OR bkg.id::text <> %s
+                    )
+                ),
 
             blocked_seat_dates AS (
 
@@ -1015,26 +1023,28 @@ def fetch_available_seats_by_range(
             ORDER BY sds.seat_code
             """,
             (
-                start_date,
-                end_date,
+                        start_date,
+                        end_date,
 
-                amenity_ids,
+                        amenity_ids,
 
-                tenant_id,
-                floor_id,
+                        tenant_id,
+                        floor_id,
 
-                tenant_id,
-                floor_id,
-                start_date,
-                end_date,
+                        tenant_id,
+                        floor_id,
+                        start_date,
+                        end_date,
+                        exclude_booking_id,
+                        exclude_booking_id,
 
-                tenant_id,
+                        tenant_id,
 
-                tenant_id,
+                        tenant_id,
 
-                tenant_id,
-                floor_id,
-            ),
+                        tenant_id,
+                        floor_id,
+                    ),
         )
 
         rows = cur.fetchall()
