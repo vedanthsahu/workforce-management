@@ -80,14 +80,11 @@ export function useBookingForm() {
   const prefillFromDate = searchParams.get("fromDate") ?? null;
   const prefillToDate   = searchParams.get("toDate")   ?? null;
 
-  // preferences passed as keys (when API returned real data)
   const prefillPreferencesParam = searchParams.get("preferences") ?? null;
   const prefillPreferences: string[] = prefillPreferencesParam
     ? prefillPreferencesParam.split(",").filter(Boolean)
     : [];
 
-  // preferenceNames passed as display names (when using fallback from MyBookingsPage)
-  // These are resolved to real keys once the /preferences API responds.
   const prefillPreferenceNamesParam = searchParams.get("preferenceNames") ?? null;
   const prefillPreferenceNames: string[] = prefillPreferenceNamesParam
     ? prefillPreferenceNamesParam.split(",").filter(Boolean)
@@ -118,7 +115,6 @@ export function useBookingForm() {
       fromDate:       initialFromDate,
       toDate:         initialToDate,
       selectedSeatId: searchParams.get("seatId")     ?? null,
-      // Only seed preferences from keys — name-based prefill happens after API loads
       preferences:    prefillPreferences,
     };
   });
@@ -132,6 +128,9 @@ export function useBookingForm() {
   const [floors,               setFloors]               = useState<Floor[]>([]);
   const [seats,                setSeats]                = useState<Seat[]>([]);
   const [availablePreferences, setAvailablePreferences] = useState<Preference[]>([]);
+
+  // ── Floor layout URL — derived from the selected floor ───────────────────
+  const [floorLayoutUrl, setFloorLayoutUrl] = useState<string | null>(null);
 
   const [loadingSites,       setLoadingSites]       = useState(false);
   const [loadingBuildings,   setLoadingBuildings]   = useState(false);
@@ -152,26 +151,17 @@ export function useBookingForm() {
     setBuildings([]);
     setFloors([]);
     setSeats([]);
+    setFloorLayoutUrl(null);
     setConfirmation(null);
     setError(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.toString()]);
 
   // ── Resolve prefill preferences once the API list is available ───────────
-  //
-  // Two resolution paths:
-  //
-  //  1. `preferences` param (real keys from API) — filter to only valid keys.
-  //  2. `preferenceNames` param (display names, fallback) — match by name
-  //     case-insensitively and resolve to keys.
-  //
-  // Path 2 runs only when there are no real keys already set, so it never
-  // overrides a legitimate selection.
 
   useEffect(() => {
     if (availablePreferences.length === 0) return;
 
-    // Path 1: validate prefill keys that came from the API
     if (prefillPreferences.length > 0) {
       const validKeys = prefillPreferences.filter((k) =>
         availablePreferences.some((p) => p.key === k)
@@ -182,7 +172,6 @@ export function useBookingForm() {
       return;
     }
 
-    // Path 2: resolve display names → keys (fallback path from MyBookingsPage)
     if (prefillPreferenceNames.length > 0) {
       const resolvedKeys = prefillPreferenceNames
         .map((name) =>
@@ -196,7 +185,6 @@ export function useBookingForm() {
       if (resolvedKeys.length > 0) {
         setForm((f) => ({
           ...f,
-          // Only set if the form has no preferences yet (don't overwrite user picks)
           preferences: f.preferences.length === 0 ? resolvedKeys : f.preferences,
         }));
       }
@@ -253,6 +241,14 @@ export function useBookingForm() {
       .finally(() => setLoadingFloors(false));
   }, [form.buildingId]);
 
+  // ── Derive floor layout URL from the selected floor ───────────────────────
+  // No extra API call needed — layout_file_url comes from fetchFloors already.
+
+  useEffect(() => {
+    const floor = floors.find((f) => f.id === form.floorId);
+    setFloorLayoutUrl(floor?.layoutFileUrl ?? null);
+  }, [floors, form.floorId]);
+
   // ── Prefill resolution: display names → IDs ──────────────────────────────
 
   useEffect(() => {
@@ -304,13 +300,14 @@ export function useBookingForm() {
       setLoadingSeats(true);
       const amenityIds = resolveAmenityIds(form.preferences);
       fetchSeatsWithAvailability({
-        floorId:       form.floorId,
-        fromDate:      form.fromDate,
-        toDate:        form.toDate,
-        preferences:   form.preferences,
+        floorId:         form.floorId,
+        fromDate:        form.fromDate,
+        toDate:          form.toDate,
+        preferences:     form.preferences,
         amenityIds,
-        currentSeatId: searchParams.get("seatId") ?? undefined,
-      })
+        currentSeatId:   searchParams.get("seatId") ?? undefined,
+        modifyBookingId: modifyBookingId ?? null,
+      } as any)
         .then(setSeats)
         .catch((e) => setError(e.message))
         .finally(() => setLoadingSeats(false));
@@ -370,13 +367,14 @@ export function useBookingForm() {
     try {
       const amenityIds = resolveAmenityIds(form.preferences);
       const data = await fetchSeatsWithAvailability({
-        floorId:       form.floorId,
-        fromDate:      form.fromDate,
-        toDate:        form.toDate,
-        preferences:   form.preferences,
+        floorId:         form.floorId,
+        fromDate:        form.fromDate,
+        toDate:          form.toDate,
+        preferences:     form.preferences,
         amenityIds,
-        currentSeatId: searchParams.get("seatId") ?? undefined,
-      });
+        currentSeatId:   searchParams.get("seatId") ?? undefined,
+        modifyBookingId: modifyBookingId ?? null,
+      } as any);
       setSeats(data);
       navigateTo(2, form);
     } catch (e: any) {
@@ -389,7 +387,7 @@ export function useBookingForm() {
     } finally {
       setLoadingSeats(false);
     }
-  }, [form, resolveAmenityIds, navigateTo, searchParams]);
+  }, [form, resolveAmenityIds, navigateTo, searchParams, modifyBookingId]);
 
   // ── Step 2: select seat ───────────────────────────────────────────────────
 
@@ -475,6 +473,7 @@ export function useBookingForm() {
     setBuildings([]);
     setFloors([]);
     setSeats([]);
+    setFloorLayoutUrl(null);
     setConfirmation(null);
     setError(null);
     router.push("/book");
@@ -526,6 +525,7 @@ export function useBookingForm() {
     step1Valid,
     isModifyMode,
     modifyBookingId,
+    floorLayoutUrl,
     setSiteId,
     setBuildingId,
     setFloorId,
