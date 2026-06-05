@@ -14,6 +14,7 @@ export default function OfficesPage() {
     offices,
     loading,
     error,
+    fetchStats,
     fetchOffices,
     stats,
   } = useOffices();
@@ -28,20 +29,23 @@ export default function OfficesPage() {
     setOpen(true);
   };
 
+  const handleSuccess = async () => {
+  await fetchOffices();
+  await fetchStats();
+};
+
   const filteredOffices = offices.filter((o: any) => {
-    const name = (o.site_name || "").toLowerCase();
-    const query = search.toLowerCase();
-    if (query.length === 0) return true;
-    let i = 0;
-    for (let char of name) {
-      if (char === query[i]) i++;
-      if (i === query.length) return true;
-    }
-    return false;
-  });
+  const name = (o.site_name || "").toLowerCase();
+  const query = search.toLowerCase().trim();
+
+  return name.includes(query);
+});
 
   const itemsPerPage = 10;
   const totalPages = Math.ceil(filteredOffices.length / itemsPerPage);
+  console.log("offices", offices.length);
+  console.log("filteredOffices", filteredOffices.length);
+  console.log("totalPages", totalPages);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedOffices = filteredOffices.slice(startIndex, startIndex + itemsPerPage);
 
@@ -81,7 +85,15 @@ export default function OfficesPage() {
             Offices List
           </h2>
           <div className="w-full sm:w-auto">
-            <OfficeFilters search={search} setSearch={setSearch} />
+            {/* <OfficeFilters search={search} setSearch={setSearch} /> */}
+            <OfficeFilters
+  search={search}
+  setSearch={(value) => {
+    setSearch(value);
+    setCurrentPage(1);
+  }}
+/>   
+ {/* Reset to first page on new search */}
           </div>
         </div>
 
@@ -108,7 +120,7 @@ export default function OfficesPage() {
             office={selectedOffice}
             open={open}
             onClose={() => setOpen(false)}
-            onSuccess={fetchOffices}
+            onSuccess={handleSuccess}
           />
         )}
 

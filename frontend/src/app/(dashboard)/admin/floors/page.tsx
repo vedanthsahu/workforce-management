@@ -87,7 +87,7 @@ export default function FloorsPage() {
     );
 
   return (
-    <div className="p-6 space-y-6 bg-[#f8fafc] min-h-screen">
+   <div className="p-6 space-y-6 bg-[#f8fafc] h-screen overflow-y-auto">
 
       {/* BREADCRUMB */}
       <div className="text-sm text-gray-500">
@@ -225,7 +225,7 @@ export default function FloorsPage() {
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm">
 
         {/* TABLE HEADER */}
-        <div className="flex justify-between items-center px-6 py-4 border-b">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center px-6 py-4 border-b">
 
           <h2 className="text-base font-semibold text-gray-800">
             Floors List
@@ -245,7 +245,7 @@ export default function FloorsPage() {
         {/* TABLE */}
         {loading ? (
           <div className="p-6 text-sm text-gray-500">
-            Loading...
+           <center>Select a site and building</center>
           </div>
         ) : error ? (
           <div className="p-6 text-sm text-red-500">
@@ -258,15 +258,21 @@ export default function FloorsPage() {
             floors.
           </div>
         ) : (
-          <FloorTable
-            data={
-              paginatedFloors
-            }
-            onEdit={
-              handleEdit
-            }
-          />
-        )}
+ <div
+  className="w-full overflow-x-auto overflow-y-auto"
+  style={{
+    minHeight: "260px",
+    maxHeight: "calc(100vh - 500px)",
+  }}
+>
+
+  <FloorTable
+    data={paginatedFloors}
+    onEdit={handleEdit}
+  />
+
+  </div>
+)}
 
         {/* EDIT MODAL */}
         {selectedFloor && (

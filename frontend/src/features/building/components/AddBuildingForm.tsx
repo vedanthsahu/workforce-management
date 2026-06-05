@@ -268,26 +268,41 @@ export default function AddBuildingForm() {
   const [successMessage, setSuccessMessage] =
     useState("");
 
+    const [errorMessage, setErrorMessage] =
+  useState("");
+
   const isFormValid =
     formData.site_id > 0 &&
     formData.building_code.trim() &&
     formData.building_name.trim();
 
-  const handleSave = async () => {
-    if (!isFormValid) return;
+ const handleSave = async () => {
+  if (!isFormValid) return;
 
-    const success = await handleSubmit();
+  setSuccessMessage("");
+  setErrorMessage("");
 
-    if (success) {
-      setSuccessMessage(
-        "Building added successfully!"
-      );
+  try {
+    await handleSubmit();
 
-      setTimeout(() => {
-        router.push("/admin/building");
-      }, 1000);
-    }
-  };
+    setSuccessMessage(
+      "Building added successfully!"
+    );
+
+    setTimeout(() => {
+      router.push("/admin/building");
+    }, 1000);
+  } catch (error: any) {
+  console.log("FULL ERROR:", error);
+  console.log("RESPONSE:", error?.response);
+  console.log("DATA:", error?.response?.data);
+
+  setErrorMessage(
+    JSON.stringify(error?.response?.data) ||
+    error.message
+  );
+}
+};
 
   const inputClass =
     "w-full h-9 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-150";
@@ -322,6 +337,12 @@ export default function AddBuildingForm() {
           {successMessage}
         </div>
       )}
+
+      {errorMessage && (
+  <div className="mb-4 flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700 px-3.5 py-2.5 rounded-lg text-sm">
+    {errorMessage}
+  </div>
+)}
 
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
