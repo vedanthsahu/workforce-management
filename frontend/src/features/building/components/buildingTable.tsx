@@ -179,15 +179,12 @@
 
 "use client";
 
-import {
-  Building2,
-  Pencil,
-} from "lucide-react";
-
+import { Building2, Pencil } from "lucide-react";
 import { Building } from "../types/building.types";
 
 type Props = {
   data: Building[];
+  onEdit: (building: Building) => void;
   onEdit: (building: Building) => void;
 };
 

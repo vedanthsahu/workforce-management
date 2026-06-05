@@ -41,7 +41,7 @@ export default function EditAmenityModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
 
       {/* MODAL */}
-      <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+      <div className="w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
 
         {/* HEADER */}
         <div className="flex items-center justify-between px-8 py-6 border-b">
@@ -73,16 +73,16 @@ export default function EditAmenityModal({
   </div>
 )}
         {/* BODY */}
-        <div className="p-8">
+       <div className="p-8 overflow-y-auto flex-1">
 
           {/* SECTION TITLE */}
-          <div className="mb-6 pb-4 border-b">
+          {/* <div className="mb-6 pb-4 border-b">
             <h3 className="text-xs font-semibold tracking-widest uppercase text-gray-400">
               Basic Information
             </h3>
-          </div>
+          </div> */}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
             {/* AMENITY NAME */}
             <div>
@@ -181,7 +181,7 @@ export default function EditAmenityModal({
                     e.target.value
                   )
                 }
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm resize-none"
+                className="w-full h-min rounded-lg border border-gray-300 px-4 py-3 text-sm resize-none"
                 placeholder="Enter short description"
               />
 
@@ -236,7 +236,7 @@ export default function EditAmenityModal({
         </div>
 
         {/* FOOTER */}
-        <div className="flex justify-end gap-3 px-8 py-5 border-t bg-gray-50">
+        <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 px-8 py-5 border-t bg-gray-50">
 
           <button
             onClick={onClose}

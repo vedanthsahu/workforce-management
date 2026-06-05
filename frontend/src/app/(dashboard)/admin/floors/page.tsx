@@ -380,7 +380,7 @@ export default function FloorsPage() {
   const paginatedFloors = filteredFloors.slice(startIndex, startIndex + itemsPerPage);
 
   return (
-    <div className="p-6 space-y-6 bg-[#f8fafc] min-h-screen">
+   <div className="p-6 space-y-6 bg-[#f8fafc] h-screen overflow-y-auto">
 
       {/* BREADCRUMB */}
       <div className="text-sm text-gray-500">
@@ -453,9 +453,19 @@ export default function FloorsPage() {
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
 
         {/* TABLE HEADER */}
-        <div className="flex justify-between items-center px-6 py-4 border-b shrink-0">
-          <h2 className="text-base font-semibold text-gray-800">Floors List</h2>
-          <FloorFilters search={search} setSearch={setSearch} />
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center px-6 py-4 border-b">
+
+          <h2 className="text-base font-semibold text-gray-800">
+            Floors List
+          </h2>
+
+          <FloorFilters
+            search={search}
+            setSearch={
+              setSearch
+            }
+          />
+
         </div>
 
         {/* TABLE BODY */}

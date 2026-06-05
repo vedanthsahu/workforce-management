@@ -25,7 +25,8 @@ export default function EditOfficeModal({
   onSuccess,
 }: Props) {
 
-  const [loading, setLoading] = useState(false);
+const [loading, setLoading] = useState(false);
+const [successMessage, setSuccessMessage] = useState("");
 
  const [formData, setFormData] =
   useState<UpdateOfficePayload>({
@@ -51,7 +52,7 @@ useEffect(() => {
     });
   }
 }, [office]);
-  // 🔹 INPUT CHANGE
+  //  INPUT CHANGE
   const handleChange = (
     e: React.ChangeEvent<
       HTMLInputElement | HTMLSelectElement
@@ -63,19 +64,25 @@ useEffect(() => {
     });
   };
 
-  // 🔹 SUBMIT
+  //  SUBMIT
   const handleSubmit = async () => {
     try {
 
       setLoading(true);
 
       await officeService.updateSite(
-        office.site_id,
-        formData
-      );
+  office.site_id,
+  formData
+);
 
-      onSuccess();
-      onClose();
+setSuccessMessage("Office updated successfully");
+
+await onSuccess();
+
+setTimeout(() => {
+  setSuccessMessage("");
+  onClose();
+}, 1300);
 
     } catch (err) {
 
@@ -117,6 +124,12 @@ useEffect(() => {
           </button>
 
         </div>
+
+        {successMessage && (
+  <div className="mx-6 mt-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+    {successMessage}
+  </div>
+)}
 
         {/* BODY */}
         <div className="p-6 space-y-5">
