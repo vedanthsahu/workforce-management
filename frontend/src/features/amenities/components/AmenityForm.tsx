@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
@@ -8,6 +8,9 @@ import { useAmenityForm } from "../hooks/useAmenityForm";
 
 export default function AmenityForm() {
   const router = useRouter();
+  useEffect(() => {
+  router.prefetch("/admin/amenities");
+}, [router]);
 
   const {
   loading,
@@ -54,6 +57,7 @@ return (
     {/* BACK BUTTON */}
     <button
       onClick={() => router.push("/admin/amenities")}
+      onMouseEnter={() => router.prefetch("/admin/amenities")}
       className="flex items-center gap-2 text-sm text-gray-600 hover:text-black mb-6"
     >
       <ArrowLeft size={16} />
@@ -82,6 +86,7 @@ return (
       <div className="flex items-center gap-3">
         <button
           onClick={() => router.push("/admin/amenities")}
+          onMouseEnter={() => router.prefetch("/admin/amenities")} 
           className="px-4 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50"
         >
           Cancel
