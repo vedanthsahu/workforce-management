@@ -548,33 +548,33 @@ export default function AddBuildingForm() {
     formData.building_code.trim() &&
     formData.building_name.trim();
 
- const handleSave = async () => {
-  if (!isFormValid) return;
+//  const handleSave = async () => {
+//   if (!isFormValid) return;
 
-  setSuccessMessage("");
-  setErrorMessage("");
+//   setSuccessMessage("");
+//   setErrorMessage("");
 
-  try {
-    await handleSubmit();
+//   try {
+//     await handleSubmit();
 
-    setSuccessMessage(
-      "Building added successfully!"
-    );
+//     setSuccessMessage(
+//       "Building added successfully!"
+//     );
 
-    setTimeout(() => {
-      router.push("/admin/building");
-    }, 1000);
-  } catch (error: any) {
-  console.log("FULL ERROR:", error);
-  console.log("RESPONSE:", error?.response);
-  console.log("DATA:", error?.response?.data);
+//     setTimeout(() => {
+//       router.push("/admin/building");
+//     }, 1000);
+//   } catch (error: any) {
+//   console.log("FULL ERROR:", error);
+//   console.log("RESPONSE:", error?.response);
+//   console.log("DATA:", error?.response?.data);
 
-  setErrorMessage(
-    JSON.stringify(error?.response?.data) ||
-    error.message
-  );
-}
-};
+//   setErrorMessage(
+//     JSON.stringify(error?.response?.data) ||
+//     error.message
+//   );
+// }
+// };
   const handleSave = async () => {
     if (!isFormValid) return;
     const success = await handleSubmit();

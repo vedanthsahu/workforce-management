@@ -185,7 +185,6 @@ import { Building } from "../types/building.types";
 type Props = {
   data: Building[];
   onEdit: (building: Building) => void;
-  onEdit: (building: Building) => void;
 };
 
 export default function BuildingTable({ data, onEdit }: Props) {
