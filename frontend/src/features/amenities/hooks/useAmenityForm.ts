@@ -88,6 +88,8 @@ import { amenitiesService } from "../services/amenitiesService";
 
 export const useAmenityForm = () => {
   const [loading, setLoading] = useState(false);
+  // const [error, setError] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   const [categories, setCategories] =
     useState<any[]>([]);
@@ -130,33 +132,37 @@ export const useAmenityForm = () => {
   };
 
   const handleSubmit = async () => {
-    try {
-      setLoading(true);
+  try {
+    setLoading(true);
+    setErrorMessage("");
 
-      await amenitiesService.createAmenity({
-        ...formData,
-        category_id: Number(
-          formData.category_id
-        ),
-      });
+    await amenitiesService.createAmenity({
+      ...formData,
+      category_id: Number(
+        formData.category_id
+      ),
+    });
 
-      toast.success(
-        "Amenity created successfully"
-      );
+    toast.success(
+      "Amenity created successfully"
+    );
 
-      return true;
-    } catch (error) {
-      toast.error(
-        "Failed to create amenity"
-      );
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
+    return true;
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.error?.code ||
+      "Failed to create amenity";
 
+    setErrorMessage(message);
+
+    return false;
+  } finally {
+    setLoading(false);
+  }
+};
   return {
     loading,
+    errorMessage,
     formData,
     categories,
     handleChange,

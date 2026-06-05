@@ -454,8 +454,12 @@ export default function AmenitiesPage() {
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
 
         {/* TABLE HEADER */}
-        <div className="flex justify-between items-center px-6 py-4 border-b shrink-0">
-          <h2 className="text-base font-semibold text-gray-800">Amenities List</h2>
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center px-6 py-4 border-b">
+
+          <h2 className="text-base font-semibold text-gray-800">
+            Amenities List
+          </h2>
+
           <AmenitiesFilters
             search={search}
             setSearch={setSearch}
@@ -465,23 +469,37 @@ export default function AmenitiesPage() {
         </div>
 
         {/* TABLE BODY */}
-        <div
-          className="w-full overflow-x-auto overflow-y-auto"
-          style={{ maxHeight: "calc(100vh - 420px)", minHeight: "200px" }}
-        >
-          {loading ? (
-            <div className="p-6 text-sm text-gray-500">Loading...</div>
-          ) : (
-            <AmenitiesTable data={paginatedAmenities} onEdit={handleEdit} />
-          )}
-        </div>
+        {loading ? (
+          <div className="p-6 text-sm text-gray-500">
+            Loading...
+          </div>
+        ) : (
+  <div
+  className="w-full overflow-x-auto overflow-y-auto"
+  style={{
+    maxHeight: "calc(100vh - 420px)",
+    minHeight: "200px",
+  }}
+>
+  <AmenitiesTable
+    data={paginatedAmenities}
+    onEdit={handleEdit}
+  />
+</div>
+        )}
 
         {/* FOOTER */}
         <div className="flex justify-between items-center px-6 py-4 border-t shrink-0 text-sm text-gray-500">
           <span>
-            Showing {startIndex + 1} to{" "}
-            {Math.min(startIndex + itemsPerPage, filteredAmenities.length)} of{" "}
-            {filteredAmenities.length} entries
+            Showing {filteredAmenities.length === 0 ? 0 : startIndex + 1} to{" "}
+            {Math.min(
+              startIndex +
+                itemsPerPage,
+              filteredAmenities.length
+            )}{" "}
+            of{" "}
+            {filteredAmenities.length}{" "}
+            entries
           </span>
           <AmenitiesPagination
             currentPage={currentPage}

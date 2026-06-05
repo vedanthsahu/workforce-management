@@ -92,6 +92,16 @@ export const useFloorForm = () => {
         status: formData.status,
       });
 
+
+      sessionStorage.setItem(
+  "floorSelection",
+  JSON.stringify({
+    site_id: formData.site_id,
+    building_id: formData.building_id,
+  })
+); 
+// store new floor's site and building in session to auto-restore selection after redirecting to floor list
+
       toast.success(
         "Floor created successfully"
       );

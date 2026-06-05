@@ -60,7 +60,9 @@
           address_line2: "",
           status: "ACTIVE",
         });
-        setTimeout(() => setSuccessMessage(""), 3000);
+        setTimeout(() => {
+    router.push("/admin/offices");
+  }, 1500);
       } catch (error) {
         console.error(error);
       }

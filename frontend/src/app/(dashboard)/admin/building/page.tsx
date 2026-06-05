@@ -330,8 +330,10 @@ export default function BuildingsPage() {
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
 
         {/* TABLE HEADER */}
-        <div className="flex justify-between items-center px-6 py-4 border-b">
-          <h2 className="text-base font-semibold text-gray-800">
+        <div className="flex justify-between items-center px-6 py-3 border-b">
+
+      
+            <h2 className="text-sm sm:text-base font-semibold text-gray-800">
             Buildings List
           </h2>
           <BuildingFilters
