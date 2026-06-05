@@ -141,7 +141,7 @@ export default function AmenitiesPage() {
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm">
 
         {/* TABLE HEADER */}
-        <div className="flex justify-between items-center px-6 py-4 border-b">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center px-6 py-4 border-b">
 
           <h2 className="text-base font-semibold text-gray-800">
             Amenities List
@@ -162,7 +162,13 @@ export default function AmenitiesPage() {
             Loading...
           </div>
         ) : (
-          <div className="max-h-[420px] overflow-y-auto">
+  <div
+  className="w-full overflow-x-auto overflow-y-auto"
+  style={{
+    maxHeight: "calc(100vh - 420px)",
+    minHeight: "200px",
+  }}
+>
   <AmenitiesTable
     data={paginatedAmenities}
     onEdit={handleEdit}
@@ -174,7 +180,7 @@ export default function AmenitiesPage() {
         <div className="flex justify-between items-center px-6 py-4 border-t text-sm text-gray-500">
 
           <span>
-            Showing {startIndex + 1} to{" "}
+            Showing {filteredAmenities.length === 0 ? 0 : startIndex + 1} to{" "}
             {Math.min(
               startIndex +
                 itemsPerPage,

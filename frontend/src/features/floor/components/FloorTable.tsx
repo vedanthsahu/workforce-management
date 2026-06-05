@@ -18,47 +18,49 @@ export default function FloorTable({
 }: Props) {
   return (
     <div className="w-full overflow-x-auto">
+     {/* <div className="border rounded-xl"> */}
+
       <table className="w-full text-sm">
 
-        <thead className="bg-gray-50 border-b text-xs text-gray-500">
-          <tr>
-            <th className="px-6 py-4 text-left">
-              Floor Code
-            </th>
+        <thead className="sticky top-0 z-20 bg-gray-50 border-b text-xs text-gray-500">
+  <tr>
+    <th className="px-6 py-4 text-left bg-gray-50">
+      Floor Code
+    </th>
 
-            <th className="px-6 py-4 text-left">
-              Floor Name
-            </th>
+    <th className="px-6 py-4 text-left bg-gray-50">
+      Floor Name
+    </th>
 
-            <th className="px-6 py-4 text-left">
-              Building
-            </th>
+    <th className="px-6 py-4 text-left bg-gray-50">
+      Building
+    </th>
 
-            <th className="px-6 py-4 text-center">
-              Seats
-            </th>
+    <th className="px-6 py-4 text-center bg-gray-50">
+      Seats
+    </th>
 
-            <th className="px-6 py-4 text-center">
-              Active Seats
-            </th>
+    <th className="px-6 py-4 text-center bg-gray-50">
+      Active Seats
+    </th>
 
-            <th className="px-6 py-4 text-center">
-              Bookable Seats
-            </th>
+    <th className="px-6 py-4 text-center bg-gray-50">
+      Bookable Seats
+    </th>
 
-            <th className="px-6 py-4 text-center">
-              Layouts
-            </th>
+    <th className="px-6 py-4 text-center bg-gray-50">
+      Layouts
+    </th>
 
-            <th className="px-6 py-4 text-center">
-              Status
-            </th>
+    <th className="px-6 py-4 text-center bg-gray-50">
+      Status
+    </th>
 
-            <th className="px-6 py-4 text-center">
-              Actions
-            </th>
-          </tr>
-        </thead>
+    <th className="px-6 py-4 text-center bg-gray-50">
+      Actions
+    </th>
+  </tr>
+</thead>
 
         <tbody className="divide-y">
 

@@ -34,6 +34,32 @@ export const useFloors = () => {
     fetchDashboardSummary();
   }, []);
 
+  useEffect(() => {
+  const loadDefaultSelection = async () => {
+    if (sites.length === 0) return;
+
+    const defaultSiteId = "5";
+    const defaultBuildingId = "7";
+
+    await handleSiteChange(defaultSiteId);
+    await handleBuildingChange(defaultBuildingId);
+  };
+
+  loadDefaultSelection();
+  }, [sites]); // auto-load default selection based on known default site and building .
+
+//   useEffect(() => {
+//   if (sites.length > 0) {
+//     handleSiteChange(
+//       sites[0].site_id.toString()
+//     );
+//   }
+// }, [sites]); // auto-select first site on load, which will cascade to auto-select first building and load floors for that building
+
+useEffect(() => {
+  restoreSelection();
+}, [sites]);
+// auto-restore selection on page load, but only after sites have loaded to prevent restoring invalid selections
   const fetchSites = async () => {
     try {
       const response =
@@ -64,19 +90,44 @@ export const useFloors = () => {
       }
     };
 
-  const fetchBuildings =
-    async (siteId: string) => {
-      try {
-        const response =
-          await floorService.getBuildings(
-            Number(siteId)
-          );
+  // const fetchBuildings =
+  //   async (siteId: string) => {
+  //     try {
+  //       const response =
+  //         await floorService.getBuildings(
+  //           Number(siteId)
+  //         );
 
-        setBuildings(response);
-      } catch (error) {
-        console.error(error);
+  //       setBuildings(response);
+  //     } catch (error) {
+  //       console.error(error);
+  //     }
+  //   };
+
+  const fetchBuildings =
+  async (siteId: string) => {
+    try {
+      const response =
+        await floorService.getBuildings(
+          Number(siteId)
+        );
+
+      setBuildings(response);
+
+      // Auto-select first building
+      if (response.length > 0) {
+        const firstBuildingId =
+          response[0].building_id.toString();
+
+        setSelectedBuilding(firstBuildingId);
+
+        await fetchFloors(firstBuildingId);
       }
-    };
+
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const fetchFloors =
     async (
@@ -153,6 +204,39 @@ export const useFloors = () => {
       await fetchDashboardSummary();
     };
 
+
+
+    const restoreSelection = async () => {
+  const saved =
+    sessionStorage.getItem(
+      "floorSelection"
+    );
+
+  if (!saved) return;
+
+  try {
+    const {
+      site_id,
+      building_id,
+    } = JSON.parse(saved);
+
+    await handleSiteChange(
+      site_id
+    );
+
+    await handleBuildingChange(
+      building_id
+    );
+
+    sessionStorage.removeItem(
+      "floorSelection"
+    );
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+// Call this function when a new floor is created to save the current selection
   return {
     loading,
     error,

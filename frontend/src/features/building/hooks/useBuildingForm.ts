@@ -51,23 +51,20 @@ export const useBuildingForm = () => {
     }));
   };
 
-  const handleSubmit =
-    async (): Promise<boolean> => {
-      try {
-        setLoading(true);
+ const handleSubmit = async () => {
+  try {
+    setLoading(true);
 
-        await buildingService.createBuilding(
-          formData
-        );
+    const response =
+      await buildingService.createBuilding(
+        formData
+      );
 
-        return true;
-      } catch (error) {
-        console.error(error);
-        return false;
-      } finally {
-        setLoading(false);
-      }
-    };
+    return response;
+  } finally {
+    setLoading(false);
+  }
+};
 
   return {
     loading,

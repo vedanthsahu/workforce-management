@@ -47,17 +47,20 @@ export const buildingService = {
   },
 
   // CREATE BUILDING
-  async createBuilding(
-    payload: CreateBuildingPayload
-  ) {
-    const { data } = await axiosInstance.post(
-      "/buildings",
-      payload
-    );
+async createBuilding(
+  payload: CreateBuildingPayload
+) {
+  const response = await axiosInstance.post(
+    "/buildings",
+    payload
+  );
 
-    return data;
-  },
+  console.log("SUCCESS RESPONSE", response);
 
+  return response.data;
+}
+
+,
   // UPDATE BUILDING
   // async updateBuilding(
   //   building_id: string,

@@ -138,9 +138,10 @@ useEffect(() => {
      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
 
         {/* TABLE HEADER */}
-        <div className="flex justify-between items-center px-6 py-4 border-b">
+        <div className="flex justify-between items-center px-6 py-3 border-b">
 
-          <h2 className="text-base font-semibold text-gray-800">
+      
+            <h2 className="text-sm sm:text-base font-semibold text-gray-800">
             Buildings List
           </h2>
 
@@ -160,7 +161,7 @@ useEffect(() => {
 
         {/* TABLE BODY */}
 <div
-  className="w-full overflow-x-auto overflow-y-auto"
+  className="w-full overflow-y-auto"
   style={{
     maxHeight: "calc(100vh - 420px)",
     minHeight: "200px",

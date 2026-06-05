@@ -24,8 +24,8 @@ export default function useOffices() {
       setLoading(true);
 
       const data = await officeService.getSites({
-        page: 1,
-        limit: 10,
+        // page: 1,
+        // limit: 10,
       });
 
       setOffices(data);
@@ -68,6 +68,7 @@ export default function useOffices() {
     offices,
     loading,
     error,
+    fetchStats,
     fetchOffices, // REFRESH AFTER UPDATE
     stats,
   };
