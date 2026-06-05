@@ -7,14 +7,20 @@ import {
 
 type Props = {
   data: any[];
+
   onEdit: (
     floor: any
   ) => void;
+
+  highlightedFloorId?:
+    | string
+    | null;
 };
 
 export default function FloorTable({
   data,
   onEdit,
+  highlightedFloorId,
 }: Props) {
   return (
     <div className="w-full overflow-x-auto">
@@ -76,10 +82,18 @@ export default function FloorTable({
           ) : (
             data.map((floor) => (
               <tr
-                key={
-                  floor.floor_id
-                }
-              >
+  key={
+    floor.floor_id
+  }
+  className={`transition-colors duration-300 ${
+    highlightedFloorId ===
+    String(
+      floor.floor_id
+    )
+      ? "bg-blue-100"
+      : "hover:bg-gray-50"
+  }`}
+>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">

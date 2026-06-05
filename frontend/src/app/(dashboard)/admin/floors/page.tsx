@@ -1,8 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import Link from "next/link";
+import {
+  useMemo,
+  useState,
+  useEffect,
+} from "react";
 
+import Link from "next/link";
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import FloorCards from "@/features/floor/components/FloorCards";
 import FloorFilters from "@/features/floor/components/FloorFilters";
 import FloorPagination from "@/features/floor/components/FloorPagination";
@@ -12,6 +20,8 @@ import EditFloorModal from "@/features/floor/components/EditFloorModal";
 import { useFloors } from "@/features/floor/hooks/useFloors";
 
 export default function FloorsPage() {
+
+  
   const {
     floors,
     loading,
@@ -31,6 +41,11 @@ export default function FloorsPage() {
     refreshFloors,
   } = useFloors();
 
+  const router = useRouter();
+
+const searchParams =
+  useSearchParams();
+
   const [search, setSearch] =
     useState("");
 
@@ -43,6 +58,51 @@ export default function FloorsPage() {
   const [open, setOpen] =
     useState(false);
 
+  const [successMessage, setSuccessMessage] =
+  useState("");
+
+  const [highlightedFloorId, setHighlightedFloorId] =
+    useState<string | null>(null);
+
+  const [pinnedFloorId, setPinnedFloorId] =
+    useState<string | null>(null);  
+
+useEffect(() => {
+  const addedFloorId =
+    searchParams.get("added");
+
+  if (!addedFloorId)
+    return;
+
+  setPinnedFloorId(
+    addedFloorId
+  );
+
+  setHighlightedFloorId(
+    addedFloorId
+  );
+
+  setSuccessMessage(
+    "Floor added successfully"
+  );
+
+  setCurrentPage(1);
+
+  setTimeout(() => {
+    setPinnedFloorId(null);
+
+    setHighlightedFloorId(
+      null
+    );
+
+    setSuccessMessage("");
+  }, 6000);
+
+  router.replace(
+    "/admin/floors"
+  );
+}, [searchParams]);
+
   const handleEdit = (
     floor: any
   ) => {
@@ -50,9 +110,10 @@ export default function FloorsPage() {
     setOpen(true);
   };
 
-  const filteredFloors =
-    useMemo(() => {
-      return floors.filter(
+ const filteredFloors =
+  useMemo(() => {
+    const filtered =
+      floors.filter(
         (floor: any) =>
           floor.floor_name
             ?.toLowerCase()
@@ -65,7 +126,32 @@ export default function FloorsPage() {
               search.toLowerCase()
             )
       );
-    }, [floors, search]);
+
+    if (!pinnedFloorId)
+      return filtered;
+
+    return [
+      ...filtered.filter(
+        (f: any) =>
+          String(
+            f.floor_id
+          ) ===
+          pinnedFloorId
+      ),
+
+      ...filtered.filter(
+        (f: any) =>
+          String(
+            f.floor_id
+          ) !==
+          pinnedFloorId
+      ),
+    ];
+  }, [
+    floors,
+    search,
+    pinnedFloorId,
+  ]);
 
   const itemsPerPage = 10;
 
@@ -97,6 +183,13 @@ export default function FloorsPage() {
           Manage Floors
         </span>
       </div>
+
+      {successMessage && (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          {successMessage}
+        </div>
+      )}
+
 
       {/* HEADER */}
       <div className="flex justify-between items-center">
@@ -266,10 +359,13 @@ export default function FloorsPage() {
   }}
 >
 
-  <FloorTable
-    data={paginatedFloors}
-    onEdit={handleEdit}
-  />
+ <FloorTable
+  data={paginatedFloors}
+  onEdit={handleEdit}
+  highlightedFloorId={
+    highlightedFloorId
+  }
+/>
 
   </div>
 )}
@@ -286,9 +382,35 @@ export default function FloorsPage() {
                 false
               )
             }
-            onSuccess={
-              refreshFloors
-            }
+            onSuccess={() => {
+  refreshFloors();
+
+  setPinnedFloorId(
+    String(
+      selectedFloor.floor_id
+    )
+  );
+
+  setHighlightedFloorId(
+    String(
+      selectedFloor.floor_id
+    )
+  );
+
+  setSuccessMessage(
+    "Floor updated successfully"
+  );
+
+  setTimeout(() => {
+    setPinnedFloorId(null);
+
+    setHighlightedFloorId(
+      null
+    );
+
+    setSuccessMessage("");
+  }, 4000);
+}}
           />
         )}
 

@@ -30,6 +30,12 @@ export default function EditFloorModal({
     onSuccess
   );
 
+
+  const hasChanges =
+  formData.floor_name !== floor.floor_name ||
+  formData.status !== floor.status;
+
+
   if (!open) return null;
 
   return (
@@ -118,7 +124,7 @@ export default function EditFloorModal({
           </button>
 
           <button
-            disabled={loading}
+             disabled={loading || !hasChanges}
             onClick={async () => {
               const success =
                 await handleUpdate();
@@ -128,7 +134,11 @@ export default function EditFloorModal({
                 onClose();
               }
             }}
-            className="px-5 py-2 rounded-xl bg-blue-600 text-white"
+           className={`px-5 py-2 rounded-xl text-white ${
+  loading || !hasChanges
+    ? "bg-gray-300 cursor-not-allowed"
+    : "bg-blue-600 hover:bg-blue-700"
+}`}
           >
             Save Changes
           </button>
