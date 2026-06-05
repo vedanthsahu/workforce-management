@@ -186,6 +186,7 @@ import { Amenity } from "../types/amenities.types";
 type Props = {
   data: Amenity[];
   onEdit: (amenity: Amenity) => void;
+  highlightedAmenityId?: string | null;
 };
 
 const iconMap: Record<string, any> = {
@@ -200,7 +201,9 @@ const iconMap: Record<string, any> = {
 export default function AmenitiesTable({
   data,
   onEdit,
+   highlightedAmenityId,
 }: Props) {
+  
   return (
     <div className="w-full overflow-x-auto">
       <table className="w-full text-sm table-auto">
@@ -257,10 +260,14 @@ export default function AmenitiesTable({
                 ] || Tag;
 
               return (
-                <tr
-                  key={amenity.amenity_id}
-                  className="hover:bg-gray-50"
-                >
+      <tr
+  key={amenity.amenity_id}
+  className={`transition-colors duration-300 ${
+    highlightedAmenityId === String(amenity.amenity_id)
+      ? "bg-blue-100"
+      : "hover:bg-gray-50"
+  }`}
+>
                   {/* AMENITY NAME */}
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">

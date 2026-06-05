@@ -50,11 +50,11 @@ export const useEditFloor = (
         }
       );
 
-      toast.success(
-        "Floor updated successfully"
-      );
+      // toast.success(
+      //   "Floor updated successfully"
+      // );
 
-      onSuccess?.();
+      // onSuccess?.();
 
       return true;
     } catch (error) {

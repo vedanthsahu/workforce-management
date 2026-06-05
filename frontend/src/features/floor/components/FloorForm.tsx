@@ -262,6 +262,8 @@
 //     </div>
 //   );
 // }
+
+
 "use client";
 
 import { useState } from "react";
@@ -291,22 +293,24 @@ export default function FloorForm() {
     !formData.floor_code ||
     !formData.floor_name;
 
-  const saveFloor = async () => {
-    if (isDisabled) return;
+ const saveFloor = async () => {
+  if (isDisabled) return;
 
-    const success =
-      await handleSubmit();
+  const floorId =
+    await handleSubmit();
 
-    if (success) {
-      setSuccessMessage(
-        "Floor added successfully!"
+  if (floorId) {
+    setSuccessMessage(
+      "Floor added successfully!"
+    );
+
+    setTimeout(() => {
+      router.push(
+        `/admin/floors?added=${floorId}`
       );
-
-      setTimeout(() => {
-        router.push("/admin/floors");
-      }, 1000);
-    }
-  };
+    }, 1000);
+  }
+};
 
   return (
     <div>
@@ -323,11 +327,11 @@ export default function FloorForm() {
       </button>
 
       {/* SUCCESS MESSAGE */}
-      {successMessage && (
+      {/* {successMessage && (
         <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
           {successMessage}
         </div>
-      )}
+      )} */}
 
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6">
