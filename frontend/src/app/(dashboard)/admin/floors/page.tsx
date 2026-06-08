@@ -391,10 +391,7 @@ export default function FloorsPage() {
     <div className="p-6 space-y-6 bg-[#f8fafc] h-screen overflow-y-auto">
 
       {/* BREADCRUMB */}
-      <div className="text-sm text-gray-500">
-        Admin / Floors /
-        <span className="text-gray-800"> Manage Floors</span>
-      </div>
+     
 
       {/* SUCCESS BANNER */}
       {successMessage && (
