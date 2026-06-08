@@ -9,7 +9,8 @@ type Props = {
   building: Building;
   open: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  // onSuccess: () => void;
+  onSuccess: (buildingId: string) => void; // ← accepts id now
 };
 
 export default function EditBuildingModal({
