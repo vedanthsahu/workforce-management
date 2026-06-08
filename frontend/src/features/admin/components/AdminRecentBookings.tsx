@@ -22,9 +22,8 @@ export default function AdminBookings({ bookings }: Props) {
         </CardTitle>
       </CardHeader>
 
-      <CardContent className="p-0">
-
-        <table className="w-full text-sm">
+     <CardContent className="p-0 overflow-x-auto">
+  <table className="w-full min-w-[700px] text-sm">
 
           {/* TABLE HEADER */}
           <thead className="bg-gray-50 border-b">
