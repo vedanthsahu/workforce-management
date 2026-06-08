@@ -18,7 +18,7 @@ import { Amenity } from "../types/amenities.types";
 type Props = {
   data: Amenity[];
   onEdit: (amenity: Amenity) => void;
-  highlightedId?: string | null;
+  highlightedAmenityId?: string | null;
 };
 
 const iconMap: Record<string, any> = {
@@ -30,7 +30,12 @@ const iconMap: Record<string, any> = {
   window: DoorOpen,
 };
 
-export default function AmenitiesTable({ data, onEdit, highlightedId }: Props) {
+export default function AmenitiesTable({
+  data,
+  onEdit,
+   highlightedAmenityId,
+}: Props) {
+  
   return (
     <>
       <style>{`
@@ -80,15 +85,17 @@ export default function AmenitiesTable({ data, onEdit, highlightedId }: Props) {
           ) : (
             data.map((amenity) => {
               const Icon = iconMap[amenity.icon_name?.toLowerCase()] || Tag;
-              const isHighlighted = highlightedId === amenity.amenity_id;
+              const isHighlighted = highlightedAmenityId === amenity.amenity_id;
 
               return (
-                <tr
-                  key={amenity.amenity_id}
-                  className={`transition-colors ${
-                    isHighlighted ? "row-highlight" : "hover:bg-gray-50"
-                  }`}
-                >
+      <tr
+  key={amenity.amenity_id}
+  className={`transition-colors duration-300 ${
+    highlightedAmenityId === String(amenity.amenity_id)
+      ? "bg-blue-100"
+      : "hover:bg-gray-50"
+  }`}
+>
                   {/* AMENITY NAME */}
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-2">

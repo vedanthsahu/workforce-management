@@ -2,8 +2,8 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Toaster } from "sonner";
 import AmenitiesCards      from "@/features/amenities/components/AmenitiesCards";
@@ -11,42 +11,97 @@ import AmenitiesFilters    from "@/features/amenities/components/AmenitiesFilter
 import AmenitiesTable      from "@/features/amenities/components/AmenitiesTable";
 import EditAmenityModal    from "@/features/amenities/components/EditAmenityModal";
 import AmenitiesPagination from "@/features/amenities/components/AmenitiesPagination";
-import { useAmenities }    from "@/features/amenities/hooks/useAmenities";
+import { useAmenities } from "@/features/amenities/hooks/useAmenities";
+
+const PIN_DURATION = 4000; // ms the row stays pinned at top + highlighted
 
 export default function AmenitiesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const { data, loading, search, setSearch, status, setStatus, fetchAmenities } =
     useAmenities();
 
   const [selectedAmenity, setSelectedAmenity] = useState<any>(null);
-  const [openModal,       setOpenModal]        = useState(false);
-  const [currentPage,     setCurrentPage]      = useState(1);
+  const [openModal, setOpenModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ─── Shared helper: pin + highlight a row for PIN_DURATION ───────────────
+  const activatePin = (id: string, message: string) => {
+    // Clear any previous timer
+    if (pinTimerRef.current) clearTimeout(pinTimerRef.current);
+
+    setPinnedId(id);
+    setHighlightedId(id);
+    setSuccessMessage(message);
+    setCurrentPage(1); // go to page 1 so the pinned top row is visible
+
+    pinTimerRef.current = setTimeout(() => {
+      setPinnedId(null);
+      setHighlightedId(null);
+      setSuccessMessage("");
+    }, PIN_DURATION);
+  };
+
+  // ─── Add flow: read ?added=ID from URL after router.push ─────────────────
   useEffect(() => {
-    router.prefetch("/admin/amenities/add");
-  }, [router]);
+    const addedId = searchParams.get("added");
+    if (!addedId || !data?.items?.length) return;
 
+    // Verify the ID actually exists in the fresh data
+    const exists = data.items.some((a) => String(a.amenity_id) === addedId);
+    if (!exists) return;
+
+    activatePin(addedId, "Amenity added successfully!");
+
+    // Clean the URL param without causing a navigation/re-render loop
+    router.replace("/admin/amenities");
+  }, [searchParams, data]);
+
+  // Cleanup timer on unmount
+  useEffect(() => () => { if (pinTimerRef.current) clearTimeout(pinTimerRef.current); }, []);
+
+  // ─── Edit flow ────────────────────────────────────────────────────────────
   const handleEdit = (amenity: any) => {
     setSelectedAmenity(amenity);
     setOpenModal(true);
   };
 
+  const handleEditSuccess = (editedId: string) => {
+    fetchAmenities();
+    activatePin(editedId, "Amenity updated successfully!");
+  };
+
+  // ─── Filter ───────────────────────────────────────────────────────────────
   const filteredAmenities = (data?.items || []).filter((a: any) => {
-    const name  = (a.amenity_name || "").toLowerCase();
+    const name = (a.amenity_name || "").toLowerCase();
     const query = search.toLowerCase();
+    if (query.length === 0) return true;
     let i = 0;
     for (const char of name) {
       if (char === query[i]) i++;
       if (i === query.length) return true;
     }
-    return query.length === 0;
+    return false;
   });
 
-  const itemsPerPage       = 10;
-  const totalPages         = Math.ceil(filteredAmenities.length / itemsPerPage);
-  const startIndex         = (currentPage - 1) * itemsPerPage;
-  const paginatedAmenities = filteredAmenities.slice(startIndex, startIndex + itemsPerPage);
+  // ─── Pin the edited/added row to top temporarily ──────────────────────────
+  const sortedAmenities = pinnedId
+    ? [
+        ...filteredAmenities.filter((a: any) => String(a.amenity_id) === pinnedId),
+        ...filteredAmenities.filter((a: any) => String(a.amenity_id) !== pinnedId),
+      ]
+    : filteredAmenities;
+
+  // ─── Pagination ───────────────────────────────────────────────────────────
+  const itemsPerPage = 10;
+  const totalPages = Math.ceil(sortedAmenities.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedAmenities = sortedAmenities.slice(startIndex, startIndex + itemsPerPage);
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc] min-h-screen">
@@ -148,6 +203,19 @@ export default function AmenitiesPage() {
         </div>
 
       </div>
+
+      {/* EDIT MODAL */}
+      {selectedAmenity && (
+        <EditAmenityModal
+          amenity={selectedAmenity}
+          open={openModal}
+          onClose={() => setOpenModal(false)}
+          onSuccess={(editedId) => {
+            setOpenModal(false);
+            handleEditSuccess(editedId);
+          }}
+        />
+      )}
 
     </div>
   );
