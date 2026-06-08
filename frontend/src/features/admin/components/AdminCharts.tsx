@@ -50,6 +50,14 @@ type Props = {
 // ---------- COMPONENT ----------
 export default function AdminCharts({ data ,buildings, trendData, selectedWeek, setSelectedWeek ,topOffices}: Props) {
 
+
+  const [showAll, setShowAll] = useState(false);
+
+const visibleOffices = showAll
+  ? topOffices
+  : topOffices.slice(0, 5);
+
+
   // HANDLE LOADING
   if (!data) {
     return <div className="p-4">Loading charts...</div>;
@@ -62,7 +70,7 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
   const occupancy = data.occupancy_percentage;
 
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
 
       {/* ---------------- DONUT ---------------- */}
       <Card>
@@ -72,7 +80,7 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="flex items-center justify-between gap-6">
+        <CardContent className="flex flex-col md:flex-row items-center justify-between gap-6">
 
           <div className="relative w-[160px] h-[160px]">
             <ChartContainer
@@ -207,26 +215,37 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
         </CardHeader>
 
         <CardContent className="space-y-4">
-         {topOffices.map((item: any, i: number) => (
-            <div key={i}>
-              <div className="flex justify-between text-sm">
-                <span>{item.name}</span>
-                <span className="text-muted-foreground">
-                  {item.value}%
-                </span>
-              </div>
+  {visibleOffices.map((item: any, i: number) => (
+    <div key={i}>
+      <div className="flex justify-between text-sm">
+        <span>{item.name}</span>
+        <span className="text-muted-foreground">
+          {item.value}%
+        </span>
+      </div>
 
-              <div className="w-full h-2 bg-gray-200 rounded-full mt-1">
-                <div
-                  className="h-2 bg-indigo-500 rounded-full"
-                  style={{ width: `${item.value}%` }}
-                />
-              </div>
-            </div>
-          ))}
+      <div className="w-full h-2 bg-gray-200 rounded-full mt-1">
+        <div
+          className="h-2 bg-indigo-500 rounded-full"
+          style={{ width: `${item.value}%` }}
+        />
+      </div>
+    </div>
+  ))}
 
-        
-        </CardContent>
+  {topOffices.length > 5 && (
+  <div className="flex justify-center pt-2">
+    <button
+      onClick={() => setShowAll(!showAll)}
+      className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+    >
+      {showAll
+        ? "View Less"
+        : `View More (${topOffices.length - 5})`}
+    </button>
+  </div>
+)}
+</CardContent>
       </Card>
 
     </div>

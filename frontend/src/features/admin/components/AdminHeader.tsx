@@ -9,7 +9,7 @@ type Props = {
 export default function AdminHeader({ selectedDate, setSelectedDate}: Props) {
 
   return (
-    <div className="flex items-center justify-between">
+   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
       {/* LEFT */}
       <div>
@@ -34,7 +34,7 @@ export default function AdminHeader({ selectedDate, setSelectedDate}: Props) {
         </select> */}
 
         {/* Date */}
-        <div className="flex items-center gap-2 h-9 px-3 rounded-md border bg-white text-sm">
+        <div className="flex flex-wrap items-center gap-2 h-auto min-h-9 px-3 py-2 rounded-md border bg-white text-sm">
          
           <input
   type="date"
