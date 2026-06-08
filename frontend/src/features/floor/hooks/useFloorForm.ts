@@ -74,10 +74,11 @@ export const useFloorForm = () => {
     }
   };
 
-  const handleSubmit = async () => {
-    try {
-      setLoading(true);
+ const handleSubmit = async () => {
+  try {
+    setLoading(true);
 
+    const createdFloor =
       await floorService.createFloor({
         site_id: Number(
           formData.site_id
@@ -92,31 +93,35 @@ export const useFloorForm = () => {
         status: formData.status,
       });
 
+    console.log(
+      "createdFloor",
+      createdFloor
+    );
 
-      sessionStorage.setItem(
-  "floorSelection",
-  JSON.stringify({
-    site_id: formData.site_id,
-    building_id: formData.building_id,
-  })
-); 
-// store new floor's site and building in session to auto-restore selection after redirecting to floor list
+    sessionStorage.setItem(
+      "floorSelection",
+      JSON.stringify({
+        site_id: formData.site_id,
+        building_id:
+          formData.building_id,
+      })
+    );
 
-      toast.success(
-        "Floor created successfully"
-      );
+    toast.success(
+      "Floor created successfully"
+    );
 
-      return true;
-    } catch (error) {
-      toast.error(
-        "Failed to create floor"
-      );
+   return createdFloor.floor_id;
+  } catch (error) {
+    toast.error(
+      "Failed to create floor"
+    );
 
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
+    return null;
+  } finally {
+    setLoading(false);
+  }
+};
 
   return {
     loading,
