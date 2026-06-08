@@ -1037,8 +1037,8 @@ export default function ManageLayoutHeader({
 
       {/* LEFT — title */}
       <div>
-        <h1 className="text-xl font-semibold">Floor Layout Management</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1  className="text-xl sm:text-2xl font-semibold text-gray-900">Floor Layout Management</h1>
+        <p className="text-xs sm:text-sm text-gray-500 mt-1">
           Review, manage and publish floor layouts for employee bookings
         </p>
       </div>

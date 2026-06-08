@@ -485,6 +485,8 @@ def fetch_building_by_id(
         )
         row = cur.fetchone()
     return dict(row) if row else None
+
+ 
  
 
 

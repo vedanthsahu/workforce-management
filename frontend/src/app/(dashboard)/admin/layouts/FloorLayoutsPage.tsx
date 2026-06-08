@@ -90,9 +90,13 @@ export default function FloorLayoutsPage() {
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Floor Layout Management</h1>
+          {/* <h1 className="text-xl font-semibold">Floor Layout Management</h1>
           <p className="text-sm text-muted-foreground">
             Upload, manage and publish floor layouts
+          </p> */}
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Floor Layout Management</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">
+            Upload, manage and publish floor layouts.
           </p>
         </div>
         <div className="flex items-center gap-3">
