@@ -1,3 +1,5 @@
+
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -89,7 +91,12 @@ export function useBookings(): UseBookingsReturn {
     loadBookings();
   }, [loadBookings]);
 
-  // ── Cancel: mutate lists only; summary re-derives via useEffect ───────────
+  // ── FIX 2: Cancel — strip status tags and prepend so newest appears first ─
+  // Prepending to cancelledBookings (instead of appending) means the freshly
+  // cancelled entry is at the top of the list before the descending date sort
+  // in MyBookingsPage kicks in. Filtering out "confirmed"-variant tags prevents
+  // the green Confirmed chip from appearing on a cancelled card until refresh.
+
   const handleCancelBooking = useCallback(
     async (bookingId: string) => {
       const target =
@@ -98,8 +105,18 @@ export function useBookings(): UseBookingsReturn {
 
       if (target) {
         setCancelledBookings((prev) => [
+          // Prepend so newest cancelled booking is first
+          {
+            ...target,
+            status: "cancelled" as const,
+            // Strip "confirmed" / status-style tags — only show the Cancelled badge
+            tags: (target.tags ?? []).filter(
+              (t) =>
+                t.variant !== "confirmed" &&
+                t.label.toLowerCase() !== "confirmed"
+            ),
+          },
           ...prev,
-          { ...target, status: "cancelled" as const },
         ]);
       }
 

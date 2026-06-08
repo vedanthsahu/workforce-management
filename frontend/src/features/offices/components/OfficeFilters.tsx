@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { Search } from "lucide-react";
@@ -9,7 +8,11 @@ type Props = {
   setSearch: (value: string) => void;
 };
 
-export default function OfficeFilters({ search, setSearch }: Props) {
+export default function OfficeFilters({ 
+  search, 
+  setSearch
+ }: Props) {
+
   return (
     <div className="flex items-center gap-3">
 
@@ -19,7 +22,11 @@ export default function OfficeFilters({ search, setSearch }: Props) {
 
       <input
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
+        onChange={(e) => 
+        setSearch(
+        e.target.value
+      )
+    }
         className="pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         placeholder="Search offices..."
       />

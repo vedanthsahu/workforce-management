@@ -1,3 +1,5 @@
+
+
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
@@ -242,7 +244,6 @@ export function useBookingForm() {
   }, [form.buildingId]);
 
   // ── Derive floor layout URL from the selected floor ───────────────────────
-  // No extra API call needed — layout_file_url comes from fetchFloors already.
 
   useEffect(() => {
     const floor = floors.find((f) => f.id === form.floorId);
@@ -293,10 +294,29 @@ export function useBookingForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seats, prefillSeatLabel]);
 
+  // ── Preference resolver ───────────────────────────────────────────────────
+
+  const resolveAmenityIds = useCallback(
+    (preferenceKeys: string[]): number[] =>
+      preferenceKeys
+        .map((key) => availablePreferences.find((p) => p.key === key)?.id)
+        .filter((id): id is string => id !== undefined)
+        .map((id) => parseInt(id, 10))
+        .filter((id) => !isNaN(id)),
+    [availablePreferences],
+  );
+
   // ── Re-fetch seats on step 2 page refresh ────────────────────────────────
 
   useEffect(() => {
-    if (step === 2 && seats.length === 0 && form.floorId && form.fromDate && form.toDate) {
+    if (
+      step === 2 &&
+      seats.length === 0 &&
+      form.floorId &&
+      form.fromDate &&
+      form.toDate &&
+      availablePreferences.length > 0
+    ) {
       setLoadingSeats(true);
       const amenityIds = resolveAmenityIds(form.preferences);
       fetchSeatsWithAvailability({
@@ -313,19 +333,7 @@ export function useBookingForm() {
         .finally(() => setLoadingSeats(false));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
-
-  // ── Preference resolver ───────────────────────────────────────────────────
-
-  const resolveAmenityIds = useCallback(
-    (preferenceKeys: string[]): number[] =>
-      preferenceKeys
-        .map((key) => availablePreferences.find((p) => p.key === key)?.id)
-        .filter((id): id is string => id !== undefined)
-        .map((id) => parseInt(id, 10))
-        .filter((id) => !isNaN(id)),
-    [availablePreferences],
-  );
+  }, [step, availablePreferences]);
 
   // ── Field setters ─────────────────────────────────────────────────────────
 
@@ -466,9 +474,9 @@ export function useBookingForm() {
     navigateTo(prevStep, clearedForm);
   };
 
+  // ── FIX: after confirmation (both book & modify) go to My Bookings ────────
   const resetForm = () => {
-    const fresh = { ...DEFAULT_STATE, fromDate: todayIso(), toDate: todayIso() };
-    setForm(fresh);
+    setForm({ ...DEFAULT_STATE, fromDate: todayIso(), toDate: todayIso() });
     setStepState(1);
     setBuildings([]);
     setFloors([]);
@@ -476,7 +484,7 @@ export function useBookingForm() {
     setFloorLayoutUrl(null);
     setConfirmation(null);
     setError(null);
-    router.push("/book");
+    router.push("/my-bookings");
   };
 
   // ── Derived values ────────────────────────────────────────────────────────

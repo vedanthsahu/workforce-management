@@ -8,7 +8,8 @@ import { Building } from "../types/building.types";
 
 export const useEditBuilding = (
   building: Building,
-  onSuccess: () => void
+  //onSuccess: () => void
+  onSuccess: (buildingId: string) => void 
 ) => {
   const [loading, setLoading] =
     useState(false);
@@ -34,29 +35,44 @@ export const useEditBuilding = (
     }));
   };
 
-  const handleUpdate =
-    async () => {
-      try {
-        setLoading(true);
+  // const handleUpdate =
+  //   async () => {
+  //     try {
+  //       setLoading(true);
 
-        await buildingService.updateBuilding(
-          building.building_id,
-          {
-            building_name:
-              formData.building_name,
+  //       await buildingService.updateBuilding(
+  //         building.building_id,
+  //         {
+  //           building_name:
+  //             formData.building_name,
 
-            status:
-              formData.status,
-          }
-        );
+  //           status:
+  //             formData.status,
+  //         }
+  //       );
 
-        onSuccess();
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  //       onSuccess();
+  //     } catch (error) {
+  //       console.error(error);
+  //     } finally {
+  //       setLoading(false);
+  //     }
+  //   };
+
+  const handleUpdate = async () => {
+    try {
+      setLoading(true);
+      await buildingService.updateBuilding(building.building_id, {
+        building_name: formData.building_name,
+        status: formData.status,
+      });
+      onSuccess(String(building.building_id)); // ← pass id back
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return {
     loading,

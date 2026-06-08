@@ -64,7 +64,7 @@ export default function BuildingFilters({
             )
           }
           className="pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Search buildings..."
+          placeholder="Search by Building Name"
         />
       </div>
 
