@@ -265,13 +265,16 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { useAmenityForm } from "../hooks/useAmenityForm";
 
 export default function AmenityForm() {
   const router = useRouter();
+  useEffect(() => {
+  router.prefetch("/admin/amenities");
+}, [router]);
 
   const {
     loading,
@@ -313,14 +316,15 @@ export default function AmenityForm() {
   return (
     <div className="max-w-5xl">
 
-      {/* BACK BUTTON */}
-      <button
-        onClick={() => router.push("/admin/amenities")}
-        className="flex items-center gap-2 text-xs text-gray-600 hover:text-black mb-5"
-      >
-        <ArrowLeft size={14} />
-        Back to Amenities
-      </button>
+    {/* BACK BUTTON */}
+    <button
+      onClick={() => router.push("/admin/amenities")}
+      onMouseEnter={() => router.prefetch("/admin/amenities")}
+      className="flex items-center gap-2 text-sm text-gray-600 hover:text-black mb-6"
+    >
+      <ArrowLeft size={16} />
+      Back to Amenities
+    </button>
 
       {/* {successMessage && (
         <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
@@ -343,13 +347,15 @@ export default function AmenityForm() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => router.push("/admin/amenities")}
-            className="h-8 px-4 text-xs font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50"
-          >
-            Cancel
-          </button>
+      {/* <div className="flex items-center gap-3">
+        <button
+          onClick={() => router.push("/admin/amenities")}
+          onMouseEnter={() => router.prefetch("/admin/amenities")} 
+          // className="px-4 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50"
+          className="h-8 px-4 text-xs font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50"
+        >
+          Cancel
+        </button>
 
           <button
             onClick={handleSave}
@@ -362,7 +368,29 @@ export default function AmenityForm() {
           >
             {loading ? "Saving..." : "Save Amenity"}
           </button>
-        </div>
+        </div> */}
+
+        <div className="flex items-center gap-3">
+  <button
+    onClick={() => router.push("/admin/amenities")}
+    onMouseEnter={() => router.prefetch("/admin/amenities")}
+    className="h-9 px-4 text-sm font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50"
+  >
+    Cancel
+  </button>
+
+  <button
+    onClick={handleSave}
+    disabled={!isFormValid || loading}
+    className={`h-9 px-4 text-sm font-medium rounded-lg text-white ${
+      isFormValid && !loading
+        ? "bg-blue-600 hover:bg-blue-700"
+        : "bg-gray-300 cursor-not-allowed"
+    }`}
+  >
+    {loading ? "Saving..." : "Save Amenity"}
+  </button>
+</div>
       </div>
 
       {/* FORM CARD */}
