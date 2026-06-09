@@ -51,21 +51,11 @@ type Props = {
 export default function AdminCharts({ data ,buildings, trendData, selectedWeek, setSelectedWeek ,topOffices}: Props) {
 
   // HANDLE LOADING
-
-// const dynamicOffices = (buildings || []).map((b: any) => ({
-//   name: b.building_name,
-//   value: Math.floor(Math.random() * 80) + 20, // temp %
-// }));
-
-// const offices = dynamicOffices;
-
-
-  // HANDLE LOADING
   if (!data) {
     return <div className="p-4">Loading charts...</div>;
   }
 
-  // ✅BACKEND DATA
+  // BACKEND DATA
   const totalSeats = data.total_seats;
   const booked = data.booked_today;
   const available = totalSeats - booked;
@@ -171,8 +161,8 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="This-week">This Week</SelectItem>
-              <SelectItem value="Last-week">Last Week</SelectItem>
+              <SelectItem value="this-week">This Week</SelectItem>
+              <SelectItem value="last-week">Last Week</SelectItem>
             </SelectContent>
           </Select>
         </CardHeader>
@@ -190,7 +180,7 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
             <AreaChart data={trendData}>
               <XAxis dataKey="day" axisLine={false} tickLine={false} />
               <YAxis
-                domain={[0, 10]}
+                domain={[0, 100]}
                 axisLine={true}
                 tickLine={true}
               />

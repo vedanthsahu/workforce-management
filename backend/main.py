@@ -43,7 +43,7 @@ from backend.api.routes import teams
 from backend.api.routes.preferences import router as preferences_router
 from backend.api.routes.admin_dashboard import router as admin_dashboard_router
 from backend.api.routes.floor_layouts import router as floor_layout_router
-
+from backend.api.routes.user_management import router as user_management_router
 settings = get_settings()
 configure_console_logging(
     "DEBUG" if settings.app_trace_functions else settings.app_log_level,
@@ -72,6 +72,7 @@ app.include_router(dashboard_router)
 app.include_router(admin_dashboard_router)
 app.include_router(preferences_router)
 app.include_router(floor_layout_router)
+app.include_router(user_management_router)
 
 
 @app.middleware("http")
@@ -232,9 +233,19 @@ def index() -> dict[str, object]:
             "GET /bookings/me/future",
             "GET /bookings/available",
             "GET /sites",
+            "POST /sites",
+            "PATCH /sites/{site_id}",
             "GET /buildings?site_id={site_id}",
+            "POST /buildings",
+            "PATCH /buildings/{building_id}",
             "GET /offices/{office_id}/floors",
+            "POST /floors",
+            "PATCH /floors/{floor_id}",
             "GET /floors/{floor_id}/seats",
+            "PATCH /seats/{seat_id}/configuration",
+            "GET /amenities",
+            "POST /amenities",
+            "PATCH /amenities/{amenity_id}",
             "GET /health",
         ],
     }

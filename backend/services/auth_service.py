@@ -28,7 +28,8 @@ from backend.repositories.token_repository import (
     revoke_user_session,
     rotate_refresh_token,
 )
-from backend.repositories.user_repository import fetch_user_by_id
+from backend.repositories.user_repository import fetch_tenant_name_by_id, fetch_user_by_id
+from backend.schemas.auth import UserResponse
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,42 @@ def attach_permissions_to_user(
     )
 
     return user
+
+
+def get_auth_me_payload(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+) -> UserResponse:
+    """Return the authenticated user while preserving legacy auth fields."""
+    tenant_id = str(current_user["tenant_id"])
+    try:
+        tenant_name = current_user.get("tenant_name") or fetch_tenant_name_by_id(
+            conn,
+            tenant_id=tenant_id,
+        )
+    except psycopg2.Error as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "tenant_lookup_failed",
+                "message": "Failed to load tenant context.",
+            },
+        ) from exc
+
+    role = current_user.get("role") or current_user.get("role_name")
+    payload = dict(current_user)
+    payload.update(
+        {
+            "user_id": str(current_user["user_id"]),
+            "tenant_id": tenant_id,
+            "tenant_name": tenant_name,
+            "role": role,
+            "role_name": current_user.get("role_name") or role,
+            "permissions": current_user.get("permissions", []),
+        }
+    )
+    return UserResponse(**payload)
 
 
 def issue_tokens_for_user(
@@ -214,6 +251,24 @@ def refresh_auth_tokens(
         )
         
         if user is None:
+            if user["status"] != "ACTIVE":
+                revoke_user_session(
+                    conn,
+                    tenant_id=refresh_scope["tenant_id"],
+                    user_id=refresh_scope["user_id"],
+                    session_id=refresh_scope["session_id"],
+                )
+
+                if commit:
+                    conn.commit()
+
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={
+                        "code": "inactive_user",
+                        "message": "User account is inactive.",
+                    },
+                )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={
