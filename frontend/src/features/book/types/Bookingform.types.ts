@@ -23,11 +23,19 @@ export interface Building {
   name: string;
 }
 
+// export interface Floor {
+//   id: string;
+//   buildingId: string;
+//   name: string;
+//   number: number;
+// }
+
 export interface Floor {
   id: string;
   buildingId: string;
   name: string;
   number: number;
+  layoutFileUrl?: string;
 }
 
 // ── Booking form state ────────────────────────────────────────────────────────

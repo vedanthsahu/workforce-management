@@ -1,7 +1,3 @@
-
-
-// bookings.service.ts
-
 import { axiosInstance } from "@/lib/http/axios";
 import { Booking, BookingSummary, RawBooking } from "../types/bookings.types";
 import type { ApiTeamGroup } from "@/features/dashboard/types/dashboard.types";

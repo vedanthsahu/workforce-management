@@ -885,7 +885,9 @@ def modify_booking(
             conn,
             tenant_id=tenant_id,
             booking_id=booking_id,
-            cancellation_reason="MODIFIED",
+            cancellation_reason="Booking ID : " + booking_id + ". Is being modified",
+            booking_status="NO_SHOW",
+
         )
  
         new_booking = insert_booking(
@@ -963,6 +965,7 @@ def get_available_seats_by_range(
     amenity_ids: list[int] | None = None,
     current_user: dict[str, Any] | None = None,
     booked_for_user_id: str | None = None,
+    exclude_booking_id: str | None = None,
 ) -> list[AvailableSeatResponse]:
     """
     Fetch seat availability across a date range.
@@ -988,24 +991,26 @@ def get_available_seats_by_range(
                 forbidden_message="You are not allowed to check availability for this user.",
             )
             if user_has_active_booking_in_range(
-                conn,
-                tenant_id=tenant_id,
-                booked_for_user_id=booked_for_user_id,
-                start_date=start_date,
-                end_date=end_date,
-            ):
+                    conn,
+                    tenant_id=tenant_id,
+                    booked_for_user_id=booked_for_user_id,
+                    start_date=start_date,
+                    end_date=end_date,
+                    exclude_booking_id=exclude_booking_id,
+                ):
                 _raise_user_booking_conflict(
                     "The booking owner already has an active booking in the requested date range.",
                 )
 
         seats = fetch_available_seats_by_range(
-            conn,
-            tenant_id=tenant_id,
-            floor_id=floor_id,
-            start_date=start_date,
-            end_date=end_date,
-            amenity_ids=normalized_amenity_ids,
-        )
+                conn,
+                tenant_id=tenant_id,
+                floor_id=floor_id,
+                start_date=start_date,
+                end_date=end_date,
+                amenity_ids=normalized_amenity_ids,
+                exclude_booking_id=exclude_booking_id,
+            )
 
     except psycopg2.Error as exc:
 

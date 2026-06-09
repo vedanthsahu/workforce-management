@@ -70,7 +70,7 @@ class AvailableSeatResponse(BaseModel):
 
     seat_id: str
 
-    id: str | None = None
+    seat_code: str
 
     tenant_id: str | None = None
 

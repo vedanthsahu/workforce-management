@@ -45,6 +45,68 @@ def purge_expired_revoked_tokens(conn: PGConnection) -> None:
     """Legacy compatibility no-op."""
     del conn
 
+def revoke_all_user_sessions(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+) -> int:
+    """Revoke all active sessions for one tenant-scoped user."""
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE user_sessions
+            SET revoked_at = NOW(),
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND user_id = %s
+              AND revoked_at IS NULL
+            """,
+            (
+                tenant_id,
+                user_id,
+            ),
+        )
+
+        return cur.rowcount
+
+
+def fetch_active_session(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    session_id: str,
+) -> dict[str, Any] | None:
+    """Fetch one active non-revoked session."""
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                session_id::text AS session_id,
+                tenant_id::text AS tenant_id,
+                user_id::text AS user_id,
+                revoked_at,
+                expires_at
+            FROM user_sessions
+            WHERE tenant_id = %s
+              AND user_id = %s
+              AND session_id = %s
+              AND revoked_at IS NULL
+            """,
+            (
+                tenant_id,
+                user_id,
+                session_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
 
 def create_user_session(
     conn: PGConnection,
