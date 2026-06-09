@@ -1,3 +1,5 @@
+
+
 "use client";
 
 import React, { useState } from "react";
@@ -22,11 +24,6 @@ import {
 import { Button }   from "@/components/ui/button";
 import { Label }    from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-
-// ── Fallback preference NAMES (not keys) ──────────────────────────────────────
-// These are display names that will be matched against the loaded preference list
-// by name in useBookingForm, so they work even when keys aren't known ahead of time.
-// Only used when the booking API doesn't return preference data.
 
 const FALLBACK_PREFERENCE_NAMES = ["Window Seat", "Near Cafeteria"];
 
@@ -115,7 +112,7 @@ const CancelDialog: React.FC<CancelDialogProps> = ({
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent className="max-w-md">
+      <AlertDialogContent className="max-w-md mx-4 sm:mx-auto">
         <AlertDialogHeader>
           <AlertDialogTitle className="text-[#1A1A2E]">Cancel Booking</AlertDialogTitle>
           <AlertDialogDescription className="text-gray-500 text-[13px]">
@@ -149,17 +146,17 @@ const CancelDialog: React.FC<CancelDialogProps> = ({
           />
         </div>
 
-        <AlertDialogFooter>
+        <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:gap-0">
           <AlertDialogCancel
             onClick={() => { setReason(""); onClose(); }}
-            className="text-[12.5px]"
+            className="text-[12.5px] w-full sm:w-auto"
           >
             Keep Booking
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={handleConfirm}
             disabled={loading}
-            className="bg-red-500 hover:bg-red-600 text-white text-[12.5px] disabled:opacity-50"
+            className="bg-red-500 hover:bg-red-600 text-white text-[12.5px] disabled:opacity-50 w-full sm:w-auto"
           >
             {loading ? "Cancelling…" : "Yes, Cancel"}
           </AlertDialogAction>
@@ -199,11 +196,11 @@ const BookingCard: React.FC<BookingCardProps> = ({
               : "bg-indigo-500",
         )} />
 
-        <div className="flex-1 px-5 py-4">
-          {/* Row 1: title + booked-on */}
-          <div className="flex justify-between items-start gap-4">
-            <div>
-              <p className="text-[13.5px] font-semibold text-[#1A1A2E]">
+        <div className="flex-1 min-w-0 px-4 sm:px-5 py-4">
+          {/* Row 1: title + booked-on — stacks on mobile */}
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 sm:gap-4">
+            <div className="min-w-0">
+              <p className="text-[13.5px] font-semibold text-[#1A1A2E] truncate">
                 {booking.location} · {booking.floor} · Seat {booking.seat}
               </p>
               <p className="text-[12px] text-gray-500 mt-0.5">
@@ -219,35 +216,30 @@ const BookingCard: React.FC<BookingCardProps> = ({
                 )}
               </p>
             </div>
-            <span className="text-[11px] text-gray-400 whitespace-nowrap mt-0.5">
+            <span className="text-[11px] text-gray-400 whitespace-nowrap sm:mt-0.5">
               Booked {booking.bookedOn}
             </span>
           </div>
 
           {/* Row 2: tags */}
-          <div className="flex gap-1.5 flex-wrap mt-2.5">
-            {booking.tags.map((tag, i) => (
-              <BookingTagChip key={i} label={tag.label} variant={tag.variant} />
-            ))}
-            {booking.isRecurring && booking.recurringPattern && (
-              <BookingTagChip label={booking.recurringPattern} variant="recurring" />
-            )}
-          </div>
+          {!isCancelled && (
+            <div className="flex gap-1.5 flex-wrap mt-2.5">
+              {booking.tags.map((tag, i) => (
+                <BookingTagChip key={i} label={tag.label} variant={tag.variant} />
+              ))}
+              {booking.isRecurring && booking.recurringPattern && (
+                <BookingTagChip label={booking.recurringPattern} variant="recurring" />
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── Cancelled badge — renders instantly when status flips ── */}
+      {/* Cancelled badge */}
       {isCancelled && (
-        <div className="flex justify-end px-5 py-2.5 border-t border-gray-100 bg-[#F7F8FC]">
+        <div className="flex justify-end px-4 sm:px-5 py-2.5 border-t border-gray-100 bg-[#F7F8FC]">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-semibold bg-red-50 text-red-500 border border-red-200">
-            <svg
-              width="11"
-              height="11"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-            >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <circle cx="12" cy="12" r="10" />
               <path d="M15 9l-6 6M9 9l6 6" strokeLinecap="round" />
             </svg>
@@ -256,13 +248,13 @@ const BookingCard: React.FC<BookingCardProps> = ({
         </div>
       )}
 
-      {/* ── Action footer — only for non-cancelled bookings ── */}
+      {/* Action footer */}
       {showActions && !isCancelled && (
-        <div className="flex justify-end gap-2 px-5 py-2.5 border-t border-gray-100 bg-[#F7F8FC]">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2 px-4 sm:px-5 py-2.5 border-t border-gray-100 bg-[#F7F8FC]">
           <Button
             variant="outline"
             size="sm"
-            className="h-7 px-4 text-[12.5px] text-gray-600"
+            className="h-8 sm:h-7 w-full sm:w-auto px-4 text-[12.5px] text-gray-600"
             onClick={() => onModifyClick(booking)}
           >
             Modify
@@ -270,7 +262,7 @@ const BookingCard: React.FC<BookingCardProps> = ({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 px-4 text-[12.5px] border-red-200 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-600 hover:border-red-300"
+            className="h-8 sm:h-7 w-full sm:w-auto px-4 text-[12.5px] border-red-200 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-600 hover:border-red-300"
             onClick={() => onCancelClick(booking)}
           >
             Cancel
@@ -295,18 +287,19 @@ const StatCard: React.FC<StatCardProps> = ({
   label, value, subLabel, icon, accentClass,
 }) => (
   <div className={cn(
-    "flex-1 bg-white border border-[#EBEBF5] rounded-xl p-4 flex flex-col gap-1 min-w-[160px]",
+    "flex-1 bg-white border border-[#EBEBF5] rounded-xl p-4 flex flex-col gap-1",
+    "min-w-[140px] sm:min-w-[160px]",
     "border-l-[3px]", accentClass,
   )}>
     <div className="flex justify-between items-center mb-1">
-      <span className="text-[10px] font-semibold tracking-widest uppercase text-gray-400">
+      <span className="text-[10px] font-semibold tracking-widest uppercase text-gray-400 leading-tight">
         {label}
       </span>
-      <span className="text-gray-400">{icon}</span>
+      <span className="text-gray-400 shrink-0">{icon}</span>
     </div>
-    <div className="text-[26px] font-bold text-[#1A1A2E] leading-none">{value}</div>
+    <div className="text-[22px] sm:text-[26px] font-bold text-[#1A1A2E] leading-none">{value}</div>
     {subLabel && (
-      <div className="text-[11.5px] text-gray-400 mt-1">{subLabel}</div>
+      <div className="text-[11px] sm:text-[11.5px] text-gray-400 mt-1 leading-snug">{subLabel}</div>
     )}
   </div>
 );
@@ -377,7 +370,10 @@ const MyBookingsPage: React.FC = () => {
     false,
   );
 
-  const sortedDisplayed = sortByDate(displayedBookings, activeTab !== "past");
+  const sortedDisplayed = sortByDate(
+    displayedBookings,
+    activeTab !== "past" && activeTab !== "cancelled",
+  );
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -418,86 +414,92 @@ const MyBookingsPage: React.FC = () => {
       <div className="flex h-screen bg-[#F7F8FC] font-sans overflow-hidden w-full">
         <AppSidebar user={user} />
 
-        <main className="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-5">
+        <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
 
-          {/* Header */}
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-[20px] font-bold text-[#1A1A2E] leading-tight">
-                My Bookings
-              </h1>
-              <p className="text-[12.5px] text-gray-400 mt-0.5">
-                Your upcoming and past seat reservations
-              </p>
+          {/* ── Sticky top zone: header + stats + tabs ── */}
+          <div className="shrink-0 bg-[#F7F8FC] px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 flex flex-col gap-4 sm:gap-5">
+
+            {/* Header */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+              <div>
+                <h1 className="text-[18px] sm:text-[20px] font-bold text-[#1A1A2E] leading-tight">
+                  My Bookings
+                </h1>
+                <p className="text-[12px] sm:text-[12.5px] text-gray-400 mt-0.5">
+                  Your upcoming and past seat reservations
+                </p>
+              </div>
+              <div className="flex gap-2.5 items-center">
+                <Button
+                  size="sm"
+                  className="h-8 flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-semibold gap-1.5"
+                  onClick={() => router.push("/book")}
+                >
+                  <span className="text-base leading-none">+</span>
+                  New booking
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 text-gray-400"
+                  onClick={refreshBookings}
+                >
+                  <RefreshIcon />
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-2.5 items-center">
-              <Button
-                size="sm"
-                className="h-8 bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-semibold gap-1.5"
-                onClick={() => router.push("/book")}
-              >
-                <span className="text-base leading-none">+</span>
-                New booking
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 text-gray-400"
-                onClick={refreshBookings}
-              >
-                <RefreshIcon />
-              </Button>
+
+            {/* Stat cards — horizontal scroll on mobile */}
+            <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-1 sm:pb-0 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+              <StatCard
+                label="Upcoming"
+                value={summary.upcomingCount}
+                subLabel={summary.nextBookingDate ?? undefined}
+                icon={<CalIcon />}
+                accentClass="border-l-indigo-400"
+              />
+              <StatCard
+                label="Completed this month"
+                value={summary.completedThisMonth}
+                subLabel={`${summary.daysInOffice} days in office`}
+                icon={<CheckIcon />}
+                accentClass="border-l-emerald-400"
+              />
+              <StatCard
+                label="Team in office today"
+                value={summary.teamInOffice ?? 0}
+                subLabel={
+                  (summary.teamInOffice ?? 0) === 1
+                    ? "1 teammate present"
+                    : `${summary.teamInOffice ?? 0} teammates present`
+                }
+                icon={<UsersIcon />}
+                accentClass="border-l-violet-400"
+              />
             </div>
-          </div>
 
-          {/* Stat cards */}
-          <div className="flex gap-4">
-            <StatCard
-              label="Upcoming"
-              value={summary.upcomingCount}
-              subLabel={summary.nextBookingDate ?? undefined}
-              icon={<CalIcon />}
-              accentClass="border-l-indigo-400"
-            />
-            <StatCard
-              label="Completed this month"
-              value={summary.completedThisMonth}
-              subLabel={`${summary.daysInOffice} days in office`}
-              icon={<CheckIcon />}
-              accentClass="border-l-emerald-400"
-            />
-            <StatCard
-              label="Team in office today"
-              value={summary.teamInOffice ?? 0}
-              subLabel={
-                (summary.teamInOffice ?? 0) === 1
-                  ? "1 teammate present"
-                  : `${summary.teamInOffice ?? 0} teammates present`
-              }
-              icon={<UsersIcon />}
-              accentClass="border-l-violet-400"
-            />
-          </div>
+            {/* Tabs — scrollable on narrow screens */}
+            <div className="flex border-b border-[#EBEBF5] overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
+              {TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    "px-4 sm:px-5 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-colors duration-150 whitespace-nowrap shrink-0",
+                    activeTab === tab.id
+                      ? "border-indigo-600 text-indigo-600 font-semibold"
+                      : "border-transparent text-gray-500 hover:text-gray-700",
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-          {/* Tabs */}
-          <div className="flex border-b border-[#EBEBF5]">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "px-5 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-colors duration-150",
-                  activeTab === tab.id
-                    ? "border-indigo-600 text-indigo-600 font-semibold"
-                    : "border-transparent text-gray-500 hover:text-gray-700",
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          </div>{/* end sticky top zone */}
 
-          {/* Content */}
+          {/* ── Scrollable card list ── */}
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
           <div className="flex flex-col gap-3">
 
             {isLoading && (
@@ -507,7 +509,7 @@ const MyBookingsPage: React.FC = () => {
             )}
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-red-500 text-[13px]">
+              <div className="bg-red-50 border border-red-200 rounded-xl px-4 sm:px-5 py-4 text-red-500 text-[13px]">
                 {error}
               </div>
             )}
@@ -526,7 +528,6 @@ const MyBookingsPage: React.FC = () => {
                     />
                   ))
                 ) : (
-                  // ✅ Single empty state — only shown when there are truly no upcoming cards
                   <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
                     No upcoming bookings found.
                   </div>
@@ -554,7 +555,6 @@ const MyBookingsPage: React.FC = () => {
             {/* ── Past & Cancelled tabs ── */}
             {!isLoading && !error && activeTab !== "upcoming" && (
               sortedDisplayed.length === 0 ? (
-                // ✅ Single empty state per tab — no duplicate
                 <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
                   No {activeTab} bookings found.
                 </div>
@@ -571,7 +571,8 @@ const MyBookingsPage: React.FC = () => {
               )
             )}
 
-          </div>
+          </div>{/* end card list */}
+          </div>{/* end scrollable zone */}
         </main>
       </div>
 
