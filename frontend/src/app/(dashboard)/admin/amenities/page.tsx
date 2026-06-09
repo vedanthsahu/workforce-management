@@ -107,9 +107,9 @@ export default function AmenitiesPage() {
     <div className="p-6 space-y-6 bg-[#f8fafc] min-h-screen">
 
       {/* BREADCRUMB */}
-      <div className="text-sm text-gray-500">
+      {/* <div className="text-sm text-gray-500">
         Admin / Amenities / <span className="text-gray-800">Manage Amenities</span>
-      </div>
+      </div> */}
 
       {successMessage && (
         <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
