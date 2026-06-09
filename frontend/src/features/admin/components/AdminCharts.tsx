@@ -193,7 +193,20 @@ const visibleOffices = showAll
                 tickLine={true}
               />
 
-              <ChartTooltip content={<ChartTooltipContent />} />
+              {/* <ChartTooltip content={<ChartTooltipContent />} /> */}
+              <ChartTooltip
+  content={
+    <ChartTooltipContent
+      labelFormatter={(_, payload) => {
+        if (!payload?.length) return "";
+
+        const item = payload[0].payload;
+
+        return `${item.day} (${item.date})`;
+      }}
+    />
+  }
+/>
 
               <Area
                 type="monotone"

@@ -76,12 +76,13 @@ const fetchTrend = async () => {
       endDate
     );
 
-    const formatted = res.map((item: any) => ({
-      day: new Date(item.date).toLocaleDateString("en-US", {
-        weekday: "short",
-      }),
-      occupancy: item.occupancyRate,
-    }));
+   const formatted = res.map((item: any) => ({
+  day: new Date(item.date).toLocaleDateString("en-US", {
+    weekday: "short",
+  }),
+  date: new Date(item.date).toLocaleDateString("en-GB"),
+  occupancy: item.occupancyRate,
+}));
 
     setTrendData(formatted);
   } catch (err) {
