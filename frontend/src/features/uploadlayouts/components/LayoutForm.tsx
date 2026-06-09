@@ -2897,7 +2897,7 @@ export default function LayoutForm({ formData, setFormData }: Props) {
       });
 
       console.log("[LayoutForm] Upload success:", res);
-      toast.success("Layout saved successfully");
+      // toast.success("Layout saved successfully");
 
       const layoutId = res?.layout_id || res?.id || res?.data?.layout_id;
       if (!layoutId) {
