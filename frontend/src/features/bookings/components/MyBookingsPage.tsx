@@ -6,9 +6,6 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Booking, BookingTab } from "../types/bookings.types";
 import { useBookings } from "../hooks/useBookings";
-import { AppSidebar } from "@/features/dashboard/components/AppSidebar";
-import { useAuthContext } from "@/features/auth/context/AuthContext";
-import { SidebarProvider } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { cancelBooking } from "../services/bookings.service";
 import {
@@ -357,7 +354,6 @@ const MyBookingsPage: React.FC = () => {
     refreshBookings,
   } = useBookings();
 
-  const { user } = useAuthContext();
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
   const router = useRouter();
 
@@ -410,11 +406,8 @@ const MyBookingsPage: React.FC = () => {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <SidebarProvider>
-      <div className="flex h-screen bg-[#F7F8FC] font-sans overflow-hidden w-full">
-        <AppSidebar user={user} />
-
-        <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
+    <>
+      <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#F7F8FC]">
 
           {/* ── Sticky top zone: header + stats + tabs ── */}
           <div className="shrink-0 bg-[#F7F8FC] px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 flex flex-col gap-4 sm:gap-5">
@@ -574,7 +567,6 @@ const MyBookingsPage: React.FC = () => {
           </div>{/* end card list */}
           </div>{/* end scrollable zone */}
         </main>
-      </div>
 
       {/* Dialogs */}
       <CancelDialog
@@ -583,7 +575,7 @@ const MyBookingsPage: React.FC = () => {
         onConfirm={handleConfirmCancel}
         onClose={() => setCancelTarget(null)}
       />
-    </SidebarProvider>
+    </>
   );
 };
 
