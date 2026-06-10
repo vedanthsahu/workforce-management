@@ -101,17 +101,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (PUBLIC_ROUTES.includes(pathname)) return;
 
     const isAdmin = user?.role === "TENANT_ADMIN";
-    const home    = isAdmin ? "/admin" : "/dashboard";
 
     // Not logged in on a protected route → login
     if (user === null) {
       router.replace("/login");
-      return;
-    }
-
-    // Admin accidentally on /dashboard/* → correct to /admin
-    if (isAdmin && pathname.startsWith("/dashboard")) {
-      router.replace("/admin");
       return;
     }
 

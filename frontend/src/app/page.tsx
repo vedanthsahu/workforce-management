@@ -18,8 +18,7 @@ export default function RootPage() {
     }
 
     // Single hop — correct destination on first navigation, no flash
-    const home = user.role === "TENANT_ADMIN" ? "/admin" : "/dashboard";
-    router.replace(home);
+    router.replace("/dashboard");
   }, [isLoading, user, router]);
 
   // Shown only while /me is in flight — typically <500ms

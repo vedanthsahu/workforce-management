@@ -155,9 +155,6 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useAuthContext } from "@/features/auth/context/AuthContext";
-import { AppSidebar } from "@/features/dashboard/components/AppSidebar";
-import { SidebarProvider } from "@/components/ui/sidebar";
 import { useBookingForm } from "../hooks/useBooking";
 import {
   BookingTypeSelector,
@@ -167,7 +164,6 @@ import {
 } from "./BookForSomeone";
 
 export default function BookForSomeonePage() {
-  const { user } = useAuthContext();
 
   const router = useRouter();
 
@@ -184,11 +180,7 @@ export default function BookForSomeonePage() {
   };
 
   return (
-    <SidebarProvider>
-      <div className="flex h-screen bg-[#F7F8FC] font-sans overflow-hidden w-full">
-        <AppSidebar user={user} />
-
-        <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#F7F8FC]">
 
           {/* ── Sticky top zone: header ── */}
           <div className="shrink-0 bg-[#F7F8FC] px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 flex flex-col gap-4 sm:gap-5">
@@ -307,7 +299,5 @@ export default function BookForSomeonePage() {
           </div>{/* end scrollable zone */}
 
         </main>
-      </div>
-    </SidebarProvider>
   );
 }
