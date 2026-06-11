@@ -304,6 +304,8 @@
 //   );
 // }
 
+
+
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
@@ -388,7 +390,7 @@ export default function FloorsPage() {
   const paginatedFloors = filteredFloors.slice(startIndex, startIndex + itemsPerPage);
 
   return (
-    <div className="p-6 space-y-6 bg-[#f8fafc] h-screen overflow-y-auto">
+   <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc]">
 
       {/* BREADCRUMB */}
      
@@ -401,20 +403,17 @@ export default function FloorsPage() {
       )}
 
       {/* HEADER */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Manage Floors</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            View, add, edit and manage all floors.
-          </p>
-        </div>
-        <Link
-          href="/admin/floors/add"
-          className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700"
-        >
-          + Add Floor
-        </Link>
-      </div>
+     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Manage Floors</h1>
+    <p className="text-xs sm:text-sm text-gray-500 mt-1">View, add, edit and manage all floors.</p>
+  </div>
+  <div className="self-start sm:self-auto shrink-0">
+    <Link href="/admin/floors/add" className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700">
+      + Add Floor
+    </Link>
+  </div>
+</div>
 
       {/* CARDS */}
       <FloorCards stats={stats} />
@@ -471,10 +470,7 @@ export default function FloorsPage() {
         </div>
 
         {/* TABLE BODY */}
-        <div
-          className="w-full overflow-x-auto overflow-y-auto"
-          style={{ maxHeight: "calc(100vh - 420px)", minHeight: "200px" }}
-        >
+        <div className="w-full overflow-x-auto">
           {loading ? (
             <div className="p-6 text-sm text-gray-500">
               <center>Select a site and building</center>
@@ -515,7 +511,8 @@ export default function FloorsPage() {
         )}
 
         {/* FOOTER */}
-        <div className="flex justify-between items-center px-6 py-4 border-t shrink-0 text-sm text-gray-500">
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
+        
           <span>
             Showing {filteredFloors.length === 0 ? 0 : startIndex + 1} to{" "}
             {Math.min(startIndex + itemsPerPage, filteredFloors.length)} of{" "}

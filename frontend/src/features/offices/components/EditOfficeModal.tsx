@@ -264,6 +264,7 @@
 import { useState, useEffect } from "react";
 import { Office, UpdateOfficePayload } from "../types/office.types";
 import { officeService } from "../services/office.service";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X } from "lucide-react";
 
 // type Props = {
@@ -342,7 +343,7 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Pr
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
 
       {/* MODAL */}
-      <div className="w-full max-w-2xl rounded-3xl bg-white shadow-2xl overflow-hidden">
+     <div className="w-full max-w-2xl rounded-3xl bg-white shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
 
         {/* HEADER */}
         <div className="flex items-center justify-between border-b px-6 py-5">
@@ -356,8 +357,8 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Pr
         </div>
 
         {/* BODY */}
-        <div className="p-6 space-y-5">
-          <div className="grid grid-cols-2 gap-5">
+        <div className="p-4 sm:p-6 space-y-4 overflow-y-auto">
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
             {/* OFFICE NAME */}
             <div className="space-y-2">
@@ -386,14 +387,16 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Pr
           </div>
 
           {/* STATUS */}
-          <div className="space-y-2">
+          <div className="space-y-2 min-w-0">
+
             <label className="text-sm font-medium text-gray-700">Status</label>
+           
             <select
-              name="status"
-              value={formData.status || "ACTIVE"}
-              onChange={handleChange}
-              className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
+  name="status"
+  value={formData.status || "ACTIVE"}
+  onChange={handleChange}
+  className="w-full max-w-full min-w-0 h-11 rounded-xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+>
               <option value="ACTIVE">ACTIVE</option>
               <option value="INACTIVE">INACTIVE</option>
             </select>
@@ -401,7 +404,7 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Pr
         </div>
 
         {/* FOOTER */}
-        <div className="flex justify-end gap-3 border-t px-6 py-4 bg-gray-50">
+        <div className="flex justify-end gap-3 border-t px-4 sm:px-6 py-4 bg-gray-50 shrink-0">
           <button
             onClick={onClose}
             className="h-11 rounded-xl border border-gray-200 px-5 text-sm font-medium hover:bg-gray-100 transition"

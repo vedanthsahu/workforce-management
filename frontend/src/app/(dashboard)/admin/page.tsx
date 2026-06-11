@@ -24,8 +24,10 @@ const [selectedDate, setSelectedDate] = useState(getLocalDate());
   const { statsData, loading, error ,buildings, trendData , selectedWeek, setSelectedWeek, topOffices,recentBookings, } = useAdminDashboard(selectedDate);
   return (
     <>
+  
       {/* <AdminTopbar /> */}
-      <main className="flex-1 bg-gray-50 p-4 sm:p-6 space-y-6 overflow-x-hidden overflow-y-auto">
+      
+     <main className="flex-1 min-h-0 bg-gray-50 p-4 sm:p-6 space-y-6 overflow-x-clip overflow-y-auto">
         <AdminHeader 
         selectedDate={selectedDate}
          setSelectedDate={setSelectedDate}  />
@@ -46,19 +48,9 @@ const [selectedDate, setSelectedDate] = useState(getLocalDate());
   setSelectedWeek={setSelectedWeek}    topOffices={topOffices}   />
         
         <AdminRecentBookings bookings={recentBookings} />
-
-                    {/* <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"> */}
-                      {/* LEFT SIDE - BOOKINGS */}
-                      {/* <div className="lg:col-span-2">
-                        <AdminRecentBookings bookings={recentBookings} />
-                      </div> */}
-                      {/* RIGHT SIDE - QUICK ACTIONS */}
-                      {/* <div>
-                        <AdminQuickActions />
-                      </div>
-                    </div>  */}
         
       </main>
+      
     </>
   );
 }   

@@ -231,14 +231,14 @@ export default function FloorLayoutsPage() {
   return (
     <main className="flex-1 bg-[#f8fafc] p-6 space-y-6 overflow-y-auto">
 
-      <div className="flex items-center justify-between">
+    <div className="flex flex-wrap items-start justify-between gap-y-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Floor Layout Management</h1>
           <p className="text-xs sm:text-sm text-gray-500 mt-1">
             Upload, manage and publish floor layouts.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleRefresh}
             className="flex items-center gap-2 border px-4 py-2 rounded-md text-sm hover:bg-gray-50 transition-colors"
@@ -254,8 +254,8 @@ export default function FloorLayoutsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-3">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-3">
           <FloorTree
             initialSiteId={siteIdParam     || selection.siteId}
             initialBuildingId={buildingIdParam || selection.buildingId}
@@ -263,7 +263,7 @@ export default function FloorLayoutsPage() {
             onSelect={handleFloorSelect}
           />
         </div>
-        <div className="col-span-9">
+         <div className="lg:col-span-9">
           <LayoutTable
             selection={selection}
             selectedLayoutId={layoutIdParam}

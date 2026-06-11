@@ -57,14 +57,7 @@ const stats = [
       icon: Armchair,
       color: "bg-orange-100 text-orange-600",
     },
-    // {
-    //   title: isToday? "Booked Today" : `Booked on ${formattedDate}`,
-    //   value: data?.booked_today ?? "-",
-    //   subtitle: `${data?.occupancy_percentage ?? 0}% occupancy`,
-    //   icon: CalendarCheck,
-    //   color: "bg-blue-100 text-blue-600",
-    // },
-
+    
     {
   title: "Bookings",
   value: data?.booked_today ?? "-",
@@ -82,13 +75,7 @@ const stats = [
   icon: CalendarCheck,
   color: "bg-blue-100 text-blue-600",
 },
-    // {
-    //   title: "Blocked Seats",
-    //   value: data?.blocked_seats ?? "-",
-    //   subtitle: "Maintenance / Other",
-    //   icon: Ban,
-    //   color: "bg-purple-100 text-purple-600",
-    // },
+   
     {
   title: "Blocked ",
   value: data?.blocked_seats ?? "-",
@@ -130,7 +117,7 @@ const stats = [
 
             {/* CONTENT */}
             <CardContent>
-              <div className="text-4xl font-semibold">
+              <div className="text-2xl sm:text-3xl xl:text-4xl font-semibold">
                 {item.value}
               </div>
 

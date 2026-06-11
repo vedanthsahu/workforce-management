@@ -583,7 +583,7 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
   return (
     <div className="bg-white border rounded-xl p-6 shadow-sm">
 
-      <div className="flex justify-between items-center mb-6">
+    <div className="flex flex-wrap items-center justify-between gap-y-2 mb-6">
         <h2 className="text-sm font-semibold">
           Floor Layouts — {selection.buildingName} / {selection.floorName}
         </h2>
@@ -682,7 +682,7 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
 
       {previewUrl && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl w-[50%] h-[95%] flex flex-col shadow-xl">
+          <div className="bg-white rounded-xl w-[90vw] sm:w-[70%] md:w-[50%] h-[90vh] md:h-[95%] flex flex-col shadow-xl">
             <div className="flex items-center justify-between px-4 py-3 border-b">
               <h2 className="text-sm font-semibold">Layout Preview</h2>
               <div className="flex items-center gap-2">
