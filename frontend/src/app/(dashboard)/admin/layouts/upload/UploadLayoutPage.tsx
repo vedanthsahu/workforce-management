@@ -33,7 +33,7 @@ export default function UploadLayoutPage() {
   return (
     <main className="flex-1 p-6 bg-gray-50 space-y-6 overflow-y-auto">
 
-      <div className="flex justify-between items-center">
+     <div className="flex flex-wrap items-start justify-between gap-y-3">
         <div>
           <h1 className="text-xl font-semibold">Upload New Floor Layout</h1>
           <p className="text-sm text-muted-foreground">
@@ -48,7 +48,7 @@ export default function UploadLayoutPage() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <LayoutForm formData={formData} setFormData={setFormData} />
         <div className="space-y-6">
           <LayoutGuidelines />

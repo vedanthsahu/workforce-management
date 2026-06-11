@@ -80,9 +80,9 @@ const visibleOffices = showAll
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="flex flex-col md:flex-row items-center justify-between gap-6">
+        <CardContent className="flex flex-col sm:flex-row items-center justify-center gap-6">
 
-          <div className="relative w-[160px] h-[160px]">
+          <div className="relative w-[160px] h-[160px] sm:w-[160px] sm:h-[160px] shrink-0">
             <ChartContainer
               config={{
                 booked: { label: "Booked", color: "#4F46E5" },

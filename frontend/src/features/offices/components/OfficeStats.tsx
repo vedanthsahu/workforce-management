@@ -9,7 +9,7 @@ export default function OfficeStats({ stats }: { stats: OfficeStatsSummary | nul
   }
 
   return (
-    <div className="grid grid-cols-4 gap-6">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
 
       <Stat icon={<Building2 className="text-blue-600" />} bg="bg-blue-100" label="Total Offices" value={stats.total_offices.toString()} sub="Across all tenants" />
       <Stat icon={<CheckCircle className="text-green-600" />} bg="bg-green-100" label="Active Offices" value={stats.active_sites.toString()} sub="Currently active" />
@@ -22,7 +22,7 @@ export default function OfficeStats({ stats }: { stats: OfficeStatsSummary | nul
 
 function Stat({ icon, bg, label, value, sub }: any) {
   return (
-    <div className="flex items-center gap-4 p-5 bg-white border rounded-2xl shadow-sm">
+    <div className="flex items-center gap-3 p-3 sm:p-5 bg-white border rounded-2xl shadow-sm">
       <div className={`p-3 rounded-xl ${bg}`}>{icon}</div>
 
       <div>

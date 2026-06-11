@@ -80,7 +80,11 @@ const fetchTrend = async () => {
   day: new Date(item.date).toLocaleDateString("en-US", {
     weekday: "short",
   }),
-  date: new Date(item.date).toLocaleDateString("en-GB"),
+  date: new Date(item.date).toLocaleDateString("en-GB", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+}),
   occupancy: item.occupancyRate,
 }));
 

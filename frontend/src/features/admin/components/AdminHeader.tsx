@@ -22,26 +22,17 @@ export default function AdminHeader({ selectedDate, setSelectedDate}: Props) {
       {/* RIGHT FILTERS */}
       <div className="flex items-center gap-3">
 
-        {/* Offices Dropdown */}
-        {/* <select 
-        className="h-9 px-3 rounded-md border bg-white text-sm">
-          <option>All Offices</option>
-        </select> */}
-
-        {/* Floors Dropdown */}
-        {/* <select className="h-9 px-3 rounded-md border bg-white text-sm">
-          <option>All Floors</option>
-        </select> */}
 
         {/* Date */}
-        <div className="flex flex-wrap items-center gap-2 h-auto min-h-9 px-3 py-2 rounded-md border bg-white text-sm">
-         
-          <input
-  type="date"
-  value={selectedDate}
-  onChange={(e) => setSelectedDate(e.target.value)}
-/> Filter by date
-        </div>
+        <div className="flex items-center gap-2 h-9 px-3 py-2 rounded-md border bg-white text-sm w-full sm:w-auto">
+  <input
+    type="date"
+    value={selectedDate}
+    onChange={(e) => setSelectedDate(e.target.value)}
+    className="outline-none bg-transparent"
+  />
+  <span >Filter by date</span>
+</div>
 
       </div>
     </div>
