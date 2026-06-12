@@ -66,7 +66,7 @@ export default function FloorForm() {
             onClick={() =>
               router.push("/admin/floors")
             }
-            className="px-4 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50"
+            className="h-9 px-4 text-sm font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50"
           >
             Cancel
           </button>
@@ -76,7 +76,7 @@ export default function FloorForm() {
             disabled={
               isDisabled || loading
             }
-            className={`px-4 py-2 rounded-lg text-white ${
+            className={`h-9 px-4 text-sm font-medium rounded-lg text-white ${
               !isDisabled
                 ? "bg-blue-600 hover:bg-blue-700"
                 : "bg-gray-300 cursor-not-allowed"

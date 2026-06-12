@@ -6,7 +6,6 @@ import OfficeStats from "@/features/offices/components/OfficeStats";
 import useOffices from "@/features/offices/hooks/useOffices";
 import Pagination from "@/features/offices/components/OfficePagination";
 import EditOfficeModal from "@/features/offices/components/EditOfficeModal";
-import { Button } from "@/components/ui/button";
 import { Suspense, useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { CheckCircle2, XCircle, X, Plus } from "lucide-react";
@@ -93,10 +92,13 @@ function OfficesPage() {
           </p>
         </div>
         <div className="self-start sm:self-auto shrink-0">
-          <Button onClick={() => router.push("/admin/offices/addoffice")}>
+          <button
+            onClick={() => router.push("/admin/offices/addoffice")}
+            className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm"
+          >
             <Plus size={16} />
             Add Office
-          </Button>
+          </button>
         </div>
       </div>
 

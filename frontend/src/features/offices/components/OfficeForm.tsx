@@ -109,10 +109,18 @@ export default function OfficeForm() {
         </div>
 
         <div className="flex items-center gap-2 sm:shrink-0">
-          <Button variant="outline" onClick={() => router.push("/admin/offices")}>
+          <Button
+            variant="outline"
+            className="h-9 px-4 rounded-lg"
+            onClick={() => router.push("/admin/offices")}
+          >
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!isFormValid || loading}>
+          <Button
+            className="h-9 px-4 rounded-lg"
+            onClick={handleSave}
+            disabled={!isFormValid || loading}
+          >
             {loading ? "Saving..." : "Save Office"}
           </Button>
         </div>

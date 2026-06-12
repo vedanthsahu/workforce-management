@@ -115,7 +115,7 @@ function AmenitiesPage() {
           <button
             onClick={() => router.push("/admin/amenities/add")}
             onMouseEnter={() => router.prefetch("/admin/amenities/add")}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium shadow-sm"
+            className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm"
           >
             <Plus size={15} />
             Add Amenity
