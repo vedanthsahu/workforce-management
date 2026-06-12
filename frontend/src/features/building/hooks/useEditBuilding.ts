@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { buildingService } from "../services/buildingService";
 
@@ -21,6 +21,13 @@ export const useEditBuilding = (
       status:
         building.status,
     });
+
+  useEffect(() => {
+    setFormData({
+      building_name: building.building_name,
+      status: building.status,
+    });
+  }, [building]);
 
   const handleChange = (
     field: "building_name" | "status",
