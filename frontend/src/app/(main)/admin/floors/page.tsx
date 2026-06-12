@@ -3,6 +3,7 @@
 import { Suspense, useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Plus } from "lucide-react";
 
 import FloorCards from "@/features/floor/components/FloorCards";
 import FloorFilters from "@/features/floor/components/FloorFilters";
@@ -102,9 +103,10 @@ function FloorsPage() {
         </div>
         <Link
           href="/admin/floors/add"
-          className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700"
+          className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm"
         >
-          + Add Floor
+          <Plus size={16} />
+          Add Floor
         </Link>
       </div>
 

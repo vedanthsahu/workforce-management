@@ -98,7 +98,7 @@ function BuildingsPage() {
         <div className="self-start sm:self-auto shrink-0">
           <Link
             href="/admin/building/add"
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-sm text-sm"
+            className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm"
           >
             <Plus size={16} />
             Add Building

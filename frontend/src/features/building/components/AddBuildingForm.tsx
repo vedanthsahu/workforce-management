@@ -81,7 +81,7 @@ export default function AddBuildingForm() {
         <div className="flex items-center gap-2 sm:shrink-0">
           <Link
             href="/admin/building"
-            className="h-8 px-4 text-xs font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all inline-flex items-center"
+            className="h-9 px-4 text-sm font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all inline-flex items-center"
           >
             Cancel
           </Link>
@@ -89,10 +89,10 @@ export default function AddBuildingForm() {
             onClick={handleSave}
             onMouseEnter={() => router.prefetch("/admin/building")}
             disabled={!isFormValid || loading}
-            className={`h-8 px-4 text-xs font-medium rounded-lg text-white transition-all ${
+            className={`h-9 px-4 text-sm font-medium rounded-lg text-white transition-all ${
               isFormValid && !loading
                 ? "bg-blue-600 hover:bg-blue-700 shadow-sm shadow-blue-200"
-                : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                : "bg-gray-300 cursor-not-allowed"
             }`}
           >
             {loading ? "Saving..." : "Save Building"}
