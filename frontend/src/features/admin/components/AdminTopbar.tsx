@@ -3,6 +3,7 @@
 import { Bell } from "lucide-react";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import { getInitials } from "@/features/auth/types/auth.types";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export default function AdminTopbar() {
   const { user } = useAuthContext();
@@ -37,9 +38,11 @@ export default function AdminTopbar() {
         <div className="flex items-center gap-3 cursor-pointer">
 
           {/* Avatar */}
-          <div className="w-9 h-9 rounded-full bg-indigo-500 flex items-center justify-center text-white font-medium">
-            {initials}
-          </div>
+          <Avatar className="bg-indigo-500">
+            <AvatarFallback className="bg-indigo-500 text-white font-medium">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
 
           {/* Name + Role */}
           <div className="text-sm">

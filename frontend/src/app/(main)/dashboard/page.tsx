@@ -2,7 +2,7 @@
 
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import DashboardPage from "@/features/dashboard/components/DashboardPage";
-import AdminDashboardPage from "../admin/AdminDashboardPage";
+import AdminDashboardPage from "@/features/admin/components/AdminDashboardPage";
 
 export default function DashboardRoutePage() {
   const { user, isLoading } = useAuthContext();

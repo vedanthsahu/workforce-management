@@ -344,6 +344,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
           {isAdmin ? (
             <>
               <SidebarGroup>
+                <SidebarGroupLabel>Overview</SidebarGroupLabel>
                 <SidebarMenu>
                   <NavSection items={ADMIN_DASHBOARD}      activeItem={activeItem} onNavigate={handleNav} />
                 </SidebarMenu>

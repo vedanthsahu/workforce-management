@@ -1,6 +1,3 @@
-
-// bookings.types.ts
-
 export type BookingStatus = "confirmed" | "cancelled" | "pending";
 
 export type BookingTab = "upcoming" | "past" | "recurring" | "cancelled";
@@ -28,8 +25,8 @@ export interface Booking {
   isRecurring?: boolean;
   recurringPattern?: string;
   preferences?: string[]; // ← NEW: preference keys e.g. ["window", "dualMonitor"]
-  floorId?:  string;   // raw floor_id from API
-seatId?:   string;   // raw seat_id from API
+  floorId?: string;        // raw floor_id from API
+  seatId?: string;         // raw seat_id from API
 }
 
 export interface BookingSummary {
@@ -38,14 +35,6 @@ export interface BookingSummary {
   completedThisMonth: number;
   daysInOffice:       number;
   teamInOffice:       number;
-}
-
-export interface BookingsState {
-  bookings:  Booking[];
-  summary:   BookingSummary;
-  activeTab: BookingTab;
-  isLoading: boolean;
-  error:     string | null;
 }
 
 export interface RawBooking {

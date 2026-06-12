@@ -1,13 +1,12 @@
 "use client";
 
-import {
-  X,
-} from "lucide-react";
+import { X } from "lucide-react";
 
+import { Floor } from "../types/floor.types";
 import { useEditFloor } from "../hooks/useEditFloor";
 
 type Props = {
-  floor: any;
+  floor: Floor;
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
@@ -19,22 +18,11 @@ export default function EditFloorModal({
   onClose,
   onSuccess,
 }: Props) {
-
-  const {
-    loading,
-    formData,
-    handleChange,
-    handleUpdate,
-  } = useEditFloor(
-    floor,
-    onSuccess
-  );
-
+  const { loading, formData, handleChange, handleUpdate } = useEditFloor(floor);
 
   const hasChanges =
-  formData.floor_name !== floor.floor_name ||
-  formData.status !== floor.status;
-
+    formData.floor_name !== floor.floor_name ||
+    formData.status !== floor.status;
 
   if (!open) return null;
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import axios from "axios";
 
 import { buildingService } from "../services/buildingService";
 
@@ -43,16 +44,6 @@ export const useBuildings = () => {
         });
 
       setSites(data);
-
-      // auto-select first site
-      // if (
-      //   data.length > 0 &&
-      //   !selectedSiteId
-      // ) {
-      //   setSelectedSiteId(
-      //     data[0].site_id
-      //   );
-      // }
     } catch (err) {
       console.error(err);
     }
@@ -75,11 +66,9 @@ export const useBuildings = () => {
       });
 
     setBuildings(data);
-  } catch (err: any) {
-    setError(
-      err?.message ||
-      "Failed to fetch buildings"
-    );
+  } catch (err) {
+    const message = axios.isAxiosError(err) ? err.message : undefined;
+    setError(message || "Failed to fetch buildings");
   } finally {
     setLoading(false);
   }

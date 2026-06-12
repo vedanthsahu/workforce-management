@@ -5,6 +5,7 @@ import AdminStats from "@/features/admin/components/AdminStats";
 import AdminCharts from "@/features/admin/components/AdminCharts";
 import AdminRecentBookings from "@/features/admin/components/AdminRecentBookings";
 import { useAdminDashboard } from "@/features/admin/hooks/useAdminDashboard";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 
 export default function AdminDashboardPage() {
@@ -17,16 +18,17 @@ export default function AdminDashboardPage() {
   };
   const [selectedDate, setSelectedDate] = useState(getLocalDate());
 
-  const { statsData, loading, error, buildings, trendData, selectedWeek, setSelectedWeek, topOffices, recentBookings } = useAdminDashboard(selectedDate);
+  const { statsData, loading, error, trendData, selectedWeek, setSelectedWeek, topOffices, recentBookings } = useAdminDashboard(selectedDate);
   return (
     <main className="flex-1 bg-gray-50 p-6 space-y-6 overflow-y-auto">
       <AdminHeader
         selectedDate={selectedDate}
         setSelectedDate={setSelectedDate} />
       {loading && (
-        <div className="flex items-center gap-2 text-sm text-gray-400">
-          <div className="w-4 h-4 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
-          Loading dashboard…
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 w-full rounded-xl" />
+          ))}
         </div>
       )}
       {error && (
@@ -35,10 +37,10 @@ export default function AdminDashboardPage() {
         </div>
       )}
       {!loading && !error && <AdminStats data={statsData} selectedDate={selectedDate} />}
-      <AdminCharts data={statsData} buildings={buildings} trendData={trendData} selectedWeek={selectedWeek}
+      <AdminCharts data={statsData} trendData={trendData} selectedWeek={selectedWeek}
         setSelectedWeek={setSelectedWeek} topOffices={topOffices} />
 
-      <AdminRecentBookings bookings={recentBookings} />
+      <AdminRecentBookings bookings={recentBookings} loading={loading} />
     </main>
   );
 }

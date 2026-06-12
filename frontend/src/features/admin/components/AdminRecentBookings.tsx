@@ -7,15 +7,31 @@ import {
   CardContent,
 } from "@/components/ui/card";
 
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+
+import type { RecentBooking } from "../types/admin.types";
+
+const SKELETON_ROWS = 5;
 
 type Props = {
-  bookings: any[];
+  bookings: RecentBooking[];
+  loading?: boolean;
 };
 
-export default function AdminBookings({ bookings }: Props) {  
+export default function AdminRecentBookings({ bookings, loading }: Props) {
   return (
     <Card>
-
       <CardHeader>
         <CardTitle className="text-sm font-semibold">
           Recent Bookings
@@ -23,87 +39,82 @@ export default function AdminBookings({ bookings }: Props) {
       </CardHeader>
 
       <CardContent className="p-0">
+        <Table>
+          <TableHeader className="bg-gray-50">
+            <TableRow>
+              <TableHead className="px-6 py-3">User</TableHead>
+              <TableHead className="px-6 py-3">Office</TableHead>
+              <TableHead className="px-6 py-3">Seat</TableHead>
+              <TableHead className="px-6 py-3">Date</TableHead>
+              <TableHead className="px-6 py-3">Status</TableHead>
+            </TableRow>
+          </TableHeader>
 
-        <table className="w-full text-sm">
+          <TableBody>
+            {loading &&
+              Array.from({ length: SKELETON_ROWS }).map((_, index) => (
+                <TableRow key={index}>
+                  <TableCell colSpan={5} className="px-6 py-4">
+                    <Skeleton className="h-9 w-full" />
+                  </TableCell>
+                </TableRow>
+              ))}
 
-          {/* TABLE HEADER */}
-          <thead className="bg-gray-50 border-b">
-            <tr className="text-left text-muted-foreground">
-              <th className="px-6 py-3 font-medium">User</th>
-              <th className="px-6 py-3 font-medium">Office</th>
-              <th className="px-6 py-3 font-medium">Seat</th>
-              <th className="px-6 py-3 font-medium">Date</th>
-              <th className="px-6 py-3 font-medium">Status</th>
-            </tr>
-          </thead>
-
-          {/* TABLE BODY */}
-          <tbody>
-
-           {bookings?.map((item, index) => (
-              <tr
-                key={index}
-                className="border-b hover:bg-gray-50 transition"
-              >
-
+            {!loading && bookings?.map((item, index) => (
+              <TableRow key={index}>
                 {/* USER */}
-                <td className="px-6 py-4 flex items-center gap-3">
+                <TableCell className="px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="bg-indigo-100">
+                      <AvatarFallback className="bg-indigo-100 text-indigo-600 font-medium">
+                        {item.name.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
 
-                  {/* Avatar */}
-                  <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium">
-                    {item.name.charAt(0)}
+                    <div>
+                      <p className="font-medium">{item.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.email}
+                      </p>
+                    </div>
                   </div>
-
-                  <div>
-                    <p className="font-medium">{item.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.email}
-                    </p>
-                  </div>
-
-                </td>
+                </TableCell>
 
                 {/* OFFICE */}
-                <td className="px-6 py-4">{item.office}</td>
+                <TableCell className="px-6 py-4">{item.office}</TableCell>
 
                 {/* SEAT */}
-                <td className="px-6 py-4">{item.seat}</td>
+                <TableCell className="px-6 py-4">{item.seat}</TableCell>
 
                 {/* DATE */}
-                <td className="px-6 py-4">{item.date}</td>
+                <TableCell className="px-6 py-4">{item.date}</TableCell>
 
                 {/* STATUS */}
-                <td className="px-6 py-4">
-
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      item.status === "Booked" || item.status === "CONFIRMED"
+                <TableCell className="px-6 py-4">
+                  <Badge
+                    variant={item.status === "Booked" ? "secondary" : "destructive"}
+                    className={
+                      item.status === "Booked"
                         ? "bg-green-100 text-green-600"
                         : "bg-red-100 text-red-600"
-                    }`}
+                    }
                   >
-                    
                     {item.status}
-                  </span>
-
-                </td>
-
-              </tr>
+                  </Badge>
+                </TableCell>
+              </TableRow>
             ))}
-            {bookings.length === 0 && (
-  <tr>
-    <td colSpan={5} className="text-center py-6 text-gray-400">
-      No bookings found
-    </td>
-  </tr>
-)}
 
-
-          </tbody>
-        </table>
-
+            {!loading && bookings.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-6 text-gray-400">
+                  No bookings found
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </CardContent>
-
     </Card>
   );
 }

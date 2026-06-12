@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Plus, CheckCircle2, XCircle, X } from "lucide-react";
@@ -12,10 +11,11 @@ import BuildingTable from "@/features/building/components/buildingTable";
 import BuildingPagination from "@/features/building/components/BuildingPagination";
 import EditBuildingModal from "@/features/building/components/EditBuildingModal";
 import { useBuildings } from "@/features/building/hooks/useBuildings";
+import { Building } from "@/features/building/types/building.types";
 
 type BannerState = { type: "success" | "error"; message: string } | null;
 
-export default function BuildingsPage() {
+function BuildingsPage() {
   const {
     buildings, sites, stats, loading, error,
     search, setSearch, selectedSiteId, setSelectedSiteId, fetchBuildings,
@@ -24,7 +24,7 @@ export default function BuildingsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const [selectedBuilding, setSelectedBuilding] = useState<any>(null);
+  const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null);
   const [openModal, setOpenModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [banner, setBanner] = useState<BannerState>(null);
@@ -50,7 +50,7 @@ export default function BuildingsPage() {
     }
   }, [searchParams, router]);
 
-  const handleEdit = (building: any) => {
+  const handleEdit = (building: Building) => {
     setSelectedBuilding(building);
     setOpenModal(true);
   };
@@ -61,7 +61,7 @@ export default function BuildingsPage() {
   };
 
   const filteredBuildings = buildings
-    .filter((building: any) => {
+    .filter((building) => {
       const name = (building.building_name || "").toLowerCase();
       const query = search.toLowerCase();
       let i = 0;
@@ -71,7 +71,7 @@ export default function BuildingsPage() {
       }
       return query.length === 0;
     })
-    .sort((a: any, b: any) => {
+    .sort((a, b) => {
       if (highlightedId) {
         if (a.building_id === highlightedId) return -1;
         if (b.building_id === highlightedId) return 1;
@@ -86,9 +86,6 @@ export default function BuildingsPage() {
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc] min-h-screen">
-
-      {/* BREADCRUMB */}
-     
 
       {/* HEADER */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -195,5 +192,13 @@ export default function BuildingsPage() {
       )}
 
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-gray-500">Loading...</div>}>
+      <BuildingsPage />
+    </Suspense>
   );
 }
