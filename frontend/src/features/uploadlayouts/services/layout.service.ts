@@ -41,4 +41,12 @@ export const layoutService = {
     const { data } = await axiosInstance.get(`/buildings/${building_id}/floors`);
     return data;
   },
+
+  async getLayoutsByFloor(floor_id: number) {
+    const { data } = await axiosInstance.get(
+      `/admin/floor-layouts/floors/${floor_id}`
+    );
+
+    return data;
+  },
 };

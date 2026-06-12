@@ -16,11 +16,13 @@ import {
 } from "@/components/ui/select";
 import { UploadCloud, FileCheck2, X } from "lucide-react";
 import { layoutService } from "../services/layout.service";
-import { Building, Floor, LayoutFormState, Site } from "../types/layout.types";
+import SVGPreviewModal from "./Svgpreviewmodal";
+import { Building, Floor, FloorLayoutInfo, LayoutFormState, Site } from "../types/layout.types";
 
 interface LayoutFormProps {
   formData: LayoutFormState;
   setFormData: (data: LayoutFormState | ((prev: LayoutFormState) => LayoutFormState)) => void;
+  onFloorLayoutInfo?: (info: FloorLayoutInfo | null) => void;
 }
 
 function extractSeatIds(svgText: string): string[] {
@@ -33,7 +35,7 @@ function extractSeatIds(svgText: string): string[] {
   return ids;
 }
 
-export default function LayoutForm({ formData, setFormData }: LayoutFormProps) {
+export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }: LayoutFormProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
 
@@ -65,7 +67,10 @@ export default function LayoutForm({ formData, setFormData }: LayoutFormProps) {
     const siteId = formData.site.id;
     const match = sites.find((s) => s.site_id === siteId);
     if (match) {
-      setFormData((prev) => ({ ...prev, site: { id: siteId, name: match.site_name } }));
+      setFormData((prev) => ({
+        ...prev,
+        site: { id: siteId, name: match.site_name, code: match.site_code ?? "" },
+      }));
     }
   }, [sites]);
 
@@ -85,7 +90,10 @@ export default function LayoutForm({ formData, setFormData }: LayoutFormProps) {
     const buildingId = formData.building.id;
     const match = buildings.find((b) => b.building_id === buildingId);
     if (match) {
-      setFormData((prev) => ({ ...prev, building: { id: buildingId, name: match.building_name } }));
+      setFormData((prev) => ({
+        ...prev,
+        building: { id: buildingId, name: match.building_name, code: match.building_code ?? "" },
+      }));
     }
   }, [buildings]);
 
@@ -106,10 +114,53 @@ export default function LayoutForm({ formData, setFormData }: LayoutFormProps) {
     if (match) {
       setFormData((prev) => ({
         ...prev,
-        floor: { id: floorId, name: match.floor_name ?? match.floor_code ?? "" },
+        floor: {
+          id: floorId,
+          name: match.floor_name ?? match.floor_code ?? "",
+          code: match.floor_code ?? "",
+        },
       }));
     }
   }, [floors]);
+
+  // Auto-generate layout name once site, building and floor codes are known
+  useEffect(() => {
+    const generate = async () => {
+      if (
+        !formData.site?.id ||
+        !formData.building?.id ||
+        !formData.floor?.id ||
+        !formData.site?.code ||
+        !formData.building?.code ||
+        !formData.floor?.code
+      ) {
+        return;
+      }
+
+      try {
+        const layouts = await layoutService.getLayoutsByFloor(formData.floor.id);
+
+        let nextVersion = 1;
+        if (Array.isArray(layouts) && layouts.length > 0) {
+          const versions = layouts.map((l: { version_no?: number; layout_version_no?: number }) =>
+            Number(l.version_no ?? l.layout_version_no ?? 0)
+          );
+          nextVersion = Math.max(...versions) + 1;
+        }
+
+        const sitePart = formData.site.code.split("-")[0];
+        const buildingPart = formData.building.code.split("-").pop();
+        const floorPart = formData.floor.code.split("-").pop();
+        const layoutName = `${sitePart}-${buildingPart}-${floorPart}-v${nextVersion}`;
+
+        setFormData((prev) => ({ ...prev, layoutName }));
+      } catch (err) {
+        console.error("Failed to generate layout name", err);
+      }
+    };
+
+    generate();
+  }, [formData.site?.id, formData.building?.id, formData.floor?.id]);
 
   const isFormValid =
     !!formData.site &&
@@ -172,6 +223,8 @@ export default function LayoutForm({ formData, setFormData }: LayoutFormProps) {
         seat_ids: seatIds,
       });
 
+      toast.success("Layout saved successfully");
+
       const layoutId = res?.layout_id || res?.id || res?.data?.layout_id;
       if (!layoutId) {
         console.error("layout_id not returned from createLayout response", res);
@@ -195,286 +248,305 @@ export default function LayoutForm({ formData, setFormData }: LayoutFormProps) {
   };
 
   return (
-    <Card className="lg:col-span-2">
-      <CardHeader>
-        <CardTitle className="text-sm font-semibold">Layout Information</CardTitle>
-      </CardHeader>
+    <>
+      <Card className="lg:col-span-2">
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold">Layout Information</CardTitle>
+        </CardHeader>
 
-      <CardContent className="space-y-6">
-        {/* ROW 1 — Site / Building */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <CardContent className="space-y-6">
+          {/* ROW 1 — Site / Building */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>
+                Site <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                items={Object.fromEntries(sites.map((s) => [String(s.site_id), s.site_name]))}
+                value={formData.site ? String(formData.site.id) : ""}
+                onValueChange={(value) => {
+                  if (!value) return;
+                  const site = sites.find((s) => String(s.site_id) === value);
+                  if (!site) return;
+                  setFormData((prev) => ({
+                    ...prev,
+                    site: { id: site.site_id, name: site.site_name, code: site.site_code ?? "" },
+                    building: null,
+                    floor: null,
+                    layoutName: "",
+                  }));
+                  onFloorLayoutInfo?.(null);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select Site" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sites.map((s) => (
+                    <SelectItem key={s.site_id} value={String(s.site_id)}>
+                      {s.site_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>
+                Building <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                items={Object.fromEntries(buildings.map((b) => [String(b.building_id), b.building_name]))}
+                value={formData.building ? String(formData.building.id) : ""}
+                onValueChange={(value) => {
+                  if (!value) return;
+                  const building = buildings.find((b) => String(b.building_id) === value);
+                  if (!building) return;
+                  setFormData((prev) => ({
+                    ...prev,
+                    building: {
+                      id: building.building_id,
+                      name: building.building_name,
+                      code: building.building_code ?? "",
+                    },
+                    floor: null,
+                    layoutName: "",
+                  }));
+                  onFloorLayoutInfo?.(null);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select Building" />
+                </SelectTrigger>
+                <SelectContent>
+                  {buildings.map((b) => (
+                    <SelectItem key={b.building_id} value={String(b.building_id)}>
+                      {b.building_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* ROW 2 — Floor / Layout Name */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>
+                Floor <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                items={Object.fromEntries(
+                  floors.map((f) => [String(f.floor_id), f.floor_name || f.floor_code || ""])
+                )}
+                value={formData.floor ? String(formData.floor.id) : ""}
+                onValueChange={(value) => {
+                  if (!value) return;
+                  const floor = floors.find((f) => String(f.floor_id) === value);
+                  if (!floor) return;
+                  setFormData((prev) => ({
+                    ...prev,
+                    floor: {
+                      id: floor.floor_id,
+                      name: floor.floor_name ?? floor.floor_code ?? "",
+                      code: floor.floor_code ?? "",
+                    },
+                  }));
+                  onFloorLayoutInfo?.({
+                    layoutId: floor.layout_id,
+                    layoutName: floor.layout_name,
+                    layoutStatus: floor.layout_status,
+                    layoutIsPublished: floor.layout_is_published,
+                    layoutVersionNo: floor.layout_version_no,
+                    layoutFileUrl: floor.layout_file_url,
+                    layoutCount: floor.layout_count,
+                  });
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select Floor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {floors.map((f) => (
+                    <SelectItem key={f.floor_id} value={String(f.floor_id)}>
+                      {f.floor_name || f.floor_code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>
+                Layout Name <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                value={formData.layoutName}
+                onChange={(e) => setFormData((prev) => ({ ...prev, layoutName: e.target.value }))}
+                placeholder="Auto-generated after floor selection"
+              />
+            </div>
+          </div>
+
+          {/* FILE UPLOAD */}
           <div className="space-y-1.5">
             <Label>
-              Site <span className="text-red-500">*</span>
+              Upload SVG File <span className="text-red-500">*</span>
             </Label>
-            <Select
-              items={Object.fromEntries(sites.map((s) => [String(s.site_id), s.site_name]))}
-              value={formData.site ? String(formData.site.id) : ""}
-              onValueChange={(value) => {
-                if (!value) return;
-                const site = sites.find((s) => String(s.site_id) === value);
-                if (!site) return;
-                setFormData((prev) => ({
-                  ...prev,
-                  site: { id: site.site_id, name: site.site_name },
-                  building: null,
-                  floor: null,
-                }));
-              }}
+
+            <div
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onClick={() => !formData.file && fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-lg p-8 flex flex-col items-center justify-center text-center transition-colors ${
+                formData.file
+                  ? "border-emerald-300 bg-emerald-50/40 cursor-default"
+                  : "border-indigo-300 hover:border-indigo-400 cursor-pointer"
+              }`}
             >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select Site" />
-              </SelectTrigger>
-              <SelectContent>
-                {sites.map((s) => (
-                  <SelectItem key={s.site_id} value={String(s.site_id)}>
-                    {s.site_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              {formData.file ? (
+                <div className="flex flex-col items-center gap-2 w-full">
+                  <FileCheck2 className="w-8 h-8 text-emerald-500" />
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-emerald-700 truncate max-w-[240px]">
+                      {formData.file.name}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFormData((prev) => ({ ...prev, file: null }));
+                        setSeatIds([]);
+                        setSvgPreview(null);
+                        setShowPreview(false);
+                        if (fileInputRef.current) fileInputRef.current.value = "";
+                      }}
+                      className="text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
+                      title="Remove file"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
 
-          <div className="space-y-1.5">
-            <Label>
-              Building <span className="text-red-500">*</span>
-            </Label>
-            <Select
-              items={Object.fromEntries(buildings.map((b) => [String(b.building_id), b.building_name]))}
-              value={formData.building ? String(formData.building.id) : ""}
-              onValueChange={(value) => {
-                if (!value) return;
-                const building = buildings.find((b) => String(b.building_id) === value);
-                if (!building) return;
-                setFormData((prev) => ({
-                  ...prev,
-                  building: { id: building.building_id, name: building.building_name },
-                  floor: null,
-                }));
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select Building" />
-              </SelectTrigger>
-              <SelectContent>
-                {buildings.map((b) => (
-                  <SelectItem key={b.building_id} value={String(b.building_id)}>
-                    {b.building_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+                  <div className="flex items-center gap-1.5 text-xs">
+                    {countingSeats ? (
+                      <span className="flex items-center gap-1.5 text-gray-400">
+                        <span className="w-3 h-3 border border-gray-300 border-t-indigo-500 rounded-full animate-spin" />
+                        Counting seats…
+                      </span>
+                    ) : seatIds.length > 0 ? (
+                      <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full font-medium">
+                        {seatIds.length} seat{seatIds.length !== 1 ? "s" : ""} detected
+                      </span>
+                    ) : null}
+                  </div>
 
-        {/* ROW 2 — Floor / Layout Name */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label>
-              Floor <span className="text-red-500">*</span>
-            </Label>
-            <Select
-              items={Object.fromEntries(
-                floors.map((f) => [String(f.floor_id), f.floor_name || f.floor_code || ""])
-              )}
-              value={formData.floor ? String(formData.floor.id) : ""}
-              onValueChange={(value) => {
-                if (!value) return;
-                const floor = floors.find((f) => String(f.floor_id) === value);
-                if (!floor) return;
-                setFormData((prev) => ({
-                  ...prev,
-                  floor: { id: floor.floor_id, name: floor.floor_name ?? floor.floor_code ?? "" },
-                }));
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select Floor" />
-              </SelectTrigger>
-              <SelectContent>
-                {floors.map((f) => (
-                  <SelectItem key={f.floor_id} value={String(f.floor_id)}>
-                    {f.floor_name || f.floor_code}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+                  <div className="flex items-center gap-2 mt-1">
 
-          <div className="space-y-1.5">
-            <Label>
-              Layout Name <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              value={formData.layoutName}
-              onChange={(e) => setFormData((prev) => ({ ...prev, layoutName: e.target.value }))}
-              placeholder="e.g. 8th Floor Layout"
-            />
-          </div>
-        </div>
-
-        {/* FILE UPLOAD */}
-        <div className="space-y-1.5">
-          <Label>
-            Upload SVG File <span className="text-red-500">*</span>
-          </Label>
-
-          <div
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onClick={() => !formData.file && fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-lg p-8 flex flex-col items-center justify-center text-center transition-colors ${
-              formData.file
-                ? "border-emerald-300 bg-emerald-50/40 cursor-default"
-                : "border-indigo-300 hover:border-indigo-400 cursor-pointer"
-            }`}
-          >
-            {formData.file ? (
-              <div className="flex flex-col items-center gap-2 w-full">
-                <FileCheck2 className="w-8 h-8 text-emerald-500" />
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-emerald-700 truncate max-w-[240px]">
-                    {formData.file.name}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setFormData((prev) => ({ ...prev, file: null }));
-                      setSeatIds([]);
-                      setSvgPreview(null);
-                      setShowPreview(false);
-                      if (fileInputRef.current) fileInputRef.current.value = "";
-                    }}
-                    className="text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
-                    title="Remove file"
-                  >
-                    <X size={15} />
-                  </button>
+                    {svgPreview && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowPreview(true);
+                        }}
+                        className="border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 hover:text-indigo-700"
+                      >
+                        <svg
+                          className="w-3.5 h-3.5"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        Preview Layout
+                      </Button>
+                    )}
+                  </div>
                 </div>
-
-                <div className="flex items-center gap-1.5 text-xs">
-                  {countingSeats ? (
-                    <span className="flex items-center gap-1.5 text-gray-400">
-                      <span className="w-3 h-3 border border-gray-300 border-t-indigo-500 rounded-full animate-spin" />
-                      Counting seats…
-                    </span>
-                  ) : seatIds.length > 0 ? (
-                    <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full font-medium">
-                      {seatIds.length} seat{seatIds.length !== 1 ? "s" : ""} detected
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="flex items-center gap-2 mt-1">
+              ) : (
+                <>
+                  <UploadCloud className="w-8 h-8 text-indigo-500 mb-2" />
+                  <p className="text-sm">Drag and drop your SVG file here</p>
+                  <p className="text-xs text-muted-foreground my-1">or</p>
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
                       fileInputRef.current?.click();
                     }}
                   >
-                    Replace file
+                    Browse File
                   </Button>
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Maximum file size: 10 MB · Allowed format: .svg
+                  </p>
+                </>
+              )}
+            </div>
 
-                  {svgPreview && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowPreview((p) => !p);
-                      }}
-                      className="border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 hover:text-indigo-700"
-                    >
-                      <svg
-                        className={`w-3.5 h-3.5 transition-transform duration-200 ${showPreview ? "rotate-180" : ""}`}
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
-                      {showPreview ? "Hide Preview" : "Preview Layout"}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <>
-                <UploadCloud className="w-8 h-8 text-indigo-500 mb-2" />
-                <p className="text-sm">Drag and drop your SVG file here</p>
-                <p className="text-xs text-muted-foreground my-1">or</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    fileInputRef.current?.click();
-                  }}
-                >
-                  Browse File
-                </Button>
-                <p className="text-xs text-muted-foreground mt-3">
-                  Maximum file size: 10 MB · Allowed format: .svg
-                </p>
-              </>
-            )}
+            <input
+              type="file"
+              accept=".svg"
+              ref={fileInputRef}
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.[0]) handleFileChange(e.target.files[0]);
+              }}
+            />
           </div>
 
-          <input
-            type="file"
-            accept=".svg"
-            ref={fileInputRef}
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files?.[0]) handleFileChange(e.target.files[0]);
-            }}
-          />
-        </div>
-
-        {/* SVG PREVIEW */}
-        {svgPreview && showPreview && (
-          <div
-            className="border rounded-lg bg-gray-50 overflow-auto p-2"
-            style={{ maxHeight: "260px" }}
-            dangerouslySetInnerHTML={{ __html: svgPreview }}
-          />
-        )}
-
-        {/* DESCRIPTION */}
-        <div className="space-y-1.5">
-          <Label>
-            Description{" "}
-            <span className="text-muted-foreground font-normal">(optional)</span>
-          </Label>
-          <textarea
-            className="w-full border rounded-md p-3 resize-none text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-            rows={4}
-            maxLength={500}
-            placeholder="Enter description or notes about this layout (optional)"
-            value={formData.description || ""}
-            onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-          />
-          <div className="text-right text-xs text-muted-foreground">
-            {(formData.description || "").length} / 500
+          {/* DESCRIPTION */}
+          <div className="space-y-1.5">
+            <Label>
+              Description{" "}
+              <span className="text-muted-foreground font-normal">(optional)</span>
+            </Label>
+            <textarea
+              className="w-full border rounded-md p-3 resize-none text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              rows={4}
+              maxLength={500}
+              placeholder="Enter description or notes about this layout (optional)"
+              value={formData.description || ""}
+              onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+            />
+            <div className="text-right text-xs text-muted-foreground">
+              {(formData.description || "").length} / 500
+            </div>
           </div>
-        </div>
 
-        {/* BUTTONS */}
-        <div className="flex justify-end gap-3 pt-2">
-          <Button type="button" onClick={handleSubmit} disabled={isSubmitting || !isFormValid}>
-            {isSubmitting ? "Saving…" : "Save as Draft"}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+          {/* BUTTONS */}
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" onClick={handleSubmit} disabled={isSubmitting || !isFormValid}>
+              {isSubmitting ? "Saving…" : "Save as Draft"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* SVG PREVIEW MODAL (uploaded file) */}
+      {showPreview && svgPreview && (
+        <SVGPreviewModal
+          title={formData.file?.name ?? "Layout Preview"}
+          svgContent={svgPreview}
+          badge={
+            seatIds.length > 0 ? (
+              <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs font-medium">
+                {seatIds.length} seat{seatIds.length !== 1 ? "s" : ""}
+              </span>
+            ) : undefined
+          }
+          onClose={() => setShowPreview(false)}
+        />
+      )}
+    </>
   );
 }

@@ -34,6 +34,11 @@ export function getWeekRange(week: WeekFilter): { startDate: string; endDate: st
 export function mapOccupancyRangeToTrend(items: OccupancyRangeItem[]): OccupancyTrendPoint[] {
   return items.map((item) => ({
     day: new Date(item.date).toLocaleDateString("en-US", { weekday: "short" }),
+    date: new Date(item.date).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
     occupancy: item.occupancyRate,
   }));
 }
