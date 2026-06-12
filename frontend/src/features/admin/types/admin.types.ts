@@ -24,6 +24,7 @@ export interface OccupancyRangeItem {
 
 export interface OccupancyTrendPoint {
   day: string;
+  date: string;
   occupancy: number;
 }
 
