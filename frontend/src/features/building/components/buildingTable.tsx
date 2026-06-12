@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { Building2, Pencil } from "lucide-react";
@@ -71,7 +69,7 @@ export default function BuildingTable({ data, onEdit, highlightedId }: Props) {
                   {/* BUILDING CODE */}
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-2">
-                      <div className={`w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-full ${
+                      <div className={`w-7 h-7 shrink-0 flex items-center justify-center rounded-full ${
                         isHighlighted ? "bg-blue-200" : "bg-blue-100"
                       }`}>
                         <Building2 className="w-3 h-3 text-blue-600" />

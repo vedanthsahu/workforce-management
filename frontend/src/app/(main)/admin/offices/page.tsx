@@ -1,24 +1,23 @@
-
-
 "use client";
 
 import OfficeTable from "@/features/offices/components/OfficeTable";
 import OfficeFilters from "@/features/offices/components/OfficeFilters";
 import OfficeStats from "@/features/offices/components/OfficeStats";
-import AddOfficeForm from "@/features/offices/components/AddOfficeForm";
 import useOffices from "@/features/offices/hooks/useOffices";
 import Pagination from "@/features/offices/components/OfficePagination";
 import EditOfficeModal from "@/features/offices/components/EditOfficeModal";
-import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { CheckCircle2, XCircle, X } from "lucide-react";
+import { CheckCircle2, XCircle, X, Plus } from "lucide-react";
+import { Office } from "@/features/offices/types/office.types";
 
 type BannerState = {
   type: "success" | "error";
   message: string;
 } | null;
 
-export default function OfficesPage() {
+function OfficesPage() {
   const { offices, loading, error, fetchStats, fetchOffices, stats } = useOffices();
 
   const searchParams = useSearchParams();
@@ -26,7 +25,7 @@ export default function OfficesPage() {
 
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedOffice, setSelectedOffice] = useState<any>(null);
+  const [selectedOffice, setSelectedOffice] = useState<Office | null>(null);
   const [open, setOpen] = useState(false);
   const [banner, setBanner] = useState<BannerState>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
@@ -51,7 +50,7 @@ export default function OfficesPage() {
     }
   }, [searchParams, router]);
 
-  const handleEdit = (office: any) => {
+  const handleEdit = (office: Office) => {
     setSelectedOffice(office);
     setOpen(true);
   };
@@ -62,27 +61,20 @@ export default function OfficesPage() {
     showBannerWithHighlight("Office updated successfully.", updatedSiteId);
   };
 
-  // const filteredOffices = offices.filter((o: any) => {
-  //   const name = (o.site_name || "").toLowerCase();
-  //   const query = search.toLowerCase().trim();
-  //   return name.includes(query);
-  // });
-
-  // Replace your existing filteredOffices declaration with this:
-const filteredOffices = offices
-  .filter((o: any) => {
-    const name = (o.site_name || "").toLowerCase();
-    const query = search.toLowerCase().trim();
-    return name.includes(query);
-  })
-  .sort((a: any, b: any) => {
-    // Always push the newly added/edited office to the top
-    if (highlightedId) {
-      if (a.site_id === highlightedId) return -1;
-      if (b.site_id === highlightedId) return 1;
-    }
-    return 0;
-  });
+  const filteredOffices = offices
+    .filter((o) => {
+      const name = (o.site_name || "").toLowerCase();
+      const query = search.toLowerCase().trim();
+      return name.includes(query);
+    })
+    .sort((a, b) => {
+      // Always push the newly added/edited office to the top
+      if (highlightedId) {
+        if (a.site_id === highlightedId) return -1;
+        if (b.site_id === highlightedId) return 1;
+      }
+      return 0;
+    });
 
   const itemsPerPage = 10;
   const totalPages = Math.ceil(filteredOffices.length / itemsPerPage);
@@ -91,9 +83,6 @@ const filteredOffices = offices
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc] min-h-screen">
-
-      {/* BREADCRUMB */}
-     
 
       {/* HEADER */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -104,7 +93,10 @@ const filteredOffices = offices
           </p>
         </div>
         <div className="self-start sm:self-auto shrink-0">
-          <AddOfficeForm />
+          <Button onClick={() => router.push("/admin/offices/addoffice")}>
+            <Plus size={16} />
+            Add Office
+          </Button>
         </div>
       </div>
 
@@ -191,5 +183,13 @@ const filteredOffices = offices
 
       </div>
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-gray-500">Loading...</div>}>
+      <OfficesPage />
+    </Suspense>
   );
 }

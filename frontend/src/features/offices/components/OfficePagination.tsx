@@ -1,18 +1,19 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
-interface PaginationProps {
+interface OfficePaginationProps {
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
 }
 
-export default function Pagination({
+export default function OfficePagination({
   currentPage,
   totalPages,
   onPageChange,
-}: PaginationProps) {
+}: OfficePaginationProps) {
   if (totalPages <= 1) return null;
 
   const getPageNumbers = () => {
@@ -37,13 +38,15 @@ export default function Pagination({
     <div className="flex items-center gap-1.5">
 
       {/* PREV */}
-      <button
+      <Button
+        variant="outline"
+        size="icon"
+        className="h-7 w-7"
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
-        className="p-1.5 border rounded-md hover:bg-gray-50 disabled:opacity-40 transition"
       >
         <ChevronLeft size={14} />
-      </button>
+      </Button>
 
       {/* PAGE NUMBERS — full on sm+, compact on mobile */}
       <div className="hidden sm:flex items-center gap-1">
@@ -53,17 +56,15 @@ export default function Pagination({
               …
             </span>
           ) : (
-            <button
+            <Button
               key={page}
+              variant={currentPage === page ? "default" : "outline"}
+              size="sm"
+              className="h-7 px-2.5 text-xs"
               onClick={() => onPageChange(page)}
-              className={`px-2.5 py-1 text-xs rounded-md transition ${
-                currentPage === page
-                  ? "bg-blue-600 text-white"
-                  : "border hover:bg-gray-50 text-gray-600"
-              }`}
             >
               {page}
-            </button>
+            </Button>
           )
         )}
       </div>
@@ -74,13 +75,15 @@ export default function Pagination({
       </span>
 
       {/* NEXT */}
-      <button
+      <Button
+        variant="outline"
+        size="icon"
+        className="h-7 w-7"
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
-        className="p-1.5 border rounded-md hover:bg-gray-50 disabled:opacity-40 transition"
       >
         <ChevronRight size={14} />
-      </button>
+      </Button>
 
     </div>
   );

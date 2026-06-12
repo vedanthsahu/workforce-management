@@ -6,6 +6,7 @@ import {
   CreateAmenityPayload,
   UpdateAmenityPayload,
   PreferencesResponse,
+  AmenityCategoryResponse,
 } from "../types/amenities.types";
 
 export const amenitiesService = {
@@ -38,7 +39,7 @@ export const amenitiesService = {
   // CREATE AMENITY
   async createAmenity(
     payload: CreateAmenityPayload
-  ) {
+  ): Promise<Amenity> {
     const { data } = await axiosInstance.post(
       "/amenities",
       payload
@@ -51,7 +52,7 @@ export const amenitiesService = {
   async updateAmenity(
     amenity_id: string,
     payload: UpdateAmenityPayload
-  ) {
+  ): Promise<Amenity> {
     const { data } = await axiosInstance.patch(
       `/amenities/${amenity_id}`,
       payload
@@ -61,7 +62,7 @@ export const amenitiesService = {
   },
 
   // Get categories for dropdown
-  async getCategories() {
+  async getCategories(): Promise<AmenityCategoryResponse> {
     const { data } = await axiosInstance.get(
       "/amenity-categories",
       {

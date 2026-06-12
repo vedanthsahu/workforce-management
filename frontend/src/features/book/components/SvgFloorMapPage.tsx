@@ -1,6 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { Seat } from "../types/Bookingform.types";
+import {
+  SVG_W,
+  SVG_H,
+  ZOOM_MIN,
+  ZOOM_MAX,
+  ZOOM_BUTTON_FACTOR,
+  ZOOM_WHEEL_FACTOR,
+  TOOLTIP_WIDTH,
+  TOOLTIP_PADDING,
+  SEAT_PALETTES,
+  DAY_STATUS_CONFIG,
+  SEAT_STATUS_CONFIG,
+  PREFERENCE_MATCH_CONFIG,
+} from "../utils/constants";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface SeatWithSvgId extends Seat {
@@ -17,9 +31,6 @@ export interface SeatWithSvgId extends Seat {
   } | null;
 }
 
-const SVG_W = 2466;
-const SVG_H = 2039;
-
 // ─── Extract all <g id="..."> values from raw SVG text ───────────────────────
 
 function extractSeatIds(svgText: string): string[] {
@@ -29,72 +40,6 @@ function extractSeatIds(svgText: string): string[] {
   while ((match = regex.exec(svgText)) !== null) ids.push(match[1]);
   return ids;
 }
-
-// ─── Color palettes ───────────────────────────────────────────────────────────
-const PALETTES: Record<string, {
-  body: string; bodyStroke: string;
-  armrest: string;
-  back: string; backStroke: string;
-  curve: string; arc: string;
-  opacity: string;
-}> = {
-  available: {
-    body: "#d1fae5", bodyStroke: "#34d399",
-    armrest: "#a7f3d0",
-    back: "#059669", backStroke: "#047857",
-    curve: "#34d399", arc: "#6ee7b7",
-    opacity: "1",
-  },
-  best_match: {
-    body: "#facc15", bodyStroke: "#eab308",
-    armrest: "#fde047",
-    back: "#a16207", backStroke: "#854d0e",
-    curve: "#ca8a04", arc: "#fbbf24",
-    opacity: "1",
-  },
-  partial_match: {
-    body: "#fefce8", bodyStroke: "#facc15",
-    armrest: "#fef9c3",
-    back: "#eab308", backStroke: "#ca8a04",
-    curve: "#facc15", arc: "#fef08a",
-    opacity: "1",
-  },
-  selected: {
-    body: "#dbeafe", bodyStroke: "#3b82f6",
-    armrest: "#bfdbfe",
-    back: "#1d4ed8", backStroke: "#1e40af",
-    curve: "#3b82f6", arc: "#93c5fd",
-    opacity: "1",
-  },
-  booked: {
-    body: "#f3f4f6", bodyStroke: "#9ca3af",
-    armrest: "#e5e7eb",
-    back: "#6b7280", backStroke: "#4b5563",
-    curve: "#9ca3af", arc: "#d1d5db",
-    opacity: "0.75",
-  },
-  unavailable: {
-    body: "#f3f4f6", bodyStroke: "#9ca3af",
-    armrest: "#e5e7eb",
-    back: "#6b7280", backStroke: "#4b5563",
-    curve: "#9ca3af", arc: "#d1d5db",
-    opacity: "0.75",
-  },
-  yours: {
-    body: "#d1fae5", bodyStroke: "#10b981",
-    armrest: "#6ee7b7",
-    back: "#059669", backStroke: "#047857",
-    curve: "#10b981", arc: "#6ee7b7",
-    opacity: "1",
-  },
-  unloaded: {
-    body: "#f3f4f6", bodyStroke: "#9ca3af",
-    armrest: "#e5e7eb",
-    back: "#6b7280", backStroke: "#4b5563",
-    curve: "#9ca3af", arc: "#d1d5db",
-    opacity: "0.6",
-  },
-};
 
 function getPaletteKey(seat: SeatWithSvgId, isSelected: boolean): string {
   if (isSelected) return "selected";
@@ -107,7 +52,7 @@ function getPaletteKey(seat: SeatWithSvgId, isSelected: boolean): string {
 }
 
 function recolorSeat(svg: string, svgId: string, paletteKey: string): string {
-  const p = PALETTES[paletteKey] ?? PALETTES.unloaded;
+  const p = SEAT_PALETTES[paletteKey] ?? SEAT_PALETTES.unloaded;
   const openTag = `<g id="${svgId}">`;
   const start = svg.indexOf(openTag);
   if (start === -1) return svg;
@@ -197,14 +142,6 @@ const AvailabilityRing: React.FC<{ pct: number; available: number; total: number
 
 // ─── Day calendar strip ───────────────────────────────────────────────────────
 
-const DAY_STATUS_CONFIG: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-  AVAILABLE:   { bg: "#d1fae5", text: "#065f46", dot: "#10b981", label: "Available"    },
-  BOOKED:      { bg: "#fee2e2", text: "#991b1b", dot: "#ef4444", label: "Booked"       },
-  BLOCKED:     { bg: "#f3f4f6", text: "#374151", dot: "#9ca3af", label: "Blocked"      },
-  UNAVAILABLE: { bg: "#f3f4f6", text: "#374151", dot: "#9ca3af", label: "Unavailable"  },
-  YOURS:       { bg: "#dbeafe", text: "#1e40af", dot: "#3b82f6", label: "Your Booking" },
-};
-
 function fmtShortDate(iso: string): { day: string; date: string; month: string } {
   const d = new Date(iso + "T00:00:00");
   return {
@@ -275,36 +212,20 @@ const SeatTooltip: React.FC<{
   const seat = tooltip.seat;
   const avail = seat.availabilitySummary;
 
-  const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
-    available:   { label: "Available",    color: "#059669", bg: "#d1fae5" },
-    booked:      { label: "Booked",       color: "#dc2626", bg: "#fee2e2" },
-    unavailable: { label: "Unavailable",  color: "#6b7280", bg: "#f3f4f6" },
-    yours:       { label: "Your Booking", color: "#1d4ed8", bg: "#dbeafe" },
-  };
-
-  const matchConfig: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-    FULL_MATCH:    { label: "Best Match",    color: "#92400e", bg: "#fef3c7", icon: "⭐" },
-    PARTIAL_MATCH: { label: "Partial Match", color: "#92400e", bg: "#fefce8", icon: "✦"  },
-    NO_MATCH:      { label: "No Match",      color: "#6b7280", bg: "#f3f4f6", icon: ""   },
-  };
-
-  const sc  = statusConfig[seat.status] ?? statusConfig.unavailable;
-  const mc  = seat.preferenceMatchStatus ? matchConfig[seat.preferenceMatchStatus] : null;
+  const sc  = SEAT_STATUS_CONFIG[seat.status] ?? SEAT_STATUS_CONFIG.unavailable;
+  const mc  = seat.preferenceMatchStatus ? PREFERENCE_MATCH_CONFIG[seat.preferenceMatchStatus] : null;
   const pct = avail?.availability_percentage ?? null;
-
-  const TIP_W  = 248;
-  const PADDING = 12;
 
   let left = tooltip.x + 14;
   let top  = tooltip.y - 10;
 
-  if (left + TIP_W > containerRect.width - PADDING) left = tooltip.x - TIP_W - 14;
-  if (top < PADDING) top = PADDING;
+  if (left + TOOLTIP_WIDTH > containerRect.width - TOOLTIP_PADDING) left = tooltip.x - TOOLTIP_WIDTH - 14;
+  if (top < TOOLTIP_PADDING) top = TOOLTIP_PADDING;
 
   const arrowOnRight = left < tooltip.x;
 
   return (
-    <div style={{ position: "absolute", left, top, width: TIP_W, pointerEvents: "none", zIndex: 50 }}>
+    <div style={{ position: "absolute", left, top, width: TOOLTIP_WIDTH, pointerEvents: "none", zIndex: 50 }}>
       <div style={{
         position: "absolute",
         left:  arrowOnRight ? "auto" : -6,
@@ -599,7 +520,7 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     if (!wrapper) return;
     const { width: wW, height: wH } = wrapper.getBoundingClientRect();
     const oldScale = scaleRef.current;
-    const newScale = Math.min(Math.max(oldScale * factor, 0.05), 4);
+    const newScale = Math.min(Math.max(oldScale * factor, ZOOM_MIN), ZOOM_MAX);
     const cx = wW / 2, cy = wH / 2;
     translateRef.current = {
       x: cx - (cx - translateRef.current.x) * (newScale / oldScale),
@@ -610,8 +531,8 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     setZoomDisplay(Math.round(newScale * 100));
   }, [applyTransform]);
 
-  const zoomIn  = useCallback(() => zoomStep(1.25),     [zoomStep]);
-  const zoomOut = useCallback(() => zoomStep(1 / 1.25), [zoomStep]);
+  const zoomIn  = useCallback(() => zoomStep(ZOOM_BUTTON_FACTOR),     [zoomStep]);
+  const zoomOut = useCallback(() => zoomStep(1 / ZOOM_BUTTON_FACTOR), [zoomStep]);
 
   // ── Wheel zoom ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -619,9 +540,9 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     if (!el) return;
     const handler = (e: WheelEvent) => {
       e.preventDefault();
-      const factor   = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      const factor   = e.deltaY < 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR;
       const oldScale = scaleRef.current;
-      const newScale = Math.min(Math.max(oldScale * factor, 0.05), 4);
+      const newScale = Math.min(Math.max(oldScale * factor, ZOOM_MIN), ZOOM_MAX);
       const rect     = el.getBoundingClientRect();
       translateRef.current = {
         x: e.clientX - rect.left - (e.clientX - rect.left - translateRef.current.x) * (newScale / oldScale),
@@ -703,7 +624,6 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     const svgId = getSvgIdFromClick(e.target, svgSeatIdsSet.current);
     if (!svgId) return;
     const seat = seats.find((s) => s.svgId === svgId);
-    console.log("clicked seat:", seat?.id, "status:", seat?.status, "svgId:", svgId);
     if (!seat) return;
     if (seat.status !== "available" && seat.status !== "yours") return;
     hideTooltip();

@@ -18,27 +18,6 @@ export default function AmenitiesFilters({
   return (
     <div className="flex items-center gap-3">
 
-      {/* STATUS FILTER
-      <select
-        value={status}
-        onChange={(e) =>
-          setStatus(e.target.value)
-        }
-        className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-      >
-        <option value="">
-          All Status
-        </option>
-
-        <option value="true">
-          Active
-        </option>
-
-        <option value="false">
-          Inactive
-        </option>
-      </select> */}
-
       {/* SEARCH */}
       <div className="relative">
         <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />

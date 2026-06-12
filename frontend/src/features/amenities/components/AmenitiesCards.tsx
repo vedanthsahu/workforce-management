@@ -7,6 +7,14 @@ import {
   Tag,
 } from "lucide-react";
 
+type StatProps = {
+  icon: React.ReactNode;
+  bg: string;
+  label: string;
+  value: string;
+  sub: string;
+};
+
 type Props = {
   stats: {
     total_amenities: number;
@@ -22,8 +30,7 @@ export default function AmenitiesCards({
   if (!stats) return null;
 
   return (
-  // <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
 
       <Stat
         icon={
@@ -73,7 +80,7 @@ function Stat({
   label,
   value,
   sub,
-}: any) {
+}: StatProps) {
   return (
     <div className="flex items-center gap-4 p-5 bg-white border rounded-2xl shadow-sm">
 

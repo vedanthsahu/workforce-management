@@ -112,14 +112,6 @@ export interface TeamMember {
   buildingId?: string;
 }
 
-export interface Announcement {
-  id: string;
-  title: string;
-  description: string;
-  type: "warning" | "info" | "success";
-  date?: string;
-}
-
 export interface FavouriteSeat {
   id: string;
   label: string;
@@ -129,7 +121,6 @@ export interface FavouriteSeat {
 }
 
 export interface DashboardStats {
-  daysInMonth: number;
   trend: number;
   teamInOffice: number;
   teamRemoteCount: number;
@@ -158,10 +149,7 @@ export interface DashboardData {
   weekDays: WeekDay[];
   upcomingBookings: Booking[];
   teamInOfficeToday: TeamMember[];
-  announcements: Announcement[];
   favouriteSeat: FavouriteSeat | null;
-  teamOnlineCount: number;
-  teamOfflineCount: number;
   nextBookingDate: string;
   todayBooking: TodayBookingInfo;
   daysInOffice: number;

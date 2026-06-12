@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -12,6 +11,14 @@ import { BuildingStatsSummary } from "../types/building.types";
 
 type Props = {
   stats: BuildingStatsSummary | null;
+};
+
+type StatProps = {
+  icon: React.ReactNode;
+  bg: string;
+  label: string;
+  value: string;
+  sub: string;
 };
 
 export default function BuildingCards({
@@ -74,7 +81,7 @@ function Stat({
   label,
   value,
   sub,
-}: any) {
+}: StatProps) {
   return (
     <div className="flex items-center gap-4 p-5 bg-white border rounded-2xl shadow-sm">
 

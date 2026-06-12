@@ -1,7 +1,6 @@
 
 "use client";
 
-import { useState } from "react";
 import {
   PieChart,
   Pie,
@@ -34,25 +33,35 @@ import {
 } from "@/components/ui/select";
 
 import { Info } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
-
-type WeekType = "this-week" | "last-week";
+import type {
+  DashboardSummary,
+  OccupancyTrendPoint,
+  TopOffice,
+  WeekFilter,
+} from "../types/admin.types";
 
 type Props = {
-  data: any;
-  buildings: any[]; 
-  trendData: any[];
-  selectedWeek: WeekType;
-  setSelectedWeek: (week: WeekType) => void;
-  topOffices: any[];
+  data: DashboardSummary | null;
+  trendData: OccupancyTrendPoint[];
+  selectedWeek: WeekFilter;
+  setSelectedWeek: (week: WeekFilter) => void;
+  topOffices: TopOffice[];
 };
 
 // ---------- COMPONENT ----------
-export default function AdminCharts({ data ,buildings, trendData, selectedWeek, setSelectedWeek ,topOffices}: Props) {
+export default function AdminCharts({ data, trendData, selectedWeek, setSelectedWeek, topOffices }: Props) {
 
   // HANDLE LOADING
   if (!data) {
-    return <div className="p-4">Loading charts...</div>;
+    return (
+      <div className="grid grid-cols-3 gap-4">
+        <Skeleton className="h-80 w-full rounded-xl" />
+        <Skeleton className="h-80 w-full rounded-xl" />
+        <Skeleton className="h-80 w-full rounded-xl" />
+      </div>
+    );
   }
 
   // BACKEND DATA
@@ -154,7 +163,7 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
           <Select
             value={selectedWeek}
             onValueChange={(value) => {
-              if (value) setSelectedWeek(value as WeekType);
+              if (value) setSelectedWeek(value as WeekFilter);
             }}
           >
             <SelectTrigger className="h-8 w-[120px] text-xs">
@@ -207,7 +216,7 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
         </CardHeader>
 
         <CardContent className="space-y-4">
-         {topOffices.map((item: any, i: number) => (
+         {topOffices.map((item, i) => (
             <div key={i}>
               <div className="flex justify-between text-sm">
                 <span>{item.name}</span>

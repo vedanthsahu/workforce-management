@@ -8,8 +8,7 @@ import { Building } from "../types/building.types";
 
 export const useEditBuilding = (
   building: Building,
-  //onSuccess: () => void
-  onSuccess: (buildingId: string) => void 
+  onSuccess: (buildingId: string) => void
 ) => {
   const [loading, setLoading] =
     useState(false);
@@ -24,40 +23,14 @@ export const useEditBuilding = (
     });
 
   const handleChange = (
-    field:
-      | "building_name"
-      | "status",
-    value: any
+    field: "building_name" | "status",
+    value: string
   ) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
     }));
   };
-
-  // const handleUpdate =
-  //   async () => {
-  //     try {
-  //       setLoading(true);
-
-  //       await buildingService.updateBuilding(
-  //         building.building_id,
-  //         {
-  //           building_name:
-  //             formData.building_name,
-
-  //           status:
-  //             formData.status,
-  //         }
-  //       );
-
-  //       onSuccess();
-  //     } catch (error) {
-  //       console.error(error);
-  //     } finally {
-  //       setLoading(false);
-  //     }
-  //   };
 
   const handleUpdate = async () => {
     try {

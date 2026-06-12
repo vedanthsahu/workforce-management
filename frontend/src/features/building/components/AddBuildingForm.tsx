@@ -1,11 +1,10 @@
-
-
 "use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, AlertCircle } from "lucide-react";
 import { useState } from "react";
+import axios from "axios";
 import { useBuildingForm } from "../hooks/useBuildingForm";
 
 export default function AddBuildingForm() {
@@ -28,9 +27,11 @@ export default function AddBuildingForm() {
       setTimeout(() => {
         router.push(`/admin/building?success=true&building_id=${result.building_id}`);
       }, 300);
-    } catch (error: any) {
-      const status = error?.response?.status;
-      const serverMessage = error?.response?.data?.message;
+    } catch (error) {
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+      const serverMessage = axios.isAxiosError(error)
+        ? error.response?.data?.message
+        : undefined;
 
       if (status === 409) {
         setErrorMessage(
