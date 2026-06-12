@@ -54,10 +54,10 @@ function getSeatIdFromClick(target: EventTarget | null, knownIds: Set<string>): 
 //   4. ACTIVE + is_bookable = true        → Green   (#22C55E)
 
 function resolveSeatFill(seat: Seat): string {
-  if (!seat.is_configured)      return "#D1D5DB"; // Unconfigured — gray
+  if (!seat.is_configured)        return "#D1D5DB"; // Unconfigured — gray
   if (seat.status === "INACTIVE") return "#EF4444"; // Inactive     — red
-  if (!seat.is_bookable)         return "#F59E0B"; // Non-bookable — amber
-  return "#22C55E";                                // Bookable     — green
+  if (!seat.is_bookable)          return "#F59E0B"; // Non-bookable — amber
+  return "#22C55E";                                 // Bookable     — green
 }
 
 function colorSeats(svgText: string, seats: Seat[], filteredIds?: Set<string>): string {
@@ -66,13 +66,9 @@ function colorSeats(svgText: string, seats: Seat[], filteredIds?: Set<string>): 
 
   seats.forEach((seat) => {
     const id = seat.seat_svg_id;
-    let fill: string;
-
-    if (hasFilter && filteredIds!.has(id)) {
-      fill = "#FEF9C3"; // Highlight matching seats — light yellow
-    } else {
-      fill = resolveSeatFill(seat);
-    }
+    const fill = hasFilter && filteredIds!.has(id)
+      ? "#FEF9C3"          // Highlight matching seats — light yellow
+      : resolveSeatFill(seat);
 
     const groupRegex = new RegExp(
       `(<g[^>]*id="${id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`,
@@ -82,7 +78,7 @@ function colorSeats(svgText: string, seats: Seat[], filteredIds?: Set<string>): 
     result = result.replace(groupRegex, (_match, open, inner, close) => {
       const colored = inner
         .replace(/fill="[^"]*"/g, `fill="${fill}"`)
-        .replace(/fill:[^;"}]*/g, `fill:${fill}`);
+        .replace(/fill:[^;"}\s]*/g, `fill:${fill}`);
       return `${open}${colored}${close}`;
     });
   });
@@ -336,17 +332,18 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
 // ─── Legend ───────────────────────────────────────────────────────────────────
 
 const LEGEND_ITEMS = [
-  { label: "Bookable",      color: "#22C55E" },
-  { label: "Non-bookable",  color: "#F59E0B" },
-  { label: "Inactive",      color: "#EF4444" },
-  { label: "Unconfigured",  color: "#D1D5DB" },
+  { label: "Bookable",     color: "#22C55E" },
+  { label: "Non-bookable", color: "#F59E0B" },
+  { label: "Inactive",     color: "#EF4444" },
+  { label: "Unconfigured", color: "#D1D5DB" },
 ] as const;
 
+// FIX: flex-wrap + gap-y so items wrap on narrow screens instead of overflowing
 function PreviewLegend() {
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       {LEGEND_ITEMS.map(({ label, color }) => (
-        <span key={label} className="flex items-center gap-1.5 text-xs text-gray-500">
+        <span key={label} className="flex items-center gap-1.5 text-xs text-gray-500 whitespace-nowrap">
           <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
           {label}
         </span>
@@ -359,7 +356,6 @@ function PreviewLegend() {
 
 const SVG_W = 2466;
 const SVG_H = 2039;
-const DEFAULT_CANVAS_HEIGHT = 460;
 
 export default function LayoutPreview({
   layout,
@@ -373,12 +369,16 @@ export default function LayoutPreview({
   const wrapperRef   = useRef<HTMLDivElement>(null);
   const transformRef = useRef<HTMLDivElement>(null);
 
+  // ── pan / zoom state (all refs to avoid re-renders) ────────────────────
   const scaleRef     = useRef(1);
   const translateRef = useRef({ x: 0, y: 0 });
   const isPanning    = useRef(false);
   const panStart     = useRef({ x: 0, y: 0 });
   const mouseDownPos = useRef({ x: 0, y: 0 });
   const didDrag      = useRef(false);
+
+  // FIX: touch support refs
+  const pinchStartRef = useRef<number | null>(null);
 
   const [rawSvg,      setRawSvg]      = useState<string | null>(null);
   const [svgError,    setSvgError]    = useState(false);
@@ -390,8 +390,6 @@ export default function LayoutPreview({
 
   const [dialogOpen,  setDialogOpen]  = useState(false);
   const [clickedSeat, setClickedSeat] = useState<Seat | null>(null);
-
-  const resolvedHeight = canvasHeight ?? DEFAULT_CANVAS_HEIGHT;
 
   // ── Load SVG ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -462,6 +460,7 @@ export default function LayoutPreview({
     return () => cancelAnimationFrame(id);
   }, [rawSvg, loading, fitView]);
 
+  // ── Zoom ───────────────────────────────────────────────────────────────
   const zoomStep = useCallback((factor: number) => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
@@ -481,6 +480,7 @@ export default function LayoutPreview({
   const zoomIn  = useCallback(() => zoomStep(1.25),     [zoomStep]);
   const zoomOut = useCallback(() => zoomStep(1 / 1.25), [zoomStep]);
 
+  // ── Wheel zoom ─────────────────────────────────────────────────────────
   useEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
@@ -502,7 +502,7 @@ export default function LayoutPreview({
     return () => el.removeEventListener("wheel", handler);
   }, [applyTransform]);
 
-  // ── Pan handlers ───────────────────────────────────────────────────────
+  // ── Mouse pan handlers ─────────────────────────────────────────────────
   const onMouseDown = (e: React.MouseEvent) => {
     isPanning.current = true; didDrag.current = false;
     mouseDownPos.current = { x: e.clientX, y: e.clientY };
@@ -531,6 +531,66 @@ export default function LayoutPreview({
     if (wrapperRef.current) wrapperRef.current.style.cursor = "grab";
   };
 
+  // ── FIX: Touch pan + pinch-to-zoom handlers ────────────────────────────
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      // Single finger → pan
+      isPanning.current = true;
+      didDrag.current = false;
+      const t = e.touches[0];
+      mouseDownPos.current = { x: t.clientX, y: t.clientY };
+      panStart.current = { ...translateRef.current };
+    } else if (e.touches.length === 2) {
+      // Two fingers → pinch-to-zoom
+      isPanning.current = false;
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchStartRef.current = Math.hypot(dx, dy);
+    }
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    e.preventDefault();
+    if (e.touches.length === 1 && isPanning.current) {
+      const t = e.touches[0];
+      const dx = t.clientX - mouseDownPos.current.x;
+      const dy = t.clientY - mouseDownPos.current.y;
+      if (!didDrag.current && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) didDrag.current = true;
+      if (didDrag.current) {
+        translateRef.current = { x: panStart.current.x + dx, y: panStart.current.y + dy };
+        applyTransform();
+      }
+    } else if (e.touches.length === 2 && pinchStartRef.current !== null) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      const factor = dist / pinchStartRef.current;
+      pinchStartRef.current = dist;
+
+      const wrapper = wrapperRef.current;
+      if (!wrapper) return;
+      const { left, top } = wrapper.getBoundingClientRect();
+      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - left;
+      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - top;
+
+      const oldScale = scaleRef.current;
+      const newScale = Math.min(Math.max(oldScale * factor, 0.05), 4);
+      translateRef.current = {
+        x: cx - (cx - translateRef.current.x) * (newScale / oldScale),
+        y: cy - (cy - translateRef.current.y) * (newScale / oldScale),
+      };
+      scaleRef.current = newScale;
+      applyTransform();
+      setZoomDisplay(Math.round(newScale * 100));
+    }
+  };
+
+  const onTouchEnd = () => {
+    isPanning.current = false;
+    pinchStartRef.current = null;
+  };
+
+  // ── Click → seat config dialog ─────────────────────────────────────────
   const onMapClick = (e: React.MouseEvent) => {
     if (didDrag.current) { didDrag.current = false; return; }
     if (!onSeatSave) return;
@@ -544,13 +604,15 @@ export default function LayoutPreview({
 
   const showSpinner = loading || (!rawSvg && !svgError && !!layout?.layout_file_url);
 
+  // ── Empty state ────────────────────────────────────────────────────────
   if (!layout) {
     return (
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between px-1">
           <p className="text-sm font-medium text-gray-700">Layout Preview</p>
         </div>
-        <div className="flex items-center justify-center h-[460px] bg-gray-50 rounded-xl border border-dashed border-gray-200">
+        {/* FIX: responsive height on empty state too */}
+        <div className="flex items-center justify-center h-[320px] sm:h-[400px] md:h-[460px] bg-gray-50 rounded-xl border border-dashed border-gray-200">
           <div className="text-center text-gray-400">
             <Layers className="mx-auto mb-2 opacity-30" size={32} />
             <p className="text-sm">Select a layout to preview</p>
@@ -563,43 +625,78 @@ export default function LayoutPreview({
   return (
     <>
       <div className={`flex flex-col gap-2 ${fillHeight ? "h-full" : ""}`}>
-        <div className="flex items-center gap-4 flex-wrap flex-shrink-0">
+
+        {/* ── Toolbar: title + legend + zoom controls ─────────────────── */}
+        <div className="flex items-start gap-3 flex-wrap flex-shrink-0">
           <p className="text-sm font-semibold text-gray-700 mr-auto">Layout Preview</p>
+
+          {/* FIX: legend now wraps via flex-wrap inside PreviewLegend */}
           <PreviewLegend />
+
           {mapReady && (
-            <div className="flex items-center gap-1.5">
-              <button onClick={(e) => { e.stopPropagation(); zoomOut(); }}
-                className="w-7 h-7 rounded-md border border-gray-200 bg-white flex items-center justify-center hover:bg-gray-50 text-gray-600 transition-colors">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                onClick={(e) => { e.stopPropagation(); zoomOut(); }}
+                className="w-7 h-7 rounded-md border border-gray-200 bg-white flex items-center justify-center hover:bg-gray-50 text-gray-600 transition-colors"
+              >
                 <ZoomOut size={13} />
               </button>
               <span className="text-xs font-semibold text-gray-500 tabular-nums w-10 text-center select-none">
                 {zoomDisplay}%
               </span>
-              <button onClick={(e) => { e.stopPropagation(); zoomIn(); }}
-                className="w-7 h-7 rounded-md border border-gray-200 bg-white flex items-center justify-center hover:bg-gray-50 text-gray-600 transition-colors">
+              <button
+                onClick={(e) => { e.stopPropagation(); zoomIn(); }}
+                className="w-7 h-7 rounded-md border border-gray-200 bg-white flex items-center justify-center hover:bg-gray-50 text-gray-600 transition-colors"
+              >
                 <ZoomIn size={13} />
               </button>
             </div>
           )}
         </div>
 
+        {/* ── Canvas ────────────────────────────────────────────────────── */}
+        {/*
+          FIX: Drop the hardcoded inline height style.
+          Use responsive Tailwind classes: 320px mobile → 400px sm → 460px md+.
+          When fillHeight=true, the parent flex-1 takes over as before.
+        */}
         <div
-          className={`relative bg-[#F7F8FC] border border-[#EBEBF5] rounded-xl overflow-hidden ${fillHeight ? "flex-1 min-h-0" : ""}`}
-          style={fillHeight ? { width: "100%" } : { width: "100%", height: resolvedHeight }}
+          className={`relative bg-[#F7F8FC] border border-[#EBEBF5] rounded-xl overflow-hidden
+            ${fillHeight
+              ? "flex-1 min-h-0"
+              : "h-[320px] sm:h-[400px] md:h-[460px]"
+            }`}
+          style={{ width: "100%" }}
         >
+          {/* Fit-to-view button (top-right corner) */}
           {mapReady && (
             <div className="absolute top-3 right-3 z-20 flex flex-col gap-1.5">
-              <button onClick={(e) => { e.stopPropagation(); fitView(); }} title="Fit to view"
-                className="w-8 h-8 rounded-lg bg-white border border-[#EBEBF5] shadow-sm flex items-center justify-center hover:bg-gray-50 text-gray-600 transition-colors">
+              <button
+                onClick={(e) => { e.stopPropagation(); fitView(); }}
+                title="Fit to view"
+                className="w-8 h-8 rounded-lg bg-white border border-[#EBEBF5] shadow-sm flex items-center justify-center hover:bg-gray-50 text-gray-600 transition-colors"
+              >
                 <Maximize2 size={14} />
               </button>
             </div>
           )}
 
-          <div ref={wrapperRef} className="w-full h-full overflow-hidden select-none"
-            style={{ cursor: "grab" }}
-            onMouseDown={onMouseDown} onMouseMove={onMouseMove}
-            onMouseUp={onMouseUp} onMouseLeave={onMouseLeave} onClick={onMapClick}
+          {/*
+            FIX: Add onTouchStart / onTouchMove / onTouchEnd for pan + pinch-to-zoom.
+            touchAction: "none" prevents the browser intercepting touch events for scroll.
+          */}
+          <div
+            ref={wrapperRef}
+            className="w-full h-full overflow-hidden select-none"
+            style={{ cursor: "grab", touchAction: "none" }}
+            onMouseDown={onMouseDown}
+            onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp}
+            onMouseLeave={onMouseLeave}
+            onClick={onMapClick}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
           >
             {showSpinner && (
               <div className="absolute inset-0 flex items-center justify-center bg-[#F7F8FC] z-10">
@@ -620,27 +717,39 @@ export default function LayoutPreview({
             )}
 
             {displaySvg && (
-              <div ref={transformRef}
-                style={{ transformOrigin: "top left", width: `${SVG_W}px`, height: `${SVG_H}px`, willChange: "transform", visibility: mapReady ? "visible" : "hidden" }}
+              <div
+                ref={transformRef}
+                style={{
+                  transformOrigin: "top left",
+                  width: `${SVG_W}px`,
+                  height: `${SVG_H}px`,
+                  willChange: "transform",
+                  visibility: mapReady ? "visible" : "hidden",
+                }}
                 dangerouslySetInnerHTML={{ __html: displaySvg }}
               />
             )}
           </div>
         </div>
 
+        {/* ── Bottom bar ────────────────────────────────────────────────── */}
         {mapReady && (
           <div className="flex items-center justify-between px-0.5 flex-shrink-0">
-            <button onClick={fitView}
-              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors border border-gray-200 bg-white px-3 py-1.5 rounded-lg hover:bg-gray-50">
+            <button
+              onClick={fitView}
+              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors border border-gray-200 bg-white px-3 py-1.5 rounded-lg hover:bg-gray-50"
+            >
               <Maximize2 size={12} />
               Fit to Screen
             </button>
-            <p className="text-[10px] text-gray-400 select-none">
+            {/* FIX: hide hint text on mobile — too long for narrow screens */}
+            <p className="text-[10px] text-gray-400 select-none hidden sm:block">
               Scroll to zoom · Drag to pan · Click a seat to configure
             </p>
           </div>
         )}
 
+        {/* ── Draft banner ──────────────────────────────────────────────── */}
         {layout && !layout.is_published && layout.status !== "ARCHIVED" && (
           <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 flex-shrink-0">
             <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -649,8 +758,10 @@ export default function LayoutPreview({
             This is a draft layout. Publish to make it available for employee bookings.
           </div>
         )}
+
       </div>
 
+      {/* ── Seat config dialog ─────────────────────────────────────────── */}
       <SeatConfigDialog
         open={dialogOpen}
         onClose={() => { setDialogOpen(false); setClickedSeat(null); }}

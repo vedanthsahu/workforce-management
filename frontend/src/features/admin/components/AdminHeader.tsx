@@ -1,8 +1,5 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-
 type Props = {
   selectedDate: string;
   setSelectedDate: (date: string) => void;
@@ -10,7 +7,7 @@ type Props = {
 
 export default function AdminHeader({ selectedDate, setSelectedDate }: Props) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
       {/* LEFT */}
       <div>
@@ -24,15 +21,15 @@ export default function AdminHeader({ selectedDate, setSelectedDate }: Props) {
       <div className="flex items-center gap-3">
 
         {/* Date */}
-        <Label className="flex items-center gap-2 h-9 px-3 rounded-md border bg-white text-sm">
-          <Input
+        <div className="flex items-center gap-2 h-9 px-3 py-2 rounded-md border bg-white text-sm w-full sm:w-auto">
+          <input
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="h-7 w-auto border-0 p-0 shadow-none focus-visible:ring-0"
+            className="outline-none bg-transparent"
           />
-          Filter by date
-        </Label>
+          <span>Filter by date</span>
+        </div>
 
       </div>
     </div>

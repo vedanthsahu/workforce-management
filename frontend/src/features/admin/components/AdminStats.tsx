@@ -94,7 +94,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
 
             {/* CONTENT */}
             <CardContent>
-              <div className="text-4xl font-semibold">
+              <div className="text-2xl sm:text-3xl xl:text-4xl font-semibold">
                 {item.value}
               </div>
 
