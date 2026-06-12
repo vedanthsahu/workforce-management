@@ -4,7 +4,7 @@
 // Extracted so page.tsx can wrap it in <Suspense> — required for useSearchParams().
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import LayoutForm       from "@/features/uploadlayouts/components/LayoutForm";
 import LayoutGuidelines from "@/features/uploadlayouts/components/LayoutGuidelines";
 import LayoutSummary    from "@/features/uploadlayouts/components/LayoutSummary";
@@ -24,6 +24,8 @@ export default function UploadLayoutPage() {
     initialBuildingId: buildingId,
     initialFloorId:    floorId,
   });
+
+  const [floorLayoutInfo, setFloorLayoutInfo] = useState<any>(null);
 
   // FIX: Prefetch the back destination on mount so the Link click is instant
   useEffect(() => {
@@ -49,10 +51,14 @@ export default function UploadLayoutPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <LayoutForm formData={formData} setFormData={setFormData} />
+       <LayoutForm
+  formData={formData}
+  setFormData={setFormData}
+  onFloorLayoutInfo={setFloorLayoutInfo}   // ← add this
+/>
         <div className="space-y-6">
           <LayoutGuidelines />
-          <LayoutSummary formData={formData} />
+          <LayoutSummary formData={formData} floorLayoutInfo={floorLayoutInfo} />
         </div>
       </div>
 
