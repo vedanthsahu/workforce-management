@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Office, UpdateOfficePayload } from "../types/office.types";
 import { officeService } from "../services/office.service";
+import { X } from "lucide-react";
 
 interface EditOfficeModalProps {
   office: Office;

@@ -53,7 +53,7 @@ export default function AddBuildingForm() {
     "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
 
   return (
-    <div className="p-6 space-y-6 bg-[#f8fafc] min-h-screen">
+    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc]">
 
       <Link
         href="/admin/building"

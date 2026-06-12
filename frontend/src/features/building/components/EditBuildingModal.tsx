@@ -34,7 +34,7 @@ export default function EditBuildingModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
 
       {/* MODAL */}
-      <div className="w-full max-w-2xl rounded-3xl bg-white shadow-2xl overflow-hidden">
+      <div className="w-full max-w-2xl rounded-3xl bg-white shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
 
         {/* HEADER */}
         <div className="flex items-center justify-between border-b px-6 py-5">
@@ -62,7 +62,7 @@ export default function EditBuildingModal({
         </div>
 
         {/* BODY */}
-        <div className="p-6 space-y-5">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto">
 
           {/* BUILDING NAME */}
           <div className="space-y-2">

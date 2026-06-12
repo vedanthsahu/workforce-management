@@ -1,5 +1,6 @@
-
 "use client";
+
+import { useState } from "react";
 
 import {
   PieChart,
@@ -52,6 +53,11 @@ type Props = {
 
 // ---------- COMPONENT ----------
 export default function AdminCharts({ data, trendData, selectedWeek, setSelectedWeek, topOffices }: Props) {
+  const [showAll, setShowAll] = useState(false);
+
+  const visibleOffices = showAll
+    ? topOffices
+    : topOffices.slice(0, 5);
 
   // HANDLE LOADING
   if (!data) {
@@ -71,7 +77,7 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
   const occupancy = data.occupancy_percentage;
 
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
 
       {/* ---------------- DONUT ---------------- */}
       <Card>
@@ -81,9 +87,9 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="flex items-center justify-between gap-6">
+        <CardContent className="flex flex-col sm:flex-row items-center justify-center gap-6">
 
-          <div className="relative w-[160px] h-[160px]">
+          <div className="relative w-[160px] h-[160px] sm:w-[160px] sm:h-[160px] shrink-0">
             <ChartContainer
               config={{
                 booked: { label: "Booked", color: "#4F46E5" },
@@ -194,7 +200,19 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
                 tickLine={true}
               />
 
-              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    labelFormatter={(_, payload) => {
+                      if (!payload?.length) return "";
+
+                      const item = payload[0].payload;
+
+                      return `${item.day} (${item.date})`;
+                    }}
+                  />
+                }
+              />
 
               <Area
                 type="monotone"
@@ -216,7 +234,7 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
         </CardHeader>
 
         <CardContent className="space-y-4">
-         {topOffices.map((item, i) => (
+          {visibleOffices.map((item, i) => (
             <div key={i}>
               <div className="flex justify-between text-sm">
                 <span>{item.name}</span>
@@ -234,7 +252,18 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
             </div>
           ))}
 
-        
+          {topOffices.length > 5 && (
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={() => setShowAll(!showAll)}
+                className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+              >
+                {showAll
+                  ? "View Less"
+                  : `View More (${topOffices.length - 5})`}
+              </button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

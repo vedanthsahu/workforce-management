@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -33,87 +34,91 @@ export default function AdminRecentBookings({ bookings, loading }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm font-semibold">
-          Recent Bookings
-        </CardTitle>
+        <CardTitle className="text-sm font-semibold">Recent Bookings</CardTitle>
       </CardHeader>
 
       <CardContent className="p-0">
-        <Table>
-          <TableHeader className="bg-gray-50">
-            <TableRow>
-              <TableHead className="px-6 py-3">User</TableHead>
-              <TableHead className="px-6 py-3">Office</TableHead>
-              <TableHead className="px-6 py-3">Seat</TableHead>
-              <TableHead className="px-6 py-3">Date</TableHead>
-              <TableHead className="px-6 py-3">Status</TableHead>
-            </TableRow>
-          </TableHeader>
 
-          <TableBody>
-            {loading &&
-              Array.from({ length: SKELETON_ROWS }).map((_, index) => (
-                <TableRow key={index}>
-                  <TableCell colSpan={5} className="px-6 py-4">
-                    <Skeleton className="h-9 w-full" />
-                  </TableCell>
-                </TableRow>
-              ))}
+        {/* ── Mobile card list (hidden on md+) ─────────────── */}
+        <div className="md:hidden divide-y">
+          {bookings.length === 0 ? (
+            <p className="text-center py-6 text-gray-400 text-sm">No bookings found</p>
+          ) : (
+            bookings.map((item, index) => (
+              <div key={index} className="flex items-start gap-3 px-4 py-3">
+                <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium shrink-0">
+                  {item.name.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{item.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{item.email}</p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                    <span className="text-xs text-gray-500">{item.office}</span>
+                    <span className="text-xs text-gray-400">·</span>
+                    <span className="text-xs text-gray-500">{item.seat}</span>
+                    <span className="text-xs text-gray-400">·</span>
+                    <span className="text-xs text-gray-500">{item.date}</span>
+                  </div>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${
+                  item.status === "Booked"
+                    ? "bg-green-100 text-green-600"
+                    : "bg-red-100 text-red-600"
+                }`}>
+                  {item.status}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
 
-            {!loading && bookings?.map((item, index) => (
-              <TableRow key={index}>
-                {/* USER */}
-                <TableCell className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="bg-indigo-100">
-                      <AvatarFallback className="bg-indigo-100 text-indigo-600 font-medium">
-                        {item.name.charAt(0)}
-                      </AvatarFallback>
-                    </Avatar>
-
+        {/* ── Desktop table (hidden below md) ──────────────── */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full min-w-[700px] text-sm">
+            <thead className="bg-gray-50 border-b">
+              <tr className="text-left text-muted-foreground">
+                <th className="px-6 py-3 font-medium">User</th>
+                <th className="px-6 py-3 font-medium">Office</th>
+                <th className="px-6 py-3 font-medium">Seat</th>
+                <th className="px-6 py-3 font-medium">Date</th>
+                <th className="px-6 py-3 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bookings.map((item, index) => (
+                <tr key={index} className="border-b hover:bg-gray-50 transition">
+                  <td className="px-6 py-4 flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium">
+                      {item.name.charAt(0)}
+                    </div>
                     <div>
                       <p className="font-medium">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {item.email}
-                      </p>
+                      <p className="text-xs text-muted-foreground">{item.email}</p>
                     </div>
-                  </div>
-                </TableCell>
-
-                {/* OFFICE */}
-                <TableCell className="px-6 py-4">{item.office}</TableCell>
-
-                {/* SEAT */}
-                <TableCell className="px-6 py-4">{item.seat}</TableCell>
-
-                {/* DATE */}
-                <TableCell className="px-6 py-4">{item.date}</TableCell>
-
-                {/* STATUS */}
-                <TableCell className="px-6 py-4">
-                  <Badge
-                    variant={item.status === "Booked" ? "secondary" : "destructive"}
-                    className={
+                  </td>
+                  <td className="px-6 py-4">{item.office}</td>
+                  <td className="px-6 py-4">{item.seat}</td>
+                  <td className="px-6 py-4">{item.date}</td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                       item.status === "Booked"
                         ? "bg-green-100 text-green-600"
                         : "bg-red-100 text-red-600"
-                    }
-                  >
-                    {item.status}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
+                    }`}>
+                      {item.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {bookings.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="text-center py-6 text-gray-400">No bookings found</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-            {!loading && bookings.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center py-6 text-gray-400">
-                  No bookings found
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
       </CardContent>
     </Card>
   );

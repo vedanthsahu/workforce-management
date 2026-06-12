@@ -15,11 +15,11 @@ interface StatCardProps {
 
 function StatCard({ icon, bg, label, value, sub }: StatCardProps) {
   return (
-    <Card className="flex flex-row items-center gap-4 p-5">
-      <div className={`p-3 rounded-xl ${bg}`}>{icon}</div>
+    <Card className="flex flex-row items-center gap-3 sm:gap-4 p-3 sm:p-5">
+      <div className={`p-2 sm:p-3 rounded-xl shrink-0 ${bg}`}>{icon}</div>
       <div>
-        <p className="text-sm text-gray-500">{label}</p>
-        <p className="text-xl font-semibold text-gray-900">{value}</p>
+        <p className="text-xs sm:text-sm text-gray-500">{label}</p>
+        <p className="text-lg sm:text-xl font-semibold text-gray-900">{value}</p>
         <p className="text-xs text-gray-400 mt-1">{sub}</p>
       </div>
     </Card>
@@ -34,7 +34,7 @@ export default function OfficeStats({ stats }: OfficeStatsProps) {
   if (!stats) return null;
 
   return (
-    <div className="grid grid-cols-4 gap-6">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       <StatCard
         icon={<Building2 className="text-blue-600" />}
         bg="bg-blue-100"

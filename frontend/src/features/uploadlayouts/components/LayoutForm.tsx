@@ -195,14 +195,14 @@ export default function LayoutForm({ formData, setFormData }: LayoutFormProps) {
   };
 
   return (
-    <Card className="col-span-2">
+    <Card className="lg:col-span-2">
       <CardHeader>
         <CardTitle className="text-sm font-semibold">Layout Information</CardTitle>
       </CardHeader>
 
       <CardContent className="space-y-6">
         {/* ROW 1 — Site / Building */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>
               Site <span className="text-red-500">*</span>

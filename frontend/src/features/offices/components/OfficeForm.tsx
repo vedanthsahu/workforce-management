@@ -70,8 +70,17 @@ export default function OfficeForm() {
     }
   };
 
+  const inputClass =
+    "w-full h-9 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-150";
+
+  const selectClass =
+    "w-full max-w-full min-w-0 h-9 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-150 cursor-pointer";
+
+  const labelClass =
+    "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
+
   return (
-    <div className="p-4 sm:p-6 bg-[#f7f8fa] min-h-screen overflow-x-hidden">
+    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 bg-[#f7f8fa]">
 
       {/* BACK BUTTON */}
       <button
@@ -110,7 +119,7 @@ export default function OfficeForm() {
       </div>
 
       {/* FORM CARD */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
 
         {/* Section: Basic Info */}
         <div className="px-5 py-4 border-b border-gray-100">
