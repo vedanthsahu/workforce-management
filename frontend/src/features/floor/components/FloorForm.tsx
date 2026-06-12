@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -18,33 +17,21 @@ export default function FloorForm() {
     handleSubmit,
   } = useFloorForm();
 
-  const [successMessage, setSuccessMessage] =
-    useState("");
-
   const isDisabled =
     !formData.site_id ||
     !formData.building_id ||
     !formData.floor_code ||
     !formData.floor_name;
 
- const saveFloor = async () => {
-  if (isDisabled) return;
+  const saveFloor = async () => {
+    if (isDisabled) return;
 
-  const floorId =
-    await handleSubmit();
+    const floorId = await handleSubmit();
 
-  if (floorId) {
-    setSuccessMessage(
-      "Floor added successfully!"
-    );
-
-    setTimeout(() => {
-      router.push(
-        `/admin/floors?added=${floorId}`
-      );
-    }, 1000);
-  }
-};
+    if (floorId) {
+      router.push(`/admin/floors?added=${floorId}`);
+    }
+  };
 
   return (
     <div>
@@ -59,13 +46,6 @@ export default function FloorForm() {
         <ArrowLeft size={16} />
         Back to Floors
       </button>
-
-      {/* SUCCESS MESSAGE */}
-      {successMessage && (
-        <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
-          {successMessage}
-        </div>
-      )}
 
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6">
