@@ -203,7 +203,7 @@ def fetch_floor_scope(
 #                 SELECT
 #                     b.id,
 #                     b.seat_id,
-#                     b.user_id
+#                     b.booked_for_user_id
 #                 FROM bookings AS b
 #                 WHERE b.tenant_id = %(tenant_id)s
 #                   AND b.booking_date = %(selected_date)s
@@ -475,7 +475,7 @@ def fetch_admin_dashboard_summary(
                 SELECT
                     b.id,
                     b.seat_id,
-                    b.user_id
+                    b.booked_for_user_id
                 FROM bookings AS b
                 WHERE b.tenant_id = %(tenant_id)s
                   AND b.booking_date = %(selected_date)s
@@ -686,7 +686,7 @@ def fetch_admin_booking_list(
     from_and_where = """
         FROM bookings AS b
         INNER JOIN app_users AS u
-            ON u.id = b.user_id
+            ON u.id = b.booked_by_user_id
            AND u.tenant_id = b.tenant_id
         LEFT JOIN app_users AS bfu
             ON bfu.id = b.booked_for_user_id
