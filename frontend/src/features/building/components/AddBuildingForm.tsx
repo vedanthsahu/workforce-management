@@ -1,11 +1,10 @@
-
-
 "use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, AlertCircle } from "lucide-react";
 import { useState } from "react";
+import axios from "axios";
 import { useBuildingForm } from "../hooks/useBuildingForm";
 
 export default function AddBuildingForm() {
@@ -28,9 +27,11 @@ export default function AddBuildingForm() {
       setTimeout(() => {
         router.push(`/admin/building?success=true&building_id=${result.building_id}`);
       }, 300);
-    } catch (error: any) {
-      const status = error?.response?.status;
-      const serverMessage = error?.response?.data?.message;
+    } catch (error) {
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+      const serverMessage = axios.isAxiosError(error)
+        ? error.response?.data?.message
+        : undefined;
 
       if (status === 409) {
         setErrorMessage(
@@ -52,7 +53,7 @@ export default function AddBuildingForm() {
     "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
 
   return (
-    <div className="p-6 space-y-6 bg-[#f8fafc] min-h-screen">
+    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc]">
 
       <Link
         href="/admin/building"
@@ -80,7 +81,7 @@ export default function AddBuildingForm() {
         <div className="flex items-center gap-2 sm:shrink-0">
           <Link
             href="/admin/building"
-            className="h-8 px-4 text-xs font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all inline-flex items-center"
+            className="h-9 px-4 text-sm font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all inline-flex items-center"
           >
             Cancel
           </Link>
@@ -88,10 +89,10 @@ export default function AddBuildingForm() {
             onClick={handleSave}
             onMouseEnter={() => router.prefetch("/admin/building")}
             disabled={!isFormValid || loading}
-            className={`h-8 px-4 text-xs font-medium rounded-lg text-white transition-all ${
+            className={`h-9 px-4 text-sm font-medium rounded-lg text-white transition-all ${
               isFormValid && !loading
                 ? "bg-blue-600 hover:bg-blue-700 shadow-sm shadow-blue-200"
-                : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                : "bg-gray-300 cursor-not-allowed"
             }`}
           >
             {loading ? "Saving..." : "Save Building"}

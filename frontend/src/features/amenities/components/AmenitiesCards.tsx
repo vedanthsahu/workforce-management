@@ -7,6 +7,14 @@ import {
   Tag,
 } from "lucide-react";
 
+type StatProps = {
+  icon: React.ReactNode;
+  bg: string;
+  label: string;
+  value: string;
+  sub: string;
+};
+
 type Props = {
   stats: {
     total_amenities: number;
@@ -22,8 +30,7 @@ export default function AmenitiesCards({
   if (!stats) return null;
 
   return (
-  // <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
 
       <Stat
         icon={
@@ -62,7 +69,6 @@ export default function AmenitiesCards({
         value={stats.assigned_amenities.toString()}
         sub="Amenities in use"
       />
-
     </div>
   );
 }
@@ -73,30 +79,15 @@ function Stat({
   label,
   value,
   sub,
-}: any) {
+}: StatProps) {
   return (
-    <div className="flex items-center gap-4 p-5 bg-white border rounded-2xl shadow-sm">
-
-      <div
-        className={`p-3 rounded-xl ${bg}`}
-      >
-        {icon}
-      </div>
-
+    <div className="flex items-center gap-3 p-3 sm:p-5 bg-white border rounded-2xl shadow-sm">
+      <div className={`p-2 sm:p-3 rounded-xl shrink-0 ${bg}`}>{icon}</div>
       <div>
-        <p className="text-sm text-gray-500">
-          {label}
-        </p>
-
-        <p className="text-xl font-semibold text-gray-900">
-          {value}
-        </p>
-
-        <p className="text-xs text-gray-400 mt-1">
-          {sub}
-        </p>
+        <p className="text-xs sm:text-sm text-gray-500">{label}</p>
+        <p className="text-lg sm:text-xl font-semibold text-gray-900">{value}</p>
+        <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
       </div>
-
     </div>
   );
 }

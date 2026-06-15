@@ -1,70 +1,58 @@
 import { axiosInstance } from "@/lib/http/axios";
-import type { DashboardSummary } from "../types/admin.types";
+import type {
+  AdminBookingsResponse,
+  DashboardFilters,
+  DashboardSummary,
+  OccupancyHierarchyItem,
+  OccupancyRangeItem,
+} from "../types/admin.types";
 
 export const adminService = {
-  async getDashboardSummary(params?: {
-  date?: string;
-  site_id?: number;
-  floor_id?: number;
-}): Promise<DashboardSummary> {
-  const { data } = await axiosInstance.get(
-    "/admin/dashboard/summary",
-    {
-      params, 
-    }
-  );
+  async getDashboardSummary(params?: DashboardFilters): Promise<DashboardSummary> {
+    const { data } = await axiosInstance.get<DashboardSummary>(
+      "/admin/dashboard/summary",
+      { params }
+    );
 
-  return data;
-},
+    return data;
+  },
 
-  async getBuildings(siteId: number) {
-  const { data } = await axiosInstance.get("/buildings", {
-    params: { site_id: siteId },
-  });
+  async getOccupancyRange(startDate: string, endDate: string): Promise<OccupancyRangeItem[]> {
+    const { data } = await axiosInstance.get<OccupancyRangeItem[]>(
+      "/admin/occupancy/date-range",
+      { params: { startDate, endDate } }
+    );
 
-  return data;
-},
+    return data;
+  },
 
-async getOccupancyRange(startDate: string, endDate: string) {
-  const { data } = await axiosInstance.get(
-    "/admin/occupancy/date-range",
-    {
-      params: { startDate, endDate },
-    }
-  );
+  async getOccupancyHierarchy(params: {
+    date?: string;
+    siteId?: number;
+    buildingId?: number;
+  }): Promise<OccupancyHierarchyItem[]> {
+    const { data } = await axiosInstance.get<OccupancyHierarchyItem[]>(
+      "/admin/occupancy/hierarchy",
+      { params }
+    );
 
-  return data;
-},
+    return data;
+  },
 
-async getOccupancyHierarchy(params: {
-  date?: string;
-  siteId?: number;
-  buildingId?: number;
-}) {
-  const { data } = await axiosInstance.get(
-    "/admin/occupancy/hierarchy",
-    { params }
-  );
+  async getAdminBookings(params?: {
+    date?: string;
+    siteId?: number;
+    buildingId?: number;
+    floorId?: number;
+    bookingStatus?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<AdminBookingsResponse> {
+    const { data } = await axiosInstance.get<AdminBookingsResponse>(
+      "/admin/bookings",
+      { params }
+    );
 
-  return data;
-},
-
-async getAdminBookings(params?: {
-  date?: string;
-  siteId?: number;
-  buildingId?: number;
-  floorId?: number;
-  bookingStatus?: string;
-  page?: number;
-  limit?: number;
-}) {
-  const { data } = await axiosInstance.get("/admin/bookings", {
-    params,
-  });
-
-  return data;
-}
-
+    return data;
+  },
 };
-
-

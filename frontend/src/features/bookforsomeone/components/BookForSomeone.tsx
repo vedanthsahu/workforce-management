@@ -1,0 +1,699 @@
+"use client";
+
+import { JSX } from "react";
+import { useEmployeeSearch } from "../hooks/useBooking";
+import { getInitials, GUEST_TYPES, MOCK_EMPLOYEES, PURPOSE_OF_VISIT } from "../services/bookingService";
+import { BookingType, Employee, GuestType, PurposeOfVisit, VisitorDetails } from "../types/booking";
+
+
+// ─── Icons ────────────────────────────────────────────────────────────────────
+
+export function IconUser() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconBadge() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="6" width="18" height="13" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M3 10h18" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="12" cy="15" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+export function IconSearch() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+      <path d="M21 21l-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconChevronRight() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconChevronDown() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconClose() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconArrowRight() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconInfo() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconEdit() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// ─── Avatar ───────────────────────────────────────────────────────────────────
+
+interface AvatarProps {
+  name: string;
+  size?: "sm" | "md";
+}
+
+export function Avatar({ name, size = "sm" }: AvatarProps) {
+  const dim = size === "md" ? 44 : 36;
+  return (
+    <span
+      style={{
+        width: dim,
+        height: dim,
+        borderRadius: "50%",
+        background: "#eef2ff",
+        color: "#4f46e5",
+        fontSize: size === "md" ? "0.875rem" : "0.75rem",
+        fontWeight: 700,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}
+      aria-hidden="true"
+    >
+      {getInitials(name)}
+    </span>
+  );
+}
+
+// ─── StatusBadge ──────────────────────────────────────────────────────────────
+
+export function StatusBadge({ status }: { status: "Active" | "Inactive" }) {
+  return (
+    <span
+      style={{
+        fontSize: "0.6875rem",
+        fontWeight: 600,
+        padding: "2px 8px",
+        borderRadius: 20,
+        background: status === "Active" ? "#dcfce7" : "#f3f4f6",
+        color: status === "Active" ? "#16a34a" : "#6b7280",
+      }}
+    >
+      {status}
+    </span>
+  );
+}
+
+// ─── EmployeeRow ──────────────────────────────────────────────────────────────
+
+interface EmployeeRowProps {
+  employee: Employee;
+  onClick?: () => void;
+  showChevron?: boolean;
+}
+
+export function EmployeeRow({ employee, onClick, showChevron = true }: EmployeeRowProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.75rem",
+        padding: "0.75rem 1rem",
+        width: "100%",
+        background: "none",
+        border: "none",
+        textAlign: "left",
+        cursor: onClick ? "pointer" : "default",
+        transition: "background 0.12s",
+        borderRadius: 8,
+      }}
+      onMouseEnter={(e) => { if (onClick) (e.currentTarget as HTMLElement).style.background = "#f9fafb"; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "none"; }}
+    >
+      <Avatar name={employee.name} />
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#111827" }}>{employee.name}</span>
+          <StatusBadge status={employee.status} />
+        </span>
+        <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>
+          {employee.employeeId} · {employee.department}
+        </span>
+        <span style={{ fontSize: "0.75rem", color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {employee.email}
+        </span>
+      </span>
+      {showChevron && <span style={{ color: "#9ca3af", display: "flex" }}><IconChevronRight /></span>}
+    </button>
+  );
+}
+
+// ─── EmployeeSearch ───────────────────────────────────────────────────────────
+
+interface EmployeeSearchProps {
+  placeholder: string;
+  selectedEmployee: Employee | null;
+  onSelect: (emp: Employee) => void;
+  onClear: () => void;
+}
+
+export function EmployeeSearch({ placeholder, selectedEmployee, onSelect, onClear }: EmployeeSearchProps) {
+  const { query, results, isOpen, containerRef, handleQueryChange, handleSelect, openDropdown } =
+    useEmployeeSearch(onSelect);
+
+  return (
+    <div ref={containerRef} style={{ position: "relative" }}>
+      {/* Input */}
+      <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+        <span style={{ position: "absolute", left: 11, color: "#9ca3af", display: "flex", pointerEvents: "none" }}>
+          <IconSearch />
+        </span>
+        <input
+          type="text"
+          placeholder={placeholder}
+          value={selectedEmployee ? selectedEmployee.name : query}
+          onChange={(e) => { if (!selectedEmployee) handleQueryChange(e.target.value); }}
+          onFocus={() => { if (!selectedEmployee) openDropdown(); }}
+          readOnly={!!selectedEmployee}
+          style={{
+            width: "100%",
+            height: 40,
+            paddingLeft: 34,
+            paddingRight: selectedEmployee ? 34 : 12,
+            border: "1.5px solid #e5e7eb",
+            borderRadius: 8,
+            fontSize: "0.875rem",
+            color: "#111827",
+            outline: "none",
+            background: "#fff",
+            fontFamily: "inherit",
+            cursor: selectedEmployee ? "default" : "text",
+          }}
+          onFocusCapture={(e) => { e.currentTarget.style.borderColor = "#4f46e5"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(79,70,229,0.1)"; }}
+          onBlurCapture={(e) => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.boxShadow = "none"; }}
+          aria-label={placeholder}
+          aria-expanded={isOpen}
+          aria-autocomplete="list"
+        />
+        {selectedEmployee && (
+          <button
+            type="button"
+            onClick={onClear}
+            aria-label="Clear selection"
+            style={{
+              position: "absolute",
+              right: 10,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 20,
+              height: 20,
+              borderRadius: "50%",
+              background: "none",
+              border: "none",
+              color: "#9ca3af",
+              cursor: "pointer",
+            }}
+          >
+            <IconClose />
+          </button>
+        )}
+      </div>
+
+      {/* Dropdown */}
+      {isOpen && !selectedEmployee && results.length > 0 && (
+        <ul
+          role="listbox"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            right: 0,
+            background: "#fff",
+            border: "1.5px solid #e5e7eb",
+            borderRadius: 10,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+            listStyle: "none",
+            zIndex: 20,
+            overflow: "hidden",
+            padding: 0,
+            margin: 0,
+          }}
+        >
+          {results.map((emp, i) => (
+            <li
+              key={emp.id}
+              role="option"
+              style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none" }}
+            >
+              <EmployeeRow employee={emp} onClick={() => handleSelect(emp)} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ─── BookingTypeSelector ──────────────────────────────────────────────────────
+
+interface BookingTypeSelectorProps {
+  selected: BookingType;
+  onChange: (type: BookingType) => void;
+}
+
+export function BookingTypeSelector({ selected, onChange }: BookingTypeSelectorProps) {
+  const options: { type: BookingType; label: string; sub: string; Icon: () => JSX.Element }[] = [
+    { type: "internal", label: "Internal Employee", sub: "Book a seat for an employee in your organization", Icon: IconUser },
+    { type: "visitor", label: "Visitor / Guest", sub: "Book a seat for a visitor or guest", Icon: IconBadge },
+  ];
+
+  return (
+    <div>
+      <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "#111827", marginBottom: "0.875rem" }}>
+        Who are you booking for?
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+        {options.map(({ type, label, sub, Icon }) => {
+          const active = selected === type;
+          return (
+            <button
+              key={type}
+              type="button"
+              onClick={() => onChange(type)}
+              aria-pressed={active}
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "0.75rem",
+                padding: "1rem",
+                border: `1.5px solid ${active ? "#4f46e5" : "#e5e7eb"}`,
+                borderRadius: 10,
+                background: active ? "#eef2ff" : "#fff",
+                textAlign: "left",
+                cursor: "pointer",
+                transition: "border-color 0.15s, background 0.15s",
+                width: "100%",
+              }}
+            >
+              <span style={{ color: active ? "#4f46e5" : "#9ca3af", marginTop: 1, flexShrink: 0 }}>
+                <Icon />
+              </span>
+              <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+                <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#111827" }}>{label}</span>
+                <span style={{ fontSize: "0.75rem", color: "#6b7280", lineHeight: 1.4 }}>{sub}</span>
+              </span>
+              <span style={{ flexShrink: 0, marginTop: 2 }}>
+                <span style={{
+                  display: "block",
+                  width: 16,
+                  height: 16,
+                  borderRadius: "50%",
+                  border: `2px solid ${active ? "#4f46e5" : "#d1d5db"}`,
+                  background: active ? "radial-gradient(circle, #4f46e5 45%, transparent 46%)" : "transparent",
+                }} />
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── InternalEmployeeForm ─────────────────────────────────────────────────────
+
+interface InternalEmployeeFormProps {
+  selectedEmployee: Employee | null;
+  onSelect: (emp: Employee) => void;
+  onClear: () => void;
+}
+
+export function InternalEmployeeForm({ selectedEmployee, onSelect, onClear }: InternalEmployeeFormProps) {
+  return (
+    <div>
+      <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Employee Details</h2>
+      <p style={{ fontSize: "0.8125rem", color: "#6b7280", marginTop: 4, marginBottom: "1.25rem" }}>
+        Search and select the employee for whom you want to book a seat.
+      </p>
+
+      {/* Search */}
+      <div style={{ marginBottom: "0.875rem" }}>
+        <label style={{ fontSize: "0.8125rem", fontWeight: 500, color: "#111827", display: "block", marginBottom: 6 }}>
+          Search Employee <span style={{ color: "#dc2626" }}>*</span>
+        </label>
+        <EmployeeSearch
+          placeholder="Search by name, email or employee ID"
+          selectedEmployee={selectedEmployee}
+          onSelect={onSelect}
+          onClear={onClear}
+        />
+      </div>
+
+      {/* Default preview row (no selection yet) */}
+      {!selectedEmployee && (
+        <div style={{ border: "1.5px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
+          <EmployeeRow
+            employee={MOCK_EMPLOYEES[0]}
+            onClick={() => onSelect(MOCK_EMPLOYEES[0])}
+          />
+        </div>
+      )}
+
+      {/* Selected employee detail card */}
+      {selectedEmployee && (
+        <div style={{ marginTop: "0.75rem" }}>
+          <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#111827", marginBottom: "0.625rem" }}>
+            Selected Employee
+          </p>
+          <div style={{
+            display: "flex",
+            gap: "1rem",
+            padding: "1rem",
+            background: "#f9fafb",
+            border: "1.5px solid #e5e7eb",
+            borderRadius: 10,
+          }}>
+            <Avatar name={selectedEmployee.name} size="md" />
+            <dl style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: "2rem", rowGap: "0.375rem", flex: 1 }}>
+              {[
+                ["Name", selectedEmployee.name],
+                ["Employee ID", selectedEmployee.employeeId],
+                ["Department", selectedEmployee.department],
+                ["Email", selectedEmployee.email],
+                ["Manager", selectedEmployee.manager],
+              ].map(([label, value]) => (
+                <div key={label} style={{ display: "contents" }}>
+                  <dt style={{ fontSize: "0.8125rem", color: "#6b7280" }}>{label}</dt>
+                  <dd style={{ fontSize: "0.8125rem", fontWeight: 500, color: "#111827" }}>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+          <button
+            type="button"
+            onClick={onClear}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              marginTop: "0.625rem",
+              fontSize: "0.8125rem",
+              fontWeight: 500,
+              color: "#4f46e5",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "2px 0",
+            }}
+          >
+            <IconEdit /> Change Employee
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── VisitorGuestForm ─────────────────────────────────────────────────────────
+
+interface VisitorGuestFormProps {
+  details: VisitorDetails;
+  onChange: (updates: Partial<VisitorDetails>) => void;
+}
+
+function inputStyle(focused?: boolean): React.CSSProperties {
+  return {
+    width: "100%",
+    height: 40,
+    padding: "0 0.75rem",
+    border: `1.5px solid ${focused ? "#4f46e5" : "#e5e7eb"}`,
+    borderRadius: 8,
+    fontSize: "0.875rem",
+    color: "#111827",
+    outline: "none",
+    background: "#fff",
+    fontFamily: "inherit",
+    boxShadow: focused ? "0 0 0 3px rgba(79,70,229,0.1)" : "none",
+  };
+}
+
+function FieldLabel({ children, htmlFor, required }: { children: React.ReactNode; htmlFor?: string; required?: boolean }) {
+  return (
+    <label htmlFor={htmlFor} style={{ fontSize: "0.8125rem", fontWeight: 500, color: "#111827", display: "block", marginBottom: 6 }}>
+      {children} {required && <span style={{ color: "#dc2626" }}>*</span>}
+    </label>
+  );
+}
+
+export function VisitorGuestForm({ details, onChange }: VisitorGuestFormProps) {
+  return (
+    <div>
+      <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Visitor / Guest Details</h2>
+      <p style={{ fontSize: "0.8125rem", color: "#6b7280", marginTop: 4, marginBottom: "1.25rem" }}>
+        Enter the details of the visitor or guest.
+      </p>
+
+      {/* 2-column grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+        {/* Full Name */}
+        <div>
+          <FieldLabel htmlFor="fullName" required>Full Name</FieldLabel>
+          <input id="fullName" type="text" style={inputStyle()} placeholder="Full name"
+            value={details.fullName} onChange={(e) => onChange({ fullName: e.target.value })}
+            onFocus={(e) => Object.assign(e.currentTarget.style, { borderColor: "#4f46e5", boxShadow: "0 0 0 3px rgba(79,70,229,0.1)" })}
+            onBlur={(e) => Object.assign(e.currentTarget.style, { borderColor: "#e5e7eb", boxShadow: "none" })}
+          />
+        </div>
+
+        {/* Email */}
+        <div>
+          <FieldLabel htmlFor="visitorEmail" required>Email Address</FieldLabel>
+          <input id="visitorEmail" type="email" style={inputStyle()} placeholder="email@example.com"
+            value={details.email} onChange={(e) => onChange({ email: e.target.value })}
+            onFocus={(e) => Object.assign(e.currentTarget.style, { borderColor: "#4f46e5", boxShadow: "0 0 0 3px rgba(79,70,229,0.1)" })}
+            onBlur={(e) => Object.assign(e.currentTarget.style, { borderColor: "#e5e7eb", boxShadow: "none" })}
+          />
+        </div>
+
+        {/* Phone */}
+        <div>
+          <FieldLabel htmlFor="phone" required>Phone Number</FieldLabel>
+          <input id="phone" type="tel" style={inputStyle()} placeholder="+91 00000 00000"
+            value={details.phoneNumber} onChange={(e) => onChange({ phoneNumber: e.target.value })}
+            onFocus={(e) => Object.assign(e.currentTarget.style, { borderColor: "#4f46e5", boxShadow: "0 0 0 3px rgba(79,70,229,0.1)" })}
+            onBlur={(e) => Object.assign(e.currentTarget.style, { borderColor: "#e5e7eb", boxShadow: "none" })}
+          />
+        </div>
+
+        {/* Organization */}
+        <div>
+          <FieldLabel htmlFor="org">Organization / Company</FieldLabel>
+          <input id="org" type="text" style={inputStyle()} placeholder="Company name"
+            value={details.organization} onChange={(e) => onChange({ organization: e.target.value })}
+            onFocus={(e) => Object.assign(e.currentTarget.style, { borderColor: "#4f46e5", boxShadow: "0 0 0 3px rgba(79,70,229,0.1)" })}
+            onBlur={(e) => Object.assign(e.currentTarget.style, { borderColor: "#e5e7eb", boxShadow: "none" })}
+          />
+        </div>
+
+        {/* Guest Type */}
+        <div>
+          <FieldLabel htmlFor="guestType" required>Guest Type</FieldLabel>
+          <div style={{ position: "relative" }}>
+            <select id="guestType" style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: "pointer" }}
+              value={details.guestType} onChange={(e) => onChange({ guestType: e.target.value as GuestType })}
+            >
+              {GUEST_TYPES.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+            <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
+              <IconChevronDown />
+            </span>
+          </div>
+        </div>
+
+        {/* Purpose */}
+        <div>
+          <FieldLabel htmlFor="purpose">Purpose of Visit</FieldLabel>
+          <div style={{ position: "relative" }}>
+            <select id="purpose" style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: "pointer" }}
+              value={details.purposeOfVisit} onChange={(e) => onChange({ purposeOfVisit: e.target.value as PurposeOfVisit })}
+            >
+              {PURPOSE_OF_VISIT.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
+              <IconChevronDown />
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Host Employee (full width) */}
+      <div style={{ marginTop: "1rem" }}>
+        <FieldLabel required>Host Employee</FieldLabel>
+        <EmployeeSearch
+          placeholder="Search host employee"
+          selectedEmployee={details.hostEmployee}
+          onSelect={(emp) => onChange({ hostEmployee: emp })}
+          onClear={() => onChange({ hostEmployee: null })}
+        />
+        {/* Default host preview */}
+        {!details.hostEmployee && (
+          <div style={{ marginTop: "0.5rem", border: "1.5px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
+            <EmployeeRow
+              employee={MOCK_EMPLOYEES[1]}
+              onClick={() => onChange({ hostEmployee: MOCK_EMPLOYEES[1] })}
+            />
+          </div>
+        )}
+        {details.hostEmployee && (
+          <div style={{ marginTop: "0.5rem", border: "1.5px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
+            <EmployeeRow employee={details.hostEmployee} onClick={undefined} showChevron />
+          </div>
+        )}
+      </div>
+
+      {/* Notes (full width) */}
+      <div style={{ marginTop: "1rem" }}>
+        <FieldLabel htmlFor="notes">
+          Additional Notes <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span>
+        </FieldLabel>
+        <div style={{ position: "relative" }}>
+          <textarea
+            id="notes"
+            maxLength={300}
+            rows={3}
+            placeholder="Add any notes about the visit…"
+            value={details.additionalNotes}
+            onChange={(e) => onChange({ additionalNotes: e.target.value })}
+            style={{
+              width: "100%",
+              padding: "0.625rem 0.75rem 1.5rem",
+              border: "1.5px solid #e5e7eb",
+              borderRadius: 8,
+              fontSize: "0.875rem",
+              color: "#111827",
+              outline: "none",
+              resize: "vertical",
+              fontFamily: "inherit",
+              lineHeight: 1.5,
+            }}
+            onFocus={(e) => Object.assign(e.currentTarget.style, { borderColor: "#4f46e5", boxShadow: "0 0 0 3px rgba(79,70,229,0.1)" })}
+            onBlur={(e) => Object.assign(e.currentTarget.style, { borderColor: "#e5e7eb", boxShadow: "none" })}
+          />
+          <span style={{ position: "absolute", bottom: 8, right: 10, fontSize: "0.6875rem", color: "#9ca3af" }}>
+            {details.additionalNotes.length} / 300
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── FormFooter ───────────────────────────────────────────────────────────────
+
+interface FormFooterProps {
+  onCancel: () => void;
+  onSubmit: () => void;
+}
+
+export function FormFooter({ onCancel, onSubmit }: FormFooterProps) {
+  return (
+    <div style={{ marginTop: "2rem" }}>
+      {/* Info banner */}
+      <div style={{
+        display: "flex",
+        gap: "0.625rem",
+        padding: "0.875rem 1rem",
+        background: "#eff6ff",
+        border: "1px solid #bfdbfe",
+        borderRadius: 8,
+        marginBottom: "1rem",
+        alignItems: "flex-start",
+      }}>
+        <span style={{ color: "#3b82f6", flexShrink: 0, marginTop: 1, display: "flex" }}><IconInfo /></span>
+        <p style={{ fontSize: "0.8125rem", color: "#1e40af", lineHeight: 1.5 }}>
+          After clicking &ldquo;Book a Seat&rdquo;, you will continue in the existing booking flow to
+          select workspace, date, preferences and choose a seat.
+        </p>
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
+        <button
+          type="button"
+          onClick={onCancel}
+          style={{
+            height: 40,
+            padding: "0 1.25rem",
+            borderRadius: 8,
+            border: "1.5px solid #e5e7eb",
+            background: "#fff",
+            fontSize: "0.875rem",
+            fontWeight: 600,
+            color: "#111827",
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onSubmit}
+          style={{
+            height: 40,
+            padding: "0 1.25rem",
+            borderRadius: 8,
+            border: "1.5px solid #4f46e5",
+            background: "#4f46e5",
+            fontSize: "0.875rem",
+            fontWeight: 600,
+            color: "#fff",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            fontFamily: "inherit",
+          }}
+        >
+          Book a Seat <IconArrowRight />
+        </button>
+      </div>
+    </div>
+  );
+}

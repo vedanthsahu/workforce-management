@@ -17,12 +17,7 @@ export const buildingService = {
     search?: string;
     status?: string;
   }): Promise<Building[]> {
-    const { data } = await axiosInstance.get(
-      "/buildings",
-      {
-        params,
-      }
-    );
+    const { data } = await axiosInstance.get("/buildings", { params });
 
     return data;
   },
@@ -34,98 +29,44 @@ export const buildingService = {
     search?: string;
     status?: string;
   }): Promise<SiteOption[]> {
-    const { data } = await axiosInstance.get(
-      "/sites",
-      {
-        params: {
+    const { data } = await axiosInstance.get("/sites", {
+      params: {
         status: "ACTIVE",
       },
-      }
-    );
+    });
 
     return data;
   },
 
   // CREATE BUILDING
-async createBuilding(
-  payload: CreateBuildingPayload
-) {
-  const response = await axiosInstance.post(
-    "/buildings",
-    payload
-  );
+  async createBuilding(payload: CreateBuildingPayload): Promise<Building> {
+    const { data } = await axiosInstance.post("/buildings", payload);
 
-  console.log("SUCCESS RESPONSE", response);
+    return data;
+  },
 
-  return response.data;
-}
-
-,
   // UPDATE BUILDING
-  // async updateBuilding(
-  //   building_id: string,
-  //   payload: UpdateBuildingPayload
-  // ) {
-  //   const { data } = await axiosInstance.patch(
-  //     `/buildings/${building_id}`,
-  //     payload
-  //   );
-
-  //   return data;
-  // },
-
-//   async updateBuilding(
-//   building_id: string,
-//   payload: UpdateBuildingPayload
-// ) {
-//   console.log("Building ID:", building_id);
-//   console.log("Payload:", payload);
-
-//   const { data } = await axiosInstance.patch(
-//     `/buildings/${building_id}`,
-//     payload
-//   );
-
-//   return data;
-// },
-
-async updateBuilding(
-  building_id: string,
-  payload: UpdateBuildingPayload
-) {
-  try {
+  async updateBuilding(
+    building_id: string,
+    payload: UpdateBuildingPayload
+  ): Promise<Building> {
     const { data } = await axiosInstance.patch(
       `/buildings/${building_id}`,
       payload
     );
 
     return data;
-  } catch (error: any) {
-    console.log("Axios Error:", error);
-    console.log("Response:", error?.response);
-    console.log("Request:", error?.request);
-    throw error;
-  }
-},
+  },
 
   // DASHBOARD STATS
   async getBuildingStats(): Promise<BuildingStatsSummary> {
-    const { data } = await axiosInstance.get(
-      "/admin/dashboard/summary"
-    );
+    const { data } = await axiosInstance.get("/admin/dashboard/summary");
 
     return {
-      total_buildings:
-        data.total_buildings,
-
-      active_buildings:
-        data.active_buildings,
-
-      inactive_buildings:
-        data.inactive_buildings,
-
-      total_seats:
-        data.total_seats,
+      total_buildings: data.total_buildings,
+      active_buildings: data.active_buildings,
+      inactive_buildings: data.inactive_buildings,
+      total_seats: data.total_seats,
     };
   },
 };

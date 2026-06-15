@@ -1,7 +1,7 @@
-
 "use client";
 
 import { useState } from "react";
+
 import {
   PieChart,
   Pie,
@@ -34,25 +34,40 @@ import {
 } from "@/components/ui/select";
 
 import { Info } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
-
-type WeekType = "this-week" | "last-week";
+import type {
+  DashboardSummary,
+  OccupancyTrendPoint,
+  TopOffice,
+  WeekFilter,
+} from "../types/admin.types";
 
 type Props = {
-  data: any;
-  buildings: any[]; 
-  trendData: any[];
-  selectedWeek: WeekType;
-  setSelectedWeek: (week: WeekType) => void;
-  topOffices: any[];
+  data: DashboardSummary | null;
+  trendData: OccupancyTrendPoint[];
+  selectedWeek: WeekFilter;
+  setSelectedWeek: (week: WeekFilter) => void;
+  topOffices: TopOffice[];
 };
 
 // ---------- COMPONENT ----------
-export default function AdminCharts({ data ,buildings, trendData, selectedWeek, setSelectedWeek ,topOffices}: Props) {
+export default function AdminCharts({ data, trendData, selectedWeek, setSelectedWeek, topOffices }: Props) {
+  const [showAll, setShowAll] = useState(false);
+
+  const visibleOffices = showAll
+    ? topOffices
+    : topOffices.slice(0, 5);
 
   // HANDLE LOADING
   if (!data) {
-    return <div className="p-4">Loading charts...</div>;
+    return (
+      <div className="grid grid-cols-3 gap-4">
+        <Skeleton className="h-80 w-full rounded-xl" />
+        <Skeleton className="h-80 w-full rounded-xl" />
+        <Skeleton className="h-80 w-full rounded-xl" />
+      </div>
+    );
   }
 
   // BACKEND DATA
@@ -62,7 +77,7 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
   const occupancy = data.occupancy_percentage;
 
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
 
       {/* ---------------- DONUT ---------------- */}
       <Card>
@@ -72,9 +87,9 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="flex items-center justify-between gap-6">
+        <CardContent className="flex flex-col sm:flex-row items-center justify-center gap-6">
 
-          <div className="relative w-[160px] h-[160px]">
+          <div className="relative w-[160px] h-[160px] sm:w-[160px] sm:h-[160px] shrink-0">
             <ChartContainer
               config={{
                 booked: { label: "Booked", color: "#4F46E5" },
@@ -154,7 +169,7 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
           <Select
             value={selectedWeek}
             onValueChange={(value) => {
-              if (value) setSelectedWeek(value as WeekType);
+              if (value) setSelectedWeek(value as WeekFilter);
             }}
           >
             <SelectTrigger className="h-8 w-[120px] text-xs">
@@ -185,7 +200,19 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
                 tickLine={true}
               />
 
-              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    labelFormatter={(_, payload) => {
+                      if (!payload?.length) return "";
+
+                      const item = payload[0].payload;
+
+                      return `${item.day} (${item.date})`;
+                    }}
+                  />
+                }
+              />
 
               <Area
                 type="monotone"
@@ -207,7 +234,7 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
         </CardHeader>
 
         <CardContent className="space-y-4">
-         {topOffices.map((item: any, i: number) => (
+          {visibleOffices.map((item, i) => (
             <div key={i}>
               <div className="flex justify-between text-sm">
                 <span>{item.name}</span>
@@ -225,7 +252,18 @@ export default function AdminCharts({ data ,buildings, trendData, selectedWeek, 
             </div>
           ))}
 
-        
+          {topOffices.length > 5 && (
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={() => setShowAll(!showAll)}
+                className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+              >
+                {showAll
+                  ? "View Less"
+                  : `View More (${topOffices.length - 5})`}
+              </button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

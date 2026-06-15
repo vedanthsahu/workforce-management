@@ -1,8 +1,7 @@
-
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import axios from "axios";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   BookingFormState,
@@ -327,9 +326,9 @@ export function useBookingForm() {
         amenityIds,
         currentSeatId:   searchParams.get("seatId") ?? undefined,
         modifyBookingId: modifyBookingId ?? null,
-      } as any)
+      })
         .then(setSeats)
-        .catch((e) => setError(e.message))
+        .catch((e) => setError(e instanceof Error ? e.message : "Failed to load seats"))
         .finally(() => setLoadingSeats(false));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -382,11 +381,11 @@ export function useBookingForm() {
         amenityIds,
         currentSeatId:   searchParams.get("seatId") ?? undefined,
         modifyBookingId: modifyBookingId ?? null,
-      } as any);
+      });
       setSeats(data);
       navigateTo(2, form);
-    } catch (e: any) {
-      const status = e?.response?.status;
+    } catch (e) {
+      const status = axios.isAxiosError(e) ? e.response?.status : undefined;
       if (status === 409) {
         setError("This seat is already booked for the selected date. Please choose a different seat.");
       } else if (status === 400) {
@@ -435,13 +434,17 @@ export function useBookingForm() {
 
       setConfirmation(result);
       setStepState(3);
-    } catch (err: any) {
-      const status = err?.response?.status;
+    } catch (err) {
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+      const data = axios.isAxiosError(err)
+        ? (err.response?.data as { detail?: { message?: string }; message?: string } | undefined)
+        : undefined;
+
       if (status === 409) {
         setError("This seat is already booked for the selected date. Please choose a different seat.");
       } else if (status === 400) {
         setError(
-          err?.response?.data?.detail?.message ??
+          data?.detail?.message ??
           "Invalid booking details. Please go back and check your selection."
         );
       } else if (status === 403) {
@@ -454,10 +457,9 @@ export function useBookingForm() {
         );
       } else {
         setError(
-          err?.response?.data?.detail?.message ??
-          err?.response?.data?.message ??
-          err?.message ??
-          "Failed to confirm booking. Please try again.",
+          data?.detail?.message ??
+          data?.message ??
+          (err instanceof Error ? err.message : "Failed to confirm booking. Please try again.")
         );
       }
     } finally {
