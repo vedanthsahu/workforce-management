@@ -1,4 +1,4 @@
-"""Booking repository functions scoped by tenant and aligned to bookings schema."""
+"""repository/booking_repository functions scoped by tenant and aligned to bookings schema."""
 
 from __future__ import annotations
 
@@ -9,6 +9,71 @@ from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
 
 SOURCE_CHANNELS = {"WEB", "MOBILE", "ADMIN", "API"}
+
+BOOKING_SELECT_FIELDS = """
+    b.id::text AS booking_id,
+    b.tenant_id::text AS tenant_id,
+    b.booked_for_user_id::text AS booked_for_user_id,
+    b.booked_for_guest_id::text AS booked_for_guest_id,
+    b.booked_by_user_id::text AS booked_by_user_id,
+    b.guest_visit_id::text AS guest_visit_id,
+    b.booking_type,
+    b.seat_id::text AS seat_id,
+    b.site_id::text AS site_id,
+    b.building_id::text AS building_id,
+    b.floor_id::text AS floor_id,
+    s.seat_code,
+    si.site_name,
+    bu.building_name,
+    f.floor_name,
+    b.booking_date,
+    b.booking_status,
+    b.source_channel,
+    b.check_in_at,
+    b.checked_out_at,
+    b.cancelled_at,
+    b.cancellation_reason,
+    b.created_at,
+    b.updated_at,
+    g.full_name AS guest_name,
+    g.email AS guest_email,
+    g.phone AS guest_phone,
+    g.organization AS guest_organization,
+    gv.guest_type,
+    gv.visit_status,
+    gv.purpose_of_visit,
+    gv.start_time,
+    gv.end_time,
+    gv.notes,
+    gv.requires_seat,
+    host.id::text AS host_user_id,
+    host.full_name AS host_name
+"""
+
+BOOKING_SELECT_FROM = """
+    FROM bookings AS b
+    INNER JOIN seats AS s
+        ON s.id = b.seat_id
+       AND s.tenant_id = b.tenant_id
+    INNER JOIN floors AS f
+        ON f.id = b.floor_id
+       AND f.tenant_id = b.tenant_id
+    INNER JOIN buildings AS bu
+        ON bu.id = b.building_id
+       AND bu.tenant_id = b.tenant_id
+    INNER JOIN sites AS si
+        ON si.id = b.site_id
+       AND si.tenant_id = b.tenant_id
+    LEFT JOIN guests AS g
+        ON g.id = b.booked_for_guest_id
+       AND g.tenant_id = b.tenant_id
+    LEFT JOIN guest_visits AS gv
+        ON gv.id = b.guest_visit_id
+       AND gv.tenant_id = b.tenant_id
+    LEFT JOIN app_users AS host
+        ON host.id = gv.host_user_id
+       AND host.tenant_id = b.tenant_id
+"""
 
 
 def fetch_seat_for_booking(
@@ -30,14 +95,35 @@ def fetch_seat_for_booking(
                 s.site_id::text AS site_id,
                 s.building_id::text AS building_id,
                 s.floor_id::text AS floor_id,
+
+                s.seat_code,
+
+                si.site_name,
+                bu.building_name,
+                f.floor_name,
+
                 s.status,
                 s.is_bookable
-            FROM seats AS s
+
+            FROM seats s
+
+            JOIN sites si
+                ON si.id = s.site_id
+            AND si.tenant_id = s.tenant_id
+
+            JOIN buildings bu
+                ON bu.id = s.building_id
+            AND bu.tenant_id = s.tenant_id
+
+            JOIN floors f
+                ON f.id = s.floor_id
+            AND f.tenant_id = s.tenant_id
+
             WHERE s.id = %s
-              AND s.floor_id = %s
-              AND s.building_id = %s
-              AND s.site_id = %s
-              AND s.tenant_id = %s
+            AND s.floor_id = %s
+            AND s.building_id = %s
+            AND s.site_id = %s
+            AND s.tenant_id = %s
             """,
             (seat_id, floor_id, building_id, site_id, tenant_id),
         )
@@ -112,71 +198,6 @@ def has_active_booking_conflict(
         return cur.fetchone() is not None
 
 
-def user_has_active_booking_on_date(
-    conn: PGConnection,
-    *,
-    tenant_id: str,
-    booked_for_user_id: str,
-    booking_date: date,
-    exclude_booking_id: str | None = None,
-) -> bool:
-    """Return whether a booking owner already has an active booking."""
-    query = """
-        SELECT 1
-        FROM bookings
-        WHERE tenant_id = %s
-          AND booked_for_user_id = %s
-          AND booking_date = %s
-          AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
-    """
-    params: list[Any] = [tenant_id, booked_for_user_id, booking_date]
-
-    if exclude_booking_id is not None:
-        query += " AND id::text <> %s"
-        params.append(exclude_booking_id)
-
-    query += " LIMIT 1"
-
-    with conn.cursor() as cur:
-        cur.execute(query, params)
-        return cur.fetchone() is not None
-
-
-def user_has_active_booking_in_range(
-    conn: PGConnection,
-    *,
-    tenant_id: str,
-    booked_for_user_id: str,
-    start_date: date,
-    end_date: date,
-    exclude_booking_id: str | None = None,
-) -> bool:
-    """Return whether a booking owner has an active booking in a date range."""
-    query = """
-        SELECT 1
-        FROM bookings
-        WHERE tenant_id = %s
-          AND booked_for_user_id = %s
-          AND booking_date BETWEEN %s AND %s
-          AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
-    """
-    params: list[Any] = [
-        tenant_id,
-        booked_for_user_id,
-        start_date,
-        end_date,
-    ]
-
-    if exclude_booking_id is not None:
-        query += " AND id::text <> %s"
-        params.append(exclude_booking_id)
-
-    query += " LIMIT 1"
-
-    with conn.cursor() as cur:
-        cur.execute(query, params)
-        return cur.fetchone() is not None
-
 
 def user_has_active_booking_on_date(
     conn: PGConnection,
@@ -237,6 +258,34 @@ def user_has_active_booking_in_range(
         query += " AND id::text <> %s"
         params.append(exclude_booking_id)
 
+    query += " LIMIT 1"
+
+    with conn.cursor() as cur:
+        cur.execute(query, params)
+        return cur.fetchone() is not None
+
+
+def guest_has_active_booking_on_date(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    booked_for_guest_id: str,
+    booking_date: date,
+    exclude_booking_id: str | None = None,
+) -> bool:
+    """Return whether a guest already has an active booking for a date."""
+    query = """
+        SELECT 1
+        FROM bookings
+        WHERE tenant_id = %s
+          AND booked_for_guest_id = %s
+          AND booking_date = %s
+          AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
+    """
+    params: list[Any] = [tenant_id, booked_for_guest_id, booking_date]
+    if exclude_booking_id is not None:
+        query += " AND id::text <> %s"
+        params.append(exclude_booking_id)
     query += " LIMIT 1"
 
     with conn.cursor() as cur:
@@ -254,53 +303,97 @@ def insert_booking(
     booking_date: date,
     source_channel: str = "WEB",
 ) -> dict[str, Any]:
-    """Insert a booking using hierarchy values derived from the seat row."""
+    """
+    Insert an EMPLOYEE booking using hierarchy values
+    derived from the seat row.
+    """
+
     normalized_source = source_channel.strip().upper()
+
     if normalized_source not in SOURCE_CHANNELS:
-        raise ValueError("source_channel is not allowed by chk_bookings_source.")
+        raise ValueError(
+            "source_channel is not allowed by chk_bookings_source."
+        )
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
         cur.execute(
             """
             INSERT INTO bookings (
                 tenant_id,
-                user_id,
+
                 booked_for_user_id,
                 booked_by_user_id,
+
                 seat_id,
                 site_id,
                 building_id,
                 floor_id,
+
                 booking_date,
+
+                booking_type,
+
                 booking_status,
+
                 source_channel
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'CONFIRMED', %s)
+            VALUES (
+                %s,
+
+                %s,
+                %s,
+
+                %s,
+                %s,
+                %s,
+                %s,
+
+                %s,
+
+                'EMPLOYEE',
+
+                'CONFIRMED',
+
+                %s
+            )
             RETURNING id::text AS booking_id
             """,
             (
                 tenant_id,
-                booked_for_user_id,
+
                 booked_for_user_id,
                 booked_by_user_id,
+
                 seat["seat_id"],
                 seat["site_id"],
                 seat["building_id"],
                 seat["floor_id"],
+
                 booking_date,
+
                 normalized_source,
             ),
         )
+
         created = cur.fetchone()
+
     if created is None:
-        raise LookupError("Booking insert did not return an id.")
+        raise LookupError(
+            "Booking insert did not return an id."
+        )
+
     booking = fetch_booking_by_id(
         conn,
         tenant_id=tenant_id,
         booking_id=str(created["booking_id"]),
     )
+
     if booking is None:
-        raise LookupError("Created booking could not be reloaded.")
+        raise LookupError(
+            "Created booking could not be reloaded."
+        )
+
     return booking
 
 
@@ -310,46 +403,11 @@ def fetch_booking_by_id(
     tenant_id: str,
     booking_id: str,
 ) -> dict[str, Any] | None:
-    """Fetch one tenant-scoped booking with location display fields."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
-            SELECT
-                b.id::text AS booking_id,
-                b.tenant_id::text AS tenant_id,
-                b.booked_for_user_id::text AS user_id,
-                b.booked_for_user_id::text AS booked_for_user_id,
-                b.booked_by_user_id::text AS booked_by_user_id,
-                b.seat_id::text AS seat_id,
-                b.site_id::text AS site_id,
-                b.building_id::text AS building_id,
-                b.floor_id::text AS floor_id,
-                s.seat_code,
-                si.site_name,
-                bu.building_name,
-                f.floor_name,
-                b.booking_date,
-                b.booking_status,
-                b.source_channel,
-                b.check_in_at,
-                b.checked_out_at,
-                b.cancelled_at,
-                b.cancellation_reason,
-                b.created_at,
-                b.updated_at
-            FROM bookings AS b
-            JOIN seats AS s
-                ON b.seat_id = s.id
-               AND b.tenant_id = s.tenant_id
-            JOIN floors AS f
-                ON b.floor_id = f.id
-               AND b.tenant_id = f.tenant_id
-            JOIN buildings AS bu
-                ON b.building_id = bu.id
-               AND b.tenant_id = bu.tenant_id
-            JOIN sites AS si
-                ON b.site_id = si.id
-               AND b.tenant_id = si.tenant_id
+            f"""
+            SELECT {BOOKING_SELECT_FIELDS}
+            {BOOKING_SELECT_FROM}
             WHERE b.id = %s
               AND b.tenant_id = %s
             """,
@@ -359,41 +417,24 @@ def fetch_booking_by_id(
     return dict(row) if row else None
 
 
-
 def fetch_booking_by_id_for_update(
     conn: PGConnection,
     *,
     tenant_id: str,
     booking_id: str,
 ) -> dict[str, Any] | None:
-    """Fetch one booking row and lock it for transactional mutation."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
-            SELECT
-                b.id::text AS booking_id,
-                b.tenant_id::text AS tenant_id,
-                b.booked_for_user_id::text AS user_id,
-                b.booked_for_user_id::text AS booked_for_user_id,
-                b.booked_by_user_id::text AS booked_by_user_id,
-                b.seat_id::text AS seat_id,
-                b.site_id::text AS site_id,
-                b.building_id::text AS building_id,
-                b.floor_id::text AS floor_id,
-                b.booking_date,
-                b.booking_status,
-                b.cancelled_at,
-                b.cancellation_reason
-            FROM bookings AS b
+            f"""
+            SELECT {BOOKING_SELECT_FIELDS}
+            {BOOKING_SELECT_FROM}
             WHERE b.id = %s
               AND b.tenant_id = %s
-            FOR UPDATE
+            FOR UPDATE OF b
             """,
             (booking_id, tenant_id),
         )
-
         row = cur.fetchone()
-
     return dict(row) if row else None
 
 
@@ -426,15 +467,9 @@ def cancel_booking(
                 tenant_id,
             ),
         )
+        if cur.rowcount != 1:
+            raise LookupError("Booking was not found for cancellation.")
 
-
-def fetch_bookings_for_user(
-    conn: PGConnection,
-    *,
-    tenant_id: str,
-    user_id: str,
-) -> list[dict[str, Any]]:
-    return
 
 def fetch_past_bookings_for_user(
     conn: PGConnection,
@@ -449,9 +484,9 @@ def fetch_past_bookings_for_user(
             SELECT
                 b.id::text AS booking_id,
                 b.tenant_id::text AS tenant_id,
-                b.booked_for_user_id::text AS user_id,
                 b.booked_for_user_id::text AS booked_for_user_id,
                 b.booked_by_user_id::text AS booked_by_user_id,
+                b.booking_type,
                 b.seat_id::text AS seat_id,
                 b.site_id::text AS site_id,
                 b.building_id::text AS building_id,
@@ -506,9 +541,9 @@ def fetch_current_bookings_for_user(
             SELECT
                 b.id::text AS booking_id,
                 b.tenant_id::text AS tenant_id,
-                b.booked_for_user_id::text AS user_id,
                 b.booked_for_user_id::text AS booked_for_user_id,
                 b.booked_by_user_id::text AS booked_by_user_id,
+                b.booking_type,
                 b.seat_id::text AS seat_id,
                 b.site_id::text AS site_id,
                 b.building_id::text AS building_id,
@@ -563,9 +598,9 @@ def fetch_cancelled_bookings_for_user(
             SELECT
                 b.id::text AS booking_id,
                 b.tenant_id::text AS tenant_id,
-                b.booked_for_user_id::text AS user_id,
                 b.booked_for_user_id::text AS booked_for_user_id,
                 b.booked_by_user_id::text AS booked_by_user_id,
+                b.booking_type,
                 b.seat_id::text AS seat_id,
                 b.site_id::text AS site_id,
                 b.building_id::text AS building_id,
@@ -619,9 +654,9 @@ def fetch_future_bookings_for_user(
             SELECT
                 b.id::text AS booking_id,
                 b.tenant_id::text AS tenant_id,
-                b.booked_for_user_id::text AS user_id,
                 b.booked_for_user_id::text AS booked_for_user_id,
                 b.booked_by_user_id::text AS booked_by_user_id,
+                b.booking_type,
                 b.seat_id::text AS seat_id,
                 b.site_id::text AS site_id,
                 b.building_id::text AS building_id,
@@ -1193,5 +1228,155 @@ def fetch_available_seats(
                 floor_id,
             ),
         )
+        rows = cur.fetchall()
+    return [dict(row) for row in rows]
+
+
+def insert_guest_booking(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_id: str,
+    guest_visit_id: str,
+    booked_by_user_id: str,
+    seat: dict[str, Any],
+    booking_date: date,
+    source_channel: str = "WEB",
+) -> dict[str, Any]:
+    """
+    Insert a GUEST booking linked to a guest visit.
+    """
+
+    normalized_source = source_channel.strip().upper()
+
+    if normalized_source not in SOURCE_CHANNELS:
+        raise ValueError(
+            "source_channel is not allowed by chk_bookings_source."
+        )
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+        cur.execute(
+            """
+            INSERT INTO bookings (
+
+                tenant_id,
+
+                booked_for_guest_id,
+                guest_visit_id,
+
+                booked_by_user_id,
+
+                seat_id,
+                site_id,
+                building_id,
+                floor_id,
+
+                booking_date,
+
+                booking_type,
+
+                booking_status,
+
+                source_channel
+
+            )
+            VALUES (
+
+                %s,
+
+                %s,
+                %s,
+
+                %s,
+
+                %s,
+                %s,
+                %s,
+                %s,
+
+                %s,
+
+                'GUEST',
+
+                'CONFIRMED',
+
+                %s
+            )
+            RETURNING id::text AS booking_id
+            """,
+            (
+                tenant_id,
+
+                guest_id,
+                guest_visit_id,
+
+                booked_by_user_id,
+
+                seat["seat_id"],
+                seat["site_id"],
+                seat["building_id"],
+                seat["floor_id"],
+
+                booking_date,
+
+                normalized_source,
+            ),
+        )
+
+        created = cur.fetchone()
+
+    if created is None:
+        raise LookupError(
+            "Guest booking insert did not return an id."
+        )
+
+    booking = fetch_booking_by_id(
+        conn,
+        tenant_id=tenant_id,
+        booking_id=str(created["booking_id"]),
+    )
+
+    if booking is None:
+        raise LookupError(
+            "Created guest booking could not be reloaded."
+        )
+
+    return booking
+
+
+def fetch_guest_bookings(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_id: str | None = None,
+    booking_date: date | None = None,
+    booking_status: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """Fetch administrative guest booking records for one tenant."""
+    query = f"""
+        SELECT {BOOKING_SELECT_FIELDS}
+        {BOOKING_SELECT_FROM}
+        WHERE b.tenant_id = %s
+          AND b.booking_type = 'GUEST'
+    """
+    params: list[Any] = [tenant_id]
+
+    if guest_id is not None:
+        query += " AND b.booked_for_guest_id = %s"
+        params.append(guest_id)
+    if booking_date is not None:
+        query += " AND b.booking_date = %s"
+        params.append(booking_date)
+    if booking_status is not None:
+        query += " AND b.booking_status = %s"
+        params.append(booking_status)
+
+    query += " ORDER BY b.booking_date DESC, b.created_at DESC, b.id DESC LIMIT %s"
+    params.append(limit)
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(query, params)
         rows = cur.fetchall()
     return [dict(row) for row in rows]
