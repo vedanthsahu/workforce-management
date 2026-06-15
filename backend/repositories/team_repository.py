@@ -44,8 +44,9 @@ def fetch_team_members_with_today_booking(
                 AND t.tenant_id = tm.tenant_id
 
             LEFT JOIN bookings b
-                ON b.user_id = u.id
+                ON b.booked_for_user_id = u.id
                 AND b.tenant_id = u.tenant_id
+                AND b.booking_type = 'EMPLOYEE'
                 AND b.booking_date = CURRENT_DATE
                 AND b.booking_status = 'CONFIRMED'
 

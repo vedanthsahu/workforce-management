@@ -41,3 +41,21 @@ class DayAvailabilityStatus(str, Enum):
     BOOKED = "BOOKED"
     BLOCKED = "BLOCKED"
     UNAVAILABLE = "UNAVAILABLE"
+
+
+class GuestType(str, Enum):
+    INTERVIEW_CANDIDATE = "INTERVIEW_CANDIDATE"
+    CUSTOMER = "CUSTOMER"
+    VENDOR = "VENDOR"
+    PARTNER = "PARTNER"
+    CONTRACTOR = "CONTRACTOR"
+    OTHER = "OTHER"
+
+
+class VisitPurpose(str, Enum):
+    INTERVIEW = "INTERVIEW"
+    MEETING = "MEETING"
+    WORKSHOP = "WORKSHOP"
+    VENDOR_VISIT = "VENDOR_VISIT"
+    CUSTOMER_VISIT = "CUSTOMER_VISIT"
+    OTHER = "OTHER"
