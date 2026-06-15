@@ -1,4 +1,4 @@
-import { Employee, GuestType, PurposeOfVisit } from "../types/booking";
+import { Employee, Guest, GuestType, PurposeOfVisit } from "../types/booking";
 
 
 export const MOCK_EMPLOYEES: Employee[] = [
@@ -74,4 +74,55 @@ export function getInitials(name: string): string {
     .join("")
     .toUpperCase()
     .slice(0, 2);
+}
+
+export const MOCK_GUESTS: Guest[] = [
+  {
+    id: "g1",
+    firstName: "Alex",
+    lastName: "Carter",
+    email: "alex.carter@acmecorp.com",
+    phone: "+1 555 010 1234",
+    company: "Acme Corp",
+    jobTitle: "Product Manager",
+    guestType: "Client",
+  },
+  {
+    id: "g2",
+    firstName: "Priya",
+    lastName: "Sharma",
+    email: "priya.sharma@globex.com",
+    company: "Globex Solutions",
+    jobTitle: "Recruiter",
+    guestType: "Vendor",
+  },
+  {
+    id: "g3",
+    firstName: "Daniel",
+    lastName: "Lee",
+    email: "daniel.lee@example.com",
+    guestType: "Interview Candidate",
+  },
+];
+
+export function getGuestName(guest: Guest): string {
+  return `${guest.firstName} ${guest.lastName}`.trim();
+}
+
+export function searchGuests(query: string, guests: Guest[]): Guest[] {
+  if (!query.trim()) return guests;
+  const lower = query.toLowerCase();
+  return guests.filter(
+    (g) =>
+      getGuestName(g).toLowerCase().includes(lower) ||
+      g.email.toLowerCase().includes(lower) ||
+      (g.company ?? "").toLowerCase().includes(lower)
+  );
+}
+
+export function createGuest(data: Omit<Guest, "id">): Guest {
+  return {
+    id: `g_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+    ...data,
+  };
 }

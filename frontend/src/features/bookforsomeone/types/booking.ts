@@ -14,6 +14,8 @@ export type PurposeOfVisit =
   | "Tour"
   | "Other";
 
+export type SeatRequired = "yes" | "no" | null;
+
 export interface Employee {
   id: string;
   name: string;
@@ -24,19 +26,35 @@ export interface Employee {
   status: "Active" | "Inactive";
 }
 
-export interface VisitorDetails {
-  fullName: string;
+export interface Guest {
+  id: string;
+  firstName: string;
+  lastName: string;
   email: string;
-  phoneNumber: string;
-  organization: string;
+  phone?: string;
+  company?: string;
+  jobTitle?: string;
+  guestType: GuestType;
+  notes?: string;
+}
+
+export interface VisitDetails {
   guestType: GuestType;
   purposeOfVisit: PurposeOfVisit;
   hostEmployee: Employee | null;
+  visitDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
   additionalNotes: string;
 }
 
 export interface BookingFormState {
+  step: number;
   bookingType: BookingType;
   selectedEmployee: Employee | null;
-  visitorDetails: VisitorDetails;
+  guests: Guest[];
+  selectedGuest: Guest | null;
+  visitDetails: VisitDetails;
+  seatRequired: SeatRequired;
 }
