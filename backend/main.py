@@ -24,6 +24,9 @@ from fastapi.responses import JSONResponse
 from backend.api.routes.dashboard import router as dashboard_router
 from backend.api.routes.auth import router as auth_router
 from backend.api.routes.bookings import router as bookings_router
+from backend.api.routes.guest_bookings import router as guest_bookings_router
+from backend.api.routes.guest_visits import router as guest_visits_router
+from backend.api.routes.guests import router as guests_router
 from backend.api.routes.locations import router as locations_router
 from backend.api.routes.sso import router as sso_router
 from backend.core.config import get_settings
@@ -66,6 +69,9 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(sso_router)
 app.include_router(bookings_router)
+app.include_router(guests_router)
+app.include_router(guest_visits_router)
+app.include_router(guest_bookings_router)
 app.include_router(locations_router)
 app.include_router(teams.router)
 app.include_router(dashboard_router)
@@ -231,7 +237,12 @@ def index() -> dict[str, object]:
             "GET /bookings/me/past",
             "GET /bookings/me/current",
             "GET /bookings/me/future",
-            "GET /bookings/available",
+            "GET /bookings/me/cancelled",
+            "POST /guests",
+            "GET /guests?q={search}",
+            "POST /guest-visits",
+            "POST /guest-bookings",
+            "GET /guest-bookings",
             "GET /sites",
             "POST /sites",
             "PATCH /sites/{site_id}",
