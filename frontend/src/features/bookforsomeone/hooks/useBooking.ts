@@ -1,27 +1,37 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { BookingFormState, BookingType, Employee, VisitorDetails } from "../types/booking";
-import { searchEmployees } from "../services/bookingService";
-
+import {
+  BookingFormState,
+  BookingType,
+  Employee,
+  Guest,
+  SeatRequired,
+  VisitDetails,
+} from "../types/booking";
+import { createGuest, MOCK_GUESTS, searchEmployees } from "../services/bookingService";
 
 // ─── Initial state ────────────────────────────────────────────────────────────
 
-const initialVisitorDetails: VisitorDetails = {
-  fullName: "",
-  email: "",
-  phoneNumber: "",
-  organization: "",
+const initialVisitDetails: VisitDetails = {
   guestType: "Interview Candidate",
   purposeOfVisit: "Interview",
   hostEmployee: null,
+  visitDate: "",
+  endDate: "",
+  startTime: "",
+  endTime: "",
   additionalNotes: "",
 };
 
 const initialFormState: BookingFormState = {
+  step: 1,
   bookingType: "internal",
   selectedEmployee: null,
-  visitorDetails: initialVisitorDetails,
+  guests: MOCK_GUESTS,
+  selectedGuest: null,
+  visitDetails: initialVisitDetails,
+  seatRequired: null,
 };
 
 // ─── useBookingForm ───────────────────────────────────────────────────────────
@@ -30,39 +40,79 @@ export function useBookingForm() {
   const [formState, setFormState] = useState<BookingFormState>(initialFormState);
 
   const setBookingType = useCallback((type: BookingType) => {
-    setFormState({
+    setFormState((prev) => ({
       ...initialFormState,
+      guests: prev.guests,
       bookingType: type,
-    });
+    }));
   }, []);
 
   const setSelectedEmployee = useCallback((employee: Employee | null) => {
     setFormState((prev) => ({ ...prev, selectedEmployee: employee }));
   }, []);
 
-  const updateVisitorDetails = useCallback((updates: Partial<VisitorDetails>) => {
+  const selectGuest = useCallback((guest: Guest | null) => {
+    setFormState((prev) => ({ ...prev, selectedGuest: guest }));
+  }, []);
+
+  const addGuest = useCallback((data: Omit<Guest, "id">) => {
+    const guest = createGuest(data);
     setFormState((prev) => ({
       ...prev,
-      visitorDetails: { ...prev.visitorDetails, ...updates },
+      guests: [guest, ...prev.guests],
+      selectedGuest: guest,
     }));
   }, []);
 
-  const handleSubmit = useCallback(() => {
-    // Wire up real navigation here
-    alert("Continuing to workspace & seat selection…");
+  const updateVisitDetails = useCallback((updates: Partial<VisitDetails>) => {
+    setFormState((prev) => ({
+      ...prev,
+      visitDetails: { ...prev.visitDetails, ...updates },
+    }));
+  }, []);
+
+  const setSeatRequired = useCallback((value: SeatRequired) => {
+    setFormState((prev) => ({ ...prev, seatRequired: value }));
+  }, []);
+
+  const goNext = useCallback(() => {
+    setFormState((prev) => {
+      if (prev.bookingType === "internal") return prev;
+      if (prev.step === 1) return { ...prev, step: 2 };
+      if (prev.step === 2) return { ...prev, step: 3 };
+      if (prev.step === 3 && prev.seatRequired === "no") return { ...prev, step: 4 };
+      if (prev.step === 4) return { ...prev, step: 5 };
+      return prev;
+    });
+  }, []);
+
+  const goBack = useCallback(() => {
+    setFormState((prev) => {
+      if (prev.step <= 1) return prev;
+      return { ...prev, step: prev.step - 1 };
+    });
   }, []);
 
   const handleCancel = useCallback(() => {
-    setFormState(initialFormState);
+    setFormState((prev) => ({ ...initialFormState, guests: prev.guests, bookingType: prev.bookingType }));
+  }, []);
+
+  const resetWizard = useCallback(() => {
+    setFormState((prev) => ({ ...initialFormState, guests: prev.guests }));
   }, []);
 
   return {
     formState,
     setBookingType,
     setSelectedEmployee,
-    updateVisitorDetails,
-    handleSubmit,
+    selectGuest,
+    addGuest,
+    updateVisitDetails,
+    setSeatRequired,
+    goNext,
+    goBack,
     handleCancel,
+    resetWizard,
   };
 }
 

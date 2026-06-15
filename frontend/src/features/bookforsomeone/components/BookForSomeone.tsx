@@ -2,8 +2,8 @@
 
 import { JSX } from "react";
 import { useEmployeeSearch } from "../hooks/useBooking";
-import { getInitials, GUEST_TYPES, MOCK_EMPLOYEES, PURPOSE_OF_VISIT } from "../services/bookingService";
-import { BookingType, Employee, GuestType, PurposeOfVisit, VisitorDetails } from "../types/booking";
+import { getInitials, MOCK_EMPLOYEES } from "../services/bookingService";
+import { BookingType, Employee } from "../types/booking";
 
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -450,14 +450,9 @@ export function InternalEmployeeForm({ selectedEmployee, onSelect, onClear }: In
   );
 }
 
-// ─── VisitorGuestForm ─────────────────────────────────────────────────────────
+// ─── Shared field helpers ───────────────────────────────────────────────────
 
-interface VisitorGuestFormProps {
-  details: VisitorDetails;
-  onChange: (updates: Partial<VisitorDetails>) => void;
-}
-
-function inputStyle(focused?: boolean): React.CSSProperties {
+export function inputStyle(focused?: boolean): React.CSSProperties {
   return {
     width: "100%",
     height: 40,
@@ -473,154 +468,11 @@ function inputStyle(focused?: boolean): React.CSSProperties {
   };
 }
 
-function FieldLabel({ children, htmlFor, required }: { children: React.ReactNode; htmlFor?: string; required?: boolean }) {
+export function FieldLabel({ children, htmlFor, required }: { children: React.ReactNode; htmlFor?: string; required?: boolean }) {
   return (
     <label htmlFor={htmlFor} style={{ fontSize: "0.8125rem", fontWeight: 500, color: "#111827", display: "block", marginBottom: 6 }}>
       {children} {required && <span style={{ color: "#dc2626" }}>*</span>}
     </label>
-  );
-}
-
-export function VisitorGuestForm({ details, onChange }: VisitorGuestFormProps) {
-  return (
-    <div>
-      <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Visitor / Guest Details</h2>
-      <p style={{ fontSize: "0.8125rem", color: "#6b7280", marginTop: 4, marginBottom: "1.25rem" }}>
-        Enter the details of the visitor or guest.
-      </p>
-
-      {/* 2-column grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-        {/* Full Name */}
-        <div>
-          <FieldLabel htmlFor="fullName" required>Full Name</FieldLabel>
-          <input id="fullName" type="text" style={inputStyle()} placeholder="Full name"
-            value={details.fullName} onChange={(e) => onChange({ fullName: e.target.value })}
-            onFocus={(e) => Object.assign(e.currentTarget.style, { borderColor: "#4f46e5", boxShadow: "0 0 0 3px rgba(79,70,229,0.1)" })}
-            onBlur={(e) => Object.assign(e.currentTarget.style, { borderColor: "#e5e7eb", boxShadow: "none" })}
-          />
-        </div>
-
-        {/* Email */}
-        <div>
-          <FieldLabel htmlFor="visitorEmail" required>Email Address</FieldLabel>
-          <input id="visitorEmail" type="email" style={inputStyle()} placeholder="email@example.com"
-            value={details.email} onChange={(e) => onChange({ email: e.target.value })}
-            onFocus={(e) => Object.assign(e.currentTarget.style, { borderColor: "#4f46e5", boxShadow: "0 0 0 3px rgba(79,70,229,0.1)" })}
-            onBlur={(e) => Object.assign(e.currentTarget.style, { borderColor: "#e5e7eb", boxShadow: "none" })}
-          />
-        </div>
-
-        {/* Phone */}
-        <div>
-          <FieldLabel htmlFor="phone" required>Phone Number</FieldLabel>
-          <input id="phone" type="tel" style={inputStyle()} placeholder="+91 00000 00000"
-            value={details.phoneNumber} onChange={(e) => onChange({ phoneNumber: e.target.value })}
-            onFocus={(e) => Object.assign(e.currentTarget.style, { borderColor: "#4f46e5", boxShadow: "0 0 0 3px rgba(79,70,229,0.1)" })}
-            onBlur={(e) => Object.assign(e.currentTarget.style, { borderColor: "#e5e7eb", boxShadow: "none" })}
-          />
-        </div>
-
-        {/* Organization */}
-        <div>
-          <FieldLabel htmlFor="org">Organization / Company</FieldLabel>
-          <input id="org" type="text" style={inputStyle()} placeholder="Company name"
-            value={details.organization} onChange={(e) => onChange({ organization: e.target.value })}
-            onFocus={(e) => Object.assign(e.currentTarget.style, { borderColor: "#4f46e5", boxShadow: "0 0 0 3px rgba(79,70,229,0.1)" })}
-            onBlur={(e) => Object.assign(e.currentTarget.style, { borderColor: "#e5e7eb", boxShadow: "none" })}
-          />
-        </div>
-
-        {/* Guest Type */}
-        <div>
-          <FieldLabel htmlFor="guestType" required>Guest Type</FieldLabel>
-          <div style={{ position: "relative" }}>
-            <select id="guestType" style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: "pointer" }}
-              value={details.guestType} onChange={(e) => onChange({ guestType: e.target.value as GuestType })}
-            >
-              {GUEST_TYPES.map((g) => <option key={g} value={g}>{g}</option>)}
-            </select>
-            <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
-              <IconChevronDown />
-            </span>
-          </div>
-        </div>
-
-        {/* Purpose */}
-        <div>
-          <FieldLabel htmlFor="purpose">Purpose of Visit</FieldLabel>
-          <div style={{ position: "relative" }}>
-            <select id="purpose" style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: "pointer" }}
-              value={details.purposeOfVisit} onChange={(e) => onChange({ purposeOfVisit: e.target.value as PurposeOfVisit })}
-            >
-              {PURPOSE_OF_VISIT.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-            <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
-              <IconChevronDown />
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Host Employee (full width) */}
-      <div style={{ marginTop: "1rem" }}>
-        <FieldLabel required>Host Employee</FieldLabel>
-        <EmployeeSearch
-          placeholder="Search host employee"
-          selectedEmployee={details.hostEmployee}
-          onSelect={(emp) => onChange({ hostEmployee: emp })}
-          onClear={() => onChange({ hostEmployee: null })}
-        />
-        {/* Default host preview */}
-        {!details.hostEmployee && (
-          <div style={{ marginTop: "0.5rem", border: "1.5px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
-            <EmployeeRow
-              employee={MOCK_EMPLOYEES[1]}
-              onClick={() => onChange({ hostEmployee: MOCK_EMPLOYEES[1] })}
-            />
-          </div>
-        )}
-        {details.hostEmployee && (
-          <div style={{ marginTop: "0.5rem", border: "1.5px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
-            <EmployeeRow employee={details.hostEmployee} onClick={undefined} showChevron />
-          </div>
-        )}
-      </div>
-
-      {/* Notes (full width) */}
-      <div style={{ marginTop: "1rem" }}>
-        <FieldLabel htmlFor="notes">
-          Additional Notes <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span>
-        </FieldLabel>
-        <div style={{ position: "relative" }}>
-          <textarea
-            id="notes"
-            maxLength={300}
-            rows={3}
-            placeholder="Add any notes about the visit…"
-            value={details.additionalNotes}
-            onChange={(e) => onChange({ additionalNotes: e.target.value })}
-            style={{
-              width: "100%",
-              padding: "0.625rem 0.75rem 1.5rem",
-              border: "1.5px solid #e5e7eb",
-              borderRadius: 8,
-              fontSize: "0.875rem",
-              color: "#111827",
-              outline: "none",
-              resize: "vertical",
-              fontFamily: "inherit",
-              lineHeight: 1.5,
-            }}
-            onFocus={(e) => Object.assign(e.currentTarget.style, { borderColor: "#4f46e5", boxShadow: "0 0 0 3px rgba(79,70,229,0.1)" })}
-            onBlur={(e) => Object.assign(e.currentTarget.style, { borderColor: "#e5e7eb", boxShadow: "none" })}
-          />
-          <span style={{ position: "absolute", bottom: 8, right: 10, fontSize: "0.6875rem", color: "#9ca3af" }}>
-            {details.additionalNotes.length} / 300
-          </span>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -629,70 +481,99 @@ export function VisitorGuestForm({ details, onChange }: VisitorGuestFormProps) {
 interface FormFooterProps {
   onCancel: () => void;
   onSubmit: () => void;
+  onBack?: () => void;
+  submitLabel?: string;
+  submitDisabled?: boolean;
+  infoText?: string;
 }
 
-export function FormFooter({ onCancel, onSubmit }: FormFooterProps) {
+export function FormFooter({ onCancel, onSubmit, onBack, submitLabel = "Book a Seat", submitDisabled, infoText }: FormFooterProps) {
   return (
     <div style={{ marginTop: "2rem" }}>
       {/* Info banner */}
-      <div style={{
-        display: "flex",
-        gap: "0.625rem",
-        padding: "0.875rem 1rem",
-        background: "#eff6ff",
-        border: "1px solid #bfdbfe",
-        borderRadius: 8,
-        marginBottom: "1rem",
-        alignItems: "flex-start",
-      }}>
-        <span style={{ color: "#3b82f6", flexShrink: 0, marginTop: 1, display: "flex" }}><IconInfo /></span>
-        <p style={{ fontSize: "0.8125rem", color: "#1e40af", lineHeight: 1.5 }}>
-          After clicking &ldquo;Book a Seat&rdquo;, you will continue in the existing booking flow to
-          select workspace, date, preferences and choose a seat.
-        </p>
-      </div>
+      {infoText && (
+        <div style={{
+          display: "flex",
+          gap: "0.625rem",
+          padding: "0.875rem 1rem",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          borderRadius: 8,
+          marginBottom: "1rem",
+          alignItems: "flex-start",
+        }}>
+          <span style={{ color: "#3b82f6", flexShrink: 0, marginTop: 1, display: "flex" }}><IconInfo /></span>
+          <p style={{ fontSize: "0.8125rem", color: "#1e40af", lineHeight: 1.5 }}>
+            {infoText}
+          </p>
+        </div>
+      )}
 
       {/* Actions */}
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
-        <button
-          type="button"
-          onClick={onCancel}
-          style={{
-            height: 40,
-            padding: "0 1.25rem",
-            borderRadius: 8,
-            border: "1.5px solid #e5e7eb",
-            background: "#fff",
-            fontSize: "0.875rem",
-            fontWeight: 600,
-            color: "#111827",
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={onSubmit}
-          style={{
-            height: 40,
-            padding: "0 1.25rem",
-            borderRadius: 8,
-            border: "1.5px solid #4f46e5",
-            background: "#4f46e5",
-            fontSize: "0.875rem",
-            fontWeight: 600,
-            color: "#fff",
-            cursor: "pointer",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            fontFamily: "inherit",
-          }}
-        >
-          Book a Seat <IconArrowRight />
-        </button>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            style={{
+              height: 40,
+              padding: "0 1.25rem",
+              borderRadius: 8,
+              border: "1.5px solid #e5e7eb",
+              background: "#fff",
+              fontSize: "0.875rem",
+              fontWeight: 600,
+              color: "#111827",
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            Back
+          </button>
+        ) : <span />}
+
+        <div style={{ display: "flex", gap: "0.75rem" }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            style={{
+              height: 40,
+              padding: "0 1.25rem",
+              borderRadius: 8,
+              border: "1.5px solid #e5e7eb",
+              background: "#fff",
+              fontSize: "0.875rem",
+              fontWeight: 600,
+              color: "#111827",
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={submitDisabled}
+            style={{
+              height: 40,
+              padding: "0 1.25rem",
+              borderRadius: 8,
+              border: "1.5px solid #4f46e5",
+              background: submitDisabled ? "#a5b4fc" : "#4f46e5",
+              fontSize: "0.875rem",
+              fontWeight: 600,
+              color: "#fff",
+              cursor: submitDisabled ? "not-allowed" : "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              fontFamily: "inherit",
+            }}
+          >
+            {submitLabel} <IconArrowRight />
+          </button>
+        </div>
       </div>
     </div>
   );
