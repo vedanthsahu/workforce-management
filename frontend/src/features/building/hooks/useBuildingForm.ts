@@ -43,7 +43,7 @@ export const useBuildingForm = () => {
 
   const handleChange = (
     field: keyof CreateBuildingPayload,
-    value: any
+    value: string | number
   ) => {
     setFormData((prev) => ({
       ...prev,

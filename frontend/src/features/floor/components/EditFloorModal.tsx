@@ -1,13 +1,29 @@
 "use client";
 
 import {
-  X,
-} from "lucide-react";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
+import { Floor } from "../types/floor.types";
 import { useEditFloor } from "../hooks/useEditFloor";
 
 type Props = {
-  floor: any;
+  floor: Floor;
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
@@ -19,132 +35,64 @@ export default function EditFloorModal({
   onClose,
   onSuccess,
 }: Props) {
-
-  const {
-    loading,
-    formData,
-    handleChange,
-    handleUpdate,
-  } = useEditFloor(
-    floor,
-    onSuccess
-  );
-
+  const { loading, formData, handleChange, handleUpdate } = useEditFloor(floor);
 
   const hasChanges =
-  formData.floor_name !== floor.floor_name ||
-  formData.status !== floor.status;
-
-
-  if (!open) return null;
+    formData.floor_name !== floor.floor_name ||
+    formData.status !== floor.status;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+    <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Edit Floor</DialogTitle>
+          <DialogDescription>Update floor details and save changes.</DialogDescription>
+        </DialogHeader>
 
-      <div className="bg-white w-full max-w-xl rounded-2xl shadow-xl">
-
-        {/* HEADER */}
-        <div className="flex justify-between items-center px-6 py-5 border-b">
-          <div>
-            <h2 className="text-xl font-semibold">
-              Edit Floor
-            </h2>
-
-            <p className="text-sm text-gray-500">
-              Update floor details.
-            </p>
-          </div>
-
-          <button
-            onClick={onClose}
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* BODY */}
-        <div className="p-6 space-y-5">
-
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Floor Name
-            </label>
-
-            <input
-              value={
-                formData.floor_name
-              }
-              onChange={(e) =>
-                handleChange(
-                  "floor_name",
-                  e.target.value
-                )
-              }
-              className="w-full border rounded-xl px-4 py-3"
+        <div className="space-y-5">
+          <div className="space-y-1.5">
+            <Label>Floor Name</Label>
+            <Input
+              value={formData.floor_name}
+              onChange={(e) => handleChange("floor_name", e.target.value)}
+              placeholder="Enter floor name"
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Status
-            </label>
-
-            <select
-              value={
-                formData.status
-              }
-              onChange={(e) =>
-                handleChange(
-                  "status",
-                  e.target.value
-                )
-              }
-              className="w-full border rounded-xl px-4 py-3"
+          <div className="space-y-1.5">
+            <Label>Status</Label>
+            <Select
+              value={formData.status}
+              onValueChange={(value) => {
+                if (value) handleChange("status", value);
+              }}
             >
-              <option value="ACTIVE">
-                ACTIVE
-              </option>
-
-              <option value="INACTIVE">
-                INACTIVE
-              </option>
-            </select>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                <SelectItem value="INACTIVE">INACTIVE</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-
         </div>
 
-        {/* FOOTER */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t">
-
-          <button
-            onClick={onClose}
-            className="px-5 py-2 border rounded-xl"
-          >
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
             Cancel
-          </button>
-
-          <button
-             disabled={loading || !hasChanges}
+          </Button>
+          <Button
             onClick={async () => {
-              const success =
-                await handleUpdate();
-
-              if (success) {
-                onSuccess();
-                onClose();
-              }
+              const success = await handleUpdate();
+              if (success) { onSuccess(); onClose(); }
             }}
-           className={`px-5 py-2 rounded-xl text-white ${
-  loading || !hasChanges
-    ? "bg-gray-300 cursor-not-allowed"
-    : "bg-blue-600 hover:bg-blue-700"
-}`}
+            disabled={loading || !hasChanges}
           >
-            Save Changes
-          </button>
-
-        </div>
-      </div>
-    </div>
+            {loading ? "Saving..." : "Save Changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

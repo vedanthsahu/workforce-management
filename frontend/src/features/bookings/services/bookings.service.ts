@@ -1,6 +1,7 @@
 import { axiosInstance } from "@/lib/http/axios";
 import { Booking, BookingSummary, RawBooking } from "../types/bookings.types";
 import type { ApiTeamGroup } from "@/features/dashboard/types/dashboard.types";
+import type { User } from "@/features/auth/types/auth.types";
 import { fetchPreferences } from "@/features/book/services/Bookingform.service";
 
 const BASE = "/bookings";
@@ -85,8 +86,8 @@ function mapRawBooking(raw: RawBooking): Booking {
     seat:             raw.seat_code      ?? raw.seat_id,
     // Keep `date` for backward compat — always equals fromDate
     date:             raw.booking_date,
-    fromDate,                            // ← NEW
-    toDate,                              // ← NEW
+    fromDate,
+    toDate,
     startTime:        raw.start_time     ?? "9:00 AM",
     endTime:          raw.end_time       ?? "6:00 PM",
     isFullDay:        raw.is_full_day    ?? false,
@@ -95,9 +96,9 @@ function mapRawBooking(raw: RawBooking): Booking {
     tags:             tagList,
     isRecurring:      raw.is_recurring      ?? false,
     recurringPattern: raw.recurring_pattern,
-    preferences:      extractPreferenceKeys(raw), // ← NEW
-    floorId:  raw.floor_id  ? String(raw.floor_id)  : undefined,
-seatId:   raw.seat_id   ? String(raw.seat_id)   : undefined,
+    preferences:      extractPreferenceKeys(raw),
+    floorId:          raw.floor_id ? String(raw.floor_id) : undefined,
+    seatId:           raw.seat_id  ? String(raw.seat_id)  : undefined,
   };
 }
 
@@ -127,35 +128,15 @@ export async function cancelBooking(
   bookingId: string,
   cancellationReason?: string,
 ): Promise<void> {
-  try {
-    await axiosInstance.post(`${BASE}/${bookingId}/cancel`, {
-      cancellation_reason: cancellationReason?.trim() || null,
-    });
-  } catch (err: any) {
-    console.error("cancelBooking failed:", JSON.stringify(err?.response?.data, null, 2));
-    throw err;
-  }
-}
-
-export interface ModifyBookingPayload {
-  site_id:      number;
-  building_id:  number;
-  floor_id:     number;
-  seat_id:      number;
-  booking_date: string;
-}
-
-export async function modifyBooking(
-  bookingId: string,
-  payload: ModifyBookingPayload,
-): Promise<void> {
-  await axiosInstance.post(`${BASE}/${bookingId}/modify`, payload);
+  await axiosInstance.post(`${BASE}/${bookingId}/cancel`, {
+    cancellation_reason: cancellationReason?.trim() || null,
+  });
 }
 
 // ── Team / user ───────────────────────────────────────────────────────────────
 
-export async function fetchCurrentUser() {
-  const { data } = await axiosInstance.get("/auth/me");
+export async function fetchCurrentUser(): Promise<User> {
+  const { data } = await axiosInstance.get<User>("/auth/me");
   return data;
 }
 
@@ -166,55 +147,6 @@ export async function fetchTeamGroups(): Promise<ApiTeamGroup[]> {
 
 // ── Summary aggregation ───────────────────────────────────────────────────────
 
-// export function deriveBookingSummary(
-//   current:       Booking[],
-//   future:        Booking[],
-//   past:          Booking[],
-//   teamGroups:    ApiTeamGroup[] = [],
-//   currentUserId: string        = "",
-// ): BookingSummary {
-//   const upcoming = [...current, ...future]
-//     .filter((b) => b.status !== "cancelled")
-//     .sort(
-//       (a, b) =>
-//         new Date(a.date + "T00:00:00").getTime() -
-//         new Date(b.date + "T00:00:00").getTime(),
-//     );
-
-//   const nextBooking = upcoming[0];
-
-//   const nextBookingDate = nextBooking
-//     ? (() => {
-//         const d     = new Date(nextBooking.date + "T00:00:00");
-//         const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-//         return `Next: ${label} · ${nextBooking.seat}`;
-//       })()
-//     : null;
-
-//   const now                = new Date();
-//   const completedThisMonth = past.filter((b) => {
-//     const d = new Date(b.date);
-//     return (
-//       d.getMonth()    === now.getMonth() &&
-//       d.getFullYear() === now.getFullYear()
-//     );
-//   }).length;
-
-//   const teamInOffice = teamGroups.reduce((acc, g) => {
-//     const selfMember      = g.members.find((m) => m.user_id === currentUserId);
-//     const selfBookedToday = selfMember?.seat != null;
-//     return acc + g.booked_today_count - (selfBookedToday ? 1 : 0);
-//   }, 0);
-
-//   return {
-//     upcomingCount:      upcoming.length,
-//     nextBookingDate,
-//     completedThisMonth,
-//     daysInOffice:       completedThisMonth,
-//     teamInOffice,
-//   };
-// }
-
 export function deriveBookingSummary(
   current:       Booking[],   // today's bookings from /bookings/me/current
   future:        Booking[],   // future bookings  from /bookings/me/future
@@ -222,9 +154,8 @@ export function deriveBookingSummary(
   teamGroups:    ApiTeamGroup[] = [],
   currentUserId: string        = "",
 ): BookingSummary {
- 
   const todayIso = new Date().toISOString().slice(0, 10);
- 
+
   // All non-cancelled upcoming (current + future), sorted ascending by date
   const upcoming = [...current, ...future]
     .filter((b) => b.status !== "cancelled")
@@ -233,26 +164,19 @@ export function deriveBookingSummary(
         new Date(a.date + "T00:00:00").getTime() -
         new Date(b.date + "T00:00:00").getTime(),
     );
- 
+
   // ── Next booking label ────────────────────────────────────────────────────
-  // Priority: today first, then earliest future date.
-  const todayBooking  = upcoming.find((b) => b.date === todayIso);
-  const futureBooking = upcoming.find((b) => b.date >  todayIso);
- 
-  const nextBookingDate = (() => {
-    // if (todayBooking) {
-    //   // There is a booking today — show it as "Today · Seat X"
-    //   return `Today · ${todayBooking.seat}`;
-    // }
-    if (futureBooking) {
-      // No booking today but one coming up — show formatted date
-      const d     = new Date(futureBooking.date + "T00:00:00");
-      const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      return `Next: ${label} · ${futureBooking.seat}`;
-    }
-    return null;
-  })();
- 
+  // Earliest upcoming date strictly after today.
+  const futureBooking = upcoming.find((b) => b.date > todayIso);
+
+  const nextBookingDate = futureBooking
+    ? (() => {
+        const d     = new Date(futureBooking.date + "T00:00:00");
+        const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        return `Next: ${label} · ${futureBooking.seat}`;
+      })()
+    : null;
+
   // ── Completed this month ──────────────────────────────────────────────────
   const now                = new Date();
   const completedThisMonth = past.filter((b) => {
@@ -262,14 +186,14 @@ export function deriveBookingSummary(
       d.getFullYear() === now.getFullYear()
     );
   }).length;
- 
+
   // ── Team in office ────────────────────────────────────────────────────────
   const teamInOffice = teamGroups.reduce((acc, g) => {
     const selfMember      = g.members.find((m) => m.user_id === currentUserId);
     const selfBookedToday = selfMember?.seat != null;
     return acc + g.booked_today_count - (selfBookedToday ? 1 : 0);
   }, 0);
- 
+
   return {
     upcomingCount:      upcoming.length,
     nextBookingDate,
@@ -278,83 +202,13 @@ export function deriveBookingSummary(
     teamInOffice,
   };
 }
-// bookings.service.ts  — add this new export
 
-// export async function fetchSeatAmenities(
-//   floorId: string,
-//   seatId: string,
-//   bookingDate: string,
-// ): Promise<string[]> {
-//   try {
-//     const { data } = await axiosInstance.get<any[]>(
-//       `/floors/${floorId}/seats`,
-//       {
-//         params: {
-//           start_date: bookingDate,
-//           end_date:   bookingDate,
-//         },
-//       },
-//     );
-//     const match = data.find(
-//       (s) => String(s.seat_id) === String(seatId),
-//     );
-//     if (!match) return [];
-//     // matched_amenities contains names like "Window View"; we need the keys.
-//     // If your API returns amenity keys directly, use those. Otherwise derive
-//     // keys from names by lowercasing + removing spaces — adjust to match your
-//     // Preference.key values (e.g. "window", "dualMonitor", "cafeteria").
-//     const names: string[] = match.matched_amenities ?? [];
-//     return names.map((n: string) =>
-//       n.toLowerCase().replace(/\s+/g, ""),  // "Window View" → "windowview"
-//     );
-//   } catch {
-//     return [];
-//   }
-// }
+// ── Seat amenities ────────────────────────────────────────────────────────────
 
-// export async function fetchSeatAmenities(
-//   floorId: string,
-//   seatId: string,
-//   bookingDate: string,
-// ): Promise<string[]> {
-
-//   // ── Add the mapping HERE, at the top of the function ──
-//   const AMENITY_NAME_TO_KEY: Record<string, string> = {
-//     "window view":   "window",
-//     "window":        "window",
-//     "cafeteria":     "cafeteria",
-//     "dual monitor":  "dualMonitor",
-//     "dual monitors": "dualMonitor",
-//     "elevator":      "elevator",
-//   };
-
-//   try {
-//     const { data } = await axiosInstance.get<any[]>(
-//       `/floors/${floorId}/seats`,
-//       {
-//         params: {
-//           start_date: bookingDate,
-//           end_date:   bookingDate,
-//         },
-//       },
-//     );
-// console.log("fetchSeatAmenities raw data:", data);  // ← ADD THIS
-//     const match = data.find(
-//       (s) => String(s.seat_id) === String(seatId),
-//     );
-//     if (!match) return [];
-
-//     const names: string[] = match.matched_amenities ?? [];
-
-//     // ── Use the mapping HERE instead of the raw .map() ──
-//     return names
-//       .map((n: string) => AMENITY_NAME_TO_KEY[n.toLowerCase()] ?? null)
-//       .filter(Boolean) as string[];
-
-//   } catch {
-//     return [];
-//   }
-// }
+interface SeatAmenityMatch {
+  seat_id: string | number;
+  matched_amenities?: string[];
+}
 
 export async function fetchSeatAmenities(
   floorId: string,
@@ -362,14 +216,12 @@ export async function fetchSeatAmenities(
   bookingDate: string,
 ): Promise<string[]> {
   try {
-    // Step 1: fetch all preferences to get their ids AND keys
+    // Step 1: fetch all preferences to get their ids and keys
     const allPrefs = await fetchPreferences();
-    // e.g. [{id: 1, key: "window", name: "Window View"}, ...]
-
     const allAmenityIds = allPrefs.map((p) => p.id);
 
-    // Step 2: fetch seats passing ALL amenity ids so backend populates matched_amenities
-    const { data } = await axiosInstance.get<any[]>(
+    // Step 2: fetch seats passing all amenity ids so the backend populates matched_amenities
+    const { data } = await axiosInstance.get<SeatAmenityMatch[]>(
       `/floors/${floorId}/seats`,
       {
         params: {
@@ -395,21 +247,17 @@ export async function fetchSeatAmenities(
     const match = data.find((s) => String(s.seat_id) === String(seatId));
     if (!match) return [];
 
-    console.log("matched seat amenities:", match.matched_amenities);
-
     // Step 4: map display names → keys using the preferences list (no hardcoding)
-    const names: string[] = match.matched_amenities ?? [];
+    const names = match.matched_amenities ?? [];
     return names
-      .map((name: string) => {
+      .map((name) => {
         const pref = allPrefs.find(
           (p) => p.name.toLowerCase() === name.toLowerCase()
         );
         return pref?.key ?? null;
       })
-      .filter(Boolean) as string[];
-
+      .filter((key): key is string => key !== null);
   } catch {
-    // console.error("fetchSeatAmenities failed:", e);
     return [];
   }
 }

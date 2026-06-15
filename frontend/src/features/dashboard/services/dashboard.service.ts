@@ -1,12 +1,9 @@
-
-
 import { axiosInstance } from "@/lib/http/axios";
 import type {
   ApiBooking,
   ApiDashboardMe,
   ApiFavouriteSeat,
   ApiTeamGroup,
-  Announcement,
   Booking,
   DashboardData,
   DashboardStats,
@@ -16,6 +13,12 @@ import type {
   WeekDay,
 } from "../types/dashboard.types";
 import type { User } from "@/features/auth/types/auth.types";
+import {
+  AVATAR_COLORS,
+  DAY_LABELS,
+  DEFAULT_BOOKING_START_TIME,
+  DEFAULT_BOOKING_END_TIME,
+} from "../utils/constants";
 
 // ─── Error types ──────────────────────────────────────────────────────────────
 
@@ -53,11 +56,6 @@ function toInitials(fullName: string): string {
     .join("");
 }
 
-const AVATAR_COLORS = [
-  "#E8D5B7", "#B7D5E8", "#D5E8B7", "#E8B7D5",
-  "#B7E8D5", "#D5B7E8", "#E8E8B7", "#B7B7E8",
-];
-
 function pickAvatarColor(index: number): string {
   return AVATAR_COLORS[index % AVATAR_COLORS.length];
 }
@@ -65,7 +63,6 @@ function pickAvatarColor(index: number): string {
 function buildWeekDays(bookedDates: Set<string>): WeekDay[] {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const DAY_LABELS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
@@ -109,8 +106,8 @@ function mapApiBooking(b: ApiBooking): Booking {
     // ISO strings preserved for the modify / amenity-fetch flow
     fromDate,
     toDate,
-    startTime:   "9:00 AM",
-    endTime:     "6:00 PM",
+    startTime:   DEFAULT_BOOKING_START_TIME,
+    endTime:     DEFAULT_BOOKING_END_TIME,
     status:      mapBookingStatus(b.booking_status),
     isRecurring: false,
     // Display label (seat_code preferred, falls back to seat_id)
@@ -158,7 +155,6 @@ function extractTodayBookingInfo(currentBookings: ApiBooking[]): TodayBookingInf
 }
 
 function deriveStats(
-  currentBookings: ApiBooking[],
   teamGroups: ApiTeamGroup[],
   dashboardMe: ApiDashboardMe,
   currentUserId: string,
@@ -175,7 +171,6 @@ function deriveStats(
   }, 0);
 
   return {
-    daysInMonth:          currentBookings.length,
     trend:                0,
     teamInOffice:         bookedToday,
     teamRemoteCount:      totalMembers - bookedToday,
@@ -183,14 +178,6 @@ function deriveStats(
     teamRank:             dashboardMe.team_rank_current_year ?? 0,
   };
 }
-
-// ─── Static mock announcements ────────────────────────────────────────────────
-
-const MOCK_ANNOUNCEMENTS: Announcement[] = [
-  { id: "1", title: "Floor 4 maintenance – Apr 17",     description: "Bookings paused from 10am – 1pm",        type: "warning" },
-  { id: "2", title: "Parking lot B closed this week",   description: "Use parking lot D as alternate",          type: "info"    },
-  { id: "3", title: "Austin Hub now open for bookings", description: "100 Congress Ave · 45 seats available",   type: "success" },
-];
 
 // ─── Error classifier ─────────────────────────────────────────────────────────
 
@@ -298,7 +285,7 @@ export async function getDashboardData(): Promise<DashboardResult> {
   })();
 
   const teamInOfficeToday = mapApiTeamToMembers(teamGroups, currentUserId);
-  const stats             = deriveStats(currentRaw, teamGroups, dashboardMe, currentUserId);
+  const stats             = deriveStats(teamGroups, dashboardMe, currentUserId);
   const todayBooking      = extractTodayBookingInfo(currentRaw);
 
   const allBookedDates = new Set([
@@ -318,38 +305,13 @@ export async function getDashboardData(): Promise<DashboardResult> {
       weekDays:         buildWeekDays(allBookedDates),
       upcomingBookings,
       teamInOfficeToday,
-      announcements:    MOCK_ANNOUNCEMENTS,
       favouriteSeat:    mapFavouriteSeat(dashboardMe.favorite_seat),
-      teamOnlineCount:  stats.teamInOffice,
-      teamOfflineCount: stats.teamRemoteCount,
       nextBookingDate:  upcomingBookings[0]?.date ?? "—",
       todayBooking,
       daysInOffice:     dashboardMe.days_in_office_current_month,
     },
     errors: sectionErrors,
   };
-}
-
-// ─── Individual exports ───────────────────────────────────────────────────────
-
-export async function getUpcomingBookings(): Promise<Booking[]> {
-  const raw = await fetchFutureBookingsRaw();
-  return raw.map(mapApiBooking);
-}
-
-export async function getTeamInOfficeToday(): Promise<TeamMember[]> {
-  const [user, groups] = await Promise.all([fetchCurrentUser(), fetchTeamGroupsRaw()]);
-  return mapApiTeamToMembers(groups, user.user_id);
-}
-
-export async function getAnnouncements(): Promise<Announcement[]> {
-  return Promise.resolve(MOCK_ANNOUNCEMENTS);
-}
-
-export async function getFavouriteSeats(): Promise<FavouriteSeat[]> {
-  const dashboardMe = await fetchDashboardMe();
-  const seat = mapFavouriteSeat(dashboardMe.favorite_seat);
-  return seat ? [seat] : [];
 }
 
 // ✅ cancelBooking is intentionally absent from this service.

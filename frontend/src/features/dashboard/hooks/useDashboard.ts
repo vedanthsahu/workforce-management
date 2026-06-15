@@ -4,11 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { DashboardData } from "../types/dashboard.types";
 import { DashboardSectionError, getDashboardData } from "../services/dashboard.service";
-// ✅ Use the real cancel endpoint from bookings.service (POST /{id}/cancel)
-// instead of dashboard.service's cancelBooking which was using axiosInstance.delete
-import { cancelBooking as cancelBookingApi } from "@/features/bookings/services/bookings.service";
-
-const MAX_VISIBLE_BOOKINGS = 2;
+import { MAX_VISIBLE_BOOKINGS } from "../utils/constants";
 
 type HookState =
   | { status: "idle" }
@@ -52,27 +48,6 @@ export function useDashboard() {
     });
   }, [state.status]);
 
-  // ── Cancel today's booking (hero banner) ──────────────────────────────────
-  // Same pattern — API call happens in DashboardPage, this just clears local state.
-  const handleCancelToday = useCallback(async (bookingId: string) => {
-    if (state.status !== "ready") return;
-    setState((prev) => {
-      if (prev.status !== "ready") return prev;
-      return {
-        ...prev,
-        data: {
-          ...prev.data,
-          todayBooking: {
-            hasTodayBooking: false,
-            seatCode:        null,
-            floor:           null,
-            bookingId:       null,
-          },
-        },
-      };
-    });
-  }, [state.status]);
-
   // Derived values
   const data               = state.status === "ready" ? state.data : null;
   const visibleBookings    = data?.upcomingBookings.slice(0, MAX_VISIBLE_BOOKINGS) ?? [];
@@ -89,6 +64,5 @@ export function useDashboard() {
     visibleBookings,
     totalBookingsCount,
     handleCancelBooking,
-    handleCancelToday,
   };
 }

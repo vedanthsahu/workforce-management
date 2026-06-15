@@ -14,28 +14,21 @@ import {
   Ban,
 } from "lucide-react";
 
+import type { DashboardSummary } from "../types/admin.types";
+
 type Props = {
-  data: any;
+  data: DashboardSummary | null;
   selectedDate: string;
 };
 
-export default function AdminStats({ data , selectedDate}: Props) {
+export default function AdminStats({ data, selectedDate }: Props) {
+  const formattedSelectedDate = new Date(selectedDate).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 
-  
-  const today = new Date()
-  .toISOString()
-  .split("T")[0];
-
-const isToday = selectedDate === today;
-
-//  FORMAT DATE
-const formattedDate = selectedDate
-  ?.split("-")
-  .reverse()
-  .join("-");
-
-
-const stats = [
+  const stats = [
     {
       title: "Total Offices",
       value: data?.total_offices ?? "-",
@@ -57,49 +50,20 @@ const stats = [
       icon: Armchair,
       color: "bg-orange-100 text-orange-600",
     },
-    // {
-    //   title: isToday? "Booked Today" : `Booked on ${formattedDate}`,
-    //   value: data?.booked_today ?? "-",
-    //   subtitle: `${data?.occupancy_percentage ?? 0}% occupancy`,
-    //   icon: CalendarCheck,
-    //   color: "bg-blue-100 text-blue-600",
-    // },
-
     {
-  title: "Bookings",
-  value: data?.booked_today ?? "-",
-  subtitle: isToday
-    ? `For ${new Date(selectedDate).toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })}`
-    : `For ${new Date(selectedDate).toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })}`,
-  icon: CalendarCheck,
-  color: "bg-blue-100 text-blue-600",
-},
-    // {
-    //   title: "Blocked Seats",
-    //   value: data?.blocked_seats ?? "-",
-    //   subtitle: "Maintenance / Other",
-    //   icon: Ban,
-    //   color: "bg-purple-100 text-purple-600",
-    // },
+      title: "Bookings",
+      value: data?.booked_today ?? "-",
+      subtitle: `For ${formattedSelectedDate}`,
+      icon: CalendarCheck,
+      color: "bg-blue-100 text-blue-600",
+    },
     {
-  title: "Blocked ",
-  value: data?.blocked_seats ?? "-",
-  subtitle: `For ${new Date(selectedDate).toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  })}`,
-  icon: Ban,
-  color: "bg-purple-100 text-purple-600",
-},
+      title: "Blocked",
+      value: data?.blocked_seats ?? "-",
+      subtitle: `For ${formattedSelectedDate}`,
+      icon: Ban,
+      color: "bg-purple-100 text-purple-600",
+    },
   ];
 
   //  Loading state
@@ -130,7 +94,7 @@ const stats = [
 
             {/* CONTENT */}
             <CardContent>
-              <div className="text-4xl font-semibold">
+              <div className="text-2xl sm:text-3xl xl:text-4xl font-semibold">
                 {item.value}
               </div>
 
