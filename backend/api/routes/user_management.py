@@ -19,9 +19,40 @@ from backend.services.user_management_service import (
     admin_update_user_access_service,
     update_my_profile,
 )
+from fastapi import Query
+
+from backend.schemas.user_management import (
+    UserSearchResponse,
+)
+from backend.services.user_management_service import (
+    search_user_profiles,
+)
 
 router = APIRouter(tags=["user-management"])
 
+@router.get(
+    "/users",
+    response_model=list[UserSearchResponse],
+)
+def search_users(
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+    q: str = Query(..., min_length=1),
+    limit: int = Query(20, ge=1, le=100),
+) -> list[UserSearchResponse]:
+
+    return search_user_profiles(
+        conn,
+        current_user=current_user,
+        search_text=q,
+        limit=limit,
+    )
 
 @router.patch(
     "/users/me",

@@ -106,278 +106,6 @@ def fetch_floor_scope(
     return dict(row) if row else None
 
 
-# def fetch_admin_dashboard_summary(
-#     conn: PGConnection,
-#     *,
-#     tenant_id: str,
-#     selected_date: date,
-#     site_id: str | None = None,
-#     floor_id: str | None = None,
-# ) -> dict[str, Any]:
-#     """
-#     Fetch aggregated admin dashboard summary metrics.
-#     """
-
-#     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-#         cur.execute(
-#             """
-#             WITH scoped_sites AS (
-#                 SELECT
-#                     s.id,
-#                     s.status
-#                 FROM sites AS s
-#                 WHERE s.tenant_id = %(tenant_id)s
-#                   AND (
-#                         %(site_id)s IS NULL
-#                         OR s.id = %(site_id)s::bigint
-#                   )
-#                   AND (
-#                         %(floor_id)s IS NULL
-#                         OR EXISTS (
-#                             SELECT 1
-#                             FROM floors AS f
-#                             WHERE f.tenant_id = s.tenant_id
-#                               AND f.site_id = s.id
-#                               AND f.id = %(floor_id)s::bigint
-#                         )
-#                   )
-#             ),
-
-#             scoped_buildings AS (
-#                 SELECT
-#                     b.id,
-#                     b.status
-#                 FROM buildings AS b
-#                 WHERE b.tenant_id = %(tenant_id)s
-#                   AND (
-#                         %(site_id)s IS NULL
-#                         OR b.site_id = %(site_id)s::bigint
-#                   )
-#                   AND (
-#                         %(floor_id)s IS NULL
-#                         OR EXISTS (
-#                             SELECT 1
-#                             FROM floors AS f
-#                             WHERE f.tenant_id = b.tenant_id
-#                               AND f.site_id = b.site_id
-#                               AND f.building_id = b.id
-#                               AND f.id = %(floor_id)s::bigint
-#                         )
-#                   )
-#             ),
-
-#             scoped_floors AS (
-#                 SELECT
-#                     f.id,
-#                     f.status
-#                 FROM floors AS f
-#                 WHERE f.tenant_id = %(tenant_id)s
-#                   AND (
-#                         %(site_id)s IS NULL
-#                         OR f.site_id = %(site_id)s::bigint
-#                   )
-#                   AND (
-#                         %(floor_id)s IS NULL
-#                         OR f.id = %(floor_id)s::bigint
-#                   )
-#             ),
-
-#             scoped_seats AS (
-#                 SELECT
-#                     st.id,
-#                     st.status,
-#                     st.is_bookable
-#                 FROM seats AS st
-#                 WHERE st.tenant_id = %(tenant_id)s
-#                   AND (
-#                         %(site_id)s IS NULL
-#                         OR st.site_id = %(site_id)s::bigint
-#                   )
-#                   AND (
-#                         %(floor_id)s IS NULL
-#                         OR st.floor_id = %(floor_id)s::bigint
-#                   )
-#             ),
-
-#             booked_seats AS (
-#                 SELECT
-#                     b.id,
-#                     b.seat_id,
-#                     b.user_id
-#                 FROM bookings AS b
-#                 WHERE b.tenant_id = %(tenant_id)s
-#                   AND b.booking_date = %(selected_date)s
-#                   AND b.booking_status IN (
-#                         'CONFIRMED',
-#                         'CHECKED_IN'
-#                   )
-#                   AND (
-#                         %(site_id)s IS NULL
-#                         OR b.site_id = %(site_id)s::bigint
-#                   )
-#                   AND (
-#                         %(floor_id)s IS NULL
-#                         OR b.floor_id = %(floor_id)s::bigint
-#                   )
-#             ),
-
-#             blocked_seat_counts AS (
-#                 SELECT COUNT(DISTINCT bs.seat_id) AS blocked_seats
-#                 FROM blocked_seats AS bs
-#                 WHERE bs.tenant_id = %(tenant_id)s
-#                   AND bs.status = 'ACTIVE'
-#                   AND %(selected_date)s BETWEEN bs.blocked_from AND bs.blocked_to
-#                   AND (
-#                         %(site_id)s IS NULL
-#                         OR bs.site_id = %(site_id)s::bigint
-#                   )
-#                   AND (
-#                         %(floor_id)s IS NULL
-#                         OR bs.floor_id = %(floor_id)s::bigint
-#                   )
-#             ),
-
-#             summary_counts AS (
-#                 SELECT
-#                     (
-#                         SELECT COUNT(*)
-#                         FROM scoped_sites
-#                         WHERE status = 'ACTIVE'
-#                     ) AS total_offices,
-
-#                     (
-#                         SELECT COUNT(*)
-#                         FROM scoped_floors
-#                         WHERE status = 'ACTIVE'
-#                     ) AS total_floors,
-
-#                     (
-#                         SELECT COUNT(*)
-#                         FROM scoped_seats
-#                         WHERE status = 'ACTIVE'
-#                           AND is_bookable = TRUE
-#                     ) AS total_seats,
-
-#                     (
-#                         SELECT COUNT(*)
-#                         FROM scoped_sites
-#                         WHERE status = 'ACTIVE'
-#                     ) AS active_sites,
-
-#                     (
-#                         SELECT COUNT(*)
-#                         FROM scoped_sites
-#                         WHERE status = 'INACTIVE'
-#                     ) AS inactive_sites,
-
-#                     (
-#                         SELECT COUNT(*)
-#                         FROM scoped_buildings
-#                         WHERE status = 'ACTIVE'
-#                     ) AS active_buildings,
-
-#                     (
-#                         SELECT COUNT(*)
-#                         FROM scoped_buildings
-#                         WHERE status = 'INACTIVE'
-#                     ) AS inactive_buildings,
-
-#                     (
-#                         SELECT COUNT(*)
-#                         FROM scoped_floors
-#                         WHERE status = 'ACTIVE'
-#                     ) AS active_floors,
-
-#                     (
-#                         SELECT COUNT(*)
-#                         FROM scoped_floors
-#                         WHERE status = 'INACTIVE'
-#                     ) AS inactive_floors,
-
-#                     (
-#                         SELECT COUNT(*)
-#                         FROM scoped_seats
-#                         WHERE status = 'ACTIVE'
-#                     ) AS active_seats,
-
-#                     (
-#                         SELECT COUNT(*)
-#                         FROM scoped_seats
-#                         WHERE status = 'INACTIVE'
-#                     ) AS inactive_seats,
-
-#                     (
-#                         SELECT COUNT(DISTINCT seat_id)
-#                         FROM booked_seats
-#                     ) AS booked_seats_count,
-
-#                     (
-#                         SELECT blocked_seats
-#                         FROM blocked_seat_counts
-#                     ) AS blocked_seats,
-
-#                     (
-#                         SELECT COUNT(*)
-#                         FROM booked_seats
-#                     ) AS total_bookings,
-
-#                     (
-#                         SELECT COUNT(DISTINCT user_id)
-#                         FROM booked_seats
-#                     ) AS unique_users_booked
-#             ),
-
-#             utilization_metrics AS (
-#                 SELECT
-#                     *,
-#                     COALESCE(
-#                         ROUND(
-#                             (
-#                                 booked_seats_count::numeric
-#                                 /
-#                                 NULLIF(total_seats, 0)
-#                             ) * 100,
-#                             1
-#                         ),
-#                         0.0
-#                     ) AS booking_utilization_percentage
-#                 FROM summary_counts
-#             )
-
-#             SELECT
-#                 total_offices,
-#                 total_floors,
-#                 total_seats,
-#                 booked_seats_count AS booked_today,
-#                 booked_seats_count AS booked_seats_today,
-#                 blocked_seats,
-#                 blocked_seats AS blocked_seats_today,
-#                 booking_utilization_percentage AS occupancy_percentage,
-#                 total_bookings,
-#                 unique_users_booked,
-#                 booking_utilization_percentage,
-#                 active_sites,
-#                 inactive_sites,
-#                 active_buildings,
-#                 inactive_buildings,
-#                 active_floors,
-#                 inactive_floors,
-#                 active_seats,
-#                 inactive_seats
-#             FROM utilization_metrics
-#             """,
-#             {
-#                 "tenant_id": tenant_id,
-#                 "selected_date": selected_date,
-#                 "site_id": site_id,
-#                 "floor_id": floor_id,
-#             },
-#         )
-
-#         row = cur.fetchone()
-
-#     return dict(row) if row else {}
-
 def fetch_admin_dashboard_summary(
     conn: PGConnection,
     *,
@@ -475,7 +203,7 @@ def fetch_admin_dashboard_summary(
                 SELECT
                     b.id,
                     b.seat_id,
-                    b.user_id
+                    b.booked_for_user_id
                 FROM bookings AS b
                 WHERE b.tenant_id = %(tenant_id)s
                   AND b.booking_date = %(selected_date)s
@@ -597,7 +325,7 @@ def fetch_admin_dashboard_summary(
                     ) AS total_bookings,
 
                     (
-                        SELECT COUNT(DISTINCT user_id)
+                        SELECT COUNT(DISTINCT booked_for_user_id)
                         FROM booked_seats
                     ) AS unique_users_booked
             ),
@@ -686,7 +414,7 @@ def fetch_admin_booking_list(
     from_and_where = """
         FROM bookings AS b
         INNER JOIN app_users AS u
-            ON u.id = b.user_id
+            ON u.id = b.booked_by_user_id
            AND u.tenant_id = b.tenant_id
         LEFT JOIN app_users AS bfu
             ON bfu.id = b.booked_for_user_id
