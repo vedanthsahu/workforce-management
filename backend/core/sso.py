@@ -103,30 +103,16 @@ def build_auth_url() -> tuple[str, str]:
 
 
 def exchange_code_for_token(code: str) -> dict[str, str]:
-    """Exchange a Microsoft authorization code for tokens.
-
-    Args:
-        code: Authorization code returned by Microsoft after user consent.
-
-    Returns:
-        dict[str, str]: Mapping containing the ``access_token`` and
-        ``id_token`` issued by Microsoft.
-
-    Side Effects:
-        Performs an outbound HTTP POST to the Microsoft token endpoint.
-
-    Failure Modes:
-        Raises ``SSOError`` when the code is missing, the provider is
-        unreachable, the response is unsuccessful, or required tokens are
-        absent from the provider payload.
-    """
     settings = get_settings()
+
     if not code:
         raise SSOError(
             status_code=400,
             code="missing_authorization_code",
             message="Microsoft callback did not include an authorization code.",
         )
+
+    print("TOKEN URL:", settings.token_url)
 
     try:
         response = requests.post(
@@ -139,17 +125,28 @@ def exchange_code_for_token(code: str) -> dict[str, str]:
                 "grant_type": "authorization_code",
                 "scope": " ".join(MICROSOFT_SCOPES),
             },
-            timeout=10,
+            timeout=20,
         )
-    except requests.RequestException as exc:
-        raise SSOError(
-            status_code=502,
-            code="token_exchange_unavailable",
-            message="Failed to reach Microsoft token endpoint.",
-        ) from exc
+
+        print("TOKEN STATUS:", response.status_code)
+
+    except Exception as exc:
+        import traceback
+
+        print("TOKEN EXCEPTION TYPE:", type(exc).__name__)
+        print("TOKEN EXCEPTION:", repr(exc))
+
+        traceback.print_exc()
+
+        raise
 
     payload = _safe_json(response)
+
+    print("TOKEN PAYLOAD KEYS:", list(payload.keys()))
+
     if response.status_code != 200:
+        print("TOKEN ERROR PAYLOAD:", payload)
+
         raise SSOError(
             status_code=400,
             code="token_exchange_failed",
@@ -159,6 +156,7 @@ def exchange_code_for_token(code: str) -> dict[str, str]:
 
     access_token = payload.get("access_token")
     id_token = payload.get("id_token")
+
     if not access_token:
         raise SSOError(
             status_code=400,
@@ -166,6 +164,7 @@ def exchange_code_for_token(code: str) -> dict[str, str]:
             message="Microsoft token response did not include an access_token.",
             details=_provider_error_details(payload),
         )
+
     if not id_token:
         raise SSOError(
             status_code=400,
@@ -178,7 +177,6 @@ def exchange_code_for_token(code: str) -> dict[str, str]:
         "access_token": str(access_token),
         "id_token": str(id_token),
     }
-
 
 def verify_id_token(id_token: str) -> dict[str, Any]:
     """Validate a Microsoft ID token against tenant signing keys.
@@ -309,38 +307,35 @@ def fetch_graph_manager(access_token: str) -> dict[str, Any]:
     return _graph_get(access_token, "/me/manager")
 
 
-def _fetch_jwks() -> dict[str, Any]:
-    """Fetch the tenant JWKS document used to verify Microsoft ID tokens.
-
-    Returns:
-        dict[str, Any]: JWKS payload returned by Microsoft.
-
-    Side Effects:
-        Performs an outbound HTTP GET to the configured JWKS endpoint.
-
-    Failure Modes:
-        Raises ``SSOError`` if the provider is unreachable or the response does
-        not contain at least one signing key.
-    """
+def _fetch_jwks():
     settings = get_settings()
+
+    print("JWKS URL:", settings.jwks_url)
+
     try:
-        response = requests.get(settings.jwks_url, timeout=10)
+        response = requests.get(
+            settings.jwks_url,
+            timeout=20,
+        )
+
+        print("STATUS:", response.status_code)
+
         response.raise_for_status()
-    except requests.RequestException as exc:
-        raise SSOError(
-            status_code=502,
-            code="jwks_fetch_failed",
-            message="Failed to fetch Microsoft signing keys.",
-        ) from exc
+
+    except Exception as exc:
+        import traceback
+
+        print("EXCEPTION TYPE:", type(exc).__name__)
+        print("EXCEPTION:", repr(exc))
+
+        traceback.print_exc()
+
+        raise
 
     payload = _safe_json(response)
-    keys = payload.get("keys")
-    if not isinstance(keys, list) or not keys:
-        raise SSOError(
-            status_code=502,
-            code="invalid_jwks_response",
-            message="Microsoft JWKS response did not contain any signing keys.",
-        )
+
+    print("JWKS KEYS:", len(payload.get("keys", [])))
+
     return payload
 
 
@@ -388,24 +383,9 @@ def _graph_get(
     *,
     params: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Perform an authenticated GET request against Microsoft Graph.
 
-    Args:
-        access_token: Microsoft Graph bearer token.
-        path: Endpoint path relative to the Graph base URL.
-        params: Optional query parameters forwarded to Graph.
+    print(f"GRAPH START {path}")
 
-    Returns:
-        dict[str, Any]: Parsed JSON payload returned by Graph.
-
-    Side Effects:
-        Performs an outbound HTTP GET request.
-
-    Failure Modes:
-        Raises ``GraphAPIError`` for missing access tokens, network failures,
-        permission issues, missing resources, or other unsuccessful provider
-        responses.
-    """
     if not access_token:
         raise GraphAPIError(
             status_code=401,
@@ -418,16 +398,17 @@ def _graph_get(
             f"{MICROSOFT_GRAPH_BASE_URL}{path}",
             headers={"Authorization": f"Bearer {access_token}"},
             params=params,
-            timeout=10,
+            timeout=20,
         )
-    except requests.RequestException as exc:
-        raise GraphAPIError(
-            status_code=502,
-            code="graph_unavailable",
-            message="Failed to reach Microsoft Graph.",
-        ) from exc
+
+        print(f"GRAPH STATUS {path}: {response.status_code}")
+
+    except Exception as exc:
+        print(f"GRAPH EXCEPTION {path}: {type(exc).__name__}: {exc}")
+        raise
 
     payload = _safe_json(response)
+
     if response.status_code == 403:
         raise GraphAPIError(
             status_code=403,
@@ -435,6 +416,7 @@ def _graph_get(
             message="The signed-in user or app does not have enough Microsoft Graph permissions.",
             details=_provider_error_details(payload),
         )
+
     if response.status_code == 404:
         raise GraphAPIError(
             status_code=404,
@@ -442,6 +424,7 @@ def _graph_get(
             message="The requested Microsoft Graph resource was not found.",
             details=_provider_error_details(payload),
         )
+
     if response.status_code >= 400:
         raise GraphAPIError(
             status_code=502 if response.status_code >= 500 else response.status_code,
@@ -449,6 +432,8 @@ def _graph_get(
             message="Microsoft Graph request failed.",
             details=_provider_error_details(payload),
         )
+
+    print(f"GRAPH OK {path}")
 
     return payload
 
