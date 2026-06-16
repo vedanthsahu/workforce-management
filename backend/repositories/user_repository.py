@@ -753,7 +753,8 @@ def fetch_favorite_seat(
                 ON s.id = b.seat_id
                 AND s.tenant_id = b.tenant_id
             WHERE b.tenant_id = %s
-              AND b.user_id = %s
+              AND b.booked_for_user_id = %s
+              AND b.booking_type = 'EMPLOYEE'
               AND b.booking_status = 'CONFIRMED'
             GROUP BY s.id, s.seat_code
             ORDER BY booking_count DESC, s.id
@@ -777,7 +778,8 @@ def fetch_days_in_office(
             SELECT COUNT(DISTINCT booking_date)
             FROM bookings
             WHERE tenant_id = %s
-              AND user_id = %s
+              AND booked_for_user_id = %s
+              AND booking_type = 'EMPLOYEE'
               AND booking_status = 'CONFIRMED'
               AND booking_date <= CURRENT_DATE
             """,
@@ -797,7 +799,8 @@ def fetch_days_in_office_current_month(
             SELECT COUNT(DISTINCT booking_date)
             FROM bookings
             WHERE tenant_id = %s
-              AND user_id = %s
+              AND booked_for_user_id = %s
+              AND booking_type = 'EMPLOYEE'
               AND booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
               AND booking_date <= CURRENT_DATE
               AND DATE_TRUNC('month', booking_date)
@@ -821,7 +824,8 @@ def fetch_days_in_office_current_year(
             SELECT COUNT(DISTINCT booking_date)
             FROM bookings
             WHERE tenant_id = %s
-              AND user_id = %s
+              AND booked_for_user_id = %s
+              AND booking_type = 'EMPLOYEE'
               AND booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
               AND booking_date <= CURRENT_DATE
               AND DATE_TRUNC('year', booking_date)
@@ -855,8 +859,9 @@ def fetch_team_rank_current_year(
                 FROM team_members tm
                 CROSS JOIN primary_team pt
                 LEFT JOIN bookings b
-                    ON b.user_id = tm.user_id
+                    ON b.booked_for_user_id = tm.user_id
                    AND b.tenant_id = tm.tenant_id
+                   AND b.booking_type = 'EMPLOYEE'
                    AND b.booking_status IN (
                         'CONFIRMED',
                         'CHECKED_IN',
@@ -907,3 +912,42 @@ def fetch_team_rank_current_year(
         "team_rank_current_year": int(row["team_rank"]),
         "team_member_count": int(row["team_member_count"]),
     }
+
+def search_users(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    search_text: str,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    pattern = f"%{search_text.strip()}%"
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {USER_SELECT_FIELDS}
+            {USER_SELECT_FROM}
+            WHERE au.tenant_id = %s
+              AND au.status = 'ACTIVE'
+              AND (
+                    au.full_name ILIKE %s
+                 OR au.email ILIKE %s
+                 OR au.employee_id ILIKE %s
+              )
+            ORDER BY
+                au.full_name,
+                au.id
+            LIMIT %s
+            """,
+            (
+                tenant_id,
+                pattern,
+                pattern,
+                pattern,
+                limit,
+            ),
+        )
+
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]

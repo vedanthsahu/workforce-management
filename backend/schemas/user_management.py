@@ -24,3 +24,16 @@ class AdminUserAccessUpdateRequest(BaseModel):
         "ACTIVE",
         "INACTIVE",
     ] | None = None
+
+class UserSearchResponse(BaseModel):
+    user_id: str
+    tenant_id: str
+
+    full_name: str
+    email: str
+
+    role_name: str
+    status: str
+
+    employee_id: str | None = None
+    department: str | None = None
