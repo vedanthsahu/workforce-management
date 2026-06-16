@@ -13,6 +13,7 @@ from backend.repositories.user_repository import (
     admin_update_user_access,
     fetch_user_by_id,
     update_user_profile,
+    search_users,
 )
 from backend.schemas.auth import UserResponse
 
@@ -121,3 +122,18 @@ def admin_update_user_access_service(
     conn.commit()
 
     return UserResponse(**updated_user)
+
+def search_user_profiles(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    search_text: str,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+
+    return search_users(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        search_text=search_text,
+        limit=limit,
+    )
