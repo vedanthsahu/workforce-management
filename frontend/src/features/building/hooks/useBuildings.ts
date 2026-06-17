@@ -119,5 +119,6 @@ export const useBuildings = () => {
 
     fetchBuildings,
     fetchSites,
+    fetchStats,
   };
 };

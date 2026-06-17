@@ -69,12 +69,10 @@ export const useFloorForm = () => {
         })
       );
 
-      toast.success("Floor created successfully");
 
       return createdFloor.floor_id;
     } catch (error) {
       console.error(error);
-      toast.error("Failed to create floor");
 
       return null;
     } finally {
