@@ -12,6 +12,17 @@ from fastapi import BackgroundTasks, HTTPException, status
 from psycopg2 import errorcodes
 from psycopg2.extensions import connection as PGConnection
 
+from backend.repositories.guest_visit_repository import (
+    fetch_guest_visits,
+    check_in_guest_visit,
+    check_out_guest_visit,
+)
+
+from backend.schemas.guest import (
+    GuestVisitListItem,
+    GuestVisitListResponse,
+    GuestVisitStatusUpdateResponse,
+)
 from backend.core.logging import LOGGER_NAME
 from backend.repositories.booking_repository import (
     cancel_booking,
@@ -991,3 +1002,119 @@ def _queue_guest_booking_modified(
             "notification.queue_failed event=guest_booking_modified booking_id=%s",
             new_booking.get("booking_id"),
         )
+
+def list_guest_visits(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    visit_scope: str,
+    site_id: str | None = None,
+    visit_status: str | None = None,
+    requires_seat: bool | None = None,
+    search: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> GuestVisitListResponse:
+
+    tenant_id = str(current_user["tenant_id"])
+
+    role = (
+        current_user.get("role_name")
+        or current_user.get("role")
+        or ""
+    ).upper()
+
+    if role == "SECURITY":
+
+        home_site_id = current_user.get("home_site_id")
+
+        if not home_site_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Security user does not have a home site configured.",
+            )
+
+        site_id = str(home_site_id)
+
+        if visit_scope != "CURRENT":
+            raise HTTPException(
+                status_code=403,
+                detail="Security can only access current visits.",
+            )
+
+    rows = fetch_guest_visits(
+        conn,
+        tenant_id=tenant_id,
+        visit_scope=visit_scope,
+        site_id=site_id,
+        visit_status=visit_status,
+        requires_seat=requires_seat,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+
+    return GuestVisitListResponse(
+        items=[
+            GuestVisitListItem(**row)
+            for row in rows
+        ]
+    )
+
+def guest_visit_check_in(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    guest_visit_id: str,
+) -> GuestVisitStatusUpdateResponse:
+
+    tenant_id = str(current_user["tenant_id"])
+
+    try:
+
+        check_in_guest_visit(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        )
+
+        conn.commit()
+
+        return GuestVisitStatusUpdateResponse(
+            guest_visit_id=guest_visit_id,
+            visit_status="CHECKED_IN",
+        )
+
+    except Exception:
+        conn.rollback()
+        raise
+
+def guest_visit_check_out(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    guest_visit_id: str,
+) -> GuestVisitStatusUpdateResponse:
+
+    tenant_id = str(current_user["tenant_id"])
+
+    try:
+
+        check_out_guest_visit(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        )
+
+        conn.commit()
+
+        return GuestVisitStatusUpdateResponse(
+            guest_visit_id=guest_visit_id,
+            visit_status="CHECKED_OUT",
+        )
+
+    except Exception:
+        conn.rollback()
+        raise
+
+
