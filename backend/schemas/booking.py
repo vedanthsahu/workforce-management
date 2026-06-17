@@ -4,13 +4,19 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from typing import Literal
+from datetime import date, datetime, time
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from backend.core.enums import (
     DayAvailabilityStatus,
     GuestType,
+    DayAvailabilityStatus,
+    GuestType,
     PreferenceMatchStatus,
+    RangeAvailabilityStatus,
+    VisitPurpose,
     RangeAvailabilityStatus,
     VisitPurpose,
 )
@@ -18,17 +24,21 @@ from backend.core.enums import (
 
 class CreateBookingRequest(BaseModel):
     """Request body for creating one employee seat booking."""
+    """Request body for creating one employee seat booking."""
 
     site_id: int = Field(gt=0)
     building_id: int = Field(gt=0)
     floor_id: int = Field(gt=0)
     seat_id: int = Field(gt=0)
     booked_for_user_id: int | None = Field(default=None, gt=0)
+    booked_for_user_id: int | None = Field(default=None, gt=0)
     booking_date: date
+
 
 
 class CancelBookingRequest(BaseModel):
     cancellation_reason: str | None = None
+
 
 
 class ModifyBookingRequest(BaseModel):
@@ -37,14 +47,22 @@ class ModifyBookingRequest(BaseModel):
     floor_id: int = Field(gt=0)
     seat_id: int = Field(gt=0)
     booking_date: date
+    booking_date: date
+
 
 
 class BookingResponse(BaseModel):
+    """Public representation of a schema-native booking."""
     """Public representation of a schema-native booking."""
 
     booking_id: str
     tenant_id: str
     booked_for_user_id: str | None = None
+    booked_for_guest_id: str | None = None
+    booked_by_user_id: str
+    guest_visit_id: str | None = None
+    booking_type: Literal["EMPLOYEE", "GUEST"]
+
     booked_for_guest_id: str | None = None
     booked_by_user_id: str
     guest_visit_id: str | None = None
@@ -124,3 +142,25 @@ class AvailableSeatResponse(BaseModel):
         PreferenceMatchStatus.NOT_APPLICABLE
     )
     availability: SeatAvailabilitySummary
+
+
+class BookingEligibilityRequest(BaseModel):
+    start_date: date
+    end_date: date
+    is_guest_booking: bool = False
+
+    booked_for_user_id: int | None = Field(
+        default=None,
+        gt=0,
+    )
+
+    booked_for_guest_id: int | None = Field(
+        default=None,
+        gt=0,
+    )
+
+    exclude_booking_id: str | None = None
+
+class BookingEligibilityResponse(BaseModel):
+    eligible: bool
+    message: str

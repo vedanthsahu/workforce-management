@@ -1,4 +1,5 @@
 """HTTP routes for authenticated employee booking operations."""
+"""HTTP routes for authenticated employee booking operations."""
 
 from __future__ import annotations
 
@@ -9,7 +10,21 @@ from fastapi import (
     BackgroundTasks,
     Depends,
 )
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+)
 from psycopg2.extensions import connection as PGConnection
+
+from backend.schemas.booking import (
+BookingEligibilityRequest,
+BookingEligibilityResponse,
+)
+
+from backend.services.booking_service import (
+check_booking_eligibility,
+)
 
 from backend.api.deps import get_current_user
 from backend.db.connection import get_db
@@ -111,4 +126,24 @@ def modify_booking_route(
         booking_id=booking_id,
         payload=payload,
         background_tasks=background_tasks,
+    )
+
+@router.post("/eligibility",response_model=BookingEligibilityResponse,)
+def booking_eligibility(
+    payload: BookingEligibilityRequest,
+    current_user: Annotated[
+    dict[str, Any],
+    Depends(get_current_user),
+    ],
+    conn: Annotated[
+    PGConnection,
+    Depends(get_db),
+    ],
+    ) -> BookingEligibilityResponse:
+
+    return check_booking_eligibility(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        current_user=current_user,
+        payload=payload,
     )
