@@ -4,7 +4,6 @@ import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Plus, CheckCircle2, XCircle, X } from "lucide-react";
-
 import BuildingCards from "@/features/building/components/BuildingCards";
 import BuildingFilters from "@/features/building/components/BuildingFilters";
 import BuildingTable from "@/features/building/components/buildingTable";
@@ -18,7 +17,7 @@ type BannerState = { type: "success" | "error"; message: string } | null;
 function BuildingsPage() {
   const {
     buildings, sites, stats, loading, error,
-    search, setSearch, selectedSiteId, setSelectedSiteId, fetchBuildings,
+    search, setSearch, selectedSiteId, setSelectedSiteId, fetchBuildings, fetchStats,
   } = useBuildings();
 
   const searchParams = useSearchParams();
@@ -55,8 +54,8 @@ function BuildingsPage() {
     setOpenModal(true);
   };
 
-  const handleEditSuccess = async (updatedBuildingId?: string) => {
-    await fetchBuildings(selectedSiteId);
+const handleEditSuccess = async (updatedBuildingId?: string) => {
+    await Promise.all([fetchBuildings(selectedSiteId), fetchStats()]);
     showBannerWithHighlight("Building updated successfully.", updatedBuildingId);
   };
 
