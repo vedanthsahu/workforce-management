@@ -124,3 +124,25 @@ class AvailableSeatResponse(BaseModel):
         PreferenceMatchStatus.NOT_APPLICABLE
     )
     availability: SeatAvailabilitySummary
+
+
+class BookingEligibilityRequest(BaseModel):
+    start_date: date
+    end_date: date
+    is_guest_booking: bool = False
+
+    booked_for_user_id: int | None = Field(
+        default=None,
+        gt=0,
+    )
+
+    booked_for_guest_id: int | None = Field(
+        default=None,
+        gt=0,
+    )
+
+    exclude_booking_id: str | None = None
+
+class BookingEligibilityResponse(BaseModel):
+    eligible: bool
+    message: str
