@@ -1,9 +1,12 @@
+
 "use client";
 
-import { SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { BookOpen, Menu } from "lucide-react";
 
 function SidebarSkeleton() {
   return (
@@ -34,8 +37,8 @@ export default function MainLayout({
   children: React.ReactNode;
 }) {
   const { user, isLoading } = useAuthContext();
+  const isMobile = useIsMobile();
 
-  // Logged out (e.g. mid-logout) — about to redirect to /login, render nothing.
   if (!isLoading && user === null) return null;
 
   const showSidebarSkeleton = isLoading || user === undefined;
@@ -44,10 +47,64 @@ export default function MainLayout({
     <SidebarProvider>
       <div className="flex h-screen w-full overflow-hidden">
         {showSidebarSkeleton ? <SidebarSkeleton /> : <AppSidebar user={user} />}
+
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+
+          {/* Mobile top bar — rendered via JS hook, no CSS breakpoints */}
+          {isMobile && (
+            <header
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                height: "56px",
+                padding: "0 16px",
+                borderBottom: "1px solid #e5e7eb",
+                background: "#ffffff",
+                flexShrink: 0,
+                zIndex: 50,
+              }}
+            >
+              <SidebarTrigger
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "8px",
+                  border: "1px solid #e5e7eb",
+                  background: "#f9fafb",
+                  cursor: "pointer",
+                  color: "#111827",
+                }}
+              />
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div
+                  style={{
+                    width: "24px",
+                    height: "24px",
+                    borderRadius: "6px",
+                    background: "#4f46e5",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <BookOpen style={{ width: "12px", height: "12px", color: "#fff" }} />
+                </div>
+                <span style={{ fontSize: "13px", fontWeight: 600, letterSpacing: "-0.01em" }}>
+                  SeatBook
+                </span>
+              </div>
+            </header>
+          )}
+
           {children}
         </div>
       </div>
     </SidebarProvider>
   );
 }
+ 

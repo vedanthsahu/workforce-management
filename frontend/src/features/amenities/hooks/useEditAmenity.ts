@@ -66,7 +66,6 @@ export const useEditAmenity = (
       return true;
     } catch (error) {
       console.error(error);
-      toast.error("Failed to update amenity");
       return false;
     } finally {
       setLoading(false);

@@ -1,8 +1,8 @@
 "use client";
-
+ 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+ 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,13 +18,13 @@ import { UploadCloud, FileCheck2, X } from "lucide-react";
 import { layoutService } from "../services/layout.service";
 import SVGPreviewModal from "./Svgpreviewmodal";
 import { Building, Floor, FloorLayoutInfo, LayoutFormState, Site } from "../types/layout.types";
-
+ 
 interface LayoutFormProps {
   formData: LayoutFormState;
   setFormData: (data: LayoutFormState | ((prev: LayoutFormState) => LayoutFormState)) => void;
   onFloorLayoutInfo?: (info: FloorLayoutInfo | null) => void;
 }
-
+ 
 function extractSeatIds(svgText: string): string[] {
   const ids: string[] = [];
   const regex = /<g\s+id="([^"]+)"/g;
@@ -34,33 +34,35 @@ function extractSeatIds(svgText: string): string[] {
   }
   return ids;
 }
-
+ 
 export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }: LayoutFormProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
-
+ 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sites, setSites] = useState<Site[]>([]);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [floors, setFloors] = useState<Floor[]>([]);
-
+ 
   const [seatIds, setSeatIds] = useState<string[]>([]);
   const [countingSeats, setCountingSeats] = useState(false);
   const [svgPreview, setSvgPreview] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+ 
   const resetForm = () => {
     setFormData({ site: null, building: null, floor: null, layoutName: "", file: null });
     setSeatIds([]);
     setSvgPreview(null);
     setShowPreview(false);
   };
-
+ 
   // Load sites on mount
   useEffect(() => {
     layoutService.getSites().then(setSites);
   }, []);
-
+ 
   // Resolve site name once sites list arrives (pre-seed case)
   useEffect(() => {
     if (!sites.length || !formData.site || formData.site.name) return;
@@ -73,7 +75,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       }));
     }
   }, [sites]);
-
+ 
   // Load buildings whenever selected site changes
   useEffect(() => {
     if (!formData.site) {
@@ -83,7 +85,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
     }
     layoutService.getBuildings(formData.site.id).then(setBuildings);
   }, [formData.site?.id]);
-
+ 
   // Resolve building name once buildings list arrives (pre-seed case)
   useEffect(() => {
     if (!buildings.length || !formData.building || formData.building.name) return;
@@ -96,7 +98,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       }));
     }
   }, [buildings]);
-
+ 
   // Load floors whenever selected building changes
   useEffect(() => {
     if (!formData.building) {
@@ -105,7 +107,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
     }
     layoutService.getFloors(formData.building.id).then(setFloors);
   }, [formData.building?.id]);
-
+ 
   // Resolve floor name once floors list arrives (pre-seed case)
   useEffect(() => {
     if (!floors.length || !formData.floor || formData.floor.name) return;
@@ -122,7 +124,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       }));
     }
   }, [floors]);
-
+ 
   // Auto-generate layout name once site, building and floor codes are known
   useEffect(() => {
     const generate = async () => {
@@ -136,10 +138,10 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       ) {
         return;
       }
-
+ 
       try {
         const layouts = await layoutService.getLayoutsByFloor(formData.floor.id);
-
+ 
         let nextVersion = 1;
         if (Array.isArray(layouts) && layouts.length > 0) {
           const versions = layouts.map((l: { version_no?: number; layout_version_no?: number }) =>
@@ -147,35 +149,39 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
           );
           nextVersion = Math.max(...versions) + 1;
         }
-
+ 
         const sitePart = formData.site.code.split("-")[0];
         const buildingPart = formData.building.code.split("-").pop();
         const floorPart = formData.floor.code.split("-").pop();
         const layoutName = `${sitePart}-${buildingPart}-${floorPart}-v${nextVersion}`;
-
+ 
         setFormData((prev) => ({ ...prev, layoutName }));
       } catch (err) {
         console.error("Failed to generate layout name", err);
       }
     };
-
+ 
     generate();
   }, [formData.site?.id, formData.building?.id, formData.floor?.id]);
-
+ 
+  const noSeatsDetected = !!formData.file && !countingSeats && seatIds.length === 0;
+ 
   const isFormValid =
     !!formData.site &&
     !!formData.building &&
     !!formData.floor &&
     !!formData.file &&
-    !!formData.layoutName.trim();
-
+    !!formData.layoutName.trim() &&
+    !noSeatsDetected;
+ 
   const handleFileChange = async (file: File) => {
+    setFileError(null);
     if (file.type !== "image/svg+xml") {
-      toast.error("Only SVG files are allowed");
+      setFileError("Only SVG files are allowed.");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
-      toast.error("Maximum file size is 10 MB");
+      setFileError("Maximum file size is 10 MB.");
       return;
     }
     setFormData((prev) => ({ ...prev, file }));
@@ -185,7 +191,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
     try {
       const text = await file.text();
       setSeatIds(extractSeatIds(text));
-
+ 
       // Make SVG fluid and store for preview
       const fluid = text
         .replace(/\bwidth="[^"]*"/, 'width="100%"')
@@ -197,20 +203,21 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       setCountingSeats(false);
     }
   };
-
+ 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     if (file) handleFileChange(file);
   };
-
+ 
   const handleDragOver = (e: React.DragEvent) => e.preventDefault();
-
+ 
   const handleSubmit = async () => {
     if (!formData.site || !formData.building || !formData.floor || !formData.file || !formData.layoutName.trim()) {
       return;
     }
-
+ 
+    setSubmitError(null);
     setIsSubmitting(true);
     try {
       const res = await layoutService.createLayout({
@@ -222,16 +229,14 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
         status: "DRAFT",
         seat_ids: seatIds,
       });
-
-      toast.success("Layout saved successfully");
-
+ 
       const layoutId = res?.layout_id || res?.id || res?.data?.layout_id;
       if (!layoutId) {
         console.error("layout_id not returned from createLayout response", res);
         resetForm();
         return;
       }
-
+ 
       const params = new URLSearchParams({
         layoutId: String(layoutId),
         floorId: String(formData.floor.id),
@@ -241,19 +246,19 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       router.push(`/admin/layouts/manage-layout?${params.toString()}`);
     } catch (err: any) {
       console.error("[LayoutForm] Upload error:", err?.response?.data || err.message);
-      toast.error(err?.response?.data?.message || "Failed to save layout");
+      setSubmitError(err?.response?.data?.message || "Failed to save layout. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
-
+ 
   return (
     <>
       <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle className="text-sm font-semibold">Layout Information</CardTitle>
         </CardHeader>
-
+ 
         <CardContent className="space-y-6">
           {/* ROW 1 — Site / Building */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -290,7 +295,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                 </SelectContent>
               </Select>
             </div>
-
+ 
             <div className="space-y-1.5">
               <Label>
                 Building <span className="text-red-500">*</span>
@@ -328,7 +333,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
               </Select>
             </div>
           </div>
-
+ 
           {/* ROW 2 — Floor / Layout Name */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -375,7 +380,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                 </SelectContent>
               </Select>
             </div>
-
+ 
             <div className="space-y-1.5">
               <Label>
                 Layout Name <span className="text-red-500">*</span>
@@ -387,13 +392,13 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
               />
             </div>
           </div>
-
+ 
           {/* FILE UPLOAD */}
           <div className="space-y-1.5">
             <Label>
               Upload SVG File <span className="text-red-500">*</span>
             </Label>
-
+ 
             <div
               onDrop={handleDrop}
               onDragOver={handleDragOver}
@@ -427,7 +432,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                       <X size={15} />
                     </button>
                   </div>
-
+ 
                   <div className="flex items-center gap-1.5 text-xs">
                     {countingSeats ? (
                       <span className="flex items-center gap-1.5 text-gray-400">
@@ -438,11 +443,18 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                       <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full font-medium">
                         {seatIds.length} seat{seatIds.length !== 1 ? "s" : ""} detected
                       </span>
-                    ) : null}
+                    ) : (
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 bg-red-50 text-red-600 border border-red-200 rounded-full text-xs font-medium">
+                        <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                        No seats detected
+                      </span>
+                    )}
                   </div>
-
+ 
                   <div className="flex items-center gap-2 mt-1">
-
+ 
                     {svgPreview && (
                       <Button
                         type="button"
@@ -492,7 +504,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                 </>
               )}
             </div>
-
+ 
             <input
               type="file"
               accept=".svg"
@@ -502,8 +514,17 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                 if (e.target.files?.[0]) handleFileChange(e.target.files[0]);
               }}
             />
+ 
+            {fileError && (
+              <p className="flex items-center gap-1.5 text-xs text-red-600 mt-1">
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                {fileError}
+              </p>
+            )}
           </div>
-
+ 
           {/* DESCRIPTION */}
           <div className="space-y-1.5">
             <Label>
@@ -522,8 +543,16 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
               {(formData.description || "").length} / 500
             </div>
           </div>
-
+ 
           {/* BUTTONS */}
+          {submitError && (
+            <p className="flex items-center gap-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              {submitError}
+            </p>
+          )}
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" onClick={handleSubmit} disabled={isSubmitting || !isFormValid}>
               {isSubmitting ? "Saving…" : "Save as Draft"}
@@ -531,7 +560,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
           </div>
         </CardContent>
       </Card>
-
+ 
       {/* SVG PREVIEW MODAL (uploaded file) */}
       {showPreview && svgPreview && (
         <SVGPreviewModal

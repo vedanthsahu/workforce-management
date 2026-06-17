@@ -29,7 +29,7 @@ def get_db_connection() -> Iterator[PGConnection]:
         Propagates connection errors raised by ``psycopg2.connect``.
     """
     settings = get_settings()
-    conn = psycopg2.connect(**settings.db_config)
+    conn = psycopg2.connect(**settings.db_config, application_name="seat-management-api")
     try:
         yield conn
     finally:
