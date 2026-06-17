@@ -2,49 +2,42 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import {
-  BookingFormState,
   BookingType,
+  Building,
   Employee,
+  Floor,
   Guest,
   SeatRequired,
+  Site,
   VisitDetails,
 } from "../types/booking";
-import { createGuest, MOCK_GUESTS, searchEmployees } from "../services/bookingService";
-
-// ─── Initial state ────────────────────────────────────────────────────────────
-
-const initialVisitDetails: VisitDetails = {
-  guestType: "Interview Candidate",
-  purposeOfVisit: "Interview",
-  hostEmployee: null,
-  visitDate: "",
-  endDate: "",
-  startTime: "",
-  endTime: "",
-  additionalNotes: "",
-};
-
-const initialFormState: BookingFormState = {
-  step: 1,
-  bookingType: "internal",
-  selectedEmployee: null,
-  guests: MOCK_GUESTS,
-  selectedGuest: null,
-  visitDetails: initialVisitDetails,
-  seatRequired: null,
-};
+import { CreateGuestInput } from "../types/booking";
+import {
+  createGuest,
+  createGuestVisit,
+  fetchBuildings,
+  fetchFloors,
+  fetchSites,
+  searchGuests,
+  searchUsers,
+} from "../services/booking.service";
+import {
+  initialBookForSomeoneFormState,
+  useBookForSomeoneStore,
+} from "@/store/useBookForSomeoneStore";
 
 // ─── useBookingForm ───────────────────────────────────────────────────────────
 
 export function useBookingForm() {
-  const [formState, setFormState] = useState<BookingFormState>(initialFormState);
+  const formState    = useBookForSomeoneStore((s) => s.formState);
+  const setFormState = useBookForSomeoneStore((s) => s.setFormState);
+  const resetFormState = useBookForSomeoneStore((s) => s.resetFormState);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const setBookingType = useCallback((type: BookingType) => {
-    setFormState((prev) => ({
-      ...initialFormState,
-      guests: prev.guests,
-      bookingType: type,
-    }));
+    setFormState(() => ({ ...initialBookForSomeoneFormState, bookingType: type }));
   }, []);
 
   const setSelectedEmployee = useCallback((employee: Employee | null) => {
@@ -55,13 +48,10 @@ export function useBookingForm() {
     setFormState((prev) => ({ ...prev, selectedGuest: guest }));
   }, []);
 
-  const addGuest = useCallback((data: Omit<Guest, "id">) => {
-    const guest = createGuest(data);
-    setFormState((prev) => ({
-      ...prev,
-      guests: [guest, ...prev.guests],
-      selectedGuest: guest,
-    }));
+  const createAndSelectGuest = useCallback(async (data: CreateGuestInput) => {
+    const guest = await createGuest(data);
+    setFormState((prev) => ({ ...prev, selectedGuest: guest }));
+    return guest;
   }, []);
 
   const updateVisitDetails = useCallback((updates: Partial<VisitDetails>) => {
@@ -94,25 +84,61 @@ export function useBookingForm() {
   }, []);
 
   const handleCancel = useCallback(() => {
-    setFormState((prev) => ({ ...initialFormState, guests: prev.guests, bookingType: prev.bookingType }));
+    setFormState((prev) => ({ ...initialBookForSomeoneFormState, bookingType: prev.bookingType }));
+    setSubmitError(null);
   }, []);
 
   const resetWizard = useCallback(() => {
-    setFormState((prev) => ({ ...initialFormState, guests: prev.guests }));
-  }, []);
+    resetFormState();
+    setSubmitError(null);
+  }, [resetFormState]);
+
+  const submitGuestVisit = useCallback(async () => {
+    const { selectedGuest, visitDetails } = formState;
+    if (!selectedGuest || !visitDetails.hostEmployee || !visitDetails.siteId || !visitDetails.buildingId) {
+      setSubmitError("Please complete all required visit details.");
+      return false;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      await createGuestVisit({
+        guestId: selectedGuest.id,
+        hostUserId: visitDetails.hostEmployee.id,
+        siteId: visitDetails.siteId,
+        buildingId: visitDetails.buildingId,
+        visitDate: visitDetails.visitDate,
+        guestType: visitDetails.guestType,
+        purposeOfVisit: visitDetails.purposeOfVisit,
+        startTime: visitDetails.startTime ? `${visitDetails.startTime}:00` : null,
+        endTime: visitDetails.endTime ? `${visitDetails.endTime}:00` : null,
+        notes: visitDetails.additionalNotes || null,
+      });
+      return true;
+    } catch {
+      setSubmitError("Failed to send the invite. Please try again.");
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [formState]);
 
   return {
     formState,
+    isSubmitting,
+    submitError,
     setBookingType,
     setSelectedEmployee,
     selectGuest,
-    addGuest,
+    createAndSelectGuest,
     updateVisitDetails,
     setSeatRequired,
     goNext,
     goBack,
     handleCancel,
     resetWizard,
+    submitGuestVisit,
   };
 }
 
@@ -122,10 +148,24 @@ export function useEmployeeSearch(onSelect: (emp: Employee) => void) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Employee[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setResults(searchEmployees(query));
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setResults([]);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    const timer = setTimeout(() => {
+      searchUsers(trimmed)
+        .then(setResults)
+        .catch(() => setResults([]))
+        .finally(() => setIsLoading(false));
+    }, 300);
+    return () => clearTimeout(timer);
   }, [query]);
 
   useEffect(() => {
@@ -161,10 +201,84 @@ export function useEmployeeSearch(onSelect: (emp: Employee) => void) {
     query,
     results,
     isOpen,
+    isLoading,
     containerRef,
     handleQueryChange,
     handleSelect,
     handleClear,
     openDropdown: () => setIsOpen(true),
   };
+}
+
+// ─── useGuestSearch ───────────────────────────────────────────────────────────
+
+export function useGuestSearch() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Guest[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setResults([]);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    const timer = setTimeout(() => {
+      searchGuests(trimmed)
+        .then(setResults)
+        .catch(() => setResults([]))
+        .finally(() => setIsLoading(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  return { query, setQuery, results, isLoading };
+}
+
+// ─── useSiteBuildingOptions ───────────────────────────────────────────────────
+
+export function useSiteBuildingOptions(siteId: string, buildingId: string) {
+  const [sites, setSites] = useState<Site[]>([]);
+  const [buildings, setBuildings] = useState<Building[]>([]);
+  const [floors, setFloors] = useState<Floor[]>([]);
+  const [isLoadingSites, setIsLoadingSites] = useState(false);
+  const [isLoadingBuildings, setIsLoadingBuildings] = useState(false);
+  const [isLoadingFloors, setIsLoadingFloors] = useState(false);
+
+  useEffect(() => {
+    setIsLoadingSites(true);
+    fetchSites()
+      .then(setSites)
+      .catch(() => setSites([]))
+      .finally(() => setIsLoadingSites(false));
+  }, []);
+
+  useEffect(() => {
+    if (!siteId) {
+      setBuildings([]);
+      setFloors([]);
+      return;
+    }
+    setIsLoadingBuildings(true);
+    fetchBuildings(siteId)
+      .then(setBuildings)
+      .catch(() => setBuildings([]))
+      .finally(() => setIsLoadingBuildings(false));
+  }, [siteId]);
+
+  useEffect(() => {
+    if (!buildingId) {
+      setFloors([]);
+      return;
+    }
+    setIsLoadingFloors(true);
+    fetchFloors(buildingId)
+      .then(setFloors)
+      .catch(() => setFloors([]))
+      .finally(() => setIsLoadingFloors(false));
+  }, [buildingId]);
+
+  return { sites, buildings, floors, isLoadingSites, isLoadingBuildings, isLoadingFloors };
 }

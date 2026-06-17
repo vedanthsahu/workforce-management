@@ -8,21 +8,23 @@ import {
   FieldLabel,
   IconChevronDown,
   IconChevronRight,
+  IconClose,
+  IconEdit,
   IconSearch,
   inputStyle,
 } from "./BookForSomeone";
+import { GUEST_TYPES, PURPOSE_OF_VISIT } from "../constants/booking.constants";
+import { useGuestSearch } from "../hooks/useBooking";
+import { createGuestSchema } from "../schemas/guest.schema";
 import {
-  GUEST_TYPES,
-  MOCK_EMPLOYEES,
-  PURPOSE_OF_VISIT,
-  getGuestName,
-  searchGuests,
-} from "../services/bookingService";
-import {
+  Building,
+  CreateGuestInput,
+  Floor,
   Guest,
   GuestType,
   PurposeOfVisit,
   SeatRequired,
+  Site,
   VisitDetails,
 } from "../types/booking";
 
@@ -112,15 +114,15 @@ function GuestRow({ guest, onClick, selected }: { guest: Guest; onClick?: () => 
       onMouseEnter={(e) => { if (!selected) (e.currentTarget as HTMLElement).style.background = "#f9fafb"; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = selected ? "#eef2ff" : "none"; }}
     >
-      <Avatar name={getGuestName(guest)} />
+      <Avatar name={guest.fullName} />
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-        <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#111827" }}>{getGuestName(guest)}</span>
+        <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#111827" }}>{guest.fullName}</span>
         <span style={{ fontSize: "0.75rem", color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {guest.email}
         </span>
-        <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>
-          {guest.company ? `${guest.company} · ` : ""}{guest.guestType}
-        </span>
+        {/* {guest.organization && (
+          <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>{guest.organization}</span>
+        )} */}
       </span>
       {selected ? (
         <span style={{ color: "#4f46e5", fontWeight: 700, display: "flex" }}>✓</span>
@@ -138,31 +140,29 @@ const EMPTY_GUEST_DRAFT = {
   lastName: "",
   email: "",
   phone: "",
-  company: "",
-  jobTitle: "",
-  guestType: GUEST_TYPES[0] as GuestType,
-  notes: "",
+  organization: "",
 };
 
 interface GuestSelectStepProps {
-  guests: Guest[];
   selectedGuest: Guest | null;
   view: "list" | "create";
   onViewChange: (view: "list" | "create") => void;
-  onSelect: (guest: Guest) => void;
-  onCreate: (data: Omit<Guest, "id">) => void;
+  onSelect: (guest: Guest | null) => void;
+  onCreate: (data: CreateGuestInput) => Promise<Guest>;
 }
 
-export function GuestSelectStep({ guests, selectedGuest, view, onViewChange, onSelect, onCreate }: GuestSelectStepProps) {
-  const [query, setQuery] = useState("");
-  const results = searchGuests(query, guests);
+export function GuestSelectStep({ selectedGuest, view, onViewChange, onSelect, onCreate }: GuestSelectStepProps) {
+  const { query, setQuery, results, isLoading } = useGuestSearch();
+
+  const handleClear = () => { onSelect(null); setQuery(""); };
 
   if (view === "create") {
     return (
       <CreateGuestForm
         onCancel={() => onViewChange("list")}
-        onSave={(data) => {
-          onCreate(data);
+        onSave={async (data) => {
+          const guest = await onCreate(data);
+          onSelect(guest);
           onViewChange("list");
         }}
       />
@@ -173,55 +173,152 @@ export function GuestSelectStep({ guests, selectedGuest, view, onViewChange, onS
     <div>
       <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Visitor / Guest Details</h2>
       <p style={{ fontSize: "0.8125rem", color: "#6b7280", marginTop: 4, marginBottom: "1.25rem" }}>
-        Select a recent guest or create a new one.
+        Select an existing guest or create a new one.
       </p>
 
-      <div style={{ position: "relative", marginBottom: "0.875rem" }}>
-        <span style={{ position: "absolute", left: 11, top: 13, color: "#9ca3af", display: "flex", pointerEvents: "none" }}>
-          <IconSearch />
-        </span>
-        <input
-          type="text"
-          placeholder="Search guests by name, email or company"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          style={{ ...inputStyle(), paddingLeft: 34 }}
-          onFocus={(e) => Object.assign(e.currentTarget.style, { borderColor: "#4f46e5", boxShadow: "0 0 0 3px rgba(79,70,229,0.1)" })}
-          onBlur={(e) => Object.assign(e.currentTarget.style, { borderColor: "#e5e7eb", boxShadow: "none" })}
-        />
+      {/* Search input — shows guest name read-only when selected */}
+      <div style={{ marginBottom: "0.875rem" }}>
+        <label style={{ fontSize: "0.8125rem", fontWeight: 500, color: "#111827", display: "block", marginBottom: 6 }}>
+          Search Guest <span style={{ color: "#dc2626" }}>*</span>
+        </label>
+        <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+          <span style={{ position: "absolute", left: 11, color: "#9ca3af", display: "flex", pointerEvents: "none" }}>
+            <IconSearch />
+          </span>
+          <input
+            type="text"
+            placeholder="Search by name, email or phone number"
+            value={selectedGuest ? selectedGuest.fullName : query}
+            readOnly={!!selectedGuest}
+            onChange={(e) => { if (!selectedGuest) setQuery(e.target.value); }}
+            style={{
+              ...inputStyle(),
+              paddingLeft: 34,
+              paddingRight: selectedGuest ? 34 : 12,
+              cursor: selectedGuest ? "default" : "text",
+            }}
+            onFocusCapture={(e) => { e.currentTarget.style.borderColor = "#4f46e5"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(79,70,229,0.1)"; }}
+            onBlurCapture={(e) => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.boxShadow = "none"; }}
+          />
+          {selectedGuest && (
+            <button
+              type="button"
+              onClick={handleClear}
+              aria-label="Clear selected guest"
+              style={{
+                position: "absolute",
+                right: 10,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 20,
+                height: 20,
+                borderRadius: "50%",
+                background: "none",
+                border: "none",
+                color: "#9ca3af",
+                cursor: "pointer",
+              }}
+            >
+              <IconClose />
+            </button>
+          )}
+        </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => onViewChange("create")}
-        style={{
-          width: "100%",
-          padding: "0.625rem 1rem",
-          marginBottom: "0.875rem",
-          border: "1.5px dashed #c7d2fe",
-          borderRadius: 10,
-          background: "#eef2ff",
-          color: "#4f46e5",
-          fontSize: "0.8125rem",
-          fontWeight: 600,
-          cursor: "pointer",
-          fontFamily: "inherit",
-        }}
-      >
-        + Create New Guest
-      </button>
+      {/* Search results dropdown (only when typing, no guest selected yet) */}
+      {!selectedGuest && query.trim() && (
+        <div style={{ border: "1.5px solid #e5e7eb", borderRadius: 10, maxHeight: 260, overflowY: "auto", marginBottom: "0.875rem" }}>
+          {isLoading && (
+            <p style={{ padding: "1rem", fontSize: "0.8125rem", color: "#9ca3af", textAlign: "center" }}>Searching…</p>
+          )}
+          {!isLoading && results.map((guest, i) => (
+            <div key={guest.id} style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none" }}>
+              <GuestRow
+                guest={guest}
+                selected={false}
+                onClick={() => { onSelect(guest); setQuery(""); }}
+              />
+            </div>
+          ))}
+          {!isLoading && results.length === 0 && (
+            <p style={{ padding: "1rem", fontSize: "0.8125rem", color: "#9ca3af", textAlign: "center" }}>No guests found.</p>
+          )}
+        </div>
+      )}
 
-      <p style={{ fontSize: "0.75rem", fontWeight: 600, color: "#6b7280", marginBottom: 6 }}>Recent Guests</p>
-      <div style={{ border: "1.5px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
-        {results.map((guest, i) => (
-          <div key={guest.id} style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none" }}>
-            <GuestRow guest={guest} selected={selectedGuest?.id === guest.id} onClick={() => onSelect(guest)} />
+      {/* Selected guest detail card — mirrors InternalEmployeeForm */}
+      {selectedGuest && (
+        <div style={{ marginTop: "0.75rem" }}>
+          <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#111827", marginBottom: "0.625rem" }}>
+            Selected Guest
+          </p>
+          <div style={{
+            display: "flex",
+            gap: "1rem",
+            padding: "1rem",
+            background: "#f9fafb",
+            border: "1.5px solid #e5e7eb",
+            borderRadius: 10,
+          }}>
+            <Avatar name={selectedGuest.fullName} size="md" />
+            <dl style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: "2rem", rowGap: "0.375rem", flex: 1 }}>
+              {([
+                ["Name", selectedGuest.fullName],
+                ["Email", selectedGuest.email],
+                ["Phone", selectedGuest.phone || "—"],
+              ] as [string, string][]).map(([label, value]) => (
+                <div key={label} style={{ display: "contents" }}>
+                  <dt style={{ fontSize: "0.8125rem", color: "#6b7280" }}>{label}</dt>
+                  <dd style={{ fontSize: "0.8125rem", fontWeight: 500, color: "#111827" }}>{value}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
-        ))}
-        {results.length === 0 && (
-          <p style={{ padding: "1rem", fontSize: "0.8125rem", color: "#9ca3af", textAlign: "center" }}>No guests found.</p>
-        )}
-      </div>
+          <button
+            type="button"
+            onClick={handleClear}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              marginTop: "0.625rem",
+              fontSize: "0.8125rem",
+              fontWeight: 500,
+              color: "#4f46e5",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "2px 0",
+            }}
+          >
+            <IconEdit /> Change Guest
+          </button>
+        </div>
+      )}
+
+      {/* Create new guest button (only when no guest selected) */}
+      {!selectedGuest && (
+        <button
+          type="button"
+          onClick={() => onViewChange("create")}
+          style={{
+            width: "100%",
+            padding: "0.625rem 1rem",
+            marginTop: query.trim() ? 0 : "0.25rem",
+            border: "1.5px dashed #c7d2fe",
+            borderRadius: 10,
+            background: "#eef2ff",
+            color: "#4f46e5",
+            fontSize: "0.8125rem",
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          + Create New Guest
+        </button>
+      )}
     </div>
   );
 }
@@ -230,40 +327,73 @@ export function GuestSelectStep({ guests, selectedGuest, view, onViewChange, onS
 
 interface CreateGuestFormProps {
   onCancel: () => void;
-  onSave: (data: Omit<Guest, "id">) => void;
+  onSave: (data: CreateGuestInput) => Promise<void>;
 }
 
 function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
   const [form, setForm] = useState(EMPTY_GUEST_DRAFT);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
-  const update = (field: keyof typeof form) => (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
-  ) => {
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+  const validateField = (field: string, value: string) => {
+    const partial = { ...form, [field]: value };
+    const result = createGuestSchema.safeParse(partial);
+    if (result.success) {
+      setErrors((prev) => { const next = { ...prev }; delete next[field]; return next; });
+    } else {
+      const issue = result.error.issues.find((i) => String(i.path[0]) === field);
+      if (issue) {
+        setErrors((prev) => ({ ...prev, [field]: issue.message }));
+      } else {
+        setErrors((prev) => { const next = { ...prev }; delete next[field]; return next; });
+      }
+    }
   };
 
-  const handleSave = () => {
-    const nextErrors: Record<string, string> = {};
-    if (!form.firstName.trim()) nextErrors.firstName = "First name is required";
-    if (!form.lastName.trim()) nextErrors.lastName = "Last name is required";
-    if (!form.email.trim()) nextErrors.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) nextErrors.email = "Enter a valid email address";
-    if (!form.guestType) nextErrors.guestType = "Guest type is required";
+  const handleChange = (field: keyof typeof form) => (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const value = e.target.value;
+    setForm((prev) => ({ ...prev, [field]: value }));
+    if (!touched[field]) setTouched((prev) => ({ ...prev, [field]: true }));
+    validateField(field, value);
+  };
 
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+  const handleBlur = (field: keyof typeof form) => () => {
+    if (touched[field]) validateField(field, form[field]);
+  };
 
-    onSave({
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim(),
-      email: form.email.trim(),
-      phone: form.phone.trim() || undefined,
-      company: form.company.trim() || undefined,
-      jobTitle: form.jobTitle.trim() || undefined,
-      guestType: form.guestType as GuestType,
-      notes: form.notes.trim() || undefined,
-    });
+  const handleSave = async () => {
+    setTouched({ firstName: true, lastName: true, email: true, phone: true, organization: true });
+    const result = createGuestSchema.safeParse(form);
+    if (!result.success) {
+      const fieldErrors: Record<string, string> = {};
+      for (const issue of result.error.issues) {
+        const key = String(issue.path[0]);
+        if (!fieldErrors[key]) fieldErrors[key] = issue.message;
+      }
+      setErrors(fieldErrors);
+      return;
+    }
+
+    setErrors({});
+    setApiError(null);
+    setIsSaving(true);
+    try {
+      const v = result.data;
+      await onSave({
+        fullName: `${v.firstName} ${v.lastName}`.trim(),
+        email: v.email,
+        phone: v.phone || undefined,
+        organization: v.organization || undefined,
+      });
+    } catch {
+      setApiError("Failed to save guest. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -276,81 +406,48 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
         <div>
           <FieldLabel htmlFor="g-firstName" required>First Name</FieldLabel>
-          <input id="g-firstName" type="text" style={inputStyle()} placeholder="First name" value={form.firstName} onChange={update("firstName")} />
+          <input id="g-firstName" type="text" style={inputStyle()} placeholder="First name" value={form.firstName} onChange={handleChange("firstName")} onBlur={handleBlur("firstName")} />
           {errors.firstName && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.firstName}</p>}
         </div>
         <div>
           <FieldLabel htmlFor="g-lastName" required>Last Name</FieldLabel>
-          <input id="g-lastName" type="text" style={inputStyle()} placeholder="Last name" value={form.lastName} onChange={update("lastName")} />
+          <input id="g-lastName" type="text" style={inputStyle()} placeholder="Last name" value={form.lastName} onChange={handleChange("lastName")} onBlur={handleBlur("lastName")} />
           {errors.lastName && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.lastName}</p>}
         </div>
         <div>
           <FieldLabel htmlFor="g-email" required>Email Address</FieldLabel>
-          <input id="g-email" type="email" style={inputStyle()} placeholder="email@example.com" value={form.email} onChange={update("email")} />
+          <input id="g-email" type="email" style={inputStyle()} placeholder="email@example.com" value={form.email} onChange={handleChange("email")} onBlur={handleBlur("email")} />
           {errors.email && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.email}</p>}
         </div>
         <div>
-          <FieldLabel htmlFor="g-phone">Phone Number <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span></FieldLabel>
-          <input id="g-phone" type="tel" style={inputStyle()} placeholder="+1 555 000 0000" value={form.phone} onChange={update("phone")} />
+          <FieldLabel htmlFor="g-phone" required>Phone Number</FieldLabel>
+          <input id="g-phone" type="tel" style={inputStyle()} placeholder="+1 555 000 0000" value={form.phone} onChange={handleChange("phone")} onBlur={handleBlur("phone")} />
+          {errors.phone && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.phone}</p>}
         </div>
         <div>
-          <FieldLabel htmlFor="g-company">Organization / Company <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span></FieldLabel>
-          <input id="g-company" type="text" style={inputStyle()} placeholder="Company name" value={form.company} onChange={update("company")} />
-        </div>
-        <div>
-          <FieldLabel htmlFor="g-jobTitle">Job Title <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span></FieldLabel>
-          <input id="g-jobTitle" type="text" style={inputStyle()} placeholder="Job title" value={form.jobTitle} onChange={update("jobTitle")} />
-        </div>
-        <div>
-          <FieldLabel htmlFor="g-guestType" required>Guest Type</FieldLabel>
-          <div style={{ position: "relative" }}>
-            <select id="g-guestType" style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: "pointer" }} value={form.guestType} onChange={update("guestType")}>
-              {GUEST_TYPES.map((g) => <option key={g} value={g}>{g}</option>)}
-            </select>
-            <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
-              <IconChevronDown />
-            </span>
-          </div>
+          <FieldLabel htmlFor="g-organization">Organization / Company <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span></FieldLabel>
+          <input id="g-organization" type="text" style={inputStyle()} placeholder="Company name" value={form.organization} onChange={handleChange("organization")} onBlur={handleBlur("organization")} />
         </div>
       </div>
 
-      <div style={{ marginTop: "1rem" }}>
-        <FieldLabel htmlFor="g-notes">Notes <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span></FieldLabel>
-        <textarea
-          id="g-notes"
-          rows={3}
-          placeholder="Add any notes about the guest…"
-          value={form.notes}
-          onChange={update("notes")}
-          style={{
-            width: "100%",
-            padding: "0.625rem 0.75rem",
-            border: "1.5px solid #e5e7eb",
-            borderRadius: 8,
-            fontSize: "0.875rem",
-            color: "#111827",
-            outline: "none",
-            resize: "vertical",
-            fontFamily: "inherit",
-            lineHeight: 1.5,
-          }}
-        />
-      </div>
+      {apiError && <p style={{ fontSize: "0.8125rem", color: "#dc2626", marginTop: "1rem" }}>{apiError}</p>}
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "1.25rem" }}>
         <button
           type="button"
           onClick={onCancel}
-          style={{ height: 40, padding: "0 1.25rem", borderRadius: 8, border: "1.5px solid #e5e7eb", background: "#fff", fontSize: "0.875rem", fontWeight: 600, color: "#111827", cursor: "pointer", fontFamily: "inherit" }}
+          disabled={isSaving}
+          style={{ height: 40, padding: "0 1.25rem", borderRadius: 8, border: "1.5px solid #e5e7eb", background: "#fff", fontSize: "0.875rem", fontWeight: 600, color: "#111827", cursor: isSaving ? "not-allowed" : "pointer", fontFamily: "inherit" }}
         >
           Cancel
         </button>
         <button
           type="button"
           onClick={handleSave}
-          style={{ height: 40, padding: "0 1.25rem", borderRadius: 8, border: "1.5px solid #4f46e5", background: "#4f46e5", fontSize: "0.875rem", fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "inherit" }}
+          disabled={isSaving}
+          style={{ height: 40, padding: "0 1.25rem", borderRadius: 8, border: "1.5px solid #4f46e5", background: isSaving ? "#a5b4fc" : "#4f46e5", fontSize: "0.875rem", fontWeight: 600, color: "#fff", cursor: isSaving ? "not-allowed" : "pointer", fontFamily: "inherit" }}
         >
-          Save Guest
+          {isSaving ? "Saving…" : "Save Guest"}
         </button>
       </div>
     </div>
@@ -363,9 +460,14 @@ interface VisitDetailsStepProps {
   guest: Guest | null;
   visitDetails: VisitDetails;
   onChange: (updates: Partial<VisitDetails>) => void;
+  sites: Site[];
+  buildings: Building[];
+  floors: Floor[];
+  isLoadingBuildings: boolean;
+  isLoadingFloors: boolean;
 }
 
-export function VisitDetailsStep({ guest, visitDetails, onChange }: VisitDetailsStepProps) {
+export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildings, floors, isLoadingBuildings, isLoadingFloors }: VisitDetailsStepProps) {
   return (
     <div>
       <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Visit Details</h2>
@@ -375,9 +477,9 @@ export function VisitDetailsStep({ guest, visitDetails, onChange }: VisitDetails
 
       {guest && (
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 1rem", background: "#f9fafb", border: "1.5px solid #e5e7eb", borderRadius: 10, marginBottom: "1rem" }}>
-          <Avatar name={getGuestName(guest)} />
+          <Avatar name={guest.fullName} />
           <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#111827" }}>{getGuestName(guest)}</span>
+            <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#111827" }}>{guest.fullName}</span>
             <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>{guest.email}</span>
           </span>
         </div>
@@ -393,7 +495,7 @@ export function VisitDetailsStep({ guest, visitDetails, onChange }: VisitDetails
               value={visitDetails.guestType}
               onChange={(e) => onChange({ guestType: e.target.value as GuestType })}
             >
-              {GUEST_TYPES.map((g) => <option key={g} value={g}>{g}</option>)}
+              {GUEST_TYPES.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
             </select>
             <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
               <IconChevronDown />
@@ -409,7 +511,7 @@ export function VisitDetailsStep({ guest, visitDetails, onChange }: VisitDetails
               value={visitDetails.purposeOfVisit}
               onChange={(e) => onChange({ purposeOfVisit: e.target.value as PurposeOfVisit })}
             >
-              {PURPOSE_OF_VISIT.map((p) => <option key={p} value={p}>{p}</option>)}
+              {PURPOSE_OF_VISIT.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
             <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
               <IconChevronDown />
@@ -426,18 +528,66 @@ export function VisitDetailsStep({ guest, visitDetails, onChange }: VisitDetails
           onSelect={(emp) => onChange({ hostEmployee: emp })}
           onClear={() => onChange({ hostEmployee: null })}
         />
-        {!visitDetails.hostEmployee && (
-          <div style={{ marginTop: "0.5rem", border: "1.5px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
-            <button
-              type="button"
-              onClick={() => onChange({ hostEmployee: MOCK_EMPLOYEES[1] })}
-              style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 1rem", width: "100%", background: "none", border: "none", textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+        <div>
+          <FieldLabel htmlFor="visitSite" required>Site</FieldLabel>
+          <div style={{ position: "relative" }}>
+            <select
+              id="visitSite"
+              style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: "pointer" }}
+              value={visitDetails.siteId}
+              onChange={(e) => onChange({ siteId: e.target.value, buildingId: "", floorId: "" })}
             >
-              <Avatar name={MOCK_EMPLOYEES[1].name} />
-              <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#111827" }}>{MOCK_EMPLOYEES[1].name}</span>
-            </button>
+              <option value="">Select a site</option>
+              {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
+              <IconChevronDown />
+            </span>
           </div>
-        )}
+        </div>
+        <div>
+          <FieldLabel htmlFor="visitBuilding" required>Building</FieldLabel>
+          <div style={{ position: "relative" }}>
+            <select
+              id="visitBuilding"
+              style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: visitDetails.siteId ? "pointer" : "not-allowed" }}
+              value={visitDetails.buildingId}
+              onChange={(e) => onChange({ buildingId: e.target.value, floorId: "" })}
+              disabled={!visitDetails.siteId}
+            >
+              <option value="">
+                {!visitDetails.siteId ? "Select a site first" : isLoadingBuildings ? "Loading…" : "Select a building"}
+              </option>
+              {buildings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+            <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
+              <IconChevronDown />
+            </span>
+          </div>
+        </div>
+        <div>
+          <FieldLabel htmlFor="visitFloor" required>Floor</FieldLabel>
+          <div style={{ position: "relative" }}>
+            <select
+              id="visitFloor"
+              style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: visitDetails.buildingId ? "pointer" : "not-allowed" }}
+              value={visitDetails.floorId}
+              onChange={(e) => onChange({ floorId: e.target.value })}
+              disabled={!visitDetails.buildingId}
+            >
+              <option value="">
+                {!visitDetails.buildingId ? "Select a building first" : isLoadingFloors ? "Loading…" : "Select a floor"}
+              </option>
+              {floors.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+            <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
+              <IconChevronDown />
+            </span>
+          </div>
+        </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
@@ -497,19 +647,34 @@ interface SeatRequiredStepProps {
 }
 
 export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
-  const options: { key: "yes" | "no"; label: string; sub: string }[] = [
-    { key: "yes", label: "Yes, book a seat", sub: "Continue to seat selection for this visit." },
-    { key: "no", label: "No, invite only", sub: "Send an invite without reserving a workspace." },
+  const options: { key: "yes" | "no"; label: string; sub: string; bullets: string[] }[] = [
+    {
+      key: "yes",
+      label: "Yes, book a seat",
+      sub: "Reserve a workspace for this guest.",
+      bullets: ["Guest will have a dedicated seat", "Seat will be held for the selected time", "Ideal for longer or in-office visits"],
+    },
+    {
+      key: "no",
+      label: "No, invite only",
+      sub: "Send an invite without reserving a seat.",
+      bullets: ["Guest does not need a seat", "Perfect for short or host-only visits", "Quick invite and arrival"],
+    },
   ];
 
   return (
-    <div>
-      <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Does this guest need a seat?</h2>
-      <p style={{ fontSize: "0.8125rem", color: "#6b7280", marginTop: 4, marginBottom: "1.25rem" }}>
-        Choose whether to reserve a workspace for this visitor.
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+      {/* Top icon — seat */}
+      <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#eef2ff", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3" /><path d="M3 16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4z" /><path d="M5 18v2" /><path d="M19 18v2" /></svg>
+      </div>
+      <h2 style={{ fontSize: "1.0625rem", fontWeight: 700, color: "#111827", marginBottom: 4 }}>Does this guest need a seat?</h2>
+      <p style={{ fontSize: "0.8125rem", color: "#6b7280", marginBottom: "1.75rem" }}>
+        Choose the option that best fits this visitor&apos;s visit.
       </p>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-        {options.map(({ key, label, sub }) => {
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", width: "100%" }}>
+        {options.map(({ key, label, sub, bullets }) => {
           const active = value === key;
           return (
             <button
@@ -520,18 +685,56 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: 4,
-                padding: "1rem",
+                padding: "1.5rem 1.25rem",
                 border: `1.5px solid ${active ? "#4f46e5" : "#e5e7eb"}`,
-                borderRadius: 10,
-                background: active ? "#eef2ff" : "#fff",
-                textAlign: "left",
+                borderRadius: 12,
+                background: active ? "#fafaff" : "#fff",
                 cursor: "pointer",
                 fontFamily: "inherit",
+                transition: "border-color 0.15s, background 0.15s",
+                textAlign: "left",
+                gap: 0,
               }}
             >
-              <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#111827" }}>{label}</span>
-              <span style={{ fontSize: "0.75rem", color: "#6b7280", lineHeight: 1.4 }}>{sub}</span>
+              {/* Card icon */}
+              <div style={{
+                width: 40, height: 40, borderRadius: 10, marginBottom: 14,
+                background: active ? "#eef2ff" : "#f3f4f6",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                {key === "yes" ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={active ? "#4f46e5" : "#6b7280"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3" /><path d="M3 16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4z" /><path d="M5 18v2" /><path d="M19 18v2" /></svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={active ? "#4f46e5" : "#6b7280"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg>
+                )}
+              </div>
+
+              {/* Title & subtitle */}
+              <span style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#111827", marginBottom: 4 }}>{label}</span>
+              <span style={{ fontSize: "0.75rem", color: "#6b7280", lineHeight: 1.5, marginBottom: 14 }}>{sub}</span>
+
+              {/* Bullet points */}
+              <ul style={{ listStyle: "none", padding: 0, margin: "0 0 16px 0", display: "flex", flexDirection: "column", gap: 8 }}>
+                {bullets.map((b) => (
+                  <li key={b} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.75rem", color: "#374151" }}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}><circle cx="8" cy="8" r="8" fill={active ? "#eef2ff" : "#f3f4f6"} /><path d="M5 8l2 2 4-4" stroke={active ? "#4f46e5" : "#9ca3af"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    {b}
+                  </li>
+                ))}
+              </ul>
+
+              {/* Radio selector */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid #f3f4f6", paddingTop: 14, marginTop: "auto" }}>
+                <span style={{
+                  width: 18, height: 18, borderRadius: "50%",
+                  border: `2px solid ${active ? "#4f46e5" : "#d1d5db"}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: active ? "#4f46e5" : "#fff", flexShrink: 0,
+                }}>
+                  {active && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} />}
+                </span>
+                <span style={{ fontSize: "0.8125rem", fontWeight: 500, color: active ? "#4f46e5" : "#6b7280" }}>Select this option</span>
+              </div>
             </button>
           );
         })}
@@ -545,15 +748,24 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
 interface ConfirmInviteStepProps {
   guest: Guest | null;
   visitDetails: VisitDetails;
+  sites: Site[];
+  buildings: Building[];
 }
 
-export function ConfirmInviteStep({ guest, visitDetails }: ConfirmInviteStepProps) {
+export function ConfirmInviteStep({ guest, visitDetails, sites, buildings }: ConfirmInviteStepProps) {
+  const guestTypeLabel = GUEST_TYPES.find((g) => g.value === visitDetails.guestType)?.label ?? visitDetails.guestType;
+  const purposeLabel = PURPOSE_OF_VISIT.find((p) => p.value === visitDetails.purposeOfVisit)?.label ?? visitDetails.purposeOfVisit;
+  const siteName = sites.find((s) => s.id === visitDetails.siteId)?.name ?? "—";
+  const buildingName = buildings.find((b) => b.id === visitDetails.buildingId)?.name ?? "—";
+
   const rows: [string, string][] = [
-    ["Guest", guest ? getGuestName(guest) : "—"],
+    ["Guest", guest ? guest.fullName : "—"],
     ["Email", guest?.email ?? "—"],
-    ["Guest Type", visitDetails.guestType],
-    ["Purpose of Visit", visitDetails.purposeOfVisit],
+    ["Guest Type", guestTypeLabel],
+    ["Purpose of Visit", purposeLabel],
     ["Host Employee", visitDetails.hostEmployee?.name ?? "—"],
+    ["Site", siteName],
+    ["Building", buildingName],
     ["Visit Date", visitDetails.visitDate || "—"],
     ["End Date", visitDetails.endDate || "—"],
     ["Time", [visitDetails.startTime, visitDetails.endTime].filter(Boolean).join(" – ") || "—"],

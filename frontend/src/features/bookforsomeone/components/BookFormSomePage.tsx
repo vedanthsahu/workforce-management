@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useBookingForm } from "../hooks/useBooking";
-import { getGuestName } from "../services/bookingService";
+import { useBookingForm, useSiteBuildingOptions } from "../hooks/useBooking";
 import { BookingTypeSelector, FormFooter, InternalEmployeeForm } from "./BookForSomeone";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 import {
   ConfirmInviteStep,
   GuestSelectStep,
@@ -19,19 +19,40 @@ export default function BookForSomeonePage() {
 
   const {
     formState,
+    isSubmitting,
+    submitError,
     setBookingType,
     setSelectedEmployee,
     selectGuest,
-    addGuest,
+    createAndSelectGuest,
     updateVisitDetails,
     setSeatRequired,
     goNext,
     goBack,
     handleCancel,
     resetWizard,
+    submitGuestVisit,
   } = useBookingForm();
 
-  const { step, bookingType, selectedEmployee, guests, selectedGuest, visitDetails, seatRequired } = formState;
+  const { step, bookingType, selectedEmployee, selectedGuest, visitDetails, seatRequired } = formState;
+  const { sites, buildings, floors, isLoadingBuildings, isLoadingFloors } = useSiteBuildingOptions(visitDetails.siteId, visitDetails.buildingId);
+
+  const { can } = usePermissions();
+  const canBookEmployee = can("booking:book_for_employee");
+  const canBookGuest    = can("booking:book_for_guest");
+
+  // Auto-select when only one type is permitted — no need to show the selector
+  useEffect(() => {
+    if (canBookEmployee && !canBookGuest) setBookingType("internal");
+    if (canBookGuest && !canBookEmployee) setBookingType("visitor");
+  }, [canBookEmployee, canBookGuest]);
+
+  const showTypeSelector = canBookEmployee && canBookGuest;
+
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    scrollAreaRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, [step]);
 
   const [guestView, setGuestView] = useState<"list" | "create">("list");
   const isCreatingGuest = bookingType === "visitor" && step === 1 && guestView === "create";
@@ -39,8 +60,33 @@ export default function BookForSomeonePage() {
   const redirectToBookSeat = () => {
     const fromDate = visitDetails.visitDate;
     const toDate = visitDetails.endDate || visitDetails.visitDate;
-    const query = fromDate ? `?fromDate=${fromDate}&toDate=${toDate}` : "";
-    router.push(`/book${query}`);
+
+    const params = new URLSearchParams();
+    if (fromDate) {
+      params.set("fromDate", fromDate);
+      params.set("toDate", toDate);
+    }
+    if (visitDetails.siteId) params.set("siteId", visitDetails.siteId);
+    if (visitDetails.buildingId) params.set("buildingId", visitDetails.buildingId);
+    if (visitDetails.floorId) params.set("floorId", visitDetails.floorId);
+    if (bookingType === "internal" && selectedEmployee) {
+      params.set("bookedForUserId", selectedEmployee.id);
+      params.set("bookingForName", selectedEmployee.name);
+    }
+
+    if (bookingType === "visitor" && selectedGuest) {
+      params.set("guestId", selectedGuest.id);
+      params.set("bookingForName", selectedGuest.fullName);
+      if (visitDetails.hostEmployee) params.set("hostUserId", visitDetails.hostEmployee.id);
+      params.set("guestType", visitDetails.guestType);
+      if (visitDetails.purposeOfVisit) params.set("purposeOfVisit", visitDetails.purposeOfVisit);
+      if (visitDetails.startTime)      params.set("startTime", visitDetails.startTime);
+      if (visitDetails.endTime)        params.set("endTime", visitDetails.endTime);
+      if (visitDetails.additionalNotes) params.set("notes", visitDetails.additionalNotes);
+    }
+
+    const query = params.toString();
+    router.push(`/book${query ? `?${query}` : ""}`);
   };
 
   const steps =
@@ -60,23 +106,26 @@ export default function BookForSomeonePage() {
     if (step === 1) canContinue = !!selectedEmployee;
   } else {
     if (step === 1) canContinue = !!selectedGuest;
-    if (step === 2) canContinue = !!visitDetails.hostEmployee && !!visitDetails.visitDate;
+    if (step === 2)
+      canContinue =
+        !!visitDetails.hostEmployee && !!visitDetails.visitDate && !!visitDetails.siteId && !!visitDetails.buildingId && !!visitDetails.floorId;
     if (step === 3) canContinue = seatRequired !== null;
+    if (step === 4) canContinue = !isSubmitting;
   }
 
   const submitLabel = (() => {
     if (bookingType === "internal" && step === 1) return "Book a Seat";
     if (bookingType === "visitor" && step === 3) return seatRequired === "no" ? "Continue" : "Book a Seat";
-    if (bookingType === "visitor" && step === 4) return "Confirm Invite";
+    if (bookingType === "visitor" && step === 4) return isSubmitting ? "Sending…" : "Confirm Invite";
     return "Continue";
   })();
 
   const infoText =
     (bookingType === "internal" && step === 1) || (bookingType === "visitor" && step === 3 && seatRequired === "yes")
       ? `After clicking "${submitLabel}", you will continue in the existing booking flow to select workspace, date, preferences and choose a seat.`
-      : undefined;
+      : submitError;
 
-  const handlePrimaryAction = () => {
+  const handlePrimaryAction = async () => {
     if (bookingType === "internal" && step === 1) {
       redirectToBookSeat();
       return;
@@ -84,6 +133,10 @@ export default function BookForSomeonePage() {
     if (bookingType === "visitor" && step === 3 && seatRequired === "yes") {
       redirectToBookSeat();
       return;
+    }
+    if (bookingType === "visitor" && step === 4) {
+      const success = await submitGuestVisit();
+      if (!success) return;
     }
     goNext();
   };
@@ -101,22 +154,32 @@ export default function BookForSomeonePage() {
     if (step === 1) {
       stepContent = (
         <GuestSelectStep
-          guests={guests}
           selectedGuest={selectedGuest}
           view={guestView}
           onViewChange={setGuestView}
           onSelect={selectGuest}
-          onCreate={addGuest}
+          onCreate={createAndSelectGuest}
         />
       );
     } else if (step === 2) {
       stepContent = (
-        <VisitDetailsStep guest={selectedGuest} visitDetails={visitDetails} onChange={updateVisitDetails} />
+        <VisitDetailsStep
+          guest={selectedGuest}
+          visitDetails={visitDetails}
+          onChange={updateVisitDetails}
+          sites={sites}
+          buildings={buildings}
+          floors={floors}
+          isLoadingBuildings={isLoadingBuildings}
+          isLoadingFloors={isLoadingFloors}
+        />
       );
     } else if (step === 3) {
       stepContent = <SeatRequiredStep value={seatRequired} onChange={setSeatRequired} />;
     } else if (step === 4) {
-      stepContent = <ConfirmInviteStep guest={selectedGuest} visitDetails={visitDetails} />;
+      stepContent = (
+        <ConfirmInviteStep guest={selectedGuest} visitDetails={visitDetails} sites={sites} buildings={buildings} />
+      );
     } else {
       stepContent = <SuccessStep onBookAnother={resetWizard} />;
     }
@@ -153,14 +216,14 @@ export default function BookForSomeonePage() {
       </div>
 
       {/* ── Scrollable content ── */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
+      <div ref={scrollAreaRef} className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
         <div className="flex gap-6 lg:gap-8 items-start w-full">
           {/* ── Main form card ── */}
-          <div className="flex-1 min-w-0 bg-white border border-[#EBEBF5] rounded-xl overflow-hidden flex flex-col gap-0">
+          <div className="flex-1 min-w-0 bg-white border border-[#EBEBF5] rounded-xl flex flex-col gap-0">
             <div className="px-4 sm:px-5 py-4 sm:py-5">
               {bookingType === "visitor" && <StepProgressBar steps={steps} currentStep={displayStep} />}
 
-              {step === 1 && (
+              {step === 1 && showTypeSelector && (
                 <>
                   <BookingTypeSelector selected={bookingType} onChange={setBookingType} />
                   <div className="border-t border-[#EBEBF5] my-4 sm:my-5" />
@@ -180,7 +243,7 @@ export default function BookForSomeonePage() {
                     onBack={step > 1 ? goBack : undefined}
                     submitLabel={submitLabel}
                     submitDisabled={!canContinue}
-                    infoText={infoText}
+                    infoText={infoText ?? undefined}
                   />
                 </div>
               </>
@@ -214,7 +277,7 @@ export default function BookForSomeonePage() {
                   Booking For
                 </p>
                 <p className="text-[12px] sm:text-[12.5px] font-semibold text-[#1A1A2E]">
-                  {getGuestName(selectedGuest)}
+                  {selectedGuest.fullName}
                 </p>
                 <p className="text-[11.5px] text-gray-400">{selectedGuest.email}</p>
               </div>

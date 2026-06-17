@@ -18,7 +18,7 @@ type BannerState = { type: "success" | "error"; message: string } | null;
 function BuildingsPage() {
   const {
     buildings, sites, stats, loading, error,
-    search, setSearch, selectedSiteId, setSelectedSiteId, fetchBuildings,
+    search, setSearch, selectedSiteId, setSelectedSiteId, fetchBuildings, fetchStats,
   } = useBuildings();
 
   const searchParams = useSearchParams();
@@ -56,7 +56,7 @@ function BuildingsPage() {
   };
 
   const handleEditSuccess = async (updatedBuildingId?: string) => {
-    await fetchBuildings(selectedSiteId);
+    await Promise.all([fetchBuildings(selectedSiteId), fetchStats()]);
     showBannerWithHighlight("Building updated successfully.", updatedBuildingId);
   };
 

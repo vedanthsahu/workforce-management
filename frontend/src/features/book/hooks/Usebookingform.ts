@@ -16,6 +16,7 @@ import {
 
 import {
   createBooking,
+  createGuestBooking,
   modifyBooking,
   fetchBuildings,
   fetchFloors,
@@ -44,14 +45,29 @@ const DEFAULT_STATE: BookingFormState = {
 
 // ── URL builder ───────────────────────────────────────────────────────────────
 
+interface GuestUrlParams {
+  guestId?: string | null;
+  hostUserId?: string | null;
+  guestType?: string | null;
+  purposeOfVisit?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  notes?: string | null;
+}
+
 function buildUrl(
   step: number,
   form: BookingFormState,
   modifyBookingId?: string | null,
+  bookedForUserId?: string | null,
+  guestParams?: GuestUrlParams | null,
+  bookingForName?: string | null,
 ): string {
   const params = new URLSearchParams();
   params.set("step", String(step));
   if (modifyBookingId)             params.set("modifyBookingId", modifyBookingId);
+  if (bookedForUserId)             params.set("bookedForUserId", bookedForUserId);
+  if (bookingForName)              params.set("bookingForName",  bookingForName);
   if (form.siteId)                 params.set("siteId",          form.siteId);
   if (form.buildingId)             params.set("buildingId",      form.buildingId);
   if (form.floorId)                params.set("floorId",         form.floorId);
@@ -59,6 +75,13 @@ function buildUrl(
   if (form.toDate)                 params.set("toDate",          form.toDate);
   if (form.selectedSeatId)         params.set("seatId",          form.selectedSeatId);
   if (form.preferences.length > 0) params.set("preferences",     form.preferences.join(","));
+  if (guestParams?.guestId)        params.set("guestId",         guestParams.guestId);
+  if (guestParams?.hostUserId)     params.set("hostUserId",      guestParams.hostUserId);
+  if (guestParams?.guestType)      params.set("guestType",       guestParams.guestType);
+  if (guestParams?.purposeOfVisit) params.set("purposeOfVisit",  guestParams.purposeOfVisit);
+  if (guestParams?.startTime)      params.set("startTime",       guestParams.startTime);
+  if (guestParams?.endTime)        params.set("endTime",         guestParams.endTime);
+  if (guestParams?.notes)          params.set("notes",           guestParams.notes);
   return `/book?${params.toString()}`;
 }
 
@@ -80,6 +103,20 @@ export function useBookingForm() {
 
   const prefillFromDate = searchParams.get("fromDate") ?? null;
   const prefillToDate   = searchParams.get("toDate")   ?? null;
+
+  const bookedForUserId = searchParams.get("bookedForUserId") ?? null;
+  const bookingForName  = searchParams.get("bookingForName")  ?? null;
+
+  // Guest booking params — present only when coming from book-for-someone (visitor path)
+  const guestId       = searchParams.get("guestId")        ?? null;
+  const hostUserId    = searchParams.get("hostUserId")      ?? null;
+  const guestType     = searchParams.get("guestType")       ?? null;
+  const purposeOfVisit = searchParams.get("purposeOfVisit") ?? null;
+  const guestStartTime = searchParams.get("startTime")      ?? null;
+  const guestEndTime   = searchParams.get("endTime")        ?? null;
+  const guestNotes     = searchParams.get("notes")          ?? null;
+  const isGuestBooking = Boolean(guestId);
+  const isBookingForSomeone = Boolean(bookedForUserId || guestId);
 
   const prefillPreferencesParam = searchParams.get("preferences") ?? null;
   const prefillPreferences: string[] = prefillPreferencesParam
@@ -195,12 +232,17 @@ export function useBookingForm() {
 
   // ── Navigate helper ───────────────────────────────────────────────────────
 
+  const guestUrlParams: GuestUrlParams | null = isGuestBooking
+    ? { guestId, hostUserId, guestType, purposeOfVisit, startTime: guestStartTime, endTime: guestEndTime, notes: guestNotes }
+    : null;
+
   const navigateTo = useCallback(
     (nextStep: BookingStep, nextForm: BookingFormState) => {
       setStepState(nextStep);
-      router.push(buildUrl(nextStep, nextForm, modifyBookingId));
+      router.push(buildUrl(nextStep, nextForm, modifyBookingId, bookedForUserId, guestUrlParams, bookingForName));
     },
-    [router, modifyBookingId],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [router, modifyBookingId, bookedForUserId, isGuestBooking],
   );
 
   // ── Data fetching ─────────────────────────────────────────────────────────
@@ -415,7 +457,7 @@ export function useBookingForm() {
     setSubmitting(true);
     setError(null);
 
-    const payload = {
+    const basePayload = {
       site_id:      Number(form.siteId),
       building_id:  Number(form.buildingId),
       floor_id:     Number(form.floorId),
@@ -427,9 +469,26 @@ export function useBookingForm() {
       let result: CreateBookingResponse;
 
       if (isModifyMode && modifyBookingId) {
-        result = await modifyBooking(modifyBookingId, payload);
+        result = await modifyBooking(modifyBookingId, basePayload);
+      } else if (isGuestBooking && guestId && hostUserId && guestType) {
+        result = await createGuestBooking({
+          site_id:      Number(form.siteId),
+          building_id:  Number(form.buildingId),
+          floor_id:     Number(form.floorId),
+          seat_id:      Number(form.selectedSeatId),
+          visit_date:   form.fromDate,
+          guest_id:     Number(guestId),
+          host_user_id: Number(hostUserId),
+          guest_type:   guestType,
+          ...(purposeOfVisit ? { purpose_of_visit: purposeOfVisit } : {}),
+          ...(guestStartTime ? { start_time: guestStartTime }       : {}),
+          ...(guestEndTime   ? { end_time:   guestEndTime }         : {}),
+          ...(guestNotes     ? { notes:      guestNotes }           : {}),
+        });
       } else {
-        result = await createBooking(payload);
+        result = await createBooking(
+          bookedForUserId ? { ...basePayload, booked_for_user_id: Number(bookedForUserId) } : basePayload
+        );
       }
 
       setConfirmation(result);
@@ -534,6 +593,9 @@ export function useBookingForm() {
     dayCount,
     step1Valid,
     isModifyMode,
+    isBookingForSomeone,
+    isGuestBooking,
+    bookingForName,
     modifyBookingId,
     floorLayoutUrl,
     setSiteId,

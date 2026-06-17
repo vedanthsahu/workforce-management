@@ -5,6 +5,7 @@ import {
   Floor,
   Seat,
   CreateBookingPayload,
+  CreateGuestBookingPayload,
   CreateBookingResponse,
   Preference,
   PreferenceMatchStatus,
@@ -297,6 +298,18 @@ export async function createBooking(
 ): Promise<CreateBookingResponse> {
   const { data } = await axiosInstance.post<CreateBookingResponse>(
     "/bookings",
+    payload
+  );
+  return data;
+}
+
+// ── Create guest booking — POST /guest-bookings ───────────────────────────────
+
+export async function createGuestBooking(
+  payload: CreateGuestBookingPayload
+): Promise<CreateBookingResponse> {
+  const { data } = await axiosInstance.post<CreateBookingResponse>(
+    "/guest-bookings",
     payload
   );
   return data;
