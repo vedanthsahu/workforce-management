@@ -77,7 +77,7 @@ def auth_callback(
     error_description: str | None = None,
 ):
     def debug(msg):
-        logger.debug("sso.callback %s", msg)
+        logger.warning("sso.callback %s", msg)
 
     debug("=== auth_callback started ===")
 
@@ -106,8 +106,23 @@ def auth_callback(
         debug("Token exchange OK")
 
         debug("Verifying id_token...")
-        claims = verify_id_token(token_payload["id_token"])
-        debug(f"Claims OK, keys: {list(claims.keys())}")
+
+        try:
+            claims = verify_id_token(token_payload["id_token"])
+            debug(f"Claims OK, keys: {list(claims.keys())}")
+        except Exception as exc:
+            import traceback
+
+            logger.error(
+                "verify_id_token failed: %s: %s",
+                type(exc).__name__,
+                str(exc),
+                exc_info=True,
+            )
+
+            traceback.print_exc()
+
+            raise
     except SSOError as exc:
         debug(f"SSOError: {exc.code} - {exc.message}")
         return _error_response(exc.status_code, exc.code, exc.message, exc.details)
@@ -150,7 +165,9 @@ def auth_callback(
 
         if user is None:
             debug("Fetching Graph /me...")
+            debug("STEP_GRAPH_ME_START")
             graph_profile = _fetch_graph_payload(fetch_graph_me, token_payload["access_token"], required=True)
+            debug("STEP_GRAPH_ME_END")
             debug(f"Graph /me keys: {list(graph_profile.keys())}")
             graph_object_id = _resolve_graph_object_id(graph_profile)
             if microsoft_object_id and graph_object_id != microsoft_object_id:

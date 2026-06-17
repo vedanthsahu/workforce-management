@@ -75,6 +75,71 @@ BOOKING_SELECT_FROM = """
        AND host.tenant_id = b.tenant_id
 """
 
+BOOKING_SELECT_FIELDS = """
+    b.id::text AS booking_id,
+    b.tenant_id::text AS tenant_id,
+    b.booked_for_user_id::text AS booked_for_user_id,
+    b.booked_for_guest_id::text AS booked_for_guest_id,
+    b.booked_by_user_id::text AS booked_by_user_id,
+    b.guest_visit_id::text AS guest_visit_id,
+    b.booking_type,
+    b.seat_id::text AS seat_id,
+    b.site_id::text AS site_id,
+    b.building_id::text AS building_id,
+    b.floor_id::text AS floor_id,
+    s.seat_code,
+    si.site_name,
+    bu.building_name,
+    f.floor_name,
+    b.booking_date,
+    b.booking_status,
+    b.source_channel,
+    b.check_in_at,
+    b.checked_out_at,
+    b.cancelled_at,
+    b.cancellation_reason,
+    b.created_at,
+    b.updated_at,
+    g.full_name AS guest_name,
+    g.email AS guest_email,
+    g.phone AS guest_phone,
+    g.organization AS guest_organization,
+    gv.guest_type,
+    gv.visit_status,
+    gv.purpose_of_visit,
+    gv.start_time,
+    gv.end_time,
+    gv.notes,
+    gv.requires_seat,
+    host.id::text AS host_user_id,
+    host.full_name AS host_name
+"""
+
+BOOKING_SELECT_FROM = """
+    FROM bookings AS b
+    INNER JOIN seats AS s
+        ON s.id = b.seat_id
+       AND s.tenant_id = b.tenant_id
+    INNER JOIN floors AS f
+        ON f.id = b.floor_id
+       AND f.tenant_id = b.tenant_id
+    INNER JOIN buildings AS bu
+        ON bu.id = b.building_id
+       AND bu.tenant_id = b.tenant_id
+    INNER JOIN sites AS si
+        ON si.id = b.site_id
+       AND si.tenant_id = b.tenant_id
+    LEFT JOIN guests AS g
+        ON g.id = b.booked_for_guest_id
+       AND g.tenant_id = b.tenant_id
+    LEFT JOIN guest_visits AS gv
+        ON gv.id = b.guest_visit_id
+       AND gv.tenant_id = b.tenant_id
+    LEFT JOIN app_users AS host
+        ON host.id = gv.host_user_id
+       AND host.tenant_id = b.tenant_id
+"""
+
 
 def fetch_seat_for_booking(
     conn: PGConnection,
@@ -286,6 +351,43 @@ def guest_has_active_booking_on_date(
     if exclude_booking_id is not None:
         query += " AND id::text <> %s"
         params.append(exclude_booking_id)
+    query += " LIMIT 1"
+
+    with conn.cursor() as cur:
+        cur.execute(query, params)
+        return cur.fetchone() is not None
+
+def guest_has_active_booking_in_range(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    booked_for_guest_id: str,
+    start_date: date,
+    end_date: date,
+    exclude_booking_id: str | None = None,
+) -> bool:
+    """Return whether a guest has an active booking in a date range."""
+
+    query = """
+        SELECT 1
+        FROM bookings
+        WHERE tenant_id = %s
+          AND booked_for_guest_id = %s
+          AND booking_date BETWEEN %s AND %s
+          AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
+    """
+
+    params: list[Any] = [
+        tenant_id,
+        booked_for_guest_id,
+        start_date,
+        end_date,
+    ]
+
+    if exclude_booking_id is not None:
+        query += " AND id::text <> %s"
+        params.append(exclude_booking_id)
+
     query += " LIMIT 1"
 
     with conn.cursor() as cur:

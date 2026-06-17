@@ -46,7 +46,7 @@ export function HeroBanner({
             )}
           </div>
         </div>
-        {canBookSelf && (
+         {canBookSelf && (
           <Link
             href="/book"
             className="inline-flex items-center justify-center bg-white text-blue-800 hover:bg-indigo-50 hover:scale-[1.03] active:scale-[0.97] transition-all duration-150 text-[11.5px] font-semibold shrink-0 h-8 px-4 rounded-xl shadow-md shadow-indigo-900/20 self-start sm:self-auto z-10"
