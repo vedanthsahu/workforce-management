@@ -62,6 +62,7 @@ import {
 
 import { getInitials, type User } from "@/features/auth/types/auth.types";
 import { cn } from "@/lib/utils";
+import { useBookForSomeoneStore } from "@/store/useBookForSomeoneStore";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -82,6 +83,7 @@ interface NavItem {
   badgeRed?: boolean;
   badgeGreen?: boolean;
   permission?: string;
+  anyPermission?: string[];
   roles?: string[];
 }
 
@@ -119,7 +121,7 @@ const MAIN_NAV: NavItem[] = [
   { id: "dashboard",  label: "Dashboard",        icon: LayoutDashboard },
   { id: "book",       label: "Book a seat",       icon: CalendarDays,  permission: "seat:book_self" },
   { id: "mybookings", label: "My bookings",       icon: BookOpen,      badge: 3, badgeRed: true,   permission: "booking:view_own" },
-  { id: "team",       label: "Book for someone",  icon: Monitor,       badge: "New", badgeGreen: true, permission: "booking:book_for_someone" },
+  { id: "team",       label: "Book for someone",  icon: Monitor,       badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
   { id: "schedule",   label: "My schedule",       icon: CalendarCheck, permission: "booking:view_own" },
 ];
 
@@ -221,10 +223,11 @@ function NavSection({
   onNavigate: (id: string) => void;
 }) {
   const router = useRouter();
-  const { can, hasRole } = usePermissions();
+  const { can, canAny, hasRole } = usePermissions();
 
   const visible = items.filter((item) => {
     if (item.permission && !can(item.permission)) return false;
+    if (item.anyPermission && !canAny(...item.anyPermission)) return false;
     if (item.roles && !hasRole(...item.roles)) return false;
     return true;
   });
@@ -295,7 +298,9 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
   const handleNav = (id: string) => {
     const path = ROUTE_MAP[id];
-    if (path) router.push(path);
+    if (!path) return;
+    if (id === "team") useBookForSomeoneStore.getState().resetFormState();
+    router.push(path);
   };
 
   const handleLogoutConfirm = () => {

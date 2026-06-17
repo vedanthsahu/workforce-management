@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { CalendarDays, Users } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
+
 import type { TodayBookingInfo } from "../types/dashboard.types";
 
 type HeroBannerProps = {
@@ -49,11 +49,7 @@ export function HeroBanner({
         {canBookSelf && (
           <Link
             href="/book"
-            className={buttonVariants({
-              size: "sm",
-              className:
-                "bg-white text-indigo-700 hover:bg-indigo-50 hover:scale-[1.03] active:scale-[0.97] transition-all duration-150 text-[11.5px] font-semibold shrink-0 h-[32px] px-4 rounded-xl shadow-md shadow-indigo-900/20 border-0 self-start sm:self-auto z-10",
-            })}
+            className="inline-flex items-center justify-center bg-white text-blue-800 hover:bg-indigo-50 hover:scale-[1.03] active:scale-[0.97] transition-all duration-150 text-[11.5px] font-semibold shrink-0 h-8 px-4 rounded-xl shadow-md shadow-indigo-900/20 self-start sm:self-auto z-10"
           >
             Book Now →
           </Link>

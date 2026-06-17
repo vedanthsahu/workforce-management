@@ -1,9 +1,9 @@
 "use client";
 
-import { JSX } from "react";
 import { useEmployeeSearch } from "../hooks/useBooking";
-import { getInitials, MOCK_EMPLOYEES } from "../services/bookingService";
+import { getInitials } from "../utils/booking.utils";
 import { BookingType, Employee } from "../types/booking";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -119,7 +119,8 @@ export function Avatar({ name, size = "sm" }: AvatarProps) {
 
 // ─── StatusBadge ──────────────────────────────────────────────────────────────
 
-export function StatusBadge({ status }: { status: "Active" | "Inactive" }) {
+export function StatusBadge({ status }: { status: string }) {
+  const isActive = status.toUpperCase() === "ACTIVE";
   return (
     <span
       style={{
@@ -127,11 +128,12 @@ export function StatusBadge({ status }: { status: "Active" | "Inactive" }) {
         fontWeight: 600,
         padding: "2px 8px",
         borderRadius: 20,
-        background: status === "Active" ? "#dcfce7" : "#f3f4f6",
-        color: status === "Active" ? "#16a34a" : "#6b7280",
+        background: isActive ? "#dcfce7" : "#f3f4f6",
+        color: isActive ? "#16a34a" : "#6b7280",
+        textTransform: "capitalize",
       }}
     >
-      {status}
+      {status.toLowerCase()}
     </span>
   );
 }
@@ -172,7 +174,7 @@ export function EmployeeRow({ employee, onClick, showChevron = true }: EmployeeR
           <StatusBadge status={employee.status} />
         </span>
         <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>
-          {employee.employeeId} · {employee.department}
+          {[employee.employeeId, employee.department].filter(Boolean).join(" · ") || employee.role}
         </span>
         <span style={{ fontSize: "0.75rem", color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {employee.email}
@@ -193,7 +195,7 @@ interface EmployeeSearchProps {
 }
 
 export function EmployeeSearch({ placeholder, selectedEmployee, onSelect, onClear }: EmployeeSearchProps) {
-  const { query, results, isOpen, containerRef, handleQueryChange, handleSelect, openDropdown } =
+  const { query, results, isOpen, isLoading, containerRef, handleQueryChange, handleSelect, openDropdown } =
     useEmployeeSearch(onSelect);
 
   return (
@@ -255,8 +257,31 @@ export function EmployeeSearch({ placeholder, selectedEmployee, onSelect, onClea
         )}
       </div>
 
+      {/* Loading / empty state */}
+      {isOpen && !selectedEmployee && query.trim() && (isLoading || results.length === 0) && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            right: 0,
+            background: "#fff",
+            border: "1.5px solid #e5e7eb",
+            borderRadius: 10,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+            zIndex: 20,
+            padding: "0.75rem 1rem",
+            fontSize: "0.8125rem",
+            color: "#9ca3af",
+            textAlign: "center",
+          }}
+        >
+          {isLoading ? "Searching…" : "No employees found."}
+        </div>
+      )}
+
       {/* Dropdown */}
-      {isOpen && !selectedEmployee && results.length > 0 && (
+      {isOpen && !selectedEmployee && !isLoading && results.length > 0 && (
         <ul
           role="listbox"
           style={{
@@ -270,7 +295,8 @@ export function EmployeeSearch({ placeholder, selectedEmployee, onSelect, onClea
             boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
             listStyle: "none",
             zIndex: 20,
-            overflow: "hidden",
+            maxHeight: 260,
+            overflowY: "auto",
             padding: 0,
             margin: 0,
           }}
@@ -298,10 +324,14 @@ interface BookingTypeSelectorProps {
 }
 
 export function BookingTypeSelector({ selected, onChange }: BookingTypeSelectorProps) {
-  const options: { type: BookingType; label: string; sub: string; Icon: () => JSX.Element }[] = [
-    { type: "internal", label: "Internal Employee", sub: "Book a seat for an employee in your organization", Icon: IconUser },
-    { type: "visitor", label: "Visitor / Guest", sub: "Book a seat for a visitor or guest", Icon: IconBadge },
-  ];
+  const { can } = usePermissions();
+
+  const options = [
+    { type: "internal" as BookingType, label: "Internal Employee", sub: "Book a seat for an employee in your organization", Icon: IconUser },
+    { type: "visitor" as BookingType, label: "Visitor / Guest", sub: "Book a seat for a visitor or guest", Icon: IconBadge },
+  ].filter(({ type }) =>
+    type === "internal" ? can("booking:book_for_employee") : can("booking:book_for_guest")
+  );
 
   return (
     <div>
@@ -385,14 +415,11 @@ export function InternalEmployeeForm({ selectedEmployee, onSelect, onClear }: In
         />
       </div>
 
-      {/* Default preview row (no selection yet) */}
+      {/* Empty state (no selection yet) */}
       {!selectedEmployee && (
-        <div style={{ border: "1.5px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
-          <EmployeeRow
-            employee={MOCK_EMPLOYEES[0]}
-            onClick={() => onSelect(MOCK_EMPLOYEES[0])}
-          />
-        </div>
+        <p style={{ fontSize: "0.8125rem", color: "#9ca3af", textAlign: "center", padding: "1.5rem 0" }}>
+          Search above to find an employee.
+        </p>
       )}
 
       {/* Selected employee detail card */}
@@ -413,10 +440,10 @@ export function InternalEmployeeForm({ selectedEmployee, onSelect, onClear }: In
             <dl style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: "2rem", rowGap: "0.375rem", flex: 1 }}>
               {[
                 ["Name", selectedEmployee.name],
-                ["Employee ID", selectedEmployee.employeeId],
-                ["Department", selectedEmployee.department],
-                ["Email", selectedEmployee.email],
-                ["Manager", selectedEmployee.manager],
+                ["Employee ID", selectedEmployee.employeeId ?? "—"],
+                ["Department", selectedEmployee.department ?? "—"],
+                // ["Email", selectedEmployee.email],
+                // ["Role", selectedEmployee.role],
               ].map(([label, value]) => (
                 <div key={label} style={{ display: "contents" }}>
                   <dt style={{ fontSize: "0.8125rem", color: "#6b7280" }}>{label}</dt>
@@ -533,7 +560,7 @@ export function FormFooter({ onCancel, onSubmit, onBack, submitLabel = "Book a S
         ) : <span />}
 
         <div style={{ display: "flex", gap: "0.75rem" }}>
-          <button
+          {/* <button
             type="button"
             onClick={onCancel}
             style={{
@@ -550,7 +577,7 @@ export function FormFooter({ onCancel, onSubmit, onBack, submitLabel = "Book a S
             }}
           >
             Cancel
-          </button>
+          </button> */}
           <button
             type="button"
             onClick={onSubmit}

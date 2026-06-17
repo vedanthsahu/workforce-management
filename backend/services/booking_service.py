@@ -81,7 +81,7 @@ def _can_book_for_user(
         return True
 
     role = _user_role(current_user)
-    if role == "TENANT_ADMIN":
+    if role in {"TENANT_ADMIN", "TALENT"}:
         return True
 
     return (

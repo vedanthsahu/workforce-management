@@ -145,6 +145,9 @@ const BookASeatPage: React.FC = () => {
     dayCount,
     step1Valid,
     isModifyMode,
+    isBookingForSomeone,
+    isGuestBooking,
+    bookingForName,
     floorLayoutUrl,
     setSiteId,
     setBuildingId,
@@ -194,12 +197,14 @@ const BookASeatPage: React.FC = () => {
         <div className="flex justify-between items-start sm:items-center gap-3">
           <div>
             <h1 className="text-[17px] sm:text-[20px] font-bold text-[#1A1A2E] leading-tight">
-              {isModifyMode ? "Modify Booking" : "Book a Seat"}
+              {isModifyMode ? "Modify Booking" : isBookingForSomeone ? `Book a Seat for ${bookingForName}` : "Book a Seat"}
             </h1>
             <p className="text-[11.5px] sm:text-[12.5px] text-gray-400 mt-0.5">
               {isModifyMode
                 ? "Select a new seat to replace your existing booking"
-                : "Reserve your workspace in a few steps"}
+                : isBookingForSomeone
+                  ? `Selecting a workspace for ${isGuestBooking ? "guest" : "employee"} — ${bookingForName}`
+                  : "Reserve your workspace in a few steps"}
             </p>
           </div>
 
@@ -564,6 +569,9 @@ const BookASeatPage: React.FC = () => {
               <Separator />
 
               <div>
+                {isBookingForSomeone && bookingForName && (
+                  <SummaryRow label="Booking For" value={`${bookingForName} (${isGuestBooking ? "Guest" : "Employee"})`} />
+                )}
                 <SummaryRow label="Location"   value={selectedSite?.name ?? "—"} />
                 <SummaryRow label="Building"   value={selectedBuilding?.name ?? "—"} />
                 <SummaryRow label="Floor"      value={selectedFloor?.name ?? "—"} />
@@ -611,13 +619,18 @@ const BookASeatPage: React.FC = () => {
                 <p className="text-[12px] sm:text-[12.5px] text-gray-400 mt-1">
                   {isModifyMode
                     ? "Your booking has been updated successfully."
-                    : "Your seat has been reserved successfully."}
+                    : isBookingForSomeone && bookingForName
+                      ? `A seat has been reserved for ${bookingForName}.`
+                      : "Your seat has been reserved successfully."}
                 </p>
               </div>
               <div className="bg-[#F7F8FC] border border-[#EBEBF5] rounded-xl px-4 sm:px-6 py-4 w-full text-left">
                 <p className="text-[10.5px] sm:text-[11px] font-semibold tracking-widest uppercase text-gray-400 mb-3">
                   Booking Details
                 </p>
+                {isBookingForSomeone && bookingForName && (
+                  <SummaryRow label="Booked For" value={`${bookingForName} (${isGuestBooking ? "Guest" : "Employee"})`} />
+                )}
                 <SummaryRow label="Booking ID" value={confirmation.booking_id} />
                 <SummaryRow label="Location"   value={confirmation.site_name ?? "—"} />
                 <SummaryRow label="Building"   value={confirmation.building_name ?? "—"} />

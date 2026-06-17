@@ -12,6 +12,9 @@ export function middleware(req: NextRequest) {
 
   if (!token) {
     if (pathname === "/login") return NextResponse.next();
+    // Refresh token still present — access_token cookie just expired (browser removed it).
+    // Let the page through; the axios interceptor will call /auth/refresh and retry.
+    if (req.cookies.get("refresh_token")?.value) return NextResponse.next();
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
