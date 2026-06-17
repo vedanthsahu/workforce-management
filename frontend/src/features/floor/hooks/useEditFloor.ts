@@ -37,7 +37,6 @@ export const useEditFloor = (floor: Floor) => {
       return true;
     } catch (error) {
       console.error(error);
-      toast.error("Failed to update floor");
 
       return false;
     } finally {

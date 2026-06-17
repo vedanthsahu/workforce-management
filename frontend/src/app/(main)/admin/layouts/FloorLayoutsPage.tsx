@@ -76,11 +76,7 @@ export default function FloorLayoutsPage() {
     fetchLayouts(data.floorId);
   }, [setSelection, fetchLayouts]);
 
-  const handleRefresh = useCallback(() => {
-    invalidateAll();
-    if (selection.floorId) fetchLayouts(selection.floorId);
-    toast.success("Refreshed successfully");
-  }, [invalidateAll, fetchLayouts, selection.floorId]);
+
 
   return (
     <main className="flex-1 bg-[#f8fafc] p-6 space-y-6 overflow-y-auto">
@@ -93,12 +89,6 @@ export default function FloorLayoutsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleRefresh}
-            className="flex items-center gap-2 border px-4 py-2 rounded-md text-sm hover:bg-gray-50 transition-colors"
-          >
-            ⟳ Refresh
-          </button>
           <Link
             href="/admin/layouts/upload"
             className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700 transition-colors"

@@ -44,9 +44,6 @@ export const useAmenityForm = () => {
         ...formData,
         category_id: Number(formData.category_id),
       });
-
-      toast.success("Amenity created successfully");
-
       return created?.amenity_id ?? null;
     } catch (error) {
       const message = axios.isAxiosError(error)
