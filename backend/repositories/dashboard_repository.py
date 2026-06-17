@@ -597,7 +597,7 @@ def fetch_admin_dashboard_summary(
                     ) AS total_bookings,
 
                     (
-                        SELECT COUNT(DISTINCT user_id)
+                        SELECT COUNT(DISTINCT booked_for_user_id)
                         FROM booked_seats
                     ) AS unique_users_booked
             ),
