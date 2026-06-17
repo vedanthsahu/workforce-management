@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from backend.core.enums import GuestType, VisitPurpose
 
+from typing import Literal
 
 class CreateGuestRequest(BaseModel):
     full_name: str = Field(min_length=1, max_length=255)
@@ -70,3 +71,86 @@ class GuestVisitResponse(BaseModel):
     created_by_user_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+
+
+class GuestVisitListItem(BaseModel):
+
+    guest_visit_id: str
+
+    visit_date: date
+    start_time: time | None = None
+    end_time: time | None = None
+
+    visit_status: str
+    guest_type: str | None = None
+    purpose_of_visit: str | None = None
+
+    requires_seat: bool
+
+    checked_in_at: datetime | None = None
+    checked_out_at: datetime | None = None
+
+    guest_id: str
+    guest_name: str
+    guest_email: str | None = None
+    guest_phone: str | None = None
+
+    host_user_id: str
+    host_name: str
+    host_email: str | None = None
+    host_phone: str | None = None
+    host_department: str | None = None
+    host_job_title: str | None = None
+
+    site_id: str
+    site_name: str
+
+    building_id: str
+    building_name: str
+
+    floor_id: str | None = None
+    floor_name: str | None = None
+
+    booking_id: str | None = None
+    booking_status: str | None = None
+
+    seat_id: str | None = None
+    seat_code: str | None = None
+    start_time: time | None = None
+    end_time: time | None = None
+
+    guest_type: str | None = None
+    purpose_of_visit: str | None = None
+    notes: str | None = None
+
+    host_phone: str | None = None
+
+    site_id: str
+    site_name: str
+
+    building_id: str
+    building_name: str
+
+    floor_id: str | None = None
+    floor_name: str | None = None
+
+    seat_code: str | None = None
+
+class GuestVisitListResponse(BaseModel):
+    items: list[GuestVisitListItem]
+
+
+class GuestVisitStatusUpdateResponse(BaseModel):
+    guest_visit_id: str
+    visit_status: str
+    checked_in_at: datetime | None = None
+    checked_out_at: datetime | None = None
+
+
+GuestVisitScope = Literal[
+    "CURRENT",
+    "UPCOMING",
+    "PAST",
+]
