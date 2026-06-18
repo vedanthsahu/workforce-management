@@ -24,7 +24,6 @@ from backend.core.enums import (
 
 class CreateBookingRequest(BaseModel):
     """Request body for creating one employee seat booking."""
-    """Request body for creating one employee seat booking."""
 
     site_id: int = Field(gt=0)
     building_id: int = Field(gt=0)

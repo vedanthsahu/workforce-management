@@ -161,6 +161,9 @@ export async function fetchAvailability(params: {
   toDate?: string;
   amenityIds?: number[];
   modifyBookingId?: string | null;
+  bookedForUserId?: string | null;
+  isGuestBooking?: boolean;
+  bookedForGuestId?: string | null;
 }): Promise<AvailableSeatResponse[]> {
   const { data } = await axiosInstance.get<AvailableSeatResponse[]>(
     `/floors/${params.floorId}/seats`,
@@ -173,6 +176,15 @@ export async function fetchAvailability(params: {
           : {}),
         ...(params.modifyBookingId
           ? { modifyBookingId: params.modifyBookingId }
+          : {}),
+        ...(params.bookedForUserId
+          ? { booked_for_user_id: Number(params.bookedForUserId) }
+          : {}),
+        ...(params.isGuestBooking
+          ? { is_guest_booking: true }
+          : {}),
+        ...(params.bookedForGuestId
+          ? { booked_for_guest_id: Number(params.bookedForGuestId) }
           : {}),
       },
       paramsSerializer: (p) => {
@@ -204,6 +216,9 @@ export async function fetchSeatsWithAvailability(
     toDate: params.toDate ?? params.fromDate,
     amenityIds: params.amenityIds,
     modifyBookingId: params.modifyBookingId ?? null,
+    bookedForUserId: params.bookedForUserId ?? null,
+    isGuestBooking: params.isGuestBooking ?? false,
+    bookedForGuestId: params.bookedForGuestId ?? null,
   });
 
   const selectedPrefs = (params.preferences ?? []).map((p) => p.toLowerCase());

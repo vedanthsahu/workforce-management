@@ -413,10 +413,12 @@ def get_guest_profile(
     return GuestResponse(**guest)
 
 
+
 def search_guest_profiles(
     conn: PGConnection,
     *,
     current_user: dict[str, Any],
+    include_inactive: bool = False,
     search_text: str,
     limit: int,
 ) -> list[GuestResponse]:
@@ -434,9 +436,12 @@ def search_guest_profiles(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         search_text=normalized_search,
+        include_inactive=include_inactive,
         limit=limit,
     )
     return [GuestResponse(**row) for row in rows]
+
+ 
 
 
 def create_guest_visit(
