@@ -48,11 +48,6 @@ export function CheckInButton({ visitor, isLoading, onCheckIn, onCheckOut }: Pro
       )}
 
       <DropdownMenu>
-        <DropdownMenuTrigger
-          className="h-8 w-8 inline-flex items-center justify-center rounded-md hover:bg-gray-100 transition-colors"
-        >
-          <MoreVertical className="w-3.5 h-3.5 text-gray-400" />
-        </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
           <DropdownMenuItem className="text-xs cursor-pointer">View details</DropdownMenuItem>
           <DropdownMenuItem className="text-xs cursor-pointer">Edit visit</DropdownMenuItem>

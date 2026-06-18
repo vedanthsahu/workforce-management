@@ -117,7 +117,7 @@ def check_out_visit(
 
 """Administrative guest visit routes."""
 
-from __future__ import annotations
+# from __future__ import annotations
 
 from typing import Annotated, Any
 

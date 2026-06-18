@@ -53,7 +53,7 @@ export default function SecurityDashboardPage() {
       {/* ── Today's expected visitors table ─────────────────────── */}
       <VisitorTable
         title="Today's Expected Visitors"
-        count={summary?.expectedToday ?? 0}
+        count={totalVisitors}   
         visitors={expectedVisitors}
         loading={loading}
         search={search}

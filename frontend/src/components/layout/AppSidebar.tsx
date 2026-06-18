@@ -111,6 +111,7 @@ const ROUTE_MAP: Record<string, string> = {
   seatstatus:      "/admin/seat-status",
   bookings:        "/admin/bookings",
   users:           "/admin/users",
+  roles:           "/admin/roles",
   occupancy:       "/admin/occupancy",
   utilization:     "/admin/utilization",
   audit:           "/admin/audit",
@@ -160,6 +161,7 @@ const ADMIN_MANAGE_NAV: NavItem[] = [
 const ADMIN_OPERATIONS_NAV: NavItem[] = [
   { id: "bookings",      label: "Bookings",      icon: CalendarDays },
   { id: "users",         label: "Users",         icon: Users        },
+  { id: "roles",         label: "Role Management",  icon: ShieldCheck  },
   { id: "notifications", label: "Notifications", icon: Bell         },
 ];
 

@@ -62,8 +62,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { BookOpen, Menu } from "lucide-react";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { BookOpen, Menu } from "lucide-react";
+
 
 function SidebarSkeleton() {
   return (
