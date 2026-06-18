@@ -1,15 +1,9 @@
 """HTTP routes for authenticated employee booking operations."""
-"""HTTP routes for authenticated employee booking operations."""
 
 from __future__ import annotations
 
 from typing import Any, Annotated
 
-from fastapi import (
-    APIRouter,
-    BackgroundTasks,
-    Depends,
-)
 from fastapi import (
     APIRouter,
     BackgroundTasks,

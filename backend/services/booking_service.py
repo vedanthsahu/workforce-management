@@ -1,7 +1,6 @@
-"""services/booking_service.py Service-layer booking workflows for day-based seat reservations."""
-"""services/booking_service.py Service-layer booking workflows for day-based seat reservations."""
-
 from __future__ import annotations
+
+"""services/booking_service.py Service-layer booking workflows for day-based seat reservations."""
 
 import logging
 from datetime import date, datetime
@@ -42,6 +41,7 @@ from backend.repositories.booking_repository import (
     user_has_active_booking_on_date,
     guest_has_active_booking_in_range,
     insert_guest_booking,
+    guest_has_active_visit_in_range,
 )
 from backend.repositories.user_repository import fetch_user_by_id
 from backend.schemas.booking import (
@@ -1455,20 +1455,19 @@ payload: BookingEligibilityRequest,
                 },
             )
 
-        if guest_has_active_booking_in_range(
-            conn,
-            tenant_id=tenant_id,
-            booked_for_guest_id=str(payload.booked_for_guest_id),
-            start_date=payload.start_date,
-            end_date=payload.end_date,
-            exclude_booking_id=payload.exclude_booking_id,
-        ):
+        if guest_has_active_visit_in_range(
+                conn,
+                tenant_id=tenant_id,
+                guest_id=str(payload.booked_for_guest_id),
+                start_date=payload.start_date,
+                end_date=payload.end_date,
+            ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "code": "booking_guest_conflict",
                     "message": (
-                        "Guest already has an active booking "
+                        "Guest already has an active Visit "
                         "in requested date range."
                     ),
                 },

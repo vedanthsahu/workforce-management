@@ -593,11 +593,16 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
         <div>
           <FieldLabel htmlFor="visitDate" required>Visit Date</FieldLabel>
-          <input id="visitDate" type="date" style={inputStyle()} value={visitDetails.visitDate} onChange={(e) => onChange({ visitDate: e.target.value })} />
+          <input id="visitDate" type="date" style={inputStyle()} value={visitDetails.visitDate} onChange={(e) => {
+            const val = e.target.value;
+            const updates: Partial<VisitDetails> = { visitDate: val };
+            if (!visitDetails.endDate || visitDetails.endDate < val) updates.endDate = val;
+            onChange(updates);
+          }} />
         </div>
         <div>
-          <FieldLabel htmlFor="endDate">End Date <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span></FieldLabel>
-          <input id="endDate" type="date" style={inputStyle()} value={visitDetails.endDate} onChange={(e) => onChange({ endDate: e.target.value })} />
+          <FieldLabel htmlFor="endDate" required>End Date</FieldLabel>
+          <input id="endDate" type="date" style={inputStyle()} value={visitDetails.endDate} min={visitDetails.visitDate || undefined} onChange={(e) => onChange({ endDate: e.target.value })} />
         </div>
       </div>
 
@@ -665,8 +670,8 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
       {/* Top icon — seat */}
-      <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#eef2ff", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3" /><path d="M3 16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4z" /><path d="M5 18v2" /><path d="M19 18v2" /></svg>
+      <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#ecfdf5", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3" /><path d="M3 16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4z" /><path d="M5 18v2" /><path d="M19 18v2" /></svg>
       </div>
       <h2 style={{ fontSize: "1.0625rem", fontWeight: 700, color: "#111827", marginBottom: 4 }}>Does this guest need a seat?</h2>
       <p style={{ fontSize: "0.8125rem", color: "#6b7280", marginBottom: "1.75rem" }}>
@@ -699,13 +704,13 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
               {/* Card icon */}
               <div style={{
                 width: 40, height: 40, borderRadius: 10, marginBottom: 14,
-                background: active ? "#eef2ff" : "#f3f4f6",
+                background: key === "yes" ? "#eef2ff" : "#f0fdf4",
                 display: "flex", alignItems: "center", justifyContent: "center",
               }}>
                 {key === "yes" ? (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={active ? "#4f46e5" : "#6b7280"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3" /><path d="M3 16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4z" /><path d="M5 18v2" /><path d="M19 18v2" /></svg>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3" /><path d="M3 16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4z" /><path d="M5 18v2" /><path d="M19 18v2" /></svg>
                 ) : (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={active ? "#4f46e5" : "#6b7280"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg>
                 )}
               </div>
 

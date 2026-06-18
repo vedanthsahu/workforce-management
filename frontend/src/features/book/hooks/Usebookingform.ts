@@ -368,6 +368,9 @@ export function useBookingForm() {
         amenityIds,
         currentSeatId:   searchParams.get("seatId") ?? undefined,
         modifyBookingId: modifyBookingId ?? null,
+        bookedForUserId: bookedForUserId ?? null,
+        isGuestBooking:  isGuestBooking,
+        bookedForGuestId: guestId ?? null,
       })
         .then(setSeats)
         .catch((e) => setError(e instanceof Error ? e.message : "Failed to load seats"))
@@ -423,6 +426,9 @@ export function useBookingForm() {
         amenityIds,
         currentSeatId:   searchParams.get("seatId") ?? undefined,
         modifyBookingId: modifyBookingId ?? null,
+        bookedForUserId: bookedForUserId ?? null,
+        isGuestBooking:  isGuestBooking,
+        bookedForGuestId: guestId ?? null,
       });
       setSeats(data);
       navigateTo(2, form);

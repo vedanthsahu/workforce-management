@@ -39,12 +39,12 @@ function mapUser(u: RawUser): Employee {
   };
 }
 
-export async function searchUsers(query: string, limit = 20): Promise<Employee[]> {
+export async function searchUsers(query: string, limit = 20, excludeId?: string): Promise<Employee[]> {
   if (!query.trim()) return [];
   const { data } = await axiosInstance.get<RawUser[]>("/users", {
     params: { q: query, limit },
   });
-  return data.map(mapUser);
+  return data.map(mapUser).filter((u) => !excludeId || u.id !== excludeId);
 }
 
 // ── Guests ───────────────────────────────────────────────────────────────────
@@ -148,6 +148,27 @@ export async function createGuestVisit(input: CreateGuestVisitInput): Promise<Gu
     start_time: input.startTime || undefined,
     end_time: input.endTime || undefined,
     notes: input.notes || undefined,
+  });
+  return data;
+}
+
+// ── Booking Eligibility ─────────────────────────────────────────────────────
+
+interface EligibilityResponse {
+  eligible: boolean;
+  message: string;
+}
+
+export async function checkGuestBookingEligibility(
+  guestId: string,
+  startDate: string,
+  endDate: string,
+): Promise<EligibilityResponse> {
+  const { data } = await axiosInstance.post<EligibilityResponse>("/bookings/eligibility", {
+    start_date: startDate,
+    end_date: endDate || startDate,
+    is_guest_booking: true,
+    booked_for_guest_id: Number(guestId),
   });
   return data;
 }

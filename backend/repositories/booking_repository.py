@@ -294,6 +294,51 @@ def user_has_active_booking_on_date(
         return cur.fetchone() is not None
 
 
+def guest_has_active_visit_in_range(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_id: str,
+    start_date: date,
+    end_date: date,
+    exclude_guest_visit_id: str | None = None,
+) -> bool:
+    """
+    Return whether a guest already has an active visit
+    in the requested date range.
+    """
+
+    query = """
+        SELECT 1
+        FROM guest_visits
+        WHERE tenant_id = %s
+          AND guest_id = %s
+          AND visit_date BETWEEN %s AND %s
+          AND visit_status IN (
+                'SCHEDULED',
+                'CHECKED_IN'
+          )
+    """
+
+    params: list[Any] = [
+        tenant_id,
+        guest_id,
+        start_date,
+        end_date,
+    ]
+
+    if exclude_guest_visit_id is not None:
+        query += " AND id::text <> %s"
+        params.append(exclude_guest_visit_id)
+
+    query += " LIMIT 1"
+
+    with conn.cursor() as cur:
+        cur.execute(query, params)
+        return cur.fetchone() is not None
+
+
+
 def user_has_active_booking_in_range(
     conn: PGConnection,
     *,

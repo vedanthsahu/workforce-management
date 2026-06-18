@@ -91,34 +91,73 @@ def fetch_guest_by_id(
     return dict(row) if row else None
 
 
+
+
 def search_guests(
     conn: PGConnection,
     *,
     tenant_id: str,
+    include_inactive: bool = False,
     search_text: str,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
-    pattern = f"%{search_text.strip()}%"
+    search_text = search_text.strip().lower()
+
+    status_clause = ""
+    if not include_inactive:
+        status_clause = "AND g.status = 'ACTIVE'"
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
             SELECT {GUEST_SELECT_FIELDS}
             FROM guests AS g
             WHERE g.tenant_id = %s
+            {status_clause}
               AND (
-                    g.full_name ILIKE %s
-                 OR g.email ILIKE %s
-                 OR g.phone ILIKE %s
+                    EXISTS (
+                        SELECT 1
+                        FROM unnest(
+                            regexp_split_to_array(
+                                lower(coalesce(g.full_name, '')),
+                                '\s+'
+                            )
+                        ) AS name_part
+                        WHERE name_part LIKE %s || '%%'
+                    )
+                 OR coalesce(g.phone, '')
+                        LIKE %s || '%%'
+                 OR lower(coalesce(g.email, ''))
+                        LIKE '%%' || %s || '%%'
               )
             ORDER BY
-                CASE WHEN g.status = 'ACTIVE' THEN 0 ELSE 1 END,
+                CASE
+                    WHEN lower(coalesce(g.full_name, ''))
+                         LIKE %s || '%%'
+                    THEN 1
+                    ELSE 2
+                END,
                 g.full_name,
                 g.id
             LIMIT %s
             """,
-            (tenant_id, pattern, pattern, pattern, limit),
+            (
+                tenant_id,
+
+                # WHERE
+                search_text,
+                search_text,
+                search_text,
+
+                # ORDER BY
+                search_text,
+
+                limit,
+            ),
         )
+
         rows = cur.fetchall()
+
     return [dict(row) for row in rows]
 
 

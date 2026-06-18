@@ -97,6 +97,11 @@ export interface FetchSeatsParams {
   currentSeatId?: string;
   /** Booking being modified, if any — passed through to the availability API */
   modifyBookingId?: string | null;
+  /** When booking for an employee */
+  bookedForUserId?: string | null;
+  /** When booking for a guest */
+  isGuestBooking?: boolean;
+  bookedForGuestId?: string | null;
 }
 
 // ── Booking payload / response ────────────────────────────────────────────────
