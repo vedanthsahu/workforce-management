@@ -6,6 +6,9 @@ import {
   fetchFutureBookings,
   fetchPastBookings,
   fetchCancelledBookings,
+  fetchDelegatedCurrentBookings,
+  fetchDelegatedFutureBookings,
+  fetchDelegatedPastBookings,
   deriveBookingSummary,
   fetchTeamGroups,
   fetchCurrentUser,
@@ -15,6 +18,7 @@ import type { ApiTeamGroup } from "@/features/dashboard/types/dashboard.types";
 
 interface UseBookingsReturn {
   displayedBookings: Booking[];
+  delegatedBookings: Booking[];
   summary:           BookingSummary;
   activeTab:         BookingTab;
   isLoading:         boolean;
@@ -33,6 +37,7 @@ export function useBookings(): UseBookingsReturn {
   const [futureBookings,    setFutureBookings]     = useState<Booking[]>([]);
   const [pastBookings,      setPastBookings]       = useState<Booking[]>([]);
   const [cancelledBookings, setCancelledBookings]  = useState<Booking[]>([]);
+  const [delegatedBookings, setDelegatedBookings]  = useState<Booking[]>([]);
   const [teamGroups,        setTeamGroups]         = useState<ApiTeamGroup[]>([]);
   const [currentUserId,     setCurrentUserId]      = useState<string>("");
 
@@ -62,22 +67,29 @@ export function useBookings(): UseBookingsReturn {
     setIsLoading(true);
     setError(null);
     try {
-      const [current, future, past, cancelled, groups, user] = await Promise.all([
-        fetchCurrentBookings(),
-        fetchFutureBookings(),
-        fetchPastBookings(),
-        fetchCancelledBookings(),
-        fetchTeamGroups(),
+      const [user, groups] = await Promise.all([
         fetchCurrentUser(),
+        fetchTeamGroups(),
+      ]);
+      const uid = user.user_id;
+      setCurrentUserId(uid);
+      setTeamGroups(groups);
+
+      const [current, future, past, cancelled, delCurrent, delFuture, delPast] = await Promise.all([
+        fetchCurrentBookings(uid),
+        fetchFutureBookings(uid),
+        fetchPastBookings(uid),
+        fetchCancelledBookings(uid),
+        fetchDelegatedCurrentBookings(uid),
+        fetchDelegatedFutureBookings(uid),
+        fetchDelegatedPastBookings(uid),
       ]);
 
       setCurrentBookings(current);
       setFutureBookings(future);
       setPastBookings(past);
       setCancelledBookings(cancelled);
-      setTeamGroups(groups);
-      setCurrentUserId(user.user_id);
-      // ✅ No setSummary here — the useEffect above handles it reactively
+      setDelegatedBookings([...delCurrent, ...delFuture, ...delPast]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load bookings");
     } finally {
@@ -146,6 +158,7 @@ export function useBookings(): UseBookingsReturn {
 
   return {
     displayedBookings,
+    delegatedBookings,
     summary,
     activeTab,
     isLoading,
