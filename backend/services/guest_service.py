@@ -16,11 +16,15 @@ from backend.repositories.guest_visit_repository import (
     fetch_guest_visits,
     check_in_guest_visit,
     check_out_guest_visit,
+    update_guest_visit,
+    sync_booking_from_guest_visit,
 )
 
 from backend.schemas.guest import (
     GuestVisitListItem,
     GuestVisitListResponse,
+    ModifyGuestVisitRequest,
+    AttachSeatToGuestVisitRequest,
     GuestVisitStatusUpdateResponse,
 )
 from backend.core.logging import LOGGER_NAME
@@ -44,6 +48,12 @@ from backend.repositories.guest_repository import (
 from backend.repositories.guest_visit_repository import (
     insert_guest_visit,
     update_guest_visit_booking_details,
+    fetch_guest_visit_by_id,
+    guest_visit_has_active_booking,
+    fetch_guest_visit_status,
+    update_guest_visit_requires_seat,
+    cancel_guest_visit,
+    fetch_active_booking_by_guest_visit,
 )
 from backend.repositories.location_repository import (
     fetch_building_by_id,
@@ -706,6 +716,14 @@ def cancel_guest_booking(
                 cancellation_reason,
             ),
         )
+        update_guest_visit_requires_seat(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=str(
+                booking["guest_visit_id"]
+            ),
+            requires_seat=False,
+        )
         updated_booking = fetch_booking_by_id(
             conn,
             tenant_id=tenant_id,
@@ -1121,5 +1139,284 @@ def guest_visit_check_out(
     except Exception:
         conn.rollback()
         raise
+
+
+
+
+def create_booking_for_existing_guest_visit(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    guest_visit_id: str,
+    payload: AttachSeatToGuestVisitRequest,
+) -> BookingResponse:
+
+    _require_guest_operator(current_user)
+
+    tenant_id = str(current_user["tenant_id"])
+
+    try:
+
+        visit = fetch_guest_visit_by_id(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        )
+
+        if visit is None:
+            raise LookupError(
+                "Guest visit not found."
+            )
+
+        if visit["visit_status"] != "SCHEDULED":
+            raise ValueError(
+                "Only scheduled visits can receive seat bookings."
+            )
+
+        if guest_visit_has_active_booking(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        ):
+            raise ValueError(
+                "Guest visit already has a booking."
+            )
+
+        seat = _resolve_seat(
+            conn,
+            tenant_id=tenant_id,
+            site_id=str(payload.site_id),
+            building_id=str(payload.building_id),
+            floor_id=str(payload.floor_id),
+            seat_id=str(payload.seat_id),
+        )
+
+        if has_active_booking_conflict(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+            booking_date=visit["visit_date"],
+        ):
+            _raise_seat_booking_conflict()
+
+        booking = insert_guest_booking(
+            conn,
+            tenant_id=tenant_id,
+            guest_id=str(visit["guest_id"]),
+            guest_visit_id=guest_visit_id,
+            booked_by_user_id=_current_user_id(current_user),
+            seat=seat,
+            booking_date=visit["visit_date"],
+        )
+
+        update_guest_visit_booking_details(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+            site_id=str(payload.site_id),
+            building_id=str(payload.building_id),
+            floor_id=str(payload.floor_id),
+            visit_date=visit["visit_date"],
+        )
+
+        conn.commit()
+
+        return BookingResponse(**booking)
+
+    except Exception:
+        conn.rollback()
+        raise
+
+def cancel_guest_visit_record(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    guest_visit_id: str,
+    cancellation_reason: str | None,
+) -> GuestVisitStatusUpdateResponse:
+
+    _require_guest_operator(current_user)
+
+    tenant_id = str(current_user["tenant_id"])
+
+    try:
+
+        active_booking = (
+            fetch_active_booking_by_guest_visit(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=guest_visit_id,
+            )
+        )
+
+        cancel_guest_visit(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        )
+
+        if active_booking:
+
+            cancel_booking(
+                conn,
+                tenant_id=tenant_id,
+                booking_id=str(
+                    active_booking["booking_id"]
+                ),
+                cancellation_reason=(
+                    cancellation_reason
+                    or
+                    "Guest visit cancelled."
+                ),
+                booking_status="NO_SHOW",
+            )
+
+        conn.commit()
+
+        status_row = fetch_guest_visit_status(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        )
+
+        return GuestVisitStatusUpdateResponse(
+            **status_row,
+        )
+
+    except HTTPException:
+        conn.rollback()
+        raise
+
+    except LookupError as exc:
+        conn.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "guest_visit_not_found",
+                "message": str(exc),
+            },
+        ) from exc
+
+    except psycopg2.Error as exc:
+        conn.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "guest_visit_cancel_failed",
+                "message": "Failed to cancel guest visit.",
+            },
+        ) from exc
+    
+
+
+def modify_guest_visit(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    guest_visit_id: str,
+    payload: ModifyGuestVisitRequest,
+) -> GuestVisitResponse:
+
+    _require_guest_operator(current_user)
+
+    tenant_id = str(current_user["tenant_id"])
+
+    floor_id = (
+        str(payload.floor_id)
+        if payload.floor_id is not None
+        else None
+    )
+
+    try:
+
+        visit = fetch_guest_visit_by_id(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        )
+
+        if visit is None:
+            raise LookupError(
+                "Guest visit not found."
+            )
+
+        if visit["visit_status"] != "SCHEDULED":
+            raise ValueError(
+                "Only scheduled guest visits can be modified."
+            )
+
+        _validate_visit_times(
+            payload.start_time,
+            payload.end_time,
+        )
+
+        _resolve_host(
+            conn,
+            tenant_id=tenant_id,
+            host_user_id=str(payload.host_user_id),
+        )
+
+        _validate_visit_location(
+            conn,
+            tenant_id=tenant_id,
+            site_id=str(payload.site_id),
+            building_id=str(payload.building_id),
+            floor_id=floor_id,
+        )
+
+        update_guest_visit(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+            host_user_id=str(payload.host_user_id),
+            site_id=str(payload.site_id),
+            building_id=str(payload.building_id),
+            floor_id=floor_id,
+            visit_date=payload.visit_date,
+            guest_type=_enum_value(payload.guest_type),
+            purpose_of_visit=_enum_value(
+                payload.purpose_of_visit
+            ),
+            start_time=payload.start_time,
+            end_time=payload.end_time,
+            notes=_clean_optional(payload.notes),
+        )
+
+        sync_booking_from_guest_visit(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+            site_id=str(payload.site_id),
+            building_id=str(payload.building_id),
+            floor_id=floor_id,
+            booking_date=payload.visit_date,
+        )
+
+        conn.commit()
+
+        updated = fetch_guest_visit_by_id(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        )
+
+        return GuestVisitResponse(**updated)
+
+    except HTTPException:
+        conn.rollback()
+        raise
+
+    except (LookupError, ValueError) as exc:
+        conn.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "guest_visit_modify_failed",
+                "message": str(exc),
+            },
+        ) from exc
 
 

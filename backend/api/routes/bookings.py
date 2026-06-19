@@ -34,6 +34,9 @@ from backend.services.booking_service import (
     get_user_past_bookings,
     get_user_current_bookings,
     get_user_cancelled_bookings,
+    get_delegated_past_bookings,
+    get_delegated_current_bookings,
+    get_delegated_future_bookings,
     get_user_future_bookings,
     modify_booking,
 )
@@ -141,3 +144,37 @@ def booking_eligibility(
         current_user=current_user,
         payload=payload,
     )
+
+@router.get("/delegated/past", response_model=list[BookingResponse])
+def fetch_delegated_past(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> list[BookingResponse]:
+
+    return get_delegated_past_bookings(
+        conn,
+        current_user=current_user,
+    )
+
+@router.get("/delegated/current", response_model=list[BookingResponse])
+def fetch_delegated_current(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> list[BookingResponse]:
+
+    return get_delegated_current_bookings(
+        conn,
+        current_user=current_user,
+    )
+
+@router.get("/delegated/future", response_model=list[BookingResponse])
+def fetch_delegated_future(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> list[BookingResponse]:
+
+    return get_delegated_future_bookings(
+        conn,
+        current_user=current_user,
+    )
+

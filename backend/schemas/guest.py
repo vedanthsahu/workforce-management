@@ -154,3 +154,32 @@ GuestVisitScope = Literal[
     "UPCOMING",
     "PAST",
 ]
+
+class AttachSeatToGuestVisitRequest(BaseModel):
+    site_id: int = Field(gt=0)
+    building_id: int = Field(gt=0)
+    floor_id: int = Field(gt=0)
+    seat_id: int = Field(gt=0)
+
+class CancelGuestVisitRequest(BaseModel):
+    cancellation_reason: str | None = None
+
+
+class ModifyGuestVisitRequest(BaseModel):
+    host_user_id: int = Field(gt=0)
+
+    site_id: int = Field(gt=0)
+    building_id: int = Field(gt=0)
+    floor_id: int | None = Field(default=None, gt=0)
+
+    visit_date: date
+
+    guest_type: GuestType
+
+    purpose_of_visit: VisitPurpose | None = None
+
+    start_time: time | None = None
+    end_time: time | None = None
+
+    notes: str | None = None
+
