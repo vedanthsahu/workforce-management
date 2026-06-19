@@ -19,17 +19,20 @@ from backend.services.guest_service import (
 router = APIRouter(prefix="/guests", tags=["guests"])
 
 
+
 @router.get("", response_model=list[GuestResponse])
 def search_guest_records(
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
     q: Annotated[str, Query(min_length=1)],
+    include_inactive: bool = Query(False),
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> list[GuestResponse]:
     return search_guest_profiles(
         conn,
         current_user=current_user,
         search_text=q,
+        include_inactive=include_inactive,
         limit=limit,
     )
 

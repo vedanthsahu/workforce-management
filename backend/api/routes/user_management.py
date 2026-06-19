@@ -30,6 +30,7 @@ from backend.services.user_management_service import (
 
 router = APIRouter(tags=["user-management"])
 
+
 @router.get(
     "/users",
     response_model=list[UserSearchResponse],
@@ -45,12 +46,14 @@ def search_users(
     ],
     q: str = Query(..., min_length=1),
     limit: int = Query(20, ge=1, le=100),
+    include_inactive: bool = Query(False),
 ) -> list[UserSearchResponse]:
 
     return search_user_profiles(
         conn,
         current_user=current_user,
         search_text=q,
+        include_inactive=include_inactive,
         limit=limit,
     )
 

@@ -1,6 +1,6 @@
-"""services/booking_service.py Service-layer booking workflows for day-based seat reservations."""
-
 from __future__ import annotations
+
+"""services/booking_service.py Service-layer booking workflows for day-based seat reservations."""
 
 import logging
 from datetime import date, datetime
@@ -11,9 +11,11 @@ from fastapi import BackgroundTasks, HTTPException, status
 from psycopg2 import errorcodes
 from psycopg2.extensions import connection as PGConnection
 
-from backend.repositories.booking_repository import (
-    insert_guest_booking,
+from backend.schemas.booking import (
+BookingEligibilityRequest,
+BookingEligibilityResponse,
 )
+
 from backend.repositories.guest_repository import (
     fetch_guest_by_id,
 )
@@ -27,6 +29,9 @@ from backend.repositories.booking_repository import (
     fetch_available_seats_by_range,
     fetch_past_bookings_for_user,
     fetch_current_bookings_for_user,
+    fetch_past_delegated_bookings,
+    fetch_current_delegated_bookings,
+    fetch_future_delegated_bookings,
     fetch_cancelled_bookings_for_user,
     fetch_future_bookings_for_user,
     fetch_seat_for_booking,
@@ -37,6 +42,9 @@ from backend.repositories.booking_repository import (
     fetch_booking_by_id,
     user_has_active_booking_in_range,
     user_has_active_booking_on_date,
+    guest_has_active_booking_in_range,
+    insert_guest_booking,
+    guest_has_active_visit_in_range,
 )
 from backend.repositories.user_repository import fetch_user_by_id
 from backend.schemas.booking import (
@@ -81,9 +89,13 @@ def _can_book_for_user(
         return True
 
     role = _user_role(current_user)
-    if role == "TENANT_ADMIN":
+    if role in {"TENANT_ADMIN", "TALENT"}:
         return True
 
+    return (
+        role == "MANAGER"
+        and str(booking_user.get("manager_user_id") or "") == current_user_id
+    )
     return (
         role == "MANAGER"
         and str(booking_user.get("manager_user_id") or "") == current_user_id
@@ -1035,6 +1047,8 @@ def get_available_seats_by_range(
     amenity_ids: list[int] | None = None,
     current_user: dict[str, Any] | None = None,
     booked_for_user_id: str | None = None,
+    booked_for_guest_id: str | None = None,
+    is_guest_booking: bool = False,
     exclude_booking_id: str | None = None,
 ) -> list[AvailableSeatResponse]:
     """
@@ -1044,30 +1058,68 @@ def get_available_seats_by_range(
     normalized_amenity_ids = sorted(set(amenity_ids or []))
 
     try:
-        if booked_for_user_id is not None:
+        if is_guest_booking:
+            if booked_for_guest_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "code": "guest_id_required",
+                        "message": "booked_for_guest_id is required.",
+                    },
+                )
+
+            if guest_has_active_booking_in_range(
+                conn,
+                tenant_id=tenant_id,
+                booked_for_guest_id=booked_for_guest_id,
+                start_date=start_date,
+                end_date=end_date,
+                exclude_booking_id=exclude_booking_id,
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "booking_guest_conflict",
+                        "message": (
+                            "The guest already has an active booking "
+                            "in the requested date range."
+                        ),
+                    },
+                )
+
+        elif booked_for_user_id is not None:
+
             if current_user is None:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail={
                         "code": "booking_forbidden",
-                        "message": "Authenticated user context is required for delegated availability checks.",
+                        "message": (
+                            "Authenticated user context is required "
+                            "for delegated availability checks."
+                        ),
                     },
                 )
+
             _resolve_booked_for_user(
                 conn,
                 tenant_id=tenant_id,
                 current_user=current_user,
                 booked_for_user_id=booked_for_user_id,
-                forbidden_message="You are not allowed to check availability for this user.",
+                forbidden_message=(
+                    "You are not allowed to check "
+                    "availability for this user."
+                ),
             )
+
             if user_has_active_booking_in_range(
-                    conn,
-                    tenant_id=tenant_id,
-                    booked_for_user_id=booked_for_user_id,
-                    start_date=start_date,
-                    end_date=end_date,
-                    exclude_booking_id=exclude_booking_id,
-                ):
+                conn,
+                tenant_id=tenant_id,
+                booked_for_user_id=booked_for_user_id,
+                start_date=start_date,
+                end_date=end_date,
+                exclude_booking_id=exclude_booking_id,
+            ):
                 _raise_user_booking_conflict(
                     "The booking owner already has an active booking in the requested date range.",
                 )
@@ -1378,3 +1430,127 @@ def create_guest_visit(
                 "message": "Failed to create guest visit.",
             },
         ) from exc
+
+def check_booking_eligibility(
+conn: PGConnection,
+*,
+tenant_id: str,
+current_user: dict[str, Any],
+payload: BookingEligibilityRequest,
+) -> BookingEligibilityResponse:
+    if payload.start_date > payload.end_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_date_range",
+                "message": "start_date must be earlier than end_date.",
+            },
+        )
+
+    if payload.is_guest_booking:
+
+        if payload.booked_for_guest_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "guest_id_required",
+                    "message": "booked_for_guest_id is required.",
+                },
+            )
+
+        if guest_has_active_visit_in_range(
+                conn,
+                tenant_id=tenant_id,
+                guest_id=str(payload.booked_for_guest_id),
+                start_date=payload.start_date,
+                end_date=payload.end_date,
+            ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "booking_guest_conflict",
+                    "message": (
+                        "Guest already has an active Visit "
+                        "in requested date range."
+                    ),
+                },
+            )
+
+    else:
+
+        effective_user_id = (
+            str(payload.booked_for_user_id)
+            if payload.booked_for_user_id is not None
+            else str(current_user["user_id"])
+        )
+
+        _resolve_booked_for_user(
+            conn,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            booked_for_user_id=effective_user_id,
+            forbidden_message=(
+                "You are not allowed to check "
+                "availability for this user."
+            ),
+        )
+
+        if user_has_active_booking_in_range(
+            conn,
+            tenant_id=tenant_id,
+            booked_for_user_id=effective_user_id,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            exclude_booking_id=payload.exclude_booking_id,
+        ):
+            _raise_user_booking_conflict(
+                "The booking owner already has an active booking in the requested date range.",
+            )
+
+    return BookingEligibilityResponse(
+        eligible=True,
+        message="Eligible for booking.",
+    )
+
+def get_delegated_past_bookings(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+) -> list[BookingResponse]:
+
+    bookings = fetch_past_delegated_bookings(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        user_id=str(current_user["user_id"]),
+    )
+
+    return [BookingResponse(**booking) for booking in bookings]
+
+def get_delegated_current_bookings(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+) -> list[BookingResponse]:
+
+    bookings = fetch_current_delegated_bookings(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        user_id=str(current_user["user_id"]),
+    )
+
+    return [BookingResponse(**booking) for booking in bookings]
+
+def get_delegated_future_bookings(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+) -> list[BookingResponse]:
+
+    bookings = fetch_future_delegated_bookings(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        user_id=str(current_user["user_id"]),
+    )
+
+    return [BookingResponse(**booking) for booking in bookings]
+

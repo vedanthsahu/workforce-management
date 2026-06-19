@@ -385,7 +385,16 @@ def available_seats(
     modify_booking_id: Annotated[
     str | None,
     Query(alias="modifyBookingId"),
-] = None,
+    ] = None,
+    is_guest_booking: Annotated[
+        bool,
+        Query(),
+    ] = False,
+
+    booked_for_guest_id: Annotated[
+        int | None,
+        Query(),
+    ] = None,
 
 ) -> list[AvailableSeatResponse]:
 
@@ -409,23 +418,36 @@ def available_seats(
             },
         )
 
-    effective_user_id = (
-        booked_for_user_id
-        if booked_for_user_id is not None
-        else current_user["user_id"]
-    )
+    effective_user_id = None
+
+    if not is_guest_booking:
+        effective_user_id = (
+            booked_for_user_id
+            if booked_for_user_id is not None
+            else current_user["user_id"]
+        )
 
     return get_available_seats_by_range(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        floor_id=str(floor_id),
-        start_date=start_date,
-        end_date=end_date,
-        current_user=current_user,
-        booked_for_user_id=str(effective_user_id),
-        amenity_ids=amenity_ids,
-        exclude_booking_id=modify_booking_id
-    )
+            conn,
+            tenant_id=str(current_user["tenant_id"]),
+            floor_id=str(floor_id),
+            start_date=start_date,
+            end_date=end_date,
+            current_user=current_user,
+            booked_for_user_id=(
+                str(effective_user_id)
+                if effective_user_id is not None
+                else None
+            ),
+            booked_for_guest_id=(
+                str(booked_for_guest_id)
+                if booked_for_guest_id is not None
+                else None
+            ),
+            is_guest_booking=is_guest_booking,
+            amenity_ids=amenity_ids,
+            exclude_booking_id=modify_booking_id,
+        )
 
 
 @router.patch(
