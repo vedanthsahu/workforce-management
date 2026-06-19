@@ -1,5 +1,7 @@
 export type BookingStatus = "confirmed" | "cancelled" | "pending";
 
+export type BookingType = "self" | "on_behalf" | "employee" | "guest";
+
 export type BookingTab = "upcoming" | "past" | "recurring" | "cancelled";
 
 export interface BookingTag {
@@ -24,9 +26,14 @@ export interface Booking {
   tags: BookingTag[];
   isRecurring?: boolean;
   recurringPattern?: string;
-  preferences?: string[]; // ← NEW: preference keys e.g. ["window", "dualMonitor"]
-  floorId?: string;        // raw floor_id from API
-  seatId?: string;         // raw seat_id from API
+  preferences?: string[];
+  floorId?: string;
+  seatId?: string;
+  bookingType?: BookingType;
+  bookedForName?: string;
+  bookedByName?: string;
+  bookedForRole?: string;
+  bookedByRole?: string;
 }
 
 export interface BookingSummary {
