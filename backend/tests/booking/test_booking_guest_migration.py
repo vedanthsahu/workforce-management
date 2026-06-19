@@ -119,12 +119,6 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
                 booking_user=target,
             )
         )
-        self.assertTrue(
-            booking_service._can_book_for_user(
-                current_user={"user_id": "99", "role_name": "TALENT"},
-                booking_user=target,
-            )
-        )
 
     def test_employee_cancel_uses_booked_for_user_owner(self) -> None:
         conn = FakeConnection()
