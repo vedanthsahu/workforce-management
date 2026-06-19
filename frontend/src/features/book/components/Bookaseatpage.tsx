@@ -1154,16 +1154,7 @@ const BookASeatPage: React.FC = () => {
             </section>
 
             {/* Actions */}
-            <div className="flex justify-between items-center pt-1 border-t border-[#EBEBF5]">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={clearAll}
-                className="gap-1.5 text-[12px] sm:text-[12.5px] text-gray-500"
-              >
-                <RefreshCw size={12} />
-                Clear All
-              </Button>
+            <div className="flex justify-end items-center pt-1 border-t border-[#EBEBF5]">
               <Button
                 onClick={findAvailableSeats}
                 disabled={!step1Valid || loadingSeats}

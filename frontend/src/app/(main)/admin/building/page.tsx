@@ -18,7 +18,7 @@ function BuildingsPage() {
   const {
     buildings, sites, stats, loading, error,
     search, setSearch, selectedSiteId, setSelectedSiteId, fetchBuildings, fetchStats,
-    search, setSearch, selectedSiteId, setSelectedSiteId, fetchBuildings, fetchStats,
+    
   } = useBuildings();
 
   const searchParams = useSearchParams();

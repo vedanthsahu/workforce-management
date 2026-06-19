@@ -551,7 +551,7 @@ export function useBookingForm() {
     setFloorLayoutUrl(null);
     setConfirmation(null);
     setError(null);
-    // router.push("/my-bookings");
+    router.push("/book");
   };
 
   // ── Derived values ────────────────────────────────────────────────────────
