@@ -170,7 +170,7 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
         self.assertEqual(response.booked_for_user_id, "20")
         self.assertEqual(conn.commits, 1)
 
-    def test_employee_modify_marks_old_booking_no_show(self) -> None:
+    def test_employee_modify_marks_old_booking_modified(self) -> None:
         conn = FakeConnection()
         old_booking = _employee_booking()
         new_booking = _employee_booking(
@@ -235,7 +235,7 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
                 payload=payload,
             )
 
-        self.assertEqual(cancel.call_args.kwargs["booking_status"], "NO_SHOW")
+        self.assertEqual(cancel.call_args.kwargs["booking_status"], "MODIFIED")
         self.assertEqual(response.booking_id, "101")
         self.assertEqual(conn.commits, 1)
 
@@ -360,6 +360,9 @@ class GuestBookingMigrationTests(unittest.TestCase):
             return_value={"guest_visit_id": "60"},
         ) as insert_visit, patch.object(
             guest_service,
+            "update_guest_visit_requires_seat",
+        ), patch.object(
+            guest_service,
             "insert_guest_booking",
             return_value=_guest_booking(),
         ) as insert_booking:
@@ -420,6 +423,9 @@ class GuestBookingMigrationTests(unittest.TestCase):
             guest_service,
             "insert_guest_visit",
             return_value={"guest_visit_id": "60"},
+        ), patch.object(
+            guest_service,
+            "update_guest_visit_requires_seat",
         ), patch.object(
             guest_service,
             "insert_guest_booking",
@@ -509,6 +515,9 @@ class GuestBookingMigrationTests(unittest.TestCase):
             "cancel_booking",
         ), patch.object(
             guest_service,
+            "update_guest_visit_requires_seat",
+        ), patch.object(
+            guest_service,
             "fetch_booking_by_id",
             return_value=cancelled,
         ):
@@ -523,7 +532,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
         self.assertEqual(response.booked_for_guest_id, "50")
         self.assertEqual(conn.commits, 1)
 
-    def test_guest_modify_preserves_visit_and_marks_old_booking_no_show(self) -> None:
+    def test_guest_modify_preserves_visit_and_marks_old_booking_modified(self) -> None:
         conn = FakeConnection()
         old_booking = _guest_booking()
         new_booking = _guest_booking(
@@ -593,7 +602,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
             )
 
         self.assertEqual(update_visit.call_args.kwargs["guest_visit_id"], "60")
-        self.assertEqual(cancel.call_args.kwargs["booking_status"], "NO_SHOW")
+        self.assertEqual(cancel.call_args.kwargs["booking_status"], "MODIFIED")
         self.assertEqual(insert_booking.call_args.kwargs["guest_visit_id"], "60")
         self.assertEqual(response.booking_id, "201")
         self.assertEqual(conn.commits, 1)
