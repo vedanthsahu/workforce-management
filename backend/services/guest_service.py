@@ -14,17 +14,20 @@ from psycopg2.extensions import connection as PGConnection
 
 from backend.repositories.guest_visit_repository import (
     fetch_guest_visits,
+    fetch_guest_visit_summary,
     check_in_guest_visit,
     check_out_guest_visit,
     update_guest_visit,
     sync_booking_from_guest_visit,
+    recalculate_guest_visit_requires_seat,
+    fetch_guest_visit_integrity_findings,
 )
 
 from backend.schemas.guest import (
     GuestVisitListItem,
     GuestVisitListResponse,
-    ModifyGuestVisitRequest,
     AttachSeatToGuestVisitRequest,
+    ModifyGuestVisitRequest,
     GuestVisitStatusUpdateResponse,
 )
 from backend.core.logging import LOGGER_NAME
@@ -84,6 +87,7 @@ BOOKING_STATUSES = {
     "CANCELLED",
     "CHECKED_IN",
     "COMPLETED",
+    "MODIFIED",
     "NO_SHOW",
 }
 
@@ -606,6 +610,11 @@ def create_guest_booking(
             seat=seat,
             booking_date=payload.visit_date,
         )
+        recalculate_guest_visit_requires_seat(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=str(visit["guest_visit_id"]),
+        )
         conn.commit()
     except HTTPException:
         conn.rollback()
@@ -716,13 +725,12 @@ def cancel_guest_booking(
                 cancellation_reason,
             ),
         )
-        update_guest_visit_requires_seat(
+        recalculate_guest_visit_requires_seat(
             conn,
             tenant_id=tenant_id,
             guest_visit_id=str(
                 booking["guest_visit_id"]
             ),
-            requires_seat=False,
         )
         updated_booking = fetch_booking_by_id(
             conn,
@@ -841,7 +849,7 @@ def modify_guest_booking(
             cancellation_reason=(
                 f"Booking ID: {booking_id}. Replaced by guest booking modification."
             ),
-            booking_status="NO_SHOW",
+            booking_status="MODIFIED",
         )
         new_booking = insert_guest_booking(
             conn,
@@ -851,6 +859,11 @@ def modify_guest_booking(
             booked_by_user_id=_current_user_id(current_user),
             seat=target_seat,
             booking_date=payload.booking_date,
+        )
+        recalculate_guest_visit_requires_seat(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
         )
         conn.commit()
     except HTTPException:
@@ -912,6 +925,7 @@ def _validate_mutable_guest_booking(
         "CANCELLED",
         "CHECKED_IN",
         "COMPLETED",
+        "MODIFIED",
         "NO_SHOW",
     }:
         raise HTTPException(
@@ -1065,6 +1079,16 @@ def list_guest_visits(
                 detail="Security can only access current visits.",
             )
 
+    summary = fetch_guest_visit_summary(
+        conn,
+        tenant_id=tenant_id,
+        visit_scope=visit_scope,
+        site_id=site_id,
+        visit_status=visit_status,
+        requires_seat=requires_seat,
+        search=search,
+    )
+
     rows = fetch_guest_visits(
         conn,
         tenant_id=tenant_id,
@@ -1078,6 +1102,7 @@ def list_guest_visits(
     )
 
     return GuestVisitListResponse(
+        summary=summary,
         items=[
             GuestVisitListItem(**row)
             for row in rows
@@ -1108,6 +1133,24 @@ def guest_visit_check_in(
             visit_status="CHECKED_IN",
         )
 
+    except LookupError as exc:
+        conn.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "guest_visit_not_found",
+                "message": str(exc),
+            },
+        ) from exc
+    except ValueError as exc:
+        conn.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_guest_visit_transition",
+                "message": str(exc),
+            },
+        ) from exc
     except Exception:
         conn.rollback()
         raise
@@ -1136,6 +1179,24 @@ def guest_visit_check_out(
             visit_status="CHECKED_OUT",
         )
 
+    except LookupError as exc:
+        conn.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "guest_visit_not_found",
+                "message": str(exc),
+            },
+        ) from exc
+    except ValueError as exc:
+        conn.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_guest_visit_transition",
+                "message": str(exc),
+            },
+        ) from exc
     except Exception:
         conn.rollback()
         raise
@@ -1219,6 +1280,12 @@ def create_booking_for_existing_guest_visit(
             visit_date=visit["visit_date"],
         )
 
+        recalculate_guest_visit_requires_seat(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        )
+
         conn.commit()
 
         return BookingResponse(**booking)
@@ -1253,6 +1320,7 @@ def cancel_guest_visit_record(
             conn,
             tenant_id=tenant_id,
             guest_visit_id=guest_visit_id,
+            cancellation_reason=cancellation_reason,
         )
 
         if active_booking:
@@ -1268,8 +1336,14 @@ def cancel_guest_visit_record(
                     or
                     "Guest visit cancelled."
                 ),
-                booking_status="NO_SHOW",
+                booking_status="CANCELLED",
             )
+
+        recalculate_guest_visit_requires_seat(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        )
 
         conn.commit()
 
@@ -1418,5 +1492,138 @@ def modify_guest_visit(
                 "message": str(exc),
             },
         ) from exc
+
+
+def attach_seat_to_guest_visit(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    guest_visit_id: str,
+    payload: AttachSeatToGuestVisitRequest,
+    background_tasks: BackgroundTasks | None = None,
+) -> BookingResponse:
+
+    _require_guest_operator(current_user)
+
+    tenant_id = str(current_user["tenant_id"])
+
+    try:
+
+        visit = fetch_guest_visit_by_id(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        )
+
+        if visit is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "guest_visit_not_found",
+                    "message": "Guest visit not found.",
+                },
+            )
+
+        if visit["visit_status"] == "CANCELLED":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "guest_visit_cancelled",
+                    "message": "Cannot attach seat to a cancelled visit.",
+                },
+            )
+
+        if guest_visit_has_active_booking(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "booking_already_exists",
+                    "message": "Guest visit already has an active booking.",
+                },
+            )
+
+        seat = _resolve_seat(
+            conn,
+            tenant_id=tenant_id,
+            site_id=str(payload.site_id),
+            building_id=str(payload.building_id),
+            floor_id=str(payload.floor_id),
+            seat_id=str(payload.seat_id),
+        )
+
+        if has_active_booking_conflict(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+            booking_date=visit["visit_date"],
+        ):
+            _raise_seat_booking_conflict()
+
+        booking = insert_guest_booking(
+            conn,
+            tenant_id=tenant_id,
+            guest_id=str(visit["guest_id"]),
+            guest_visit_id=guest_visit_id,
+            booked_by_user_id=_current_user_id(current_user),
+            seat=seat,
+            booking_date=visit["visit_date"],
+        )
+
+        update_guest_visit_requires_seat(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+            requires_seat=True,
+        )
+
+        recalculate_guest_visit_requires_seat(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        )
+
+        conn.commit()
+
+    except HTTPException:
+        conn.rollback()
+        raise
+
+    except (LookupError, ValueError) as exc:
+        conn.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "attach_seat_failed",
+                "message": str(exc),
+            },
+        ) from exc
+
+    except psycopg2.Error as exc:
+        conn.rollback()
+        _translate_guest_db_error(
+            exc,
+            action="attach_seat",
+        )
+
+    return BookingResponse(**booking)
+
+
+def audit_guest_visit_integrity(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    _require_guest_operator(current_user)
+
+    return fetch_guest_visit_integrity_findings(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        limit=limit,
+    )
 
 

@@ -9,7 +9,7 @@ from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user
 from backend.db.connection import get_db
-from backend.schemas.guest import CreateGuestVisitRequest, GuestVisitResponse, CancelGuestVisitRequest
+from backend.schemas.guest import CreateGuestVisitRequest, GuestVisitResponse, AttachSeatToGuestVisitRequest , CancelGuestVisitRequest
 from backend.services.guest_service import create_guest_visit
 
 from backend.api.deps import (
@@ -20,6 +20,7 @@ from backend.api.deps import (
 from backend.services.guest_service import (
     list_guest_visits,
     guest_visit_check_in,
+    attach_seat_to_guest_visit,
     guest_visit_check_out,
     cancel_guest_visit_record,
     modify_guest_visit,
