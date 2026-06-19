@@ -4,13 +4,19 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from typing import Literal
+from datetime import date, datetime, time
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from backend.core.enums import (
     DayAvailabilityStatus,
     GuestType,
+    DayAvailabilityStatus,
+    GuestType,
     PreferenceMatchStatus,
+    RangeAvailabilityStatus,
+    VisitPurpose,
     RangeAvailabilityStatus,
     VisitPurpose,
 )
@@ -24,11 +30,14 @@ class CreateBookingRequest(BaseModel):
     floor_id: int = Field(gt=0)
     seat_id: int = Field(gt=0)
     booked_for_user_id: int | None = Field(default=None, gt=0)
+    booked_for_user_id: int | None = Field(default=None, gt=0)
     booking_date: date
+
 
 
 class CancelBookingRequest(BaseModel):
     cancellation_reason: str | None = None
+
 
 
 class ModifyBookingRequest(BaseModel):
@@ -37,6 +46,8 @@ class ModifyBookingRequest(BaseModel):
     floor_id: int = Field(gt=0)
     seat_id: int = Field(gt=0)
     booking_date: date
+    booking_date: date
+
 
 
 class BookingResponse(BaseModel):
@@ -44,9 +55,22 @@ class BookingResponse(BaseModel):
 
     booking_id: str
     tenant_id: str
+
     booked_for_user_id: str | None = None
     booked_for_guest_id: str | None = None
+
     booked_by_user_id: str
+
+    # NEW
+    booked_by_name: str | None = None
+    booked_by_email: str | None = None
+
+    # NEW
+    booked_for_name: str | None = None
+    booked_for_email: str | None = None
+    booked_for_phone: str | None = None
+    booked_for_organization: str | None = None
+
     guest_visit_id: str | None = None
     booking_type: Literal["EMPLOYEE", "GUEST"]
 
@@ -54,6 +78,7 @@ class BookingResponse(BaseModel):
     site_id: str
     building_id: str
     floor_id: str
+
     seat_code: str | None = None
     site_name: str | None = None
     building_name: str | None = None
@@ -62,10 +87,13 @@ class BookingResponse(BaseModel):
     booking_date: date
     booking_status: str
     source_channel: str | None = None
+
     check_in_at: datetime | None = None
     checked_out_at: datetime | None = None
     cancelled_at: datetime | None = None
+
     cancellation_reason: str | None = None
+
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -73,13 +101,17 @@ class BookingResponse(BaseModel):
     guest_email: str | None = None
     guest_phone: str | None = None
     guest_organization: str | None = None
+
     guest_type: GuestType | None = None
     purpose_of_visit: VisitPurpose | None = None
     visit_status: str | None = None
+
     host_user_id: str | None = None
     host_name: str | None = None
+
     start_time: time | None = None
     end_time: time | None = None
+
     notes: str | None = None
     requires_seat: bool | None = None
 

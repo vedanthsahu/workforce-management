@@ -18,6 +18,7 @@ function BuildingsPage() {
   const {
     buildings, sites, stats, loading, error,
     search, setSearch, selectedSiteId, setSelectedSiteId, fetchBuildings, fetchStats,
+    search, setSearch, selectedSiteId, setSelectedSiteId, fetchBuildings, fetchStats,
   } = useBuildings();
 
   const searchParams = useSearchParams();
@@ -54,7 +55,7 @@ function BuildingsPage() {
     setOpenModal(true);
   };
 
-const handleEditSuccess = async (updatedBuildingId?: string) => {
+  const handleEditSuccess = async (updatedBuildingId?: string) => {
     await Promise.all([fetchBuildings(selectedSiteId), fetchStats()]);
     showBannerWithHighlight("Building updated successfully.", updatedBuildingId);
   };
