@@ -29,6 +29,9 @@ from backend.repositories.booking_repository import (
     fetch_available_seats_by_range,
     fetch_past_bookings_for_user,
     fetch_current_bookings_for_user,
+    fetch_past_delegated_bookings,
+    fetch_current_delegated_bookings,
+    fetch_future_delegated_bookings,
     fetch_cancelled_bookings_for_user,
     fetch_future_bookings_for_user,
     fetch_seat_for_booking,
@@ -1508,3 +1511,46 @@ payload: BookingEligibilityRequest,
         eligible=True,
         message="Eligible for booking.",
     )
+
+def get_delegated_past_bookings(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+) -> list[BookingResponse]:
+
+    bookings = fetch_past_delegated_bookings(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        user_id=str(current_user["user_id"]),
+    )
+
+    return [BookingResponse(**booking) for booking in bookings]
+
+def get_delegated_current_bookings(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+) -> list[BookingResponse]:
+
+    bookings = fetch_current_delegated_bookings(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        user_id=str(current_user["user_id"]),
+    )
+
+    return [BookingResponse(**booking) for booking in bookings]
+
+def get_delegated_future_bookings(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+) -> list[BookingResponse]:
+
+    bookings = fetch_future_delegated_bookings(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        user_id=str(current_user["user_id"]),
+    )
+
+    return [BookingResponse(**booking) for booking in bookings]
+
