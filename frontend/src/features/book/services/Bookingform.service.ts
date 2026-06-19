@@ -351,6 +351,17 @@ export async function modifyBooking(
   return data;
 }
 
+export async function modifyGuestBooking(
+  bookingId: string,
+  payload: ModifyBookingPayload
+): Promise<CreateBookingResponse> {
+  const { data } = await axiosInstance.post<CreateBookingResponse>(
+    `/guest-bookings/${bookingId}/modify`,
+    payload
+  );
+  return data;
+}
+
 // ── Preferences ───────────────────────────────────────────────────────────────
 
 export async function fetchPreferences(): Promise<Preference[]> {

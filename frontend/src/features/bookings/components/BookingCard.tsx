@@ -39,13 +39,29 @@ type BookingCardProps = {
   onCancelClick: (booking: Booking) => void;
   onModifyClick: (booking: Booking) => void;
   showActions?: boolean;
+  variant?: "my" | "delegated";
 };
 
-export function BookingCard({ booking, onCancelClick, onModifyClick, showActions = true }: BookingCardProps) {
+export function BookingCard({ booking, onCancelClick, onModifyClick, showActions = true, variant = "my" }: BookingCardProps) {
   const isCancelled = booking.status === "cancelled";
   const bType = booking.bookingType ?? "self";
-  const isSelf = bType === "self";
-  const hasBookedBy = !isSelf && !!booking.bookedByName;
+
+  const showPersonColumn = variant === "my"
+    ? bType !== "self" && !!booking.bookedByName
+    : !!booking.bookedForName;
+
+  const personLabel = variant === "my" ? "Booked by" : "Booked for";
+  const personName = variant === "my" ? booking.bookedByName : booking.bookedForName;
+  const personSub = variant === "my"
+    ? (booking.bookedByRole ?? "—")
+    : bType === "guest"
+      ? (booking.guestEmail ?? "Guest")
+      : (booking.bookedForRole ?? "Employee");
+  const personColor = variant === "my"
+    ? "bg-gradient-to-br from-emerald-500 to-teal-600"
+    : bType === "guest"
+      ? "bg-gradient-to-br from-amber-500 to-amber-600"
+      : "bg-gradient-to-br from-blue-500 to-blue-600";
 
   return (
     <div className={cn(
@@ -54,12 +70,12 @@ export function BookingCard({ booking, onCancelClick, onModifyClick, showActions
     )}>
       <div className={cn(
         "grid items-center gap-4 sm:gap-6 p-4 sm:px-5 sm:py-[18px]",
-        hasBookedBy
+        showPersonColumn
           ? "grid-cols-[52px_1fr] sm:grid-cols-[52px_1.7fr_1.1fr_auto]"
           : "grid-cols-[52px_1fr] sm:grid-cols-[52px_1.7fr_auto]",
       )}>
 
-        {/* Icon — same as booked-for-someone */}
+        {/* Icon */}
         <div className="w-[52px] h-[52px] rounded-[13px] bg-orange-100 flex items-center justify-center shrink-0">
           <span className="text-2xl leading-none" role="img" aria-label="Office building">🏢</span>
         </div>
@@ -90,19 +106,30 @@ export function BookingCard({ booking, onCancelClick, onModifyClick, showActions
           </div>
         </div>
 
-        {/* Booked by — only when someone else booked for you */}
-        {hasBookedBy && (
+        {/* Person column — context-aware */}
+        {showPersonColumn && personName && (
           <div className="hidden sm:block min-w-0">
-            <p className="text-[10px] font-semibold tracking-wider uppercase text-gray-400 mb-2">Booked by</p>
+            <p className="text-[10px] font-semibold tracking-wider uppercase text-gray-400 mb-2">{personLabel}</p>
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 bg-gradient-to-br from-emerald-500 to-teal-600">
-                {getInitials(booking.bookedByName!)}
+              <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0", personColor)}>
+                {getInitials(personName)}
               </div>
               <div className="min-w-0">
-                <p className="text-[12.5px] font-semibold text-[#1A1A2E] truncate">{booking.bookedByName}</p>
-                <p className="text-[11px] text-gray-400 truncate">{booking.bookedByRole ?? "—"}</p>
+                <p className="text-[12.5px] font-semibold text-[#1A1A2E] truncate">{personName}</p>
+                <p className="text-[11px] text-gray-400 truncate">{personSub}</p>
               </div>
             </div>
+            {variant === "delegated" && bType === "guest" && booking.hostName && (
+              <div className="flex items-center gap-2 mt-2">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 bg-gradient-to-br from-emerald-500 to-teal-600">
+                  {getInitials(booking.hostName)}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[12.5px] font-semibold text-[#1A1A2E] truncate">{booking.hostName}</p>
+                  <p className="text-[11px] text-gray-400 truncate">Host</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

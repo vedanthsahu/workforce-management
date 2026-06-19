@@ -233,6 +233,7 @@ function StaticBfsCard({ office, floor, date, statusLabel, typeBadge, personLabe
 export default function MyBookingsPage() {
   const {
     displayedBookings,
+    delegatedBookings,
     summary,
     activeTab,
     isLoading,
@@ -409,8 +410,7 @@ export default function MyBookingsPage() {
           {/* ══ BOOKED FOR SOMEONE PANEL ══ */}
           {topTab === "bookedForSomeone" && (
             <>
-
-              {/* Sub-tabs */}
+              {/* Sub-tabs + filter chips */}
               <div className="flex border-b border-[#EBEBF5] mb-4">
                 {(["upcoming", "past", "cancelled"] as const).map((t) => (
                   <button
@@ -426,7 +426,7 @@ export default function MyBookingsPage() {
                     {t.charAt(0).toUpperCase() + t.slice(1)}
                   </button>
                 ))}
-                <div className="flex gap-1.5 ml-auto">
+                <div className="flex gap-1.5 ml-auto items-center">
                   {(["all", "employees", "guests"] as const).map((f) => (
                     <button
                       key={f}
@@ -444,41 +444,41 @@ export default function MyBookingsPage() {
                 </div>
               </div>
 
-              {/* Static cards */}
+              {/* Dynamic delegated booking cards */}
               <div className="flex flex-col gap-3.5">
-                {(bfsFilter === "all" || bfsFilter === "employees") && (
-                  <StaticBfsCard
-                    office="Bangalore Office"
-                    floor="7th Floor · Seat B-15"
-                    date="Fri, Jun 20, 2025 · 9:00 AM – 5:00 PM"
-                    statusLabel="Confirmed"
-                    typeBadge="employee"
-                    personLabel="Booked for"
-                    personName="Rahul Sharma"
-                    personRole="Software Engineer"
-                    personColor="bg-gradient-to-br from-blue-500 to-blue-600"
-                    bookingId="SB-2025-0620-101"
-                    bookedOn="Booked Jun 10 · 11:15 AM"
-                  />
-                )}
-                {(bfsFilter === "all" || bfsFilter === "guests") && (
-                  <StaticBfsCard
-                    office="Hyderabad Begumpet Office"
-                    floor="5th Floor · Seat G-08"
-                    date="Mon, Jun 23, 2025 · 10:00 AM – 6:00 PM"
-                    statusLabel="Confirmed"
-                    typeBadge="guest"
-                    personLabel="Guest & host"
-                    personName="John Smith"
-                    personRole="Acme Corp · Guest"
-                    personColor="bg-gradient-to-br from-amber-500 to-amber-600"
-                    hostName="Priya Sharma"
-                    hostRole="Host"
-                    hostColor="bg-gradient-to-br from-emerald-500 to-emerald-600"
-                    bookingId="SB-2025-0623-301"
-                    bookedOn="Booked Jun 11 · 08:45 AM"
-                  />
-                )}
+                {(() => {
+                  const filtered = delegatedBookings
+                    .filter((b) => {
+                      if (bfsSubTab === "upcoming") return isUpcoming(b.date) && b.status !== "cancelled";
+                      if (bfsSubTab === "past") return !isUpcoming(b.date) && b.status !== "cancelled";
+                      if (bfsSubTab === "cancelled") return b.status === "cancelled";
+                      return true;
+                    })
+                    .filter((b) => {
+                      if (bfsFilter === "employees") return b.bookingType === "employee";
+                      if (bfsFilter === "guests") return b.bookingType === "guest";
+                      return true;
+                    });
+
+                  if (isLoading) return <div className="text-center py-12 text-gray-400 text-[13.5px]">Loading bookings…</div>;
+
+                  if (filtered.length === 0) return (
+                    <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
+                      No {bfsSubTab} delegated bookings found.
+                    </div>
+                  );
+
+                  return filtered.map((booking) => (
+                    <BookingCard
+                      key={booking.id}
+                      booking={booking}
+                      onCancelClick={setCancelTarget}
+                      onModifyClick={handleModify}
+                      showActions={bfsSubTab === "upcoming" && !isToday(booking.date)}
+                      variant="delegated"
+                    />
+                  ));
+                })()}
               </div>
             </>
           )}

@@ -15,9 +15,9 @@ export interface Booking {
   building: string;
   floor: string;
   seat: string;
-  date: string;           // kept for backward compat — always equals fromDate
-  fromDate: string;       // ← NEW: booking start date "YYYY-MM-DD"
-  toDate: string;         // ← NEW: booking end date  "YYYY-MM-DD" (= fromDate for single-day)
+  date: string;
+  fromDate: string;
+  toDate: string;
   startTime: string;
   endTime: string;
   isFullDay: boolean;
@@ -29,11 +29,17 @@ export interface Booking {
   preferences?: string[];
   floorId?: string;
   seatId?: string;
-  bookingType?: BookingType;
+  bookingType: BookingType;
   bookedForName?: string;
   bookedByName?: string;
   bookedForRole?: string;
   bookedByRole?: string;
+  bookedByUserId?: string;
+  bookedForUserId?: string;
+  bookedForGuestId?: string;
+  guestName?: string;
+  guestEmail?: string;
+  hostName?: string;
 }
 
 export interface BookingSummary {
@@ -56,10 +62,11 @@ export interface RawBooking {
   site_name:            string;
   building_name:        string;
   floor_name:           string;
-  booking_date:         string;    // single-day bookings: primary date
-  from_date?:           string;    // ← NEW: if API returns a range start
-  to_date?:             string;    // ← NEW: if API returns a range end
+  booking_date:         string;
+  from_date?:           string;
+  to_date?:             string;
   booking_status:       "CONFIRMED" | "CANCELLED" | "PENDING" | "ACTIVE";
+  booking_type?:        "EMPLOYEE" | "GUEST";
   source_channel:       string;
   check_in_at:          string | null;
   checked_out_at:       string | null;
@@ -67,13 +74,31 @@ export interface RawBooking {
   cancellation_reason:  string | null;
   created_at:           string;
   updated_at:           string;
-  // optional enrichment fields
   is_full_day?:         boolean;
   start_time?:          string;
   end_time?:            string;
   is_recurring?:        boolean;
   recurring_pattern?:   string;
   tags?:                string[];
-  amenity_keys?:        string[];  // ← NEW: preference keys if API returns them
-  amenities?:           { key: string; name: string }[]; // ← NEW: alternate shape
+  amenity_keys?:        string[];
+  amenities?:           { key: string; name: string }[];
+
+  // Delegation / on-behalf fields
+  booked_for_user_id?:  string | null;
+  booked_for_guest_id?: string | null;
+  booked_by_user_id?:   string;
+  booked_by_name?:      string | null;
+  booked_by_email?:     string | null;
+  booked_for_name?:     string | null;
+  booked_for_email?:    string | null;
+
+  // Guest enrichment
+  guest_name?:          string | null;
+  guest_email?:         string | null;
+  guest_phone?:         string | null;
+  guest_organization?:  string | null;
+  guest_type?:          string | null;
+  purpose_of_visit?:    string | null;
+  host_user_id?:        string | null;
+  host_name?:           string | null;
 }
