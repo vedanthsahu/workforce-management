@@ -11,6 +11,15 @@ from fastapi import (
 )
 from psycopg2.extensions import connection as PGConnection
 
+from backend.schemas.booking import (
+BookingEligibilityRequest,
+BookingEligibilityResponse,
+)
+
+from backend.services.booking_service import (
+check_booking_eligibility,
+)
+
 from backend.api.deps import get_current_user
 from backend.db.connection import get_db
 from backend.schemas.booking import (
@@ -25,6 +34,9 @@ from backend.services.booking_service import (
     get_user_past_bookings,
     get_user_current_bookings,
     get_user_cancelled_bookings,
+    get_delegated_past_bookings,
+    get_delegated_current_bookings,
+    get_delegated_future_bookings,
     get_user_future_bookings,
     modify_booking,
 )
@@ -112,3 +124,57 @@ def modify_booking_route(
         payload=payload,
         background_tasks=background_tasks,
     )
+
+@router.post("/eligibility",response_model=BookingEligibilityResponse,)
+def booking_eligibility(
+    payload: BookingEligibilityRequest,
+    current_user: Annotated[
+    dict[str, Any],
+    Depends(get_current_user),
+    ],
+    conn: Annotated[
+    PGConnection,
+    Depends(get_db),
+    ],
+    ) -> BookingEligibilityResponse:
+
+    return check_booking_eligibility(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        current_user=current_user,
+        payload=payload,
+    )
+
+@router.get("/delegated/past", response_model=list[BookingResponse])
+def fetch_delegated_past(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> list[BookingResponse]:
+
+    return get_delegated_past_bookings(
+        conn,
+        current_user=current_user,
+    )
+
+@router.get("/delegated/current", response_model=list[BookingResponse])
+def fetch_delegated_current(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> list[BookingResponse]:
+
+    return get_delegated_current_bookings(
+        conn,
+        current_user=current_user,
+    )
+
+@router.get("/delegated/future", response_model=list[BookingResponse])
+def fetch_delegated_future(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> list[BookingResponse]:
+
+    return get_delegated_future_bookings(
+        conn,
+        current_user=current_user,
+    )
+
