@@ -170,38 +170,26 @@ def fetch_floors_by_building(
             f.floor_code,
             f.floor_name,
             f.status,
-
             COALESCE(seat_counts.seat_count, 0)::integer AS seat_count,
             COALESCE(seat_counts.active_seat_count, 0)::integer AS active_seat_count,
             COALESCE(seat_counts.bookable_seat_count, 0)::integer AS bookable_seat_count,
-
             COALESCE(layout_counts.layout_count, 0)::integer AS layout_count,
             COALESCE(layout_counts.published_layout_exists, FALSE) AS published_layout_exists,
-
             fl.id::text AS layout_id,
             fl.layout_name,
             fl.layout_file_url,
             fl.status AS layout_status,
             fl.is_published AS layout_is_published,
-            fl.version_no AS layout_version_no,
-
-            fl.uploaded_by_name,
-            fl.published_by_name,
-            fl.updated_at AS layout_last_updated
-
+            fl.version_no AS layout_version_no
         FROM floors AS f
-
         JOIN buildings AS b
             ON f.building_id = b.id
            AND f.tenant_id = b.tenant_id
            AND f.site_id = b.site_id
-
         LEFT JOIN LATERAL (
             SELECT
                 COUNT(*)::integer AS seat_count,
-                COUNT(*) FILTER (
-                    WHERE st.status = 'ACTIVE'
-                )::integer AS active_seat_count,
+                COUNT(*) FILTER (WHERE st.status = 'ACTIVE')::integer AS active_seat_count,
                 COUNT(*) FILTER (
                     WHERE st.status = 'ACTIVE'
                       AND st.is_bookable = TRUE
@@ -210,7 +198,6 @@ def fetch_floors_by_building(
             WHERE st.tenant_id = f.tenant_id
               AND st.floor_id = f.id
         ) AS seat_counts ON TRUE
-
         LEFT JOIN LATERAL (
             SELECT
                 COUNT(*)::integer AS layout_count,
@@ -222,7 +209,6 @@ def fetch_floors_by_building(
             WHERE flc.tenant_id = f.tenant_id
               AND flc.floor_id = f.id
         ) AS layout_counts ON TRUE
-
         LEFT JOIN LATERAL (
             SELECT
                 fl.id,
@@ -231,27 +217,12 @@ def fetch_floors_by_building(
                 fl.status,
                 fl.is_published,
                 fl.version_no,
-                fl.created_at,
-                fl.updated_at,
-
-                uploader.full_name AS uploaded_by_name,
-                publisher.full_name AS published_by_name
-
+                fl.created_at
             FROM floor_layouts AS fl
-
-            LEFT JOIN app_users AS uploader
-                ON uploader.id = fl.uploaded_by_user_id
-               AND uploader.tenant_id = fl.tenant_id
-
-            LEFT JOIN app_users AS publisher
-                ON publisher.id = fl.published_by_user_id
-               AND publisher.tenant_id = fl.tenant_id
-
             WHERE fl.tenant_id = f.tenant_id
               AND fl.site_id = f.site_id
               AND fl.building_id = f.building_id
               AND fl.floor_id = f.id
-
             ORDER BY
                 CASE
                     WHEN fl.is_published = TRUE
@@ -260,45 +231,27 @@ def fetch_floors_by_building(
                     ELSE 1
                 END,
                 fl.version_no DESC,
-                fl.updated_at DESC,
+                fl.created_at DESC,
                 fl.id DESC
-
             LIMIT 1
         ) AS fl ON TRUE
-
         WHERE b.id = %s
           AND f.tenant_id = %s
     """
-
     params: list[Any] = [building_id, tenant_id]
-
-    query, params = _apply_status_filter(
-        query,
-        params,
-        "f.status",
-        status_filter,
-    )
-
+    query, params = _apply_status_filter(query, params, "f.status", status_filter)
     query, params = _apply_search_filter(
         query,
         params,
         search,
         ("f.floor_code", "f.floor_name"),
     )
-
     query += " ORDER BY b.building_code, f.floor_code, f.id"
-
-    query, params = _apply_pagination(
-        query,
-        params,
-        page=page,
-        limit=limit,
-    )
+    query, params = _apply_pagination(query, params, page=page, limit=limit)
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(query, params)
         rows = cur.fetchall()
-
     return [dict(row) for row in rows]
 
 
@@ -678,47 +631,34 @@ def fetch_floor_by_id(
                 f.floor_code,
                 f.floor_name,
                 f.status,
-
                 COALESCE(seat_counts.seat_count, 0)::integer AS seat_count,
                 COALESCE(seat_counts.active_seat_count, 0)::integer AS active_seat_count,
                 COALESCE(seat_counts.bookable_seat_count, 0)::integer AS bookable_seat_count,
-
                 COALESCE(layout_counts.layout_count, 0)::integer AS layout_count,
                 COALESCE(layout_counts.published_layout_exists, FALSE) AS published_layout_exists,
-
                 fl.id::text AS layout_id,
                 fl.layout_name,
                 fl.layout_file_url,
                 fl.status AS layout_status,
                 fl.is_published AS layout_is_published,
-                fl.version_no AS layout_version_no,
-
-                fl.uploaded_by_name,
-                fl.published_by_name,
-                fl.updated_at AS layout_last_updated
-
+                fl.version_no AS layout_version_no
             FROM floors AS f
-
             INNER JOIN buildings AS b
                 ON b.id = f.building_id
-            AND b.tenant_id = f.tenant_id
-            AND b.site_id = f.site_id
-
+               AND b.tenant_id = f.tenant_id
+               AND b.site_id = f.site_id
             LEFT JOIN LATERAL (
                 SELECT
                     COUNT(*)::integer AS seat_count,
+                    COUNT(*) FILTER (WHERE st.status = 'ACTIVE')::integer AS active_seat_count,
                     COUNT(*) FILTER (
                         WHERE st.status = 'ACTIVE'
-                    )::integer AS active_seat_count,
-                    COUNT(*) FILTER (
-                        WHERE st.status = 'ACTIVE'
-                        AND st.is_bookable = TRUE
+                          AND st.is_bookable = TRUE
                     )::integer AS bookable_seat_count
                 FROM seats AS st
                 WHERE st.tenant_id = f.tenant_id
-                AND st.floor_id = f.id
+                  AND st.floor_id = f.id
             ) AS seat_counts ON TRUE
-
             LEFT JOIN LATERAL (
                 SELECT
                     COUNT(*)::integer AS layout_count,
@@ -728,9 +668,8 @@ def fetch_floor_by_id(
                     ) AS published_layout_exists
                 FROM floor_layouts AS flc
                 WHERE flc.tenant_id = f.tenant_id
-                AND flc.floor_id = f.id
+                  AND flc.floor_id = f.id
             ) AS layout_counts ON TRUE
-
             LEFT JOIN LATERAL (
                 SELECT
                     fl.id,
@@ -739,41 +678,24 @@ def fetch_floor_by_id(
                     fl.status,
                     fl.is_published,
                     fl.version_no,
-                    fl.created_at,
-                    fl.updated_at,
-
-                    uploader.full_name AS uploaded_by_name,
-                    publisher.full_name AS published_by_name
-
+                    fl.created_at
                 FROM floor_layouts AS fl
-
-                LEFT JOIN app_users AS uploader
-                    ON uploader.id = fl.uploaded_by_user_id
-                AND uploader.tenant_id = fl.tenant_id
-
-                LEFT JOIN app_users AS publisher
-                    ON publisher.id = fl.published_by_user_id
-                AND publisher.tenant_id = fl.tenant_id
-
                 WHERE fl.tenant_id = f.tenant_id
-                AND fl.floor_id = f.id
-
+                  AND fl.floor_id = f.id
                 ORDER BY
                     CASE
                         WHEN fl.is_published = TRUE
-                            AND fl.status = 'PUBLISHED'
+                             AND fl.status = 'PUBLISHED'
                             THEN 0
                         ELSE 1
                     END,
                     fl.version_no DESC,
-                    fl.updated_at DESC,
+                    fl.created_at DESC,
                     fl.id DESC
-
                 LIMIT 1
             ) AS fl ON TRUE
-
             WHERE f.tenant_id = %s
-            AND f.id = %s;
+              AND f.id = %s
             """,
             (tenant_id, floor_id),
         )

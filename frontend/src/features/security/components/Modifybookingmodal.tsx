@@ -40,7 +40,11 @@ export function ModifyBookingModal({ visitor, onClose, onSuccess }: Props) {
     try {
       setLoading(true);
       setError(null);
-      await securityService.modifyBooking(visitor.bookingId, payload);
+if (!visitor.bookingId) {
+  setError("No booking ID found for this visit.");
+  return;
+}
+await securityService.modifyBooking(visitor.bookingId, payload);
       onSuccess();
       onClose();
     } catch {
