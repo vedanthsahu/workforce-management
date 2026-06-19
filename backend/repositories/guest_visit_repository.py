@@ -344,3 +344,292 @@ def check_out_guest_visit(
 
         if cur.rowcount != 1:
             raise LookupError("Guest visit not found.")
+        
+def fetch_guest_visit_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_visit_id: str,
+) -> dict[str, Any] | None:
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT *
+            FROM guest_visits
+            WHERE id = %s
+              AND tenant_id = %s
+            """,
+            (
+                guest_visit_id,
+                tenant_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+
+def guest_visit_has_active_booking(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_visit_id: str,
+) -> bool:
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT 1
+            FROM bookings
+            WHERE tenant_id = %s
+              AND guest_visit_id = %s
+              AND booking_type = 'GUEST'
+              AND booking_status IN (
+                    'CONFIRMED',
+                    'CHECKED_IN'
+              )
+            LIMIT 1
+            """,
+            (
+                tenant_id,
+                guest_visit_id,
+            ),
+        )
+
+        return cur.fetchone() is not None
+    
+
+def update_guest_visit_requires_seat(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_visit_id: str,
+    requires_seat: bool,
+) -> None:
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE guest_visits
+            SET
+                requires_seat = %s,
+                updated_at = NOW()
+            WHERE id = %s
+              AND tenant_id = %s
+            """,
+            (
+                requires_seat,
+                guest_visit_id,
+                tenant_id,
+            ),
+        )
+
+        if cur.rowcount != 1:
+            raise LookupError(
+                "Guest visit not found."
+            )
+        
+
+def cancel_guest_visit(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_visit_id: str,
+) -> None:
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE guest_visits
+            SET
+                visit_status = 'CANCELLED',
+                cancelled_at = NOW(),
+                updated_at = NOW()
+            WHERE id = %s
+              AND tenant_id = %s
+            """,
+            (
+                guest_visit_id,
+                tenant_id,
+            ),
+        )
+
+        if cur.rowcount != 1:
+            raise LookupError(
+                "Guest visit not found."
+            )
+        
+
+
+def fetch_active_booking_by_guest_visit(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_visit_id: str,
+) -> dict[str, Any] | None:
+
+    with conn.cursor(
+        cursor_factory=RealDictCursor
+    ) as cur:
+
+        cur.execute(
+            """
+            SELECT
+                id::text AS booking_id
+            FROM bookings
+            WHERE tenant_id = %s
+              AND guest_visit_id = %s
+              AND booking_status IN (
+                    'CONFIRMED',
+                    'CHECKED_IN'
+              )
+            LIMIT 1
+            """,
+            (
+                tenant_id,
+                guest_visit_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+def fetch_guest_visit_status(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_visit_id: str,
+) -> dict[str, Any]:
+
+    with conn.cursor(
+        cursor_factory=RealDictCursor
+    ) as cur:
+
+        cur.execute(
+            """
+            SELECT
+                id::text AS guest_visit_id,
+                visit_status,
+                checked_in_at,
+                checked_out_at
+            FROM guest_visits
+            WHERE id = %s
+              AND tenant_id = %s
+            """,
+            (
+                guest_visit_id,
+                tenant_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    if row is None:
+        raise LookupError(
+            "Guest visit not found."
+        )
+
+    return dict(row)
+
+
+
+def update_guest_visit(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_visit_id: str,
+    host_user_id: str,
+    site_id: str,
+    building_id: str,
+    floor_id: str | None,
+    visit_date: date,
+    guest_type: str,
+    purpose_of_visit: str | None,
+    start_time: time | None,
+    end_time: time | None,
+    notes: str | None,
+) -> None:
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            """
+            UPDATE guest_visits
+            SET
+                host_user_id = %s,
+                site_id = %s,
+                building_id = %s,
+                floor_id = %s,
+                visit_date = %s,
+                guest_type = %s,
+                purpose_of_visit = %s,
+                start_time = %s,
+                end_time = %s,
+                notes = %s,
+                updated_at = NOW()
+            WHERE id = %s
+              AND tenant_id = %s
+            """,
+            (
+                host_user_id,
+                site_id,
+                building_id,
+                floor_id,
+                visit_date,
+                guest_type,
+                purpose_of_visit,
+                start_time,
+                end_time,
+                notes,
+                guest_visit_id,
+                tenant_id,
+            ),
+        )
+
+        if cur.rowcount != 1:
+            raise LookupError(
+                "Guest visit not found."
+            )
+
+def sync_booking_from_guest_visit(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_visit_id: str,
+    site_id: str,
+    building_id: str,
+    floor_id: str | None,
+    booking_date: date,
+) -> None:
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            """
+            UPDATE bookings
+            SET
+                site_id = %s,
+                building_id = %s,
+                floor_id = %s,
+                booking_date = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND guest_visit_id = %s
+              AND booking_status IN (
+                    'CONFIRMED',
+                    'CHECKED_IN'
+              )
+            """,
+            (
+                site_id,
+                building_id,
+                floor_id,
+                booking_date,
+                tenant_id,
+                guest_visit_id,
+            ),
+        )
+
