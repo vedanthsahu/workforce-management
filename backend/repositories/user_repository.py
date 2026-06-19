@@ -913,21 +913,14 @@ def fetch_team_rank_current_year(
         "team_member_count": int(row["team_member_count"]),
     }
 
-
-
 def search_users(
     conn: PGConnection,
     *,
     tenant_id: str,
     search_text: str,
-    include_inactive: bool = False,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
-    search_text = search_text.strip().lower()
-
-    status_clause = ""
-    if not include_inactive:
-        status_clause = "AND au.status = 'ACTIVE'"
+    pattern = f"%{search_text.strip()}%"
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -935,45 +928,22 @@ def search_users(
             SELECT {USER_SELECT_FIELDS}
             {USER_SELECT_FROM}
             WHERE au.tenant_id = %s
-            {status_clause}
+              AND au.status = 'ACTIVE'
               AND (
-                    EXISTS (
-                        SELECT 1
-                        FROM unnest(
-                            regexp_split_to_array(
-                                lower(coalesce(au.full_name, '')),
-                                '\s+'
-                            )
-                        ) AS name_part
-                        WHERE name_part LIKE %s || '%%'
-                    )
-                 OR lower(coalesce(au.employee_id, ''))
-                        LIKE %s || '%%'
-                 OR coalesce(au.mobile_phone, '')
-                        LIKE %s || '%%'
+                    au.full_name ILIKE %s
+                 OR au.email ILIKE %s
+                 OR au.employee_id ILIKE %s
               )
             ORDER BY
-                CASE
-                    WHEN lower(coalesce(au.full_name, ''))
-                         LIKE %s || '%%'
-                    THEN 1
-                    ELSE 2
-                END,
                 au.full_name,
                 au.id
             LIMIT %s
             """,
             (
                 tenant_id,
-
-                # WHERE
-                search_text,
-                search_text,
-                search_text,
-
-                # ORDER BY
-                search_text,
-
+                pattern,
+                pattern,
+                pattern,
                 limit,
             ),
         )

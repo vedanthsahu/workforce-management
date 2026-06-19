@@ -123,13 +123,11 @@ def admin_update_user_access_service(
 
     return UserResponse(**updated_user)
 
-
 def search_user_profiles(
     conn: PGConnection,
     *,
     current_user: dict[str, Any],
     search_text: str,
-    include_inactive: bool = False,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
 
@@ -137,6 +135,5 @@ def search_user_profiles(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         search_text=search_text,
-        include_inactive=include_inactive,
         limit=limit,
     )
