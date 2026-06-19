@@ -28,7 +28,11 @@ export function CancelBookingModal({ visitor, onClose, onSuccess }: Props) {
     try {
       setLoading(true);
       setError(null);
-      await securityService.cancelBooking(visitor.bookingId, {
+      if (!visitor.bookingId) {
+  setError("No booking ID found for this visit.");
+  return;
+}
+await securityService.cancelBooking(visitor.bookingId, {
         cancellation_reason: trimmed,
       });
       onSuccess();

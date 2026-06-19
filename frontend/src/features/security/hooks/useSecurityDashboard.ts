@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
@@ -46,9 +44,10 @@ export const useSecurityDashboard = (date?: string, siteId?: string) => {
     try {
       setLoading(true);
       const visitorsRes = await securityService.getVisitors({
-        date,
+        // ✅ No status filter — visit_scope=CURRENT in the service already
+        // restricts to today's visits. All statuses (SCHEDULED, CHECKED_IN,
+        // CHECKED_OUT, OVERDUE) will show in the table.
         site_id: selectedSiteId,
-        status: "SCHEDULED",
         search: search || undefined,
         page,
         limit: PAGE_SIZE,
@@ -63,12 +62,12 @@ export const useSecurityDashboard = (date?: string, siteId?: string) => {
     } finally {
       setLoading(false);
     }
-  }, [date, selectedSiteId, search, page]);
+  }, [selectedSiteId, search, page]);
 
   // Reset to page 1 whenever search or filters change
   useEffect(() => {
     setPage(1);
-  }, [search, selectedSiteId, date]);
+  }, [search, selectedSiteId]);
 
   useEffect(() => {
     fetchSummaryAndSites();

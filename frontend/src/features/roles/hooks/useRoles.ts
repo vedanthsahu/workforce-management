@@ -31,7 +31,7 @@ export const useRoles = () => {
   const filteredRoles = roles.filter((r) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
-    return r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q);
+    return r.name.toLowerCase().includes(q) ;
   });
 
   return {

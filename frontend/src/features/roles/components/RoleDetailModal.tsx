@@ -50,9 +50,9 @@ export default function RoleDetailModal({ role, onClose }: Props) {
           <div>
             <p className="text-xs text-gray-400 mb-1">Role</p>
             <span
-              className={`inline-flex items-center px-2.5 py-1 rounded-md text-sm font-semibold ring-1 ${getRoleBadgeClass(
-                role.key
-              )}`}
+            //   className={`inline-flex items-center px-2.5 py-1 rounded-md text-sm font-semibold ring-1 ${getRoleBadgeClass(
+            //     role.key
+            //   )}`}
             >
               {role.name}
             </span>
