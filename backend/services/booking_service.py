@@ -684,6 +684,7 @@ def cancel_booking_by_id(
         if booking["booking_status"] in {
             "CANCELLED",
             "COMPLETED",
+            "MODIFIED",
             "NO_SHOW",
         }:
             raise HTTPException(
@@ -839,6 +840,7 @@ def modify_booking(
             "CANCELLED",
             "CHECKED_IN",
             "COMPLETED",
+            "MODIFIED",
             "NO_SHOW",
         }:
             raise HTTPException(
@@ -968,7 +970,7 @@ def modify_booking(
             tenant_id=tenant_id,
             booking_id=booking_id,
             cancellation_reason="Booking ID : " + booking_id + ". Is being modified",
-            booking_status="NO_SHOW",
+            booking_status="MODIFIED",
 
         )
  

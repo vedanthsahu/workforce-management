@@ -10,6 +10,15 @@ from backend.core.enums import GuestType, VisitPurpose
 
 from typing import Literal
 
+GuestVisitStatus = Literal[
+    "SCHEDULED",
+    "CHECKED_IN",
+    "CHECKED_OUT",
+    "CANCELLED",
+    "NO_SHOW",
+    "MODIFIED",
+]
+
 class CreateGuestRequest(BaseModel):
     full_name: str = Field(min_length=1, max_length=255)
     email: str | None = Field(default=None, max_length=255)
@@ -67,7 +76,7 @@ class GuestVisitResponse(BaseModel):
     end_time: time | None = None
     notes: str | None = None
     requires_seat: bool
-    visit_status: str
+    visit_status: GuestVisitStatus
     created_by_user_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -83,7 +92,7 @@ class GuestVisitListItem(BaseModel):
     start_time: time | None = None
     end_time: time | None = None
 
-    visit_status: str
+    visit_status: GuestVisitStatus
     guest_type: str | None = None
     purpose_of_visit: str | None = None
 
@@ -138,13 +147,24 @@ class GuestVisitListItem(BaseModel):
 
     seat_code: str | None = None
 
+class GuestVisitSummary(BaseModel):
+    total: int = 0
+    scheduled: int = 0
+    checked_in: int = 0
+    checked_out: int = 0
+    cancelled: int = 0
+    modified: int = 0
+    overdue: int = 2
+
+
 class GuestVisitListResponse(BaseModel):
+    summary: GuestVisitSummary = Field(default_factory=GuestVisitSummary)
     items: list[GuestVisitListItem]
 
 
 class GuestVisitStatusUpdateResponse(BaseModel):
     guest_visit_id: str
-    visit_status: str
+    visit_status: GuestVisitStatus
     checked_in_at: datetime | None = None
     checked_out_at: datetime | None = None
 
@@ -183,3 +203,10 @@ class ModifyGuestVisitRequest(BaseModel):
 
     notes: str | None = None
 
+
+
+class AttachSeatToGuestVisitRequest(BaseModel):
+    site_id: int = Field(gt=0)
+    building_id: int = Field(gt=0)
+    floor_id: int = Field(gt=0)
+    seat_id: int = Field(gt=0)
