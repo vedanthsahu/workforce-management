@@ -30,6 +30,9 @@ from backend.repositories.booking_repository import (
     fetch_past_bookings_for_user,
     fetch_current_bookings_for_user,
     fetch_past_delegated_bookings,
+    fetch_future_delegated_guest_visits_without_booking,
+    fetch_current_delegated_guest_visits_without_booking,
+    fetch_past_delegated_guest_visits_without_booking,
     fetch_current_delegated_bookings,
     fetch_future_delegated_bookings,
     fetch_cancelled_bookings_for_user,
@@ -1514,33 +1517,6 @@ payload: BookingEligibilityRequest,
         message="Eligible for booking.",
     )
 
-def get_delegated_past_bookings(
-    conn: PGConnection,
-    *,
-    current_user: dict[str, Any],
-) -> list[BookingResponse]:
-
-    bookings = fetch_past_delegated_bookings(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        user_id=str(current_user["user_id"]),
-    )
-
-    return [BookingResponse(**booking) for booking in bookings]
-
-def get_delegated_current_bookings(
-    conn: PGConnection,
-    *,
-    current_user: dict[str, Any],
-) -> list[BookingResponse]:
-
-    bookings = fetch_current_delegated_bookings(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        user_id=str(current_user["user_id"]),
-    )
-
-    return [BookingResponse(**booking) for booking in bookings]
 
 def get_delegated_future_bookings(
     conn: PGConnection,
@@ -1554,5 +1530,96 @@ def get_delegated_future_bookings(
         user_id=str(current_user["user_id"]),
     )
 
-    return [BookingResponse(**booking) for booking in bookings]
+    guest_visits = (
+        fetch_future_delegated_guest_visits_without_booking(
+            conn,
+            tenant_id=str(current_user["tenant_id"]),
+            user_id=str(current_user["user_id"]),
+        )
+    )
+
+    combined = bookings + guest_visits
+
+    combined.sort(
+        key=lambda row: (
+            row.get("booking_date")
+            or date.min
+        ),
+        reverse=True,
+    )
+
+    return [
+        BookingResponse(**row)
+        for row in combined
+    ]
+
+def get_delegated_current_bookings(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+) -> list[BookingResponse]:
+
+    bookings = fetch_current_delegated_bookings(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        user_id=str(current_user["user_id"]),
+    )
+
+    guest_visits = (
+        fetch_current_delegated_guest_visits_without_booking(
+            conn,
+            tenant_id=str(current_user["tenant_id"]),
+            user_id=str(current_user["user_id"]),
+        )
+    )
+
+    combined = bookings + guest_visits
+
+    combined.sort(
+        key=lambda row: (
+            row.get("booking_date")
+            or date.min
+        ),
+        reverse=True,
+    )
+
+    return [
+        BookingResponse(**row)
+        for row in combined
+    ]
+
+def get_delegated_past_bookings(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+) -> list[BookingResponse]:
+
+    bookings = fetch_past_delegated_bookings(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        user_id=str(current_user["user_id"]),
+    )
+
+    guest_visits = (
+        fetch_past_delegated_guest_visits_without_booking(
+            conn,
+            tenant_id=str(current_user["tenant_id"]),
+            user_id=str(current_user["user_id"]),
+        )
+    )
+
+    combined = bookings + guest_visits
+
+    combined.sort(
+        key=lambda row: (
+            row.get("booking_date")
+            or date.min
+        ),
+        reverse=True,
+    )
+
+    return [
+        BookingResponse(**row)
+        for row in combined
+    ]
 
