@@ -50,6 +50,7 @@ import {
   Star,
   LogOut,
   Building2,
+  Building,
   BarChart3,
   ShieldCheck,
   MapPin,
@@ -152,7 +153,7 @@ const ADMIN_DASHBOARD: NavItem[] = [
 
 const ADMIN_MANAGE_NAV: NavItem[] = [
   { id: "offices",    label: "Offices",       icon: Building2     },
-  { id: "buildings",  label: "Buildings",     icon: Building2     },
+  { id: "buildings",  label: "Buildings",     icon: Building     },
   { id: "floors",     label: "Floors",        icon: MapPin        },
   { id: "layouts",    label: "Floor Layouts", icon: ClipboardList },
   { id: "seats",      label: "Seats",         icon: CalendarDays  },
@@ -199,7 +200,7 @@ const ROLE_LABELS: Record<string, string> = {
   MANAGER:      "Manager",
   EMPLOYEE:     "Employee",
   TALENT:       "Talent",
-  SECURITY: "Security",
+  SECURITY:     "Security",
   FACILITIES:   "Facilities",
 };
 

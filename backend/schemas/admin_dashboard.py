@@ -15,6 +15,7 @@ AdminBookingStatus = Literal[
     "CHECKED_IN",
     "COMPLETED",
     "CANCELLED",
+    "MODIFIED",
     "NO_SHOW",
 ]
 

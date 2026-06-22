@@ -1,16 +1,22 @@
+
+
 "use client";
 
 import { useState } from "react";
 import { toast } from "sonner";
 import { securityService } from "../services/security.service";
 
+/**
+ * Check-in / check-out — real API, no request body, just the guest_visit_id
+ * in the path: POST /guest-visits/{guest_visit_id}/check-in | check-out
+ */
 export const useCheckIn = (onSuccess?: () => void) => {
   const [checkingInId, setCheckingInId] = useState<string | null>(null);
 
-  const handleCheckIn = async (visitId: string) => {
-    setCheckingInId(visitId);
+  const handleCheckIn = async (guestVisitId: string) => {
+    setCheckingInId(guestVisitId);
     try {
-      await securityService.checkInVisitor({ visit_id: visitId });
+      await securityService.checkInVisit(guestVisitId);
       toast.success("Visitor checked in");
       onSuccess?.();
     } catch (err) {
@@ -21,10 +27,10 @@ export const useCheckIn = (onSuccess?: () => void) => {
     }
   };
 
-  const handleCheckOut = async (visitId: string) => {
-    setCheckingInId(visitId);
+  const handleCheckOut = async (guestVisitId: string) => {
+    setCheckingInId(guestVisitId);
     try {
-      await securityService.checkOutVisitor({ visit_id: visitId });
+      await securityService.checkOutVisit(guestVisitId);
       toast.success("Visitor checked out");
       onSuccess?.();
     } catch (err) {

@@ -1,4 +1,4 @@
-"use client";
+  "use client";
 
 import { useEffect, useRef, useState } from "react";
 import { MoreVertical } from "lucide-react";
@@ -37,6 +37,7 @@ type Props = {
   search: string;
   onSearchChange: (value: string) => void;
   onRefresh?: () => void;
+  onPatchVisitor: (id: string, patch: Partial<Visitor>) => void;
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -71,8 +72,7 @@ function RowMenu({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const isCancellable =
-    visitor.status === "SCHEDULED" || visitor.status === "OVERDUE";
+  const isCancellable = visitor.status === "SCHEDULED" || visitor.status === "OVERDUE";
 
   return (
     <div className="relative" ref={menuRef}>
@@ -122,6 +122,7 @@ export function VisitorTable({
   search,
   onSearchChange,
   onRefresh,
+  onPatchVisitor,
   page,
   totalPages,
   onPageChange,
@@ -200,8 +201,8 @@ export function VisitorTable({
                 )}
 
                 {!loading && visitors.map((v, index) => (
-  <tr
-    key={v.id ?? `row-${index}`}
+                  <tr
+                    key={v.id ?? `row-${index}`}
                     className="border-b last:border-0 hover:bg-gray-50/60 transition-colors"
                   >
                     {/* Guest Name */}
@@ -291,8 +292,8 @@ export function VisitorTable({
               <p className="py-8 text-center text-sm text-gray-400">No visitors found.</p>
             )}
 
-           {!loading && visitors.map((v, index) => (
-  <div key={v.id ?? `card-${index}`} className="border rounded-xl p-3.5 space-y-2.5">
+            {!loading && visitors.map((v, index) => (
+              <div key={v.id ?? `card-${index}`} className="border rounded-xl p-3.5 space-y-2.5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-[11px] font-semibold text-indigo-700 shrink-0">
@@ -375,19 +376,28 @@ export function VisitorTable({
       </Card>
 
       {/* ── Modals ─────────────────────────────────────────────────── */}
+      {/* Details reads straight off the already-fetched table data —
+         no extra API call, just the row's Visitor object. */}
       <GuestBookingDetailsModal
-        bookingId={activeModal === "details" ? (selectedVisitor?.bookingId ?? null) : null}
+        visitor={activeModal === "details" ? selectedVisitor : null}
         onClose={closeModal}
       />
+
+      {/* Cancel + Modify are dummy for now (see hooks/useCancelVisit.ts and
+         hooks/useModifyVisitForm.ts) — they don't call onRefresh, since a
+         refetch would just overwrite the optimistic patch with stale real
+         data. They only call onPatchVisitor to update the row locally. */}
       <CancelBookingModal
         visitor={activeModal === "cancel" ? selectedVisitor : null}
         onClose={closeModal}
-        onSuccess={() => onRefresh?.()}
+        onSuccess={closeModal}
+        onPatchVisitor={onPatchVisitor}
       />
       <ModifyBookingModal
         visitor={activeModal === "modify" ? selectedVisitor : null}
         onClose={closeModal}
-        onSuccess={() => onRefresh?.()}
+        onSuccess={closeModal}
+        onPatchVisitor={onPatchVisitor}
       />
     </>
   );

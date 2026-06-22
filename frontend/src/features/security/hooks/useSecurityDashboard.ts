@@ -1,101 +1,112 @@
+
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { securityService } from "../services/security.service";
-import { mapApiVisitorToVisitor } from "../utils/security.utils";
+import { mapApiGuestVisitToVisitor, mapApiSummary } from "../utils/security.utils";
+import { useDebouncedValue } from "../hooks/Usedebouncedvalue";
 import type { SecurityDashboardSummary, Site, Visitor } from "../types/security.types";
 
 const PAGE_SIZE = 10;
 
-export const useSecurityDashboard = (date?: string, siteId?: string) => {
+/**
+ * Drives the whole Security Dashboard page.
+ *
+ * GET /guest-visits returns the stat-card `summary` AND the table `items` in
+ * one response, so a single fetch covers both. The endpoint itself isn't
+ * paginated (no `page`/`total_pages` in the response), so pagination here is
+ * done client-side over the fetched batch (up to `limit`, default 100).
+ * If visit volume ever exceeds that, switch to real `offset`-based paging.
+ */
+export const useSecurityDashboard = () => {
   const [summary, setSummary] = useState<SecurityDashboardSummary | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
-  const [selectedSiteId, setSelectedSiteId] = useState<string | undefined>(siteId);
-  const [expectedVisitors, setExpectedVisitors] = useState<Visitor[]>([]);
-  const [totalVisitors, setTotalVisitors] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-  const [page, setPage] = useState(1);
+  const [selectedSiteId, setSelectedSiteId] = useState<string | undefined>(undefined);
+
+  const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 350);
+
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchSummaryAndSites = useCallback(async () => {
-    try {
-      const [summaryRes, sitesRes] = await Promise.all([
-        securityService.getDashboardSummary({ date, site_id: selectedSiteId }),
-        securityService.getSites(),
-      ]);
+  // ── Sites (dummy list — swap once a real /sites endpoint exists) ─────────
+  useEffect(() => {
+    securityService
+      .getSites()
+      .then((res) => setSites(res.map((s) => ({ id: s.site_id, name: s.site_name }))))
+      .catch((err) => console.error("Error fetching sites", err));
+  }, []);
 
-      setSummary({
-        expectedToday: summaryRes.expected_today,
-        checkedIn: summaryRes.checked_in,
-        overdueCheckout: summaryRes.overdue_checkout,
-        cancelledNoShow: summaryRes.cancelled_no_show,
-      });
-
-      setSites(sitesRes.map((s) => ({ id: s.site_id, name: s.site_name })));
-    } catch (err) {
-      console.error("Error fetching security summary", err);
-      setError("Failed to load dashboard data");
-    }
-  }, [date, selectedSiteId]);
-
-  const fetchVisitors = useCallback(async () => {
+  // ── Guest visits: one call → both summary + items ────────────────────────
+  const fetchGuestVisits = useCallback(async () => {
     try {
       setLoading(true);
-      const visitorsRes = await securityService.getVisitors({
-        // ✅ No status filter — visit_scope=CURRENT in the service already
-        // restricts to today's visits. All statuses (SCHEDULED, CHECKED_IN,
-        // CHECKED_OUT, OVERDUE) will show in the table.
+      setError(null);
+
+      const res = await securityService.getGuestVisits({
+        visit_scope: "CURRENT",
         site_id: selectedSiteId,
-        search: search || undefined,
-        page,
-        limit: PAGE_SIZE,
+        search: debouncedSearch || undefined,
+        limit: 100,
+        offset: 0,
       });
 
-      setExpectedVisitors(visitorsRes.items.map(mapApiVisitorToVisitor));
-      setTotalVisitors(visitorsRes.total);
-      setTotalPages(visitorsRes.total_pages);
+      setSummary(mapApiSummary(res.summary));
+      setVisitors(res.items.map(mapApiGuestVisitToVisitor));
     } catch (err) {
-      console.error("Error fetching visitors", err);
+      console.error("Error fetching guest visits", err);
       setError("Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
-  }, [selectedSiteId, search, page]);
+  }, [selectedSiteId, debouncedSearch]);
 
-  // Reset to page 1 whenever search or filters change
+  useEffect(() => {
+    fetchGuestVisits();
+  }, [fetchGuestVisits]);
+
+  // Jump back to page 1 whenever the filtered set changes
   useEffect(() => {
     setPage(1);
-  }, [search, selectedSiteId]);
+  }, [debouncedSearch, selectedSiteId]);
 
-  useEffect(() => {
-    fetchSummaryAndSites();
-  }, [fetchSummaryAndSites]);
+  // ── Client-side pagination over the fetched batch ────────────────────────
+  const total = visitors.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const pageEnd = Math.min(page * PAGE_SIZE, total);
 
-  useEffect(() => {
-    fetchVisitors();
-  }, [fetchVisitors]);
+  const pagedVisitors = useMemo(
+    () => visitors.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [visitors, page]
+  );
 
-  const refetch = useCallback(() => {
-    fetchSummaryAndSites();
-    fetchVisitors();
-  }, [fetchSummaryAndSites, fetchVisitors]);
+  // ── Optimistic local patch — used by the dummy cancel/modify flows (and
+  // available for check-in/out too) so the table reflects a change without
+  // needing a backend round trip. ────────────────────────────────────────
+  const patchVisitor = useCallback((id: string, patch: Partial<Visitor>) => {
+    setVisitors((prev) => prev.map((v) => (v.id === id ? { ...v, ...patch } : v)));
+  }, []);
 
   return {
     summary,
     sites,
     selectedSiteId,
     setSelectedSiteId,
-    expectedVisitors,
-    totalVisitors,
+    expectedVisitors: pagedVisitors,
+    totalVisitors: total,
     totalPages,
     page,
     setPage,
+    pageStart,
+    pageEnd,
     search,
     setSearch,
     loading,
     error,
-    refetch,
+    refetch: fetchGuestVisits,
+    patchVisitor,
   };
 };

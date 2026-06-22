@@ -38,6 +38,7 @@ ADMIN_BOOKING_STATUSES = {
     "CHECKED_IN",
     "COMPLETED",
     "CANCELLED",
+    "MODIFIED",
     "NO_SHOW",
 }
 
