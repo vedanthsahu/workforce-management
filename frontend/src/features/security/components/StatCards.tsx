@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { CalendarCheck, UserCheck, Clock, XCircle, ArrowRight } from "lucide-react";

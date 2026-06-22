@@ -1,4 +1,3 @@
-
 // ─── Enums / literal unions ───────────────────────────────────────────────────
 
 export type VisitorStatus =
