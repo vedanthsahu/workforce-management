@@ -97,7 +97,9 @@ interface RawSite {
 }
 
 export async function fetchSites(): Promise<Site[]> {
-  const { data } = await axiosInstance.get<RawSite[]>("/sites");
+  const { data } = await axiosInstance.get<RawSite[]>("/sites", {
+    params: { status: "ACTIVE" },
+  });
   return data.map((s) => ({ id: s.site_id, name: s.site_name }));
 }
 
@@ -109,7 +111,7 @@ interface RawBuilding {
 
 export async function fetchBuildings(siteId: string): Promise<Building[]> {
   const { data } = await axiosInstance.get<RawBuilding[]>("/buildings", {
-    params: { site_id: siteId },
+    params: { site_id: siteId, status: "ACTIVE" },
   });
   return data.map((b) => ({ id: b.building_id, siteId: b.site_id, name: b.building_name }));
 }
@@ -125,7 +127,8 @@ interface RawFloor {
 
 export async function fetchFloors(buildingId: string): Promise<Floor[]> {
   const { data } = await axiosInstance.get<RawFloor[]>(
-    `/buildings/${buildingId}/floors`
+    `/buildings/${buildingId}/floors`,
+    { params: { status: "ACTIVE" } },
   );
   return data.map((f) => ({
     id: f.floor_id,
