@@ -50,4 +50,4 @@ export const useVisitorSearch = (options: UseVisitorSearchOptions = {}) => {
   }, [fetchVisitors]);
 
   return { visitors, total, loading, search, setSearch, status, setStatus, fetchVisitors };
-};
+};  

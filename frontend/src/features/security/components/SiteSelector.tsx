@@ -18,20 +18,34 @@
 // export function SiteSelector({ sites, selectedSiteId, onChange }: Props) {
 //   return (
 //     <div className="flex items-center gap-6">
-//       {/* <span className="text-[12px] text-gray-500 whitespace-nowrap">Site:</span> */}
 //       <Select
-//         items={Object.fromEntries(sites.map((s) => [s.id, s.name]))}
 //         value={selectedSiteId ?? ""}
 //         onValueChange={(value) => {
 //           if (value) onChange(value);
 //         }}
 //       >
-//         <SelectTrigger className="h-9 w-[180px] text-sm">
+//         <SelectTrigger
+//           className="h-9 w-[180px] text-sm font-medium
+//             border border-gray-200
+//             bg-white
+//             text-gray-700
+//             hover:bg-gray-50
+//             focus:ring-2 focus:ring-gray-200 focus:ring-offset-1
+//             rounded-lg
+//             shadow-sm
+//             transition-colors"
+//         >
 //           <SelectValue placeholder="Select Site" />
 //         </SelectTrigger>
-//         <SelectContent>
+//         <SelectContent className="rounded-lg border border-gray-200 bg-white shadow-md">
 //           {sites.map((s) => (
-//             <SelectItem key={s.id} value={s.id}>
+//             <SelectItem
+//               key={s.id}
+//               value={s.id}
+//               className="text-sm text-gray-700
+//                 focus:bg-gray-100 focus:text-gray-900
+//                 cursor-pointer"
+//             >
 //               {s.name}
 //             </SelectItem>
 //           ))}
@@ -51,19 +65,23 @@
 //   SelectContent,
 //   SelectItem,
 // } from "@/components/ui/select";
-// import type { Site } from "../types/security.types";
 
 // type Props = {
-//   sites: Site[];
 //   selectedSiteId?: string;
 //   onChange: (siteId: string) => void;
 // };
 
-// export function SiteSelector({ sites, selectedSiteId, onChange }: Props) {
+// // Static for now — no live /sites call, just a fixed list to pick from.
+// const STATIC_SITES = [
+//   { id: "5", name: "Hyderabad Begumpet Office" },
+//   { id: "7", name: "Roxana Towers" },
+//   { id: "6", name: "Tech Park Annex" },
+// ];
+
+// export function SiteSelector({ selectedSiteId, onChange }: Props) {
 //   return (
 //     <div className="flex items-center gap-6">
 //       <Select
-//         items={Object.fromEntries(sites.map((s) => [s.id, s.name]))}
 //         value={selectedSiteId ?? ""}
 //         onValueChange={(value) => {
 //           if (value) onChange(value);
@@ -71,23 +89,24 @@
 //       >
 //         <SelectTrigger
 //           className="h-9 w-[180px] text-sm font-medium
-//             border border-indigo-200
-//             bg-indigo-50
-//             text-indigo-700
-//             hover:bg-indigo-100
-//             focus:ring-2 focus: bg-indigo-50 focus:ring-offset-1
+//             border border-gray-200
+//             bg-white
+//             text-gray-700
+//             hover:bg-gray-50
+//             focus:ring-2 focus:ring-gray-200 focus:ring-offset-1
 //             rounded-lg
+//             shadow-sm
 //             transition-colors"
 //         >
 //           <SelectValue placeholder="Select Site" />
 //         </SelectTrigger>
-//         <SelectContent className="rounded-lg border border-indigo-100 shadow-md">
-//           {sites.map((s) => (
+//         <SelectContent className="rounded-lg border border-gray-200 bg-white shadow-md">
+//           {STATIC_SITES.map((s) => (
 //             <SelectItem
 //               key={s.id}
 //               value={s.id}
 //               className="text-sm text-gray-700
-//                 focus:bg-indigo-50 focus:text-indigo-700
+//                 focus:bg-gray-100 focus:text-gray-900
 //                 cursor-pointer"
 //             >
 //               {s.name}
@@ -99,6 +118,7 @@
 //   );
 // }
 
+
 "use client";
 
 import {
@@ -108,23 +128,19 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import type { Site } from "../types/security.types";
+import { useSiteSelector } from "../hooks/Usesiteselector";
 
 type Props = {
-  sites: Site[];
   selectedSiteId?: string;
   onChange: (siteId: string) => void;
 };
 
-export function SiteSelector({ sites, selectedSiteId, onChange }: Props) {
+export function SiteSelector({ selectedSiteId, onChange }: Props) {
+  const { options, selectedKey, selectOption } = useSiteSelector({ selectedSiteId, onChange });
+
   return (
     <div className="flex items-center gap-6">
-      <Select
-        value={selectedSiteId ?? ""}
-        onValueChange={(value) => {
-          if (value) onChange(value);
-        }}
-      >
+      <Select value={selectedKey} onValueChange={(key) => key && selectOption(key)}>
         <SelectTrigger
           className="h-9 w-[180px] text-sm font-medium
             border border-gray-200
@@ -139,15 +155,15 @@ export function SiteSelector({ sites, selectedSiteId, onChange }: Props) {
           <SelectValue placeholder="Select Site" />
         </SelectTrigger>
         <SelectContent className="rounded-lg border border-gray-200 bg-white shadow-md">
-          {sites.map((s) => (
+          {options.map((o) => (
             <SelectItem
-              key={s.id}
-              value={s.id}
+              key={o.key}
+              value={o.key}
               className="text-sm text-gray-700
                 focus:bg-gray-100 focus:text-gray-900
                 cursor-pointer"
             >
-              {s.name}
+              {o.label}
             </SelectItem>
           ))}
         </SelectContent>

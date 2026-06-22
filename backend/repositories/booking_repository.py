@@ -261,7 +261,7 @@ def has_active_booking_conflict(
                 WHERE tenant_id = %s
                   AND seat_id = %s
                   AND booking_date = %s
-                  AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
+                  AND booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
                   AND id::text <> %s
                 LIMIT 1
                 """,
@@ -275,7 +275,7 @@ def has_active_booking_conflict(
                 WHERE tenant_id = %s
                   AND seat_id = %s
                   AND booking_date = %s
-                  AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
+                  AND booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
                 LIMIT 1
                 """,
                 (tenant_id, seat_id, booking_date),
@@ -299,7 +299,7 @@ def user_has_active_booking_on_date(
         WHERE tenant_id = %s
           AND booked_for_user_id = %s
           AND booking_date = %s
-          AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
+          AND booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
     """
     params: list[Any] = [tenant_id, booked_for_user_id, booking_date]
 
@@ -375,7 +375,7 @@ def user_has_active_booking_in_range(
         WHERE tenant_id = %s
           AND booked_for_user_id = %s
           AND booking_date BETWEEN %s AND %s
-          AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
+          AND booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
     """
     params: list[Any] = [
         tenant_id,
@@ -410,7 +410,7 @@ def guest_has_active_booking_on_date(
         WHERE tenant_id = %s
           AND booked_for_guest_id = %s
           AND booking_date = %s
-          AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
+          AND booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
     """
     params: list[Any] = [tenant_id, booked_for_guest_id, booking_date]
     if exclude_booking_id is not None:
@@ -439,7 +439,7 @@ def guest_has_active_booking_in_range(
         WHERE tenant_id = %s
           AND booked_for_guest_id = %s
           AND booking_date BETWEEN %s AND %s
-          AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
+          AND booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
     """
 
     params: list[Any] = [
@@ -647,43 +647,9 @@ def fetch_past_bookings_for_user(
     """Fetch bookings for one user within one tenant."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
-            SELECT
-                b.id::text AS booking_id,
-                b.tenant_id::text AS tenant_id,
-                b.booked_for_user_id::text AS booked_for_user_id,
-                b.booked_by_user_id::text AS booked_by_user_id,
-                b.booking_type,
-                b.seat_id::text AS seat_id,
-                b.site_id::text AS site_id,
-                b.building_id::text AS building_id,
-                b.floor_id::text AS floor_id,
-                s.seat_code,
-                si.site_name,
-                bu.building_name,
-                f.floor_name,
-                b.booking_date,
-                b.booking_status,
-                b.source_channel,
-                b.check_in_at,
-                b.checked_out_at,
-                b.cancelled_at,
-                b.cancellation_reason,
-                b.created_at,
-                b.updated_at
-            FROM bookings AS b
-            JOIN seats AS s
-                ON b.seat_id = s.id
-               AND b.tenant_id = s.tenant_id
-            JOIN floors AS f
-                ON b.floor_id = f.id
-               AND b.tenant_id = f.tenant_id
-            JOIN buildings AS bu
-                ON b.building_id = bu.id
-               AND b.tenant_id = bu.tenant_id
-            JOIN sites AS si
-                ON b.site_id = si.id
-               AND b.tenant_id = si.tenant_id
+            f"""
+            SELECT {BOOKING_SELECT_FIELDS}
+            {BOOKING_SELECT_FROM}
             WHERE b.booked_for_user_id = %s
               AND b.tenant_id = %s
               AND b.booking_status = 'CONFIRMED'
@@ -704,43 +670,9 @@ def fetch_current_bookings_for_user(
     """Fetch bookings for one user within one tenant."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
-            SELECT
-                b.id::text AS booking_id,
-                b.tenant_id::text AS tenant_id,
-                b.booked_for_user_id::text AS booked_for_user_id,
-                b.booked_by_user_id::text AS booked_by_user_id,
-                b.booking_type,
-                b.seat_id::text AS seat_id,
-                b.site_id::text AS site_id,
-                b.building_id::text AS building_id,
-                b.floor_id::text AS floor_id,
-                s.seat_code,
-                si.site_name,
-                bu.building_name,
-                f.floor_name,
-                b.booking_date,
-                b.booking_status,
-                b.source_channel,
-                b.check_in_at,
-                b.checked_out_at,
-                b.cancelled_at,
-                b.cancellation_reason,
-                b.created_at,
-                b.updated_at
-            FROM bookings AS b
-            JOIN seats AS s
-                ON b.seat_id = s.id
-               AND b.tenant_id = s.tenant_id
-            JOIN floors AS f
-                ON b.floor_id = f.id
-               AND b.tenant_id = f.tenant_id
-            JOIN buildings AS bu
-                ON b.building_id = bu.id
-               AND b.tenant_id = bu.tenant_id
-            JOIN sites AS si
-                ON b.site_id = si.id
-               AND b.tenant_id = si.tenant_id
+            f"""
+            SELECT {BOOKING_SELECT_FIELDS}
+            {BOOKING_SELECT_FROM}
             WHERE b.booked_for_user_id = %s
               AND b.tenant_id = %s
               AND b.booking_status = 'CONFIRMED'
@@ -859,43 +791,9 @@ def fetch_cancelled_bookings_for_user(
     """Fetch bookings for one user within one tenant."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
-            SELECT
-                b.id::text AS booking_id,
-                b.tenant_id::text AS tenant_id,
-                b.booked_for_user_id::text AS booked_for_user_id,
-                b.booked_by_user_id::text AS booked_by_user_id,
-                b.booking_type,
-                b.seat_id::text AS seat_id,
-                b.site_id::text AS site_id,
-                b.building_id::text AS building_id,
-                b.floor_id::text AS floor_id,
-                s.seat_code,
-                si.site_name,
-                bu.building_name,
-                f.floor_name,
-                b.booking_date,
-                b.booking_status,
-                b.source_channel,
-                b.check_in_at,
-                b.checked_out_at,
-                b.cancelled_at,
-                b.cancellation_reason,
-                b.created_at,
-                b.updated_at
-            FROM bookings AS b
-            JOIN seats AS s
-                ON b.seat_id = s.id
-               AND b.tenant_id = s.tenant_id
-            JOIN floors AS f
-                ON b.floor_id = f.id
-               AND b.tenant_id = f.tenant_id
-            JOIN buildings AS bu
-                ON b.building_id = bu.id
-               AND b.tenant_id = bu.tenant_id
-            JOIN sites AS si
-                ON b.site_id = si.id
-               AND b.tenant_id = si.tenant_id
+            f"""
+            SELECT {BOOKING_SELECT_FIELDS}
+            {BOOKING_SELECT_FROM}
             WHERE b.booked_for_user_id = %s
               AND b.tenant_id = %s
               AND b.booking_status = 'CANCELLED'
@@ -915,43 +813,9 @@ def fetch_future_bookings_for_user(
     """Fetch bookings for one user within one tenant."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
-            SELECT
-                b.id::text AS booking_id,
-                b.tenant_id::text AS tenant_id,
-                b.booked_for_user_id::text AS booked_for_user_id,
-                b.booked_by_user_id::text AS booked_by_user_id,
-                b.booking_type,
-                b.seat_id::text AS seat_id,
-                b.site_id::text AS site_id,
-                b.building_id::text AS building_id,
-                b.floor_id::text AS floor_id,
-                s.seat_code,
-                si.site_name,
-                bu.building_name,
-                f.floor_name,
-                b.booking_date,
-                b.booking_status,
-                b.source_channel,
-                b.check_in_at,
-                b.checked_out_at,
-                b.cancelled_at,
-                b.cancellation_reason,
-                b.created_at,
-                b.updated_at
-            FROM bookings AS b
-            JOIN seats AS s
-                ON b.seat_id = s.id
-               AND b.tenant_id = s.tenant_id
-            JOIN floors AS f
-                ON b.floor_id = f.id
-               AND b.tenant_id = f.tenant_id
-            JOIN buildings AS bu
-                ON b.building_id = bu.id
-               AND b.tenant_id = bu.tenant_id
-            JOIN sites AS si
-                ON b.site_id = si.id
-               AND b.tenant_id = si.tenant_id
+            f"""
+            SELECT {BOOKING_SELECT_FIELDS}
+            {BOOKING_SELECT_FROM}
             WHERE b.booked_for_user_id = %s
               AND b.tenant_id = %s
               AND b.booking_status = 'CONFIRMED'
@@ -1023,7 +887,8 @@ def fetch_available_seats_by_range(
                     AND bkg.booking_date BETWEEN %s AND %s
                     AND bkg.booking_status IN (
                             'CONFIRMED',
-                            'CHECKED_IN'
+                            'CHECKED_IN',
+                            'COMPLETED'
                     )
                     AND (
                             %s IS NULL
@@ -1376,7 +1241,7 @@ def fetch_available_seats(
                 WHERE bkg.tenant_id = %s
                   AND bkg.floor_id = %s
                   AND bkg.booking_date = %s
-                  AND bkg.booking_status IN ('CONFIRMED', 'CHECKED_IN')
+                  AND bkg.booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
             ),
             blocked_seats AS (
                 SELECT DISTINCT bl.seat_id

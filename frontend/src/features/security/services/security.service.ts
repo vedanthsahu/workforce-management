@@ -1,279 +1,97 @@
-// import { axiosInstance } from "@/lib/http/axios";
-// import type {
-//   ApiGuestVisit,
-//   ApiGuestBooking, 
-//   ApiSecurityDashboardSummary,
-//   ApiSite,
-//   CancelBookingPayload,
-//   CheckInPayload,
-//   CheckOutPayload,
-//   InviteGuestPayload,
-//   ModifyBookingPayload,
-//   VisitorFilters,
-//   VisitorResponse,
-// } from "../types/security.types";
-
-// // ── Dummy data for stats/sites (swap when backend endpoints are ready) ────────
-
-// const DUMMY_SITES: ApiSite[] = [
-//   { site_id: "1", site_name: "Head Office" },
-//   { site_id: "2", site_name: "Tech Park Annex" },
-// ];
-
-// const DUMMY_SUMMARY: ApiSecurityDashboardSummary = {
-//   expected_today: 8,
-//   checked_in: 1,
-//   overdue_checkout: 1,
-//   cancelled_no_show: 2,
-// };
-
-// function delay<T>(value: T, ms = 0): Promise<T> {
-//   return new Promise((resolve) => setTimeout(() => resolve(value), ms));
-// }
-
-// // ─────────────────────────────────────────────────────────────────────────────
-
-// export const securityService = {
-//   // ── DASHBOARD SUMMARY (dummy — swap body when /security/dashboard/summary is ready)
-//   async getDashboardSummary(_params?: {
-//     date?: string;
-//     site_id?: string;
-//   }): Promise<ApiSecurityDashboardSummary> {
-//     return delay(DUMMY_SUMMARY);
-//     // const { data } = await axiosInstance.get("/security/dashboard/summary", { params: _params });
-//     // return data;
-//   },
-
-//   // ── SITES (dummy — swap body when /sites is ready) ────────────────────────
-//   async getSites(): Promise<ApiSite[]> {
-//     return delay(DUMMY_SITES);
-//     // const { data } = await axiosInstance.get("/sites", { params: { status: "ACTIVE" } });
-//     // return data;
-//   },
-
-//   // ── GET GUEST VISITS ──────────────────────────────────────────────────────
-//   async getVisitors(filters?: VisitorFilters): Promise<VisitorResponse> {
-//     const page = filters?.page ?? 1;
-//     const limit = filters?.limit ?? 10;
-//     const offset = (page - 1) * limit;
-
-//     const params: Record<string, unknown> = {
-//       limit,
-//       offset,
-//       visit_scope: "CURRENT", // ✅ restricts to today's visits only
-//     };
-
-//     // Server-side status filter
-//     if (filters?.status && filters.status !== "ALL") {
-//       params.visit_status = filters.status;
-//     }
-
-//     // Server-side search (guest name / host name)
-//     if (filters?.search?.trim()) {
-//       params.search = filters.search.trim();
-//     }
-
-//     // Server-side site filter
-//     if (filters?.site_id) {
-//       params.site_id = filters.site_id;
-//     }
-
-//     const { data } = await axiosInstance.get<{ items: ApiGuestVisit[]; total?: number }>(
-//       "/guest-visits",
-//       { params }
-//     );
-
-//     const items: ApiGuestVisit[] = Array.isArray(data.items) ? data.items : [];
-//     const total = data.total ?? items.length;
-
-//     return {
-//       items,
-//       total,
-//       page,
-//       limit,
-//       total_pages: Math.max(1, Math.ceil(total / limit)),
-//     };
-//   },
-
-//   // ── GET SINGLE VISIT (for view-details modal) ─────────────────────────────
-//   // async getBookingById(guestVisitId: string): Promise<ApiGuestVisit> {
-//   //   const { data } = await axiosInstance.get<ApiGuestVisit>(
-//   //     `/guest-visits/${guestVisitId}`
-//   //   );
-//   //   return data;
-//   // },
-
-//   async getBookingById(bookingId: string): Promise<ApiGuestBooking> {
-//   const { data } = await axiosInstance.get<ApiGuestBooking>(
-//     `/guest-bookings/${bookingId}`   // ← was /guest-visits/
-//   );
-//   return data;
-// },
-
-//   // ── CHECK IN ──────────────────────────────────────────────────────────────
-//   async checkInVisitor(payload: CheckInPayload): Promise<void> {
-//     await axiosInstance.post(`/guest-visits/${payload.visit_id}/check-in`);
-//   },
-
-//   // ── CHECK OUT ─────────────────────────────────────────────────────────────
-//   async checkOutVisitor(payload: CheckOutPayload): Promise<void> {
-//     await axiosInstance.post(`/guest-visits/${payload.visit_id}/check-out`);
-//   },
-
-//   // ── CANCEL BOOKING ────────────────────────────────────────────────────────
-//   async cancelBooking(
-//     bookingId: string,
-//     payload: CancelBookingPayload
-//   ): Promise<void> {
-//     await axiosInstance.post(`/guest-bookings/${bookingId}/cancel`, payload);
-//   },
-
-//   // ── MODIFY BOOKING ────────────────────────────────────────────────────────
-//   async modifyBooking(
-//     bookingId: string,
-//     payload: ModifyBookingPayload
-//   ): Promise<void> {
-//     await axiosInstance.post(`/guest-bookings/${bookingId}/modify`, payload);
-//   },
-
-//   // ── INVITE GUEST ──────────────────────────────────────────────────────────
-//   async inviteGuest(payload: InviteGuestPayload): Promise<{ visit_id: string }> {
-//     const { data } = await axiosInstance.post("/security/visitors/invite", payload);
-//     return data;
-//   },
-// };
 
 
 import { axiosInstance } from "@/lib/http/axios";
 import type {
-  ApiGuestBooking,
-  ApiSecurityDashboardSummary,
+  ApiCheckInOutResponse,
+  ApiGuestVisitsResponse,
   ApiSite,
   CancelVisitPayload,
-  CheckInPayload,
-  CheckOutPayload,
+  GuestVisitsQueryParams,
   InviteGuestPayload,
   ModifyVisitPayload,
-  VisitorFilters,
-  VisitorResponse,
 } from "../types/security.types";
 
-// ── Dummy data for stats/sites (backend endpoints not ready yet) ─────────────
-// Replace getDashboardSummary and getSites bodies when the endpoints are live.
-
+// ── Dummy sites (backend /sites endpoint not ready yet) ──────────────────────
 const DUMMY_SITES: ApiSite[] = [
-  { site_id: "1", site_name: "Head Office" },
-  { site_id: "2", site_name: "Tech Park Annex" },
+  { site_id: "5", site_name: "Hyderabad Begumpet Office" },
+  { site_id: "6", site_name: "Tech Park Annex" },
 ];
 
-const DUMMY_SUMMARY: ApiSecurityDashboardSummary = {
-  expected_today: 8,
-  checked_in: 1,
-  overdue_checkout: 1,
-  cancelled_no_show: 2,
-};
-
-function delay<T>(value: T, ms = 0): Promise<T> {
+function delay<T>(value: T, ms = 500): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), ms));
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const securityService = {
-  // ── DASHBOARD SUMMARY (dummy — swap body when /security/dashboard/summary is ready)
-  async getDashboardSummary(_params?: {
-    date?: string;
-    site_id?: string;
-  }): Promise<ApiSecurityDashboardSummary> {
-    return delay(DUMMY_SUMMARY);
-    // const { data } = await axiosInstance.get("/security/dashboard/summary", { params: _params });
-    // return data;
+  // ── GET GUEST VISITS (real API) ────────────────────────────────────────────
+  // Single call — the backend returns both the stat-card `summary` and the
+  // table `items` together, so this is the only call the dashboard needs.
+  async getGuestVisits(params: GuestVisitsQueryParams = {}): Promise<ApiGuestVisitsResponse> {
+    const { data } = await axiosInstance.get<ApiGuestVisitsResponse>("/guest-visits", {
+      params: {
+        visit_scope: params.visit_scope ?? "CURRENT",
+        limit: params.limit ?? 100,
+        offset: params.offset ?? 0,
+        ...(params.site_id ? { site_id: params.site_id } : {}),
+        ...(params.visit_status && params.visit_status !== "ALL"
+          ? { visit_status: params.visit_status }
+          : {}),
+        ...(params.requires_seat !== undefined ? { requires_seat: params.requires_seat } : {}),
+        ...(params.search ? { search: params.search } : {}),
+      },
+    });
+    return data;
   },
 
-  // ── SITES (dummy — swap body when /sites is ready) ────────────────────────
-  async getSites(): Promise<ApiSite[]> {
-    return delay(DUMMY_SITES);
-    // const { data } = await axiosInstance.get("/sites", { params: { status: "ACTIVE" } });
-    // return data;
-  },
-
-  // ── GET ALL GUEST BOOKINGS (real API — client-side search + pagination) ────
-  async getVisitors(filters?: VisitorFilters): Promise<VisitorResponse> {
-    const params: Record<string, unknown> = { limit: 100 };
-
-    if (filters?.date) {
-      params.booking_date = filters.date;
-    }
-
-    const { data } = await axiosInstance.get<ApiGuestBooking[]>("/guest-bookings", { params });
-
-    let items: ApiGuestBooking[] = Array.isArray(data) ? data : [];
-
-    // ── Client-side filters ────────────────────────────────────────────────
-    if (filters?.status && filters.status !== "ALL") {
-      items = items.filter((v) => v.visit_status === filters.status);
-    }
-
-    if (filters?.search?.trim()) {
-      const q = filters.search.trim().toLowerCase();
-      items = items.filter(
-        (v) =>
-          v.guest_name.toLowerCase().includes(q) ||
-          (v.host_name ?? "").toLowerCase().includes(q)
-      );
-    }
-
-    // ── Client-side pagination ─────────────────────────────────────────────
-    const page = filters?.page ?? 1;
-    const limit = filters?.limit ?? 10;
-    const start = (page - 1) * limit;
-    const pageItems = items.slice(start, start + limit);
-
-    return {
-      items: pageItems,
-      total: items.length,
-      page,
-      limit,
-      total_pages: Math.max(1, Math.ceil(items.length / limit)),
-    };
-  },
-
-  // ── GET SINGLE BOOKING (for view-details modal) ───────────────────────────
-  async getBookingById(bookingId: string): Promise<ApiGuestBooking> {
-    const { data } = await axiosInstance.get<ApiGuestBooking>(
-      `/guest-bookings/${bookingId}`
+  // ── CHECK IN (real API) ─────────────────────────────────────────────────────
+  // POST /guest-visits/{guest_visit_id}/check-in
+  async checkInVisit(guestVisitId: string): Promise<ApiCheckInOutResponse> {
+    const { data } = await axiosInstance.post<ApiCheckInOutResponse>(
+      `/guest-visits/${guestVisitId}/check-in`
     );
     return data;
   },
 
-  // ── CHECK IN ──────────────────────────────────────────────────────────────
-  async checkInVisitor(payload: CheckInPayload): Promise<void> {
-    await axiosInstance.post(`/security/visitors/${payload.visit_id}/check-in`);
+  // ── CHECK OUT (real API) ────────────────────────────────────────────────────
+  // POST /guest-visits/{guest_visit_id}/check-out
+  async checkOutVisit(guestVisitId: string): Promise<ApiCheckInOutResponse> {
+    const { data } = await axiosInstance.post<ApiCheckInOutResponse>(
+      `/guest-visits/${guestVisitId}/check-out`
+    );
+    return data;
   },
 
-  // ── CHECK OUT ─────────────────────────────────────────────────────────────
-  async checkOutVisitor(payload: CheckOutPayload): Promise<void> {
-    await axiosInstance.post(`/security/visitors/${payload.visit_id}/check-out`);
+  // ── SITES (dummy — swap for a real /sites call once the backend has one) ──
+  async getSites(): Promise<ApiSite[]> {
+    return delay(DUMMY_SITES, 150);
   },
 
-  // ── CANCEL VISIT ──────────────────────────────────────────────────────────
-  // POST /guest-visits/{guest_visit_id}/cancel
-  async cancelVisit(
-    guestVisitId: string,
-    payload: CancelVisitPayload
-  ): Promise<void> {
-    await axiosInstance.post(`/guest-visits/${guestVisitId}/cancel`, payload);
+  // ── CANCEL VISIT ─────────────────────────────────────────────────────────
+  // 🚧 DUMMY — intentionally NOT calling the backend yet (per request: cancel
+  // is low priority right now). This just simulates a network round trip.
+  // Flip the comments below once the endpoint is ready to wire up for real:
+  //
+  //   await axiosInstance.post(`/guest-visits/${guestVisitId}/cancel`, payload);
+  //
+  async cancelVisit(guestVisitId: string, payload: CancelVisitPayload): Promise<void> {
+    console.log("[DUMMY cancelVisit] guestVisitId:", guestVisitId, "payload:", payload);
+    await delay(undefined, 700);
   },
 
-  // ── MODIFY VISIT ──────────────────────────────────────────────────────────
-  // PATCH /guest-visits/{guest_visit_id}
-  async modifyVisit(
-    guestVisitId: string,
-    payload: ModifyVisitPayload
-  ): Promise<void> {
-    await axiosInstance.patch(`/guest-visits/${guestVisitId}`, payload);
+  // ── MODIFY VISIT ─────────────────────────────────────────────────────────
+  // 🚧 DUMMY — intentionally NOT calling the backend yet (per request: modify
+  // is low priority right now). This just simulates a network round trip.
+  // Flip the comments below once the endpoint is ready to wire up for real:
+  //
+  //   await axiosInstance.patch(`/guest-visits/${guestVisitId}`, payload);
+  //
+  async modifyVisit(guestVisitId: string, payload: ModifyVisitPayload): Promise<void> {
+    console.log("[DUMMY modifyVisit] guestVisitId:", guestVisitId, "payload:", payload);
+    await delay(undefined, 700);
   },
 
-  // ── INVITE GUEST ──────────────────────────────────────────────────────────
+  // ── INVITE GUEST (unchanged — outside this pass's scope) ───────────────────
   async inviteGuest(payload: InviteGuestPayload): Promise<{ visit_id: string }> {
     const { data } = await axiosInstance.post("/security/visitors/invite", payload);
     return data;

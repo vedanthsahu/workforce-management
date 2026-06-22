@@ -444,6 +444,7 @@ def fetch_admin_booking_list(
                 'CHECKED_IN',
                 'COMPLETED',
                 'CANCELLED',
+                'MODIFIED',
                 'NO_SHOW'
           )
           AND (
