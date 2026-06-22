@@ -81,45 +81,6 @@ BOOKING_SELECT_FIELDS = """
     host.full_name AS host_name
 """
 
-# BOOKING_SELECT_FIELDS = """
-#     b.id::text AS booking_id,
-#     b.tenant_id::text AS tenant_id,
-#     b.booked_for_user_id::text AS booked_for_user_id,
-#     b.booked_for_guest_id::text AS booked_for_guest_id,
-#     b.booked_by_user_id::text AS booked_by_user_id,
-#     b.guest_visit_id::text AS guest_visit_id,
-#     b.booking_type,
-#     b.seat_id::text AS seat_id,
-#     b.site_id::text AS site_id,
-#     b.building_id::text AS building_id,
-#     b.floor_id::text AS floor_id,
-#     s.seat_code,
-#     si.site_name,
-#     bu.building_name,
-#     f.floor_name,
-#     b.booking_date,
-#     b.booking_status,
-#     b.source_channel,
-#     b.check_in_at,
-#     b.checked_out_at,
-#     b.cancelled_at,
-#     b.cancellation_reason,
-#     b.created_at,
-#     b.updated_at,
-#     g.full_name AS guest_name,
-#     g.email AS guest_email,
-#     g.phone AS guest_phone,
-#     g.organization AS guest_organization,
-#     gv.guest_type,
-#     gv.visit_status,
-#     gv.purpose_of_visit,
-#     gv.start_time,
-#     gv.end_time,
-#     gv.notes,
-#     gv.requires_seat,
-#     host.id::text AS host_user_id,
-#     host.full_name AS host_name
-# """
 
 BOOKING_SELECT_FROM = """
     FROM bookings AS b
@@ -173,6 +134,7 @@ def fetch_future_delegated_guest_visits_without_booking(
             """
             SELECT
                 NULL::text AS booking_id,
+                'GUEST_VISIT' AS activity_source,
                 gv.tenant_id::text AS tenant_id,
 
                 NULL::text AS booked_for_user_id,
@@ -293,6 +255,7 @@ def fetch_current_delegated_guest_visits_without_booking(
             """
             SELECT
                 NULL::text AS booking_id,
+                'GUEST_VISIT' AS activity_source,
                 gv.tenant_id::text AS tenant_id,
 
                 NULL::text AS booked_for_user_id,
@@ -413,6 +376,7 @@ def fetch_past_delegated_guest_visits_without_booking(
             """
             SELECT
                 NULL::text AS booking_id,
+                'GUEST_VISIT' AS activity_source,
                 gv.tenant_id::text AS tenant_id,
 
                 NULL::text AS booked_for_user_id,
@@ -577,29 +541,6 @@ def fetch_seat_for_booking(
         row = cur.fetchone()
     return dict(row) if row else None
 
-
-# def has_active_booking_conflict(
-#     conn: PGConnection,
-#     *,
-#     tenant_id: str,
-#     seat_id: str,
-#     booking_date: date,
-# ) -> bool:
-#     """Return whether a seat is already actively booked for a date."""
-#     with conn.cursor() as cur:
-#         cur.execute(
-#             """
-#             SELECT 1
-#             FROM bookings
-#             WHERE tenant_id = %s
-#               AND seat_id = %s
-#               AND booking_date = %s
-#               AND booking_status IN ('CONFIRMED', 'CHECKED_IN')
-#             LIMIT 1
-#             """,
-#             (tenant_id, seat_id, booking_date),
-#         )
-#         return cur.fetchone() is not None
 
 def has_active_booking_conflict(
     conn,
