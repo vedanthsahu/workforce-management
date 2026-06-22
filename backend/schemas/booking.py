@@ -53,13 +53,14 @@ class ModifyBookingRequest(BaseModel):
 class BookingResponse(BaseModel):
     """Public representation of a schema-native booking."""
 
-    booking_id: str
-    tenant_id: str
+    activity_source: str | None = None
+    booking_id: str | None = None
+    tenant_id: str | None = None
 
     booked_for_user_id: str | None = None
     booked_for_guest_id: str | None = None
 
-    booked_by_user_id: str
+    booked_by_user_id: str | None = None
 
     # NEW
     booked_by_name: str | None = None
@@ -74,18 +75,18 @@ class BookingResponse(BaseModel):
     guest_visit_id: str | None = None
     booking_type: Literal["EMPLOYEE", "GUEST"]
 
-    seat_id: str
-    site_id: str
-    building_id: str
-    floor_id: str
+    seat_id: str | None = None
+    site_id: str | None = None
+    building_id: str | None = None
+    floor_id: str | None = None
 
     seat_code: str | None = None
     site_name: str | None = None
     building_name: str | None = None
     floor_name: str | None = None
 
-    booking_date: date
-    booking_status: str
+    booking_date: date | None = None
+    booking_status: str | None = None
     source_channel: str | None = None
 
     check_in_at: datetime | None = None
