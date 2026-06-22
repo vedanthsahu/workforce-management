@@ -50,6 +50,7 @@ import {
   Star,
   LogOut,
   Building2,
+  Building,
   BarChart3,
   ShieldCheck,
   MapPin,
@@ -58,6 +59,10 @@ import {
   Users,
   ChevronsUpDown,
   UserRound,
+  UserCheck,
+  CalendarSearch,
+  History,
+  UserPlus, 
 } from "lucide-react";
 
 import { getInitials, type User } from "@/features/auth/types/auth.types";
@@ -71,7 +76,7 @@ export type AppRole =
   | "MANAGER"
   | "EMPLOYEE"
   | "TALENT"
-  | "RECEPTIONIST"
+  | "SECURITY"
   | "FACILITIES"
   | string;
 
@@ -109,10 +114,18 @@ const ROUTE_MAP: Record<string, string> = {
   seatstatus:      "/admin/seat-status",
   bookings:        "/admin/bookings",
   users:           "/admin/users",
+  roles:           "/admin/roles",
   occupancy:       "/admin/occupancy",
   utilization:     "/admin/utilization",
   audit:           "/admin/audit",
   settings:        "/admin/settings",
+
+  security_dashboard: "/dashboard",
+  today_visitors:     "/security/today-visitors",
+  checked_in:          "/security/checked-in",
+  visitor_search:      "/security/visitor-search",
+  past_visits:         "/security/past-visits",
+  invite_guest:        "/security/invite-guest",
 };
 
 // ─── Nav configs ──────────────────────────────────────────────────────────────
@@ -140,7 +153,7 @@ const ADMIN_DASHBOARD: NavItem[] = [
 
 const ADMIN_MANAGE_NAV: NavItem[] = [
   { id: "offices",    label: "Offices",       icon: Building2     },
-  { id: "buildings",  label: "Buildings",     icon: Building2     },
+  { id: "buildings",  label: "Buildings",     icon: Building     },
   { id: "floors",     label: "Floors",        icon: MapPin        },
   { id: "layouts",    label: "Floor Layouts", icon: ClipboardList },
   { id: "seats",      label: "Seats",         icon: CalendarDays  },
@@ -151,6 +164,7 @@ const ADMIN_MANAGE_NAV: NavItem[] = [
 const ADMIN_OPERATIONS_NAV: NavItem[] = [
   { id: "bookings",      label: "Bookings",      icon: CalendarDays },
   { id: "users",         label: "Users",         icon: Users        },
+  { id: "roles",         label: "Role Management",  icon: ShieldCheck  },
   { id: "notifications", label: "Notifications", icon: Bell         },
 ];
 
@@ -163,6 +177,21 @@ const ADMIN_REPORTS_NAV: NavItem[] = [
 const ADMIN_SETTINGS_NAV: NavItem[] = [
   { id: "settings", label: "Settings", icon: Settings },
 ];
+//--------security nav config----------------------------------------------------
+const SECURITY_DASHBOARD: NavItem[] = [
+  { id: "security_dashboard", label: "Dashboard", icon: LayoutDashboard },
+];
+
+const SECURITY_VISITOR_NAV: NavItem[] = [
+  { id: "today_visitors", label: "Today's Visitors",   icon: CalendarCheck },
+  { id: "checked_in",     label: "Checked-in Visitors", icon: UserCheck     },
+  { id: "visitor_search", label: "Visitor Search",      icon: CalendarSearch },
+  { id: "past_visits",    label: "Past Visits",         icon: History       },
+];
+
+const SECURITY_ACTIONS_NAV: NavItem[] = [
+  { id: "invite_guest", label: "Invite Guest", icon: UserPlus },
+];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -171,7 +200,7 @@ const ROLE_LABELS: Record<string, string> = {
   MANAGER:      "Manager",
   EMPLOYEE:     "Employee",
   TALENT:       "Talent",
-  RECEPTIONIST: "Receptionist",
+  SECURITY:     "Security",
   FACILITIES:   "Facilities",
 };
 
@@ -180,7 +209,7 @@ const ROLE_BADGE_STYLES: Record<string, string> = {
   MANAGER:      "bg-violet-50 text-violet-600 ring-violet-200",
   EMPLOYEE:     "bg-blue-50 text-blue-600 ring-blue-200",
   TALENT:       "bg-teal-50 text-teal-600 ring-teal-200",
-  RECEPTIONIST: "bg-amber-50 text-amber-600 ring-amber-200",
+  SECURITY: "bg-amber-50 text-amber-600 ring-amber-200",
   FACILITIES:   "bg-orange-50 text-orange-600 ring-orange-200",
 };
 
@@ -290,6 +319,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
   const role: AppRole = user?.role ?? "EMPLOYEE";
   const isAdmin = role === "TENANT_ADMIN";
+  const isSecurity = role === "SECURITY";
 
   const activeItem =
     Object.entries(ROUTE_MAP)
@@ -379,6 +409,30 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 </SidebarMenu>
               </SidebarGroup>
             </>
+          // ) : (
+          //-----------------------security-----------------------------------------------------------------
+          ) : isSecurity ? (
+            <>
+              <SidebarGroup>
+                <SidebarGroupLabel>Overview</SidebarGroupLabel>
+                <SidebarMenu>
+                  <NavSection items={SECURITY_DASHBOARD}   activeItem={activeItem} onNavigate={handleNav} />
+                </SidebarMenu>
+              </SidebarGroup>
+              <SidebarGroup>
+                <SidebarGroupLabel>Visitor Management</SidebarGroupLabel>
+                <SidebarMenu>
+                  <NavSection items={SECURITY_VISITOR_NAV} activeItem={activeItem} onNavigate={handleNav} />
+                </SidebarMenu>
+              </SidebarGroup>
+              <SidebarGroup>
+                <SidebarGroupLabel>Actions</SidebarGroupLabel>
+                <SidebarMenu>
+                  <NavSection items={SECURITY_ACTIONS_NAV} activeItem={activeItem} onNavigate={handleNav} />
+                </SidebarMenu>
+              </SidebarGroup>
+            </>
+          //--------------------------------------------------------------------------------------------------  
           ) : (
             <>
               <SidebarGroup>
