@@ -1,10 +1,10 @@
-
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { securityService } from "../services/security.service";
 import { mapApiGuestVisitToVisitor, mapApiSummary } from "../utils/security.utils";
-import { useDebouncedValue } from "../hooks/Usedebouncedvalue";
+import { useDebouncedValue } from "./Usedebouncedvalue";
+import { DEFAULT_SITE_ID } from "./Usesiteselector";
 import type { SecurityDashboardSummary, Site, Visitor } from "../types/security.types";
 
 const PAGE_SIZE = 10;
@@ -21,7 +21,10 @@ const PAGE_SIZE = 10;
 export const useSecurityDashboard = () => {
   const [summary, setSummary] = useState<SecurityDashboardSummary | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
-  const [selectedSiteId, setSelectedSiteId] = useState<string | undefined>(undefined);
+  // Defaults to Roxana Towers' real site_id so the dashboard opens already
+  // scoped to it — kept in sync with the SiteSelector's own default via
+  // the shared DEFAULT_SITE_ID constant (single source of truth).
+  const [selectedSiteId, setSelectedSiteId] = useState<string | undefined>(DEFAULT_SITE_ID);
 
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [search, setSearch] = useState("");

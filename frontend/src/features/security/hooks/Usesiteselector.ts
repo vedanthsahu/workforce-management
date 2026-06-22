@@ -1,5 +1,5 @@
 "use client";
-
+// hard coded
 import { useEffect, useState } from "react";
 
 export interface SiteOption {
@@ -17,6 +17,13 @@ export const SITE_OPTIONS: SiteOption[] = [
   { key: "tech-park", label: "Tech Park Annex", siteId: "6" },
 ];
 
+// Auto-selected the moment security logs in / the dashboard first loads.
+// Exported so useSecurityDashboard can seed its initial site_id with the
+// exact same default — single source of truth, no magic strings repeated.
+export const DEFAULT_SITE_KEY = "Roxana Towers";
+export const DEFAULT_SITE_ID =
+  SITE_OPTIONS.find((o) => o.key === DEFAULT_SITE_KEY)?.siteId ?? "";
+
 interface UseSiteSelectorOptions {
   selectedSiteId?: string;
   onChange: (siteId: string) => void;
@@ -29,14 +36,14 @@ interface UseSiteSelectorOptions {
  * `options` and calls `selectOption(key)` on click.
  */
 export function useSiteSelector({ selectedSiteId, onChange }: UseSiteSelectorOptions) {
-  const [selectedKey, setSelectedKey] = useState<string>("");
+  const [selectedKey, setSelectedKey] = useState<string>(DEFAULT_SITE_KEY);
 
   // If the real site id changes from outside (e.g. reset elsewhere) and the
   // currently-tracked key no longer matches it, fall back to the first
   // option that does match that site id.
   useEffect(() => {
     if (!selectedSiteId) {
-      setSelectedKey("");
+      setSelectedKey(DEFAULT_SITE_KEY);
       return;
     }
     const currentKeyStillMatches =
