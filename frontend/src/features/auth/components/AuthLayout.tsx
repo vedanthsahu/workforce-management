@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 interface AuthLayoutProps {
   children: React.ReactNode;
   title: string;
@@ -13,12 +15,13 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
 
         {/* Logo — top left */}
         <div className="absolute top-8 left-8 flex items-center gap-2.5">
-          <img
+          <Image
             src="/logo.png"
             alt="Solugenix logo"
             width={36}
             height={36}
             className="rounded-lg"
+            unoptimized
           />
           <span className="text-lg font-semibold tracking-tight text-gray-900">
             Solugenix Seat Book
