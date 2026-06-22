@@ -13,6 +13,11 @@ ACTIVE_GUEST_BOOKING_STATUSES = (
     "CHECKED_IN",
     "COMPLETED",
 )
+ACTIVE_GUEST_BOOKING_STATUSES = (
+    "CONFIRMED",
+    "CHECKED_IN",
+    "COMPLETED",
+)
 
 GUEST_VISIT_LIST_SELECT = """
     gv.id::text AS guest_visit_id,
@@ -475,8 +480,7 @@ def check_out_guest_visit(
     if row is None:
         raise LookupError("Guest visit not found.")
     raise ValueError("Only checked-in guest visits can be checked out.")
-       
-
+        
 def fetch_guest_visit_by_id(
     conn: PGConnection,
     *,

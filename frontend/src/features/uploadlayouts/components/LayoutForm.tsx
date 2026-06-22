@@ -360,6 +360,15 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                       code: floor.floor_code ?? "",
                     },
                   }));
+                  // onFloorLayoutInfo?.({
+                  //   layoutId: floor.layout_id,
+                  //   layoutName: floor.layout_name,
+                  //   layoutStatus: floor.layout_status,
+                  //   layoutIsPublished: floor.layout_is_published,
+                  //   layoutVersionNo: floor.layout_version_no,
+                  //   layoutFileUrl: floor.layout_file_url,
+                  //   layoutCount: floor.layout_count,
+                  // });
                   onFloorLayoutInfo?.({
                     layoutId: floor.layout_id,
                     layoutName: floor.layout_name,
@@ -368,6 +377,8 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                     layoutVersionNo: floor.layout_version_no,
                     layoutFileUrl: floor.layout_file_url,
                     layoutCount: floor.layout_count,
+                    publishedByName: floor.published_by_name,
+                    layoutLastUpdated: floor.layout_last_updated,
                   });
                 }}
               >
