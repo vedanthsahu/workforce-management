@@ -140,9 +140,9 @@ export function useBookings(): UseBookingsReturn {
   const displayedBookings: Booking[] = (() => {
     switch (activeTab) {
       case "upcoming":
-        return [...currentBookings, ...futureBookings].filter(
-          (b) => b.status !== "cancelled"
-        );
+        return [...currentBookings, ...futureBookings]
+          .filter((b) => b.status !== "cancelled")
+          .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
       case "past":
         return pastBookings;
       case "recurring":

@@ -11,7 +11,7 @@ export const createGuestSchema = z.object({
   phone: z
     .string()
     .trim()
-    .refine((val) => !val || /^\+?[\d\s\-()]{10,15}$/.test(val), {
+    .refine((val) => !val || /^\+?[\d\s\-()]{10}$/.test(val), {
       message: "Enter a valid phone number",
     })
     .optional(),

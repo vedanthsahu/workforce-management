@@ -50,6 +50,7 @@ function extractPreferenceKeys(raw: RawBooking): string[] {
 // ── Mapper ────────────────────────────────────────────────────────────────────
 
 function deriveBookingType(raw: RawBooking, currentUserId: string): Booking["bookingType"] {
+  if (raw.activity_source === "GUEST_VISIT") return "visit";
   if (raw.booking_type === "GUEST") return "guest";
   const bookedForId = raw.booked_for_user_id ?? raw.user_id;
   const bookedById  = raw.booked_by_user_id;
@@ -62,7 +63,8 @@ function deriveBookingType(raw: RawBooking, currentUserId: string): Booking["boo
 }
 
 function mapRawBooking(raw: RawBooking, currentUserId: string): Booking {
-  const bookedDate = new Date(raw.created_at);
+  const createdAt = raw.created_at ?? raw.booking_date;
+  const bookedDate = new Date(createdAt);
   const bookedOn   = bookedDate.toLocaleDateString("en-US", {
     month: "short",
     day:   "numeric",
@@ -88,12 +90,15 @@ function mapRawBooking(raw: RawBooking, currentUserId: string): Booking {
   const fromDate = raw.from_date ?? raw.booking_date;
   const toDate   = raw.to_date   ?? raw.booking_date;
 
+  const id = raw.booking_id ?? raw.guest_visit_id ?? "";
+  const isVisitOnly = raw.activity_source === "GUEST_VISIT";
+
   return {
-    id:               raw.booking_id,
+    id,
     location:         raw.site_name      ?? "Office",
     building:         raw.building_name  ?? "",
     floor:            raw.floor_name     ?? (raw.floor_id ? `Floor ${raw.floor_id}` : ""),
-    seat:             raw.seat_code      ?? raw.seat_id,
+    seat:             raw.seat_code      ?? raw.seat_id ?? (isVisitOnly ? "—" : ""),
     date:             raw.booking_date,
     fromDate,
     toDate,
@@ -118,6 +123,8 @@ function mapRawBooking(raw: RawBooking, currentUserId: string): Booking {
     guestName:        raw.guest_name ?? undefined,
     guestEmail:       raw.guest_email ?? undefined,
     hostName:         raw.host_name ?? undefined,
+    activitySource:   (raw.activity_source as Booking["activitySource"]) ?? "BOOKING",
+    createdAt:        raw.created_at ?? raw.booking_date,
   };
 }
 

@@ -1,6 +1,6 @@
 export type BookingStatus = "confirmed" | "cancelled" | "pending";
 
-export type BookingType = "self" | "on_behalf" | "employee" | "guest";
+export type BookingType = "self" | "on_behalf" | "employee" | "guest" | "visit";
 
 export type BookingTab = "upcoming" | "past" | "recurring" | "cancelled";
 
@@ -40,6 +40,8 @@ export interface Booking {
   guestName?: string;
   guestEmail?: string;
   hostName?: string;
+  activitySource?: "BOOKING" | "GUEST_VISIT";
+  createdAt?: string;
 }
 
 export interface BookingSummary {
@@ -51,10 +53,11 @@ export interface BookingSummary {
 }
 
 export interface RawBooking {
-  booking_id:           string;
+  booking_id:           string | null;
+  activity_source?:     "BOOKING" | "GUEST_VISIT" | string;
   tenant_id:            string;
   user_id:              string;
-  seat_id:              string;
+  seat_id:              string | null;
   site_id:              string;
   building_id:          string;
   floor_id:             string;
@@ -91,6 +94,8 @@ export interface RawBooking {
   booked_by_email?:     string | null;
   booked_for_name?:     string | null;
   booked_for_email?:    string | null;
+
+  guest_visit_id?:      string | null;
 
   // Guest enrichment
   guest_name?:          string | null;

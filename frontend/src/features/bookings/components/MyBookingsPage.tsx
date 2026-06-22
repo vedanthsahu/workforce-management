@@ -1,17 +1,21 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { RefreshCw, Plus, Calendar, CheckCircle2, Users, UserCheck, Search, SlidersHorizontal, Pencil, X as XIcon } from "lucide-react";
+import {
+  RefreshCw, Plus, Calendar, CheckCircle2, Users, UserCheck,
+  Search,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useBookings } from "../hooks/useBookings";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 import { useBookingActions } from "../hooks/useBookingActions";
 import { BookingCard } from "./BookingCard";
 import { CancelBookingDialog } from "./CancelBookingDialog";
-import { TABS, BOOKING_TYPE_STYLES } from "../utils/constants";
+import { TABS } from "../utils/constants";
 import { isUpcoming, isToday, sortByDate } from "../utils/bookingHelpers";
-import type { BookingSummary } from "../types/bookings.types";
+import type { Booking, BookingSummary, BookingTab } from "../types/bookings.types";
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
 
@@ -47,10 +51,10 @@ function StatCard({ label, value, subLabel, icon, iconBg, accentBorder }: StatCa
   );
 }
 
-function BookingStatsCards({ summary }: { summary: BookingSummary }) {
+function BookingStatsCards({ summary, delegatedCount, showOnBehalf }: { summary: BookingSummary; delegatedCount: number; showOnBehalf: boolean }) {
   const teamInOffice = summary.teamInOffice ?? 0;
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+    <div className={cn("grid gap-3 sm:gap-4", showOnBehalf ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2 lg:grid-cols-3")}>
       <StatCard
         label="Upcoming"
         value={summary.upcomingCount}
@@ -75,162 +79,261 @@ function BookingStatsCards({ summary }: { summary: BookingSummary }) {
         iconBg="bg-amber-100"
         accentBorder="border-l-amber-500"
       />
-      <StatCard
-        label="On behalf"
-        value={0}
-        subLabel="Booked for you by others"
-        icon={<UserCheck className="size-5 text-violet-600" />}
-        iconBg="bg-violet-100"
-        accentBorder="border-l-violet-500"
-      />
-    </div>
-  );
-}
-
-// ── Search bar ────────────────────────────────────────────────────────────────
-
-function SearchToolbar({ search, onSearchChange }: { search: string; onSearchChange: (v: string) => void }) {
-  return (
-    <div className="flex items-center gap-2.5 flex-wrap">
-      <div className="flex items-center gap-2 bg-gray-50 border border-[#EBEBF5] rounded-lg px-3 py-2 min-w-[220px] flex-1 sm:flex-none sm:max-w-[280px]">
-        <Search className="size-3.5 text-gray-400 shrink-0" />
-        <input
-          type="text"
-          placeholder="Search by seat, location or person…"
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="border-none bg-transparent text-[13px] text-[#0f172a] outline-none w-full placeholder:text-gray-400"
+      {showOnBehalf && (
+        <StatCard
+          label="Delegated"
+          value={delegatedCount}
+          subLabel="Booked by you for others"
+          icon={<UserCheck className="size-5 text-violet-600" />}
+          iconBg="bg-violet-100"
+          accentBorder="border-l-violet-500"
         />
-      </div>
-      <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-50 border border-[#EBEBF5] text-[13px] font-medium text-gray-500 hover:border-indigo-300 hover:text-indigo-600 transition-colors">
-        <SlidersHorizontal className="size-3.5" />
-        Filters
-      </button>
+      )}
     </div>
   );
 }
 
-// ── Static "Booked For Someone" card ──────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-function getInitials(name: string) {
-  return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
-}
+type BookingStatus  = "all" | "confirmed" | "pending";
+type BfsBookingType = "all" | "employees" | "guests" | "visits";
 
-type StaticBfsCardProps = {
-  office: string;
-  floor: string;
-  date: string;
-  statusLabel: string;
-  typeBadge: string;
-  personLabel: string;
-  personName: string;
-  personRole: string;
-  personColor: string;
-  hostName?: string;
-  hostRole?: string;
-  hostColor?: string;
-  bookingId: string;
-  bookedOn: string;
-};
+// ── Shared filter chip ────────────────────────────────────────────────────────
 
-function StaticBfsCard({ office, floor, date, statusLabel, typeBadge, personLabel, personName, personRole, personColor, hostName, hostRole, hostColor, bookingId, bookedOn }: StaticBfsCardProps) {
-  const typeStyle = BOOKING_TYPE_STYLES[typeBadge] ?? BOOKING_TYPE_STYLES.self;
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div className="bg-white border border-[#EBEBF5] rounded-2xl hover:shadow-md hover:border-gray-200 transition-all duration-200 overflow-hidden">
-      <div className="grid grid-cols-[52px_1fr] sm:grid-cols-[52px_1.7fr_1.1fr_auto] items-center gap-4 sm:gap-6 p-4 sm:px-5 sm:py-[18px]">
+    <button
+      onClick={onClick}
+      className={cn(
+        "px-3 py-1.5 rounded-full text-[12.5px] font-medium border transition-colors whitespace-nowrap",
+        active
+          ? "bg-indigo-50 border-indigo-200 text-indigo-600 font-semibold"
+          : "bg-white border-[#EBEBF5] text-gray-500 hover:border-gray-300 hover:text-gray-700",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
 
-        {/* Icon */}
-        <div className="w-[52px] h-[52px] rounded-[13px] bg-orange-100 flex items-center justify-center shrink-0">
-          <span className="text-2xl leading-none" role="img" aria-label="Office building">🏢</span>
-        </div>
+// ── My Bookings toolbar ───────────────────────────────────────────────────────
 
-        {/* Main info */}
-        <div className="min-w-0">
-          <p className="text-[14px] font-bold text-[#0f172a] truncate">{office}</p>
-          <p className="text-[12px] text-gray-500 mt-0.5">{floor}</p>
-          <div className="flex items-center gap-1.5 mt-1.5 text-[12px] text-gray-500">
-            <Calendar className="size-3 text-gray-400 shrink-0" />
-            <span>{date}</span>
-          </div>
-          <div className="flex gap-1.5 flex-wrap mt-2.5">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#E8F5E9] text-[#2E7D32]">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />{statusLabel}
-            </span>
-            <span className={cn("inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold", typeStyle.bg, typeStyle.text)}>
-              {typeStyle.label}
-            </span>
-          </div>
-        </div>
+function MyBookingsToolbar({
+  activeTab,
+  onTabChange,
+  search,
+  onSearchChange,
+  status,
+  onStatusChange,
+}: {
+  activeTab: BookingTab;
+  onTabChange: (t: BookingTab) => void;
+  search: string;
+  onSearchChange: (v: string) => void;
+  status: BookingStatus;
+  onStatusChange: (s: BookingStatus) => void;
+}) {
+  const statusOptions: { label: string; value: BookingStatus }[] = [
+    { label: "All",       value: "all"       },
+    { label: "Confirmed", value: "confirmed" },
+    { label: "Pending",   value: "pending"   },
+  ];
 
-        {/* Booked for */}
-        <div className="hidden sm:block min-w-0">
-          <p className="text-[10px] font-semibold tracking-wider uppercase text-gray-400 mb-2">{personLabel}</p>
-          <div className="flex items-center gap-2">
-            <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0", personColor)}>
-              {getInitials(personName)}
-            </div>
-            <div className="min-w-0">
-              <p className="text-[12.5px] font-semibold text-[#1A1A2E] truncate">{personName}</p>
-              <p className="text-[11px] text-gray-400 truncate">{personRole}</p>
-            </div>
-          </div>
-          {hostName && hostColor && (
-            <div className="flex items-center gap-2 mt-2">
-              <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0", hostColor)}>
-                {getInitials(hostName)}
-              </div>
-              <div className="min-w-0">
-                <p className="text-[12.5px] font-semibold text-[#1A1A2E] truncate">{hostName}</p>
-                <p className="text-[11px] text-gray-400 truncate">{hostRole}</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Meta + Actions — right aligned */}
-        <div className="hidden sm:flex flex-col items-end text-right">
-          <p className="text-[10px] font-semibold tracking-wider uppercase text-gray-400 mb-1">Booking ID</p>
-          <p className="text-[11px] text-gray-500 font-mono mb-2.5">{bookingId}</p>
-          <p className="text-[10px] font-semibold tracking-wider uppercase text-gray-400 mb-1">Booked on</p>
-          <p className="text-[12px] text-gray-500">{bookedOn}</p>
-          <div className="flex gap-2 mt-3">
-            <button className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 hover:border-blue-300 hover:text-blue-600 rounded-lg px-3 py-1.5 transition-all">
-              <Pencil className="size-3" />
-              Modify
-            </button>
-            <button className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-red-500 bg-white hover:bg-red-50 border border-red-200 hover:border-red-300 rounded-lg px-3 py-1.5 transition-all">
-              <XIcon className="size-3" />
-              Cancel
-            </button>
-          </div>
-        </div>
+  return (
+    <div className="flex items-center gap-2 flex-wrap mb-4">
+      {/* Sub-tabs — left */}
+      <div className="flex gap-1 shrink-0">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => onTabChange(tab.id)}
+            className={cn(
+              "px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors whitespace-nowrap",
+              activeTab === tab.id
+                ? "bg-indigo-50 text-indigo-600 font-semibold"
+                : "text-gray-500 hover:bg-gray-100 hover:text-gray-700",
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Mobile meta + actions */}
-      <div className="sm:hidden px-4 pb-4">
-        <div className="flex items-center gap-4 text-[11px] text-gray-400">
-          <span className="font-mono">{bookingId}</span>
-          <span>·</span>
-          <span>{bookedOn}</span>
+      {/* Right side */}
+      <div className="flex items-center gap-2 ml-auto">
+        {/* Status chips */}
+        <div className="flex gap-1.5">
+          {statusOptions.map((o) => (
+            <FilterChip
+              key={o.value}
+              label={o.label}
+              active={status === o.value}
+              onClick={() => onStatusChange(o.value)}
+            />
+          ))}
         </div>
-        <div className="flex gap-2 mt-2.5">
-          <button className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
-            <Pencil className="size-3" />
-            Modify
-          </button>
-          <button className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-red-500 bg-white hover:bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
-            <XIcon className="size-3" />
-            Cancel
-          </button>
+
+        {/* Search */}
+        <div className="flex items-center gap-2 bg-gray-50 border border-[#EBEBF5] rounded-lg px-3 py-2 w-[200px]">
+          <Search className="size-3.5 text-gray-400 shrink-0" />
+          <input
+            type="text"
+            placeholder="Search seat, location…"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="border-none bg-transparent text-[13px] text-[#0f172a] outline-none w-full placeholder:text-gray-400"
+          />
         </div>
       </div>
     </div>
   );
+}
+
+// ── Booked For Someone toolbar ────────────────────────────────────────────────
+
+function BfsToolbar({
+  subTab,
+  onSubTabChange,
+  search,
+  onSearchChange,
+  bookingType,
+  onBookingTypeChange,
+}: {
+  subTab: "upcoming" | "past" | "cancelled";
+  onSubTabChange: (t: "upcoming" | "past" | "cancelled") => void;
+  search: string;
+  onSearchChange: (v: string) => void;
+  bookingType: BfsBookingType;
+  onBookingTypeChange: (t: BfsBookingType) => void;
+}) {
+  const typeOptions: { label: string; value: BfsBookingType; hint?: string }[] = [
+    { label: "All",       value: "all"       },
+    { label: "Employees", value: "employees" },
+    { label: "Guests",    value: "guests"    },
+    { label: "Visits",    value: "visits",   hint: "Guest visits only" },
+  ];
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap border-b border-[#EBEBF5] mb-4">
+      {/* Sub-tabs — left */}
+      <div className="flex">
+        {(["upcoming", "past", "cancelled"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => onSubTabChange(t)}
+            className={cn(
+              "px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
+              subTab === t
+                ? "border-indigo-600 text-indigo-600 font-semibold"
+                : "border-transparent text-gray-500 hover:text-gray-700",
+            )}
+          >
+            {t.charAt(0).toUpperCase() + t.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {/* Right side */}
+      <div className="flex items-center gap-2 ml-auto pb-2">
+        {/* Type chips with tooltip support */}
+        <div className="flex gap-1.5">
+          {typeOptions.map((o) => (
+            <div key={o.value} className="relative group">
+              <FilterChip
+                label={o.label}
+                active={bookingType === o.value}
+                onClick={() => onBookingTypeChange(o.value)}
+              />
+              {/* Tooltip — shown only for chips that have a hint */}
+              {o.hint && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex items-center whitespace-nowrap bg-gray-800 text-white text-[10.5px] font-medium px-2 py-1 rounded-md shadow-md pointer-events-none z-50">
+                  {o.hint}
+                  <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Search */}
+        <div className="flex items-center gap-2 bg-gray-50 border border-[#EBEBF5] rounded-lg px-3 py-2 w-[200px]">
+          <Search className="size-3.5 text-gray-400 shrink-0" />
+          <input
+            type="text"
+            placeholder="Search person or location…"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="border-none bg-transparent text-[13px] text-[#0f172a] outline-none w-full placeholder:text-gray-400"
+          />
+        </div>
+
+
+      </div>
+    </div>
+  );
+}
+
+// ── Filter helpers ────────────────────────────────────────────────────────────
+
+function applyMyBookingFilters(
+  bookings: Booking[],
+  search: string,
+  status: BookingStatus,
+): Booking[] {
+  return bookings.filter((b) => {
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const matches =
+        b.location.toLowerCase().includes(q) ||
+        b.floor.toLowerCase().includes(q) ||
+        b.seat.toLowerCase().includes(q) ||
+        (b.bookedForName?.toLowerCase().includes(q) ?? false) ||
+        (b.bookedByName?.toLowerCase().includes(q) ?? false);
+      if (!matches) return false;
+    }
+    if (status !== "all" && b.status !== status) return false;
+    return true;
+  });
+}
+
+function applyBfsFilters(
+  bookings: Booking[],
+  search: string,
+  bookingType: BfsBookingType,
+): Booking[] {
+  return bookings.filter((b) => {
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const matches =
+        b.location.toLowerCase().includes(q) ||
+        (b.bookedForName?.toLowerCase().includes(q) ?? false) ||
+        (b.guestEmail?.toLowerCase().includes(q) ?? false);
+      if (!matches) return false;
+    }
+    // "employees" — only employee-type bookings
+    if (bookingType === "employees" && b.bookingType !== "employee") return false;
+    // "guests" — only regular guest bookings (not visits)
+    if (bookingType === "guests" && b.bookingType !== "guest") return false;
+    // "visits" — only visit-type bookings (guest sub-type)
+    if (bookingType === "visits" && b.bookingType !== "visit") return false;
+    return true;
+  });
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function MyBookingsPage() {
+  const { canAny } = usePermissions();
+  const canBookForSomeone = canAny("booking:book_for_employee", "booking:book_for_guest");
+
   const {
     displayedBookings,
     delegatedBookings,
@@ -247,35 +350,41 @@ export default function MyBookingsPage() {
     useBookingActions({ handleCancelBooking });
 
   const router = useRouter();
-  const [search, setSearch] = useState("");
-  const [topTab, setTopTab] = useState<"myBookings" | "bookedForSomeone">("myBookings");
+  const [topTab, setTopTab]       = useState<"myBookings" | "bookedForSomeone">("myBookings");
   const [bfsSubTab, setBfsSubTab] = useState<"upcoming" | "past" | "cancelled">("upcoming");
-  const [bfsFilter, setBfsFilter] = useState<"all" | "employees" | "guests">("all");
 
-  const filtered = search.trim()
-    ? displayedBookings.filter((b) => {
-        const q = search.toLowerCase();
-        return (
-          b.location.toLowerCase().includes(q) ||
-          b.floor.toLowerCase().includes(q) ||
-          b.seat.toLowerCase().includes(q) ||
-          (b.bookedForName?.toLowerCase().includes(q) ?? false)
-        );
-      })
-    : displayedBookings;
+  // My Bookings filters
+  const [mySearch, setMySearch] = useState("");
+  const [myStatus, setMyStatus] = useState<BookingStatus>("all");
+
+  // Booked For Someone filters
+  const [bfsSearch, setBfsSearch]           = useState("");
+  const [bfsBookingType, setBfsBookingType] = useState<BfsBookingType>("all");
+
+  // ── Apply filters ──────────────────────────────────────────────────────────
+  const filteredBookings = applyMyBookingFilters(displayedBookings, mySearch, myStatus);
 
   const upcomingCards = sortByDate(
-    filtered.filter((b) => b.status !== "cancelled" && isUpcoming(b.date)),
+    filteredBookings.filter((b) => b.status !== "cancelled" && isUpcoming(b.date)),
     true,
   );
   const pastCards = sortByDate(
-    filtered.filter((b) => b.status !== "cancelled" && !isUpcoming(b.date)),
+    filteredBookings.filter((b) => b.status !== "cancelled" && !isUpcoming(b.date)),
     false,
   );
   const sortedDisplayed = sortByDate(
-    filtered,
+    filteredBookings,
     activeTab !== "past" && activeTab !== "cancelled",
   );
+
+  const bfsBaseFiltered = delegatedBookings.filter((b) => {
+    if (bfsSubTab === "upcoming")  return isUpcoming(b.date) && b.status !== "cancelled";
+    if (bfsSubTab === "past")      return !isUpcoming(b.date) && b.status !== "cancelled";
+    if (bfsSubTab === "cancelled") return b.status === "cancelled";
+    return true;
+  });
+  const filteredDelegated = applyBfsFilters(bfsBaseFiltered, bfsSearch, bfsBookingType)
+    .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
 
   return (
     <>
@@ -315,11 +424,11 @@ export default function MyBookingsPage() {
           </div>
 
           {/* Stats */}
-          <BookingStatsCards summary={summary} />
+          <BookingStatsCards summary={summary} delegatedCount={delegatedBookings.length} showOnBehalf={canBookForSomeone} />
 
-          {/* Top-level tabs: My Bookings | Booked For Someone */}
+          {/* Top-level tabs — "Booked For Someone" only visible with permission */}
           <div className="flex border-b border-[#EBEBF5] overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
-            {(["myBookings", "bookedForSomeone"] as const).map((t) => (
+            {(["myBookings", ...(canBookForSomeone ? ["bookedForSomeone"] : [])] as ("myBookings" | "bookedForSomeone")[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTopTab(t)}
@@ -342,34 +451,19 @@ export default function MyBookingsPage() {
           {/* ══ MY BOOKINGS PANEL ══ */}
           {topTab === "myBookings" && (
             <>
-              {/* Sub-tabs */}
-              <div className="flex items-center gap-2.5 mb-4 flex-wrap">
-                <div className="flex gap-1">
-                  {TABS.map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={cn(
-                        "px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors",
-                        activeTab === tab.id
-                          ? "bg-indigo-50 text-indigo-600 font-semibold"
-                          : "text-gray-500 hover:bg-gray-100 hover:text-gray-700",
-                      )}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="ml-auto">
-                  <SearchToolbar search={search} onSearchChange={setSearch} />
-                </div>
-              </div>
+              <MyBookingsToolbar
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                search={mySearch}
+                onSearchChange={setMySearch}
+                status={myStatus}
+                onStatusChange={setMyStatus}
+              />
 
               <div className="flex flex-col gap-3.5">
                 {isLoading && (
                   <div className="text-center py-12 text-gray-400 text-[13.5px]">Loading bookings…</div>
                 )}
-
                 {error && (
                   <div className="bg-red-50 border border-red-200 rounded-xl px-4 sm:px-5 py-4 text-red-500 text-[13px]">{error}</div>
                 )}
@@ -378,16 +472,30 @@ export default function MyBookingsPage() {
                   <>
                     {upcomingCards.length > 0 ? (
                       upcomingCards.map((booking) => (
-                        <BookingCard key={booking.id} booking={booking} onCancelClick={setCancelTarget} onModifyClick={handleModify} showActions={!isToday(booking.date)} />
+                        <BookingCard
+                          key={booking.id}
+                          booking={booking}
+                          onCancelClick={setCancelTarget}
+                          onModifyClick={handleModify}
+                          showActions={!isToday(booking.date)}
+                        />
                       ))
                     ) : (
-                      <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">No upcoming bookings found.</div>
+                      <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
+                        No upcoming bookings found.
+                      </div>
                     )}
                     {pastCards.length > 0 && (
                       <>
                         <p className="text-[11px] font-semibold tracking-widest uppercase text-gray-400 mt-2">Past Bookings</p>
                         {pastCards.map((booking) => (
-                          <BookingCard key={booking.id} booking={booking} onCancelClick={setCancelTarget} onModifyClick={handleModify} showActions={false} />
+                          <BookingCard
+                            key={booking.id}
+                            booking={booking}
+                            onCancelClick={setCancelTarget}
+                            onModifyClick={handleModify}
+                            showActions={false}
+                          />
                         ))}
                       </>
                     )}
@@ -396,10 +504,18 @@ export default function MyBookingsPage() {
 
                 {!isLoading && !error && activeTab !== "upcoming" && (
                   sortedDisplayed.length === 0 ? (
-                    <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">No {activeTab} bookings found.</div>
+                    <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
+                      No {activeTab} bookings found.
+                    </div>
                   ) : (
                     sortedDisplayed.map((booking) => (
-                      <BookingCard key={booking.id} booking={booking} onCancelClick={setCancelTarget} onModifyClick={handleModify} showActions={activeTab !== "past" && activeTab !== "cancelled"} />
+                      <BookingCard
+                        key={booking.id}
+                        booking={booking}
+                        onCancelClick={setCancelTarget}
+                        onModifyClick={handleModify}
+                        showActions={activeTab !== "past" && activeTab !== "cancelled"}
+                      />
                     ))
                   )
                 )}
@@ -410,65 +526,24 @@ export default function MyBookingsPage() {
           {/* ══ BOOKED FOR SOMEONE PANEL ══ */}
           {topTab === "bookedForSomeone" && (
             <>
-              {/* Sub-tabs + filter chips */}
-              <div className="flex border-b border-[#EBEBF5] mb-4">
-                {(["upcoming", "past", "cancelled"] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setBfsSubTab(t)}
-                    className={cn(
-                      "px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
-                      bfsSubTab === t
-                        ? "border-indigo-600 text-indigo-600 font-semibold"
-                        : "border-transparent text-gray-500 hover:text-gray-700",
-                    )}
-                  >
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
-                  </button>
-                ))}
-                <div className="flex gap-1.5 ml-auto items-center">
-                  {(["all", "employees", "guests"] as const).map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => setBfsFilter(f)}
-                      className={cn(
-                        "px-3 py-1.5 rounded-full text-[12.5px] font-medium border transition-colors",
-                        bfsFilter === f
-                          ? "bg-indigo-50 border-indigo-100 text-indigo-600 font-semibold"
-                          : "bg-white border-[#EBEBF5] text-gray-500 hover:border-gray-300",
-                      )}
-                    >
-                      {f.charAt(0).toUpperCase() + f.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <BfsToolbar
+                subTab={bfsSubTab}
+                onSubTabChange={setBfsSubTab}
+                search={bfsSearch}
+                onSearchChange={setBfsSearch}
+                bookingType={bfsBookingType}
+                onBookingTypeChange={setBfsBookingType}
+              />
 
-              {/* Dynamic delegated booking cards */}
               <div className="flex flex-col gap-3.5">
-                {(() => {
-                  const filtered = delegatedBookings
-                    .filter((b) => {
-                      if (bfsSubTab === "upcoming") return isUpcoming(b.date) && b.status !== "cancelled";
-                      if (bfsSubTab === "past") return !isUpcoming(b.date) && b.status !== "cancelled";
-                      if (bfsSubTab === "cancelled") return b.status === "cancelled";
-                      return true;
-                    })
-                    .filter((b) => {
-                      if (bfsFilter === "employees") return b.bookingType === "employee";
-                      if (bfsFilter === "guests") return b.bookingType === "guest";
-                      return true;
-                    });
-
-                  if (isLoading) return <div className="text-center py-12 text-gray-400 text-[13.5px]">Loading bookings…</div>;
-
-                  if (filtered.length === 0) return (
-                    <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
-                      No {bfsSubTab} delegated bookings found.
-                    </div>
-                  );
-
-                  return filtered.map((booking) => (
+                {isLoading ? (
+                  <div className="text-center py-12 text-gray-400 text-[13.5px]">Loading bookings…</div>
+                ) : filteredDelegated.length === 0 ? (
+                  <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
+                    No {bfsSubTab} delegated bookings found.
+                  </div>
+                ) : (
+                  filteredDelegated.map((booking) => (
                     <BookingCard
                       key={booking.id}
                       booking={booking}
@@ -477,8 +552,8 @@ export default function MyBookingsPage() {
                       showActions={bfsSubTab === "upcoming" && !isToday(booking.date)}
                       variant="delegated"
                     />
-                  ));
-                })()}
+                  ))
+                )}
               </div>
             </>
           )}
