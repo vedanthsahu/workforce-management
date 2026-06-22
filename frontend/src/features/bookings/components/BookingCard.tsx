@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Pencil, X } from "lucide-react";
+import { Calendar, Hash, Clock, Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TAG_STYLES, BOOKING_TYPE_STYLES } from "../utils/constants";
 import { formatDate } from "../utils/bookingHelpers";
@@ -135,10 +135,16 @@ export function BookingCard({ booking, onCancelClick, onModifyClick, showActions
 
         {/* Meta + Actions — right aligned */}
         <div className="hidden sm:flex flex-col items-end text-right">
-          <p className="text-[10px] font-semibold tracking-wider uppercase text-gray-400 mb-1">Booking ID</p>
-          <p className="text-[11px] text-gray-500 font-mono mb-2.5">{booking.id}</p>
-          <p className="text-[10px] font-semibold tracking-wider uppercase text-gray-400 mb-1">Booked on</p>
-          <p className="text-[12px] text-gray-500">{booking.bookedOn}</p>
+          <div className="flex items-center gap-1.5 mb-1">
+            <Hash className="size-3 text-blue-500" />
+            <p className="text-[10px] font-semibold tracking-wider uppercase text-gray-500">Booking ID</p>
+          </div>
+          <p className="text-[11.5px] text-gray-700 font-mono mb-2.5">{booking.id}</p>
+          <div className="flex items-center gap-1.5 mb-1">
+            <Clock className="size-3 text-blue-500" />
+            <p className="text-[10px] font-semibold tracking-wider uppercase text-gray-500">Booked on</p>
+          </div>
+          <p className="text-[12px] text-gray-700">{booking.bookedOn}</p>
           {showActions && !isCancelled && (
             <div className="flex gap-2 mt-3">
               <button

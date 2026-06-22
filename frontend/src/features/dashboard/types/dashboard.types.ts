@@ -28,6 +28,12 @@ export interface ApiBooking {
   cancellation_reason?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  booking_type?: "EMPLOYEE" | "GUEST";
+  booked_by_user_id?: string;
+  booked_by_name?: string | null;
+  booked_by_email?: string | null;
+  booked_for_user_id?: string | null;
+  booked_for_name?: string | null;
 }
 
 export interface ApiTeamMemberSeat {
@@ -96,9 +102,11 @@ export interface Booking {
   seatId: string;
   /** Raw numeric/string seat ID passed to the book page for modify */
   rawSeatId?: string;
-  /** Raw floor ID passed to fetchSeatAmenities */
   floorId?: string;
   managerNote: string;
+  bookingType?: "self" | "on_behalf";
+  bookedByName?: string;
+  bookedByEmail?: string;
 }
 
 export interface TeamMember {
