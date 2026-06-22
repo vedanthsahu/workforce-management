@@ -475,7 +475,8 @@ def check_out_guest_visit(
     if row is None:
         raise LookupError("Guest visit not found.")
     raise ValueError("Only checked-in guest visits can be checked out.")
-        
+       
+
 def fetch_guest_visit_by_id(
     conn: PGConnection,
     *,
@@ -483,14 +484,54 @@ def fetch_guest_visit_by_id(
     guest_visit_id: str,
 ) -> dict[str, Any] | None:
 
+    query = f"""
+        SELECT
+            {GUEST_VISIT_LIST_SELECT}
+
+        FROM guest_visits gv
+
+        INNER JOIN guests g
+            ON g.id = gv.guest_id
+           AND g.tenant_id = gv.tenant_id
+
+        LEFT JOIN app_users au
+            ON au.id = gv.host_user_id
+           AND au.tenant_id = gv.tenant_id
+
+        INNER JOIN sites si
+            ON si.id = gv.site_id
+           AND si.tenant_id = gv.tenant_id
+
+        INNER JOIN buildings bu
+            ON bu.id = gv.building_id
+           AND bu.tenant_id = gv.tenant_id
+
+        LEFT JOIN floors fl
+            ON fl.id = gv.floor_id
+           AND fl.tenant_id = gv.tenant_id
+
+        LEFT JOIN LATERAL (
+            SELECT b.*
+            FROM bookings b
+            WHERE b.guest_visit_id = gv.id
+              AND b.tenant_id = gv.tenant_id
+              AND b.booking_type = 'GUEST'
+            ORDER BY b.updated_at DESC,
+                     b.id DESC
+            LIMIT 1
+        ) b ON TRUE
+
+        LEFT JOIN seats s
+            ON s.id = b.seat_id
+           AND s.tenant_id = b.tenant_id
+
+        WHERE gv.id = %s
+          AND gv.tenant_id = %s
+    """
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
-            SELECT *
-            FROM guest_visits
-            WHERE id = %s
-              AND tenant_id = %s
-            """,
+            query,
             (
                 guest_visit_id,
                 tenant_id,

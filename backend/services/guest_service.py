@@ -1109,6 +1109,24 @@ def list_guest_visits(
         ]
     )
 
+
+def get_guest_visit_details(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    guest_visit_id: str,
+) -> GuestVisitListItem:
+
+    row = fetch_guest_visit_by_id(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        guest_visit_id=guest_visit_id,
+    )
+
+
+    return GuestVisitListItem(**row)
+
+
 def guest_visit_check_in(
     conn: PGConnection,
     *,
