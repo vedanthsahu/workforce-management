@@ -2,7 +2,7 @@
  
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
- 
+
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,7 +50,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
   const [showPreview, setShowPreview] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
- 
+
   const resetForm = () => {
     setFormData({ site: null, building: null, floor: null, layoutName: "", file: null });
     setSeatIds([]);
@@ -163,9 +163,9 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
  
     generate();
   }, [formData.site?.id, formData.building?.id, formData.floor?.id]);
- 
+
   const noSeatsDetected = !!formData.file && !countingSeats && seatIds.length === 0;
- 
+
   const isFormValid =
     !!formData.site &&
     !!formData.building &&
@@ -173,14 +173,17 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
     !!formData.file &&
     !!formData.layoutName.trim() &&
     !noSeatsDetected;
- 
+
   const handleFileChange = async (file: File) => {
     setFileError(null);
+    setFileError(null);
     if (file.type !== "image/svg+xml") {
+      setFileError("Only SVG files are allowed.");
       setFileError("Only SVG files are allowed.");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
+      setFileError("Maximum file size is 10 MB.");
       setFileError("Maximum file size is 10 MB.");
       return;
     }
@@ -216,7 +219,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
     if (!formData.site || !formData.building || !formData.floor || !formData.file || !formData.layoutName.trim()) {
       return;
     }
- 
+
     setSubmitError(null);
     setIsSubmitting(true);
     try {
@@ -229,7 +232,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
         status: "DRAFT",
         seat_ids: seatIds,
       });
- 
+
       const layoutId = res?.layout_id || res?.id || res?.data?.layout_id;
       if (!layoutId) {
         console.error("layout_id not returned from createLayout response", res);
@@ -357,6 +360,15 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                       code: floor.floor_code ?? "",
                     },
                   }));
+                  // onFloorLayoutInfo?.({
+                  //   layoutId: floor.layout_id,
+                  //   layoutName: floor.layout_name,
+                  //   layoutStatus: floor.layout_status,
+                  //   layoutIsPublished: floor.layout_is_published,
+                  //   layoutVersionNo: floor.layout_version_no,
+                  //   layoutFileUrl: floor.layout_file_url,
+                  //   layoutCount: floor.layout_count,
+                  // });
                   onFloorLayoutInfo?.({
                     layoutId: floor.layout_id,
                     layoutName: floor.layout_name,
@@ -365,6 +377,8 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                     layoutVersionNo: floor.layout_version_no,
                     layoutFileUrl: floor.layout_file_url,
                     layoutCount: floor.layout_count,
+                    publishedByName: floor.published_by_name,
+                    layoutLastUpdated: floor.layout_last_updated,
                   });
                 }}
               >
@@ -514,7 +528,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                 if (e.target.files?.[0]) handleFileChange(e.target.files[0]);
               }}
             />
- 
+
             {fileError && (
               <p className="flex items-center gap-1.5 text-xs text-red-600 mt-1">
                 <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">

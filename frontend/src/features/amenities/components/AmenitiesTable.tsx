@@ -87,7 +87,8 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
       </div>
 
       {/* ── Desktop table (hidden below md) ───────────────── */}
-      <div className="hidden md:block overflow-x-auto">
+      {/* ✅ CHANGED: removed overflow-x-auto here — parent div in page.tsx owns it now */}
+      <div className="hidden md:block">
         <table className="w-full text-xs" style={{ minWidth: "860px" }}>
           <colgroup>
             <col style={{ width: "200px" }} />
@@ -133,16 +134,27 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
                       {amenity.category_name}
                     </span>
                   </td>
-                  <td className="px-3 py-3 text-gray-500 max-w-0"><span className="block truncate">{amenity.description}</span></td>
-                  <td className="px-3 py-3 text-center"><Icon className="w-4 h-4 mx-auto text-gray-600" /></td>
+                  <td className="px-3 py-3 text-gray-500 max-w-0">
+                    <span className="block truncate">{amenity.description}</span>
+                  </td>
+                  <td className="px-3 py-3 text-center">
+                    <Icon className="w-4 h-4 mx-auto text-gray-600" />
+                  </td>
                   <td className="px-3 py-3">
-                    <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap ${amenity.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
+                    <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap ${
+                      amenity.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                    }`}>
                       {amenity.is_active ? "Active" : "Inactive"}
                     </span>
                   </td>
-                  <td className="px-3 py-3 text-center font-medium">{amenity.assigned_seat_count.toLocaleString()}</td>
+                  <td className="px-3 py-3 text-center font-medium">
+                    {amenity.assigned_seat_count.toLocaleString()}
+                  </td>
                   <td className="px-3 py-3 text-center">
-                    <button onClick={() => onEdit(amenity)} className="p-1.5 border rounded-lg hover:bg-gray-100 transition">
+                    <button
+                      onClick={() => onEdit(amenity)}
+                      className="p-1.5 border rounded-lg hover:bg-gray-100 transition"
+                    >
                       <Pencil size={13} className="text-blue-600" />
                     </button>
                   </td>

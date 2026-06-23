@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { CalendarDays, Users } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
+
 import type { TodayBookingInfo } from "../types/dashboard.types";
 
 type HeroBannerProps = {

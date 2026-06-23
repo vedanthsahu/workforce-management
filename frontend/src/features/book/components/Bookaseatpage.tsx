@@ -145,6 +145,9 @@ const BookASeatPage: React.FC = () => {
     dayCount,
     step1Valid,
     isModifyMode,
+    isBookingForSomeone,
+    isGuestBooking,
+    bookingForName,
     floorLayoutUrl,
     setSiteId,
     setBuildingId,
@@ -162,6 +165,16 @@ const BookASeatPage: React.FC = () => {
     availablePreferences,
     loadingPreferences,
   } = useBookingForm();
+
+  const errorBannerRef = React.useRef<HTMLDivElement>(null);
+
+  // Scroll up to the error banner whenever a new error comes in, so it's
+  // visible even if the user is scrolled further down the page.
+  React.useEffect(() => {
+    if (error) {
+      errorBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [error]);
 
   const todayIso = new Date().toISOString().slice(0, 10);
 
@@ -194,12 +207,14 @@ const BookASeatPage: React.FC = () => {
         <div className="flex justify-between items-start sm:items-center gap-3">
           <div>
             <h1 className="text-[17px] sm:text-[20px] font-bold text-[#1A1A2E] leading-tight">
-              {isModifyMode ? "Modify Booking" : "Book a Seat"}
+              {isModifyMode ? "Modify Booking" : isBookingForSomeone ? `Book a Seat for ${bookingForName}` : "Book a Seat"}
             </h1>
             <p className="text-[11.5px] sm:text-[12.5px] text-gray-400 mt-0.5">
               {isModifyMode
                 ? "Select a new seat to replace your existing booking"
-                : "Reserve your workspace in a few steps"}
+                : isBookingForSomeone
+                  ? `Selecting a workspace for ${isGuestBooking ? "guest" : "employee"} — ${bookingForName}`
+                  : "Reserve your workspace in a few steps"}
             </p>
           </div>
 
@@ -273,7 +288,10 @@ const BookASeatPage: React.FC = () => {
 
         {/* ── Error banner ── */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl px-4 sm:px-5 py-3 text-red-500 text-[12.5px] sm:text-[13px] flex items-center justify-between gap-3">
+          <div
+            ref={errorBannerRef}
+            className="bg-red-50 border border-red-200 rounded-xl px-4 sm:px-5 py-3 text-red-500 text-[12.5px] sm:text-[13px] flex items-center justify-between gap-3"
+          >
             <span>{error}</span>
             <button onClick={() => {}} className="text-red-400 hover:text-red-600 shrink-0">
               <X size={14} />
@@ -478,16 +496,7 @@ const BookASeatPage: React.FC = () => {
             </section>
 
             {/* Actions */}
-            <div className="flex justify-between items-center pt-1 border-t border-[#EBEBF5]">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={clearAll}
-                className="gap-1.5 text-[12px] sm:text-[12.5px] text-gray-500"
-              >
-                <RefreshCw size={12} />
-                Clear All
-              </Button>
+            <div className="flex justify-end items-center pt-1 border-t border-[#EBEBF5]">
               <Button
                 onClick={findAvailableSeats}
                 disabled={!step1Valid || loadingSeats}
@@ -564,6 +573,9 @@ const BookASeatPage: React.FC = () => {
               <Separator />
 
               <div>
+                {isBookingForSomeone && bookingForName && (
+                  <SummaryRow label="Booking For" value={`${bookingForName} (${isGuestBooking ? "Guest" : "Employee"})`} />
+                )}
                 <SummaryRow label="Location"   value={selectedSite?.name ?? "—"} />
                 <SummaryRow label="Building"   value={selectedBuilding?.name ?? "—"} />
                 <SummaryRow label="Floor"      value={selectedFloor?.name ?? "—"} />
@@ -611,13 +623,18 @@ const BookASeatPage: React.FC = () => {
                 <p className="text-[12px] sm:text-[12.5px] text-gray-400 mt-1">
                   {isModifyMode
                     ? "Your booking has been updated successfully."
-                    : "Your seat has been reserved successfully."}
+                    : isBookingForSomeone && bookingForName
+                      ? `A seat has been reserved for ${bookingForName}.`
+                      : "Your seat has been reserved successfully."}
                 </p>
               </div>
               <div className="bg-[#F7F8FC] border border-[#EBEBF5] rounded-xl px-4 sm:px-6 py-4 w-full text-left">
                 <p className="text-[10.5px] sm:text-[11px] font-semibold tracking-widest uppercase text-gray-400 mb-3">
                   Booking Details
                 </p>
+                {isBookingForSomeone && bookingForName && (
+                  <SummaryRow label="Booked For" value={`${bookingForName} (${isGuestBooking ? "Guest" : "Employee"})`} />
+                )}
                 <SummaryRow label="Booking ID" value={confirmation.booking_id} />
                 <SummaryRow label="Location"   value={confirmation.site_name ?? "—"} />
                 <SummaryRow label="Building"   value={confirmation.building_name ?? "—"} />

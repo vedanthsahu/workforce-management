@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { cancelBooking } from "../services/bookings.service";
+import { cancelBooking, cancelGuestBooking } from "../services/bookings.service";
 import { FALLBACK_PREFERENCE_NAMES } from "../utils/constants";
 import type { Booking } from "../types/bookings.types";
 
@@ -16,13 +16,18 @@ export function useBookingActions({ handleCancelBooking }: UseBookingActionsPara
 
   const handleConfirmCancel = async (reason: string) => {
     if (!cancelTarget) return;
-    await cancelBooking(cancelTarget.id, reason);
+    if (cancelTarget.bookingType === "guest") {
+      await cancelGuestBooking(cancelTarget.id, reason);
+    } else {
+      await cancelBooking(cancelTarget.id, reason);
+    }
     await handleCancelBooking(cancelTarget.id);
     setCancelTarget(null);
   };
 
   const handleModify = (booking: Booking) => {
     const hasRealPrefs = (booking.preferences ?? []).length > 0;
+    const isGuest = booking.bookingType === "guest";
 
     const params = new URLSearchParams({
       modifyBookingId: booking.id,
@@ -39,6 +44,15 @@ export function useBookingActions({ handleCancelBooking }: UseBookingActionsPara
       params.set("preferences", booking.preferences!.join(","));
     } else {
       params.set("preferenceNames", FALLBACK_PREFERENCE_NAMES.join(","));
+    }
+
+    if (isGuest) {
+      params.set("isGuestModify", "true");
+      if (booking.bookedForGuestId) params.set("guestId", booking.bookedForGuestId);
+      if (booking.bookedForName)    params.set("bookingForName", booking.bookedForName);
+    } else if (booking.bookingType === "employee" && booking.bookedForUserId) {
+      params.set("bookedForUserId", booking.bookedForUserId);
+      if (booking.bookedForName) params.set("bookingForName", booking.bookedForName);
     }
 
     router.push(`/book?${params.toString()}`);

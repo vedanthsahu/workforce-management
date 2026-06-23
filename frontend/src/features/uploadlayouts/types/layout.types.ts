@@ -13,10 +13,7 @@ export type LayoutFormState = {
   description?: string;
 };
 
-export type LayoutSummaryData = Pick<
-  LayoutFormState,
-  "site" | "building" | "floor" | "layoutName"
->;
+export type LayoutSummaryData = Pick<LayoutFormState, "site" | "building" | "floor" | "layoutName">;
 
 export type FloorLayoutInfo = {
   layoutId?: string | null;
@@ -26,6 +23,8 @@ export type FloorLayoutInfo = {
   layoutVersionNo?: number | null;
   layoutFileUrl?: string | null;
   layoutCount?: number | null;
+  publishedByName?: string | null;
+  layoutLastUpdated?: string | null;
 };
 
 export type Site = {
@@ -52,6 +51,8 @@ export type Floor = {
   layout_version_no?: number | null;
   layout_file_url?: string | null;
   layout_count?: number | null;
+  published_by_name?: string | null;
+  layout_last_updated?: string | null;
 };
 
 export type CreateLayoutPayload = {
