@@ -57,6 +57,10 @@ from backend.repositories.guest_visit_repository import (
     update_guest_visit_requires_seat,
     cancel_guest_visit,
     fetch_active_booking_by_guest_visit,
+    fetch_active_booking_for_guest_visit,
+    fetch_guest_visit_by_id_for_update,
+    mark_guest_visit_modified,
+    update_guest_visit_only,
 )
 from backend.repositories.location_repository import (
     fetch_building_by_id,
@@ -71,6 +75,9 @@ from backend.schemas.guest import (
     CreateGuestVisitRequest,
     GuestResponse,
     GuestVisitResponse,
+    GuestWorkflowAction,
+    GuestWorkflowRequest,
+    GuestWorkflowResponse,
 )
 from backend.services.booking_service import _normalize_cancellation_reason
 from backend.services.notification_service import (
@@ -1628,6 +1635,409 @@ def attach_seat_to_guest_visit(
         )
 
     return BookingResponse(**booking)
+
+
+def _require_workflow_visit(
+    visit: dict[str, Any] | None,
+    *,
+    require_scheduled: bool,
+) -> dict[str, Any]:
+    if visit is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "guest_visit_not_found",
+                "message": "Guest visit not found.",
+            },
+        )
+    if require_scheduled and visit.get("visit_status") != "SCHEDULED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "guest_visit_not_mutable",
+                "message": "Only scheduled guest visits can be changed.",
+            },
+        )
+    return visit
+
+
+def _required_workflow_seat_id(payload: GuestWorkflowRequest) -> str:
+    if payload.seat_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "workflow_seat_required",
+                "message": f"seat_id is required for {payload.action.value}.",
+            },
+        )
+    return str(payload.seat_id)
+
+
+def execute_guest_visit_workflow(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    guest_visit_id: str,
+    payload: GuestWorkflowRequest,
+) -> GuestWorkflowResponse:
+    """Execute one explicit guest visit/booking workflow atomically."""
+    _require_guest_operator(current_user)
+    tenant_id = str(current_user["tenant_id"])
+
+    try:
+        if payload.action == GuestWorkflowAction.MODIFY_VISIT_ONLY:
+            visit = _require_workflow_visit(
+                fetch_guest_visit_by_id_for_update(
+                    conn,
+                    tenant_id=tenant_id,
+                    guest_visit_id=guest_visit_id,
+                ),
+                require_scheduled=True,
+            )
+            _validate_visit_times(payload.start_time, payload.end_time)
+            _resolve_host(
+                conn,
+                tenant_id=tenant_id,
+                host_user_id=str(payload.host_user_id),
+            )
+            update_guest_visit_only(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=guest_visit_id,
+                host_user_id=str(payload.host_user_id),
+                guest_type=_enum_value(payload.guest_type),
+                purpose_of_visit=_enum_value(payload.purpose_of_visit),
+                start_time=payload.start_time,
+                end_time=payload.end_time,
+                notes=_clean_optional(payload.notes),
+            )
+            result = GuestWorkflowResponse(
+                success=True,
+                action=payload.action.value,
+                guest_visit_id=str(visit["guest_visit_id"]),
+                message="Guest visit updated without changing its booking.",
+            )
+
+        elif payload.action == GuestWorkflowAction.MODIFY_VISIT_AND_BOOKING:
+            visit = _require_workflow_visit(
+                fetch_guest_visit_by_id_for_update(
+                    conn,
+                    tenant_id=tenant_id,
+                    guest_visit_id=guest_visit_id,
+                ),
+                require_scheduled=True,
+            )
+            booking = fetch_active_booking_for_guest_visit(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=guest_visit_id,
+            )
+            _validate_mutable_guest_booking(booking, action="modify")
+            seat_id = _required_workflow_seat_id(payload)
+            if payload.floor_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "code": "workflow_floor_required",
+                        "message": "floor_id is required when replacing a booking.",
+                    },
+                )
+
+            _validate_visit_times(payload.start_time, payload.end_time)
+            _resolve_guest(
+                conn,
+                tenant_id=tenant_id,
+                guest_id=str(visit["guest_id"]),
+                require_active=True,
+            )
+            _resolve_host(
+                conn,
+                tenant_id=tenant_id,
+                host_user_id=str(payload.host_user_id),
+            )
+            _validate_visit_location(
+                conn,
+                tenant_id=tenant_id,
+                site_id=str(payload.site_id),
+                building_id=str(payload.building_id),
+                floor_id=str(payload.floor_id),
+            )
+            seat = _resolve_seat(
+                conn,
+                tenant_id=tenant_id,
+                site_id=str(payload.site_id),
+                building_id=str(payload.building_id),
+                floor_id=str(payload.floor_id),
+                seat_id=seat_id,
+            )
+            if guest_has_active_booking_on_date(
+                conn,
+                tenant_id=tenant_id,
+                booked_for_guest_id=str(visit["guest_id"]),
+                booking_date=payload.visit_date,
+                exclude_booking_id=str(booking["booking_id"]),
+            ):
+                _raise_guest_booking_conflict()
+            if has_active_booking_conflict(
+                conn,
+                tenant_id=tenant_id,
+                seat_id=seat_id,
+                booking_date=payload.visit_date,
+                exclude_booking_id=str(booking["booking_id"]),
+            ):
+                _raise_seat_booking_conflict()
+
+            cancel_booking(
+                conn,
+                tenant_id=tenant_id,
+                booking_id=str(booking["booking_id"]),
+                cancellation_reason=(
+                    f"Booking ID: {booking['booking_id']}. "
+                    "Replaced by guest workflow modification."
+                ),
+                booking_status="MODIFIED",
+            )
+            mark_guest_visit_modified(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=guest_visit_id,
+            )
+
+            # Future lineage columns can connect these historical and replacement rows.
+            new_visit = insert_guest_visit(
+                conn,
+                tenant_id=tenant_id,
+                guest_id=str(visit["guest_id"]),
+                host_user_id=str(payload.host_user_id),
+                site_id=str(payload.site_id),
+                building_id=str(payload.building_id),
+                floor_id=str(payload.floor_id),
+                visit_date=payload.visit_date,
+                guest_type=_enum_value(payload.guest_type),
+                purpose_of_visit=_enum_value(payload.purpose_of_visit),
+                start_time=payload.start_time,
+                end_time=payload.end_time,
+                notes=_clean_optional(payload.notes),
+                requires_seat=True,
+                created_by_user_id=_current_user_id(current_user),
+            )
+            new_visit_id = str(new_visit["guest_visit_id"])
+            new_booking = insert_guest_booking(
+                conn,
+                tenant_id=tenant_id,
+                guest_id=str(visit["guest_id"]),
+                guest_visit_id=new_visit_id,
+                booked_by_user_id=_current_user_id(current_user),
+                seat=seat,
+                booking_date=payload.visit_date,
+            )
+            recalculate_guest_visit_requires_seat(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=new_visit_id,
+            )
+            result = GuestWorkflowResponse(
+                success=True,
+                action=payload.action.value,
+                guest_visit_id=new_visit_id,
+                booking_id=str(new_booking["booking_id"]),
+                message="Guest visit and booking replaced; prior records retained.",
+            )
+
+        elif payload.action == GuestWorkflowAction.ADD_BOOKING:
+            visit = _require_workflow_visit(
+                fetch_guest_visit_by_id_for_update(
+                    conn,
+                    tenant_id=tenant_id,
+                    guest_visit_id=guest_visit_id,
+                ),
+                require_scheduled=True,
+            )
+            if fetch_active_booking_for_guest_visit(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=guest_visit_id,
+            ) is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "booking_already_exists",
+                        "message": "Guest visit already has an active booking.",
+                    },
+                )
+            seat_id = _required_workflow_seat_id(payload)
+            if visit.get("floor_id") is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "code": "guest_visit_floor_required",
+                        "message": "Guest visit must have a floor before adding a seat.",
+                    },
+                )
+            _resolve_guest(
+                conn,
+                tenant_id=tenant_id,
+                guest_id=str(visit["guest_id"]),
+                require_active=True,
+            )
+            seat = _resolve_seat(
+                conn,
+                tenant_id=tenant_id,
+                site_id=str(visit["site_id"]),
+                building_id=str(visit["building_id"]),
+                floor_id=str(visit["floor_id"]),
+                seat_id=seat_id,
+            )
+            if guest_has_active_booking_on_date(
+                conn,
+                tenant_id=tenant_id,
+                booked_for_guest_id=str(visit["guest_id"]),
+                booking_date=visit["visit_date"],
+            ):
+                _raise_guest_booking_conflict()
+            if has_active_booking_conflict(
+                conn,
+                tenant_id=tenant_id,
+                seat_id=seat_id,
+                booking_date=visit["visit_date"],
+            ):
+                _raise_seat_booking_conflict()
+            new_booking = insert_guest_booking(
+                conn,
+                tenant_id=tenant_id,
+                guest_id=str(visit["guest_id"]),
+                guest_visit_id=guest_visit_id,
+                booked_by_user_id=_current_user_id(current_user),
+                seat=seat,
+                booking_date=visit["visit_date"],
+            )
+            recalculate_guest_visit_requires_seat(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=guest_visit_id,
+            )
+            result = GuestWorkflowResponse(
+                success=True,
+                action=payload.action.value,
+                guest_visit_id=guest_visit_id,
+                booking_id=str(new_booking["booking_id"]),
+                message="Booking added to guest visit.",
+            )
+
+        elif payload.action == GuestWorkflowAction.CANCEL_BOOKING:
+            _require_workflow_visit(
+                fetch_guest_visit_by_id_for_update(
+                    conn,
+                    tenant_id=tenant_id,
+                    guest_visit_id=guest_visit_id,
+                ),
+                require_scheduled=False,
+            )
+            booking = fetch_active_booking_for_guest_visit(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=guest_visit_id,
+            )
+            _validate_mutable_guest_booking(booking, action="cancel")
+            cancel_booking(
+                conn,
+                tenant_id=tenant_id,
+                booking_id=str(booking["booking_id"]),
+                cancellation_reason=_normalize_cancellation_reason(
+                    payload.cancellation_reason,
+                ),
+                booking_status="CANCELLED",
+            )
+            recalculate_guest_visit_requires_seat(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=guest_visit_id,
+            )
+            result = GuestWorkflowResponse(
+                success=True,
+                action=payload.action.value,
+                guest_visit_id=guest_visit_id,
+                booking_id=str(booking["booking_id"]),
+                message="Guest booking cancelled; guest visit remains active.",
+            )
+
+        elif payload.action == GuestWorkflowAction.CANCEL_VISIT:
+            visit = _require_workflow_visit(
+                fetch_guest_visit_by_id_for_update(
+                    conn,
+                    tenant_id=tenant_id,
+                    guest_visit_id=guest_visit_id,
+                ),
+                require_scheduled=True,
+            )
+            booking = fetch_active_booking_for_guest_visit(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=guest_visit_id,
+            )
+            cancellation_reason = _clean_optional(payload.cancellation_reason)
+            if booking is not None:
+                cancel_booking(
+                    conn,
+                    tenant_id=tenant_id,
+                    booking_id=str(booking["booking_id"]),
+                    cancellation_reason=(
+                        cancellation_reason or "Guest visit cancelled."
+                    ),
+                    booking_status="CANCELLED",
+                )
+            cancel_guest_visit(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=guest_visit_id,
+                cancellation_reason=cancellation_reason,
+            )
+            recalculate_guest_visit_requires_seat(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=guest_visit_id,
+            )
+            result = GuestWorkflowResponse(
+                success=True,
+                action=payload.action.value,
+                guest_visit_id=str(visit["guest_visit_id"]),
+                booking_id=(
+                    str(booking["booking_id"])
+                    if booking is not None
+                    else None
+                ),
+                message="Guest visit and any active booking cancelled.",
+            )
+
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "invalid_guest_workflow_action",
+                    "message": "Unsupported guest workflow action.",
+                },
+            )
+
+        conn.commit()
+        return result
+    except HTTPException:
+        conn.rollback()
+        raise
+    except (LookupError, ValueError) as exc:
+        conn.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "guest_workflow_failed",
+                "message": str(exc),
+            },
+        ) from exc
+    except psycopg2.Error as exc:
+        conn.rollback()
+        _translate_guest_db_error(exc, action="workflow")
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def audit_guest_visit_integrity(
