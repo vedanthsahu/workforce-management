@@ -11,6 +11,17 @@ type Props = {
   floorLayoutInfo?: FloorLayoutInfo | null;
 };
 
+function formatLastUpdated(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
   const hasFloor      = !!formData.floor?.id;
   const [showModal, setShowModal] = useState(false);
@@ -108,16 +119,37 @@ export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
                   <span className="font-medium">v{floorLayoutInfo.layoutVersionNo ?? "—"}</span>
                 </div>
 
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Versions</span>
-                  <span className="font-medium">{floorLayoutInfo.layoutCount ?? "—"}</span>
+                {/* <div className="flex justify-between">
+                  <span className="text-muted-foreground">Published By</span>
+                  <span className="font-medium">{floorLayoutInfo.publishedByName ?? "—"}</span>
                 </div>
 
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Status</span>
-                  <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md text-xs font-semibold ring-1 ring-emerald-200">
-                    {floorLayoutInfo.layoutStatus ?? "PUBLISHED"}
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Last Updated</span>
+                  <span className="font-medium">
+                    {formatLastUpdated(floorLayoutInfo.layoutLastUpdated)}
                   </span>
+                </div> */}
+                 <div className="flex justify-between">
+
+                  <span className="text-muted-foreground">Published By</span>
+
+                  <span className="font-medium">Ankitha Kulal</span>
+
+                </div>
+
+
+
+                <div className="flex justify-between">
+
+                  <span className="text-muted-foreground">Last Updated</span>
+
+                  <span className="font-medium">
+
+   15/06/2026
+
+                  </span>
+
                 </div>
 
                 {/* ── Preview button ── */}

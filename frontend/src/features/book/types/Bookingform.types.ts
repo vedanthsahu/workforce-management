@@ -97,6 +97,11 @@ export interface FetchSeatsParams {
   currentSeatId?: string;
   /** Booking being modified, if any — passed through to the availability API */
   modifyBookingId?: string | null;
+  /** When booking for an employee */
+  bookedForUserId?: string | null;
+  /** When booking for a guest */
+  isGuestBooking?: boolean;
+  bookedForGuestId?: string | null;
 }
 
 // ── Booking payload / response ────────────────────────────────────────────────
@@ -107,6 +112,22 @@ export interface CreateBookingPayload {
   floor_id: number;
   seat_id: number;
   booking_date: string;
+  booked_for_user_id?: number;
+}
+
+export interface CreateGuestBookingPayload {
+  site_id: number;
+  building_id: number;
+  floor_id: number;
+  seat_id: number;
+  visit_date: string;
+  guest_id: number;
+  host_user_id: number;
+  guest_type: string;
+  purpose_of_visit?: string;
+  start_time?: string;
+  end_time?: string;
+  notes?: string;
 }
 
 export interface CreateBookingResponse {

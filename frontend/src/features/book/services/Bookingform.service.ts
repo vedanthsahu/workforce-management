@@ -5,6 +5,7 @@ import {
   Floor,
   Seat,
   CreateBookingPayload,
+  CreateGuestBookingPayload,
   CreateBookingResponse,
   Preference,
   PreferenceMatchStatus,
@@ -49,7 +50,9 @@ interface RawPreference {
 // ── Sites ─────────────────────────────────────────────────────────────────────
 
 export async function fetchSites(): Promise<Site[]> {
-  const { data } = await axiosInstance.get<RawSite[]>("/sites");
+  const { data } = await axiosInstance.get<RawSite[]>("/sites", {
+    params: { status: "ACTIVE" },
+  });
   return data.map((s) => ({
     id: s.site_id,
     name: s.site_name,
@@ -63,7 +66,7 @@ export async function fetchSites(): Promise<Site[]> {
 
 export async function fetchBuildings(siteId: string): Promise<Building[]> {
   const { data } = await axiosInstance.get<RawBuilding[]>("/buildings", {
-    params: { site_id: siteId },
+    params: { site_id: siteId, status: "ACTIVE" },
   });
   return data.map((b) => ({
     id: b.building_id,
@@ -79,7 +82,8 @@ export async function fetchBuildings(siteId: string): Promise<Building[]> {
 
 export async function fetchFloors(buildingId: string): Promise<Floor[]> {
   const { data } = await axiosInstance.get<RawFloor[]>(
-    `/buildings/${buildingId}/floors`
+    `/buildings/${buildingId}/floors`,
+    { params: { status: "ACTIVE" } },
   );
   return data.map((f) => ({
     id: f.floor_id,
@@ -160,6 +164,9 @@ export async function fetchAvailability(params: {
   toDate?: string;
   amenityIds?: number[];
   modifyBookingId?: string | null;
+  bookedForUserId?: string | null;
+  isGuestBooking?: boolean;
+  bookedForGuestId?: string | null;
 }): Promise<AvailableSeatResponse[]> {
   const { data } = await axiosInstance.get<AvailableSeatResponse[]>(
     `/floors/${params.floorId}/seats`,
@@ -172,6 +179,15 @@ export async function fetchAvailability(params: {
           : {}),
         ...(params.modifyBookingId
           ? { modifyBookingId: params.modifyBookingId }
+          : {}),
+        ...(params.bookedForUserId
+          ? { booked_for_user_id: Number(params.bookedForUserId) }
+          : {}),
+        ...(params.isGuestBooking
+          ? { is_guest_booking: true }
+          : {}),
+        ...(params.bookedForGuestId
+          ? { booked_for_guest_id: Number(params.bookedForGuestId) }
           : {}),
       },
       paramsSerializer: (p) => {
@@ -203,6 +219,9 @@ export async function fetchSeatsWithAvailability(
     toDate: params.toDate ?? params.fromDate,
     amenityIds: params.amenityIds,
     modifyBookingId: params.modifyBookingId ?? null,
+    bookedForUserId: params.bookedForUserId ?? null,
+    isGuestBooking: params.isGuestBooking ?? false,
+    bookedForGuestId: params.bookedForGuestId ?? null,
   });
 
   const selectedPrefs = (params.preferences ?? []).map((p) => p.toLowerCase());
@@ -302,6 +321,18 @@ export async function createBooking(
   return data;
 }
 
+// ── Create guest booking — POST /guest-bookings ───────────────────────────────
+
+export async function createGuestBooking(
+  payload: CreateGuestBookingPayload
+): Promise<CreateBookingResponse> {
+  const { data } = await axiosInstance.post<CreateBookingResponse>(
+    "/guest-bookings",
+    payload
+  );
+  return data;
+}
+
 // ── Modify booking — POST /bookings/{booking_id}/modify ──────────────────────
 
 export interface ModifyBookingPayload {
@@ -318,6 +349,17 @@ export async function modifyBooking(
 ): Promise<CreateBookingResponse> {
   const { data } = await axiosInstance.post<CreateBookingResponse>(
     `/bookings/${bookingId}/modify`,
+    payload
+  );
+  return data;
+}
+
+export async function modifyGuestBooking(
+  bookingId: string,
+  payload: ModifyBookingPayload
+): Promise<CreateBookingResponse> {
+  const { data } = await axiosInstance.post<CreateBookingResponse>(
+    `/guest-bookings/${bookingId}/modify`,
     payload
   );
   return data;

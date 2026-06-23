@@ -94,7 +94,9 @@ function AmenitiesPage() {
   const paginatedAmenities = sortedAmenities.slice(startIndex, startIndex + itemsPerPage);
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc] min-h-screen">
+    // ✅ CHANGED: was "p-4 sm:p-6 ... min-h-screen"
+    // flex-1 min-h-0 overflow-y-auto lets the page itself scroll (same as offices page)
+    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc]">
 
       {/* SUCCESS BANNER */}
       {successMessage && (
@@ -157,10 +159,8 @@ function AmenitiesPage() {
         </div>
 
         {/* TABLE BODY */}
-        <div
-          className="w-full overflow-x-auto overflow-y-auto"
-          style={{ maxHeight: "calc(100vh - 420px)", minHeight: "200px" }}
-        >
+        {/* ✅ CHANGED: removed overflow-y-auto and maxHeight/minHeight style — no more inner scroll */}
+        <div className="w-full overflow-x-auto">
           {loading ? (
             <div className="p-6 text-sm text-gray-500">Loading...</div>
           ) : (

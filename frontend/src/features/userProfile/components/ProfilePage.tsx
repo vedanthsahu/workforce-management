@@ -1,13 +1,4 @@
-
-
-
 "use client";
-
-/**
- * ProfilePage.tsx
- * src/features/profile/components/ProfilePage.tsx
- */
-
 import { useState, useRef, useEffect } from "react";
 import {
   Mail, Phone, MapPin, Briefcase,
@@ -52,7 +43,7 @@ const ROLE_BADGE: Record<string, string> = {
   MANAGER:      "bg-violet-50 text-violet-600 ring-violet-200",
   EMPLOYEE:     "bg-blue-50 text-blue-600 ring-blue-200",
   TALENT:       "bg-teal-50 text-teal-600 ring-teal-200",
-  RECEPTIONIST: "bg-amber-50 text-amber-600 ring-amber-200",
+  SECURITY:     "bg-amber-50 text-amber-600 ring-amber-200",
   FACILITIES:   "bg-orange-50 text-orange-600 ring-orange-200",
 };
 
