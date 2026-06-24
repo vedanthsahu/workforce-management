@@ -13,6 +13,7 @@ import EditFloorModal from "@/features/floor/components/EditFloorModal";
 
 import { useFloors } from "@/features/floor/hooks/useFloors";
 import { Floor } from "@/features/floor/types/floor.types";
+import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
 
 function FloorsPage() {
   const {
@@ -111,7 +112,7 @@ function FloorsPage() {
       </div>
 
       {/* CARDS */}
-      <FloorCards stats={stats} />
+      {loading ? <StatCardsSkeleton /> : <FloorCards stats={stats} />}
 
       {/* SITE + BUILDING FILTER */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
@@ -170,9 +171,7 @@ function FloorsPage() {
           style={{ maxHeight: "calc(100vh - 420px)", minHeight: "200px" }}
         >
           {loading ? (
-            <div className="p-6 text-sm text-gray-500 text-center">
-              Select a site and building
-            </div>
+            <TableBodySkeleton columns={5} rows={4} />
           ) : error ? (
             <div className="p-6 text-sm text-red-500">{error}</div>
           ) : !selectedBuilding ? (
@@ -230,7 +229,7 @@ function FloorsPage() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-gray-500">Loading...</div>}>
+    <Suspense fallback={<div className="p-6"><TableSkeleton columns={5} rows={4} /></div>}>
       <FloorsPage />
     </Suspense>
   );

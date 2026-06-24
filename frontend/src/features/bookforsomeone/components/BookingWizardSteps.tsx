@@ -120,9 +120,6 @@ function GuestRow({ guest, onClick, selected }: { guest: Guest; onClick?: () => 
         <span style={{ fontSize: "0.75rem", color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {guest.email}
         </span>
-        {/* {guest.organization && (
-          <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>{guest.organization}</span>
-        )} */}
       </span>
       {selected ? (
         <span style={{ color: "#4f46e5", fontWeight: 700, display: "flex" }}>✓</span>
@@ -176,7 +173,6 @@ export function GuestSelectStep({ selectedGuest, view, onViewChange, onSelect, o
         Select an existing guest or create a new one.
       </p>
 
-      {/* Search input — shows guest name read-only when selected */}
       <div style={{ marginBottom: "0.875rem" }}>
         <label style={{ fontSize: "0.8125rem", fontWeight: 500, color: "#111827", display: "block", marginBottom: 6 }}>
           Search Guest <span style={{ color: "#dc2626" }}>*</span>
@@ -226,7 +222,6 @@ export function GuestSelectStep({ selectedGuest, view, onViewChange, onSelect, o
         </div>
       </div>
 
-      {/* Search results dropdown (only when typing, no guest selected yet) */}
       {!selectedGuest && query.trim() && (
         <div style={{ border: "1.5px solid #e5e7eb", borderRadius: 10, maxHeight: 260, overflowY: "auto", marginBottom: "0.875rem" }}>
           {isLoading && (
@@ -247,7 +242,6 @@ export function GuestSelectStep({ selectedGuest, view, onViewChange, onSelect, o
         </div>
       )}
 
-      {/* Selected guest detail card — mirrors InternalEmployeeForm */}
       {selectedGuest && (
         <div style={{ marginTop: "0.75rem" }}>
           <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#111827", marginBottom: "0.625rem" }}>
@@ -297,7 +291,6 @@ export function GuestSelectStep({ selectedGuest, view, onViewChange, onSelect, o
         </div>
       )}
 
-      {/* Create new guest button (only when no guest selected) */}
       {!selectedGuest && (
         <button
           type="button"
@@ -365,6 +358,61 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
     if (touched[field]) validateField(field, form[field]);
   };
 
+  // const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   const raw = e.target.value;
+  //   const digits = raw.replace(/\D/g, "");
+  //   // Block input if digit count exceeds 10
+  //   if (digits.length > 10) return;
+  //   setForm((prev) => ({ ...prev, phone: raw }));
+  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
+  //   validateField("phone", raw);
+  // };
+
+  //   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   const raw = e.target.value;
+
+  //   // Only allow digits, spaces, +, -, (, )
+  //   const sanitized = raw.replace(/[^\d\s+\-()\s]/g, "");
+
+  //   // Block if digit count exceeds 10
+  //   const digits = sanitized.replace(/\D/g, "");
+  //   if (digits.length > 10) return;
+
+  //   setForm((prev) => ({ ...prev, phone: sanitized }));
+  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
+  //   validateField("phone", sanitized);
+  // };
+  // const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   const raw = e.target.value;
+  //   setForm((prev) => ({ ...prev, phone: raw }));
+  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
+  //   validateField("phone", raw);
+  // };
+  // const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   const raw = e.target.value;
+
+  //   // Block if digit count exceeds 10 (silent, no typing allowed)
+  //   const digits = raw.replace(/\D/g, "");
+  //   if (digits.length > 10) return;
+
+  //   // Allow the value through (valid or not) and let zod show errors for invalid chars
+  //   setForm((prev) => ({ ...prev, phone: raw }));
+  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
+  //   validateField("phone", raw);
+  // };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    const newDigits = raw.replace(/\D/g, "");
+    const maxDigits = newDigits.startsWith("91") ? 12 : 10;
+
+    if (newDigits.length > maxDigits) return;
+
+    setForm((prev) => ({ ...prev, phone: raw }));
+    if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
+    validateField("phone", raw);
+  };
+
   const handleSave = async () => {
     setTouched({ firstName: true, lastName: true, email: true, phone: true, organization: true });
     const result = createGuestSchema.safeParse(form);
@@ -404,40 +452,116 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
       </p>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+        {/* First Name */}
         <div>
           <FieldLabel htmlFor="g-firstName" required>First Name</FieldLabel>
-          <input id="g-firstName" type="text" style={inputStyle()} placeholder="First name" value={form.firstName} onChange={handleChange("firstName")} onBlur={handleBlur("firstName")} />
-          {errors.firstName && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.firstName}</p>}
+          <input
+            id="g-firstName"
+            type="text"
+            style={inputStyle()}
+            placeholder="First name"
+            value={form.firstName}
+            onChange={handleChange("firstName")}
+            onBlur={handleBlur("firstName")}
+          />
+          {errors.firstName && (
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.firstName}</p>
+          )}
         </div>
+
+        {/* Last Name */}
         <div>
           <FieldLabel htmlFor="g-lastName" required>Last Name</FieldLabel>
-          <input id="g-lastName" type="text" style={inputStyle()} placeholder="Last name" value={form.lastName} onChange={handleChange("lastName")} onBlur={handleBlur("lastName")} />
-          {errors.lastName && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.lastName}</p>}
+          <input
+            id="g-lastName"
+            type="text"
+            style={inputStyle()}
+            placeholder="Last name"
+            value={form.lastName}
+            onChange={handleChange("lastName")}
+            onBlur={handleBlur("lastName")}
+          />
+          {errors.lastName && (
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.lastName}</p>
+          )}
         </div>
+
+        {/* Email */}
         <div>
           <FieldLabel htmlFor="g-email" required>Email Address</FieldLabel>
-          <input id="g-email" type="email" style={inputStyle()} placeholder="email@example.com" value={form.email} onChange={handleChange("email")} onBlur={handleBlur("email")} />
-          {errors.email && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.email}</p>}
+          <input
+            id="g-email"
+            type="email"
+            style={inputStyle()}
+            placeholder="email@example.com"
+            value={form.email}
+            onChange={handleChange("email")}
+            onBlur={handleBlur("email")}
+          />
+          {errors.email && (
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.email}</p>
+          )}
         </div>
+
+        {/* Phone — blocks input beyond 10 digits */}
         <div>
           <FieldLabel htmlFor="g-phone" required>Phone Number</FieldLabel>
-          <input id="g-phone" type="tel" style={inputStyle()} placeholder="+1 555 000 0000" value={form.phone} onChange={handleChange("phone")} onBlur={handleBlur("phone")} />
-          {errors.phone && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.phone}</p>}
+          <input
+            id="g-phone"
+            type="tel"
+            style={inputStyle()}
+            placeholder="+91 550000000"
+            value={form.phone}
+            onChange={handlePhoneChange}
+            onBlur={handleBlur("phone")}
+          />
+          {errors.phone && (
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.phone}</p>
+          )}
         </div>
+
+        {/* Organization — with inline error */}
         <div>
-          <FieldLabel htmlFor="g-organization">Organization / Company <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span></FieldLabel>
-          <input id="g-organization" type="text" style={inputStyle()} placeholder="Company name" value={form.organization} onChange={handleChange("organization")} onBlur={handleBlur("organization")} />
+          <FieldLabel htmlFor="g-organization">
+            Organization / Company{" "}
+            <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span>
+          </FieldLabel>
+          <input
+            id="g-organization"
+            type="text"
+            style={inputStyle()}
+            placeholder="Company name"
+            value={form.organization}
+            onChange={handleChange("organization")}
+            onBlur={handleBlur("organization")}
+          />
+          {errors.organization && (
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.organization}</p>
+          )}
         </div>
       </div>
 
-      {apiError && <p style={{ fontSize: "0.8125rem", color: "#dc2626", marginTop: "1rem" }}>{apiError}</p>}
+      {apiError && (
+        <p style={{ fontSize: "0.8125rem", color: "#dc2626", marginTop: "1rem" }}>{apiError}</p>
+      )}
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "1.25rem" }}>
         <button
           type="button"
           onClick={onCancel}
           disabled={isSaving}
-          style={{ height: 40, padding: "0 1.25rem", borderRadius: 8, border: "1.5px solid #e5e7eb", background: "#fff", fontSize: "0.875rem", fontWeight: 600, color: "#111827", cursor: isSaving ? "not-allowed" : "pointer", fontFamily: "inherit" }}
+          style={{
+            height: 40,
+            padding: "0 1.25rem",
+            borderRadius: 8,
+            border: "1.5px solid #e5e7eb",
+            background: "#fff",
+            fontSize: "0.875rem",
+            fontWeight: 600,
+            color: "#111827",
+            cursor: isSaving ? "not-allowed" : "pointer",
+            fontFamily: "inherit",
+          }}
         >
           Cancel
         </button>
@@ -445,7 +569,18 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
           type="button"
           onClick={handleSave}
           disabled={isSaving}
-          style={{ height: 40, padding: "0 1.25rem", borderRadius: 8, border: "1.5px solid #4f46e5", background: isSaving ? "#a5b4fc" : "#4f46e5", fontSize: "0.875rem", fontWeight: 600, color: "#fff", cursor: isSaving ? "not-allowed" : "pointer", fontFamily: "inherit" }}
+          style={{
+            height: 40,
+            padding: "0 1.25rem",
+            borderRadius: 8,
+            border: "1.5px solid #4f46e5",
+            background: isSaving ? "#a5b4fc" : "#4f46e5",
+            fontSize: "0.875rem",
+            fontWeight: 600,
+            color: "#fff",
+            cursor: isSaving ? "not-allowed" : "pointer",
+            fontFamily: "inherit",
+          }}
         >
           {isSaving ? "Saving…" : "Save Guest"}
         </button>
@@ -593,16 +728,30 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
         <div>
           <FieldLabel htmlFor="visitDate" required>Visit Date</FieldLabel>
-          <input id="visitDate" type="date" style={inputStyle()} value={visitDetails.visitDate} onChange={(e) => {
-            const val = e.target.value;
-            const updates: Partial<VisitDetails> = { visitDate: val };
-            if (!visitDetails.endDate || visitDetails.endDate < val) updates.endDate = val;
-            onChange(updates);
-          }} />
+          <input
+            id="visitDate"
+            type="date"
+            style={inputStyle()}
+            value={visitDetails.visitDate}
+            min={new Date().toISOString().split("T")[0]}
+            onChange={(e) => {
+              const val = e.target.value;
+              const updates: Partial<VisitDetails> = { visitDate: val };
+              if (!visitDetails.endDate || visitDetails.endDate < val) updates.endDate = val;
+              onChange(updates);
+            }}
+          />
         </div>
         <div>
           <FieldLabel htmlFor="endDate" required>End Date</FieldLabel>
-          <input id="endDate" type="date" style={inputStyle()} value={visitDetails.endDate} min={visitDetails.visitDate || undefined} onChange={(e) => onChange({ endDate: e.target.value })} />
+          <input
+            id="endDate"
+            type="date"
+            style={inputStyle()}
+            value={visitDetails.endDate}
+            min={visitDetails.visitDate || new Date().toISOString().split("T")[0]}
+            onChange={(e) => onChange({ endDate: e.target.value })}
+          />
         </div>
       </div>
 
@@ -669,7 +818,6 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-      {/* Top icon — seat */}
       <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#ecfdf5", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3" /><path d="M3 16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4z" /><path d="M5 18v2" /><path d="M19 18v2" /></svg>
       </div>
@@ -701,7 +849,6 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
                 gap: 0,
               }}
             >
-              {/* Card icon */}
               <div style={{
                 width: 40, height: 40, borderRadius: 10, marginBottom: 14,
                 background: key === "yes" ? "#eef2ff" : "#f0fdf4",
@@ -714,11 +861,9 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
                 )}
               </div>
 
-              {/* Title & subtitle */}
               <span style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#111827", marginBottom: 4 }}>{label}</span>
               <span style={{ fontSize: "0.75rem", color: "#6b7280", lineHeight: 1.5, marginBottom: 14 }}>{sub}</span>
 
-              {/* Bullet points */}
               <ul style={{ listStyle: "none", padding: 0, margin: "0 0 16px 0", display: "flex", flexDirection: "column", gap: 8 }}>
                 {bullets.map((b) => (
                   <li key={b} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.75rem", color: "#374151" }}>
@@ -728,7 +873,6 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
                 ))}
               </ul>
 
-              {/* Radio selector */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid #f3f4f6", paddingTop: 14, marginTop: "auto" }}>
                 <span style={{
                   width: 18, height: 18, borderRadius: "50%",
@@ -834,13 +978,37 @@ export function SuccessStep({ onBookAnother }: { onBookAnother: () => void }) {
         <button
           type="button"
           onClick={onBookAnother}
-          style={{ height: 40, padding: "0 1.25rem", borderRadius: 8, border: "1.5px solid #e5e7eb", background: "#fff", fontSize: "0.875rem", fontWeight: 600, color: "#111827", cursor: "pointer", fontFamily: "inherit" }}
+          style={{
+            height: 40,
+            padding: "0 1.25rem",
+            borderRadius: 8,
+            border: "1.5px solid #e5e7eb",
+            background: "#fff",
+            fontSize: "0.875rem",
+            fontWeight: 600,
+            color: "#111827",
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
         >
           Book Another
         </button>
         <Link
           href="/mybookings"
-          style={{ height: 40, padding: "0 1.25rem", borderRadius: 8, border: "1.5px solid #4f46e5", background: "#4f46e5", fontSize: "0.875rem", fontWeight: 600, color: "#fff", display: "inline-flex", alignItems: "center", textDecoration: "none", fontFamily: "inherit" }}
+          style={{
+            height: 40,
+            padding: "0 1.25rem",
+            borderRadius: 8,
+            border: "1.5px solid #4f46e5",
+            background: "#4f46e5",
+            fontSize: "0.875rem",
+            fontWeight: 600,
+            color: "#fff",
+            display: "inline-flex",
+            alignItems: "center",
+            textDecoration: "none",
+            fontFamily: "inherit",
+          }}
         >
           Go to My Bookings
         </Link>

@@ -86,12 +86,12 @@ export default function FloorTable({ data, onEdit, highlightedId }: Props) {
               <th className="px-3 py-3 text-left font-medium">Floor Code</th>
               <th className="px-3 py-3 text-left font-medium">Floor Name</th>
               <th className="px-3 py-3 text-left font-medium">Building</th>
-              <th className="px-3 py-3 text-center font-medium">Seats</th>
-              <th className="px-3 py-3 text-center font-medium">Active Seats</th>
-              <th className="px-3 py-3 text-center font-medium">Bookable Seats</th>
-              <th className="px-3 py-3 text-center font-medium">Layouts</th>
+              <th className="px-3 py-3 text-left font-medium">Seats</th>
+              <th className="px-3 py-3 text-left font-medium">Active Seats</th>
+              <th className="px-3 py-3 text-left font-medium">Bookable Seats</th>
+              <th className="px-3 py-3 text-left font-medium">Layouts</th>
               <th className="px-3 py-3 text-left font-medium">Status</th>
-              <th className="px-3 py-3 text-center font-medium">Actions</th>
+              <th className="px-3 py-3 text-left font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">

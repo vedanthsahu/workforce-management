@@ -104,10 +104,10 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
               <th className="px-3 py-3 text-left font-medium">Amenity Name</th>
               <th className="px-3 py-3 text-left font-medium">Category</th>
               <th className="px-3 py-3 text-left font-medium">Description</th>
-              <th className="px-3 py-3 text-center font-medium">Icon</th>
+              <th className="px-3 py-3 text-left font-medium">Icon</th>
               <th className="px-3 py-3 text-left font-medium">Status</th>
-              <th className="px-3 py-3 text-center font-medium">Assigned Seats</th>
-              <th className="px-3 py-3 text-center font-medium">Actions</th>
+              <th className="px-3 py-3 text-left font-medium">Assigned Seats</th>
+              <th className="px-3 py-3 text-left font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -147,7 +147,7 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
                       {amenity.is_active ? "Active" : "Inactive"}
                     </span>
                   </td>
-                  <td className="px-3 py-3 text-center font-medium">
+                  <td className="px-3 py-3 text-left font-medium">
                     {amenity.assigned_seat_count.toLocaleString()}
                   </td>
                   <td className="px-3 py-3 text-center">

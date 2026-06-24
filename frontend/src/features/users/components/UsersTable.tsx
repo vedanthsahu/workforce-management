@@ -30,11 +30,11 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
         <table className="w-full text-left">
           <thead className="text-xs text-gray-500 bg-gray-50 border-b sticky top-0 z-10">
             <tr>
-              <th className="py-2.5 px-4 font-semibold whitespace-nowrap">Name</th>
-              <th className="py-2.5 px-4 font-semibold whitespace-nowrap">Email</th>
-              <th className="py-2.5 px-4 font-semibold whitespace-nowrap">Current Role</th>
-              <th className="py-2.5 px-4 font-semibold whitespace-nowrap">Status</th>
-              <th className="py-2.5 px-4 font-semibold whitespace-nowrap text-right">Action</th>
+              <th className="py-2.5 px-4 font-semibold whitespace-nowrap text-left">Name</th>
+              <th className="py-2.5 px-4 font-semibold whitespace-nowrap text-left">Email</th>
+              <th className="py-2.5 px-4 font-semibold whitespace-nowrap text-left">Current Role</th>
+              <th className="py-2.5 px-4 font-semibold whitespace-nowrap text-left">Status</th>
+              <th className="py-2.5 px-4 font-semibold whitespace-nowrap text-left">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">

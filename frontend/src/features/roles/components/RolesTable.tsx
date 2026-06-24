@@ -16,11 +16,11 @@ export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) 
       <table className="w-full text-left">
         <thead>
           <tr className="border-b bg-gray-50/60">
-            <th className="py-2.5 px-4 text-xs font-semibold text-gray-500 whitespace-nowrap">Role Name</th>
-            <th className="py-2.5 px-4 text-xs font-semibold text-gray-500 whitespace-nowrap">Description</th>
-            <th className="py-2.5 px-4 text-xs font-semibold text-gray-500 whitespace-nowrap">Users</th>
-            <th className="py-2.5 px-4 text-xs font-semibold text-gray-500 whitespace-nowrap">Permissions</th>
-            <th className="py-2.5 px-4 text-xs font-semibold text-gray-500 whitespace-nowrap">Action</th>
+            <th className="py-2.5 px-4 text-xs font-semibold text-gray-500 whitespace-nowrap text-left">Role Name</th>
+            <th className="py-2.5 px-4 text-xs font-semibold text-gray-500 whitespace-nowrap text-left">Description</th>
+            <th className="py-2.5 px-4 text-xs font-semibold text-gray-500 whitespace-nowrap text-left">Users</th>
+            <th className="py-2.5 px-4 text-xs font-semibold text-gray-500 whitespace-nowrap text-left">Permissions</th>
+            <th className="py-2.5 px-4 text-xs font-semibold text-gray-500 whitespace-nowrap text-left">Action</th>
           </tr>
         </thead>
         <tbody>
