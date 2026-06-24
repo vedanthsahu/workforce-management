@@ -26,6 +26,7 @@ from backend.services.guest_service import (
     cancel_guest_visit_record,
     modify_guest_visit,
     create_booking_for_existing_guest_visit,
+    execute_guest_visit_workflow,
 )
 
 from backend.schemas.booking import BookingResponse
@@ -35,6 +36,8 @@ from backend.schemas.guest import (
     GuestVisitStatusUpdateResponse,
     AttachSeatToGuestVisitRequest,
     ModifyGuestVisitRequest,
+    GuestWorkflowRequest,
+    GuestWorkflowResponse,
 )
 
 
@@ -212,6 +215,27 @@ def modify_visit(
 ):
 
     return modify_guest_visit(
+        conn,
+        current_user=current_user,
+        guest_visit_id=guest_visit_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/{guest_visit_id}/workflow",
+    response_model=GuestWorkflowResponse,
+)
+def guest_visit_workflow(
+    guest_visit_id: str,
+    payload: GuestWorkflowRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_permission("guest:manage")),
+    ],
+    conn: Annotated[PGConnection, Depends(get_db)],
+):
+    return execute_guest_visit_workflow(
         conn,
         current_user=current_user,
         guest_visit_id=guest_visit_id,

@@ -1009,6 +1009,7 @@ def fetch_current_delegated_bookings(
                   )
 
               AND b.booking_date = CURRENT_DATE
+              AND b.booking_status = 'CONFIRMED'
 
             ORDER BY b.updated_at DESC
             """,
@@ -1041,6 +1042,7 @@ def fetch_future_delegated_bookings(
                   )
 
               AND b.booking_date > CURRENT_DATE
+              AND b.booking_status = 'CONFIRMED'
 
             ORDER BY b.updated_at DESC
             """,
@@ -1073,6 +1075,7 @@ def fetch_past_delegated_bookings(
                   )
 
               AND b.booking_date < CURRENT_DATE
+              AND b.booking_status = 'CONFIRMED'
 
             ORDER BY b.updated_at DESC
             """,
