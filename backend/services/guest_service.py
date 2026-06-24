@@ -60,7 +60,6 @@ from backend.repositories.guest_visit_repository import (
     fetch_active_booking_for_guest_visit,
     fetch_guest_visit_by_id_for_update,
     mark_guest_visit_modified,
-    update_guest_visit_only,
 )
 from backend.repositories.location_repository import (
     fetch_building_by_id,
@@ -1673,6 +1672,43 @@ def _required_workflow_seat_id(payload: GuestWorkflowRequest) -> str:
     return str(payload.seat_id)
 
 
+def _build_guest_workflow_response(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    action: GuestWorkflowAction,
+    message: str,
+    guest_visit_id: str,
+    booking_id: str | None = None,
+) -> GuestWorkflowResponse:
+    """Reload and serialize the final workflow state before committing."""
+    guest_visit = fetch_guest_visit_by_id_for_update(
+        conn,
+        tenant_id=tenant_id,
+        guest_visit_id=guest_visit_id,
+    )
+    if guest_visit is None:
+        raise LookupError("Workflow guest visit could not be reloaded.")
+
+    booking = None
+    if booking_id is not None:
+        booking = fetch_booking_by_id(
+            conn,
+            tenant_id=tenant_id,
+            booking_id=booking_id,
+        )
+        if booking is None:
+            raise LookupError("Workflow booking could not be reloaded.")
+
+    return GuestWorkflowResponse(
+        success=True,
+        action=action.value,
+        message=message,
+        guest_visit=GuestVisitResponse(**guest_visit),
+        booking=BookingResponse(**booking) if booking is not None else None,
+    )
+
+
 def execute_guest_visit_workflow(
     conn: PGConnection,
     *,
@@ -1700,22 +1736,49 @@ def execute_guest_visit_workflow(
                 tenant_id=tenant_id,
                 host_user_id=str(payload.host_user_id),
             )
-            update_guest_visit_only(
+            floor_id = (
+                str(payload.floor_id)
+                if payload.floor_id is not None
+                else None
+            )
+            _validate_visit_location(
+                conn,
+                tenant_id=tenant_id,
+                site_id=str(payload.site_id),
+                building_id=str(payload.building_id),
+                floor_id=floor_id,
+            )
+            mark_guest_visit_modified(
                 conn,
                 tenant_id=tenant_id,
                 guest_visit_id=guest_visit_id,
+            )
+            new_visit = insert_guest_visit(
+                conn,
+                tenant_id=tenant_id,
+                guest_id=str(visit["guest_id"]),
                 host_user_id=str(payload.host_user_id),
+                site_id=str(payload.site_id),
+                building_id=str(payload.building_id),
+                floor_id=floor_id,
+                visit_date=payload.visit_date,
                 guest_type=_enum_value(payload.guest_type),
                 purpose_of_visit=_enum_value(payload.purpose_of_visit),
                 start_time=payload.start_time,
                 end_time=payload.end_time,
                 notes=_clean_optional(payload.notes),
+                requires_seat=bool(visit["requires_seat"]),
+                created_by_user_id=_current_user_id(current_user),
             )
-            result = GuestWorkflowResponse(
-                success=True,
-                action=payload.action.value,
-                guest_visit_id=str(visit["guest_visit_id"]),
-                message="Guest visit updated without changing its booking.",
+            result = _build_guest_workflow_response(
+                conn,
+                tenant_id=tenant_id,
+                action=payload.action,
+                guest_visit_id=str(new_visit["guest_visit_id"]),
+                message=(
+                    "Guest visit replaced without changing its booking; "
+                    "the prior visit was retained."
+                ),
             )
 
         elif payload.action == GuestWorkflowAction.MODIFY_VISIT_AND_BOOKING:
@@ -1836,9 +1899,10 @@ def execute_guest_visit_workflow(
                 tenant_id=tenant_id,
                 guest_visit_id=new_visit_id,
             )
-            result = GuestWorkflowResponse(
-                success=True,
-                action=payload.action.value,
+            result = _build_guest_workflow_response(
+                conn,
+                tenant_id=tenant_id,
+                action=payload.action,
                 guest_visit_id=new_visit_id,
                 booking_id=str(new_booking["booking_id"]),
                 message="Guest visit and booking replaced; prior records retained.",
@@ -1916,9 +1980,10 @@ def execute_guest_visit_workflow(
                 tenant_id=tenant_id,
                 guest_visit_id=guest_visit_id,
             )
-            result = GuestWorkflowResponse(
-                success=True,
-                action=payload.action.value,
+            result = _build_guest_workflow_response(
+                conn,
+                tenant_id=tenant_id,
+                action=payload.action,
                 guest_visit_id=guest_visit_id,
                 booking_id=str(new_booking["booking_id"]),
                 message="Booking added to guest visit.",
@@ -1953,9 +2018,10 @@ def execute_guest_visit_workflow(
                 tenant_id=tenant_id,
                 guest_visit_id=guest_visit_id,
             )
-            result = GuestWorkflowResponse(
-                success=True,
-                action=payload.action.value,
+            result = _build_guest_workflow_response(
+                conn,
+                tenant_id=tenant_id,
+                action=payload.action,
                 guest_visit_id=guest_visit_id,
                 booking_id=str(booking["booking_id"]),
                 message="Guest booking cancelled; guest visit remains active.",
@@ -1997,9 +2063,10 @@ def execute_guest_visit_workflow(
                 tenant_id=tenant_id,
                 guest_visit_id=guest_visit_id,
             )
-            result = GuestWorkflowResponse(
-                success=True,
-                action=payload.action.value,
+            result = _build_guest_workflow_response(
+                conn,
+                tenant_id=tenant_id,
+                action=payload.action,
                 guest_visit_id=str(visit["guest_visit_id"]),
                 booking_id=(
                     str(booking["booking_id"])
