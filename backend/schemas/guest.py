@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
+from enum import Enum
 
 from pydantic import BaseModel, Field
 
 from backend.core.enums import GuestType, VisitPurpose
+from backend.schemas.booking import BookingResponse
 
 from typing import Literal
 
@@ -180,6 +182,47 @@ class AttachSeatToGuestVisitRequest(BaseModel):
     building_id: int = Field(gt=0)
     floor_id: int = Field(gt=0)
     seat_id: int = Field(gt=0)
+
+
+class GuestWorkflowAction(str, Enum):
+    MODIFY_VISIT_ONLY = "MODIFY_VISIT_ONLY"
+    MODIFY_VISIT_AND_BOOKING = "MODIFY_VISIT_AND_BOOKING"
+    ADD_BOOKING = "ADD_BOOKING"
+    CANCEL_BOOKING = "CANCEL_BOOKING"
+    CANCEL_VISIT = "CANCEL_VISIT"
+
+
+class GuestWorkflowRequest(BaseModel):
+    action: GuestWorkflowAction
+
+    host_user_id: int = Field(gt=0)
+
+    site_id: int = Field(gt=0)
+    building_id: int = Field(gt=0)
+    floor_id: int | None = Field(default=None, gt=0)
+
+    visit_date: date
+
+    guest_type: GuestType
+
+    purpose_of_visit: VisitPurpose | None = None
+
+    start_time: time | None = None
+    end_time: time | None = None
+
+    notes: str | None = None
+
+    seat_id: int | None = Field(default=None, gt=0)
+
+    cancellation_reason: str | None = None
+
+
+class GuestWorkflowResponse(BaseModel):
+    success: bool
+    action: str
+    message: str
+    guest_visit: GuestVisitResponse
+    booking: BookingResponse | None = None
 
 class CancelGuestVisitRequest(BaseModel):
     cancellation_reason: str | None = None
