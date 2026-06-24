@@ -50,11 +50,11 @@ export function useManageSeats() {
 
   // ── Layout ─────────────────────────────────────────────────────────────
   const [layout,        setLayout]        = useState<Layout | null>(null);
-  const [layoutLoading, setLayoutLoading] = useState(false);
+  const [layoutLoading, setLayoutLoading] = useState(true);
   const [layoutError,   setLayoutError]   = useState(false);
 
   useEffect(() => {
-    if (!floorId || !layoutId) { setLayout(null); return; }
+    if (!floorId || !layoutId) { setLayout(null); setLayoutLoading(false); return; }
     setLayoutLoading(true);
     setLayoutError(false);
     setLayout(null);

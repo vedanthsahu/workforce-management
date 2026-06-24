@@ -75,13 +75,20 @@ export default function AdminRecentBookings({ bookings, loading }: Props) {
         {/* ── Desktop table (hidden below md) ──────────────── */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full min-w-[700px] text-sm">
+            <colgroup>
+              <col className="w-[30%]" />
+              <col className="w-[28%]" />
+              <col className="w-[10%]" />
+              <col className="w-[18%]" />
+              <col className="w-[14%]" />
+            </colgroup>
             <thead className="bg-gray-50 border-b">
-              <tr className="text-left text-muted-foreground">
-                <th className="px-6 py-3 font-medium">User</th>
-                <th className="px-6 py-3 font-medium">Office</th>
-                <th className="px-6 py-3 font-medium">Seat</th>
-                <th className="px-6 py-3 font-medium">Date</th>
-                <th className="px-6 py-3 font-medium">Status</th>
+              <tr className="text-muted-foreground">
+                <th className="px-6 py-3 font-medium text-left">User</th>
+                <th className="px-6 py-3 font-medium text-left">Office</th>
+                <th className="px-6 py-3 font-medium text-left">Seat</th>
+                <th className="px-6 py-3 font-medium text-left">Date</th>
+                <th className="px-6 py-3 font-medium text-left">Status</th>
               </tr>
             </thead>
             <tbody>

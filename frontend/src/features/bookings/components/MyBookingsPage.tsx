@@ -5,7 +5,7 @@ import {
   RefreshCw, Plus, Calendar, CheckCircle2, Users, UserCheck,
   Search,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useBookings } from "../hooks/useBookings";
@@ -13,6 +13,7 @@ import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 import { useBookingActions } from "../hooks/useBookingActions";
 import { BookingCard } from "./BookingCard";
 import { CancelBookingDialog } from "./CancelBookingDialog";
+import { MyBookingsSkeleton, MyBookingsStatsSkeleton } from "./MyBookingsSkeleton";
 import { TABS } from "../utils/constants";
 import { isUpcoming, isToday, sortByDate } from "../utils/bookingHelpers";
 import type { Booking, BookingSummary, BookingTab } from "../types/bookings.types";
@@ -350,7 +351,9 @@ export default function MyBookingsPage() {
     useBookingActions({ handleCancelBooking });
 
   const router = useRouter();
-  const [topTab, setTopTab]       = useState<"myBookings" | "bookedForSomeone">("myBookings");
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab") === "bookedForSomeone" ? "bookedForSomeone" : "myBookings";
+  const [topTab, setTopTab]       = useState<"myBookings" | "bookedForSomeone">(initialTab);
   const [bfsSubTab, setBfsSubTab] = useState<"upcoming" | "past" | "cancelled">("upcoming");
 
   // My Bookings filters
@@ -424,7 +427,7 @@ export default function MyBookingsPage() {
           </div>
 
           {/* Stats */}
-          <BookingStatsCards summary={summary} delegatedCount={delegatedBookings.length} showOnBehalf={canBookForSomeone} />
+          {isLoading ? <MyBookingsStatsSkeleton /> : <BookingStatsCards summary={summary} delegatedCount={delegatedBookings.length} showOnBehalf={canBookForSomeone} />}
 
           {/* Top-level tabs — "Booked For Someone" only visible with permission */}
           <div className="flex border-b border-[#EBEBF5] overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -461,9 +464,7 @@ export default function MyBookingsPage() {
               />
 
               <div className="flex flex-col gap-3.5">
-                {isLoading && (
-                  <div className="text-center py-12 text-gray-400 text-[13.5px]">Loading bookings…</div>
-                )}
+                {isLoading && <MyBookingsSkeleton />}
                 {error && (
                   <div className="bg-red-50 border border-red-200 rounded-xl px-4 sm:px-5 py-4 text-red-500 text-[13px]">{error}</div>
                 )}
@@ -537,7 +538,7 @@ export default function MyBookingsPage() {
 
               <div className="flex flex-col gap-3.5">
                 {isLoading ? (
-                  <div className="text-center py-12 text-gray-400 text-[13.5px]">Loading bookings…</div>
+                  <MyBookingsSkeleton />
                 ) : filteredDelegated.length === 0 ? (
                   <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
                     No {bfsSubTab} delegated bookings found.

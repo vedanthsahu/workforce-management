@@ -86,8 +86,8 @@ export function BookingCard({
       <div className={cn(
         "grid items-center gap-4 sm:gap-6 p-4 sm:px-5 sm:py-[18px]",
         showPersonColumn
-          ? "grid-cols-[52px_1fr] sm:grid-cols-[52px_1.7fr_1.1fr_auto]"
-          : "grid-cols-[52px_1fr] sm:grid-cols-[52px_1.7fr_auto]",
+          ? "grid-cols-[52px_1fr] sm:grid-cols-[52px_1.7fr_1.1fr_170px]"
+          : "grid-cols-[52px_1fr] sm:grid-cols-[52px_1.7fr_170px]",
       )}>
 
         {/* Icon */}

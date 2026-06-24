@@ -25,7 +25,7 @@ export const useBuildings = () => {
     useState("");
 
   const [loading, setLoading] =
-    useState(false);
+    useState(true);
 
   const [error, setError] =
     useState("");

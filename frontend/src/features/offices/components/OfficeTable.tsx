@@ -72,11 +72,11 @@ export default function OfficeTable({ data, onEdit, highlightedId }: OfficeTable
               <th className="px-3 py-3 text-left font-medium">City</th>
               <th className="px-3 py-3 text-left font-medium">Country</th>
               <th className="px-3 py-3 text-left font-medium">Timezone</th>
-              <th className="px-3 py-3 text-center font-medium">Bldgs</th>
-              <th className="px-3 py-3 text-center font-medium">Floors</th>
-              <th className="px-3 py-3 text-center font-medium">Seats</th>
+              <th className="px-3 py-3 text-left font-medium">Bldgs</th>
+              <th className="px-3 py-3 text-left font-medium">Floors</th>
+              <th className="px-3 py-3 text-left font-medium">Seats</th>
               <th className="px-3 py-3 text-left font-medium">Status</th>
-              <th className="px-3 py-3 text-center font-medium">Actions</th>
+              <th className="px-3 py-3 text-left font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
