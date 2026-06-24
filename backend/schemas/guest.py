@@ -8,6 +8,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from backend.core.enums import GuestType, VisitPurpose
+from backend.schemas.booking import BookingResponse
 
 from typing import Literal
 
@@ -219,9 +220,9 @@ class GuestWorkflowRequest(BaseModel):
 class GuestWorkflowResponse(BaseModel):
     success: bool
     action: str
-    guest_visit_id: str
-    booking_id: str | None = None
     message: str
+    guest_visit: GuestVisitResponse
+    booking: BookingResponse | None = None
 
 class CancelGuestVisitRequest(BaseModel):
     cancellation_reason: str | None = None
