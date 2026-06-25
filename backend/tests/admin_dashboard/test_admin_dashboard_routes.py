@@ -22,7 +22,7 @@ class AdminDashboardRouteTests(unittest.TestCase):
         }
 
         self.assertIn("/admin/dashboard/summary", route_paths)
-        self.assertIn("/admin/bookings", route_paths)
+        self.assertIn("/admin/activities", route_paths)
         self.assertIn("/admin/occupancy/date-range", route_paths)
         self.assertIn("/admin/occupancy/hierarchy", route_paths)
 

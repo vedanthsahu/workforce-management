@@ -4,19 +4,13 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from typing import Literal
-from datetime import date, datetime, time
-from typing import Literal
-
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic import BaseModel, Field
 
 from backend.core.enums import (
     DayAvailabilityStatus,
     GuestType,
-    DayAvailabilityStatus,
-    GuestType,
     PreferenceMatchStatus,
-    RangeAvailabilityStatus,
-    VisitPurpose,
     RangeAvailabilityStatus,
     VisitPurpose,
 )
@@ -157,6 +151,17 @@ class AvailableSeatResponse(BaseModel):
         PreferenceMatchStatus.NOT_APPLICABLE
     )
     availability: SeatAvailabilitySummary
+
+
+class AvailableSeatListSummary(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    available_seats: int = Field(alias="availableSeats")
+
+
+class AvailableSeatListResponse(BaseModel):
+    summary: AvailableSeatListSummary
+    items: list[AvailableSeatResponse]
 
 
 class BookingEligibilityRequest(BaseModel):
