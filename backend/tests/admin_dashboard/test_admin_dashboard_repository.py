@@ -9,7 +9,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from backend.repositories.dashboard_repository import (
-    fetch_admin_booking_list,
+    fetch_admin_activity_list,
     fetch_admin_dashboard_summary,
     fetch_date_range_occupancy,
 )
@@ -93,23 +93,32 @@ class AdminDashboardRepositoryTests(unittest.TestCase):
         self.assertEqual(result["booked_today"], 3)
         self.assertEqual(result["active_seats"], 10)
 
-    def test_booking_list_query_is_tenant_scoped_and_paginated(self) -> None:
+    def test_activity_list_merges_employee_and_guest_rows(self) -> None:
         cursor = FakeCursor(
-            fetchone_values=[{"total": 0}],
-            fetchall_values=[[]],
+            fetchall_values=[
+                [
+                    {
+                        "activity_id": "employee-booking-10",
+                        "created_at": "2026-05-22T08:30:00",
+                    }
+                ],
+                [
+                    {
+                        "activity_id": "guest-booking-20",
+                        "created_at": "2026-05-22T08:45:00",
+                    }
+                ],
+            ],
         )
         conn = FakeConnection(cursor)
 
-        result = fetch_admin_booking_list(
+        result = fetch_admin_activity_list(
             conn,
             tenant_id="1",
-            booking_date=date(2026, 5, 22),
+            activity_date=date(2026, 5, 22),
             site_id="2",
             building_id="3",
             floor_id="4",
-            booking_status="CONFIRMED",
-            page=2,
-            limit=25,
         )
 
         combined_sql = " ".join(sql for sql, _ in cursor.executions)
@@ -117,11 +126,15 @@ class AdminDashboardRepositoryTests(unittest.TestCase):
         self.assertIn("b.site_id = %(site_id)s::bigint", combined_sql)
         self.assertIn("b.building_id = %(building_id)s::bigint", combined_sql)
         self.assertIn("b.floor_id = %(floor_id)s::bigint", combined_sql)
-        self.assertIn("LIMIT %(limit)s", combined_sql)
-        self.assertEqual(result["page"], 2)
-        self.assertEqual(result["limit"], 25)
+        self.assertIn("FROM guest_visits gv", combined_sql)
+        self.assertIn("LEFT JOIN LATERAL", combined_sql)
+        self.assertIn("COALESCE(b.floor_id, gv.floor_id)", combined_sql)
+        self.assertEqual([row["activity_id"] for row in result], [
+            "guest-booking-20",
+            "employee-booking-10",
+        ])
         self.assertEqual(cursor.executions[0][1]["tenant_id"], "1")
-        self.assertEqual(cursor.executions[1][1]["offset"], 25)
+        self.assertEqual(cursor.executions[1][1]["tenant_id"], "1")
 
     def test_date_range_occupancy_query_uses_generate_series_and_grouped_counts(self) -> None:
         cursor = FakeCursor(
