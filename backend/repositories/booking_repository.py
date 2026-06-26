@@ -480,7 +480,7 @@ def fetch_past_delegated_guest_visits_without_booking(
             AND gv.visit_status IN (
                     'CHECKED_OUT',
                     'NO_SHOW',
-                    'SCHEDULED',
+                    'SCHEDULED'
                 )
             AND b.id IS NULL
             AND gv.visit_date < CURRENT_DATE
