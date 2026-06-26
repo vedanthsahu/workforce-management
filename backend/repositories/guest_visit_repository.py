@@ -1126,70 +1126,115 @@ def fetch_cancelled_guest_visits(
     conn: PGConnection,
     *,
     tenant_id: str,
-    created_by_user_id: str | None = None,
-
+    created_by_user_id: str,
 ):
     query = """
         SELECT
+            'GUEST_VISIT' AS activity_source,
+
+            NULL::text AS booking_id,
+            gv.tenant_id::text AS tenant_id,
+
+            NULL::text AS booked_for_user_id,
+            gv.guest_id::text AS booked_for_guest_id,
+
+            gv.created_by_user_id::text AS booked_by_user_id,
+
+            creator.full_name AS booked_by_name,
+            creator.email AS booked_by_email,
+
+            g.full_name AS booked_for_name,
+            g.email AS booked_for_email,
+            g.phone AS booked_for_phone,
+            g.organization AS booked_for_organization,
+
             gv.id::text AS guest_visit_id,
 
-            g.id::text AS guest_id,
+            'GUEST' AS booking_type,
+
+            NULL::text AS seat_id,
+
+            gv.site_id::text AS site_id,
+            gv.building_id::text AS building_id,
+            gv.floor_id::text AS floor_id,
+
+            NULL::text AS seat_code,
+
+            si.site_name,
+            bu.building_name,
+            fl.floor_name,
+
+            gv.visit_date AS booking_date,
+            gv.visit_status AS booking_status,
+
+            NULL::text AS source_channel,
+
+            gv.checked_in_at AS check_in_at,
+            gv.checked_out_at,
+
+            gv.cancelled_at,
+            gv.cancellation_reason,
+
+            gv.created_at,
+            gv.updated_at,
+
             g.full_name AS guest_name,
             g.email AS guest_email,
             g.phone AS guest_phone,
+            g.organization AS guest_organization,
 
-            gv.created_by_user_id::text,
-            creator.full_name AS created_by_name,
-
-            gv.host_user_id::text,
-            host.full_name AS host_name,
-            host.email AS host_email,
-
-            gv.visit_date,
             gv.guest_type,
             gv.purpose_of_visit,
             gv.visit_status,
 
-            gv.cancelled_at,
-            gv.cancellation_reason,
-            gv.updated_at
+            gv.host_user_id::text AS host_user_id,
+            host.full_name AS host_name,
+
+            gv.start_time,
+            gv.end_time,
+            gv.notes,
+            gv.requires_seat
 
         FROM guest_visits gv
 
         INNER JOIN guests g
             ON g.id = gv.guest_id
-            AND g.tenant_id = gv.tenant_id
-
-        LEFT JOIN app_users host
-            ON host.id = gv.host_user_id
-            AND host.tenant_id = gv.tenant_id
+           AND g.tenant_id = gv.tenant_id
 
         LEFT JOIN app_users creator
             ON creator.id = gv.created_by_user_id
-            AND creator.tenant_id = gv.tenant_id
+           AND creator.tenant_id = gv.tenant_id
+
+        LEFT JOIN app_users host
+            ON host.id = gv.host_user_id
+           AND host.tenant_id = gv.tenant_id
+
+        LEFT JOIN sites si
+            ON si.id = gv.site_id
+           AND si.tenant_id = gv.tenant_id
+
+        LEFT JOIN buildings bu
+            ON bu.id = gv.building_id
+
+        LEFT JOIN floors fl
+            ON fl.id = gv.floor_id
 
         WHERE gv.tenant_id = %s
-        AND gv.visit_status = 'CANCELLED'
-        """
+          AND gv.created_by_user_id = %s
+          AND gv.visit_status = 'CANCELLED'
 
-    params = [tenant_id]
-
-    if created_by_user_id is not None:
-        query += """
-        AND gv.created_by_user_id = %s
-        """
-        params.append(created_by_user_id)
-
-    query += """
-    ORDER BY gv.updated_at DESC
+        ORDER BY gv.updated_at DESC
     """
 
-    with conn.cursor() as cur:
-        cur.execute(query, tuple(params))
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            query,
+            (
+                tenant_id,
+                created_by_user_id,
+            ),
+        )
 
-        columns = [desc[0] for desc in cur.description]
+        return [dict(row) for row in cur.fetchall()]
+    
 
-        return [
-            dict(zip(columns, row))
-            for row in cur.fetchall()
-        ]

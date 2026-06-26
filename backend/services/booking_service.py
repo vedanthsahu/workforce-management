@@ -22,6 +22,7 @@ from backend.repositories.guest_repository import (
 
 from backend.repositories.guest_visit_repository import (
     insert_guest_visit,
+    fetch_cancelled_guest_visits,
 )
 from backend.core.logging import LOGGER_NAME
 from backend.repositories.booking_repository import (
@@ -30,6 +31,7 @@ from backend.repositories.booking_repository import (
     fetch_past_bookings_for_user,
     fetch_current_bookings_for_user,
     fetch_past_delegated_bookings,
+    fetch_cancelled_delegated_bookings,
     fetch_future_delegated_guest_visits_without_booking,
     fetch_current_delegated_guest_visits_without_booking,
     fetch_past_delegated_guest_visits_without_booking,
@@ -1640,7 +1642,7 @@ def get_delegated_past_bookings(
 
     combined.sort(
         key=lambda row: (
-            row.get("booking_date")
+            row.get("updated_at")
             or date.min
         ),
         reverse=True,
@@ -1651,3 +1653,35 @@ def get_delegated_past_bookings(
         for row in combined
     ]
 
+def get_delegated_cancelled_bookings(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+) -> list[BookingResponse]:
+
+    bookings = fetch_cancelled_delegated_bookings(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        user_id=str(current_user["user_id"]),
+    )
+
+    guest_visits = fetch_cancelled_guest_visits(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        created_by_user_id=str(current_user["user_id"]),
+    )
+
+    combined = bookings + guest_visits
+
+    combined.sort(
+        key=lambda row: (
+            row.get("updated_at")
+            or datetime.min
+        ),
+        reverse=True,
+    )
+
+    return [
+        BookingResponse(**row)
+        for row in combined
+    ]
