@@ -17,6 +17,7 @@ from backend.repositories.guest_visit_repository import (
     fetch_guest_visit_summary,
     check_in_guest_visit,
     check_out_guest_visit,
+    fetch_cancelled_guest_visits,
     update_guest_visit,
     sync_booking_from_guest_visit,
     recalculate_guest_visit_requires_seat,
@@ -26,6 +27,8 @@ from backend.repositories.guest_visit_repository import (
 from backend.schemas.guest import (
     GuestVisitListItem,
     GuestVisitListResponse,
+    CancelledGuestVisitResponse,
+    CancelledGuestVisitItem,
     AttachSeatToGuestVisitRequest,
     ModifyGuestVisitRequest,
     GuestVisitStatusUpdateResponse,
@@ -2121,4 +2124,32 @@ def audit_guest_visit_integrity(
         limit=limit,
     )
 
+def list_cancelled_guest_visits(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+) -> CancelledGuestVisitResponse:
 
+    role = (
+        current_user.get("role_name")
+        or current_user.get("role")
+        or ""
+    ).upper()
+
+    created_by_user_id = None
+
+    if role != "TENANT_ADMIN":
+        created_by_user_id = _current_user_id(current_user)
+
+    rows = fetch_cancelled_guest_visits(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        created_by_user_id=created_by_user_id,
+    )
+
+    return CancelledGuestVisitResponse(
+        items=[
+            CancelledGuestVisitItem(**row)
+            for row in rows
+        ]
+    )

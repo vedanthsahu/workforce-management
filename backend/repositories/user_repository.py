@@ -981,3 +981,85 @@ def search_users(
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
+
+
+def fetch_admin_user_directory(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    role_name: str | None = None,
+    status: str | None = None,
+) -> dict[str, Any]:
+    """Fetch a lightweight tenant-scoped user directory for admin screens."""
+
+    params = {
+        "tenant_id": tenant_id,
+        "role_name": role_name,
+        "status": status,
+    }
+    filtered_where = """
+        WHERE au.tenant_id = %(tenant_id)s
+          AND (
+                %(role_name)s IS NULL
+                OR au.role_name = %(role_name)s
+          )
+          AND (
+                %(status)s IS NULL
+                OR au.status = %(status)s
+          )
+    """
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT
+                (
+                    SELECT COUNT(*)::integer
+                    FROM app_users all_users
+                    WHERE all_users.tenant_id = %(tenant_id)s
+                ) AS total_users,
+                COUNT(*)::integer AS filtered_users,
+                COUNT(*) FILTER (
+                    WHERE au.status = 'ACTIVE'
+                )::integer AS active_users,
+                COUNT(*) FILTER (
+                    WHERE au.status = 'INACTIVE'
+                )::integer AS inactive_users
+            FROM app_users au
+            {filtered_where}
+            """,
+            params,
+        )
+        summary = cur.fetchone()
+
+        cur.execute(
+            f"""
+            SELECT
+                au.id::text AS id,
+                au.employee_id,
+                au.full_name,
+                au.role_name,
+                au.department,
+                au.job_title,
+                au.mobile_phone,
+                au.status,
+                au.email
+            FROM app_users au
+            {filtered_where}
+            ORDER BY
+                au.full_name ASC NULLS LAST,
+                au.id ASC
+            """,
+            params,
+        )
+        rows = cur.fetchall()
+
+    return {
+        "summary": dict(summary) if summary else {
+            "total_users": 0,
+            "filtered_users": 0,
+            "active_users": 0,
+            "inactive_users": 0,
+        },
+        "items": [dict(row) for row in rows],
+    }

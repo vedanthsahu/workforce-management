@@ -253,3 +253,34 @@ class AttachSeatToGuestVisitRequest(BaseModel):
     building_id: int = Field(gt=0)
     floor_id: int = Field(gt=0)
     seat_id: int = Field(gt=0)
+
+class CancelledGuestVisitItem(BaseModel):
+    guest_visit_id: str
+
+    guest_id: str
+    guest_name: str
+    guest_email: str | None = None
+    guest_phone: str | None = None
+
+    created_by_user_id: str
+    created_by_name: str | None = None
+
+    host_user_id: str
+    host_name: str
+    host_email: str | None = None
+
+    visit_date: date
+
+    guest_type: str | None = None
+    purpose_of_visit: str | None = None
+
+    visit_status: str
+
+    cancelled_at: datetime | None = None
+    cancellation_reason: str | None = None
+
+    updated_at: datetime
+
+
+class CancelledGuestVisitResponse(BaseModel):
+    items: list[CancelledGuestVisitItem]

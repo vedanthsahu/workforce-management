@@ -40,6 +40,13 @@ from backend.services.booking_service import (
     get_user_future_bookings,
     modify_booking,
 )
+from backend.services.guest_service import (
+    list_cancelled_guest_visits,
+)
+
+from backend.schemas.guest import (
+    CancelledGuestVisitResponse,
+)
 
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
@@ -178,3 +185,21 @@ def fetch_delegated_future(
         current_user=current_user,
     )
 
+@router.get(
+    "/delegated/cancelled",
+    response_model=CancelledGuestVisitResponse,
+)
+def fetch_delegated_cancelled_guest_visits(
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+):
+    return list_cancelled_guest_visits(
+        conn,
+        current_user=current_user,
+    )
