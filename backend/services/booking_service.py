@@ -52,6 +52,8 @@ from backend.repositories.booking_repository import (
 from backend.repositories.user_repository import fetch_user_by_id
 from backend.schemas.booking import (
     AvailableSeatResponse,
+    AvailableSeatListResponse,
+    AvailableSeatListSummary,
     BookingResponse,
     CreateBookingRequest,
     ModifyBookingRequest,
@@ -1055,7 +1057,7 @@ def get_available_seats_by_range(
     booked_for_guest_id: str | None = None,
     is_guest_booking: bool = False,
     exclude_booking_id: str | None = None,
-) -> list[AvailableSeatResponse]:
+) -> AvailableSeatListResponse:
     """
     Fetch seat availability across a date range.
     """
@@ -1149,10 +1151,36 @@ def get_available_seats_by_range(
             },
         ) from exc
 
-    return [
+    items = [
         AvailableSeatResponse(**seat)
         for seat in seats
     ]
+
+    available_count = sum(
+            1
+            for seat in items
+            if seat.availability.total_available_days > 0
+        )
+
+    if available_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "no_available_seats",
+                "message": (
+                    "No seats are available for booking on the selected "
+                    "floor for the requested dates."
+                ),                                                                                                                       
+            },
+        )
+
+    return AvailableSeatListResponse(
+            summary=AvailableSeatListSummary(
+                available_seats=available_count,
+            ),
+            items=items,
+        )
+
 
 def book_guest_seat(
     conn: PGConnection,

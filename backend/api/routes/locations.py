@@ -19,7 +19,7 @@ from psycopg2.extensions import connection as PGConnection
 from backend.api.deps import get_current_user
 from backend.db.connection import get_db
 
-from backend.schemas.booking import AvailableSeatResponse
+from backend.schemas.booking import AvailableSeatListResponse
 
 from backend.schemas.location import (
     BuildingResponse,
@@ -356,7 +356,7 @@ def update_seat_configuration_route(
 
 @router.get(
     "/floors/{floor_id}/seats",
-    response_model=list[AvailableSeatResponse],
+    response_model=AvailableSeatListResponse,
 )
 def available_seats(
     floor_id: Annotated[int, Path(gt=0)],
@@ -396,7 +396,7 @@ def available_seats(
         Query(),
     ] = None,
 
-) -> list[AvailableSeatResponse]:
+) -> AvailableSeatListResponse:
 
     if start_date > end_date:
 

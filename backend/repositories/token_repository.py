@@ -271,10 +271,10 @@ def revoke_user_session(
             updated_at = NOW()
         WHERE tenant_id = %s
           AND user_id = %s
-          AND session_id = %s
+          AND session_id = NONE
           AND revoked_at IS NULL
     """
-    params: list[Any] = [tenant_id, user_id, session_id]
+    params: list[Any] = [tenant_id, user_id]
     if refresh_token_hash is not None:
         query += " AND refresh_token_hash = %s"
         params.append(refresh_token_hash)
@@ -289,7 +289,7 @@ def record_auth_event(
     *,
     tenant_id: str,
     user_id: str,
-    session_id: str,
+    session_id: str | None = None,
     event_type: str,
     user_agent: str | None = None,
     ip_address: str | None = None,

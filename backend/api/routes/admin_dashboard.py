@@ -15,9 +15,8 @@ from backend.api.deps import (
 )
 from backend.db.connection import get_db
 from backend.schemas.admin_dashboard import (
-    AdminBookingListResponse,
-    AdminBookingListQuery,
-    AdminBookingStatus,
+    AdminActivityListResponse,
+    AdminActivityListQuery,
     AdminDateOccupancyResponse,
     AdminDashboardSummaryResponse,
     AdminHierarchyOccupancyQuery,
@@ -25,8 +24,8 @@ from backend.schemas.admin_dashboard import (
     AdminOccupancyDateRangeQuery,
 )
 from backend.services.admin_dashboard_service import (
+    get_admin_activity_list,
     get_admin_dashboard_summary,
-    get_booking_list,
     get_date_range_occupancy,
     get_hierarchy_occupancy,
 )
@@ -78,12 +77,13 @@ def admin_dashboard_summary(
 
 
 @router.get(
-    "/bookings",
-    response_model=AdminBookingListResponse,
-    summary="List admin dashboard bookings",
+    "/activities",
+    response_model=AdminActivityListResponse,
+    summary="List admin dashboard recent activities",
     description=(
-        "Return paginated tenant-scoped bookings for the selected date. "
-        "Requires admin_dashboard:view or booking:view_all, or an admin role."
+        "Return up to 100 tenant-scoped employee booking and guest visit "
+        "activities for the selected date, ordered by creation time. "
+        "Requires admin_dashboard:view or an admin role."
     ),
     responses={
         400: {
@@ -103,17 +103,17 @@ def admin_dashboard_summary(
         403: {"description": "Insufficient permissions."},
     },
 )
-def admin_booking_list(
+def admin_activity_list(
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_any_permission(["admin_dashboard:view", "booking:view_all"])),
+        Depends(require_any_permission(["admin_dashboard:view"])),
     ],
     conn: Annotated[PGConnection, Depends(get_db)],
     selected_date: Annotated[
         date | None,
         Query(
             alias="date",
-            description="Booking date to list. Defaults to current date.",
+            description="Activity date to list. Defaults to current date.",
         ),
     ] = None,
     site_id: Annotated[
@@ -128,42 +128,24 @@ def admin_booking_list(
         int | None,
         Query(alias="floorId", gt=0, description="Optional floor filter."),
     ] = None,
-    booking_status: Annotated[
-        AdminBookingStatus | None,
-        Query(
-            alias="bookingStatus",
-            description="Optional booking status filter.",
-        ),
-    ] = None,
-    page: Annotated[int, Query(ge=1, description="Page number.")] = 1,
-    limit: Annotated[
-        int,
-        Query(ge=1, le=200, description="Page size."),
-    ] = 50,
-) -> AdminBookingListResponse:
+) -> AdminActivityListResponse:
     if selected_date is None:
         selected_date = date.today()
 
-    query = AdminBookingListQuery(
+    query = AdminActivityListQuery(
         date=selected_date,
         siteId=site_id,
         buildingId=building_id,
         floorId=floor_id,
-        bookingStatus=booking_status,
-        page=page,
-        limit=limit,
     )
 
-    return get_booking_list(
+    return get_admin_activity_list(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         selected_date=query.date,
         site_id=_optional_str(query.site_id),
         building_id=_optional_str(query.building_id),
         floor_id=_optional_str(query.floor_id),
-        booking_status=query.booking_status,
-        page=query.page,
-        limit=query.limit,
     )
 
 

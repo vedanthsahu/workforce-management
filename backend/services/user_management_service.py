@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import psycopg2
 from fastapi import HTTPException, status
 from psycopg2.extensions import connection as PGConnection
 
@@ -11,11 +12,17 @@ from backend.repositories.token_repository import (
 )
 from backend.repositories.user_repository import (
     admin_update_user_access,
+    fetch_admin_user_directory,
     fetch_user_by_id,
     update_user_profile,
     search_users,
 )
 from backend.schemas.auth import UserResponse
+from backend.schemas.user_management import (
+    AdminDirectoryRole,
+    AdminDirectoryStatus,
+    AdminUserDirectoryResponse,
+)
 
 ASSIGNABLE_ROLE_NAMES = {
     "EMPLOYEE",
@@ -23,6 +30,17 @@ ASSIGNABLE_ROLE_NAMES = {
     "TALENT",
     "SECURITY",
 }
+
+ADMIN_DIRECTORY_ROLES = {
+    "EMPLOYEE",
+    "MANAGER",
+    "TALENT",
+    "SECURITY",
+    "TENANT_ADMIN",
+    "PRODUCT_ADMIN",
+}
+
+ADMIN_DIRECTORY_STATUSES = {"ACTIVE", "INACTIVE", "LOCKED"}
 
 
 def update_my_profile(
@@ -115,7 +133,6 @@ def admin_update_user_access_service(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         user_id=target_user_id,
-        session_id="ALL",
         event_type="ACCESS_CHANGED",
     )
 
@@ -140,3 +157,47 @@ def search_user_profiles(
         include_inactive=include_inactive,
         limit=limit,
     )
+
+
+def get_admin_user_directory(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    role_name: AdminDirectoryRole | None = None,
+    user_status: AdminDirectoryStatus | None = None,
+) -> AdminUserDirectoryResponse:
+    if role_name is not None and role_name not in ADMIN_DIRECTORY_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_user_role",
+                "message": "role is not supported.",
+            },
+        )
+
+    if user_status is not None and user_status not in ADMIN_DIRECTORY_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_user_status",
+                "message": "status is not supported.",
+            },
+        )
+
+    try:
+        result = fetch_admin_user_directory(
+            conn,
+            tenant_id=str(current_user["tenant_id"]),
+            role_name=role_name,
+            status=user_status,
+        )
+    except psycopg2.Error as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "admin_user_directory_failed",
+                "message": "Failed to fetch admin user directory.",
+            },
+        ) from exc
+
+    return AdminUserDirectoryResponse(**result)

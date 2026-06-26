@@ -383,128 +383,57 @@ def fetch_admin_dashboard_summary(
     return dict(row) if row else {}
  
 
-
-def fetch_admin_booking_list(
+def _fetch_employee_activity_rows(
     conn: PGConnection,
     *,
     tenant_id: str,
-    booking_date: date,
+    activity_date: date,
     site_id: str | None = None,
     building_id: str | None = None,
     floor_id: str | None = None,
-    booking_status: str | None = None,
-    page: int = 1,
-    limit: int = 50,
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
     """
-    Fetch a paginated admin booking list for one tenant and date.
-    """
-
-    offset = (page - 1) * limit
-    params = {
-        "tenant_id": tenant_id,
-        "booking_date": booking_date,
-        "site_id": site_id,
-        "building_id": building_id,
-        "floor_id": floor_id,
-        "booking_status": booking_status,
-        "limit": limit,
-        "offset": offset,
-    }
-    from_and_where = """
-        FROM bookings AS b
-        INNER JOIN app_users AS u
-            ON u.id = b.booked_by_user_id
-           AND u.tenant_id = b.tenant_id
-        LEFT JOIN app_users AS bfu
-            ON bfu.id = b.booked_for_user_id
-           AND bfu.tenant_id = b.tenant_id
-        INNER JOIN seats AS se
-            ON se.id = b.seat_id
-           AND se.tenant_id = b.tenant_id
-           AND se.site_id = b.site_id
-           AND se.building_id = b.building_id
-           AND se.floor_id = b.floor_id
-        INNER JOIN sites AS si
-            ON si.id = b.site_id
-           AND si.tenant_id = b.tenant_id
-        INNER JOIN buildings AS bu
-            ON bu.id = b.building_id
-           AND bu.tenant_id = b.tenant_id
-           AND bu.site_id = b.site_id
-        INNER JOIN floors AS fl
-            ON fl.id = b.floor_id
-           AND fl.tenant_id = b.tenant_id
-           AND fl.site_id = b.site_id
-           AND fl.building_id = b.building_id
-        WHERE b.tenant_id = %(tenant_id)s
-          AND b.booking_date = %(booking_date)s
-          AND b.booking_status IN (
-                'CONFIRMED',
-                'CHECKED_IN',
-                'COMPLETED',
-                'CANCELLED',
-                'MODIFIED',
-                'NO_SHOW'
-          )
-          AND (
-                %(site_id)s IS NULL
-                OR b.site_id = %(site_id)s::bigint
-          )
-          AND (
-                %(building_id)s IS NULL
-                OR b.building_id = %(building_id)s::bigint
-          )
-          AND (
-                %(floor_id)s IS NULL
-                OR b.floor_id = %(floor_id)s::bigint
-          )
-          AND (
-                %(booking_status)s IS NULL
-                OR b.booking_status = %(booking_status)s
-          )
+    Fetch employee booking activities.
     """
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            f"""
-            SELECT COUNT(*)::integer AS total
-            {from_and_where}
-            """,
-            params,
-        )
-        total_row = cur.fetchone()
-        total = int(total_row["total"]) if total_row else 0
-
-        cur.execute(
-            f"""
+            """
             SELECT
+
+                CONCAT('employee-booking-', b.id::text) AS activity_id,
+
+                'EMPLOYEE_BOOKING' AS activity_type,
+                TRUE AS has_booking,
+
                 b.id::text AS booking_id,
-                b.booking_date,
-                b.booking_status,
-                b.source_channel,
-                b.check_in_at,
-                b.checked_out_at,
-                b.created_at,
 
-                u.id::text AS user_id,
-                u.email AS user_email,
-                u.full_name AS user_full_name,
-                u.role_name AS user_role_name,
-                u.department AS user_department,
-                u.job_title AS user_job_title,
+                NULL::text AS guest_visit_id,
 
-                bfu.id::text AS booked_for_user_id,
-                bfu.email AS booked_for_user_email,
-                bfu.full_name AS booked_for_user_full_name,
-                bfu.role_name AS booked_for_user_role_name,
-                bfu.department AS booked_for_user_department,
-                bfu.job_title AS booked_for_user_job_title,
+                b.booking_status AS activity_status,
 
-                se.id::text AS seat_id,
-                se.seat_code,
-                se.seat_type,
-                se.seat_neighborhood,
+                b.booking_date AS activity_date,
+
+                booked_by.id::text AS booked_by_id,
+                booked_by.full_name AS booked_by_name,
+                booked_by.email AS booked_by_email,
+                booked_by.role_name AS booked_by_role,
+                booked_by.department AS booked_by_department,
+                booked_by.job_title AS booked_by_job_title,
+
+                booked_for.id::text AS booked_for_id,
+                booked_for.full_name AS booked_for_name,
+                booked_for.email AS booked_for_email,
+                booked_for.role_name AS booked_for_role,
+                booked_for.department AS booked_for_department,
+                booked_for.job_title AS booked_for_job_title,
+
+                NULL::text AS booked_for_guest_type,
+
+                s.id::text AS seat_id,
+                s.seat_code,
+                s.seat_type,
+                s.seat_neighborhood,
 
                 si.id::text AS site_id,
                 si.site_code,
@@ -516,25 +445,277 @@ def fetch_admin_booking_list(
 
                 fl.id::text AS floor_id,
                 fl.floor_code,
-                fl.floor_name
-            {from_and_where}
+                fl.floor_name,
+
+                b.check_in_at,
+                b.checked_out_at,
+                b.created_at
+
+            FROM bookings b
+
+            INNER JOIN app_users booked_by
+                ON booked_by.id = b.booked_by_user_id
+               AND booked_by.tenant_id = b.tenant_id
+
+            INNER JOIN app_users booked_for
+                ON booked_for.id = b.booked_for_user_id
+               AND booked_for.tenant_id = b.tenant_id
+
+            INNER JOIN seats s
+                ON s.id = b.seat_id
+               AND s.tenant_id = b.tenant_id
+               AND s.site_id = b.site_id
+               AND s.building_id = b.building_id
+               AND s.floor_id = b.floor_id
+
+            INNER JOIN sites si
+                ON si.id = b.site_id
+               AND si.tenant_id = b.tenant_id
+
+            INNER JOIN buildings bu
+                ON bu.id = b.building_id
+               AND bu.tenant_id = b.tenant_id
+               AND bu.site_id = b.site_id
+
+            INNER JOIN floors fl
+                ON fl.id = b.floor_id
+               AND fl.tenant_id = b.tenant_id
+               AND fl.site_id = b.site_id
+               AND fl.building_id = b.building_id
+
+            WHERE b.tenant_id = %(tenant_id)s
+
+              AND b.booking_type = 'EMPLOYEE'
+
+              AND b.booking_date = %(activity_date)s
+
+              AND (
+                    %(site_id)s IS NULL
+                    OR b.site_id = %(site_id)s::bigint
+              )
+
+              AND (
+                    %(building_id)s IS NULL
+                    OR b.building_id = %(building_id)s::bigint
+              )
+
+              AND (
+                    %(floor_id)s IS NULL
+                    OR b.floor_id = %(floor_id)s::bigint
+              )
             ORDER BY
-                b.booking_date ASC,
                 b.created_at DESC,
                 b.id DESC
-            LIMIT %(limit)s
-            OFFSET %(offset)s
+            LIMIT 100
             """,
-            params,
+            {
+                "tenant_id": tenant_id,
+                "activity_date": activity_date,
+                "site_id": site_id,
+                "building_id": building_id,
+                "floor_id": floor_id,
+            },
         )
+
         rows = cur.fetchall()
 
-    return {
-        "items": [dict(row) for row in rows],
-        "total": total,
-        "page": page,
-        "limit": limit,
-    }
+    return [dict(row) for row in rows]
+
+def _fetch_guest_activity_rows(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    activity_date: date,
+    site_id: str | None = None,
+    building_id: str | None = None,
+    floor_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Fetch guest visit activities.
+    """
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                CASE
+                    WHEN b.id IS NULL
+                        THEN CONCAT('guest-visit-', gv.id::text)
+                    ELSE CONCAT('guest-booking-', b.id::text)
+                END AS activity_id,
+
+                CASE
+                    WHEN b.id IS NULL THEN 'GUEST_VISIT'
+                    ELSE 'GUEST_BOOKING'
+                END AS activity_type,
+
+                (b.id IS NOT NULL) AS has_booking,
+
+                b.id::text AS booking_id,
+
+                gv.id::text AS guest_visit_id,
+
+                gv.visit_status AS activity_status,
+
+                COALESCE(b.booking_date, gv.visit_date) AS activity_date,
+
+                booked_by.id::text AS booked_by_id,
+                booked_by.full_name AS booked_by_name,
+                booked_by.email AS booked_by_email,
+                booked_by.role_name AS booked_by_role,
+                booked_by.department AS booked_by_department,
+                booked_by.job_title AS booked_by_job_title,
+
+                g.id::text AS booked_for_id,
+                g.full_name AS booked_for_name,
+                g.email AS booked_for_email,
+                NULL::text AS booked_for_role,
+                NULL::text AS booked_for_department,
+                NULL::text AS booked_for_job_title,
+
+                gv.guest_type AS booked_for_guest_type,
+
+                s.id::text AS seat_id,
+                s.seat_code,
+                s.seat_type,
+                s.seat_neighborhood,
+
+                si.id::text AS site_id,
+                si.site_code,
+                si.site_name,
+
+                bu.id::text AS building_id,
+                bu.building_code,
+                bu.building_name,
+
+                fl.id::text AS floor_id,
+                fl.floor_code,
+                fl.floor_name,
+
+                gv.checked_in_at AS check_in_at,
+                gv.checked_out_at,
+                COALESCE(b.created_at, gv.created_at) AS created_at
+
+            FROM guest_visits gv
+
+            INNER JOIN guests g
+                ON g.id = gv.guest_id
+               AND g.tenant_id = gv.tenant_id
+
+            LEFT JOIN LATERAL (
+                SELECT guest_booking.*
+                FROM bookings guest_booking
+                WHERE guest_booking.guest_visit_id = gv.id
+                  AND guest_booking.tenant_id = gv.tenant_id
+                  AND guest_booking.booking_type = 'GUEST'
+                ORDER BY
+                    guest_booking.created_at DESC,
+                    guest_booking.id DESC
+                LIMIT 1
+            ) b ON TRUE
+
+            LEFT JOIN app_users booked_by
+                ON booked_by.id = COALESCE(
+                    b.booked_by_user_id,
+                    gv.created_by_user_id
+                )
+               AND booked_by.tenant_id = gv.tenant_id
+
+            LEFT JOIN seats s
+                ON s.id = b.seat_id
+               AND s.tenant_id = gv.tenant_id
+               AND s.site_id = b.site_id
+               AND s.building_id = b.building_id
+               AND s.floor_id = b.floor_id
+
+            INNER JOIN sites si
+                ON si.id = COALESCE(b.site_id, gv.site_id)
+               AND si.tenant_id = gv.tenant_id
+
+            INNER JOIN buildings bu
+                ON bu.id = COALESCE(b.building_id, gv.building_id)
+               AND bu.tenant_id = gv.tenant_id
+               AND bu.site_id = si.id
+
+            LEFT JOIN floors fl
+                ON fl.id = COALESCE(b.floor_id, gv.floor_id)
+               AND fl.tenant_id = gv.tenant_id
+               AND fl.site_id = si.id
+               AND fl.building_id = bu.id
+
+            WHERE gv.tenant_id = %(tenant_id)s
+
+              AND COALESCE(b.booking_date, gv.visit_date) = %(activity_date)s
+
+              AND (
+                    %(site_id)s IS NULL
+                    OR COALESCE(b.site_id, gv.site_id) = %(site_id)s::bigint
+              )
+
+              AND (
+                    %(building_id)s IS NULL
+                    OR COALESCE(b.building_id, gv.building_id) = %(building_id)s::bigint
+              )
+
+              AND (
+                    %(floor_id)s IS NULL
+                    OR COALESCE(b.floor_id, gv.floor_id) = %(floor_id)s::bigint
+              )
+
+            ORDER BY
+                COALESCE(b.created_at, gv.created_at) DESC,
+                gv.id DESC
+            LIMIT 100
+            """,
+            {
+                "tenant_id": tenant_id,
+                "activity_date": activity_date,
+                "site_id": site_id,
+                "building_id": building_id,
+                "floor_id": floor_id,
+            },
+        )
+
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
+
+def fetch_admin_activity_list(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    activity_date: date,
+    site_id: str | None = None,
+    building_id: str | None = None,
+    floor_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Fetch latest dashboard activities.
+    """
+    employee_rows = _fetch_employee_activity_rows(
+        conn,
+        tenant_id=tenant_id,
+        activity_date=activity_date,
+        site_id=site_id,
+        building_id=building_id,
+        floor_id=floor_id,
+    )
+    guest_rows = _fetch_guest_activity_rows(
+        conn,
+        tenant_id=tenant_id,
+        activity_date=activity_date,
+        site_id=site_id,
+        building_id=building_id,
+        floor_id=floor_id,
+    )
+
+    activities = employee_rows + guest_rows
+    activities.sort(
+        key=lambda row: (row.get("created_at") is not None, row.get("created_at")),
+        reverse=True,
+    )
+
+    return activities[:100]
 
 
 def fetch_date_range_occupancy(
