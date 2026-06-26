@@ -184,7 +184,7 @@ def fetch_delegated_future(
     response_model=list[BookingResponse],
 )
 def fetch_delegated_cancelled(
-    current_user: Annotated[
+    current_user: Annotated[    
         dict[str, Any],
         Depends(get_current_user),
     ],
