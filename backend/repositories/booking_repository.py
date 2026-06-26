@@ -201,37 +201,39 @@ def fetch_future_delegated_guest_visits_without_booking(
 
             INNER JOIN guests g
                 ON g.id = gv.guest_id
-               AND g.tenant_id = gv.tenant_id
+            AND g.tenant_id = gv.tenant_id
 
             LEFT JOIN bookings b
                 ON b.guest_visit_id = gv.id
-               AND b.booking_type = 'GUEST'
-               AND b.tenant_id = gv.tenant_id
+            AND b.booking_type = 'GUEST'
+            AND b.tenant_id = gv.tenant_id
+            AND b.booking_status = 'CONFIRMED'
 
             LEFT JOIN app_users creator
                 ON creator.id = gv.created_by_user_id
-               AND creator.tenant_id = gv.tenant_id
+            AND creator.tenant_id = gv.tenant_id
 
             LEFT JOIN app_users host
                 ON host.id = gv.host_user_id
-               AND host.tenant_id = gv.tenant_id
+            AND host.tenant_id = gv.tenant_id
 
             LEFT JOIN sites si
                 ON si.id = gv.site_id
-               AND si.tenant_id = gv.tenant_id
+            AND si.tenant_id = gv.tenant_id
 
             LEFT JOIN buildings bu
                 ON bu.id = gv.building_id
-               AND bu.tenant_id = gv.tenant_id
+            AND bu.tenant_id = gv.tenant_id
 
             LEFT JOIN floors f
                 ON f.id = gv.floor_id
-               AND f.tenant_id = gv.tenant_id
+            AND f.tenant_id = gv.tenant_id
 
             WHERE gv.tenant_id = %s
-              AND gv.created_by_user_id = %s
-              AND b.id IS NULL
-              AND gv.visit_date > CURRENT_DATE
+            AND gv.created_by_user_id = %s
+            AND gv.visit_status = 'SCHEDULED'
+            AND b.id IS NULL
+            AND gv.visit_date > CURRENT_DATE
 
             ORDER BY gv.updated_at DESC
             """,
@@ -350,10 +352,13 @@ def fetch_current_delegated_guest_visits_without_booking(
                AND f.tenant_id = gv.tenant_id
 
             WHERE gv.tenant_id = %s
-              AND gv.created_by_user_id = %s
-              AND b.id IS NULL
-              AND gv.visit_date = CURRENT_DATE
-
+            AND gv.created_by_user_id = %s
+            AND gv.visit_status IN (
+                    'SCHEDULED',
+                    'CHECKED_IN'
+                )
+            AND b.id IS NULL
+            AND gv.visit_date = CURRENT_DATE
             ORDER BY gv.updated_at DESC
             """,
             (tenant_id, user_id),
@@ -471,10 +476,14 @@ def fetch_past_delegated_guest_visits_without_booking(
                AND f.tenant_id = gv.tenant_id
 
             WHERE gv.tenant_id = %s
-              AND gv.created_by_user_id = %s
-              AND b.id IS NULL
-              AND gv.visit_date < CURRENT_DATE
-
+            AND gv.created_by_user_id = %s
+            AND gv.visit_status IN (
+                    'CHECKED_OUT',
+                    'NO_SHOW',
+                    'SCHEDULED'
+                )
+            AND b.id IS NULL
+            AND gv.visit_date < CURRENT_DATE
             ORDER BY gv.updated_at DESC
             """,
             (tenant_id, user_id),
@@ -1086,6 +1095,88 @@ def fetch_past_delegated_bookings(
 
     return [dict(row) for row in rows]
 
+def fetch_cancelled_delegated_bookings(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+):
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT
+                b.id::text AS booking_id,
+                'BOOKING' AS activity_source,
+
+                b.booked_for_user_id::text,
+                NULL::text AS booked_for_guest_id,
+
+                b.booked_by_user_id::text,
+
+                creator.full_name AS booked_by_name,
+                creator.email AS booked_by_email,
+
+                employee.full_name AS booked_for_name,
+                employee.email AS booked_for_email,
+
+                NULL::text AS guest_visit_id,
+
+                b.booking_type,
+
+                b.seat_id::text,
+                b.site_id::text,
+                b.building_id::text,
+                b.floor_id::text,
+
+                s.seat_code,
+                si.site_name,
+                bu.building_name,
+                f.floor_name,
+
+                b.booking_date,
+                b.booking_status,
+
+                b.cancelled_at,
+                b.cancellation_reason,
+
+                b.created_at,
+                b.updated_at
+
+            FROM bookings b
+
+            INNER JOIN app_users employee
+                ON employee.id = b.booked_for_user_id
+            AND employee.tenant_id = b.tenant_id
+
+            LEFT JOIN app_users creator
+                ON creator.id = b.booked_by_user_id
+            AND creator.tenant_id = b.tenant_id
+
+            LEFT JOIN seats s
+                ON s.id = b.seat_id
+
+            LEFT JOIN sites si
+                ON si.id = b.site_id
+
+            LEFT JOIN buildings bu
+                ON bu.id = b.building_id
+
+            LEFT JOIN floors f
+                ON f.id = b.floor_id
+
+            WHERE b.tenant_id = %s
+            AND b.booked_by_user_id = %s
+            AND b.booked_for_user_id <> b.booked_by_user_id
+            AND b.booking_status = 'CANCELLED'
+
+            ORDER BY b.updated_at DESC
+            """,
+     (tenant_id, user_id),
+        )
+
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
 
 
 def fetch_cancelled_bookings_for_user(

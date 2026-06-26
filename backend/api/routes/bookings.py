@@ -37,15 +37,9 @@ from backend.services.booking_service import (
     get_delegated_past_bookings,
     get_delegated_current_bookings,
     get_delegated_future_bookings,
+    get_delegated_cancelled_bookings,
     get_user_future_bookings,
     modify_booking,
-)
-from backend.services.guest_service import (
-    list_cancelled_guest_visits,
-)
-
-from backend.schemas.guest import (
-    CancelledGuestVisitResponse,
 )
 
 
@@ -187,10 +181,10 @@ def fetch_delegated_future(
 
 @router.get(
     "/delegated/cancelled",
-    response_model=CancelledGuestVisitResponse,
+    response_model=list[BookingResponse],
 )
-def fetch_delegated_cancelled_guest_visits(
-    current_user: Annotated[
+def fetch_delegated_cancelled(
+    current_user: Annotated[    
         dict[str, Any],
         Depends(get_current_user),
     ],
@@ -199,7 +193,7 @@ def fetch_delegated_cancelled_guest_visits(
         Depends(get_db),
     ],
 ):
-    return list_cancelled_guest_visits(
+    return get_delegated_cancelled_bookings(
         conn,
         current_user=current_user,
     )
