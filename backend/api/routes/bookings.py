@@ -178,6 +178,7 @@ def fetch_delegated_future(
         conn,
         current_user=current_user,
     )
+
 @router.get(
     "/delegated/cancelled",
     response_model=list[BookingResponse],
