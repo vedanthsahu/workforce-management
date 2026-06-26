@@ -9,6 +9,7 @@ import {
   fetchDelegatedCurrentBookings,
   fetchDelegatedFutureBookings,
   fetchDelegatedPastBookings,
+  fetchDelegatedCancelledVisits,
   deriveBookingSummary,
   fetchTeamGroups,
   fetchCurrentUser,
@@ -19,13 +20,14 @@ import type { ApiTeamGroup } from "@/features/dashboard/types/dashboard.types";
 interface UseBookingsReturn {
   displayedBookings: Booking[];
   delegatedBookings: Booking[];
+  cancelledDelegatedBookings: Booking[];
   summary:           BookingSummary;
   activeTab:         BookingTab;
   isLoading:         boolean;
   error:             string | null;
   setActiveTab:      (tab: BookingTab) => void;
   handleCancelBooking: (bookingId: string) => Promise<void>;
-  handleCancelDelegatedBooking: (booking: Booking, mode: "visit" | "booking") => void;
+  handleCancelDelegatedBooking: () => void;
   refreshBookings:   () => void;
 }
 
@@ -38,7 +40,7 @@ export function useBookings(): UseBookingsReturn {
   const [futureBookings,    setFutureBookings]     = useState<Booking[]>([]);
   const [pastBookings,      setPastBookings]       = useState<Booking[]>([]);
   const [cancelledBookings, setCancelledBookings]  = useState<Booking[]>([]);
-  const [delegatedBookings, setDelegatedBookings]              = useState<Booking[]>([]);
+  const [delegatedBookings, setDelegatedBookings] = useState<Booking[]>([]);
   const [cancelledDelegatedBookings, setCancelledDelegatedBookings] = useState<Booking[]>([]);
   const [teamGroups,        setTeamGroups]         = useState<ApiTeamGroup[]>([]);
   const [currentUserId,     setCurrentUserId]      = useState<string>("");
@@ -77,7 +79,7 @@ export function useBookings(): UseBookingsReturn {
       setCurrentUserId(uid);
       setTeamGroups(groups);
 
-      const [current, future, past, cancelled, delCurrent, delFuture, delPast] = await Promise.all([
+      const [current, future, past, cancelled, delCurrent, delFuture, delPast, delCancelled] = await Promise.all([
         fetchCurrentBookings(uid),
         fetchFutureBookings(uid),
         fetchPastBookings(uid),
@@ -85,6 +87,7 @@ export function useBookings(): UseBookingsReturn {
         fetchDelegatedCurrentBookings(uid),
         fetchDelegatedFutureBookings(uid),
         fetchDelegatedPastBookings(uid),
+        fetchDelegatedCancelledVisits(),
       ]);
 
       setCurrentBookings(current);
@@ -92,10 +95,6 @@ export function useBookings(): UseBookingsReturn {
       setPastBookings(past);
       setCancelledBookings(cancelled);
       const allDelegated = [...delCurrent, ...delFuture, ...delPast];
-      console.log("[Delegated] Raw records:", allDelegated.map(b => ({
-        id: b.id, type: b.bookingType, guestVisitId: b.guestVisitId,
-        seatId: b.seatId, seat: b.seat, activitySource: b.activitySource,
-      })));
       const visitIdsWithBooking = new Set(
         allDelegated
           .filter((b) => b.bookingType === "guest" && b.guestVisitId)
@@ -105,6 +104,7 @@ export function useBookings(): UseBookingsReturn {
         (b) => !(b.bookingType === "visit" && visitIdsWithBooking.has(b.id)),
       );
       setDelegatedBookings(merged);
+      setCancelledDelegatedBookings(delCancelled);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load bookings");
     } finally {
@@ -152,34 +152,9 @@ export function useBookings(): UseBookingsReturn {
   );
 
   const handleCancelDelegatedBooking = useCallback(
-    (booking: Booking, mode: "visit" | "booking") => {
-      const cancelledRecord = {
-        ...booking,
-        status: "cancelled" as const,
-        tags: booking.tags.filter((t) => t.variant !== "confirmed"),
-      };
-
-      if (mode === "visit") {
-        setDelegatedBookings((prev) => prev.filter((b) => b.id !== booking.id));
-        setCancelledDelegatedBookings((prev) => [cancelledRecord, ...prev]);
-      } else {
-        setDelegatedBookings((prev) =>
-          prev.map((b) =>
-            b.id === booking.id
-              ? { ...b, bookingType: "visit" as const, seat: "—", seatId: undefined }
-              : b
-          ),
-        );
-        setCancelledDelegatedBookings((prev) => [
-          { ...cancelledRecord, bookingType: "guest" as const },
-          ...prev,
-        ]);
-      }
-    },
-    [],
+    () => { loadBookings(); },
+    [loadBookings],
   );
-
-  const allDelegatedBookings = [...delegatedBookings, ...cancelledDelegatedBookings];
 
   // ── Displayed bookings per tab ────────────────────────────────────────────
   const displayedBookings: Booking[] = (() => {
@@ -203,7 +178,8 @@ export function useBookings(): UseBookingsReturn {
 
   return {
     displayedBookings,
-    delegatedBookings: allDelegatedBookings,
+    delegatedBookings,
+    cancelledDelegatedBookings,
     summary,
     activeTab,
     isLoading,

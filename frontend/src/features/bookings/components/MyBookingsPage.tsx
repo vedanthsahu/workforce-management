@@ -338,6 +338,7 @@ export default function MyBookingsPage() {
   const {
     displayedBookings,
     delegatedBookings,
+    cancelledDelegatedBookings,
     summary,
     activeTab,
     isLoading,
@@ -385,12 +386,13 @@ export default function MyBookingsPage() {
     activeTab !== "past" && activeTab !== "cancelled",
   );
 
-  const bfsBaseFiltered = delegatedBookings.filter((b) => {
-    if (bfsSubTab === "upcoming")  return isUpcoming(b.date) && b.status !== "cancelled";
-    if (bfsSubTab === "past")      return !isUpcoming(b.date) && b.status !== "cancelled";
-    if (bfsSubTab === "cancelled") return b.status === "cancelled";
-    return true;
-  });
+  const bfsBaseFiltered = bfsSubTab === "cancelled"
+    ? cancelledDelegatedBookings
+    : delegatedBookings.filter((b) => {
+        if (bfsSubTab === "upcoming") return isUpcoming(b.date) && b.status !== "cancelled";
+        if (bfsSubTab === "past")     return !isUpcoming(b.date) && b.status !== "cancelled";
+        return true;
+      });
   const filteredDelegated = applyBfsFilters(bfsBaseFiltered, bfsSearch, bfsBookingType)
     .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
 
