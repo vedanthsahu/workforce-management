@@ -344,11 +344,16 @@ export default function MyBookingsPage() {
     error,
     setActiveTab,
     handleCancelBooking,
+    handleCancelDelegatedBooking,
     refreshBookings,
   } = useBookings();
 
-  const { cancelTarget, setCancelTarget, handleConfirmCancel, handleModify } =
-    useBookingActions({ handleCancelBooking });
+  const {
+    cancelTarget, setCancelTarget, clearCancelTarget, cancelMode,
+    handleConfirmCancel, handleModify,
+    handleModifyVisit, handleModifyVisitAndBooking, handleAddBooking,
+    handleCancelVisit, handleCancelBookingOnly,
+  } = useBookingActions({ handleCancelBooking, handleCancelDelegatedBooking });
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -478,6 +483,11 @@ export default function MyBookingsPage() {
                           booking={booking}
                           onCancelClick={setCancelTarget}
                           onModifyClick={handleModify}
+                          onModifyVisit={handleModifyVisit}
+
+                          onAddBooking={handleAddBooking}
+                          onCancelVisit={handleCancelVisit}
+                          onCancelBooking={handleCancelBookingOnly}
                           showActions={!isToday(booking.date)}
                         />
                       ))
@@ -550,6 +560,10 @@ export default function MyBookingsPage() {
                       booking={booking}
                       onCancelClick={setCancelTarget}
                       onModifyClick={handleModify}
+                      onModifyVisit={handleModifyVisit}
+                      onAddBooking={handleAddBooking}
+                      onCancelBooking={handleCancelBookingOnly}
+                      onCancelVisit={handleCancelVisit}
                       showActions={bfsSubTab === "upcoming" && !isToday(booking.date)}
                       variant="delegated"
                     />
@@ -579,8 +593,9 @@ export default function MyBookingsPage() {
       <CancelBookingDialog
         open={cancelTarget !== null}
         booking={cancelTarget}
+        cancelMode={cancelMode}
         onConfirm={handleConfirmCancel}
-        onClose={() => setCancelTarget(null)}
+        onClose={clearCancelTarget}
       />
     </>
   );

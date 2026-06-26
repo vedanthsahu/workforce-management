@@ -18,12 +18,14 @@ import {
   createBooking,
   createGuestBooking,
   modifyBooking,
+  modifyGuestBooking,
   fetchBuildings,
   fetchFloors,
   fetchPreferences,
   fetchSeatsWithAvailability,
   fetchSites,
 } from "../services/Bookingform.service";
+import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -62,12 +64,16 @@ function buildUrl(
   bookedForUserId?: string | null,
   guestParams?: GuestUrlParams | null,
   bookingForName?: string | null,
+  visitId?: string | null,
+  isGuestModify?: boolean,
 ): string {
   const params = new URLSearchParams();
   params.set("step", String(step));
   if (modifyBookingId)             params.set("modifyBookingId", modifyBookingId);
   if (bookedForUserId)             params.set("bookedForUserId", bookedForUserId);
   if (bookingForName)              params.set("bookingForName",  bookingForName);
+  if (visitId)                     params.set("visitId",         visitId);
+  if (isGuestModify)               params.set("isGuestModify",   "true");
   if (form.siteId)                 params.set("siteId",          form.siteId);
   if (form.buildingId)             params.set("buildingId",      form.buildingId);
   if (form.floorId)                params.set("floorId",         form.floorId);
@@ -115,7 +121,10 @@ export function useBookingForm() {
   const guestStartTime = searchParams.get("startTime")      ?? null;
   const guestEndTime   = searchParams.get("endTime")        ?? null;
   const guestNotes     = searchParams.get("notes")          ?? null;
+  const visitId        = searchParams.get("visitId")         ?? null;
+  const isGuestModify  = searchParams.get("isGuestModify") === "true";
   const isGuestBooking = Boolean(guestId);
+  const isAddBookingToVisit = Boolean(visitId);
   const isBookingForSomeone = Boolean(bookedForUserId || guestId);
 
   const prefillPreferencesParam = searchParams.get("preferences") ?? null;
@@ -239,10 +248,10 @@ export function useBookingForm() {
   const navigateTo = useCallback(
     (nextStep: BookingStep, nextForm: BookingFormState) => {
       setStepState(nextStep);
-      router.push(buildUrl(nextStep, nextForm, modifyBookingId, bookedForUserId, guestUrlParams, bookingForName));
+      router.push(buildUrl(nextStep, nextForm, modifyBookingId, bookedForUserId, guestUrlParams, bookingForName, visitId, isGuestModify));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [router, modifyBookingId, bookedForUserId, isGuestBooking],
+    [router, modifyBookingId, bookedForUserId, isGuestBooking, visitId, isGuestModify],
   );
 
   // ── Data fetching ─────────────────────────────────────────────────────────
@@ -474,9 +483,29 @@ export function useBookingForm() {
     try {
       let result: CreateBookingResponse;
 
-      if (isModifyMode && modifyBookingId) {
+      if (isModifyMode && modifyBookingId && isGuestModify) {
+        console.log("[ConfirmBooking] Branch: MODIFY_GUEST", { modifyBookingId });
+        result = await modifyGuestBooking(modifyBookingId, basePayload);
+      } else if (isModifyMode && modifyBookingId) {
+        console.log("[ConfirmBooking] Branch: MODIFY", { modifyBookingId });
         result = await modifyBooking(modifyBookingId, basePayload);
+      } else if (isAddBookingToVisit && visitId) {
+        const workflowPayload = {
+          site_id:      Number(form.siteId),
+          building_id:  Number(form.buildingId),
+          floor_id:     Number(form.floorId),
+          seat_id:      Number(form.selectedSeatId),
+          visit_date:   form.fromDate,
+          guest_type:   guestType ?? "OTHER",
+          host_user_id: hostUserId ? Number(hostUserId) : undefined,
+        };
+        console.log("[ConfirmBooking] Branch: ADD_BOOKING", { visitId, workflowPayload });
+        const res = await guestVisitWorkflow(visitId, "ADD_BOOKING", workflowPayload);
+        console.log("[ConfirmBooking] ADD_BOOKING response:", res);
+        const wf = res as { booking?: CreateBookingResponse };
+        result = wf.booking ?? { booking_id: "", booking_status: "CONFIRMED", booking_date: form.fromDate } as CreateBookingResponse;
       } else if (isGuestBooking && guestId && hostUserId && guestType) {
+        console.log("[ConfirmBooking] Branch: CREATE_GUEST_BOOKING", { guestId, hostUserId, guestType });
         result = await createGuestBooking({
           site_id:      Number(form.siteId),
           building_id:  Number(form.buildingId),

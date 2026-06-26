@@ -27,6 +27,8 @@ export interface Booking {
   isRecurring?: boolean;
   recurringPattern?: string;
   preferences?: string[];
+  siteId?: string;
+  buildingId?: string;
   floorId?: string;
   seatId?: string;
   bookingType: BookingType;
@@ -39,7 +41,11 @@ export interface Booking {
   bookedForGuestId?: string;
   guestName?: string;
   guestEmail?: string;
+  guestType?: string;
+  purposeOfVisit?: string;
   hostName?: string;
+  hostUserId?: string;
+  guestVisitId?: string;
   activitySource?: "BOOKING" | "GUEST_VISIT";
   createdAt?: string;
 }

@@ -145,6 +145,7 @@ export async function createGuestVisit(input: CreateGuestVisitInput): Promise<Gu
     host_user_id: Number(input.hostUserId),
     site_id: Number(input.siteId),
     building_id: Number(input.buildingId),
+    floor_id: input.floorId ? Number(input.floorId) : undefined,
     visit_date: input.visitDate,
     guest_type: input.guestType,
     purpose_of_visit: input.purposeOfVisit || undefined,
