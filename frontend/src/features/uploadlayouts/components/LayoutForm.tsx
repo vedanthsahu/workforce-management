@@ -27,10 +27,11 @@ interface LayoutFormProps {
  
 function extractSeatIds(svgText: string): string[] {
   const ids: string[] = [];
+  const seatIdPattern = /^\d+$|^[A-Z]+-.*-\d+$/;
   const regex = /<g\s+id="([^"]+)"/g;
   let match;
   while ((match = regex.exec(svgText)) !== null) {
-    if (/^\d+$/.test(match[1])) ids.push(match[1]);
+    if (seatIdPattern.test(match[1])) ids.push(match[1]);
   }
   return ids;
 }

@@ -108,6 +108,7 @@ export function useBookingForm() {
         hostUserId: visitDetails.hostEmployee.id,
         siteId: visitDetails.siteId,
         buildingId: visitDetails.buildingId,
+        floorId: visitDetails.floorId || undefined,
         visitDate: visitDetails.visitDate,
         guestType: visitDetails.guestType,
         purposeOfVisit: visitDetails.purposeOfVisit,

@@ -25,6 +25,7 @@ interface UseBookingsReturn {
   error:             string | null;
   setActiveTab:      (tab: BookingTab) => void;
   handleCancelBooking: (bookingId: string) => Promise<void>;
+  handleCancelDelegatedBooking: (booking: Booking, mode: "visit" | "booking") => void;
   refreshBookings:   () => void;
 }
 
@@ -37,7 +38,8 @@ export function useBookings(): UseBookingsReturn {
   const [futureBookings,    setFutureBookings]     = useState<Booking[]>([]);
   const [pastBookings,      setPastBookings]       = useState<Booking[]>([]);
   const [cancelledBookings, setCancelledBookings]  = useState<Booking[]>([]);
-  const [delegatedBookings, setDelegatedBookings]  = useState<Booking[]>([]);
+  const [delegatedBookings, setDelegatedBookings]              = useState<Booking[]>([]);
+  const [cancelledDelegatedBookings, setCancelledDelegatedBookings] = useState<Booking[]>([]);
   const [teamGroups,        setTeamGroups]         = useState<ApiTeamGroup[]>([]);
   const [currentUserId,     setCurrentUserId]      = useState<string>("");
 
@@ -89,7 +91,20 @@ export function useBookings(): UseBookingsReturn {
       setFutureBookings(future);
       setPastBookings(past);
       setCancelledBookings(cancelled);
-      setDelegatedBookings([...delCurrent, ...delFuture, ...delPast]);
+      const allDelegated = [...delCurrent, ...delFuture, ...delPast];
+      console.log("[Delegated] Raw records:", allDelegated.map(b => ({
+        id: b.id, type: b.bookingType, guestVisitId: b.guestVisitId,
+        seatId: b.seatId, seat: b.seat, activitySource: b.activitySource,
+      })));
+      const visitIdsWithBooking = new Set(
+        allDelegated
+          .filter((b) => b.bookingType === "guest" && b.guestVisitId)
+          .map((b) => b.guestVisitId),
+      );
+      const merged = allDelegated.filter(
+        (b) => !(b.bookingType === "visit" && visitIdsWithBooking.has(b.id)),
+      );
+      setDelegatedBookings(merged);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load bookings");
     } finally {
@@ -136,6 +151,36 @@ export function useBookings(): UseBookingsReturn {
     [currentBookings, futureBookings],
   );
 
+  const handleCancelDelegatedBooking = useCallback(
+    (booking: Booking, mode: "visit" | "booking") => {
+      const cancelledRecord = {
+        ...booking,
+        status: "cancelled" as const,
+        tags: booking.tags.filter((t) => t.variant !== "confirmed"),
+      };
+
+      if (mode === "visit") {
+        setDelegatedBookings((prev) => prev.filter((b) => b.id !== booking.id));
+        setCancelledDelegatedBookings((prev) => [cancelledRecord, ...prev]);
+      } else {
+        setDelegatedBookings((prev) =>
+          prev.map((b) =>
+            b.id === booking.id
+              ? { ...b, bookingType: "visit" as const, seat: "—", seatId: undefined }
+              : b
+          ),
+        );
+        setCancelledDelegatedBookings((prev) => [
+          { ...cancelledRecord, bookingType: "guest" as const },
+          ...prev,
+        ]);
+      }
+    },
+    [],
+  );
+
+  const allDelegatedBookings = [...delegatedBookings, ...cancelledDelegatedBookings];
+
   // ── Displayed bookings per tab ────────────────────────────────────────────
   const displayedBookings: Booking[] = (() => {
     switch (activeTab) {
@@ -158,13 +203,14 @@ export function useBookings(): UseBookingsReturn {
 
   return {
     displayedBookings,
-    delegatedBookings,
+    delegatedBookings: allDelegatedBookings,
     summary,
     activeTab,
     isLoading,
     error,
     setActiveTab,
     handleCancelBooking,
+    handleCancelDelegatedBooking,
     refreshBookings: loadBookings,
   };
 }

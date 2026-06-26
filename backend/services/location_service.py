@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NoReturn
 
 import psycopg2
 from fastapi import HTTPException, status
@@ -879,7 +879,7 @@ def _raise_floor_duplicate_if_needed(
             _raise_duplicate("floor_name", "Floor name already exists for this building.")
 
 
-def _raise_duplicate(field_name: str, message: str) -> None:
+def _raise_duplicate(field_name: str, message: str) -> NoReturn:
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
         detail={
@@ -889,7 +889,7 @@ def _raise_duplicate(field_name: str, message: str) -> None:
     )
 
 
-def _raise_not_found(entity_name: str) -> None:
+def _raise_not_found(entity_name: str) -> NoReturn:
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail={
@@ -899,7 +899,7 @@ def _raise_not_found(entity_name: str) -> None:
     )
 
 
-def _raise_invalid_hierarchy(message: str) -> None:
+def _raise_invalid_hierarchy(message: str) -> NoReturn:
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail={
@@ -915,7 +915,7 @@ def _raise_write_error(
     duplicate_code: str,
     fallback_code: str,
     fallback_message: str,
-) -> None:
+) -> NoReturn:
     if exc.pgcode == errorcodes.UNIQUE_VIOLATION:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

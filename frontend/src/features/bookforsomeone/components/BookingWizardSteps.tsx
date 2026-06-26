@@ -600,9 +600,30 @@ interface VisitDetailsStepProps {
   floors: Floor[];
   isLoadingBuildings: boolean;
   isLoadingFloors: boolean;
+  readOnlyLocation?: boolean;
 }
 
-export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildings, floors, isLoadingBuildings, isLoadingFloors }: VisitDetailsStepProps) {
+function LockedTooltip({ children, locked, message }: { children: React.ReactNode; locked: boolean; message: string }) {
+  return (
+    <div className={locked ? "relative group" : ""}>
+      {children}
+      {locked && (
+        <div
+          className="absolute bottom-full left-0 mb-2 hidden group-hover:flex items-start gap-2 bg-indigo-50 border border-indigo-200 text-indigo-700 text-[11.5px] font-medium leading-relaxed px-3.5 py-2.5 rounded-xl shadow-md pointer-events-none z-50 w-[300px]"
+        >
+          <svg className="w-4 h-4 shrink-0 mt-px text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>{message}</span>
+          <div className="absolute top-full left-6 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-indigo-200" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildings, floors, isLoadingBuildings, isLoadingFloors, readOnlyLocation = false }: VisitDetailsStepProps) {
+  const lockedMessage = "This field cannot be changed because a seat booking is linked to this visit. To change location or dates, use 'Edit Booking' instead.";
   return (
     <div>
       <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Visit Details</h2>
@@ -666,14 +687,15 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-        <div>
+        <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="visitSite" required>Site</FieldLabel>
           <div style={{ position: "relative" }}>
             <select
               id="visitSite"
-              style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: "pointer" }}
+              style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: readOnlyLocation ? "not-allowed" : "pointer", opacity: readOnlyLocation ? 0.6 : 1 }}
               value={visitDetails.siteId}
               onChange={(e) => onChange({ siteId: e.target.value, buildingId: "", floorId: "" })}
+              disabled={readOnlyLocation}
             >
               <option value="">Select a site</option>
               {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -682,16 +704,16 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               <IconChevronDown />
             </span>
           </div>
-        </div>
-        <div>
+        </LockedTooltip>
+        <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="visitBuilding" required>Building</FieldLabel>
           <div style={{ position: "relative" }}>
             <select
               id="visitBuilding"
-              style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: visitDetails.siteId ? "pointer" : "not-allowed" }}
+              style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: readOnlyLocation || !visitDetails.siteId ? "not-allowed" : "pointer", opacity: readOnlyLocation ? 0.6 : 1 }}
               value={visitDetails.buildingId}
               onChange={(e) => onChange({ buildingId: e.target.value, floorId: "" })}
-              disabled={!visitDetails.siteId}
+              disabled={readOnlyLocation || !visitDetails.siteId}
             >
               <option value="">
                 {!visitDetails.siteId ? "Select a site first" : isLoadingBuildings ? "Loading…" : "Select a building"}
@@ -702,16 +724,16 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               <IconChevronDown />
             </span>
           </div>
-        </div>
-        <div>
+        </LockedTooltip>
+        <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="visitFloor" required>Floor</FieldLabel>
           <div style={{ position: "relative" }}>
             <select
               id="visitFloor"
-              style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: visitDetails.buildingId ? "pointer" : "not-allowed" }}
+              style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: readOnlyLocation || !visitDetails.buildingId ? "not-allowed" : "pointer", opacity: readOnlyLocation ? 0.6 : 1 }}
               value={visitDetails.floorId}
               onChange={(e) => onChange({ floorId: e.target.value })}
-              disabled={!visitDetails.buildingId}
+              disabled={readOnlyLocation || !visitDetails.buildingId}
             >
               <option value="">
                 {!visitDetails.buildingId ? "Select a building first" : isLoadingFloors ? "Loading…" : "Select a floor"}
@@ -722,18 +744,19 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               <IconChevronDown />
             </span>
           </div>
-        </div>
+        </LockedTooltip>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-        <div>
+        <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="visitDate" required>Visit Date</FieldLabel>
           <input
             id="visitDate"
             type="date"
-            style={inputStyle()}
+            style={{ ...inputStyle(), cursor: readOnlyLocation ? "not-allowed" : undefined, opacity: readOnlyLocation ? 0.6 : 1 }}
             value={visitDetails.visitDate}
             min={new Date().toISOString().split("T")[0]}
+            disabled={readOnlyLocation}
             onChange={(e) => {
               const val = e.target.value;
               const updates: Partial<VisitDetails> = { visitDate: val };
@@ -741,18 +764,19 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               onChange(updates);
             }}
           />
-        </div>
-        <div>
+        </LockedTooltip>
+        <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="endDate" required>End Date</FieldLabel>
           <input
             id="endDate"
             type="date"
-            style={inputStyle()}
+            style={{ ...inputStyle(), cursor: readOnlyLocation ? "not-allowed" : undefined, opacity: readOnlyLocation ? 0.6 : 1 }}
             value={visitDetails.endDate}
             min={visitDetails.visitDate || new Date().toISOString().split("T")[0]}
+            disabled={readOnlyLocation}
             onChange={(e) => onChange({ endDate: e.target.value })}
           />
-        </div>
+        </LockedTooltip>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
