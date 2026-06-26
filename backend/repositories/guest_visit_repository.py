@@ -1121,3 +1121,75 @@ def fetch_guest_visit_integrity_findings(
 
     return [dict(row) for row in rows]
 
+
+def fetch_cancelled_guest_visits(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    created_by_user_id: str | None = None,
+
+):
+    query = """
+        SELECT
+            gv.id::text AS guest_visit_id,
+
+            g.id::text AS guest_id,
+            g.full_name AS guest_name,
+            g.email AS guest_email,
+            g.phone AS guest_phone,
+
+            gv.created_by_user_id::text,
+            creator.full_name AS created_by_name,
+
+            gv.host_user_id::text,
+            host.full_name AS host_name,
+            host.email AS host_email,
+
+            gv.visit_date,
+            gv.guest_type,
+            gv.purpose_of_visit,
+            gv.visit_status,
+
+            gv.cancelled_at,
+            gv.cancellation_reason,
+            gv.updated_at
+
+        FROM guest_visits gv
+
+        INNER JOIN guests g
+            ON g.id = gv.guest_id
+            AND g.tenant_id = gv.tenant_id
+
+        LEFT JOIN app_users host
+            ON host.id = gv.host_user_id
+            AND host.tenant_id = gv.tenant_id
+
+        LEFT JOIN app_users creator
+            ON creator.id = gv.created_by_user_id
+            AND creator.tenant_id = gv.tenant_id
+
+        WHERE gv.tenant_id = %s
+        AND gv.visit_status = 'CANCELLED'
+        """
+
+    params = [tenant_id]
+
+    if created_by_user_id is not None:
+        query += """
+        AND gv.created_by_user_id = %s
+        """
+        params.append(created_by_user_id)
+
+    query += """
+    ORDER BY gv.updated_at DESC
+    """
+
+    with conn.cursor() as cur:
+        cur.execute(query, tuple(params))
+
+        columns = [desc[0] for desc in cur.description]
+
+        return [
+            dict(zip(columns, row))
+            for row in cur.fetchall()
+        ]
