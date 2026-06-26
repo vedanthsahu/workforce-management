@@ -10,7 +10,7 @@ type CancelMode = "booking" | "visit";
 
 type UseBookingActionsParams = {
   handleCancelBooking: (bookingId: string) => Promise<void>;
-  handleCancelDelegatedBooking: (booking: Booking, mode: "visit" | "booking") => void;
+  handleCancelDelegatedBooking: () => void;
 };
 
 export function useBookingActions({ handleCancelBooking, handleCancelDelegatedBooking }: UseBookingActionsParams) {
@@ -37,10 +37,10 @@ export function useBookingActions({ handleCancelBooking, handleCancelDelegatedBo
 
     if (cancelMode === "visit" && isVisitType) {
       await guestVisitWorkflow(visitId, "CANCEL_VISIT", workflowBase);
-      handleCancelDelegatedBooking(cancelTarget, "visit");
+      handleCancelDelegatedBooking();
     } else if (cancelMode === "booking" && cancelTarget.bookingType === "guest") {
       await guestVisitWorkflow(visitId, "CANCEL_BOOKING", workflowBase);
-      handleCancelDelegatedBooking(cancelTarget, "booking");
+      handleCancelDelegatedBooking();
     } else if (cancelTarget.bookingType === "guest") {
       await cancelGuestBooking(cancelTarget.id, reason);
       await handleCancelBooking(cancelTarget.id);

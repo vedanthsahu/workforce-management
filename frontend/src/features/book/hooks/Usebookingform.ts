@@ -442,11 +442,16 @@ export function useBookingForm() {
       setSeats(data);
       navigateTo(2, form);
     } catch (e) {
-      const status = axios.isAxiosError(e) ? e.response?.status : undefined;
-      if (status === 409) {
-        setError("This seat is already booked for the selected date. Please choose a different seat.");
-      } else if (status === 400) {
-        setError(e instanceof Error ? e.message : "Failed to load seats");
+      if (axios.isAxiosError(e)) {
+        const data = e.response?.data as { detail?: { message?: string } | string; message?: string; error?: { message?: string } } | undefined;
+        const msg =
+          (typeof data?.detail === "object" ? data?.detail?.message : typeof data?.detail === "string" ? data.detail : null)
+          ?? data?.error?.message
+          ?? data?.message
+          ?? e.message;
+        setError(msg);
+      } else {
+        setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
       }
     } finally {
       setLoadingSeats(false);
@@ -529,32 +534,16 @@ export function useBookingForm() {
       setConfirmation(result);
       setStepState(3);
     } catch (err) {
-      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
-      const data = axios.isAxiosError(err)
-        ? (err.response?.data as { detail?: { message?: string }; message?: string } | undefined)
-        : undefined;
-
-      if (status === 409) {
-        setError("This seat is already booked for the selected date. Please choose a different seat.");
-      } else if (status === 400) {
-        setError(
-          data?.detail?.message ??
-          "Invalid booking details. Please go back and check your selection."
-        );
-      } else if (status === 403) {
-        setError("You don't have permission to book this seat.");
-      } else if (status === 404) {
-        setError(
-          isModifyMode
-            ? "The original booking could not be found. It may have already been cancelled."
-            : "The selected seat is no longer available. Please go back and choose another."
-        );
+      if (axios.isAxiosError(err)) {
+        const data = err.response?.data as { detail?: { message?: string } | string; message?: string; error?: { message?: string } } | undefined;
+        const msg =
+          (typeof data?.detail === "object" ? data?.detail?.message : typeof data?.detail === "string" ? data.detail : null)
+          ?? data?.error?.message
+          ?? data?.message
+          ?? err.message;
+        setError(msg);
       } else {
-        setError(
-          data?.detail?.message ??
-          data?.message ??
-          (err instanceof Error ? err.message : "Failed to confirm booking. Please try again.")
-        );
+        setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       }
     } finally {
       setSubmitting(false);

@@ -168,7 +168,7 @@ export async function fetchAvailability(params: {
   isGuestBooking?: boolean;
   bookedForGuestId?: string | null;
 }): Promise<AvailableSeatResponse[]> {
-  const { data } = await axiosInstance.get<AvailableSeatResponse[]>(
+  const { data } = await axiosInstance.get<{ summary: { availableSeats: number }; items: AvailableSeatResponse[] }>(
     `/floors/${params.floorId}/seats`,
     {
       params: {
@@ -205,7 +205,7 @@ export async function fetchAvailability(params: {
       },
     }
   );
-  return data;
+  return data.items;
 }
 
 // ── Seats + Availability ──────────────────────────────────────────────────────
