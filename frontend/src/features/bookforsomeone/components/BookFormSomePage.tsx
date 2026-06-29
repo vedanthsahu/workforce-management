@@ -64,8 +64,10 @@ const currentUserId = data?.user.user_id;
     const purposeOfVisit = searchParams.get("purposeOfVisit") ?? "";
     const visitDate      = searchParams.get("visitDate") ?? "";
     const endDate        = searchParams.get("endDate") ?? "";
-    const startTime      = searchParams.get("startTime") ?? "";
-    const endTime        = searchParams.get("endTime") ?? "";
+    const rawStart       = searchParams.get("startTime") ?? "";
+    const rawEnd         = searchParams.get("endTime") ?? "";
+    const startTime      = rawStart.slice(0, 5);
+    const endTime        = rawEnd.slice(0, 5);
     const hostName       = searchParams.get("hostName") ?? "";
     const hostUserId     = searchParams.get("hostUserId") ?? "";
     const siteId         = searchParams.get("siteId") ?? "";
@@ -280,8 +282,6 @@ const currentUserId = data?.user.user_id;
           return;
         }
         setEditSubmitting(false);
-        router.push("/mybookings?tab=bookedForSomeone");
-        return;
       } else {
         const success = await submitGuestVisit();
         if (!success) return;
@@ -405,7 +405,9 @@ const currentUserId = data?.user.user_id;
                   <FormFooter
                     onCancel={handleCancel}
                     onSubmit={handlePrimaryAction}
-                    onBack={step > 1 ? goBack : undefined}
+                    onBack={step > 1
+                      ? (editVisitId && step === 4 ? () => setFormState((prev) => ({ ...prev, step: 2 })) : goBack)
+                      : undefined}
                     submitLabel={checkingEligibility ? "Checking…" : submitLabel}
                     submitDisabled={!canContinue}
                     infoText={infoText ?? undefined}

@@ -235,7 +235,9 @@ const BookASeatPage: React.FC = () => {
         <div className="flex justify-between items-start sm:items-center gap-3">
           <div>
             <h1 className="text-[17px] sm:text-[20px] font-bold text-[#1A1A2E] leading-tight">
-              {isModifyMode ? "Modify Booking" : isBookingForSomeone ? `Book a Seat for ${bookingForName}` : "Book a Seat"}
+              {isModifyMode
+                ? (isBookingForSomeone && bookingForName ? `Modify Booking for ${bookingForName}` : "Modify Booking")
+                : isBookingForSomeone ? `Book a Seat for ${bookingForName}` : "Book a Seat"}
             </h1>
             <p className="text-[11.5px] sm:text-[12.5px] text-gray-400 mt-0.5">
               {isModifyMode
@@ -264,21 +266,6 @@ const BookASeatPage: React.FC = () => {
           )}
         </div>
 
-        {/* ── Modify mode banner ── */}
-        {isModifyMode && (
-          <div className="flex items-start sm:items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 sm:px-5 py-3">
-            <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
-              <Pencil size={13} className="text-amber-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[12.5px] sm:text-[13px] font-semibold text-amber-800">Modifying existing booking</p>
-              <p className="text-[11.5px] sm:text-[12px] text-amber-600 mt-0.5">
-                Your original booking will be cancelled once you confirm a new seat.
-                The date is pre-filled from your original booking.
-              </p>
-            </div>
-          </div>
-        )}
 
       </div>
 

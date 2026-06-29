@@ -1712,6 +1712,8 @@ def _build_guest_workflow_response(
     )
 
 
+
+
 def execute_guest_visit_workflow(
     conn: PGConnection,
     *,
@@ -1933,14 +1935,13 @@ def execute_guest_visit_workflow(
                     },
                 )
             seat_id = _required_workflow_seat_id(payload)
-            if visit.get("floor_id") is None:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={
-                        "code": "guest_visit_floor_required",
-                        "message": "Guest visit must have a floor before adding a seat.",
-                    },
-                )
+            _validate_visit_location(
+                conn,
+                tenant_id=tenant_id,
+                site_id=str(payload.site_id),
+                building_id=str(payload.building_id),
+                floor_id=str(payload.floor_id),
+            )
             _resolve_guest(
                 conn,
                 tenant_id=tenant_id,
@@ -1950,23 +1951,23 @@ def execute_guest_visit_workflow(
             seat = _resolve_seat(
                 conn,
                 tenant_id=tenant_id,
-                site_id=str(visit["site_id"]),
-                building_id=str(visit["building_id"]),
-                floor_id=str(visit["floor_id"]),
+                site_id=str(payload.site_id),
+                building_id=str(payload.building_id),
+                floor_id=str(payload.floor_id),
                 seat_id=seat_id,
             )
             if guest_has_active_booking_on_date(
                 conn,
                 tenant_id=tenant_id,
                 booked_for_guest_id=str(visit["guest_id"]),
-                booking_date=visit["visit_date"],
+                booking_date=payload.visit_date,
             ):
                 _raise_guest_booking_conflict()
             if has_active_booking_conflict(
                 conn,
                 tenant_id=tenant_id,
                 seat_id=seat_id,
-                booking_date=visit["visit_date"],
+                booking_date=payload.visit_date,
             ):
                 _raise_seat_booking_conflict()
             new_booking = insert_guest_booking(
@@ -1976,7 +1977,16 @@ def execute_guest_visit_workflow(
                 guest_visit_id=guest_visit_id,
                 booked_by_user_id=_current_user_id(current_user),
                 seat=seat,
-                booking_date=visit["visit_date"],
+                booking_date=payload.visit_date,
+            )
+            update_guest_visit_booking_details(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=guest_visit_id,
+                site_id=str(payload.site_id),
+                building_id=str(payload.building_id),
+                floor_id=str(payload.floor_id),
+                visit_date=payload.visit_date,
             )
             recalculate_guest_visit_requires_seat(
                 conn,
@@ -2108,6 +2118,7 @@ def execute_guest_visit_workflow(
     except Exception:
         conn.rollback()
         raise
+ 
 
 
 def audit_guest_visit_integrity(

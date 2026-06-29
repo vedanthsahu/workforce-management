@@ -104,6 +104,7 @@ export interface Booking {
   rawSeatId?: string;
   floorId?: string;
   managerNote: string;
+  bookedOn?: string;
   bookingType?: "self" | "on_behalf";
   bookedByName?: string;
   bookedByEmail?: string;

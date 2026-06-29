@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { cancelBooking, cancelGuestBooking, guestVisitWorkflow } from "../services/bookings.service";
-import { FALLBACK_PREFERENCE_NAMES } from "../utils/constants";
+
 import type { Booking } from "../types/bookings.types";
 
 type CancelMode = "booking" | "visit";
@@ -92,17 +92,16 @@ export function useBookingActions({ handleCancelBooking, handleCancelDelegatedBo
 
     if (hasRealPrefs) {
       params.set("preferences", booking.preferences!.join(","));
-    } else {
-      params.set("preferenceNames", FALLBACK_PREFERENCE_NAMES.join(","));
     }
+
+    const displayName = booking.bookedForName ?? booking.guestName;
+    if (displayName) params.set("bookingForName", displayName);
 
     if (isGuest) {
       params.set("isGuestModify", "true");
       if (booking.bookedForGuestId) params.set("guestId", booking.bookedForGuestId);
-      if (booking.bookedForName)    params.set("bookingForName", booking.bookedForName);
     } else if (booking.bookingType === "employee" && booking.bookedForUserId) {
       params.set("bookedForUserId", booking.bookedForUserId);
-      if (booking.bookedForName) params.set("bookingForName", booking.bookedForName);
     }
 
     router.push(`/book?${params.toString()}`);

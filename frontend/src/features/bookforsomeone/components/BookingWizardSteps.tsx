@@ -603,6 +603,60 @@ interface VisitDetailsStepProps {
   readOnlyLocation?: boolean;
 }
 
+// ── Time slot dropdown ───────────────────────────────────────────────────────
+
+function generateTimeSlots(): { label: string; value: string }[] {
+  const slots: { label: string; value: string }[] = [];
+  for (let h = 0; h < 24; h++) {
+    for (const m of [0, 30]) {
+      const hh = h.toString().padStart(2, "0");
+      const mm = m.toString().padStart(2, "0");
+      const value = `${hh}:${mm}`;
+      const period = h < 12 ? "AM" : "PM";
+      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      const label = `${h12}:${mm} ${period}`;
+      slots.push({ label, value });
+    }
+  }
+  return slots;
+}
+
+const TIME_SLOTS = generateTimeSlots();
+
+function TimeSlotSelect({
+  id,
+  value,
+  onChange,
+  placeholder = "Select time",
+  disabled = false,
+}: {
+  id: string;
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <div style={{ position: "relative" }}>
+      <select
+        id={id}
+        style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.6 : 1 }}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+      >
+        <option value="">{placeholder}</option>
+        {TIME_SLOTS.map((slot) => (
+          <option key={slot.value} value={slot.value}>{slot.label}</option>
+        ))}
+      </select>
+      <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
+        <IconChevronDown />
+      </span>
+    </div>
+  );
+}
+
 function LockedTooltip({ children, locked, message }: { children: React.ReactNode; locked: boolean; message: string }) {
   return (
     <div className={locked ? "relative group" : ""}>
@@ -780,14 +834,14 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-        <div>
+        <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="startTime">Start Time <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span></FieldLabel>
-          <input id="startTime" type="time" style={inputStyle()} value={visitDetails.startTime} onChange={(e) => onChange({ startTime: e.target.value })} />
-        </div>
-        <div>
+          <TimeSlotSelect id="startTime" value={visitDetails.startTime} onChange={(val) => onChange({ startTime: val })} placeholder="Select start time" disabled={readOnlyLocation} />
+        </LockedTooltip>
+        <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="endTime">End Time <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span></FieldLabel>
-          <input id="endTime" type="time" style={inputStyle()} value={visitDetails.endTime} onChange={(e) => onChange({ endTime: e.target.value })} />
-        </div>
+          <TimeSlotSelect id="endTime" value={visitDetails.endTime} onChange={(val) => onChange({ endTime: val })} placeholder="Select end time" disabled={readOnlyLocation} />
+        </LockedTooltip>
       </div>
 
       <div>
@@ -1018,7 +1072,7 @@ export function SuccessStep({ onBookAnother }: { onBookAnother: () => void }) {
           Book Another
         </button>
         <Link
-          href="/mybookings"
+          href="/mybookings?tab=bookedForSomeone"
           style={{
             height: 40,
             padding: "0 1.25rem",
