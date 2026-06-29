@@ -193,57 +193,11 @@ export async function cancelGuestBooking(
   });
 }
 
-// ── Delegated cancelled visits ───────────────────────────────────────────────
+// ── Delegated cancelled bookings ─────────────────────────────────────────────
 
-interface CancelledGuestVisitItem {
-  guest_visit_id: string;
-  guest_id: string;
-  guest_name: string;
-  guest_email?: string | null;
-  host_user_id: string;
-  host_name: string;
-  visit_date: string;
-  guest_type?: string | null;
-  purpose_of_visit?: string | null;
-  visit_status: string;
-  cancelled_at?: string | null;
-  cancellation_reason?: string | null;
-  updated_at: string;
-}
-
-export async function fetchDelegatedCancelledVisits(): Promise<Booking[]> {
-  const { data } = await axiosInstance.get<{ items: CancelledGuestVisitItem[] }>(
-    "/bookings/delegated/cancelled",
-  );
-  return data.items.map((item) => ({
-    id: item.guest_visit_id,
-    location: "",
-    building: "",
-    floor: "",
-    seat: "—",
-    date: item.visit_date,
-    fromDate: item.visit_date,
-    toDate: item.visit_date,
-    startTime: "",
-    endTime: "",
-    isFullDay: false,
-    status: "cancelled" as const,
-    bookedOn: item.cancelled_at
-      ? new Date(item.cancelled_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-      : "",
-    tags: [],
-    bookingType: "visit" as const,
-    bookedForName: item.guest_name,
-    guestName: item.guest_name,
-    guestEmail: item.guest_email ?? undefined,
-    guestType: item.guest_type ?? undefined,
-    purposeOfVisit: item.purpose_of_visit ?? undefined,
-    hostName: item.host_name,
-    hostUserId: item.host_user_id,
-    guestVisitId: item.guest_visit_id,
-    activitySource: "GUEST_VISIT" as const,
-    createdAt: item.updated_at,
-  }));
+export async function fetchDelegatedCancelledBookings(currentUserId: string): Promise<Booking[]> {
+  const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/delegated/cancelled`);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
 }
 
 export type GuestWorkflowAction =
@@ -353,7 +307,7 @@ export async function fetchSeatAmenities(
     const allAmenityIds = allPrefs.map((p) => p.id);
 
     // Step 2: fetch seats passing all amenity ids so the backend populates matched_amenities
-    const { data: resp } = await axiosInstance.get<{ items: SeatAmenityMatch[] }>(
+    const { data: resp } = await axiosInstance.get<any>(
       `/floors/${floorId}/seats`,
       {
         params: {
@@ -376,7 +330,8 @@ export async function fetchSeatAmenities(
     );
 
     // Step 3: find our specific seat
-    const match = resp.items.find((s: SeatAmenityMatch) => String(s.seat_id) === String(seatId));
+    const items: SeatAmenityMatch[] = Array.isArray(resp) ? resp : resp.items ?? [];
+    const match = items.find((s) => String(s.seat_id) === String(seatId));
     if (!match) return [];
 
     // Step 4: map display names → keys using the preferences list (no hardcoding)

@@ -6,7 +6,7 @@ import {
   cancelBooking as cancelBookingApi,
   fetchSeatAmenities,
 } from "@/features/bookings/services/bookings.service";
-import { FALLBACK_PREFERENCE_NAMES } from "../utils/constants";
+
 import type { Booking } from "../types/dashboard.types";
 
 type UseDashboardActionsParams = {
@@ -65,8 +65,6 @@ export function useDashboardActions({
 
     if (resolvedKeys.length > 0) {
       params.set("preferences", resolvedKeys.join(","));
-    } else {
-      params.set("preferenceNames", FALLBACK_PREFERENCE_NAMES.join(","));
     }
 
     router.push(`/book?${params.toString()}`);

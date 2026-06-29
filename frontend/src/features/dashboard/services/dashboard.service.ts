@@ -115,6 +115,9 @@ function mapApiBooking(b: ApiBooking, currentUserId: string): Booking {
     rawSeatId:   b.seat_id  ? String(b.seat_id)  : undefined,
     floorId:     b.floor_id ? String(b.floor_id) : undefined,
     managerNote: "",
+    bookedOn:    b.created_at
+      ? new Date(b.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      : undefined,
     bookingType:   isSelf ? "self" : "on_behalf",
     bookedByName:  isSelf ? undefined : (b.booked_by_name ?? undefined),
     bookedByEmail: isSelf ? undefined : (b.booked_by_email ?? undefined),

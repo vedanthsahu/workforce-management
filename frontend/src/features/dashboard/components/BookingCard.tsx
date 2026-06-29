@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Hash, Pencil, X } from "lucide-react";
+import { Calendar, Hash, Clock, Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Booking } from "../types/dashboard.types";
 
@@ -62,13 +62,22 @@ export function BookingCard({ booking, onCancel, onModify, canCancelOwn, canBook
           </div>
         </div>
 
-        {/* Right column: Booking ID only */}
+        {/* Right column: Booking ID + Booked on */}
         <div className="hidden sm:flex flex-col items-end text-right">
           <div className="flex items-center gap-1 mb-0.5">
             <Hash className="size-2.5 text-blue-500" />
             <p className="text-[9px] font-semibold tracking-wider uppercase text-gray-500">Booking ID</p>
           </div>
-          <p className="text-[10.5px] text-gray-700 font-mono">{booking.id}</p>
+          <p className="text-[10.5px] text-gray-700 font-mono mb-2">{booking.id}</p>
+          {booking.bookedOn && (
+            <>
+              <div className="flex items-center gap-1 mb-0.5">
+                <Clock className="size-2.5 text-blue-500" />
+                <p className="text-[9px] font-semibold tracking-wider uppercase text-gray-500">Booked on</p>
+              </div>
+              <p className="text-[10.5px] text-gray-700">{booking.bookedOn}</p>
+            </>
+          )}
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -70,13 +70,26 @@ export function CancelBookingDialog({ open, booking, cancelMode = "booking", onC
     }
   };
 
+  const handleClose = useCallback(() => {
+    setSelectedReason("");
+    setOtherReason("");
+    onClose();
+  }, [onClose]);
+
   const handleOpenChange = (val: boolean) => {
-    if (!val) {
-      setSelectedReason("");
-      setOtherReason("");
-      onClose();
-    }
+    if (!val) handleClose();
   };
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-slot='alert-dialog-content']")) return;
+      if (target.closest("[data-slot='alert-dialog-overlay']")) handleClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open, handleClose]);
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>

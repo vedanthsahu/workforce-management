@@ -352,14 +352,19 @@ export default function MyBookingsPage() {
   const {
     cancelTarget, setCancelTarget, clearCancelTarget, cancelMode,
     handleConfirmCancel, handleModify,
-    handleModifyVisit, handleModifyVisitAndBooking, handleAddBooking,
+    handleModifyVisit, handleAddBooking,
     handleCancelVisit, handleCancelBookingOnly,
   } = useBookingActions({ handleCancelBooking, handleCancelDelegatedBooking });
 
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") === "bookedForSomeone" ? "bookedForSomeone" : "myBookings";
-  const [topTab, setTopTab]       = useState<"myBookings" | "bookedForSomeone">(initialTab);
+  const [topTab, setTopTabState]  = useState<"myBookings" | "bookedForSomeone">(initialTab);
+  const setTopTab = (tab: "myBookings" | "bookedForSomeone") => {
+    setTopTabState(tab);
+    const url = tab === "bookedForSomeone" ? "/mybookings?tab=bookedForSomeone" : "/mybookings";
+    router.replace(url);
+  };
   const [bfsSubTab, setBfsSubTab] = useState<"upcoming" | "past" | "cancelled">("upcoming");
 
   // My Bookings filters

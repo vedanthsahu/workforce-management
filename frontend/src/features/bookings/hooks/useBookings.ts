@@ -9,7 +9,7 @@ import {
   fetchDelegatedCurrentBookings,
   fetchDelegatedFutureBookings,
   fetchDelegatedPastBookings,
-  fetchDelegatedCancelledVisits,
+  fetchDelegatedCancelledBookings,
   deriveBookingSummary,
   fetchTeamGroups,
   fetchCurrentUser,
@@ -87,7 +87,7 @@ export function useBookings(): UseBookingsReturn {
         fetchDelegatedCurrentBookings(uid),
         fetchDelegatedFutureBookings(uid),
         fetchDelegatedPastBookings(uid),
-        fetchDelegatedCancelledVisits(),
+        fetchDelegatedCancelledBookings(uid),
       ]);
 
       setCurrentBookings(current);

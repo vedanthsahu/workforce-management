@@ -118,8 +118,8 @@ export function BookingCard({
     : !!booking.bookedForName;
 
   const personLabel = variant === "my" ? "Booked by" : "Booked for";
-  const personName  = variant === "my" ? booking.bookedByName : booking.bookedForName;
-  const personSub   = variant === "my"
+  const personName = variant === "my" ? booking.bookedByName : booking.bookedForName;
+  const personSub = variant === "my"
     ? (booking.bookedByRole ?? "—")
     : bType === "guest"
       ? (booking.guestEmail ?? "Guest")
@@ -154,7 +154,7 @@ export function BookingCard({
             }
             items={[
               { label: "Modify Visit", icon: <FileEdit className="size-3.5" />, onClick: () => onModifyVisit?.(booking) },
-              { label: "Add Booking", icon: <CalendarPlus className="size-3.5" />, onClick: () => onAddBooking?.(booking) },
+              { label: "Book a Seat", icon: <CalendarPlus className="size-3.5" />, onClick: () => onAddBooking?.(booking) },
             ]}
           />
           <button type="button" onClick={() => onCancelVisit?.(booking)} className={btnCancel}>
@@ -179,7 +179,7 @@ export function BookingCard({
             }
             items={[
               { label: "Edit Visit", icon: <FileEdit className="size-3.5" />, onClick: () => onModifyVisit?.(booking) },
-              { label: "Edit Booking", icon: <Pencil className="size-3.5" />, onClick: () => onModifyClick(booking) },
+              { label: "Edit Seat Detail", icon: <Pencil className="size-3.5" />, onClick: () => onModifyClick(booking) },
             ]}
           />
           <MiniDropdown
@@ -191,8 +191,8 @@ export function BookingCard({
               </span>
             }
             items={[
-              { label: "Cancel Booking", icon: <X className="size-3.5" />, onClick: () => onCancelBooking?.(booking), className: "text-red-600" },
-              { label: "Cancel Visit", icon: <X className="size-3.5" />, onClick: () => onCancelVisit?.(booking), className: "text-red-600" },
+              { label: "Cancel Seat", icon: <X className="size-3.5" />, onClick: () => onCancelBooking?.(booking), className: "text-red-600" },
+              { label: "Cancel Booking", icon: <X className="size-3.5" />, onClick: () => onCancelVisit?.(booking), className: "text-red-600" },
             ]}
           />
         </div>
@@ -229,7 +229,7 @@ export function BookingCard({
         {/* Icon */}
         <div className={cn(
           "w-[52px] h-[52px] rounded-[13px] flex items-center justify-center shrink-0",
-          isVisitOnly ? "bg-orange-50" : "bg-orange-100",
+          "bg-orange-100",
         )}>
           <span className="text-2xl leading-none" role="img" aria-label={isVisitOnly ? "Visit invite" : "Office building"}>
             {isVisitOnly ? "📨" : "🏢"}
