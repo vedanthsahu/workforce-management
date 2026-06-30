@@ -142,16 +142,6 @@ def get_current_user(
         ) from exc
 
     if user is None:
-        if user["status"] != "ACTIVE":
-            _clear_auth_cookies(response)
-
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail={
-                    "code": "inactive_user",
-                    "message": "User account is inactive.",
-                },
-            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -159,6 +149,17 @@ def get_current_user(
                 "message": "Authenticated user no longer exists.",
             },
         )
+
+    if user["status"] != "ACTIVE":
+        _clear_auth_cookies(response)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "inactive_user",
+                "message": "User account is inactive.",
+            },
+        )
+
     request.state.current_user = user
     return user
 

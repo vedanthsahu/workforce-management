@@ -330,7 +330,14 @@ const currentUserId = data?.user.user_id;
       stepContent = <SeatRequiredStep value={seatRequired} onChange={setSeatRequired} />;
     } else if (step === 4) {
       stepContent = (
-        <ConfirmInviteStep guest={selectedGuest} visitDetails={visitDetails} sites={sites} buildings={buildings} />
+        <ConfirmInviteStep
+          guest={selectedGuest}
+          visitDetails={visitDetails}
+          sites={sites}
+          buildings={buildings}
+          seatLabel={searchParams.get("seatLabel")}
+          floorName={searchParams.get("floorName")}
+        />
       );
     } else {
       stepContent = <SuccessStep onBookAnother={resetWizard} />;

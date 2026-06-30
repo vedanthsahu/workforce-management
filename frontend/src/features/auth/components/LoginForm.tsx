@@ -1,16 +1,45 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLogin } from "../hooks/useLogin";
 
+const LOGIN_ERROR_MESSAGES: Record<string, string> = {
+  inactive_user: "Your account is inactive. Please contact your administrator for access.",
+};
 
 export function LoginForm() {
   const { register, handleSubmit, errors, isSubmitting } = useLogin();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const errorCode = searchParams.get("error");
+  const [errorMessage, setErrorMessage] = useState<string | null>(
+    errorCode ? (LOGIN_ERROR_MESSAGES[errorCode] ?? "Something went wrong. Please try again.") : null
+  );
+
+  useEffect(() => {
+    if (errorCode) {
+      router.replace("/login");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {errorMessage && (
+        <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3.5 py-3">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 mt-0.5">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
       <div className="space-y-1.5">
         <Label htmlFor="email" className="text-sm font-medium text-gray-700">
           Work email address

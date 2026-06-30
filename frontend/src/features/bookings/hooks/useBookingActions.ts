@@ -135,6 +135,8 @@ export function useBookingActions({ handleCancelBooking, handleCancelDelegatedBo
     if (booking.floorId)        params.set("floorId", booking.floorId);
     if (hasBooking) {
       if (booking.seatId) params.set("seatId", booking.seatId);
+      if (booking.seat)   params.set("seatLabel", booking.seat);
+      if (booking.floor)  params.set("floorName", booking.floor);
       params.set("modifyBookingId", booking.id);
     }
 

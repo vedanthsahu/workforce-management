@@ -438,29 +438,30 @@ def refresh_auth_tokens(
         )
         
         if user is None:
-            if user["status"] != "ACTIVE":
-                revoke_user_session(
-                    conn,
-                    tenant_id=refresh_scope["tenant_id"],
-                    user_id=refresh_scope["user_id"],
-                    session_id=refresh_scope["session_id"],
-                )
-
-                if commit:
-                    conn.commit()
-
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail={
-                        "code": "inactive_user",
-                        "message": "User account is inactive.",
-                    },
-                )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={
                     "code": "user_not_found",
                     "message": "User not found for refresh token.",
+                },
+            )
+
+        if user["status"] != "ACTIVE":
+            revoke_user_session(
+                conn,
+                tenant_id=refresh_scope["tenant_id"],
+                user_id=refresh_scope["user_id"],
+                session_id=refresh_scope["session_id"],
+            )
+
+            if commit:
+                conn.commit()
+
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "code": "inactive_user",
+                    "message": "User account is inactive.",
                 },
             )
 

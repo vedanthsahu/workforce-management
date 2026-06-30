@@ -4,7 +4,7 @@ Schemas for admin dashboard analytics requests and responses.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date as Date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -63,7 +63,7 @@ class AdminDashboardSummaryResponse(BaseModel):
 
 
 class AdminActivityListQuery(CamelModel):
-    date: date
+    date: Date | None = None
     site_id: int | None = Field(default=None, alias="siteId", gt=0)
     building_id: int | None = Field(default=None, alias="buildingId", gt=0)
     floor_id: int | None = Field(default=None, alias="floorId", gt=0)
@@ -72,15 +72,15 @@ class AdminActivityListQuery(CamelModel):
 
 
 class AdminOccupancyDateRangeQuery(CamelModel):
-    start_date: date = Field(alias="startDate")
-    end_date: date = Field(alias="endDate")
+    start_date: Date = Field(alias="startDate")
+    end_date: Date = Field(alias="endDate")
     site_id: int | None = Field(default=None, alias="siteId", gt=0)
     building_id: int | None = Field(default=None, alias="buildingId", gt=0)
     floor_id: int | None = Field(default=None, alias="floorId", gt=0)
 
 
 class AdminHierarchyOccupancyQuery(CamelModel):
-    date: date
+    date: Date
     site_id: int | None = Field(default=None, alias="siteId", gt=0)
     building_id: int | None = Field(default=None, alias="buildingId", gt=0)
 
@@ -112,7 +112,7 @@ class AdminActivityFloorResponse(CamelModel):
 
 
 class AdminDateOccupancyResponse(CamelModel):
-    date: date
+    date: Date
     total_seats: int = Field(alias="totalSeats")
     blocked_seats: int = Field(alias="blockedSeats")
     available_seats: int = Field(alias="availableSeats")
@@ -220,7 +220,7 @@ class AdminActivityListItemResponse(CamelModel):
         alias="activityStatus",
     )
 
-    activity_date: date = Field(
+    activity_date: Date = Field(
         alias="activityDate",
     )
 
@@ -325,3 +325,4 @@ class AdminActivityListResponse(CamelModel):
             }
         },
     )
+ 
