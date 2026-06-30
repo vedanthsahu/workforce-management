@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import time
 from typing import Any
 from uuid import uuid4
 
@@ -12,6 +13,7 @@ from fastapi import HTTPException, status
 from psycopg2.extensions import TRANSACTION_STATUS_IDLE
 from psycopg2.extensions import connection as PGConnection
 
+from backend.core.config import get_settings
 from backend.core.security import (
     TokenError,
     build_jwt_payload,
@@ -19,6 +21,12 @@ from backend.core.security import (
     hash_token,
     parse_refresh_token,
     sign_jwt,
+)
+from backend.core.sso import (
+    GraphAPIError,
+    check_graph_group_membership,
+    exchange_client_credentials_for_graph_token,
+    fetch_graph_group_member_ids,
 )
 from backend.repositories.permission_repository import fetch_permissions_for_role
 from backend.repositories.token_repository import (
@@ -29,6 +37,11 @@ from backend.repositories.token_repository import (
     rotate_refresh_token,
 )
 from backend.repositories.user_repository import fetch_tenant_name_by_id, fetch_user_by_id
+from backend.repositories.user_repository import (
+    fetch_active_tenant_ids,
+    fetch_graph_managed_role_users,
+    update_user_role,
+)
 from backend.schemas.auth import UserResponse
 
 
@@ -38,6 +51,27 @@ class AuthTokens:
 
     access_token: str
     refresh_token: str
+
+
+GRAPH_MANAGED_ROLES = {"EMPLOYEE", "TALENT"}
+GRAPH_PROTECTED_ROLES = {
+    "SECURITY",
+    "MANAGER",
+    "TENANT_ADMIN",
+    "PRODUCT_ADMIN",
+}
+
+
+@dataclass(frozen=True)
+class GraphRoleSyncResult:
+    """Summary returned by the Graph managed-role sync service."""
+
+    enabled: bool
+    graph_group_id: str | None
+    scanned_users: int = 0
+    changed_users: int = 0
+    promoted_users: int = 0
+    demoted_users: int = 0
 
 
 def _rollback_if_needed(conn: PGConnection) -> None:
@@ -60,6 +94,159 @@ def _build_access_token_for_user(user: dict[str, Any], *, session_id: str) -> st
 
     payload = build_jwt_payload(user, extra_claims=extra_claims)
     return sign_jwt(payload)
+
+
+def determine_graph_onboarding_role(
+    *,
+    access_token: str,
+    microsoft_object_id: str,
+) -> str:
+    """Return EMPLOYEE or TALENT for first-time SSO provisioning."""
+    settings = get_settings()
+    graph_group_id = settings.graph_talent_group_id
+    if not graph_group_id:
+        return "EMPLOYEE"
+
+    attempts = settings.graph_role_lookup_retries + 1
+    last_error: GraphAPIError | None = None
+    for attempt in range(attempts):
+        try:
+            is_talent = check_graph_group_membership(
+                access_token,
+                group_id=graph_group_id,
+                microsoft_object_id=microsoft_object_id,
+            )
+            return "TALENT" if is_talent else "EMPLOYEE"
+        except GraphAPIError as exc:
+            last_error = exc
+            if attempt < attempts - 1 and settings.graph_role_lookup_backoff_seconds:
+                time.sleep(settings.graph_role_lookup_backoff_seconds)
+
+    assert last_error is not None
+    raise GraphAPIError(
+        status_code=last_error.status_code,
+        code="graph_role_lookup_failed",
+        message="Microsoft Graph role lookup failed after configured retries.",
+        details={
+            "graph_group_id": graph_group_id,
+            "provider_error": last_error.code,
+        },
+    ) from last_error
+
+
+def sync_graph_managed_roles(
+    conn: PGConnection,
+    *,
+    tenant_id: str | None = None,
+    access_token: str | None = None,
+    commit: bool = True,
+) -> GraphRoleSyncResult:
+    """Synchronize EMPLOYEE/TALENT roles from Microsoft Graph group membership."""
+    settings = get_settings()
+    if not settings.graph_role_sync_enabled:
+        return GraphRoleSyncResult(
+            enabled=False,
+            graph_group_id=settings.graph_talent_group_id,
+        )
+    if not settings.graph_talent_group_id:
+        return GraphRoleSyncResult(
+            enabled=True,
+            graph_group_id=None,
+        )
+
+    graph_group_id = settings.graph_talent_group_id
+    graph_access_token = access_token or exchange_client_credentials_for_graph_token()
+    graph_member_ids = {
+        member_id.lower()
+        for member_id in fetch_graph_group_member_ids(
+            graph_access_token,
+            group_id=graph_group_id,
+        )
+    }
+
+    scanned = 0
+    changed = 0
+    promoted = 0
+    demoted = 0
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    try:
+        tenant_ids = [tenant_id] if tenant_id is not None else fetch_active_tenant_ids(conn)
+        for scoped_tenant_id in tenant_ids:
+            users = fetch_graph_managed_role_users(conn, tenant_id=str(scoped_tenant_id))
+            for user in users:
+                scanned += 1
+                old_role = str(user.get("role_name") or user.get("role") or "").strip().upper()
+                if old_role not in GRAPH_MANAGED_ROLES:
+                    continue
+
+                object_id = str(user.get("microsoft_object_id") or "").strip().lower()
+                new_role = "TALENT" if object_id in graph_member_ids else "EMPLOYEE"
+                if old_role == new_role:
+                    continue
+
+                updated = update_user_role(
+                    conn,
+                    tenant_id=str(scoped_tenant_id),
+                    user_id=str(user["user_id"]),
+                    role_name=new_role,
+                )
+                if updated is None:
+                    raise LookupError("Graph role sync target user could not be updated.")
+
+                revoked_sessions = revoke_all_user_sessions(
+                    conn,
+                    tenant_id=str(scoped_tenant_id),
+                    user_id=str(user["user_id"]),
+                )
+                event_metadata = {
+                    "old_role": old_role,
+                    "new_role": new_role,
+                    "graph_group_id": graph_group_id,
+                    "timestamp": timestamp,
+                    "revoked_sessions": revoked_sessions,
+                }
+                event_type = (
+                    "GRAPH_ROLE_PROMOTED"
+                    if old_role == "EMPLOYEE" and new_role == "TALENT"
+                    else "GRAPH_ROLE_DEMOTED"
+                )
+                record_auth_event(
+                    conn,
+                    tenant_id=str(scoped_tenant_id),
+                    user_id=str(user["user_id"]),
+                    event_type=event_type,
+                    metadata=event_metadata,
+                )
+                record_auth_event(
+                    conn,
+                    tenant_id=str(scoped_tenant_id),
+                    user_id=str(user["user_id"]),
+                    event_type="GRAPH_ROLE_SYNC",
+                    metadata=event_metadata,
+                )
+
+                changed += 1
+                if new_role == "TALENT":
+                    promoted += 1
+                else:
+                    demoted += 1
+
+        if commit:
+            conn.commit()
+    except Exception:
+        if commit:
+            _rollback_if_needed(conn)
+        raise
+
+    return GraphRoleSyncResult(
+        enabled=True,
+        graph_group_id=graph_group_id,
+        scanned_users=scanned,
+        changed_users=changed,
+        promoted_users=promoted,
+        demoted_users=demoted,
+    )
 
 
 def attach_permissions_to_user(

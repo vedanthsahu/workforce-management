@@ -14,32 +14,104 @@
     <h3 style="margin-top: 20px;">Previous booking</h3>
     <table cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
         <tr>
+            <td><strong>Booking ID</strong></td>
+            <td>{{ old_booking.booking_id }}</td>
+        </tr>
+        <tr>
+            <td><strong>Booked for</strong></td>
+            <td>{{ old_booking.booked_for }}</td>
+        </tr>
+        <tr>
+            <td><strong>Booked by</strong></td>
+            <td>{{ old_booking.booked_by }}</td>
+        </tr>
+        <tr>
             <td><strong>Seat</strong></td>
-            <td>{{ old_booking.seat_name }}</td>
+            <td>{{ old_booking.seat }}</td>
         </tr>
         <tr>
             <td><strong>Date</strong></td>
             <td>{{ old_booking.booking_date }}</td>
         </tr>
         <tr>
+            <td><strong>Site</strong></td>
+            <td>{{ old_booking.site }}</td>
+        </tr>
+        <tr>
+            <td><strong>Building</strong></td>
+            <td>{{ old_booking.building }}</td>
+        </tr>
+        <tr>
+            <td><strong>Floor</strong></td>
+            <td>{{ old_booking.floor }}</td>
+        </tr>
+        <tr>
             <td><strong>Location</strong></td>
             <td>{{ old_booking.location }}</td>
+        </tr>
+        <tr>
+            <td><strong>Guest visit ID</strong></td>
+            <td>{{ old_booking.guest_visit_id }}</td>
+        </tr>
+        <tr>
+            <td><strong>Host</strong></td>
+            <td>{{ old_booking.host_name }} ({{ old_booking.host_email }})</td>
+        </tr>
+        <tr>
+            <td><strong>Guest</strong></td>
+            <td>{{ old_booking.guest_name }} ({{ old_booking.guest_email }}) {{ old_booking.guest_phone }} {{ old_booking.guest_organization }}</td>
         </tr>
     </table>
 
     <h3 style="margin-top: 20px;">New booking</h3>
     <table cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
         <tr>
+            <td><strong>Booking ID</strong></td>
+            <td>{{ new_booking.booking_id }}</td>
+        </tr>
+        <tr>
+            <td><strong>Booked for</strong></td>
+            <td>{{ new_booking.booked_for }}</td>
+        </tr>
+        <tr>
+            <td><strong>Booked by</strong></td>
+            <td>{{ new_booking.booked_by }}</td>
+        </tr>
+        <tr>
             <td><strong>Seat</strong></td>
-            <td>{{ new_booking.seat_name }}</td>
+            <td>{{ new_booking.seat }}</td>
         </tr>
         <tr>
             <td><strong>Date</strong></td>
             <td>{{ new_booking.booking_date }}</td>
         </tr>
         <tr>
+            <td><strong>Site</strong></td>
+            <td>{{ new_booking.site }}</td>
+        </tr>
+        <tr>
+            <td><strong>Building</strong></td>
+            <td>{{ new_booking.building }}</td>
+        </tr>
+        <tr>
+            <td><strong>Floor</strong></td>
+            <td>{{ new_booking.floor }}</td>
+        </tr>
+        <tr>
             <td><strong>Location</strong></td>
             <td>{{ new_booking.location }}</td>
+        </tr>
+        <tr>
+            <td><strong>Guest visit ID</strong></td>
+            <td>{{ new_booking.guest_visit_id }}</td>
+        </tr>
+        <tr>
+            <td><strong>Host</strong></td>
+            <td>{{ new_booking.host_name }} ({{ new_booking.host_email }})</td>
+        </tr>
+        <tr>
+            <td><strong>Guest</strong></td>
+            <td>{{ new_booking.guest_name }} ({{ new_booking.guest_email }}) {{ new_booking.guest_phone }} {{ new_booking.guest_organization }}</td>
         </tr>
     </table>
 

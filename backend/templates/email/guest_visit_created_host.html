@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<body style="font-family: Arial, sans-serif; color: #222; line-height: 1.5;">
+    <h2>Guest visit scheduled</h2>
+    <p>Hello {{ recipient_name }},</p>
+    <p>A guest visit has been scheduled with you as host.</p>
+    <table cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
+        <tr><td><strong>Visit ID</strong></td><td>{{ guest_visit_id }}</td></tr>
+        <tr><td><strong>Guest</strong></td><td>{{ guest_name }} ({{ guest_email }})</td></tr>
+        <tr><td><strong>Date</strong></td><td>{{ visit_date }}</td></tr>
+        <tr><td><strong>Time</strong></td><td>{{ start_time }} - {{ end_time }}</td></tr>
+        <tr><td><strong>Location</strong></td><td>{{ site }}, {{ building }}, {{ floor }}</td></tr>
+        <tr><td><strong>Created by</strong></td><td>{{ creator_name }} ({{ creator_email }})</td></tr>
+    </table>
+    <p>Thank you,<br />Seat Management Team</p>
+</body>
+</html>

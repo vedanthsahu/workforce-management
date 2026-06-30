@@ -79,6 +79,7 @@ def admin_dashboard_summary(
 @router.get(
     "/activities",
     response_model=AdminActivityListResponse,
+    response_model_exclude_none=True,
     summary="List admin dashboard recent activities",
     description=(
         "Return up to 100 tenant-scoped employee booking and guest visit "
@@ -128,6 +129,8 @@ def admin_activity_list(
         int | None,
         Query(alias="floorId", gt=0, description="Optional floor filter."),
     ] = None,
+    page: Annotated[int | None, Query(ge=1)] = None,
+    limit: Annotated[int | None, Query(ge=1, le=100)] = None,
 ) -> AdminActivityListResponse:
     if selected_date is None:
         selected_date = date.today()
@@ -146,6 +149,8 @@ def admin_activity_list(
         site_id=_optional_str(query.site_id),
         building_id=_optional_str(query.building_id),
         floor_id=_optional_str(query.floor_id),
+        page=page,
+        limit=limit,
     )
 
 
