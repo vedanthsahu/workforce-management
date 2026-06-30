@@ -9,7 +9,7 @@ from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user
 from backend.db.connection import get_db
-from backend.schemas.guest import CreateGuestVisitRequest, GuestVisitResponse, AttachSeatToGuestVisitRequest , CancelGuestVisitRequest
+from backend.schemas.guest import CreateGuestVisitRequest, GuestVisitResponse,GuestVisitListItem, AttachSeatToGuestVisitRequest , CancelGuestVisitRequest
 from backend.services.guest_service import create_guest_visit
 
 from backend.api.deps import (
@@ -21,10 +21,12 @@ from backend.services.guest_service import (
     list_guest_visits,
     guest_visit_check_in,
     attach_seat_to_guest_visit,
+    get_guest_visit_details,    
     guest_visit_check_out,
     cancel_guest_visit_record,
     modify_guest_visit,
     create_booking_for_existing_guest_visit,
+    execute_guest_visit_workflow,
 )
 
 from backend.schemas.booking import BookingResponse
@@ -34,6 +36,8 @@ from backend.schemas.guest import (
     GuestVisitStatusUpdateResponse,
     AttachSeatToGuestVisitRequest,
     ModifyGuestVisitRequest,
+    GuestWorkflowRequest,
+    GuestWorkflowResponse,
 )
 
 
@@ -55,6 +59,26 @@ def create_guest_visit_record(
         current_user=current_user,
         payload=payload,
     )
+
+@router.get(
+    "/{guest_visit_id}",
+    response_model=GuestVisitListItem,
+)
+def get_guest_visit(
+    guest_visit_id: str,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_permission("guest:view_visits"))
+    ],
+    conn: Annotated[PGConnection, Depends(get_db)],
+):
+    return get_guest_visit_details(
+        conn,
+        current_user=current_user,
+        guest_visit_id=guest_visit_id,
+    )
+
+
 
 
 @router.get(
@@ -191,6 +215,27 @@ def modify_visit(
 ):
 
     return modify_guest_visit(
+        conn,
+        current_user=current_user,
+        guest_visit_id=guest_visit_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/{guest_visit_id}/workflow",
+    response_model=GuestWorkflowResponse,
+)
+def guest_visit_workflow(
+    guest_visit_id: str,
+    payload: GuestWorkflowRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_permission("guest:manage")),
+    ],
+    conn: Annotated[PGConnection, Depends(get_db)],
+):
+    return execute_guest_visit_workflow(
         conn,
         current_user=current_user,
         guest_visit_id=guest_visit_id,

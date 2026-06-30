@@ -37,6 +37,7 @@ from backend.services.booking_service import (
     get_delegated_past_bookings,
     get_delegated_current_bookings,
     get_delegated_future_bookings,
+    get_delegated_cancelled_bookings,
     get_user_future_bookings,
     modify_booking,
 )
@@ -178,3 +179,21 @@ def fetch_delegated_future(
         current_user=current_user,
     )
 
+@router.get(
+    "/delegated/cancelled",
+    response_model=list[BookingResponse],
+)
+def fetch_delegated_cancelled(
+    current_user: Annotated[    
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+):
+    return get_delegated_cancelled_bookings(
+        conn,
+        current_user=current_user,
+    )

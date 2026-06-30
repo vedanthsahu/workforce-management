@@ -7,16 +7,21 @@ from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import (
     get_current_user,
+    require_any_permission,
     require_permission,
 )
 from backend.db.connection import get_db
 from backend.schemas.auth import UserResponse
 from backend.schemas.user_management import (
     AdminUserAccessUpdateRequest,
+    AdminDirectoryRole,
+    AdminDirectoryStatus,
+    AdminUserDirectoryResponse,
     UpdateMyProfileRequest,
 )
 from backend.services.user_management_service import (
     admin_update_user_access_service,
+    get_admin_user_directory,
     update_my_profile,
 )
 from fastapi import Query
@@ -29,6 +34,31 @@ from backend.services.user_management_service import (
 )
 
 router = APIRouter(tags=["user-management"])
+
+
+@router.get(
+    "/admin/users",
+    response_model=AdminUserDirectoryResponse,
+)
+def admin_user_directory(
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_any_permission(["admin_dashboard:view", "users:view", "user:view"])),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+    role: AdminDirectoryRole | None = Query(default=None),
+    status: AdminDirectoryStatus | None = Query(default=None),
+) -> AdminUserDirectoryResponse:
+
+    return get_admin_user_directory(
+        conn,
+        current_user=current_user,
+        role_name=role,
+        user_status=status,
+    )
 
 
 @router.get(
