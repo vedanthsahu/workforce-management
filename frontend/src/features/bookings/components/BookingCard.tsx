@@ -179,7 +179,7 @@ export function BookingCard({
             }
             items={[
               { label: "Edit Visit", icon: <FileEdit className="size-3.5" />, onClick: () => onModifyVisit?.(booking) },
-              { label: "Edit Seat Detail", icon: <Pencil className="size-3.5" />, onClick: () => onModifyClick(booking) },
+              { label: "Edit Seat", icon: <Pencil className="size-3.5" />, onClick: () => onModifyClick(booking) },
             ]}
           />
           <MiniDropdown
