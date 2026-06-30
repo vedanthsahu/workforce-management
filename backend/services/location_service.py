@@ -293,27 +293,27 @@ def update_layout_seat_configuration(
                 updated_by=str(current_user["user_id"]),
             )
 
-        # seat = upsert_operational_seat(
-        #     conn,
-        #     tenant_id=tenant_id,
-        #     layout_id=str(mapping["layout_id"]),
-        #     site_id=str(mapping["site_id"]),
-        #     building_id=str(mapping["building_id"]),
-        #     floor_id=str(mapping["floor_id"]),
-        #     seat_code=str(mapping["seat_code"]),
-        #     seat_type=payload.seat_type,
-        #     status=payload.status,
-        #     is_bookable=payload.is_bookable,
-        #     svg_element_id=str(mapping["svg_element_id"]),
-        # )
+        seat = upsert_operational_seat(
+            conn,
+            tenant_id=tenant_id,
+            layout_id=str(mapping["layout_id"]),
+            site_id=str(mapping["site_id"]),
+            building_id=str(mapping["building_id"]),
+            floor_id=str(mapping["floor_id"]),
+            seat_code=str(mapping["seat_code"]),
+            seat_type=updated_mapping["seat_type"],
+            status=updated_mapping["status"],
+            is_bookable=updated_mapping["is_bookable"],
+            svg_element_id=str(mapping["svg_element_id"]),
+        )
 
-        # replace_seat_amenities(
-        #     conn,
-        #     tenant_id=tenant_id,
-        #     seat_id=str(seat["seat_id"]),
-        #     amenity_ids=amenity_ids,
-        #     assigned_by_user_id=str(current_user["user_id"]),
-        # )
+        replace_seat_amenities(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(seat["seat_id"]),
+            amenity_ids=amenity_ids,
+            assigned_by_user_id=str(current_user["user_id"]),
+        )
 
         conn.commit()
 

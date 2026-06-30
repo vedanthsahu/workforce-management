@@ -73,7 +73,7 @@ def get_admin_activity_list(
     conn: PGConnection,
     *,
     tenant_id: str,
-    selected_date: date,
+    selected_date: date | None = None,
     site_id: str | None = None,
     building_id: str | None = None,
     floor_id: str | None = None,

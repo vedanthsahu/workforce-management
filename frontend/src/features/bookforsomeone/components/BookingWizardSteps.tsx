@@ -977,13 +977,16 @@ interface ConfirmInviteStepProps {
   visitDetails: VisitDetails;
   sites: Site[];
   buildings: Building[];
+  seatLabel?: string | null;
+  floorName?: string | null;
 }
 
-export function ConfirmInviteStep({ guest, visitDetails, sites, buildings }: ConfirmInviteStepProps) {
+export function ConfirmInviteStep({ guest, visitDetails, sites, buildings, seatLabel, floorName }: ConfirmInviteStepProps) {
   const guestTypeLabel = GUEST_TYPES.find((g) => g.value === visitDetails.guestType)?.label ?? visitDetails.guestType;
   const purposeLabel = PURPOSE_OF_VISIT.find((p) => p.value === visitDetails.purposeOfVisit)?.label ?? visitDetails.purposeOfVisit;
   const siteName = sites.find((s) => s.id === visitDetails.siteId)?.name ?? "—";
   const buildingName = buildings.find((b) => b.id === visitDetails.buildingId)?.name ?? "—";
+  const hasSeat = !!seatLabel;
 
   const rows: [string, string][] = [
     ["Guest", guest ? guest.fullName : "—"],
@@ -996,7 +999,11 @@ export function ConfirmInviteStep({ guest, visitDetails, sites, buildings }: Con
     ["Visit Date", visitDetails.visitDate || "—"],
     ["End Date", visitDetails.endDate || "—"],
     ["Time", [visitDetails.startTime, visitDetails.endTime].filter(Boolean).join(" – ") || "—"],
-    ["Requires Seat", "No"],
+    ["Requires Seat", hasSeat ? "Yes" : "No"],
+    ...(hasSeat ? ([
+      ["Floor", floorName || "—"],
+      ["Seat", seatLabel || "—"],
+    ] as [string, string][]) : []),
     ["Notes", visitDetails.additionalNotes || "—"],
   ];
 

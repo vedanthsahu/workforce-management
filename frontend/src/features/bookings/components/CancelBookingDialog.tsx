@@ -18,7 +18,6 @@ import type { Booking } from "../types/bookings.types";
 
 const BOOKING_CANCEL_REASONS = [
   "Schedule change",
-  "Working from home",
   "Meeting cancelled",
   "Booked wrong date",
   "Booked wrong seat / location",

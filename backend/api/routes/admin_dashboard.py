@@ -132,9 +132,6 @@ def admin_activity_list(
     page: Annotated[int | None, Query(ge=1)] = None,
     limit: Annotated[int | None, Query(ge=1, le=100)] = None,
 ) -> AdminActivityListResponse:
-    if selected_date is None:
-        selected_date = date.today()
-
     query = AdminActivityListQuery(
         date=selected_date,
         siteId=site_id,
