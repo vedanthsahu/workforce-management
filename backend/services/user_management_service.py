@@ -164,9 +164,22 @@ def get_admin_user_directory(
     *,
     current_user: dict[str, Any],
     role_name: AdminDirectoryRole | None = None,
+    role_names: list[str] | None = None,
     user_status: AdminDirectoryStatus | None = None,
+    page: int | None = None,
+    limit: int | None = None,
 ) -> AdminUserDirectoryResponse:
-    if role_name is not None and role_name not in ADMIN_DIRECTORY_ROLES:
+    normalized_roles = _normalize_admin_directory_roles(
+        role_name=role_name,
+        role_names=role_names,
+    )
+
+    unsupported_roles = [
+        role
+        for role in normalized_roles
+        if role not in ADMIN_DIRECTORY_ROLES
+    ]
+    if unsupported_roles:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -188,8 +201,10 @@ def get_admin_user_directory(
         result = fetch_admin_user_directory(
             conn,
             tenant_id=str(current_user["tenant_id"]),
-            role_name=role_name,
+            role_names=normalized_roles or None,
             status=user_status,
+            page=page,
+            limit=limit,
         )
     except psycopg2.Error as exc:
         raise HTTPException(
@@ -201,3 +216,19 @@ def get_admin_user_directory(
         ) from exc
 
     return AdminUserDirectoryResponse(**result)
+
+
+def _normalize_admin_directory_roles(
+    *,
+    role_name: str | None,
+    role_names: list[str] | None,
+) -> list[str]:
+    roles: list[str] = []
+    if role_name is not None:
+        roles.append(str(role_name))
+    for raw_role in role_names or []:
+        for part in str(raw_role).split(","):
+            normalized = part.strip().upper()
+            if normalized and normalized not in roles:
+                roles.append(normalized)
+    return roles

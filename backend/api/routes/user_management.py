@@ -50,14 +50,20 @@ def admin_user_directory(
         Depends(get_db),
     ],
     role: AdminDirectoryRole | None = Query(default=None),
+    roles: list[str] | None = Query(default=None),
     status: AdminDirectoryStatus | None = Query(default=None),
+    page: int | None = Query(default=None, ge=1),
+    limit: int | None = Query(default=None, ge=1, le=100),
 ) -> AdminUserDirectoryResponse:
 
     return get_admin_user_directory(
         conn,
         current_user=current_user,
         role_name=role,
+        role_names=roles,
         user_status=status,
+        page=page,
+        limit=limit,
     )
 
 

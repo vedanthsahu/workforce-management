@@ -9,6 +9,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.schemas.pagination import PaginationMetadata
+
 
 ActivityStatus = Literal[
     "CONFIRMED",
@@ -266,6 +268,7 @@ class AdminActivityListItemResponse(CamelModel):
 
 class AdminActivityListResponse(CamelModel):
     items: list[AdminActivityListItemResponse]
+    pagination: PaginationMetadata | None = None
 
     model_config = ConfigDict(
         populate_by_name=True,

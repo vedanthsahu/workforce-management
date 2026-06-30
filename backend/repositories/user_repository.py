@@ -67,9 +67,21 @@ ROLE_NAMES = {
     "TALENT",
     "SECURITY",
     "TENANT_ADMIN",
+    "PRODUCT_ADMIN",
 }
 
 USER_STATUSES = {"ACTIVE", "INACTIVE", "LOCKED"}
+
+ROLE_DISTRIBUTION_ORDER = (
+    "EMPLOYEE",
+    "TALENT",
+    "SECURITY",
+    "MANAGER",
+    "TENANT_ADMIN",
+    "PRODUCT_ADMIN",
+)
+
+GRAPH_MANAGED_ROLE_NAMES = ("EMPLOYEE", "TALENT")
 
 ADMIN_NOTIFICATION_ROLES = (
     "TENANT_ADMIN",
@@ -117,6 +129,21 @@ def fetch_default_tenant_id(conn: PGConnection) -> str:
             "Multiple active tenants exist; tenant cannot be resolved without an azure_tenant_id."
         )
     return rows[0][0]
+
+
+def fetch_active_tenant_ids(conn: PGConnection) -> list[str]:
+    """Fetch active tenant ids in deterministic order."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id::text
+            FROM tenants
+            WHERE status = 'ACTIVE'
+            ORDER BY id
+            """
+        )
+        rows = cur.fetchall()
+    return [str(row[0]) for row in rows]
 
 
 def fetch_tenant_by_azure_tenant_id(conn: PGConnection, azure_tenant_id: str) -> dict[str, Any] | None:
@@ -382,10 +409,11 @@ def create_app_user_from_graph(
     company_name: str | None,
     employee_id: str | None,
     manager_user_id: str | None,
+    role_name: str = "EMPLOYEE",
 ) -> dict[str, Any]:
     """Create a first-time SSO user in app_users using schema-valid fields."""
     normalized_email = _required_text(_normalize_email(email), field_name="email", max_length=200)
-    normalized_role = "EMPLOYEE"
+    normalized_role = _required_text(role_name, field_name="role_name", max_length=30).upper()
     normalized_status = "ACTIVE"
 
     if normalized_role not in ROLE_NAMES:
@@ -415,7 +443,22 @@ def create_app_user_from_graph(
                 graph_last_synced_at
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-            ON CONFLICT (tenant_id, microsoft_object_id) DO NOTHING
+            ON CONFLICT (tenant_id, microsoft_object_id) DO UPDATE
+            SET email = EXCLUDED.email,
+                full_name = EXCLUDED.full_name,
+                role_name = EXCLUDED.role_name,
+                microsoft_object_id = EXCLUDED.microsoft_object_id,
+                user_principal_name = EXCLUDED.user_principal_name,
+                display_name = EXCLUDED.display_name,
+                mobile_phone = COALESCE(app_users.mobile_phone, EXCLUDED.mobile_phone),
+                office_location = COALESCE(app_users.office_location, EXCLUDED.office_location),
+                job_title = EXCLUDED.job_title,
+                department = EXCLUDED.department,
+                company_name = EXCLUDED.company_name,
+                employee_id = EXCLUDED.employee_id,
+                manager_user_id = EXCLUDED.manager_user_id,
+                graph_last_synced_at = NOW(),
+                updated_at = NOW()
             RETURNING {USER_RETURNING_FIELDS}
             """,
             (
@@ -735,6 +778,118 @@ def admin_update_user_access(
 
     return dict(row) if row else None
 
+
+def fetch_graph_managed_role_users(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+) -> list[dict[str, Any]]:
+    """Fetch users whose role is controlled by Graph group membership."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {USER_SELECT_FIELDS}
+            {USER_SELECT_FROM}
+            WHERE au.tenant_id = %s
+              AND au.role_name = ANY(%s::text[])
+              AND au.microsoft_object_id IS NOT NULL
+              AND au.microsoft_object_id <> ''
+            ORDER BY au.id
+            """,
+            (
+                tenant_id,
+                list(GRAPH_MANAGED_ROLE_NAMES),
+            ),
+        )
+        rows = cur.fetchall()
+    return [dict(row) for row in rows]
+
+
+def update_user_role(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    role_name: str,
+) -> dict[str, Any] | None:
+    """Update one user's role_name and return the schema-native user row."""
+    normalized_role = _required_text(role_name, field_name="role_name", max_length=30).upper()
+    if normalized_role not in ROLE_NAMES:
+        raise ValueError("Invalid role_name.")
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            UPDATE app_users
+            SET role_name = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING {USER_RETURNING_FIELDS}
+            """,
+            (
+                normalized_role,
+                tenant_id,
+                user_id,
+            ),
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def sync_app_user_from_graph(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    microsoft_object_id: str,
+    email: str,
+    full_name: str,
+    user_principal_name: str | None,
+    display_name: str | None,
+    role_name: str,
+    mobile_phone: str | None,
+    office_location: str | None,
+) -> dict[str, Any] | None:
+    """Hydrate Graph-controlled fields while preserving user-maintained values."""
+    normalized_role = _required_text(role_name, field_name="role_name", max_length=30).upper()
+    if normalized_role not in ROLE_NAMES:
+        raise ValueError("Invalid role_name.")
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            UPDATE app_users
+            SET email = %s,
+                full_name = %s,
+                display_name = %s,
+                role_name = %s,
+                microsoft_object_id = %s,
+                user_principal_name = %s,
+                mobile_phone = COALESCE(mobile_phone, %s),
+                office_location = COALESCE(office_location, %s),
+                graph_last_synced_at = NOW(),
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING {USER_RETURNING_FIELDS}
+            """,
+            (
+                _required_text(_normalize_email(email), field_name="email", max_length=200),
+                _required_text(full_name, field_name="full_name", max_length=200),
+                _normalize_text(display_name, max_length=200),
+                normalized_role,
+                _required_text(microsoft_object_id, field_name="microsoft_object_id", max_length=150),
+                _normalize_text(user_principal_name, max_length=200),
+                _normalize_text(mobile_phone, max_length=50),
+                _normalize_text(office_location, max_length=200),
+                tenant_id,
+                user_id,
+            ),
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
 def fetch_favorite_seat(
     conn: PGConnection,
     *,
@@ -988,26 +1143,50 @@ def fetch_admin_user_directory(
     *,
     tenant_id: str,
     role_name: str | None = None,
+    role_names: list[str] | tuple[str, ...] | None = None,
     status: str | None = None,
+    page: int | None = None,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """Fetch a lightweight tenant-scoped user directory for admin screens."""
 
+    normalized_role_names: list[str] | None = None
+    if role_names is not None:
+        normalized_role_names = [
+            _required_text(str(role), field_name="role_name", max_length=30).upper()
+            for role in role_names
+        ]
+    elif role_name is not None:
+        normalized_role_names = [
+            _required_text(role_name, field_name="role_name", max_length=30).upper()
+        ]
+
     params = {
         "tenant_id": tenant_id,
-        "role_name": role_name,
+        "role_names": normalized_role_names,
         "status": status,
     }
     filtered_where = """
         WHERE au.tenant_id = %(tenant_id)s
           AND (
-                %(role_name)s IS NULL
-                OR au.role_name = %(role_name)s
+                %(role_names)s IS NULL
+                OR au.role_name = ANY(%(role_names)s::text[])
           )
           AND (
                 %(status)s IS NULL
                 OR au.status = %(status)s
           )
     """
+    pagination_clause = ""
+    if page is not None or limit is not None:
+        effective_page = page or 1
+        effective_limit = limit or 20
+        params["limit"] = effective_limit
+        params["offset"] = (effective_page - 1) * effective_limit
+        pagination_clause = """
+            LIMIT %(limit)s
+            OFFSET %(offset)s
+        """
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -1033,6 +1212,19 @@ def fetch_admin_user_directory(
         summary = cur.fetchone()
 
         cur.execute(
+            """
+            SELECT
+                role_name,
+                COUNT(*)::integer AS user_count
+            FROM app_users
+            WHERE tenant_id = %(tenant_id)s
+            GROUP BY role_name
+            """,
+            params,
+        )
+        role_rows = cur.fetchall()
+
+        cur.execute(
             f"""
             SELECT
                 au.id::text AS id,
@@ -1047,19 +1239,35 @@ def fetch_admin_user_directory(
             FROM app_users au
             {filtered_where}
             ORDER BY
-                au.full_name ASC NULLS LAST,
+                LOWER(au.full_name) ASC NULLS LAST,
                 au.id ASC
+            {pagination_clause}
             """,
             params,
         )
         rows = cur.fetchall()
 
+    role_counts = {role: 0 for role in ROLE_DISTRIBUTION_ORDER}
+    for row in role_rows:
+        role = str(row.get("role_name") or "").strip().upper()
+        if role in role_counts:
+            role_counts[role] = int(row.get("user_count") or 0)
+
+    summary_payload = dict(summary) if summary else {
+        "total_users": 0,
+        "filtered_users": 0,
+        "active_users": 0,
+        "inactive_users": 0,
+    }
+    summary_payload["roles"] = [
+        {
+            "role_name": role,
+            "count": role_counts[role],
+        }
+        for role in ROLE_DISTRIBUTION_ORDER
+    ]
+
     return {
-        "summary": dict(summary) if summary else {
-            "total_users": 0,
-            "filtered_users": 0,
-            "active_users": 0,
-            "inactive_users": 0,
-        },
+        "summary": summary_payload,
         "items": [dict(row) for row in rows],
     }

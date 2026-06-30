@@ -13,16 +13,52 @@
 
     <table cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
         <tr>
+            <td><strong>Booking ID</strong></td>
+            <td>{{ booking_id }}</td>
+        </tr>
+        <tr>
+            <td><strong>Booked for</strong></td>
+            <td>{{ booked_for }}</td>
+        </tr>
+        <tr>
+            <td><strong>Booked by</strong></td>
+            <td>{{ booked_by }}</td>
+        </tr>
+        <tr>
             <td><strong>Seat</strong></td>
-            <td>{{ seat_name }}</td>
+            <td>{{ seat }}</td>
         </tr>
         <tr>
             <td><strong>Date</strong></td>
             <td>{{ booking_date }}</td>
         </tr>
         <tr>
+            <td><strong>Site</strong></td>
+            <td>{{ site }}</td>
+        </tr>
+        <tr>
+            <td><strong>Building</strong></td>
+            <td>{{ building }}</td>
+        </tr>
+        <tr>
+            <td><strong>Floor</strong></td>
+            <td>{{ floor }}</td>
+        </tr>
+        <tr>
             <td><strong>Location</strong></td>
             <td>{{ location }}</td>
+        </tr>
+        <tr>
+            <td><strong>Guest visit ID</strong></td>
+            <td>{{ guest_visit_id }}</td>
+        </tr>
+        <tr>
+            <td><strong>Host</strong></td>
+            <td>{{ host_name }} ({{ host_email }})</td>
+        </tr>
+        <tr>
+            <td><strong>Guest</strong></td>
+            <td>{{ guest_name }} ({{ guest_email }}) {{ guest_phone }} {{ guest_organization }}</td>
         </tr>
     </table>
 
