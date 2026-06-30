@@ -59,11 +59,17 @@ class UserSearchResponse(BaseModel):
     department: str | None = None
 
 
+class RoleSummary(CamelModel):
+    role_name: str = Field(alias="roleName")
+    count: int
+
+
 class AdminUserDirectorySummary(CamelModel):
     total_users: int = Field(alias="totalUsers")
     filtered_users: int = Field(alias="filteredUsers")
     active_users: int = Field(alias="activeUsers")
     inactive_users: int = Field(alias="inactiveUsers")
+    roles: list[RoleSummary] = Field(default_factory=list)
 
 
 class AdminUserDirectoryItem(CamelModel):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user
@@ -51,6 +51,7 @@ router = APIRouter(prefix="/guest-visits", tags=["guest-visits"])
 )
 def create_guest_visit_record(
     payload: CreateGuestVisitRequest,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> GuestVisitResponse:
@@ -58,6 +59,7 @@ def create_guest_visit_record(
         conn,
         current_user=current_user,
         payload=payload,
+        background_tasks=background_tasks,
     )
 
 @router.get(
@@ -84,6 +86,7 @@ def get_guest_visit(
 @router.get(
     "",
     response_model=GuestVisitListResponse,
+    response_model_exclude_none=True,
 )
 def get_guest_visits(
     visit_scope: str = "CURRENT",
@@ -93,6 +96,7 @@ def get_guest_visits(
     search: str | None = None,
     limit: int = 100,
     offset: int = 0,
+    page: int | None = Query(default=None, ge=1),
     current_user: Annotated[
         dict[str, Any],
         Depends(require_permission("guest:view_visits"))
@@ -109,6 +113,7 @@ def get_guest_visits(
         search=search,
         limit=limit,
         offset=offset,
+        page=page,
     )
 
 @router.post(
@@ -179,6 +184,7 @@ def book_seat_for_existing_guest_visit(
 def cancel_visit(
     guest_visit_id: str,
     payload: CancelGuestVisitRequest,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[
         dict[str, Any],
         Depends(require_permission("guest:manage"))
@@ -194,6 +200,7 @@ def cancel_visit(
         current_user=current_user,
         guest_visit_id=guest_visit_id,
         cancellation_reason=payload.cancellation_reason,
+        background_tasks=background_tasks,
     )
 
 
@@ -204,6 +211,7 @@ def cancel_visit(
 def modify_visit(
     guest_visit_id: str,
     payload: ModifyGuestVisitRequest,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[
         dict[str, Any],
         Depends(require_permission("guest:manage"))
@@ -219,6 +227,7 @@ def modify_visit(
         current_user=current_user,
         guest_visit_id=guest_visit_id,
         payload=payload,
+        background_tasks=background_tasks,
     )
 
 
