@@ -28,7 +28,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 
-import { useProfile }            from "../hooks/useProfile";
+import { useProfile } from "../hooks/useProfile";
 import {
   getAvailableAmenities,
   getSites,
