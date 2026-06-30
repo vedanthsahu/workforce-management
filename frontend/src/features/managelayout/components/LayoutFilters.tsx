@@ -1,11 +1,5 @@
 "use client";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
 import { Building, Floor, Layout, Site } from "../types/layout.types";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -59,30 +53,20 @@ function CascadeSelect({
   placeholder,
   items,
 }: CascadeSelectProps) {
-  const selectedLabel = items.find((i) => i.value === value)?.label;
-
   return (
-    <Select
+    <select
       value={value}
-      onValueChange={(val) => { if (val) onValueChange(val); }}
+      onChange={(e) => { if (e.target.value) onValueChange(e.target.value); }}
       disabled={disabled}
+      className="w-full sm:w-auto sm:min-w-40 h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      {/* FIX: w-full so it fills the grid cell on mobile; min-w on larger screens */}
-      <SelectTrigger className="w-full sm:min-w-[160px] sm:w-auto bg-white">
-        {selectedLabel ? (
-          <span>{selectedLabel}</span>
-        ) : (
-          <span className="text-muted-foreground">{placeholder}</span>
-        )}
-      </SelectTrigger>
-      <SelectContent>
-        {items.map((item) => (
-          <SelectItem key={item.value} value={item.value}>
-            {item.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+      {!value && <option value="">{placeholder}</option>}
+      {items.map((item) => (
+        <option key={item.value} value={item.value}>
+          {item.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
