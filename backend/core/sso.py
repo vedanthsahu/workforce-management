@@ -18,6 +18,7 @@ from jose import ExpiredSignatureError, JWTError, jwt
 from backend.core.config import get_settings
 
 MICROSOFT_GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
+MICROSOFT_TOKEN_BASE_URL = "https://login.microsoftonline.com"
 STATE_TTL_SECONDS = 600
 MICROSOFT_SCOPES = (
     "openid",
@@ -178,6 +179,47 @@ def exchange_code_for_token(code: str) -> dict[str, str]:
         "id_token": str(id_token),
     }
 
+
+def exchange_client_credentials_for_graph_token() -> str:
+    """Fetch an app-only Microsoft Graph token for background role sync."""
+    settings = get_settings()
+    try:
+        response = requests.post(
+            f"{MICROSOFT_TOKEN_BASE_URL}/{settings.tenant_id}/oauth2/v2.0/token",
+            data={
+                "client_id": settings.client_id,
+                "client_secret": settings.client_secret,
+                "grant_type": "client_credentials",
+                "scope": "https://graph.microsoft.com/.default",
+            },
+            timeout=20,
+        )
+    except requests.RequestException as exc:
+        raise GraphAPIError(
+            status_code=502,
+            code="graph_token_request_failed",
+            message="Microsoft Graph app token request failed.",
+        ) from exc
+
+    payload = _safe_json(response)
+    if response.status_code != 200:
+        raise GraphAPIError(
+            status_code=502 if response.status_code >= 500 else response.status_code,
+            code="graph_token_exchange_failed",
+            message="Microsoft Graph app token exchange failed.",
+            details=_provider_error_details(payload),
+        )
+
+    access_token = str(payload.get("access_token") or "").strip()
+    if not access_token:
+        raise GraphAPIError(
+            status_code=502,
+            code="missing_graph_app_token",
+            message="Microsoft Graph app token response did not include an access_token.",
+            details=_provider_error_details(payload),
+        )
+    return access_token
+
 def verify_id_token(id_token: str) -> dict[str, Any]:
     """Validate a Microsoft ID token against tenant signing keys.
 
@@ -288,6 +330,74 @@ def fetch_graph_groups(access_token: str) -> dict[str, Any]:
     )
 
 
+def check_graph_group_membership(
+    access_token: str,
+    *,
+    group_id: str,
+    microsoft_object_id: str,
+) -> bool:
+    """Return whether the current Microsoft user object belongs to a group."""
+    group_id = str(group_id or "").strip()
+    microsoft_object_id = str(microsoft_object_id or "").strip()
+    if not group_id:
+        raise GraphAPIError(
+            status_code=500,
+            code="missing_graph_group_id",
+            message="GRAPH_TALENT_GROUP_ID is required for Graph role lookup.",
+        )
+    if not microsoft_object_id:
+        raise GraphAPIError(
+            status_code=400,
+            code="missing_microsoft_object_id",
+            message="Microsoft object id is required for Graph role lookup.",
+        )
+
+    try:
+        _graph_get(
+            access_token,
+            f"/groups/{group_id}/members/{microsoft_object_id}/$ref",
+        )
+    except GraphAPIError as exc:
+        if exc.status_code == 404:
+            return False
+        raise
+    return True
+
+
+def fetch_graph_group_member_ids(access_token: str, *, group_id: str) -> set[str]:
+    """Fetch all direct Graph member object IDs for a group."""
+    group_id = str(group_id or "").strip()
+    if not group_id:
+        raise GraphAPIError(
+            status_code=500,
+            code="missing_graph_group_id",
+            message="GRAPH_TALENT_GROUP_ID is required for Graph role sync.",
+        )
+
+    member_ids: set[str] = set()
+    url_or_path: str | None = f"/groups/{group_id}/members"
+    params: dict[str, str] | None = {"$select": "id", "$top": "999"}
+    while url_or_path:
+        payload = _graph_get(access_token, url_or_path, params=params)
+        members = payload.get("value", [])
+        if not isinstance(members, list):
+            raise GraphAPIError(
+                status_code=502,
+                code="invalid_graph_group_members_payload",
+                message="Microsoft Graph group members response was invalid.",
+            )
+        for member in members:
+            if not isinstance(member, dict):
+                continue
+            object_id = str(member.get("id") or "").strip()
+            if object_id:
+                member_ids.add(object_id)
+        next_link = str(payload.get("@odata.nextLink") or "").strip()
+        url_or_path = next_link or None
+        params = None
+    return member_ids
+
+
 def fetch_graph_manager(access_token: str) -> dict[str, Any]:
     """Fetch the signed-in user's manager relationship from Microsoft Graph.
 
@@ -394,8 +504,9 @@ def _graph_get(
         )
 
     try:
+        url = path if path.startswith("https://") else f"{MICROSOFT_GRAPH_BASE_URL}{path}"
         response = requests.get(
-            f"{MICROSOFT_GRAPH_BASE_URL}{path}",
+            url,
             headers={"Authorization": f"Bearer {access_token}"},
             params=params,
             timeout=20,
@@ -403,9 +514,13 @@ def _graph_get(
 
         print(f"GRAPH STATUS {path}: {response.status_code}")
 
-    except Exception as exc:
+    except requests.RequestException as exc:
         print(f"GRAPH EXCEPTION {path}: {type(exc).__name__}: {exc}")
-        raise
+        raise GraphAPIError(
+            status_code=502,
+            code="graph_request_unavailable",
+            message="Microsoft Graph request could not be completed.",
+        ) from exc
 
     payload = _safe_json(response)
 
