@@ -180,7 +180,9 @@ def fetch_floors_by_building(
             fl.layout_file_url,
             fl.status AS layout_status,
             fl.is_published AS layout_is_published,
-            fl.version_no AS layout_version_no
+            fl.version_no AS layout_version_no,
+            fl.updated_at AS layout_last_updated,
+            pub.full_name AS published_by_name
         FROM floors AS f
         JOIN buildings AS b
             ON f.building_id = b.id
@@ -217,7 +219,9 @@ def fetch_floors_by_building(
                 fl.status,
                 fl.is_published,
                 fl.version_no,
-                fl.created_at
+                fl.created_at,
+                fl.updated_at,
+                fl.published_by_user_id
             FROM floor_layouts AS fl
             WHERE fl.tenant_id = f.tenant_id
               AND fl.site_id = f.site_id
@@ -235,6 +239,9 @@ def fetch_floors_by_building(
                 fl.id DESC
             LIMIT 1
         ) AS fl ON TRUE
+        LEFT JOIN app_users AS pub
+            ON pub.id = fl.published_by_user_id
+           AND pub.tenant_id = f.tenant_id
         WHERE b.id = %s
           AND f.tenant_id = %s
     """

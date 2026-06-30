@@ -153,7 +153,15 @@ export interface ActivityFloor {
 
 export type AdminActivityType = "GUEST_BOOKING" | "GUEST_VISIT" | "EMPLOYEE_BOOKING";
 
-export type AdminActivityStatus = "CONFIRMED" | "CANCELLED" | "MODIFIED" | "SCHEDULED";
+export type AdminActivityStatus =
+  | "CONFIRMED"
+  | "SCHEDULED"
+  | "CHECKED_IN"
+  | "CHECKED_OUT"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "MODIFIED"
+  | "NO_SHOW";
 
 export interface AdminActivityItem {
   activityId: string;
@@ -184,7 +192,7 @@ export interface RecentBooking {
   office: string;
   seat: string;
   date: string;
-  status: "Booked" | "Cancelled";
+  status: "Booked" | "Checked In" | "Completed" | "Cancelled" | "No Show" | "Modified";
   type: "Self" | "Employee" | "Guest";
   bookedByName?: string;
 }

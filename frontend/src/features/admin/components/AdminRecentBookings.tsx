@@ -28,6 +28,23 @@ function TypeBadge({ type, className = "" }: { type: RecentBooking["type"]; clas
   );
 }
 
+const STATUS_STYLES: Record<RecentBooking["status"], string> = {
+  Booked: "bg-green-100 text-green-600",
+  "Checked In": "bg-blue-100 text-blue-600",
+  Completed: "bg-gray-100 text-gray-600",
+  Cancelled: "bg-red-100 text-red-600",
+  "No Show": "bg-orange-100 text-orange-600",
+  Modified: "bg-amber-100 text-amber-600",
+};
+
+function StatusBadge({ status, className = "" }: { status: RecentBooking["status"]; className?: string }) {
+  return (
+    <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${STATUS_STYLES[status]} ${className}`}>
+      {status}
+    </span>
+  );
+}
+
 export default function AdminRecentBookings({ bookings, loading }: Props) {
   return (
     <Card>
@@ -66,13 +83,7 @@ export default function AdminRecentBookings({ bookings, loading }: Props) {
                     <span className="text-xs text-gray-500">{item.date}</span>
                   </div>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${
-                  item.status === "Booked"
-                    ? "bg-green-100 text-green-600"
-                    : "bg-red-100 text-red-600"
-                }`}>
-                  {item.status}
-                </span>
+                <StatusBadge status={item.status} className="shrink-0" />
               </div>
             ))
           )}
@@ -83,45 +94,41 @@ export default function AdminRecentBookings({ bookings, loading }: Props) {
           <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-gray-50 border-b">
               <tr className="text-left text-muted-foreground">
-                <th className="px-6 py-3 font-medium">User</th>
-                <th className="px-6 py-3 font-medium">Type</th>
-                <th className="px-6 py-3 font-medium">Office</th>
-                <th className="px-6 py-3 font-medium">Seat / Visit </th>
-                <th className="px-6 py-3 font-medium">Date</th>
-                <th className="px-6 py-3 font-medium">Status</th>
+                <th className="px-6 py-3 font-medium whitespace-nowrap">User</th>
+                <th className="px-6 py-3 font-medium whitespace-nowrap">Type</th>
+                <th className="px-6 py-3 font-medium whitespace-nowrap">Office</th>
+                <th className="px-6 py-3 font-medium whitespace-nowrap">Seat / Visit</th>
+                <th className="px-6 py-3 font-medium whitespace-nowrap">Date</th>
+                <th className="px-6 py-3 font-medium whitespace-nowrap">Status</th>
               </tr>
             </thead>
             <tbody>
               {bookings.map((item, index) => (
                 <tr key={index} className="border-b hover:bg-gray-50 transition">
-                  <td className="px-6 py-4 flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium">
-                      {item.name.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="font-medium">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">{item.email}</p>
-                      {item.bookedByName && (
-                        <p className="text-xs text-blue-600 ">
-                          Booked by {item.bookedByName}
-                        </p>
-                      )}
+                  <td className="px-6 py-4 align-middle">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium shrink-0">
+                        {item.name.charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium whitespace-nowrap">{item.name}</p>
+                        <p className="text-xs text-muted-foreground whitespace-nowrap">{item.email}</p>
+                        {item.bookedByName && (
+                          <p className="text-xs text-blue-600 whitespace-nowrap">
+                            Booked by {item.bookedByName}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 align-middle whitespace-nowrap">
                     <TypeBadge type={item.type} />
                   </td>
-                  <td className="px-6 py-4">{item.office}</td>
-                  <td className="px-6 py-4">{item.seat}</td>
-                  <td className="px-6 py-4">{item.date}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      item.status === "Booked"
-                        ? "bg-green-100 text-green-600"
-                        : "bg-red-100 text-red-600"
-                    }`}>
-                      {item.status}
-                    </span>
+                  <td className="px-6 py-4 align-middle whitespace-nowrap">{item.office}</td>
+                  <td className="px-6 py-4 align-middle whitespace-nowrap">{item.seat}</td>
+                  <td className="px-6 py-4 align-middle whitespace-nowrap">{item.date}</td>
+                  <td className="px-6 py-4 align-middle whitespace-nowrap">
+                    <StatusBadge status={item.status} />
                   </td>
                 </tr>
               ))}
