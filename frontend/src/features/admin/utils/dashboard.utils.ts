@@ -67,14 +67,34 @@ export function mapHierarchyToTopOffices(items: OccupancyHierarchyItem[]): TopOf
 }
 
 // ── Activities → Recent Bookings row ────────────────────────────────────────
+// bookedFor.id is a guest ID for guest activities and an employee ID otherwise —
+// those are different ID spaces, so only compare them for employee activities.
+function isSelfBooking(item: AdminActivityItem): boolean {
+  return (
+    item.bookedFor.entityType === "EMPLOYEE" &&
+    item.bookedBy.id === item.bookedFor.id
+  );
+}
+
 function getActivityKind(item: AdminActivityItem): RecentBooking["type"] {
   if (item.bookedFor.entityType === "GUEST") return "Guest";
-  return item.bookedBy.id === item.bookedFor.id ? "Self" : "Employee";
+  return isSelfBooking(item) ? "Self" : "Employee";
 }
+
+const STATUS_LABELS: Record<AdminActivityItem["activityStatus"], RecentBooking["status"]> = {
+  CONFIRMED: "Booked",
+  SCHEDULED: "Booked",
+  CHECKED_IN: "Checked In",
+  CHECKED_OUT: "Completed",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+  NO_SHOW: "No Show",
+  MODIFIED: "Modified",
+};
 
 export function mapActivitiesToRecent(items: AdminActivityItem[]): RecentBooking[] {
   return items.map((item) => {
-    const isSelf = item.bookedBy.id === item.bookedFor.id;
+    const isSelf = isSelfBooking(item);
 
     return {
       name: item.bookedFor.name,
@@ -86,7 +106,7 @@ export function mapActivitiesToRecent(items: AdminActivityItem[]): RecentBooking
         day: "numeric",
         year: "numeric",
       }),
-      status: item.activityStatus === "CANCELLED" ? "Cancelled" : "Booked",
+      status: STATUS_LABELS[item.activityStatus] ?? "Booked",
       type: getActivityKind(item),
       bookedByName: isSelf ? undefined : item.bookedBy.name,
     };

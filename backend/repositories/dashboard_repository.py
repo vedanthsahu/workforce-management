@@ -449,7 +449,8 @@ def _fetch_employee_activity_rows(
 
                 b.check_in_at,
                 b.checked_out_at,
-                b.created_at
+                b.created_at,
+                b.updated_at
 
             FROM bookings b
 
@@ -505,7 +506,7 @@ def _fetch_employee_activity_rows(
                     OR b.floor_id = %(floor_id)s::bigint
               )
             ORDER BY
-                b.created_at DESC,
+                b.updated_at DESC,
                 b.id DESC
             LIMIT 100
             """,
@@ -595,7 +596,8 @@ def _fetch_guest_activity_rows(
 
                 gv.checked_in_at AS check_in_at,
                 gv.checked_out_at,
-                COALESCE(b.created_at, gv.created_at) AS created_at
+                COALESCE(b.created_at, gv.created_at) AS created_at,
+                COALESCE(b.updated_at, gv.updated_at) AS updated_at
 
             FROM guest_visits gv
 
@@ -665,7 +667,7 @@ def _fetch_guest_activity_rows(
               )
 
             ORDER BY
-                COALESCE(b.created_at, gv.created_at) DESC,
+                COALESCE(b.updated_at, gv.updated_at) DESC,
                 gv.id DESC
             LIMIT 100
             """,
@@ -713,7 +715,7 @@ def fetch_admin_activity_list(
 
     activities = employee_rows + guest_rows
     activities.sort(
-        key=lambda row: (row.get("created_at") is not None, row.get("created_at")),
+        key=lambda row: (row.get("updated_at") is not None, row.get("updated_at")),
         reverse=True,
     )
 

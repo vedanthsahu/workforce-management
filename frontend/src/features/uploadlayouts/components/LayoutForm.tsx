@@ -115,6 +115,17 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
           code: match.floor_code ?? "",
         },
       }));
+      onFloorLayoutInfo?.({
+        layoutId: match.layout_id,
+        layoutName: match.layout_name,
+        layoutStatus: match.layout_status,
+        layoutIsPublished: match.layout_is_published,
+        layoutVersionNo: match.layout_version_no,
+        layoutFileUrl: match.layout_file_url,
+        layoutCount: match.layout_count,
+        publishedByName: match.published_by_name,
+        layoutLastUpdated: match.layout_last_updated,
+      });
     }
   }, [floors]);
  
