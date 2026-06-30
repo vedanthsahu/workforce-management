@@ -25,14 +25,6 @@ import {
   CardContent,
 } from "@/components/ui/card";
 
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
-
 import { Info } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -166,20 +158,14 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
             Occupancy Trend
           </CardTitle>
 
-          <Select
+          <select
             value={selectedWeek}
-            onValueChange={(value) => {
-              if (value) setSelectedWeek(value as WeekFilter);
-            }}
+            onChange={(e) => setSelectedWeek(e.target.value as WeekFilter)}
+            className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <SelectTrigger className="h-8 w-[120px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="this-week">This Week</SelectItem>
-              <SelectItem value="last-week">Last Week</SelectItem>
-            </SelectContent>
-          </Select>
+            <option value="this-week">This Week</option>
+            <option value="last-week">Last Week</option>
+          </select>
         </CardHeader>
 
         <CardContent>
