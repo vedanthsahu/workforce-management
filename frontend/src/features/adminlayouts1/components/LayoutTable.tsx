@@ -158,13 +158,20 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
         </table>
       </div>
 
-      <LayoutPagination
-        total={total}
-        page={page}
-        rowsPerPage={rowsPerPage}
-        onPageChange={setPage}
-        onRowsChange={(rows) => { setRowsPerPage(rows); setPage(1); }}
-      />
+      {/* FOOTER */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4 text-xs sm:text-sm text-gray-500">
+        <span>
+          Showing {total === 0 ? 0 : (page - 1) * rowsPerPage + 1} to{" "}
+          {Math.min(page * rowsPerPage, total)} of {total} entries
+        </span>
+        <div className="self-center sm:self-auto">
+          <LayoutPagination
+            currentPage={page}
+            totalPages={Math.ceil(total / rowsPerPage)}
+            onPageChange={setPage}
+          />
+        </div>
+      </div>
 
       {previewUrl && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

@@ -475,7 +475,8 @@ def check_out_guest_visit(
     if row is None:
         raise LookupError("Guest visit not found.")
     raise ValueError("Only checked-in guest visits can be checked out.")
-        
+       
+
 def fetch_guest_visit_by_id(
     conn: PGConnection,
     *,
@@ -483,20 +484,83 @@ def fetch_guest_visit_by_id(
     guest_visit_id: str,
 ) -> dict[str, Any] | None:
 
+    query = f"""
+        SELECT
+            {GUEST_VISIT_LIST_SELECT}
+
+        FROM guest_visits gv
+
+        INNER JOIN guests g
+            ON g.id = gv.guest_id
+           AND g.tenant_id = gv.tenant_id
+
+        LEFT JOIN app_users au
+            ON au.id = gv.host_user_id
+           AND au.tenant_id = gv.tenant_id
+
+        INNER JOIN sites si
+            ON si.id = gv.site_id
+           AND si.tenant_id = gv.tenant_id
+
+        INNER JOIN buildings bu
+            ON bu.id = gv.building_id
+           AND bu.tenant_id = gv.tenant_id
+
+        LEFT JOIN floors fl
+            ON fl.id = gv.floor_id
+           AND fl.tenant_id = gv.tenant_id
+
+        LEFT JOIN LATERAL (
+            SELECT b.*
+            FROM bookings b
+            WHERE b.guest_visit_id = gv.id
+              AND b.tenant_id = gv.tenant_id
+              AND b.booking_type = 'GUEST'
+            ORDER BY b.updated_at DESC,
+                     b.id DESC
+            LIMIT 1
+        ) b ON TRUE
+
+        LEFT JOIN seats s
+            ON s.id = b.seat_id
+           AND s.tenant_id = b.tenant_id
+
+        WHERE gv.id = %s
+          AND gv.tenant_id = %s
+    """
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
-            SELECT *
-            FROM guest_visits
-            WHERE id = %s
-              AND tenant_id = %s
-            """,
+            query,
             (
                 guest_visit_id,
                 tenant_id,
             ),
         )
 
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+
+def fetch_guest_visit_by_id_for_update(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_visit_id: str,
+) -> dict[str, Any] | None:
+    """Fetch and lock one tenant-scoped guest visit."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {GUEST_VISIT_RETURNING_FIELDS}
+            FROM guest_visits
+            WHERE id = %s
+              AND tenant_id = %s
+            FOR UPDATE
+            """,
+            (guest_visit_id, tenant_id),
+        )
         row = cur.fetchone()
 
     return dict(row) if row else None
@@ -633,6 +697,48 @@ def fetch_active_booking_by_guest_visit(
 
     return dict(row) if row else None
 
+
+def fetch_active_booking_for_guest_visit(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_visit_id: str,
+) -> dict[str, Any] | None:
+    """Fetch and lock the active guest booking attached to a visit."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                id::text AS booking_id,
+                tenant_id::text AS tenant_id,
+                booked_for_guest_id::text AS booked_for_guest_id,
+                guest_visit_id::text AS guest_visit_id,
+                booking_type,
+                seat_id::text AS seat_id,
+                site_id::text AS site_id,
+                building_id::text AS building_id,
+                floor_id::text AS floor_id,
+                booking_date,
+                booking_status
+            FROM bookings
+            WHERE tenant_id = %s
+              AND guest_visit_id = %s
+              AND booking_type = 'GUEST'
+              AND booking_status IN (
+                    'CONFIRMED',
+                    'CHECKED_IN',
+                    'COMPLETED'
+              )
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 1
+            FOR UPDATE
+            """,
+            (tenant_id, guest_visit_id),
+        )
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
 def fetch_guest_visit_status(
     conn: PGConnection,
     *,
@@ -729,6 +835,72 @@ def update_guest_visit(
             raise LookupError(
                 "Guest visit not found."
             )
+
+
+def update_guest_visit_only(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_visit_id: str,
+    host_user_id: str,
+    guest_type: str,
+    purpose_of_visit: str | None,
+    start_time: time | None,
+    end_time: time | None,
+    notes: str | None,
+) -> None:
+    """Update only fields allowed by the visit-only workflow action."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE guest_visits
+            SET
+                host_user_id = %s,
+                guest_type = %s,
+                purpose_of_visit = %s,
+                start_time = %s,
+                end_time = %s,
+                notes = %s,
+                updated_at = NOW()
+            WHERE id = %s
+              AND tenant_id = %s
+            """,
+            (
+                host_user_id,
+                guest_type,
+                purpose_of_visit,
+                start_time,
+                end_time,
+                notes,
+                guest_visit_id,
+                tenant_id,
+            ),
+        )
+        if cur.rowcount != 1:
+            raise LookupError("Guest visit not found.")
+
+
+def mark_guest_visit_modified(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_visit_id: str,
+) -> None:
+    """Retain a replaced guest visit as history without cancelling it."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE guest_visits
+            SET
+                visit_status = 'MODIFIED',
+                updated_at = NOW()
+            WHERE id = %s
+              AND tenant_id = %s
+            """,
+            (guest_visit_id, tenant_id),
+        )
+        if cur.rowcount != 1:
+            raise LookupError("Guest visit not found.")
 
 def sync_booking_from_guest_visit(
     conn: PGConnection,
@@ -948,4 +1120,121 @@ def fetch_guest_visit_integrity_findings(
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
+
+
+def fetch_cancelled_guest_visits(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    created_by_user_id: str,
+):
+    query = """
+        SELECT
+            'GUEST_VISIT' AS activity_source,
+
+            NULL::text AS booking_id,
+            gv.tenant_id::text AS tenant_id,
+
+            NULL::text AS booked_for_user_id,
+            gv.guest_id::text AS booked_for_guest_id,
+
+            gv.created_by_user_id::text AS booked_by_user_id,
+
+            creator.full_name AS booked_by_name,
+            creator.email AS booked_by_email,
+
+            g.full_name AS booked_for_name,
+            g.email AS booked_for_email,
+            g.phone AS booked_for_phone,
+            g.organization AS booked_for_organization,
+
+            gv.id::text AS guest_visit_id,
+
+            'GUEST' AS booking_type,
+
+            NULL::text AS seat_id,
+
+            gv.site_id::text AS site_id,
+            gv.building_id::text AS building_id,
+            gv.floor_id::text AS floor_id,
+
+            NULL::text AS seat_code,
+
+            si.site_name,
+            bu.building_name,
+            fl.floor_name,
+
+            gv.visit_date AS booking_date,
+            gv.visit_status AS booking_status,
+
+            NULL::text AS source_channel,
+
+            gv.checked_in_at AS check_in_at,
+            gv.checked_out_at,
+
+            gv.cancelled_at,
+            gv.cancellation_reason,
+
+            gv.created_at,
+            gv.updated_at,
+
+            g.full_name AS guest_name,
+            g.email AS guest_email,
+            g.phone AS guest_phone,
+            g.organization AS guest_organization,
+
+            gv.guest_type,
+            gv.purpose_of_visit,
+            gv.visit_status,
+
+            gv.host_user_id::text AS host_user_id,
+            host.full_name AS host_name,
+
+            gv.start_time,
+            gv.end_time,
+            gv.notes,
+            gv.requires_seat
+
+        FROM guest_visits gv
+
+        INNER JOIN guests g
+            ON g.id = gv.guest_id
+           AND g.tenant_id = gv.tenant_id
+
+        LEFT JOIN app_users creator
+            ON creator.id = gv.created_by_user_id
+           AND creator.tenant_id = gv.tenant_id
+
+        LEFT JOIN app_users host
+            ON host.id = gv.host_user_id
+           AND host.tenant_id = gv.tenant_id
+
+        LEFT JOIN sites si
+            ON si.id = gv.site_id
+           AND si.tenant_id = gv.tenant_id
+
+        LEFT JOIN buildings bu
+            ON bu.id = gv.building_id
+
+        LEFT JOIN floors fl
+            ON fl.id = gv.floor_id
+
+        WHERE gv.tenant_id = %s
+          AND gv.created_by_user_id = %s
+          AND gv.visit_status = 'CANCELLED'
+
+        ORDER BY gv.updated_at DESC
+    """
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            query,
+            (
+                tenant_id,
+                created_by_user_id,
+            ),
+        )
+
+        return [dict(row) for row in cur.fetchall()]
+    
 

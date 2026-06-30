@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -8,33 +7,32 @@ import {
   CardContent,
 } from "@/components/ui/card";
 
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
-
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-
 import type { RecentBooking } from "../types/admin.types";
-
-const SKELETON_ROWS = 5;
 
 type Props = {
   bookings: RecentBooking[];
   loading?: boolean;
 };
 
+const TYPE_STYLES: Record<RecentBooking["type"], string> = {
+  Self: "bg-blue-100 text-blue-600",
+  Employee: "bg-purple-100 text-purple-600",
+  Guest: "bg-amber-100 text-amber-600",
+};
+
+function TypeBadge({ type, className = "" }: { type: RecentBooking["type"]; className?: string }) {
+  return (
+    <span className={`px-2 py-1 rounded-full text-xs font-medium ${TYPE_STYLES[type]} ${className}`}>
+      {type}
+    </span>
+  );
+}
+
 export default function AdminRecentBookings({ bookings, loading }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm font-semibold">Recent Bookings</CardTitle>
+        <CardTitle className="text-sm font-semibold">Recent Activities</CardTitle>
       </CardHeader>
 
       <CardContent className="p-0">
@@ -50,8 +48,16 @@ export default function AdminRecentBookings({ bookings, loading }: Props) {
                   {item.name.charAt(0)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">{item.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-sm truncate">{item.name}</p>
+                    <TypeBadge type={item.type} className="shrink-0 text-[10px] px-1.5 py-0.5" />
+                  </div>
                   <p className="text-xs text-muted-foreground truncate">{item.email}</p>
+                  {item.bookedByName && (
+                    <p className="text-xs text-violet-600  truncate">
+                      Booked by {item.bookedByName}
+                    </p>
+                  )}
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                     <span className="text-xs text-gray-500">{item.office}</span>
                     <span className="text-xs text-gray-400">·</span>
@@ -74,10 +80,11 @@ export default function AdminRecentBookings({ bookings, loading }: Props) {
 
         {/* ── Desktop table (hidden below md) ──────────────── */}
         <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[700px] text-sm">
+          <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-gray-50 border-b">
               <tr className="text-left text-muted-foreground">
                 <th className="px-6 py-3 font-medium">User</th>
+                <th className="px-6 py-3 font-medium">Type</th>
                 <th className="px-6 py-3 font-medium">Office</th>
                 <th className="px-6 py-3 font-medium">Seat</th>
                 <th className="px-6 py-3 font-medium">Date</th>
@@ -94,7 +101,15 @@ export default function AdminRecentBookings({ bookings, loading }: Props) {
                     <div>
                       <p className="font-medium">{item.name}</p>
                       <p className="text-xs text-muted-foreground">{item.email}</p>
+                      {item.bookedByName && (
+                        <p className="text-xs text-violet-600 ">
+                          Booked by {item.bookedByName}
+                        </p>
+                      )}
                     </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <TypeBadge type={item.type} />
                   </td>
                   <td className="px-6 py-4">{item.office}</td>
                   <td className="px-6 py-4">{item.seat}</td>
@@ -112,7 +127,7 @@ export default function AdminRecentBookings({ bookings, loading }: Props) {
               ))}
               {bookings.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="text-center py-6 text-gray-400">No bookings found</td>
+                  <td colSpan={6} className="text-center py-6 text-gray-400">No bookings found</td>
                 </tr>
               )}
             </tbody>

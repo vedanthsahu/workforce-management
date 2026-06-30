@@ -1,6 +1,6 @@
 
 import type {
-  AdminBookingItem,
+  AdminActivityItem,
   OccupancyHierarchyItem,
   OccupancyRangeItem,
   OccupancyTrendPoint,
@@ -66,17 +66,29 @@ export function mapHierarchyToTopOffices(items: OccupancyHierarchyItem[]): TopOf
     .sort((a, b) => b.value - a.value);
 }
 
-export function mapBookingsToRecent(items: AdminBookingItem[]): RecentBooking[] {
-  return items.map((item) => ({
-    name: item.user?.fullName ?? "",
-    email: item.user?.email ?? "",
-    office: item.site?.siteName ?? "",
-    seat: item.seat?.seatCode ?? "",
-    date: new Date(item.bookingDate).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }),
-    status: item.bookingStatus === "CANCELLED" ? "Cancelled" : "Booked",
-  }));
+// ── Activities → Recent Bookings row ────────────────────────────────────────
+function getActivityKind(item: AdminActivityItem): RecentBooking["type"] {
+  if (item.bookedFor.entityType === "GUEST") return "Guest";
+  return item.bookedBy.id === item.bookedFor.id ? "Self" : "Employee";
+}
+
+export function mapActivitiesToRecent(items: AdminActivityItem[]): RecentBooking[] {
+  return items.map((item) => {
+    const isSelf = item.bookedBy.id === item.bookedFor.id;
+
+    return {
+      name: item.bookedFor.name,
+      email: item.bookedFor.email,
+      office: item.site?.siteName ?? "",
+      seat: item.seat?.seatCode ?? "—",
+      date: new Date(item.activityDate).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+      status: item.activityStatus === "CANCELLED" ? "Cancelled" : "Booked",
+      type: getActivityKind(item),
+      bookedByName: isSelf ? undefined : item.bookedBy.name,
+    };
+  });
 }
