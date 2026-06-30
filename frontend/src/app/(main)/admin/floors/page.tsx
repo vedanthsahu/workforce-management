@@ -113,62 +113,26 @@ function FloorsPage() {
       {/* CARDS */}
       <FloorCards stats={stats} />
 
-      {/* SITE + BUILDING FILTER */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-          {/* SITE */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Site</label>
-            <select
-              value={selectedSite}
-              onChange={(e) => handleSiteChange(e.target.value)}
-              className="w-full border rounded-xl px-4 py-3"
-            >
-              <option value="">Select Site</option>
-              {sites.map((site) => (
-                <option key={site.site_id} value={site.site_id}>
-                  {site.site_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* BUILDING */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Building</label>
-            <select
-              value={selectedBuilding}
-              disabled={!selectedSite}
-              onChange={(e) => handleBuildingChange(e.target.value)}
-              className="w-full border rounded-xl px-4 py-3"
-            >
-              <option value="">Select Building</option>
-              {buildings.map((building) => (
-                <option key={building.building_id} value={building.building_id}>
-                  {building.building_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-        </div>
-      </div>
-
       {/* TABLE CARD */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
 
         {/* TABLE HEADER */}
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center px-6 py-4 border-b">
           <h2 className="text-base font-semibold text-gray-800">Floors List</h2>
-          <FloorFilters search={search} setSearch={setSearch} />
+          <FloorFilters
+            sites={sites}
+            buildings={buildings}
+            selectedSite={selectedSite}
+            selectedBuilding={selectedBuilding}
+            onSiteChange={handleSiteChange}
+            onBuildingChange={handleBuildingChange}
+            search={search}
+            setSearch={setSearch}
+          />
         </div>
 
         {/* TABLE BODY */}
-        <div
-          className="w-full overflow-x-auto overflow-y-auto"
-          style={{ maxHeight: "calc(100vh - 420px)", minHeight: "200px" }}
-        >
+        <div className="w-full overflow-x-auto">
           {loading ? (
             <div className="p-6 text-sm text-gray-500 text-center">
               Select a site and building
