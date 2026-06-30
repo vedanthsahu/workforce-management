@@ -405,9 +405,15 @@ const currentUserId = data?.user.user_id;
                   <FormFooter
                     onCancel={handleCancel}
                     onSubmit={handlePrimaryAction}
-                    onBack={step > 1
-                      ? (editVisitId && step === 4 ? () => setFormState((prev) => ({ ...prev, step: 2 })) : goBack)
-                      : undefined}
+                    onBack={
+                      editVisitId
+                        ? (step === 4
+                            ? () => setFormState((prev) => ({ ...prev, step: 2 }))
+                            : () => router.push("/mybookings?tab=bookedForSomeone"))
+                        : step > 1
+                          ? goBack
+                          : undefined
+                    }
                     submitLabel={checkingEligibility ? "Checking…" : submitLabel}
                     submitDisabled={!canContinue}
                     infoText={infoText ?? undefined}

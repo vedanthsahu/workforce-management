@@ -569,7 +569,12 @@ export function useBookingForm() {
     setFloorLayoutUrl(null);
     setConfirmation(null);
     setError(null);
-    router.push(isModifyMode ? "/mybookings" : "/book");
+    if (isModifyMode) {
+      const forSomeone = isBookingForSomeone || isGuestModify || Boolean(bookedForUserId);
+      router.push(forSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings");
+    } else {
+      router.push("/book");
+    }
   };
 
   // ── Derived values ────────────────────────────────────────────────────────

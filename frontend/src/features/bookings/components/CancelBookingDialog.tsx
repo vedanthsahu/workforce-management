@@ -51,11 +51,27 @@ export function CancelBookingDialog({ open, booking, cancelMode = "booking", onC
   const [otherReason, setOtherReason] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const isVisitCancel = cancelMode === "visit";
-  const title = isVisitCancel ? "Cancel Visit" : "Cancel Booking";
-  const confirmLabel = isVisitCancel ? "Yes, Cancel Visit" : "Yes, Cancel";
-  const keepLabel = isVisitCancel ? "Keep Visit" : "Keep Booking";
-  const reasons = isVisitCancel ? VISIT_CANCEL_REASONS : BOOKING_CANCEL_REASONS;
+  const bType = booking?.bookingType;
+  const isPureVisit = bType === "visit";
+  const isSeatOnlyCancel = cancelMode === "booking" && bType === "guest";
+  const isFullBookingCancel = cancelMode === "visit" && bType === "guest";
+
+  const title = isPureVisit
+    ? "Cancel Visit"
+    : isSeatOnlyCancel
+      ? "Cancel Seat"
+      : "Cancel Booking";
+  const confirmLabel = isPureVisit
+    ? "Yes, Cancel Visit"
+    : isSeatOnlyCancel
+      ? "Yes, Cancel Seat"
+      : "Yes, Cancel Booking";
+  const keepLabel = isPureVisit
+    ? "Keep Visit"
+    : isSeatOnlyCancel
+      ? "Keep Seat"
+      : "Keep Booking";
+  const reasons = cancelMode === "visit" ? VISIT_CANCEL_REASONS : BOOKING_CANCEL_REASONS;
 
   const finalReason = selectedReason === "Other" ? otherReason.trim() : selectedReason;
 
@@ -98,9 +114,27 @@ export function CancelBookingDialog({ open, booking, cancelMode = "booking", onC
           <AlertDialogTitle className="text-[#1A1A2E]">{title}</AlertDialogTitle>
           <AlertDialogDescription className="text-gray-500 text-[13px]">
             {booking && (
-              isVisitCancel ? (
+              isPureVisit ? (
                 <span>
                   Are you sure you want to cancel the visit for{" "}
+                  <strong className="text-gray-700">
+                    {booking.guestName ?? booking.bookedForName ?? "this guest"}
+                  </strong>{" "}
+                  on <strong className="text-gray-700">{formatDate(booking.date)}</strong>?
+                  This action cannot be undone.
+                </span>
+              ) : isSeatOnlyCancel ? (
+                <span>
+                  Are you sure you want to cancel the seat reservation at{" "}
+                  <strong className="text-gray-700">
+                    {booking.location} · {booking.floor} · Seat {booking.seat}
+                  </strong>{" "}
+                  on <strong className="text-gray-700">{formatDate(booking.date)}</strong>?
+                  This action cannot be undone.
+                </span>
+              ) : isFullBookingCancel ? (
+                <span>
+                  Are you sure you want to cancel the booking for{" "}
                   <strong className="text-gray-700">
                     {booking.guestName ?? booking.bookedForName ?? "this guest"}
                   </strong>{" "}
