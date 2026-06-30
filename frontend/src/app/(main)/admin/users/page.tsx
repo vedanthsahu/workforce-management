@@ -7,6 +7,7 @@ import UsersTable from "@/features/users/components/UsersTable";
 import UsersPagination from "@/features/users/components/UsersPagination";
 import { useUsers } from "@/features/users/hooks/useUsers";
 import type { User } from "@/features/users/types/users.types";
+import { TableSkeleton, TableBodySkeleton } from "@/components/ui/table-skeleton";
 
 const PIN_DURATION = 4000;
 const ITEMS_PER_PAGE = 10;
@@ -140,7 +141,7 @@ function UserManagementPage() {
             still the bounded, scrollable ancestor */}
         <div className="w-full overflow-x-auto overflow-y-auto flex-1 min-h-0">
           {loading ? (
-            <div className="p-6 text-sm text-gray-500">Loading...</div>
+            <TableBodySkeleton columns={5} rows={5} />
           ) : (
             <UsersTable
               users={paginatedUsers}
@@ -173,7 +174,7 @@ function UserManagementPage() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-gray-500">Loading...</div>}>
+    <Suspense fallback={<div className="p-6"><TableSkeleton columns={5} rows={5} /></div>}>
       <UserManagementPage />
     </Suspense>
   );

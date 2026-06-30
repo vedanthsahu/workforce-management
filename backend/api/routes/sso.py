@@ -218,7 +218,11 @@ def auth_callback(
     except PermissionError as exc:
         conn.rollback()
         debug(f"PermissionError: {exc}")
-        return _error_response(403, "inactive_user", str(exc))
+        settings = get_settings()
+        return RedirectResponse(
+            url=f"{settings.frontend_url}/login?error=inactive_user",
+            status_code=status.HTTP_302_FOUND,
+        )
     except (LookupError, ValueError) as exc:
         conn.rollback()
         debug(f"LookupError/ValueError: {exc}")

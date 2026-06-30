@@ -120,9 +120,6 @@ function GuestRow({ guest, onClick, selected }: { guest: Guest; onClick?: () => 
         <span style={{ fontSize: "0.75rem", color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {guest.email}
         </span>
-        {/* {guest.organization && (
-          <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>{guest.organization}</span>
-        )} */}
       </span>
       {selected ? (
         <span style={{ color: "#4f46e5", fontWeight: 700, display: "flex" }}>✓</span>
@@ -176,7 +173,6 @@ export function GuestSelectStep({ selectedGuest, view, onViewChange, onSelect, o
         Select an existing guest or create a new one.
       </p>
 
-      {/* Search input — shows guest name read-only when selected */}
       <div style={{ marginBottom: "0.875rem" }}>
         <label style={{ fontSize: "0.8125rem", fontWeight: 500, color: "#111827", display: "block", marginBottom: 6 }}>
           Search Guest <span style={{ color: "#dc2626" }}>*</span>
@@ -226,7 +222,6 @@ export function GuestSelectStep({ selectedGuest, view, onViewChange, onSelect, o
         </div>
       </div>
 
-      {/* Search results dropdown (only when typing, no guest selected yet) */}
       {!selectedGuest && query.trim() && (
         <div style={{ border: "1.5px solid #e5e7eb", borderRadius: 10, maxHeight: 260, overflowY: "auto", marginBottom: "0.875rem" }}>
           {isLoading && (
@@ -247,7 +242,6 @@ export function GuestSelectStep({ selectedGuest, view, onViewChange, onSelect, o
         </div>
       )}
 
-      {/* Selected guest detail card — mirrors InternalEmployeeForm */}
       {selectedGuest && (
         <div style={{ marginTop: "0.75rem" }}>
           <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#111827", marginBottom: "0.625rem" }}>
@@ -297,7 +291,6 @@ export function GuestSelectStep({ selectedGuest, view, onViewChange, onSelect, o
         </div>
       )}
 
-      {/* Create new guest button (only when no guest selected) */}
       {!selectedGuest && (
         <button
           type="button"
@@ -365,6 +358,61 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
     if (touched[field]) validateField(field, form[field]);
   };
 
+  // const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   const raw = e.target.value;
+  //   const digits = raw.replace(/\D/g, "");
+  //   // Block input if digit count exceeds 10
+  //   if (digits.length > 10) return;
+  //   setForm((prev) => ({ ...prev, phone: raw }));
+  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
+  //   validateField("phone", raw);
+  // };
+
+  //   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   const raw = e.target.value;
+
+  //   // Only allow digits, spaces, +, -, (, )
+  //   const sanitized = raw.replace(/[^\d\s+\-()\s]/g, "");
+
+  //   // Block if digit count exceeds 10
+  //   const digits = sanitized.replace(/\D/g, "");
+  //   if (digits.length > 10) return;
+
+  //   setForm((prev) => ({ ...prev, phone: sanitized }));
+  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
+  //   validateField("phone", sanitized);
+  // };
+  // const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   const raw = e.target.value;
+  //   setForm((prev) => ({ ...prev, phone: raw }));
+  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
+  //   validateField("phone", raw);
+  // };
+  // const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   const raw = e.target.value;
+
+  //   // Block if digit count exceeds 10 (silent, no typing allowed)
+  //   const digits = raw.replace(/\D/g, "");
+  //   if (digits.length > 10) return;
+
+  //   // Allow the value through (valid or not) and let zod show errors for invalid chars
+  //   setForm((prev) => ({ ...prev, phone: raw }));
+  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
+  //   validateField("phone", raw);
+  // };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    const newDigits = raw.replace(/\D/g, "");
+    const maxDigits = newDigits.startsWith("91") ? 12 : 10;
+
+    if (newDigits.length > maxDigits) return;
+
+    setForm((prev) => ({ ...prev, phone: raw }));
+    if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
+    validateField("phone", raw);
+  };
+
   const handleSave = async () => {
     setTouched({ firstName: true, lastName: true, email: true, phone: true, organization: true });
     const result = createGuestSchema.safeParse(form);
@@ -404,40 +452,116 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
       </p>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+        {/* First Name */}
         <div>
           <FieldLabel htmlFor="g-firstName" required>First Name</FieldLabel>
-          <input id="g-firstName" type="text" style={inputStyle()} placeholder="First name" value={form.firstName} onChange={handleChange("firstName")} onBlur={handleBlur("firstName")} />
-          {errors.firstName && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.firstName}</p>}
+          <input
+            id="g-firstName"
+            type="text"
+            style={inputStyle()}
+            placeholder="First name"
+            value={form.firstName}
+            onChange={handleChange("firstName")}
+            onBlur={handleBlur("firstName")}
+          />
+          {errors.firstName && (
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.firstName}</p>
+          )}
         </div>
+
+        {/* Last Name */}
         <div>
           <FieldLabel htmlFor="g-lastName" required>Last Name</FieldLabel>
-          <input id="g-lastName" type="text" style={inputStyle()} placeholder="Last name" value={form.lastName} onChange={handleChange("lastName")} onBlur={handleBlur("lastName")} />
-          {errors.lastName && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.lastName}</p>}
+          <input
+            id="g-lastName"
+            type="text"
+            style={inputStyle()}
+            placeholder="Last name"
+            value={form.lastName}
+            onChange={handleChange("lastName")}
+            onBlur={handleBlur("lastName")}
+          />
+          {errors.lastName && (
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.lastName}</p>
+          )}
         </div>
+
+        {/* Email */}
         <div>
           <FieldLabel htmlFor="g-email" required>Email Address</FieldLabel>
-          <input id="g-email" type="email" style={inputStyle()} placeholder="email@example.com" value={form.email} onChange={handleChange("email")} onBlur={handleBlur("email")} />
-          {errors.email && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.email}</p>}
+          <input
+            id="g-email"
+            type="email"
+            style={inputStyle()}
+            placeholder="email@example.com"
+            value={form.email}
+            onChange={handleChange("email")}
+            onBlur={handleBlur("email")}
+          />
+          {errors.email && (
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.email}</p>
+          )}
         </div>
+
+        {/* Phone — blocks input beyond 10 digits */}
         <div>
           <FieldLabel htmlFor="g-phone" required>Phone Number</FieldLabel>
-          <input id="g-phone" type="tel" style={inputStyle()} placeholder="+1 555 000 0000" value={form.phone} onChange={handleChange("phone")} onBlur={handleBlur("phone")} />
-          {errors.phone && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.phone}</p>}
+          <input
+            id="g-phone"
+            type="tel"
+            style={inputStyle()}
+            placeholder="+91 550000000"
+            value={form.phone}
+            onChange={handlePhoneChange}
+            onBlur={handleBlur("phone")}
+          />
+          {errors.phone && (
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.phone}</p>
+          )}
         </div>
+
+        {/* Organization — with inline error */}
         <div>
-          <FieldLabel htmlFor="g-organization">Organization / Company <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span></FieldLabel>
-          <input id="g-organization" type="text" style={inputStyle()} placeholder="Company name" value={form.organization} onChange={handleChange("organization")} onBlur={handleBlur("organization")} />
+          <FieldLabel htmlFor="g-organization">
+            Organization / Company{" "}
+            <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span>
+          </FieldLabel>
+          <input
+            id="g-organization"
+            type="text"
+            style={inputStyle()}
+            placeholder="Company name"
+            value={form.organization}
+            onChange={handleChange("organization")}
+            onBlur={handleBlur("organization")}
+          />
+          {errors.organization && (
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.organization}</p>
+          )}
         </div>
       </div>
 
-      {apiError && <p style={{ fontSize: "0.8125rem", color: "#dc2626", marginTop: "1rem" }}>{apiError}</p>}
+      {apiError && (
+        <p style={{ fontSize: "0.8125rem", color: "#dc2626", marginTop: "1rem" }}>{apiError}</p>
+      )}
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "1.25rem" }}>
         <button
           type="button"
           onClick={onCancel}
           disabled={isSaving}
-          style={{ height: 40, padding: "0 1.25rem", borderRadius: 8, border: "1.5px solid #e5e7eb", background: "#fff", fontSize: "0.875rem", fontWeight: 600, color: "#111827", cursor: isSaving ? "not-allowed" : "pointer", fontFamily: "inherit" }}
+          style={{
+            height: 40,
+            padding: "0 1.25rem",
+            borderRadius: 8,
+            border: "1.5px solid #e5e7eb",
+            background: "#fff",
+            fontSize: "0.875rem",
+            fontWeight: 600,
+            color: "#111827",
+            cursor: isSaving ? "not-allowed" : "pointer",
+            fontFamily: "inherit",
+          }}
         >
           Cancel
         </button>
@@ -445,7 +569,18 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
           type="button"
           onClick={handleSave}
           disabled={isSaving}
-          style={{ height: 40, padding: "0 1.25rem", borderRadius: 8, border: "1.5px solid #4f46e5", background: isSaving ? "#a5b4fc" : "#4f46e5", fontSize: "0.875rem", fontWeight: 600, color: "#fff", cursor: isSaving ? "not-allowed" : "pointer", fontFamily: "inherit" }}
+          style={{
+            height: 40,
+            padding: "0 1.25rem",
+            borderRadius: 8,
+            border: "1.5px solid #4f46e5",
+            background: isSaving ? "#a5b4fc" : "#4f46e5",
+            fontSize: "0.875rem",
+            fontWeight: 600,
+            color: "#fff",
+            cursor: isSaving ? "not-allowed" : "pointer",
+            fontFamily: "inherit",
+          }}
         >
           {isSaving ? "Saving…" : "Save Guest"}
         </button>
@@ -465,9 +600,84 @@ interface VisitDetailsStepProps {
   floors: Floor[];
   isLoadingBuildings: boolean;
   isLoadingFloors: boolean;
+  readOnlyLocation?: boolean;
 }
 
-export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildings, floors, isLoadingBuildings, isLoadingFloors }: VisitDetailsStepProps) {
+// ── Time slot dropdown ───────────────────────────────────────────────────────
+
+function generateTimeSlots(): { label: string; value: string }[] {
+  const slots: { label: string; value: string }[] = [];
+  for (let h = 0; h < 24; h++) {
+    for (const m of [0, 30]) {
+      const hh = h.toString().padStart(2, "0");
+      const mm = m.toString().padStart(2, "0");
+      const value = `${hh}:${mm}`;
+      const period = h < 12 ? "AM" : "PM";
+      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      const label = `${h12}:${mm} ${period}`;
+      slots.push({ label, value });
+    }
+  }
+  return slots;
+}
+
+const TIME_SLOTS = generateTimeSlots();
+
+function TimeSlotSelect({
+  id,
+  value,
+  onChange,
+  placeholder = "Select time",
+  disabled = false,
+}: {
+  id: string;
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <div style={{ position: "relative" }}>
+      <select
+        id={id}
+        style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.6 : 1 }}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+      >
+        <option value="">{placeholder}</option>
+        {TIME_SLOTS.map((slot) => (
+          <option key={slot.value} value={slot.value}>{slot.label}</option>
+        ))}
+      </select>
+      <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
+        <IconChevronDown />
+      </span>
+    </div>
+  );
+}
+
+function LockedTooltip({ children, locked, message }: { children: React.ReactNode; locked: boolean; message: string }) {
+  return (
+    <div className={locked ? "relative group" : ""}>
+      {children}
+      {locked && (
+        <div
+          className="absolute bottom-full left-0 mb-2 hidden group-hover:flex items-start gap-2 bg-indigo-50 border border-indigo-200 text-indigo-700 text-[11.5px] font-medium leading-relaxed px-3.5 py-2.5 rounded-xl shadow-md pointer-events-none z-50 w-[300px]"
+        >
+          <svg className="w-4 h-4 shrink-0 mt-px text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>{message}</span>
+          <div className="absolute top-full left-6 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-indigo-200" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildings, floors, isLoadingBuildings, isLoadingFloors, readOnlyLocation = false }: VisitDetailsStepProps) {
+  const lockedMessage = "This field cannot be changed because a seat booking is linked to this visit. To change location or dates, use 'Edit Booking' instead.";
   return (
     <div>
       <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Visit Details</h2>
@@ -531,14 +741,15 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-        <div>
+        <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="visitSite" required>Site</FieldLabel>
           <div style={{ position: "relative" }}>
             <select
               id="visitSite"
-              style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: "pointer" }}
+              style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: readOnlyLocation ? "not-allowed" : "pointer", opacity: readOnlyLocation ? 0.6 : 1 }}
               value={visitDetails.siteId}
               onChange={(e) => onChange({ siteId: e.target.value, buildingId: "", floorId: "" })}
+              disabled={readOnlyLocation}
             >
               <option value="">Select a site</option>
               {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -547,16 +758,16 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               <IconChevronDown />
             </span>
           </div>
-        </div>
-        <div>
+        </LockedTooltip>
+        <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="visitBuilding" required>Building</FieldLabel>
           <div style={{ position: "relative" }}>
             <select
               id="visitBuilding"
-              style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: visitDetails.siteId ? "pointer" : "not-allowed" }}
+              style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: readOnlyLocation || !visitDetails.siteId ? "not-allowed" : "pointer", opacity: readOnlyLocation ? 0.6 : 1 }}
               value={visitDetails.buildingId}
               onChange={(e) => onChange({ buildingId: e.target.value, floorId: "" })}
-              disabled={!visitDetails.siteId}
+              disabled={readOnlyLocation || !visitDetails.siteId}
             >
               <option value="">
                 {!visitDetails.siteId ? "Select a site first" : isLoadingBuildings ? "Loading…" : "Select a building"}
@@ -567,16 +778,16 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               <IconChevronDown />
             </span>
           </div>
-        </div>
-        <div>
+        </LockedTooltip>
+        <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="visitFloor" required>Floor</FieldLabel>
           <div style={{ position: "relative" }}>
             <select
               id="visitFloor"
-              style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: visitDetails.buildingId ? "pointer" : "not-allowed" }}
+              style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: readOnlyLocation || !visitDetails.buildingId ? "not-allowed" : "pointer", opacity: readOnlyLocation ? 0.6 : 1 }}
               value={visitDetails.floorId}
               onChange={(e) => onChange({ floorId: e.target.value })}
-              disabled={!visitDetails.buildingId}
+              disabled={readOnlyLocation || !visitDetails.buildingId}
             >
               <option value="">
                 {!visitDetails.buildingId ? "Select a building first" : isLoadingFloors ? "Loading…" : "Select a floor"}
@@ -587,34 +798,50 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               <IconChevronDown />
             </span>
           </div>
-        </div>
+        </LockedTooltip>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-        <div>
+        <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="visitDate" required>Visit Date</FieldLabel>
-          <input id="visitDate" type="date" style={inputStyle()} value={visitDetails.visitDate} onChange={(e) => {
-            const val = e.target.value;
-            const updates: Partial<VisitDetails> = { visitDate: val };
-            if (!visitDetails.endDate || visitDetails.endDate < val) updates.endDate = val;
-            onChange(updates);
-          }} />
-        </div>
-        <div>
+          <input
+            id="visitDate"
+            type="date"
+            style={{ ...inputStyle(), cursor: readOnlyLocation ? "not-allowed" : undefined, opacity: readOnlyLocation ? 0.6 : 1 }}
+            value={visitDetails.visitDate}
+            min={new Date().toISOString().split("T")[0]}
+            disabled={readOnlyLocation}
+            onChange={(e) => {
+              const val = e.target.value;
+              const updates: Partial<VisitDetails> = { visitDate: val };
+              if (!visitDetails.endDate || visitDetails.endDate < val) updates.endDate = val;
+              onChange(updates);
+            }}
+          />
+        </LockedTooltip>
+        <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="endDate" required>End Date</FieldLabel>
-          <input id="endDate" type="date" style={inputStyle()} value={visitDetails.endDate} min={visitDetails.visitDate || undefined} onChange={(e) => onChange({ endDate: e.target.value })} />
-        </div>
+          <input
+            id="endDate"
+            type="date"
+            style={{ ...inputStyle(), cursor: readOnlyLocation ? "not-allowed" : undefined, opacity: readOnlyLocation ? 0.6 : 1 }}
+            value={visitDetails.endDate}
+            min={visitDetails.visitDate || new Date().toISOString().split("T")[0]}
+            disabled={readOnlyLocation}
+            onChange={(e) => onChange({ endDate: e.target.value })}
+          />
+        </LockedTooltip>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-        <div>
+        <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="startTime">Start Time <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span></FieldLabel>
-          <input id="startTime" type="time" style={inputStyle()} value={visitDetails.startTime} onChange={(e) => onChange({ startTime: e.target.value })} />
-        </div>
-        <div>
+          <TimeSlotSelect id="startTime" value={visitDetails.startTime} onChange={(val) => onChange({ startTime: val })} placeholder="Select start time" disabled={readOnlyLocation} />
+        </LockedTooltip>
+        <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="endTime">End Time <span style={{ color: "#9ca3af", fontWeight: 400 }}>(Optional)</span></FieldLabel>
-          <input id="endTime" type="time" style={inputStyle()} value={visitDetails.endTime} onChange={(e) => onChange({ endTime: e.target.value })} />
-        </div>
+          <TimeSlotSelect id="endTime" value={visitDetails.endTime} onChange={(val) => onChange({ endTime: val })} placeholder="Select end time" disabled={readOnlyLocation} />
+        </LockedTooltip>
       </div>
 
       <div>
@@ -669,7 +896,6 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-      {/* Top icon — seat */}
       <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#ecfdf5", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3" /><path d="M3 16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4z" /><path d="M5 18v2" /><path d="M19 18v2" /></svg>
       </div>
@@ -701,7 +927,6 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
                 gap: 0,
               }}
             >
-              {/* Card icon */}
               <div style={{
                 width: 40, height: 40, borderRadius: 10, marginBottom: 14,
                 background: key === "yes" ? "#eef2ff" : "#f0fdf4",
@@ -714,11 +939,9 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
                 )}
               </div>
 
-              {/* Title & subtitle */}
               <span style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#111827", marginBottom: 4 }}>{label}</span>
               <span style={{ fontSize: "0.75rem", color: "#6b7280", lineHeight: 1.5, marginBottom: 14 }}>{sub}</span>
 
-              {/* Bullet points */}
               <ul style={{ listStyle: "none", padding: 0, margin: "0 0 16px 0", display: "flex", flexDirection: "column", gap: 8 }}>
                 {bullets.map((b) => (
                   <li key={b} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.75rem", color: "#374151" }}>
@@ -728,7 +951,6 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
                 ))}
               </ul>
 
-              {/* Radio selector */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid #f3f4f6", paddingTop: 14, marginTop: "auto" }}>
                 <span style={{
                   width: 18, height: 18, borderRadius: "50%",
@@ -755,13 +977,16 @@ interface ConfirmInviteStepProps {
   visitDetails: VisitDetails;
   sites: Site[];
   buildings: Building[];
+  seatLabel?: string | null;
+  floorName?: string | null;
 }
 
-export function ConfirmInviteStep({ guest, visitDetails, sites, buildings }: ConfirmInviteStepProps) {
+export function ConfirmInviteStep({ guest, visitDetails, sites, buildings, seatLabel, floorName }: ConfirmInviteStepProps) {
   const guestTypeLabel = GUEST_TYPES.find((g) => g.value === visitDetails.guestType)?.label ?? visitDetails.guestType;
   const purposeLabel = PURPOSE_OF_VISIT.find((p) => p.value === visitDetails.purposeOfVisit)?.label ?? visitDetails.purposeOfVisit;
   const siteName = sites.find((s) => s.id === visitDetails.siteId)?.name ?? "—";
   const buildingName = buildings.find((b) => b.id === visitDetails.buildingId)?.name ?? "—";
+  const hasSeat = !!seatLabel;
 
   const rows: [string, string][] = [
     ["Guest", guest ? guest.fullName : "—"],
@@ -774,7 +999,11 @@ export function ConfirmInviteStep({ guest, visitDetails, sites, buildings }: Con
     ["Visit Date", visitDetails.visitDate || "—"],
     ["End Date", visitDetails.endDate || "—"],
     ["Time", [visitDetails.startTime, visitDetails.endTime].filter(Boolean).join(" – ") || "—"],
-    ["Requires Seat", "No"],
+    ["Requires Seat", hasSeat ? "Yes" : "No"],
+    ...(hasSeat ? ([
+      ["Floor", floorName || "—"],
+      ["Seat", seatLabel || "—"],
+    ] as [string, string][]) : []),
     ["Notes", visitDetails.additionalNotes || "—"],
   ];
 
@@ -834,13 +1063,37 @@ export function SuccessStep({ onBookAnother }: { onBookAnother: () => void }) {
         <button
           type="button"
           onClick={onBookAnother}
-          style={{ height: 40, padding: "0 1.25rem", borderRadius: 8, border: "1.5px solid #e5e7eb", background: "#fff", fontSize: "0.875rem", fontWeight: 600, color: "#111827", cursor: "pointer", fontFamily: "inherit" }}
+          style={{
+            height: 40,
+            padding: "0 1.25rem",
+            borderRadius: 8,
+            border: "1.5px solid #e5e7eb",
+            background: "#fff",
+            fontSize: "0.875rem",
+            fontWeight: 600,
+            color: "#111827",
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
         >
           Book Another
         </button>
         <Link
-          href="/mybookings"
-          style={{ height: 40, padding: "0 1.25rem", borderRadius: 8, border: "1.5px solid #4f46e5", background: "#4f46e5", fontSize: "0.875rem", fontWeight: 600, color: "#fff", display: "inline-flex", alignItems: "center", textDecoration: "none", fontFamily: "inherit" }}
+          href="/mybookings?tab=bookedForSomeone"
+          style={{
+            height: 40,
+            padding: "0 1.25rem",
+            borderRadius: 8,
+            border: "1.5px solid #4f46e5",
+            background: "#4f46e5",
+            fontSize: "0.875rem",
+            fontWeight: 600,
+            color: "#fff",
+            display: "inline-flex",
+            alignItems: "center",
+            textDecoration: "none",
+            fontFamily: "inherit",
+          }}
         >
           Go to My Bookings
         </Link>

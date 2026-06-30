@@ -82,12 +82,12 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-gray-500 border-b">
-              <th className="py-3">Layout Name</th>
-              <th>Version</th>
-              <th>Status</th>
-              <th>Published</th>
-              <th>Uploaded By</th>
-              <th className="text-center">Actions</th>
+              <th className="py-3 px-4 text-left">Layout Name</th>
+              <th className="py-3 px-4 text-left">Version</th>
+              <th className="py-3 px-4 text-left">Status</th>
+              <th className="py-3 px-4 text-left">Published</th>
+              <th className="py-3 px-4 text-left">Uploaded By</th>
+              <th className="py-3 px-4 text-left">Actions</th>
             </tr>
           </thead>
 

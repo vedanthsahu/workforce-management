@@ -553,6 +553,19 @@ def _fetch_guest_activity_rows(
 
                 (b.id IS NOT NULL) AS has_booking,
 
+                CASE
+                    WHEN b.id IS NULL
+                        THEN CONCAT('guest-visit-', gv.id::text)
+                    ELSE CONCAT('guest-booking-', b.id::text)
+                END AS activity_id,
+
+                CASE
+                    WHEN b.id IS NULL THEN 'GUEST_VISIT'
+                    ELSE 'GUEST_BOOKING'
+                END AS activity_type,
+
+                (b.id IS NOT NULL) AS has_booking,
+
                 b.id::text AS booking_id,
 
                 gv.id::text AS guest_visit_id,
@@ -577,6 +590,32 @@ def _fetch_guest_activity_rows(
 
                 gv.guest_type AS booked_for_guest_type,
 
+                gv.id::text AS guest_visit_id,
+
+                gv.visit_status AS activity_status,
+
+                COALESCE(b.booking_date, gv.visit_date) AS activity_date,
+
+                booked_by.id::text AS booked_by_id,
+                booked_by.full_name AS booked_by_name,
+                booked_by.email AS booked_by_email,
+                booked_by.role_name AS booked_by_role,
+                booked_by.department AS booked_by_department,
+                booked_by.job_title AS booked_by_job_title,
+
+                g.id::text AS booked_for_id,
+                g.full_name AS booked_for_name,
+                g.email AS booked_for_email,
+                NULL::text AS booked_for_role,
+                NULL::text AS booked_for_department,
+                NULL::text AS booked_for_job_title,
+
+                gv.guest_type AS booked_for_guest_type,
+
+                s.id::text AS seat_id,
+                s.seat_code,
+                s.seat_type,
+                s.seat_neighborhood,
                 s.id::text AS seat_id,
                 s.seat_code,
                 s.seat_type,
@@ -679,6 +718,7 @@ def _fetch_guest_activity_rows(
                 "floor_id": floor_id,
             },
         )
+
 
         rows = cur.fetchall()
 

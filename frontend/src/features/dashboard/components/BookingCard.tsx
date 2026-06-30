@@ -1,10 +1,12 @@
 "use client";
 
-import { Repeat2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Calendar, Hash, Clock, Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Booking } from "../types/dashboard.types";
+
+function getInitials(name: string): string {
+  return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+}
 
 type BookingCardProps = {
   booking: Booking;
@@ -18,63 +20,128 @@ export function BookingCard({ booking, onCancel, onModify, canCancelOwn, canBook
   const isConfirmed = booking.status === "Confirmed";
 
   return (
-    <div className="group bg-white border border-gray-100 rounded-xl overflow-hidden flex hover:border-gray-200 hover:shadow-sm transition-all duration-200 animate-fade-in-up">
-      <div className={cn(
-        "w-[3px] shrink-0 self-stretch rounded-l-xl transition-all duration-300",
-        isConfirmed ? "bg-emerald-400 group-hover:bg-emerald-500" : "bg-yellow-400 group-hover:bg-yellow-500"
-      )} />
-      <div className="flex-1 px-4 py-3.5 min-w-0">
-        <div className="flex items-start justify-between gap-2 flex-wrap">
-          <p className="text-[12.5px] font-semibold text-gray-900 leading-snug">
-            {booking.location} · {booking.floor}
-          </p>
-          <div className="flex items-center gap-2 shrink-0">
-            <Badge
-              variant={isConfirmed ? "secondary" : "outline"}
-              className={cn(
-                "text-[10px] font-semibold px-2 py-[3px] rounded-md",
-                isConfirmed ? "bg-emerald-50 text-emerald-700" : "bg-yellow-50 text-yellow-700"
-              )}
-            >
+    <div className={cn(
+      "bg-white border border-[#EBEBF5] rounded-2xl transition-all duration-200 overflow-hidden",
+      "hover:shadow-md hover:border-gray-200 animate-fade-in-up",
+    )}>
+      <div className="grid grid-cols-[44px_1fr_auto] items-center gap-3.5 p-3.5 sm:px-4 sm:py-[14px]">
+
+        {/* Icon */}
+        <div className="w-[44px] h-[44px] rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
+          <span className="text-xl leading-none" role="img" aria-label="Office building">🏢</span>
+        </div>
+
+        {/* Main info */}
+        <div className="min-w-0">
+          <p className="text-[13px] font-bold text-[#0f172a] truncate">{booking.location}</p>
+          <p className="text-[11.5px] text-gray-600 mt-0.5">{booking.floor} · Seat {booking.seatId}</p>
+          <div className="flex items-center gap-1.5 mt-1.5 text-[11.5px] text-gray-600">
+            <Calendar className="size-3 text-blue-500 shrink-0" />
+            <span>{booking.date} · {booking.startTime} – {booking.endTime}</span>
+          </div>
+          <div className="flex gap-1.5 flex-wrap mt-2">
+            <span className={cn(
+              "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-semibold",
+              isConfirmed
+                ? "bg-[#E8F5E9] text-[#2E7D32] border border-[#A5D6A7]"
+                : "bg-[#FFF8E1] text-[#F57F17] border border-[#FFE082]",
+            )}>
+              <span className={cn("w-1.5 h-1.5 rounded-full", isConfirmed ? "bg-green-500" : "bg-amber-500")} />
               {booking.status}
-            </Badge>
+            </span>
             {booking.isRecurring && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-gray-400 font-medium">
-                <Repeat2 className="w-3 h-3" />
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10.5px] font-semibold bg-[#E8EAF6] text-[#283593] border border-[#9FA8DA]">
                 Recurring
+              </span>
+            )}
+            {booking.bookingType === "on_behalf" && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10.5px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                On Behalf
               </span>
             )}
           </div>
         </div>
-        <p className="text-[11px] text-gray-400 mt-1 leading-snug">
-          Seat {booking.seatId} · {booking.date} · {booking.startTime} – {booking.endTime}
-        </p>
-        {(canCancelOwn || canBookSelf) && (
-          <div className="flex items-center mt-3 pt-2.5 border-t border-gray-50 gap-2">
-            {canBookSelf && (
-              <Button
-                variant="outline" size="sm"
-                className="h-[22px] text-[11px] px-2.5 rounded-md border-gray-200 text-gray-600 shadow-none font-normal hover:bg-gray-50 hover:border-gray-300 active:scale-95 transition-all duration-150"
-                onClick={() => onModify(booking)}
-              >
-                Modify
-              </Button>
-            )}
-            {canCancelOwn && (
-              <Button
-                variant="ghost" size="sm"
-                className="h-[22px] text-[11px] px-2.5 rounded-md text-red-500 hover:text-red-600 hover:bg-red-50 shadow-none font-normal active:scale-95 transition-all duration-150"
-                onClick={() => onCancel(booking)}
-              >
-                Cancel
-              </Button>
-            )}
+
+        {/* Right column: Booking ID + Booked on */}
+        <div className="hidden sm:flex flex-col items-end text-right">
+          <div className="flex items-center gap-1 mb-0.5">
+            <Hash className="size-2.5 text-blue-500" />
+            <p className="text-[9px] font-semibold tracking-wider uppercase text-gray-500">Booking ID</p>
           </div>
-        )}
-        {booking.managerNote && (
-          <p className="text-[10px] text-gray-400 mt-1.5 italic">{booking.managerNote}</p>
-        )}
+          <p className="text-[10.5px] text-gray-700 font-mono mb-2">{booking.id}</p>
+          {booking.bookedOn && (
+            <>
+              <div className="flex items-center gap-1 mb-0.5">
+                <Clock className="size-2.5 text-blue-500" />
+                <p className="text-[9px] font-semibold tracking-wider uppercase text-gray-500">Booked on</p>
+              </div>
+              <p className="text-[10.5px] text-gray-700">{booking.bookedOn}</p>
+            </>
+          )}
+        </div>
       </div>
+
+      {/* Footer row: booked-by + actions aligned with grid columns */}
+      {(booking.bookingType === "on_behalf" || canCancelOwn || canBookSelf) && (
+        <div className="hidden sm:grid grid-cols-[44px_1fr_auto] gap-3.5 px-4 pb-3.5 -mt-1 items-center">
+          <div />
+          {booking.bookingType === "on_behalf" && booking.bookedByName ? (
+            <div className="flex items-center gap-2 min-w-0 pt-2 border-t border-gray-100">
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0 bg-gradient-to-br from-emerald-500 to-teal-600">
+                {getInitials(booking.bookedByName)}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] text-gray-400">Booked by</p>
+                <p className="text-[11.5px] font-semibold text-[#0f172a] truncate">{booking.bookedByName}</p>
+              </div>
+            </div>
+          ) : <div />}
+          {(canCancelOwn || canBookSelf) ? (
+            <div className="flex gap-1.5 shrink-0 justify-end">
+              {canBookSelf && (
+                <button onClick={() => onModify(booking)} className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 hover:border-blue-300 hover:text-blue-600 rounded-lg px-2.5 py-1 transition-all">
+                  <Pencil className="size-2.5" /> Modify
+                </button>
+              )}
+              {canCancelOwn && (
+                <button onClick={() => onCancel(booking)} className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-red-500 bg-white hover:bg-red-50 border border-red-200 hover:border-red-300 rounded-lg px-2.5 py-1 transition-all">
+                  <X className="size-2.5" /> Cancel
+                </button>
+              )}
+            </div>
+          ) : <div />}
+        </div>
+      )}
+
+      {/* Mobile actions */}
+      {(canCancelOwn || canBookSelf) && (
+        <div className="sm:hidden flex gap-2 px-3.5 pb-3">
+          {canBookSelf && (
+            <button
+              onClick={() => onModify(booking)}
+              className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1"
+            >
+              <Pencil className="size-2.5" />
+              Modify
+            </button>
+          )}
+          {canCancelOwn && (
+            <button
+              onClick={() => onCancel(booking)}
+              className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-red-500 bg-white hover:bg-red-50 border border-red-200 rounded-lg px-2.5 py-1"
+            >
+              <X className="size-2.5" />
+              Cancel
+            </button>
+          )}
+        </div>
+      )}
+
+      {booking.managerNote && (
+        <div className="px-3.5 pb-3 sm:px-4">
+          <p className="text-[10px] text-gray-400 italic">{booking.managerNote}</p>
+        </div>
+      )}
     </div>
   );
 }

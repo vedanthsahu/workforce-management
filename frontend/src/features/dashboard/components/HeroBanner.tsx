@@ -5,6 +5,13 @@ import { CalendarDays, Users } from "lucide-react";
 
 import type { TodayBookingInfo } from "../types/dashboard.types";
 
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 type HeroBannerProps = {
   userName: string;
   todayBooking: TodayBookingInfo;
@@ -65,7 +72,7 @@ export function HeroBanner({
       <div className="absolute w-20 h-20 rounded-full bg-indigo-500/20 top-2 left-1/3 pointer-events-none" />
       <div className="min-w-0 flex flex-col gap-2.5 z-10">
         <p className="text-white font-bold text-[26px] leading-tight tracking-tight">
-          Good morning, {userName} 👋
+          {getGreeting()}, {userName} 👋
         </p>
         <p className="text-indigo-300/80 text-[11.5px] leading-snug">
           {todayBooking.floor ?? "Office"} · {teamInOfficeCount} teammate{teamInOfficeCount !== 1 ? "s" : ""} in office
