@@ -60,7 +60,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
   useEffect(() => {
     if (!sites.length || !formData.site || formData.site.name) return;
     const siteId = formData.site.id;
-    const match = sites.find((s) => s.site_id === siteId);
+    const match = sites.find((s) => String(s.site_id) === String(siteId));
     if (match) {
       setFormData((prev) => ({
         ...prev,
@@ -83,7 +83,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
   useEffect(() => {
     if (!buildings.length || !formData.building || formData.building.name) return;
     const buildingId = formData.building.id;
-    const match = buildings.find((b) => b.building_id === buildingId);
+    const match = buildings.find((b) => String(b.building_id) === String(buildingId));
     if (match) {
       setFormData((prev) => ({
         ...prev,
@@ -105,7 +105,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
   useEffect(() => {
     if (!floors.length || !formData.floor || formData.floor.name) return;
     const floorId = formData.floor.id;
-    const match = floors.find((f) => f.floor_id === floorId);
+    const match = floors.find((f) => String(f.floor_id) === String(floorId));
     if (match) {
       setFormData((prev) => ({
         ...prev,
@@ -166,7 +166,14 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
     };
  
     generate();
-  }, [formData.site?.id, formData.building?.id, formData.floor?.id]);
+  }, [
+    formData.site?.id,
+    formData.building?.id,
+    formData.floor?.id,
+    formData.site?.code,
+    formData.building?.code,
+    formData.floor?.code,
+  ]);
 
   const noSeatsDetected = !!formData.file && !countingSeats && seatIds.length === 0;
 
