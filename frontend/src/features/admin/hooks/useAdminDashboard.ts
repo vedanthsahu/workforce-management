@@ -13,7 +13,7 @@ export const useAdminDashboard = (
   const { data: statsData, loading, error } = useDashboardSummary({ date, site_id, floor_id });
   const { trendData, selectedWeek, setSelectedWeek } = useOccupancyTrend();
   const { topOffices } = useTopOffices(date);
-  const { recentBookings } = useRecentBookings(date);
+  const { recentBookings } = useRecentBookings();
 
   return {
     statsData,
