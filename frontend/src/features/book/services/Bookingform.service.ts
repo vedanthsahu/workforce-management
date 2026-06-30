@@ -50,7 +50,9 @@ interface RawPreference {
 // ── Sites ─────────────────────────────────────────────────────────────────────
 
 export async function fetchSites(): Promise<Site[]> {
-  const { data } = await axiosInstance.get<RawSite[]>("/sites");
+  const { data } = await axiosInstance.get<RawSite[]>("/sites", {
+    params: { status: "ACTIVE" },
+  });
   return data.map((s) => ({
     id: s.site_id,
     name: s.site_name,
@@ -64,7 +66,7 @@ export async function fetchSites(): Promise<Site[]> {
 
 export async function fetchBuildings(siteId: string): Promise<Building[]> {
   const { data } = await axiosInstance.get<RawBuilding[]>("/buildings", {
-    params: { site_id: siteId },
+    params: { site_id: siteId, status: "ACTIVE" },
   });
   return data.map((b) => ({
     id: b.building_id,
@@ -80,7 +82,8 @@ export async function fetchBuildings(siteId: string): Promise<Building[]> {
 
 export async function fetchFloors(buildingId: string): Promise<Floor[]> {
   const { data } = await axiosInstance.get<RawFloor[]>(
-    `/buildings/${buildingId}/floors`
+    `/buildings/${buildingId}/floors`,
+    { params: { status: "ACTIVE" } },
   );
   return data.map((f) => ({
     id: f.floor_id,
@@ -165,7 +168,7 @@ export async function fetchAvailability(params: {
   isGuestBooking?: boolean;
   bookedForGuestId?: string | null;
 }): Promise<AvailableSeatResponse[]> {
-  const { data } = await axiosInstance.get<AvailableSeatResponse[]>(
+  const { data } = await axiosInstance.get<any>(
     `/floors/${params.floorId}/seats`,
     {
       params: {
@@ -202,7 +205,8 @@ export async function fetchAvailability(params: {
       },
     }
   );
-  return data;
+  console.log("[fetchAvailability] API response shape:", typeof data, Array.isArray(data), JSON.stringify(Object.keys(data ?? {})));
+  return Array.isArray(data) ? data : data?.items ?? [];
 }
 
 // ── Seats + Availability ──────────────────────────────────────────────────────
@@ -346,6 +350,17 @@ export async function modifyBooking(
 ): Promise<CreateBookingResponse> {
   const { data } = await axiosInstance.post<CreateBookingResponse>(
     `/bookings/${bookingId}/modify`,
+    payload
+  );
+  return data;
+}
+
+export async function modifyGuestBooking(
+  bookingId: string,
+  payload: ModifyBookingPayload
+): Promise<CreateBookingResponse> {
+  const { data } = await axiosInstance.post<CreateBookingResponse>(
+    `/guest-bookings/${bookingId}/modify`,
     payload
   );
   return data;

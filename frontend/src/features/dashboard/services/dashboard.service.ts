@@ -91,31 +91,36 @@ function mapFavouriteSeat(seat: ApiFavouriteSeat | null): FavouriteSeat | null {
   };
 }
 
-function mapApiBooking(b: ApiBooking): Booking {
-  // For single-day bookings from_date/to_date may not exist — fall back to booking_date
+function mapApiBooking(b: ApiBooking, currentUserId: string): Booking {
   const fromDate = b.from_date ?? b.booking_date;
   const toDate   = b.to_date   ?? b.booking_date;
+
+  const bookedById  = b.booked_by_user_id;
+  const bookedForId = b.booked_for_user_id ?? b.user_id;
+  const isSelf      = !bookedById || bookedById === bookedForId || bookedById === currentUserId && bookedForId === currentUserId;
 
   return {
     id:          b.booking_id,
     location:    b.site_name      ?? "Office",
     building:    b.building_name  ?? "",
     floor:       b.floor_name     ?? (b.floor_id ? `Floor ${b.floor_id}` : ""),
-    // Human-readable display date
     date:        formatBookingDate(b.booking_date),
-    // ISO strings preserved for the modify / amenity-fetch flow
     fromDate,
     toDate,
     startTime:   DEFAULT_BOOKING_START_TIME,
     endTime:     DEFAULT_BOOKING_END_TIME,
     status:      mapBookingStatus(b.booking_status),
     isRecurring: false,
-    // Display label (seat_code preferred, falls back to seat_id)
     seatId:      b.seat_code ?? b.seat_id,
-    // Raw IDs for fetchSeatAmenities and the /book?seatId= param
     rawSeatId:   b.seat_id  ? String(b.seat_id)  : undefined,
     floorId:     b.floor_id ? String(b.floor_id) : undefined,
     managerNote: "",
+    bookedOn:    b.created_at
+      ? new Date(b.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      : undefined,
+    bookingType:   isSelf ? "self" : "on_behalf",
+    bookedByName:  isSelf ? undefined : (b.booked_by_name ?? undefined),
+    bookedByEmail: isSelf ? undefined : (b.booked_by_email ?? undefined),
   };
 }
 
@@ -295,7 +300,7 @@ export async function getDashboardData(): Promise<DashboardResult> {
 
   const upcomingBookings = [...futureRaw]
     .sort((a, b) => new Date(a.booking_date).getTime() - new Date(b.booking_date).getTime())
-    .map(mapApiBooking);
+    .map((b) => mapApiBooking(b, currentUserId));
 
   return {
     ok: true,

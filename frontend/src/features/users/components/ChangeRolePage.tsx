@@ -7,6 +7,7 @@ import { useRoleChange } from "../hooks/useRoleChange";
 import UserProfileCard from "./UserProfileCard";
 import ChangeRolePanel from "./ChangeRolePanel";
 import ConfirmRoleChangeModal from "./ConfirmRoleChangeModal";
+import { ChangeRoleSkeleton } from "./ChangeRoleSkeleton";
 
 export default function ChangeRolePage({ userId }: { userId: string }) {
   const router = useRouter();
@@ -43,7 +44,7 @@ export default function ChangeRolePage({ userId }: { userId: string }) {
         Back to User Management
       </button>
 
-      {loading && <div className="text-sm text-gray-500">Loading user…</div>}
+      {loading && <ChangeRoleSkeleton />}
       {!loading && notFound && <div className="text-sm text-red-600">{errorMessage ?? "User not found."}</div>}
 
       {!loading && user && (

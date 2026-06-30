@@ -1,12 +1,15 @@
 import { Suspense } from "react";
 import BookASeatPage from "@/features/book/components/Bookaseatpage";
+import { BookaSeatSkeleton } from "@/features/book/components/BookaSeatSkeleton";
 
 export default function Book() {
   return (
     <Suspense fallback={
-      <div className="flex h-screen items-center justify-center bg-[#F7F8FC]">
-        <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-      </div>
+      <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#F7F8FC]">
+        <div className="px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-2 flex flex-col gap-4 sm:gap-5">
+          <BookaSeatSkeleton />
+        </div>
+      </main>
     }>
       <BookASeatPage />
     </Suspense>

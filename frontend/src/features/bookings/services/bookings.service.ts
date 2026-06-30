@@ -49,14 +49,31 @@ function extractPreferenceKeys(raw: RawBooking): string[] {
 
 // ── Mapper ────────────────────────────────────────────────────────────────────
 
-function mapRawBooking(raw: RawBooking): Booking {
-  const bookedDate = new Date(raw.created_at);
+function deriveBookingType(raw: RawBooking, currentUserId: string): Booking["bookingType"] {
+  if (raw.activity_source === "GUEST_VISIT") {
+    return (raw.booking_id && raw.seat_id) ? "guest" : "visit";
+  }
+  if (raw.booking_type === "GUEST") return "guest";
+  const bookedForId = raw.booked_for_user_id ?? raw.user_id;
+  const bookedById  = raw.booked_by_user_id;
+  if (!bookedById || bookedById === bookedForId) {
+    if (bookedForId === currentUserId) return "self";
+    return "employee";
+  }
+  if (bookedForId === currentUserId) return "on_behalf";
+  return "employee";
+}
+
+function mapRawBooking(raw: RawBooking, currentUserId: string): Booking {
+  const createdAt = raw.created_at ?? raw.booking_date;
+  const bookedDate = new Date(createdAt);
   const bookedOn   = bookedDate.toLocaleDateString("en-US", {
     month: "short",
     day:   "numeric",
   });
 
   const status = normaliseStatus(raw.booking_status);
+  const bookingType = deriveBookingType(raw, currentUserId);
 
   const tagList: Booking["tags"] = [];
 
@@ -72,19 +89,18 @@ function mapRawBooking(raw: RawBooking): Booking {
     else                               tagList.push({ label: t,                  variant: "zone"    });
   }
 
-  // ── Date range ──────────────────────────────────────────────────────────
-  // Prefer explicit from_date/to_date if the API returns them.
-  // Fall back to booking_date for both (single-day booking).
   const fromDate = raw.from_date ?? raw.booking_date;
   const toDate   = raw.to_date   ?? raw.booking_date;
 
+  const id = raw.booking_id ?? raw.guest_visit_id ?? "";
+  const isVisitOnly = raw.activity_source === "GUEST_VISIT";
+
   return {
-    id:               raw.booking_id,
+    id,
     location:         raw.site_name      ?? "Office",
     building:         raw.building_name  ?? "",
     floor:            raw.floor_name     ?? (raw.floor_id ? `Floor ${raw.floor_id}` : ""),
-    seat:             raw.seat_code      ?? raw.seat_id,
-    // Keep `date` for backward compat — always equals fromDate
+    seat:             raw.seat_code      ?? raw.seat_id ?? (isVisitOnly ? "—" : ""),
     date:             raw.booking_date,
     fromDate,
     toDate,
@@ -97,31 +113,66 @@ function mapRawBooking(raw: RawBooking): Booking {
     isRecurring:      raw.is_recurring      ?? false,
     recurringPattern: raw.recurring_pattern,
     preferences:      extractPreferenceKeys(raw),
-    floorId:          raw.floor_id ? String(raw.floor_id) : undefined,
-    seatId:           raw.seat_id  ? String(raw.seat_id)  : undefined,
+    siteId:           raw.site_id     ? String(raw.site_id)     : undefined,
+    buildingId:       raw.building_id ? String(raw.building_id) : undefined,
+    floorId:          raw.floor_id    ? String(raw.floor_id)    : undefined,
+    seatId:           raw.seat_id     ? String(raw.seat_id)     : undefined,
+    bookingType,
+    bookedByUserId:   raw.booked_by_user_id,
+    bookedByName:     raw.booked_by_name ?? undefined,
+    bookedByRole:     raw.booked_by_email ?? undefined,
+    bookedForUserId:  raw.booked_for_user_id ?? undefined,
+    bookedForName:    raw.booked_for_name ?? raw.guest_name ?? undefined,
+    bookedForGuestId: raw.booked_for_guest_id ?? undefined,
+    guestName:        raw.guest_name ?? undefined,
+    guestEmail:       raw.guest_email ?? undefined,
+    guestType:        raw.guest_type ?? undefined,
+    purposeOfVisit:   raw.purpose_of_visit ?? undefined,
+    hostName:         raw.host_name ?? undefined,
+    hostUserId:       raw.host_user_id ? String(raw.host_user_id) : undefined,
+    guestVisitId:     raw.guest_visit_id ?? undefined,
+    activitySource:   (raw.activity_source as Booking["activitySource"]) ?? "BOOKING",
+    createdAt:        raw.created_at ?? raw.booking_date,
   };
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────
 
-export async function fetchCurrentBookings(): Promise<Booking[]> {
+export async function fetchCurrentBookings(currentUserId: string): Promise<Booking[]> {
   const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/me/current`);
-  return data.map(mapRawBooking);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
 }
 
-export async function fetchFutureBookings(): Promise<Booking[]> {
+export async function fetchFutureBookings(currentUserId: string): Promise<Booking[]> {
   const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/me/future`);
-  return data.map(mapRawBooking);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
 }
 
-export async function fetchPastBookings(): Promise<Booking[]> {
+export async function fetchPastBookings(currentUserId: string): Promise<Booking[]> {
   const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/me/past`);
-  return data.map(mapRawBooking);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
 }
 
-export async function fetchCancelledBookings(): Promise<Booking[]> {
+export async function fetchCancelledBookings(currentUserId: string): Promise<Booking[]> {
   const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/me/cancelled`);
-  return data.map(mapRawBooking);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
+}
+
+// ── Delegated bookings (booked BY current user for others) ───────────────────
+
+export async function fetchDelegatedCurrentBookings(currentUserId: string): Promise<Booking[]> {
+  const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/delegated/current`);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
+}
+
+export async function fetchDelegatedFutureBookings(currentUserId: string): Promise<Booking[]> {
+  const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/delegated/future`);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
+}
+
+export async function fetchDelegatedPastBookings(currentUserId: string): Promise<Booking[]> {
+  const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/delegated/past`);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
 }
 
 export async function cancelBooking(
@@ -131,6 +182,41 @@ export async function cancelBooking(
   await axiosInstance.post(`${BASE}/${bookingId}/cancel`, {
     cancellation_reason: cancellationReason?.trim() || null,
   });
+}
+
+export async function cancelGuestBooking(
+  bookingId: string,
+  cancellationReason?: string,
+): Promise<void> {
+  await axiosInstance.post(`/guest-bookings/${bookingId}/cancel`, {
+    cancellation_reason: cancellationReason?.trim() || null,
+  });
+}
+
+// ── Delegated cancelled bookings ─────────────────────────────────────────────
+
+export async function fetchDelegatedCancelledBookings(currentUserId: string): Promise<Booking[]> {
+  const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/delegated/cancelled`);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
+}
+
+export type GuestWorkflowAction =
+  | "MODIFY_VISIT_ONLY"
+  | "MODIFY_VISIT_AND_BOOKING"
+  | "ADD_BOOKING"
+  | "CANCEL_BOOKING"
+  | "CANCEL_VISIT";
+
+export async function guestVisitWorkflow(
+  guestVisitId: string,
+  action: GuestWorkflowAction,
+  payload?: Record<string, unknown>,
+): Promise<unknown> {
+  const { data } = await axiosInstance.post(
+    `/guest-visits/${guestVisitId}/workflow`,
+    { action, ...payload },
+  );
+  return data;
 }
 
 // ── Team / user ───────────────────────────────────────────────────────────────
@@ -221,7 +307,7 @@ export async function fetchSeatAmenities(
     const allAmenityIds = allPrefs.map((p) => p.id);
 
     // Step 2: fetch seats passing all amenity ids so the backend populates matched_amenities
-    const { data } = await axiosInstance.get<SeatAmenityMatch[]>(
+    const { data: resp } = await axiosInstance.get<any>(
       `/floors/${floorId}/seats`,
       {
         params: {
@@ -244,7 +330,8 @@ export async function fetchSeatAmenities(
     );
 
     // Step 3: find our specific seat
-    const match = data.find((s) => String(s.seat_id) === String(seatId));
+    const items: SeatAmenityMatch[] = Array.isArray(resp) ? resp : resp.items ?? [];
+    const match = items.find((s) => String(s.seat_id) === String(seatId));
     if (!match) return [];
 
     // Step 4: map display names → keys using the preferences list (no hardcoding)

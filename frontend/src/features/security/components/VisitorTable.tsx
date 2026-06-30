@@ -174,8 +174,8 @@ export function VisitorTable({
                     <th
                       key={h}
                       className={cn(
-                        "py-2.5 px-4 text-[11px] font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap bg-gray-50",
-                        h === "Actions" && "w-[160px] text-center"
+                        "py-2.5 px-4 text-[11px] font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap bg-gray-50 text-left",
+                        h === "Actions" && "w-[160px]"
                       )}
                     >
                       {h}

@@ -18,12 +18,14 @@ import {
   createBooking,
   createGuestBooking,
   modifyBooking,
+  modifyGuestBooking,
   fetchBuildings,
   fetchFloors,
   fetchPreferences,
   fetchSeatsWithAvailability,
   fetchSites,
 } from "../services/Bookingform.service";
+import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -62,12 +64,16 @@ function buildUrl(
   bookedForUserId?: string | null,
   guestParams?: GuestUrlParams | null,
   bookingForName?: string | null,
+  visitId?: string | null,
+  isGuestModify?: boolean,
 ): string {
   const params = new URLSearchParams();
   params.set("step", String(step));
   if (modifyBookingId)             params.set("modifyBookingId", modifyBookingId);
   if (bookedForUserId)             params.set("bookedForUserId", bookedForUserId);
   if (bookingForName)              params.set("bookingForName",  bookingForName);
+  if (visitId)                     params.set("visitId",         visitId);
+  if (isGuestModify)               params.set("isGuestModify",   "true");
   if (form.siteId)                 params.set("siteId",          form.siteId);
   if (form.buildingId)             params.set("buildingId",      form.buildingId);
   if (form.floorId)                params.set("floorId",         form.floorId);
@@ -115,7 +121,10 @@ export function useBookingForm() {
   const guestStartTime = searchParams.get("startTime")      ?? null;
   const guestEndTime   = searchParams.get("endTime")        ?? null;
   const guestNotes     = searchParams.get("notes")          ?? null;
+  const visitId        = searchParams.get("visitId")         ?? null;
+  const isGuestModify  = searchParams.get("isGuestModify") === "true";
   const isGuestBooking = Boolean(guestId);
+  const isAddBookingToVisit = Boolean(visitId);
   const isBookingForSomeone = Boolean(bookedForUserId || guestId);
 
   const prefillPreferencesParam = searchParams.get("preferences") ?? null;
@@ -239,10 +248,10 @@ export function useBookingForm() {
   const navigateTo = useCallback(
     (nextStep: BookingStep, nextForm: BookingFormState) => {
       setStepState(nextStep);
-      router.push(buildUrl(nextStep, nextForm, modifyBookingId, bookedForUserId, guestUrlParams, bookingForName));
+      router.push(buildUrl(nextStep, nextForm, modifyBookingId, bookedForUserId, guestUrlParams, bookingForName, visitId, isGuestModify));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [router, modifyBookingId, bookedForUserId, isGuestBooking],
+    [router, modifyBookingId, bookedForUserId, isGuestBooking, visitId, isGuestModify],
   );
 
   // ── Data fetching ─────────────────────────────────────────────────────────
@@ -433,11 +442,16 @@ export function useBookingForm() {
       setSeats(data);
       navigateTo(2, form);
     } catch (e) {
-      const status = axios.isAxiosError(e) ? e.response?.status : undefined;
-      if (status === 409) {
-        setError("This seat is already booked for the selected date. Please choose a different seat.");
-      } else if (status === 400) {
-        setError(e instanceof Error ? e.message : "Failed to load seats");
+      if (axios.isAxiosError(e)) {
+        const data = e.response?.data as { detail?: { message?: string } | string; message?: string; error?: { message?: string } } | undefined;
+        const msg =
+          (typeof data?.detail === "object" ? data?.detail?.message : typeof data?.detail === "string" ? data.detail : null)
+          ?? data?.error?.message
+          ?? data?.message
+          ?? e.message;
+        setError(msg);
+      } else {
+        setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
       }
     } finally {
       setLoadingSeats(false);
@@ -474,9 +488,29 @@ export function useBookingForm() {
     try {
       let result: CreateBookingResponse;
 
-      if (isModifyMode && modifyBookingId) {
+      if (isModifyMode && modifyBookingId && isGuestModify) {
+        console.log("[ConfirmBooking] Branch: MODIFY_GUEST", { modifyBookingId });
+        result = await modifyGuestBooking(modifyBookingId, basePayload);
+      } else if (isModifyMode && modifyBookingId) {
+        console.log("[ConfirmBooking] Branch: MODIFY", { modifyBookingId });
         result = await modifyBooking(modifyBookingId, basePayload);
+      } else if (isAddBookingToVisit && visitId) {
+        const workflowPayload = {
+          site_id:      Number(form.siteId),
+          building_id:  Number(form.buildingId),
+          floor_id:     Number(form.floorId),
+          seat_id:      Number(form.selectedSeatId),
+          visit_date:   form.fromDate,
+          guest_type:   guestType ?? "OTHER",
+          host_user_id: hostUserId ? Number(hostUserId) : undefined,
+        };
+        console.log("[ConfirmBooking] Branch: ADD_BOOKING", { visitId, workflowPayload });
+        const res = await guestVisitWorkflow(visitId, "ADD_BOOKING", workflowPayload);
+        console.log("[ConfirmBooking] ADD_BOOKING response:", res);
+        const wf = res as { booking?: CreateBookingResponse };
+        result = wf.booking ?? { booking_id: "", booking_status: "CONFIRMED", booking_date: form.fromDate } as CreateBookingResponse;
       } else if (isGuestBooking && guestId && hostUserId && guestType) {
+        console.log("[ConfirmBooking] Branch: CREATE_GUEST_BOOKING", { guestId, hostUserId, guestType });
         result = await createGuestBooking({
           site_id:      Number(form.siteId),
           building_id:  Number(form.buildingId),
@@ -500,32 +534,16 @@ export function useBookingForm() {
       setConfirmation(result);
       setStepState(3);
     } catch (err) {
-      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
-      const data = axios.isAxiosError(err)
-        ? (err.response?.data as { detail?: { message?: string }; message?: string } | undefined)
-        : undefined;
-
-      if (status === 409) {
-        setError("This seat is already booked for the selected date. Please choose a different seat.");
-      } else if (status === 400) {
-        setError(
-          data?.detail?.message ??
-          "Invalid booking details. Please go back and check your selection."
-        );
-      } else if (status === 403) {
-        setError("You don't have permission to book this seat.");
-      } else if (status === 404) {
-        setError(
-          isModifyMode
-            ? "The original booking could not be found. It may have already been cancelled."
-            : "The selected seat is no longer available. Please go back and choose another."
-        );
+      if (axios.isAxiosError(err)) {
+        const data = err.response?.data as { detail?: { message?: string } | string; message?: string; error?: { message?: string } } | undefined;
+        const msg =
+          (typeof data?.detail === "object" ? data?.detail?.message : typeof data?.detail === "string" ? data.detail : null)
+          ?? data?.error?.message
+          ?? data?.message
+          ?? err.message;
+        setError(msg);
       } else {
-        setError(
-          data?.detail?.message ??
-          data?.message ??
-          (err instanceof Error ? err.message : "Failed to confirm booking. Please try again.")
-        );
+        setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       }
     } finally {
       setSubmitting(false);
@@ -551,7 +569,12 @@ export function useBookingForm() {
     setFloorLayoutUrl(null);
     setConfirmation(null);
     setError(null);
-    // router.push("/my-bookings");
+    if (isModifyMode) {
+      const forSomeone = isBookingForSomeone || isGuestModify || Boolean(bookedForUserId);
+      router.push(forSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings");
+    } else {
+      router.push("/book");
+    }
   };
 
   // ── Derived values ────────────────────────────────────────────────────────

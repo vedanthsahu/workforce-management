@@ -90,6 +90,7 @@ export interface CreateGuestVisitInput {
   hostUserId: string;
   siteId: string;
   buildingId: string;
+  floorId?: string;
   visitDate: string;
   guestType: GuestType;
   purposeOfVisit?: PurposeOfVisit | null;

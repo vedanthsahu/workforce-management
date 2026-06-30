@@ -6,6 +6,10 @@ import {
   fetchFutureBookings,
   fetchPastBookings,
   fetchCancelledBookings,
+  fetchDelegatedCurrentBookings,
+  fetchDelegatedFutureBookings,
+  fetchDelegatedPastBookings,
+  fetchDelegatedCancelledBookings,
   deriveBookingSummary,
   fetchTeamGroups,
   fetchCurrentUser,
@@ -15,12 +19,15 @@ import type { ApiTeamGroup } from "@/features/dashboard/types/dashboard.types";
 
 interface UseBookingsReturn {
   displayedBookings: Booking[];
+  delegatedBookings: Booking[];
+  cancelledDelegatedBookings: Booking[];
   summary:           BookingSummary;
   activeTab:         BookingTab;
   isLoading:         boolean;
   error:             string | null;
   setActiveTab:      (tab: BookingTab) => void;
   handleCancelBooking: (bookingId: string) => Promise<void>;
+  handleCancelDelegatedBooking: () => void;
   refreshBookings:   () => void;
 }
 
@@ -33,6 +40,8 @@ export function useBookings(): UseBookingsReturn {
   const [futureBookings,    setFutureBookings]     = useState<Booking[]>([]);
   const [pastBookings,      setPastBookings]       = useState<Booking[]>([]);
   const [cancelledBookings, setCancelledBookings]  = useState<Booking[]>([]);
+  const [delegatedBookings, setDelegatedBookings] = useState<Booking[]>([]);
+  const [cancelledDelegatedBookings, setCancelledDelegatedBookings] = useState<Booking[]>([]);
   const [teamGroups,        setTeamGroups]         = useState<ApiTeamGroup[]>([]);
   const [currentUserId,     setCurrentUserId]      = useState<string>("");
 
@@ -62,22 +71,40 @@ export function useBookings(): UseBookingsReturn {
     setIsLoading(true);
     setError(null);
     try {
-      const [current, future, past, cancelled, groups, user] = await Promise.all([
-        fetchCurrentBookings(),
-        fetchFutureBookings(),
-        fetchPastBookings(),
-        fetchCancelledBookings(),
-        fetchTeamGroups(),
+      const [user, groups] = await Promise.all([
         fetchCurrentUser(),
+        fetchTeamGroups(),
+      ]);
+      const uid = user.user_id;
+      setCurrentUserId(uid);
+      setTeamGroups(groups);
+
+      const [current, future, past, cancelled, delCurrent, delFuture, delPast, delCancelled] = await Promise.all([
+        fetchCurrentBookings(uid),
+        fetchFutureBookings(uid),
+        fetchPastBookings(uid),
+        fetchCancelledBookings(uid),
+        fetchDelegatedCurrentBookings(uid),
+        fetchDelegatedFutureBookings(uid),
+        fetchDelegatedPastBookings(uid),
+        fetchDelegatedCancelledBookings(uid),
       ]);
 
       setCurrentBookings(current);
       setFutureBookings(future);
       setPastBookings(past);
       setCancelledBookings(cancelled);
-      setTeamGroups(groups);
-      setCurrentUserId(user.user_id);
-      // ✅ No setSummary here — the useEffect above handles it reactively
+      const allDelegated = [...delCurrent, ...delFuture, ...delPast];
+      const visitIdsWithBooking = new Set(
+        allDelegated
+          .filter((b) => b.bookingType === "guest" && b.guestVisitId)
+          .map((b) => b.guestVisitId),
+      );
+      const merged = allDelegated.filter(
+        (b) => !(b.bookingType === "visit" && visitIdsWithBooking.has(b.id)),
+      );
+      setDelegatedBookings(merged);
+      setCancelledDelegatedBookings(delCancelled);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load bookings");
     } finally {
@@ -124,13 +151,18 @@ export function useBookings(): UseBookingsReturn {
     [currentBookings, futureBookings],
   );
 
+  const handleCancelDelegatedBooking = useCallback(
+    () => { loadBookings(); },
+    [loadBookings],
+  );
+
   // ── Displayed bookings per tab ────────────────────────────────────────────
   const displayedBookings: Booking[] = (() => {
     switch (activeTab) {
       case "upcoming":
-        return [...currentBookings, ...futureBookings].filter(
-          (b) => b.status !== "cancelled"
-        );
+        return [...currentBookings, ...futureBookings]
+          .filter((b) => b.status !== "cancelled")
+          .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
       case "past":
         return pastBookings;
       case "recurring":
@@ -146,12 +178,15 @@ export function useBookings(): UseBookingsReturn {
 
   return {
     displayedBookings,
+    delegatedBookings,
+    cancelledDelegatedBookings,
     summary,
     activeTab,
     isLoading,
     error,
     setActiveTab,
     handleCancelBooking,
+    handleCancelDelegatedBooking,
     refreshBookings: loadBookings,
   };
 }

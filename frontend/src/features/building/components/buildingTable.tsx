@@ -71,12 +71,12 @@ export default function BuildingTable({ data, onEdit, highlightedId }: Props) {
               <th className="px-3 py-3 text-left font-medium">Building Code</th>
               <th className="px-3 py-3 text-left font-medium">Building Name</th>
               <th className="px-3 py-3 text-left font-medium">Site Name</th>
-              <th className="px-3 py-3 text-center font-medium">Floors</th>
-              <th className="px-3 py-3 text-center font-medium">Total Seats</th>
-              <th className="px-3 py-3 text-center font-medium">Active Seats</th>
-              <th className="px-3 py-3 text-center font-medium">Bookable Seats</th>
+              <th className="px-3 py-3 text-left font-medium">Floors</th>
+              <th className="px-3 py-3 text-left font-medium">Total Seats</th>
+              <th className="px-3 py-3 text-left font-medium">Active Seats</th>
+              <th className="px-3 py-3 text-left font-medium">Bookable Seats</th>
               <th className="px-3 py-3 text-left font-medium">Status</th>
-              <th className="px-3 py-3 text-center font-medium">Actions</th>
+              <th className="px-3 py-3 text-left font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">

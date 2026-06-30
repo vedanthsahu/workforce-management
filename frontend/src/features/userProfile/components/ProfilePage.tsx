@@ -1,13 +1,4 @@
-
-
-
 "use client";
-
-/**
- * ProfilePage.tsx
- * src/features/profile/components/ProfilePage.tsx
- */
-
 import { useState, useRef, useEffect } from "react";
 import {
   Mail, Phone, MapPin, Briefcase,
