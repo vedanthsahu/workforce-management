@@ -15,13 +15,6 @@ import {
   Pencil,
 } from "lucide-react";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
@@ -197,21 +190,6 @@ const BookASeatPage: React.FC = () => {
 
   const todayIso = new Date().toISOString().slice(0, 10);
 
-  const selectedSiteLabel = React.useMemo(() => {
-    if (!form.siteId) return undefined;
-    return sites.find((x) => x.id === form.siteId)?.name ?? form.siteId;
-  }, [form.siteId, sites]);
-
-  const selectedBuildingLabel = React.useMemo(() => {
-    if (!form.buildingId) return undefined;
-    return buildings.find((x) => x.id === form.buildingId)?.name ?? form.buildingId;
-  }, [form.buildingId, buildings]);
-
-  const selectedFloorLabel = React.useMemo(() => {
-    if (!form.floorId) return undefined;
-    return floors.find((x) => x.id === form.floorId)?.name ?? form.floorId;
-  }, [form.floorId, floors]);
-
   const seatsWithSvgId = seats as unknown as SeatWithSvgId[];
 
   const showHeaderAction = step !== 3;
@@ -321,50 +299,47 @@ const BookASeatPage: React.FC = () => {
 
                 <div>
                   <p className="text-[11px] font-medium text-gray-500 mb-1.5">Site (Office Location)</p>
-                  <Select value={form.siteId} onValueChange={setSiteId} disabled={loadingSites}>
-                    <SelectTrigger className="h-9 sm:h-10 text-[12.5px] sm:text-[13px] border-[#EBEBF5] w-full">
-                      <SelectValue placeholder={loadingSites ? "Loading…" : "Select site"}>
-                        {selectedSiteLabel}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sites.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <select
+                    value={form.siteId ?? ""}
+                    onChange={(e) => setSiteId(e.target.value || null)}
+                    disabled={loadingSites}
+                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <option value="" disabled>{loadingSites ? "Loading…" : "Select site"}</option>
+                    {sites.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <p className="text-[11px] font-medium text-gray-500 mb-1.5">Building</p>
-                  <Select value={form.buildingId} onValueChange={setBuildingId} disabled={!form.siteId || loadingBuildings}>
-                    <SelectTrigger className="h-9 sm:h-10 text-[12.5px] sm:text-[13px] border-[#EBEBF5] w-full">
-                      <SelectValue placeholder={loadingBuildings ? "Loading…" : "Select building"}>
-                        {selectedBuildingLabel}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {buildings.map((b) => (
-                        <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <select
+                    value={form.buildingId ?? ""}
+                    onChange={(e) => setBuildingId(e.target.value || null)}
+                    disabled={!form.siteId || loadingBuildings}
+                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <option value="" disabled>{loadingBuildings ? "Loading…" : "Select building"}</option>
+                    {buildings.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="sm:col-span-2 lg:col-span-1">
                   <p className="text-[11px] font-medium text-gray-500 mb-1.5">Floor</p>
-                  <Select value={form.floorId} onValueChange={setFloorId} disabled={!form.buildingId || loadingFloors}>
-                    <SelectTrigger className="h-9 sm:h-10 text-[12.5px] sm:text-[13px] border-[#EBEBF5] w-full">
-                      <SelectValue placeholder={loadingFloors ? "Loading…" : "Select floor"}>
-                        {selectedFloorLabel}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {floors.map((f) => (
-                        <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <select
+                    value={form.floorId ?? ""}
+                    onChange={(e) => setFloorId(e.target.value || null)}
+                    disabled={!form.buildingId || loadingFloors}
+                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <option value="" disabled>{loadingFloors ? "Loading…" : "Select floor"}</option>
+                    {floors.map((f) => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
                 </div>
 
               </div>
