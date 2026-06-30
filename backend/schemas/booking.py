@@ -14,6 +14,7 @@ from backend.core.enums import (
     RangeAvailabilityStatus,
     VisitPurpose,
 )
+from backend.schemas.pagination import PaginationMetadata
 
 
 class CreateBookingRequest(BaseModel):
@@ -103,12 +104,18 @@ class BookingResponse(BaseModel):
 
     host_user_id: str | None = None
     host_name: str | None = None
+    host_email: str | None = None
 
     start_time: time | None = None
     end_time: time | None = None
 
     notes: str | None = None
     requires_seat: bool | None = None
+
+
+class PaginatedBookingResponse(BaseModel):
+    items: list[BookingResponse]
+    pagination: PaginationMetadata
 
 
 class SeatAvailabilityDay(BaseModel):

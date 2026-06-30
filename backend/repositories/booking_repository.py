@@ -78,7 +78,8 @@ BOOKING_SELECT_FIELDS = """
     gv.requires_seat,
 
     host.id::text AS host_user_id,
-    host.full_name AS host_name
+    host.full_name AS host_name,
+    host.email AS host_email
 """
 
 
@@ -1880,6 +1881,7 @@ def fetch_guest_bookings(
     booking_date: date | None = None,
     booking_status: str | None = None,
     limit: int = 100,
+    offset: int | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch administrative guest booking records for one tenant."""
     query = f"""
@@ -1902,8 +1904,43 @@ def fetch_guest_bookings(
 
     query += " ORDER BY b.booking_date DESC, b.created_at DESC, b.id DESC LIMIT %s"
     params.append(limit)
+    if offset is not None:
+        query += " OFFSET %s"
+        params.append(offset)
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(query, params)
         rows = cur.fetchall()
     return [dict(row) for row in rows]
+
+
+def count_guest_bookings(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_id: str | None = None,
+    booking_date: date | None = None,
+    booking_status: str | None = None,
+) -> int:
+    query = """
+        SELECT COUNT(*)::integer
+        FROM bookings b
+        WHERE b.tenant_id = %s
+          AND b.booking_type = 'GUEST'
+    """
+    params: list[Any] = [tenant_id]
+
+    if guest_id is not None:
+        query += " AND b.booked_for_guest_id = %s"
+        params.append(guest_id)
+    if booking_date is not None:
+        query += " AND b.booking_date = %s"
+        params.append(booking_date)
+    if booking_status is not None:
+        query += " AND b.booking_status = %s"
+        params.append(booking_status)
+
+    with conn.cursor() as cur:
+        cur.execute(query, params)
+        row = cur.fetchone()
+    return int(row[0]) if row else 0

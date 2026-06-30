@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from datetime import date, datetime
 from enum import Enum
 from typing import Any
@@ -36,6 +37,7 @@ from backend.schemas.guest import (
 from backend.core.logging import LOGGER_NAME
 from backend.repositories.booking_repository import (
     cancel_booking,
+    count_guest_bookings,
     fetch_booking_by_id,
     fetch_booking_by_id_for_update,
     fetch_guest_bookings,
@@ -70,7 +72,8 @@ from backend.repositories.location_repository import (
     fetch_site_by_id,
 )
 from backend.repositories.user_repository import fetch_user_by_id
-from backend.schemas.booking import BookingResponse, ModifyBookingRequest
+from backend.schemas.booking import BookingResponse, ModifyBookingRequest, PaginatedBookingResponse
+from backend.schemas.pagination import PaginationMetadata
 from backend.schemas.guest import (
     CreateGuestBookingRequest,
     CreateGuestRequest,
@@ -83,6 +86,7 @@ from backend.schemas.guest import (
 )
 from backend.services.booking_service import _normalize_cancellation_reason
 from backend.services.notification_service import (
+    queue_email_notification,
     queue_booking_cancelled_notification,
     queue_booking_created_notification,
     queue_booking_modified_notification,
@@ -483,6 +487,7 @@ def create_guest_visit(
     *,
     current_user: dict[str, Any],
     payload: CreateGuestVisitRequest,
+    background_tasks: BackgroundTasks | None = None,
 ) -> GuestVisitResponse:
     _require_guest_operator(current_user)
     tenant_id = str(current_user["tenant_id"])
@@ -490,13 +495,13 @@ def create_guest_visit(
 
     try:
         _validate_visit_times(payload.start_time, payload.end_time)
-        _resolve_guest(
+        guest = _resolve_guest(
             conn,
             tenant_id=tenant_id,
             guest_id=str(payload.guest_id),
             require_active=True,
         )
-        _resolve_host(
+        host = _resolve_host(
             conn,
             tenant_id=tenant_id,
             host_user_id=str(payload.host_user_id),
@@ -527,6 +532,22 @@ def create_guest_visit(
             created_by_user_id=_current_user_id(current_user),
         )
         conn.commit()
+        email_visit = (
+            fetch_guest_visit_by_id(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=str(visit["guest_visit_id"]),
+            )
+            or visit
+        )
+        _queue_guest_visit_notification_fanout(
+            background_tasks,
+            event="created",
+            visit=email_visit,
+            guest=guest,
+            host=host,
+            creator=current_user,
+        )
         return GuestVisitResponse(**visit)
     except HTTPException:
         conn.rollback()
@@ -653,7 +674,8 @@ def list_guest_bookings(
     booking_date: date | None = None,
     booking_status: str | None = None,
     limit: int = 100,
-) -> list[BookingResponse]:
+    page: int | None = None,
+) -> list[BookingResponse] | PaginatedBookingResponse:
     _require_guest_operator(current_user)
     normalized_status = (
         booking_status.strip().upper()
@@ -668,6 +690,7 @@ def list_guest_bookings(
                 "message": "booking_status is not supported.",
             },
         )
+    offset = (page - 1) * limit if page is not None else None
     rows = fetch_guest_bookings(
         conn,
         tenant_id=str(current_user["tenant_id"]),
@@ -675,8 +698,27 @@ def list_guest_bookings(
         booking_date=booking_date,
         booking_status=normalized_status,
         limit=limit,
+        offset=offset,
     )
-    return [BookingResponse(**row) for row in rows]
+    if page is None:
+        return [BookingResponse(**row) for row in rows]
+
+    total = count_guest_bookings(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        guest_id=guest_id,
+        booking_date=booking_date,
+        booking_status=normalized_status,
+    )
+    return PaginatedBookingResponse(
+        items=[BookingResponse(**row) for row in rows],
+        pagination=PaginationMetadata(
+            total=total,
+            page=page,
+            limit=limit,
+            total_pages=math.ceil(total / limit) if total else 0,
+        ),
+    )
 
 
 def get_guest_booking(
@@ -957,15 +999,44 @@ def _booking_email_details(booking: dict[str, Any]) -> dict[str, str]:
         if value
     )
     booking_date = booking.get("booking_date")
+    seat = str(booking.get("seat_code") or booking.get("seat_id") or "Not available")
     return {
-        "seat_name": str(booking.get("seat_code") or booking.get("seat_id")),
+        "booking_id": _format_notification_value(booking.get("booking_id")),
         "booking_date": (
             booking_date.isoformat()
             if isinstance(booking_date, (date, datetime))
             else str(booking_date)
         ),
+        "site": _format_notification_value(booking.get("site_name") or booking.get("site_id")),
+        "building": _format_notification_value(booking.get("building_name") or booking.get("building_id")),
+        "floor": _format_notification_value(booking.get("floor_name") or booking.get("floor_id")),
+        "seat": seat,
+        "booked_for": _format_booking_person(
+            booking.get("booked_for_name"),
+            booking.get("booked_for_email"),
+        ),
+        "booked_by": _format_booking_person(
+            booking.get("booked_by_name"),
+            booking.get("booked_by_email"),
+        ),
+        "guest_visit_id": _format_notification_value(booking.get("guest_visit_id")),
+        "host_name": _format_notification_value(booking.get("host_name")),
+        "host_email": _format_notification_value(booking.get("host_email")),
+        "guest_name": _format_notification_value(booking.get("guest_name")),
+        "guest_email": _format_notification_value(booking.get("guest_email")),
+        "guest_phone": _format_notification_value(booking.get("guest_phone")),
+        "guest_organization": _format_notification_value(booking.get("guest_organization")),
+        "seat_name": seat,
         "location": location or "Not available",
     }
+
+
+def _format_booking_person(name: Any, email: Any) -> str:
+    display_name = str(name or "").strip()
+    display_email = str(email or "").strip()
+    if display_name and display_email:
+        return f"{display_name} ({display_email})"
+    return display_name or display_email or "Not available"
 
 
 def _guest_recipients(guest: dict[str, Any]) -> list[str]:
@@ -1049,6 +1120,121 @@ def _queue_guest_booking_modified(
             new_booking.get("booking_id"),
         )
 
+
+def _queue_guest_visit_notification_fanout(
+    background_tasks: BackgroundTasks | None,
+    *,
+    event: str,
+    visit: dict[str, Any],
+    guest: dict[str, Any] | None,
+    host: dict[str, Any] | None,
+    creator: dict[str, Any],
+    cancellation_reason: str | None = None,
+) -> None:
+    if background_tasks is None:
+        return
+
+    template_by_recipient = {
+        "guest": f"guest_visit_{event}_guest.html",
+        "host": f"guest_visit_{event}_host.html",
+        "creator": f"guest_visit_{event}_creator.html",
+    }
+    subject_by_event = {
+        "created": "Guest visit scheduled",
+        "modified": "Guest visit updated",
+        "cancelled": "Guest visit cancelled",
+    }
+    subject = subject_by_event.get(event, "Guest visit notification")
+    context = _guest_visit_email_context(
+        visit,
+        guest=guest,
+        host=host,
+        creator=creator,
+        cancellation_reason=cancellation_reason,
+    )
+
+    recipients = (
+        ("guest", context["guest_email"], context["guest_name"]),
+        ("host", context["host_email"], context["host_name"]),
+        ("creator", context["creator_email"], context["creator_name"]),
+    )
+    for recipient_role, recipient_email, recipient_name in recipients:
+        if not recipient_email:
+            continue
+        try:
+            queue_email_notification(
+                background_tasks,
+                to_emails=[recipient_email],
+                subject=subject,
+                template_name=template_by_recipient[recipient_role],
+                context={
+                    **context,
+                    "recipient_role": recipient_role,
+                    "recipient_name": recipient_name or "there",
+                },
+            )
+        except Exception:
+            logger.exception(
+                "notification.queue_failed event=guest_visit_%s recipient_role=%s guest_visit_id=%s",
+                event,
+                recipient_role,
+                visit.get("guest_visit_id"),
+            )
+
+
+def _guest_visit_email_context(
+    visit: dict[str, Any],
+    *,
+    guest: dict[str, Any] | None,
+    host: dict[str, Any] | None,
+    creator: dict[str, Any],
+    cancellation_reason: str | None,
+) -> dict[str, str]:
+    return {
+        "guest_visit_id": _format_notification_value(visit.get("guest_visit_id")),
+        "guest_name": _first_text(visit.get("guest_name"), guest.get("full_name") if guest else None),
+        "guest_email": _first_text(visit.get("guest_email"), guest.get("email") if guest else None),
+        "guest_phone": _first_text(visit.get("guest_phone"), guest.get("phone") if guest else None),
+        "host_name": _first_text(visit.get("host_name"), host.get("full_name") if host else None),
+        "host_email": _first_text(visit.get("host_email"), host.get("email") if host else None),
+        "creator_name": _first_text(
+            visit.get("created_by_name"),
+            creator.get("full_name"),
+            creator.get("display_name"),
+            creator.get("email"),
+        ),
+        "creator_email": _first_text(visit.get("created_by_email"), creator.get("email")),
+        "visit_date": _format_notification_value(visit.get("visit_date")),
+        "start_time": _format_notification_value(visit.get("start_time")),
+        "end_time": _format_notification_value(visit.get("end_time")),
+        "site": _first_text(visit.get("site_name"), visit.get("site_id")),
+        "building": _first_text(visit.get("building_name"), visit.get("building_id")),
+        "floor": _first_text(visit.get("floor_name"), visit.get("floor_id")),
+        "guest_type": _format_notification_value(visit.get("guest_type")),
+        "purpose_of_visit": _format_notification_value(visit.get("purpose_of_visit")),
+        "notes": _format_notification_value(visit.get("notes")),
+        "cancellation_reason": _format_notification_value(cancellation_reason or "Cancelled"),
+    }
+
+
+def _first_text(*values: Any) -> str:
+    for value in values:
+        normalized = str(value or "").strip()
+        if normalized:
+            return normalized
+    return ""
+
+
+def _format_notification_value(value: Any) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat(sep=" ", timespec="seconds")
+    if isinstance(value, date):
+        return value.isoformat()
+    if value is None:
+        return "Not available"
+    normalized = str(value).strip()
+    return normalized or "Not available"
+
 def list_guest_visits(
     conn: PGConnection,
     *,
@@ -1060,6 +1246,7 @@ def list_guest_visits(
     search: str | None = None,
     limit: int = 100,
     offset: int = 0,
+    page: int | None = None,
 ) -> GuestVisitListResponse:
 
     tenant_id = str(current_user["tenant_id"])
@@ -1098,6 +1285,7 @@ def list_guest_visits(
         search=search,
     )
 
+    effective_offset = (page - 1) * limit if page is not None else offset
     rows = fetch_guest_visits(
         conn,
         tenant_id=tenant_id,
@@ -1107,15 +1295,26 @@ def list_guest_visits(
         requires_seat=requires_seat,
         search=search,
         limit=limit,
-        offset=offset,
+        offset=effective_offset,
     )
+
+    pagination = None
+    if page is not None:
+        total = int(summary.get("total") or 0)
+        pagination = PaginationMetadata(
+            total=total,
+            page=page,
+            limit=limit,
+            total_pages=math.ceil(total / limit) if total else 0,
+        )
 
     return GuestVisitListResponse(
         summary=summary,
         items=[
             GuestVisitListItem(**row)
             for row in rows
-        ]
+        ],
+        pagination=pagination,
     )
 
 
@@ -1327,6 +1526,7 @@ def cancel_guest_visit_record(
     current_user: dict[str, Any],
     guest_visit_id: str,
     cancellation_reason: str | None,
+    background_tasks: BackgroundTasks | None = None,
 ) -> GuestVisitStatusUpdateResponse:
 
     _require_guest_operator(current_user)
@@ -1334,6 +1534,11 @@ def cancel_guest_visit_record(
     tenant_id = str(current_user["tenant_id"])
 
     try:
+        visit_for_email = fetch_guest_visit_by_id(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        )
 
         active_booking = (
             fetch_active_booking_by_guest_visit(
@@ -1380,6 +1585,17 @@ def cancel_guest_visit_record(
             guest_visit_id=guest_visit_id,
         )
 
+        if visit_for_email is not None:
+            _queue_guest_visit_notification_fanout(
+                background_tasks,
+                event="cancelled",
+                visit=visit_for_email,
+                guest=None,
+                host=None,
+                creator=current_user,
+                cancellation_reason=cancellation_reason,
+            )
+
         return GuestVisitStatusUpdateResponse(
             **status_row,
         )
@@ -1418,6 +1634,7 @@ def modify_guest_visit(
     current_user: dict[str, Any],
     guest_visit_id: str,
     payload: ModifyGuestVisitRequest,
+    background_tasks: BackgroundTasks | None = None,
 ) -> GuestVisitResponse:
 
     _require_guest_operator(current_user)
@@ -1502,6 +1719,16 @@ def modify_guest_visit(
             tenant_id=tenant_id,
             guest_visit_id=guest_visit_id,
         )
+
+        if updated is not None:
+            _queue_guest_visit_notification_fanout(
+                background_tasks,
+                event="modified",
+                visit=updated,
+                guest=None,
+                host=None,
+                creator=current_user,
+            )
 
         return GuestVisitResponse(**updated)
 
@@ -1710,6 +1937,8 @@ def _build_guest_workflow_response(
         guest_visit=GuestVisitResponse(**guest_visit),
         booking=BookingResponse(**booking) if booking is not None else None,
     )
+
+
 
 
 def execute_guest_visit_workflow(
@@ -1933,14 +2162,13 @@ def execute_guest_visit_workflow(
                     },
                 )
             seat_id = _required_workflow_seat_id(payload)
-            if visit.get("floor_id") is None:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={
-                        "code": "guest_visit_floor_required",
-                        "message": "Guest visit must have a floor before adding a seat.",
-                    },
-                )
+            _validate_visit_location(
+                conn,
+                tenant_id=tenant_id,
+                site_id=str(payload.site_id),
+                building_id=str(payload.building_id),
+                floor_id=str(payload.floor_id),
+            )
             _resolve_guest(
                 conn,
                 tenant_id=tenant_id,
@@ -1950,23 +2178,23 @@ def execute_guest_visit_workflow(
             seat = _resolve_seat(
                 conn,
                 tenant_id=tenant_id,
-                site_id=str(visit["site_id"]),
-                building_id=str(visit["building_id"]),
-                floor_id=str(visit["floor_id"]),
+                site_id=str(payload.site_id),
+                building_id=str(payload.building_id),
+                floor_id=str(payload.floor_id),
                 seat_id=seat_id,
             )
             if guest_has_active_booking_on_date(
                 conn,
                 tenant_id=tenant_id,
                 booked_for_guest_id=str(visit["guest_id"]),
-                booking_date=visit["visit_date"],
+                booking_date=payload.visit_date,
             ):
                 _raise_guest_booking_conflict()
             if has_active_booking_conflict(
                 conn,
                 tenant_id=tenant_id,
                 seat_id=seat_id,
-                booking_date=visit["visit_date"],
+                booking_date=payload.visit_date,
             ):
                 _raise_seat_booking_conflict()
             new_booking = insert_guest_booking(
@@ -1976,7 +2204,16 @@ def execute_guest_visit_workflow(
                 guest_visit_id=guest_visit_id,
                 booked_by_user_id=_current_user_id(current_user),
                 seat=seat,
-                booking_date=visit["visit_date"],
+                booking_date=payload.visit_date,
+            )
+            update_guest_visit_booking_details(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=guest_visit_id,
+                site_id=str(payload.site_id),
+                building_id=str(payload.building_id),
+                floor_id=str(payload.floor_id),
+                visit_date=payload.visit_date,
             )
             recalculate_guest_visit_requires_seat(
                 conn,
@@ -2108,6 +2345,7 @@ def execute_guest_visit_workflow(
     except Exception:
         conn.rollback()
         raise
+ 
 
 
 def audit_guest_visit_integrity(

@@ -13,9 +13,15 @@ ACTIVE_GUEST_BOOKING_STATUSES = (
     "CHECKED_IN",
     "COMPLETED",
 )
+ACTIVE_GUEST_BOOKING_STATUSES = (
+    "CONFIRMED",
+    "CHECKED_IN",
+    "COMPLETED",
+)
 
 GUEST_VISIT_LIST_SELECT = """
     gv.id::text AS guest_visit_id,
+    gv.tenant_id::text AS tenant_id,
 
     gv.visit_date,
     gv.start_time,
@@ -42,6 +48,10 @@ GUEST_VISIT_LIST_SELECT = """
     au.mobile_phone AS host_phone,
     au.department AS host_department,
     au.job_title AS host_job_title,
+
+    gv.created_by_user_id::text AS created_by_user_id,
+    creator.full_name AS created_by_name,
+    creator.email AS created_by_email,
 
     si.id::text AS site_id,
     si.site_name,
@@ -257,6 +267,10 @@ def fetch_guest_visits(
             ON au.id = gv.host_user_id
         AND au.tenant_id = gv.tenant_id
 
+        LEFT JOIN app_users creator
+            ON creator.id = gv.created_by_user_id
+        AND creator.tenant_id = gv.tenant_id
+
         INNER JOIN sites si
             ON si.id = gv.site_id
         AND si.tenant_id = gv.tenant_id
@@ -289,6 +303,11 @@ def fetch_guest_visits(
         AND s.tenant_id = b.tenant_id
 
         WHERE gv.tenant_id = %s
+        AND gv.visit_status IN (
+            'SCHEDULED',
+            'CHECKED_IN',
+            'CHECKED_OUT'
+        )
     """
 
     params: list[Any] = [tenant_id]
@@ -475,8 +494,7 @@ def check_out_guest_visit(
     if row is None:
         raise LookupError("Guest visit not found.")
     raise ValueError("Only checked-in guest visits can be checked out.")
-       
-
+        
 def fetch_guest_visit_by_id(
     conn: PGConnection,
     *,
@@ -497,6 +515,10 @@ def fetch_guest_visit_by_id(
         LEFT JOIN app_users au
             ON au.id = gv.host_user_id
            AND au.tenant_id = gv.tenant_id
+
+        LEFT JOIN app_users creator
+            ON creator.id = gv.created_by_user_id
+           AND creator.tenant_id = gv.tenant_id
 
         INNER JOIN sites si
             ON si.id = gv.site_id

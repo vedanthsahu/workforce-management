@@ -7,13 +7,6 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { UploadCloud, FileCheck2, X } from "lucide-react";
 import { layoutService } from "../services/layout.service";
 import SVGPreviewModal from "./Svgpreviewmodal";
@@ -269,10 +262,10 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
               <Label>
                 Site <span className="text-red-500">*</span>
               </Label>
-              <Select
-                items={Object.fromEntries(sites.map((s) => [String(s.site_id), s.site_name]))}
+              <select
                 value={formData.site ? String(formData.site.id) : ""}
-                onValueChange={(value) => {
+                onChange={(e) => {
+                  const value = e.target.value;
                   if (!value) return;
                   const site = sites.find((s) => String(s.site_id) === value);
                   if (!site) return;
@@ -285,28 +278,25 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                   }));
                   onFloorLayoutInfo?.(null);
                 }}
+                className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select Site" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sites.map((s) => (
-                    <SelectItem key={s.site_id} value={String(s.site_id)}>
-                      {s.site_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <option value="" disabled>Select Site</option>
+                {sites.map((s) => (
+                  <option key={s.site_id} value={String(s.site_id)}>
+                    {s.site_name}
+                  </option>
+                ))}
+              </select>
             </div>
  
             <div className="space-y-1.5">
               <Label>
                 Building <span className="text-red-500">*</span>
               </Label>
-              <Select
-                items={Object.fromEntries(buildings.map((b) => [String(b.building_id), b.building_name]))}
+              <select
                 value={formData.building ? String(formData.building.id) : ""}
-                onValueChange={(value) => {
+                onChange={(e) => {
+                  const value = e.target.value;
                   if (!value) return;
                   const building = buildings.find((b) => String(b.building_id) === value);
                   if (!building) return;
@@ -322,18 +312,15 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                   }));
                   onFloorLayoutInfo?.(null);
                 }}
+                className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select Building" />
-                </SelectTrigger>
-                <SelectContent>
-                  {buildings.map((b) => (
-                    <SelectItem key={b.building_id} value={String(b.building_id)}>
-                      {b.building_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <option value="" disabled>Select Building</option>
+                {buildings.map((b) => (
+                  <option key={b.building_id} value={String(b.building_id)}>
+                    {b.building_name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
  
@@ -343,12 +330,10 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
               <Label>
                 Floor <span className="text-red-500">*</span>
               </Label>
-              <Select
-                items={Object.fromEntries(
-                  floors.map((f) => [String(f.floor_id), f.floor_name || f.floor_code || ""])
-                )}
+              <select
                 value={formData.floor ? String(formData.floor.id) : ""}
-                onValueChange={(value) => {
+                onChange={(e) => {
+                  const value = e.target.value;
                   if (!value) return;
                   const floor = floors.find((f) => String(f.floor_id) === value);
                   if (!floor) return;
@@ -381,18 +366,15 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                     layoutLastUpdated: floor.layout_last_updated,
                   });
                 }}
+                className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select Floor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {floors.map((f) => (
-                    <SelectItem key={f.floor_id} value={String(f.floor_id)}>
-                      {f.floor_name || f.floor_code}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <option value="" disabled>Select Floor</option>
+                {floors.map((f) => (
+                  <option key={f.floor_id} value={String(f.floor_id)}>
+                    {f.floor_name || f.floor_code}
+                  </option>
+                ))}
+              </select>
             </div>
  
             <div className="space-y-1.5">

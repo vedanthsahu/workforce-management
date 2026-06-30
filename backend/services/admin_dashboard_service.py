@@ -4,6 +4,7 @@ Service layer for admin dashboard analytics.
 
 from __future__ import annotations
 
+import math
 from datetime import date
 from typing import Any, Literal
 
@@ -28,6 +29,7 @@ from backend.schemas.admin_dashboard import (
     AdminDashboardSummaryResponse,
     AdminHierarchyOccupancyResponse,
 )
+from backend.schemas.pagination import PaginationMetadata
 
 HierarchyGroupLevel = Literal["site", "building", "floor"]
 
@@ -71,10 +73,12 @@ def get_admin_activity_list(
     conn: PGConnection,
     *,
     tenant_id: str,
-    selected_date: date,
+    selected_date: date | None = None,
     site_id: str | None = None,
     building_id: str | None = None,
     floor_id: str | None = None,
+    page: int | None = None,
+    limit: int | None = None,
 ) -> AdminActivityListResponse:
     """
     Return recent admin dashboard activity rows for one tenant.
@@ -112,9 +116,23 @@ def get_admin_activity_list(
         _build_activity_item(row)
         for row in rows
     ]
+    pagination = None
+    if page is not None or limit is not None:
+        effective_page = page or 1
+        effective_limit = limit or 100
+        total = len(items)
+        start = (effective_page - 1) * effective_limit
+        items = items[start:start + effective_limit]
+        pagination = PaginationMetadata(
+            total=total,
+            page=effective_page,
+            limit=effective_limit,
+            total_pages=math.ceil(total / effective_limit) if total else 0,
+        )
 
     return AdminActivityListResponse(
         items=items,
+        pagination=pagination,
     )
 
 

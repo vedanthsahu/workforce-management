@@ -11,13 +11,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 import { Floor } from "../types/floor.types";
 import { useEditFloor } from "../hooks/useEditFloor";
@@ -61,20 +54,14 @@ export default function EditFloorModal({
 
           <div className="space-y-1.5">
             <Label>Status</Label>
-            <Select
+            <select
               value={formData.status}
-              onValueChange={(value) => {
-                if (value) handleChange("status", value);
-              }}
+              onChange={(e) => handleChange("status", e.target.value)}
+              className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-                <SelectItem value="INACTIVE">INACTIVE</SelectItem>
-              </SelectContent>
-            </Select>
+              <option value="ACTIVE">ACTIVE</option>
+              <option value="INACTIVE">INACTIVE</option>
+            </select>
           </div>
         </div>
 

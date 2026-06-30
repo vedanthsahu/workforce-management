@@ -7,7 +7,7 @@ import { adminService } from "../services/admin.service";
 import { mapActivitiesToRecent } from "../utils/dashboard.utils";
 import type { AdminActivityItem, RecentBooking } from "../types/admin.types";
 
-const RECENT_BOOKINGS_LIMIT = 5;
+const RECENT_BOOKINGS_LIMIT = 20;
 
 // The backend only returns activities for a single date at a time, defaulting
 // to today. To show a true "recent activity" feed we fetch the last N days

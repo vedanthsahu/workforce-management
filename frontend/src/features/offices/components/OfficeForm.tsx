@@ -7,12 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxItem,
+} from "@/components/ui/combobox";
 import useCreateSite from "../hooks/useCreateSite";
 
 const TIMEZONES = [
@@ -190,23 +189,23 @@ export default function OfficeForm() {
             <Label>
               Timezone <span className="text-red-400 font-normal">*</span>
             </Label>
-            <Select
-              value={formData.timezone}
+            <Combobox
+              items={TIMEZONES}
+              value={formData.timezone || null}
               onValueChange={(value) => {
-                if (!value) return;
                 setErrorMessage("");
-                setFormData((prev) => ({ ...prev, timezone: value }));
+                setFormData((prev) => ({ ...prev, timezone: value ?? "" }));
               }}
             >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a timezone…" />
-              </SelectTrigger>
-              <SelectContent>
-                {TIMEZONES.map((tz) => (
-                  <SelectItem key={tz} value={tz}>{tz}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <ComboboxInput placeholder="Select a timezone…" />
+              <ComboboxContent>
+                {(tz: string) => (
+                  <ComboboxItem key={tz} value={tz}>
+                    {tz}
+                  </ComboboxItem>
+                )}
+              </ComboboxContent>
+            </Combobox>
           </div>
 
         </div>

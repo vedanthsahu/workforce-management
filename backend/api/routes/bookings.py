@@ -8,6 +8,7 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
+    Query,
 )
 from psycopg2.extensions import connection as PGConnection
 
@@ -27,6 +28,7 @@ from backend.schemas.booking import (
     CancelBookingRequest,
     CreateBookingRequest,
     ModifyBookingRequest,
+    PaginatedBookingResponse,
 )
 from backend.services.booking_service import (
     book_seat,
@@ -61,12 +63,19 @@ def create_booking(
     )
 
 
-@router.get("/me/past", response_model=list[BookingResponse])
+@router.get("/me/past", response_model=list[BookingResponse] | PaginatedBookingResponse)
 def fetch_my_past_bookings(
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
-) -> list[BookingResponse]:
-    return get_user_past_bookings(conn, current_user=current_user)
+    page: Annotated[int | None, Query(ge=1)] = None,
+    limit: Annotated[int | None, Query(ge=1, le=100)] = None,
+) -> list[BookingResponse] | PaginatedBookingResponse:
+    return get_user_past_bookings(
+        conn,
+        current_user=current_user,
+        page=page,
+        limit=limit,
+    )
 
 
 @router.get("/me/current", response_model=list[BookingResponse])
@@ -77,20 +86,34 @@ def fetch_my_current_bookings(
     return get_user_current_bookings(conn, current_user=current_user)
 
 
-@router.get("/me/cancelled", response_model=list[BookingResponse])
+@router.get("/me/cancelled", response_model=list[BookingResponse] | PaginatedBookingResponse)
 def fetch_my_cancelled_bookings(
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
-) -> list[BookingResponse]:
-    return get_user_cancelled_bookings(conn, current_user=current_user)
+    page: Annotated[int | None, Query(ge=1)] = None,
+    limit: Annotated[int | None, Query(ge=1, le=100)] = None,
+) -> list[BookingResponse] | PaginatedBookingResponse:
+    return get_user_cancelled_bookings(
+        conn,
+        current_user=current_user,
+        page=page,
+        limit=limit,
+    )
 
 
-@router.get("/me/future", response_model=list[BookingResponse])
+@router.get("/me/future", response_model=list[BookingResponse] | PaginatedBookingResponse)
 def fetch_my_future_bookings(
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
-) -> list[BookingResponse]:
-    return get_user_future_bookings(conn, current_user=current_user)
+    page: Annotated[int | None, Query(ge=1)] = None,
+    limit: Annotated[int | None, Query(ge=1, le=100)] = None,
+) -> list[BookingResponse] | PaginatedBookingResponse:
+    return get_user_future_bookings(
+        conn,
+        current_user=current_user,
+        page=page,
+        limit=limit,
+    )
 
 
 @router.post("/{booking_id}/cancel", response_model=BookingResponse)
@@ -146,15 +169,19 @@ def booking_eligibility(
         payload=payload,
     )
 
-@router.get("/delegated/past", response_model=list[BookingResponse])
+@router.get("/delegated/past", response_model=list[BookingResponse] | PaginatedBookingResponse)
 def fetch_delegated_past(
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
-) -> list[BookingResponse]:
+    page: Annotated[int | None, Query(ge=1)] = None,
+    limit: Annotated[int | None, Query(ge=1, le=100)] = None,
+) -> list[BookingResponse] | PaginatedBookingResponse:
 
     return get_delegated_past_bookings(
         conn,
         current_user=current_user,
+        page=page,
+        limit=limit,
     )
 
 @router.get("/delegated/current", response_model=list[BookingResponse])
@@ -168,20 +195,24 @@ def fetch_delegated_current(
         current_user=current_user,
     )
 
-@router.get("/delegated/future", response_model=list[BookingResponse])
+@router.get("/delegated/future", response_model=list[BookingResponse] | PaginatedBookingResponse)
 def fetch_delegated_future(
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
-) -> list[BookingResponse]:
+    page: Annotated[int | None, Query(ge=1)] = None,
+    limit: Annotated[int | None, Query(ge=1, le=100)] = None,
+) -> list[BookingResponse] | PaginatedBookingResponse:
 
     return get_delegated_future_bookings(
         conn,
         current_user=current_user,
+        page=page,
+        limit=limit,
     )
 
 @router.get(
     "/delegated/cancelled",
-    response_model=list[BookingResponse],
+    response_model=list[BookingResponse] | PaginatedBookingResponse,
 )
 def fetch_delegated_cancelled(
     current_user: Annotated[    
@@ -192,8 +223,12 @@ def fetch_delegated_cancelled(
         PGConnection,
         Depends(get_db),
     ],
+    page: Annotated[int | None, Query(ge=1)] = None,
+    limit: Annotated[int | None, Query(ge=1, le=100)] = None,
 ):
     return get_delegated_cancelled_bookings(
         conn,
         current_user=current_user,
+        page=page,
+        limit=limit,
     )
