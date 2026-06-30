@@ -100,7 +100,7 @@ export default function FloorForm() {
               onChange={(e) => handleChange("site_id", e.target.value)}
               className={selectClass}
             >
-              <option value="">Select Site</option>
+
               {sites.map((site) => (
                 <option key={site.site_id} value={site.site_id}>
                   {site.site_name}
@@ -121,7 +121,7 @@ export default function FloorForm() {
               onChange={(e) => handleChange("building_id", e.target.value)}
               className={selectClass}
             >
-              <option value="">Select Building</option>
+         
               {buildings.map((building) => (
                 <option key={building.building_id} value={building.building_id}>
                   {building.building_name}

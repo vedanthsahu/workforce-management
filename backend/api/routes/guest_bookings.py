@@ -14,6 +14,7 @@ from backend.schemas.booking import (
     BookingResponse,
     CancelBookingRequest,
     ModifyBookingRequest,
+    PaginatedBookingResponse,
 )
 from backend.schemas.guest import CreateGuestBookingRequest
 from backend.services.guest_service import (
@@ -27,7 +28,7 @@ from backend.services.guest_service import (
 router = APIRouter(prefix="/guest-bookings", tags=["guest-bookings"])
 
 
-@router.get("", response_model=list[BookingResponse])
+@router.get("", response_model=list[BookingResponse] | PaginatedBookingResponse)
 def fetch_guest_bookings(
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
@@ -35,7 +36,8 @@ def fetch_guest_bookings(
     booking_date: date | None = None,
     booking_status: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 100,
-) -> list[BookingResponse]:
+    page: Annotated[int | None, Query(ge=1)] = None,
+) -> list[BookingResponse] | PaginatedBookingResponse:
     return list_guest_bookings(
         conn,
         current_user=current_user,
@@ -43,6 +45,7 @@ def fetch_guest_bookings(
         booking_date=booking_date,
         booking_status=booking_status,
         limit=limit,
+        page=page,
     )
 
 

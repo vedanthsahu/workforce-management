@@ -387,7 +387,7 @@ def _fetch_employee_activity_rows(
     conn: PGConnection,
     *,
     tenant_id: str,
-    activity_date: date,
+    activity_date: date | None = None,
     site_id: str | None = None,
     building_id: str | None = None,
     floor_id: str | None = None,
@@ -487,7 +487,8 @@ def _fetch_employee_activity_rows(
 
               AND b.booking_type = 'EMPLOYEE'
 
-              AND b.booking_date = %(activity_date)s
+              AND (%(activity_date)s IS NULL
+                OR b.booking_date = %(activity_date)s)
 
               AND (
                     %(site_id)s IS NULL
@@ -525,7 +526,7 @@ def _fetch_guest_activity_rows(
     conn: PGConnection,
     *,
     tenant_id: str,
-    activity_date: date,
+    activity_date: date | None = None,
     site_id: str | None = None,
     building_id: str | None = None,
     floor_id: str | None = None,
@@ -645,8 +646,9 @@ def _fetch_guest_activity_rows(
 
             WHERE gv.tenant_id = %(tenant_id)s
 
-              AND COALESCE(b.booking_date, gv.visit_date) = %(activity_date)s
-
+            
+            AND (%(activity_date)s IS NULL
+                OR COALESCE(b.booking_date, gv.visit_date) = %(activity_date)s)
               AND (
                     %(site_id)s IS NULL
                     OR COALESCE(b.site_id, gv.site_id) = %(site_id)s::bigint
@@ -684,7 +686,7 @@ def fetch_admin_activity_list(
     conn: PGConnection,
     *,
     tenant_id: str,
-    activity_date: date,
+    activity_date: date | None = None,
     site_id: str | None = None,
     building_id: str | None = None,
     floor_id: str | None = None,

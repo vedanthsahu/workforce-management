@@ -3,6 +3,7 @@ from __future__ import annotations
 """services/booking_service.py Service-layer booking workflows for day-based seat reservations."""
 
 import logging
+import math
 from datetime import date, datetime
 from typing import Any
 
@@ -59,7 +60,9 @@ from backend.schemas.booking import (
     BookingResponse,
     CreateBookingRequest,
     ModifyBookingRequest,
+    PaginatedBookingResponse,
 )
+from backend.schemas.pagination import PaginationMetadata
 from backend.services.notification_service import (
     queue_booking_cancelled_notification,
     queue_booking_created_notification,
@@ -288,11 +291,40 @@ def _queue_booking_modified_email(
 
 
 def _booking_email_details(booking: dict[str, Any]) -> dict[str, str]:
+    seat = str(booking.get("seat_code") or booking.get("seat_id") or "Not available")
     return {
-        "seat_name": str(booking.get("seat_code") or booking.get("seat_id") or "Not available"),
+        "booking_id": _format_template_value(booking.get("booking_id")),
         "booking_date": _format_template_value(booking.get("booking_date")),
+        "site": _format_template_value(booking.get("site_name") or booking.get("site_id")),
+        "building": _format_template_value(booking.get("building_name") or booking.get("building_id")),
+        "floor": _format_template_value(booking.get("floor_name") or booking.get("floor_id")),
+        "seat": seat,
+        "booked_for": _format_person(
+            booking.get("booked_for_name"),
+            booking.get("booked_for_email"),
+        ),
+        "booked_by": _format_person(
+            booking.get("booked_by_name"),
+            booking.get("booked_by_email"),
+        ),
+        "guest_visit_id": _format_template_value(booking.get("guest_visit_id")),
+        "host_name": _format_template_value(booking.get("host_name")),
+        "host_email": _format_template_value(booking.get("host_email")),
+        "guest_name": _format_template_value(booking.get("guest_name")),
+        "guest_email": _format_template_value(booking.get("guest_email")),
+        "guest_phone": _format_template_value(booking.get("guest_phone")),
+        "guest_organization": _format_template_value(booking.get("guest_organization")),
+        "seat_name": seat,
         "location": _format_booking_location(booking),
     }
+
+
+def _format_person(name: Any, email: Any) -> str:
+    display_name = str(name or "").strip()
+    display_email = str(email or "").strip()
+    if display_name and display_email:
+        return f"{display_name} ({display_email})"
+    return display_name or display_email or "Not available"
 
 
 def _format_booking_location(booking: dict[str, Any]) -> str:
@@ -327,6 +359,31 @@ def _user_display_name(user: dict[str, Any]) -> str:
 def _user_email_list(user: dict[str, Any]) -> list[str]:
     email = str(user.get("email") or "").strip()
     return [email] if email else []
+
+
+def _booking_list_response(
+    rows: list[dict[str, Any]],
+    *,
+    page: int | None = None,
+    limit: int | None = None,
+) -> list[BookingResponse] | PaginatedBookingResponse:
+    if page is None and limit is None:
+        return [BookingResponse(**row) for row in rows]
+
+    effective_page = page or 1
+    effective_limit = limit or 100
+    total = len(rows)
+    start = (effective_page - 1) * effective_limit
+    paged_rows = rows[start:start + effective_limit]
+    return PaginatedBookingResponse(
+        items=[BookingResponse(**row) for row in paged_rows],
+        pagination=PaginationMetadata(
+            total=total,
+            page=effective_page,
+            limit=effective_limit,
+            total_pages=math.ceil(total / effective_limit) if total else 0,
+        ),
+    )
 
 
 
@@ -495,7 +552,9 @@ def get_user_past_bookings(
     conn: PGConnection,
     *,
     current_user: dict[str, Any],
-) -> list[BookingResponse]:
+    page: int | None = None,
+    limit: int | None = None,
+) -> list[BookingResponse] | PaginatedBookingResponse:
     """List bookings visible to the authenticated user."""
     try:
         bookings = fetch_past_bookings_for_user(
@@ -512,7 +571,7 @@ def get_user_past_bookings(
             },
         ) from exc
 
-    return [BookingResponse(**booking) for booking in bookings]
+    return _booking_list_response(bookings, page=page, limit=limit)
 
 
 def get_user_current_bookings(
@@ -542,7 +601,9 @@ def get_user_cancelled_bookings(
     conn: PGConnection,
     *,
     current_user: dict[str, Any],
-) -> list[BookingResponse]:
+    page: int | None = None,
+    limit: int | None = None,
+) -> list[BookingResponse] | PaginatedBookingResponse:
     """List bookings visible to the authenticated user."""
     try:
         bookings = fetch_cancelled_bookings_for_user(
@@ -559,14 +620,16 @@ def get_user_cancelled_bookings(
             },
         ) from exc
 
-    return [BookingResponse(**booking) for booking in bookings]
+    return _booking_list_response(bookings, page=page, limit=limit)
 
 
 def get_user_future_bookings(
     conn: PGConnection,
     *,
     current_user: dict[str, Any],
-) -> list[BookingResponse]:
+    page: int | None = None,
+    limit: int | None = None,
+) -> list[BookingResponse] | PaginatedBookingResponse:
     """List bookings visible to the authenticated user."""
     try:
         bookings = fetch_future_bookings_for_user(
@@ -583,7 +646,7 @@ def get_user_future_bookings(
             },
         ) from exc
 
-    return [BookingResponse(**booking) for booking in bookings]
+    return _booking_list_response(bookings, page=page, limit=limit)
 
 
 def get_available_seats(
@@ -1552,7 +1615,9 @@ def get_delegated_future_bookings(
     conn: PGConnection,
     *,
     current_user: dict[str, Any],
-) -> list[BookingResponse]:
+    page: int | None = None,
+    limit: int | None = None,
+) -> list[BookingResponse] | PaginatedBookingResponse:
 
     bookings = fetch_future_delegated_bookings(
         conn,
@@ -1578,10 +1643,7 @@ def get_delegated_future_bookings(
         reverse=True,
     )
 
-    return [
-        BookingResponse(**row)
-        for row in combined
-    ]
+    return _booking_list_response(combined, page=page, limit=limit)
 
 def get_delegated_current_bookings(
     conn: PGConnection,
@@ -1622,7 +1684,9 @@ def get_delegated_past_bookings(
     conn: PGConnection,
     *,
     current_user: dict[str, Any],
-) -> list[BookingResponse]:
+    page: int | None = None,
+    limit: int | None = None,
+) -> list[BookingResponse] | PaginatedBookingResponse:
 
     bookings = fetch_past_delegated_bookings(
         conn,
@@ -1648,16 +1712,15 @@ def get_delegated_past_bookings(
         reverse=True,
     )
 
-    return [
-        BookingResponse(**row)
-        for row in combined
-    ]
+    return _booking_list_response(combined, page=page, limit=limit)
 
 def get_delegated_cancelled_bookings(
     conn: PGConnection,
     *,
     current_user: dict[str, Any],
-) -> list[BookingResponse]:
+    page: int | None = None,
+    limit: int | None = None,
+) -> list[BookingResponse] | PaginatedBookingResponse:
 
     bookings = fetch_cancelled_delegated_bookings(
         conn,
@@ -1681,7 +1744,4 @@ def get_delegated_cancelled_bookings(
         reverse=True,
     )
 
-    return [
-        BookingResponse(**row)
-        for row in combined
-    ]
+    return _booking_list_response(combined, page=page, limit=limit)

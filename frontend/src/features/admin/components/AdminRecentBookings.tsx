@@ -54,7 +54,7 @@ export default function AdminRecentBookings({ bookings, loading }: Props) {
                   </div>
                   <p className="text-xs text-muted-foreground truncate">{item.email}</p>
                   {item.bookedByName && (
-                    <p className="text-xs text-violet-600  truncate">
+                    <p className="text-xs text-blue-600  truncate">
                       Booked by {item.bookedByName}
                     </p>
                   )}
@@ -86,7 +86,7 @@ export default function AdminRecentBookings({ bookings, loading }: Props) {
                 <th className="px-6 py-3 font-medium">User</th>
                 <th className="px-6 py-3 font-medium">Type</th>
                 <th className="px-6 py-3 font-medium">Office</th>
-                <th className="px-6 py-3 font-medium">Seat</th>
+                <th className="px-6 py-3 font-medium">Seat / Visit </th>
                 <th className="px-6 py-3 font-medium">Date</th>
                 <th className="px-6 py-3 font-medium">Status</th>
               </tr>
@@ -102,7 +102,7 @@ export default function AdminRecentBookings({ bookings, loading }: Props) {
                       <p className="font-medium">{item.name}</p>
                       <p className="text-xs text-muted-foreground">{item.email}</p>
                       {item.bookedByName && (
-                        <p className="text-xs text-violet-600 ">
+                        <p className="text-xs text-blue-600 ">
                           Booked by {item.bookedByName}
                         </p>
                       )}

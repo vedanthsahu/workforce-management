@@ -120,7 +120,7 @@ export default function AddBuildingForm() {
               }}
               className={selectClass}
             >
-              <option value="">Select Site</option>
+
               {sites.map((site) => (
                 <option key={site.site_id} value={site.site_id}>{site.site_name}</option>
               ))}

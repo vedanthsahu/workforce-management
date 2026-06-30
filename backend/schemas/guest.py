@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from backend.core.enums import GuestType, VisitPurpose
 from backend.schemas.booking import BookingResponse
+from backend.schemas.pagination import PaginationMetadata
 
 from typing import Literal
 
@@ -162,6 +163,7 @@ class GuestVisitSummary(BaseModel):
 class GuestVisitListResponse(BaseModel):
     summary: GuestVisitSummary = Field(default_factory=GuestVisitSummary)
     items: list[GuestVisitListItem]
+    pagination: PaginationMetadata | None = None
 
 
 class GuestVisitStatusUpdateResponse(BaseModel):
