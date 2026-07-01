@@ -67,7 +67,7 @@ ROLE_NAMES = {
     "TALENT",
     "SECURITY",
     "TENANT_ADMIN",
-    "PRODUCT_ADMIN",
+    "TALENT_GUEST_COORDINATOR",
 }
 
 USER_STATUSES = {"ACTIVE", "INACTIVE", "LOCKED"}
@@ -78,7 +78,7 @@ ROLE_DISTRIBUTION_ORDER = (
     "SECURITY",
     "MANAGER",
     "TENANT_ADMIN",
-    "PRODUCT_ADMIN",
+    "TALENT_GUEST_COORDINATOR",
 )
 
 GRAPH_MANAGED_ROLE_NAMES = ("EMPLOYEE", "TALENT")
@@ -1138,6 +1138,29 @@ def search_users(
     return [dict(row) for row in rows]
 
 
+def build_admin_directory_pagination(
+    *,
+    page: int | None,
+    limit: int | None,
+    filtered_users: int,
+) -> dict[str, Any] | None:
+
+    if page is None or limit is None:
+        return None
+
+    total_pages = (
+        filtered_users + limit - 1
+    ) // limit
+
+    return {
+        "page": page,
+        "limit": limit,
+        "total_pages": total_pages,
+        "has_next": page < total_pages,
+        "has_previous": page > 1,
+    }
+
+
 def fetch_admin_user_directory(
     conn: PGConnection,
     *,
@@ -1148,17 +1171,26 @@ def fetch_admin_user_directory(
     page: int | None = None,
     limit: int | None = None,
 ) -> dict[str, Any]:
-    """Fetch a lightweight tenant-scoped user directory for admin screens."""
 
     normalized_role_names: list[str] | None = None
+
     if role_names is not None:
         normalized_role_names = [
-            _required_text(str(role), field_name="role_name", max_length=30).upper()
+            _required_text(
+                str(role),
+                field_name="role_name",
+                max_length=30,
+            ).upper()
             for role in role_names
         ]
+
     elif role_name is not None:
         normalized_role_names = [
-            _required_text(role_name, field_name="role_name", max_length=30).upper()
+            _required_text(
+                role_name,
+                field_name="role_name",
+                max_length=30,
+            ).upper()
         ]
 
     params = {
@@ -1166,29 +1198,46 @@ def fetch_admin_user_directory(
         "role_names": normalized_role_names,
         "status": status,
     }
+
     filtered_where = """
         WHERE au.tenant_id = %(tenant_id)s
           AND (
                 %(role_names)s IS NULL
-                OR au.role_name = ANY(%(role_names)s::text[])
+                OR au.role_name = ANY(
+                    %(role_names)s::text[]
+                )
           )
           AND (
                 %(status)s IS NULL
                 OR au.status = %(status)s
           )
     """
+
     pagination_clause = ""
+
     if page is not None or limit is not None:
+
         effective_page = page or 1
         effective_limit = limit or 20
+
         params["limit"] = effective_limit
-        params["offset"] = (effective_page - 1) * effective_limit
+        params["offset"] = (
+            effective_page - 1
+        ) * effective_limit
+
         pagination_clause = """
             LIMIT %(limit)s
             OFFSET %(offset)s
         """
 
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with conn.cursor(
+        cursor_factory=RealDictCursor,
+    ) as cur:
+
+        # ---------------------------
+        # summary
+        # ---------------------------
+
         cur.execute(
             f"""
             SELECT
@@ -1197,32 +1246,37 @@ def fetch_admin_user_directory(
                     FROM app_users all_users
                     WHERE all_users.tenant_id = %(tenant_id)s
                 ) AS total_users,
+
                 COUNT(*)::integer AS filtered_users,
+
                 COUNT(*) FILTER (
                     WHERE au.status = 'ACTIVE'
                 )::integer AS active_users,
+
                 COUNT(*) FILTER (
                     WHERE au.status = 'INACTIVE'
                 )::integer AS inactive_users
+
             FROM app_users au
             {filtered_where}
             """,
             params,
         )
+
         summary = cur.fetchone()
 
-        cur.execute(
-            """
-            SELECT
-                role_name,
-                COUNT(*)::integer AS user_count
-            FROM app_users
-            WHERE tenant_id = %(tenant_id)s
-            GROUP BY role_name
-            """,
-            params,
+        # ---------------------------
+        # roles metadata
+        # ---------------------------
+
+        role_metadata = fetch_admin_role_metadata(
+            conn,
+            tenant_id=tenant_id,
         )
-        role_rows = cur.fetchall()
+
+        # ---------------------------
+        # users
+        # ---------------------------
 
         cur.execute(
             f"""
@@ -1239,35 +1293,151 @@ def fetch_admin_user_directory(
             FROM app_users au
             {filtered_where}
             ORDER BY
-                LOWER(au.full_name) ASC NULLS LAST,
+                LOWER(au.full_name)
+                    ASC NULLS LAST,
                 au.id ASC
             {pagination_clause}
             """,
             params,
         )
+
         rows = cur.fetchall()
 
-    role_counts = {role: 0 for role in ROLE_DISTRIBUTION_ORDER}
-    for row in role_rows:
-        role = str(row.get("role_name") or "").strip().upper()
-        if role in role_counts:
-            role_counts[role] = int(row.get("user_count") or 0)
-
-    summary_payload = dict(summary) if summary else {
-        "total_users": 0,
-        "filtered_users": 0,
-        "active_users": 0,
-        "inactive_users": 0,
-    }
-    summary_payload["roles"] = [
-        {
-            "role_name": role,
-            "count": role_counts[role],
+    summary_payload = (
+        dict(summary)
+        if summary
+        else {
+            "total_users": 0,
+            "filtered_users": 0,
+            "active_users": 0,
+            "inactive_users": 0,
         }
-        for role in ROLE_DISTRIBUTION_ORDER
-    ]
+    )
+
+    pagination_payload = (
+        build_admin_directory_pagination(
+            page=page,
+            limit=limit,
+            filtered_users=summary_payload[
+                "filtered_users"
+            ],
+        )
+    )
 
     return {
         "summary": summary_payload,
-        "items": [dict(row) for row in rows],
+        "roles": role_metadata,
+        "pagination": pagination_payload,
+        "items": [
+            dict(row)
+            for row in rows
+        ],
     }
+
+
+
+def fetch_user_details_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+) -> dict[str, Any] | None:
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT
+            au.id::text AS id,
+            au.email,
+            au.full_name,
+            au.display_name,
+            au.role_name,
+            au.status,
+            au.employee_id,
+            au.mobile_phone,
+            au.office_location,
+            au.job_title,
+            au.department,
+            au.company_name,
+            au.manager_user_id::text,
+            au.home_site_id::text
+        FROM app_users au
+        WHERE au.tenant_id = %s
+        AND au.id = %s
+        LIMIT 1
+            """,
+            (
+                tenant_id,
+                user_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+def fetch_admin_role_metadata(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+) -> list[dict[str, Any]]:
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                r.id AS role_id,
+                r.role_name,
+                r.description AS role_description,
+
+                COUNT(DISTINCT au.id)::integer AS user_count,
+
+                COUNT(DISTINCT p.id)::integer
+                    AS permission_count,
+
+                COALESCE(
+                    json_agg(
+                        DISTINCT jsonb_build_object(
+                            'id', p.id,
+                            'permission_key',
+                                p.permission_key,
+                            'description',
+                                p.description,
+                            'module_name',
+                                p.module_name
+                        )
+                    )
+                    FILTER (
+                        WHERE p.id IS NOT NULL
+                    ),
+                    '[]'::json
+                ) AS permissions
+
+            FROM roles r
+
+            LEFT JOIN app_users au
+                ON au.role_name = r.role_name
+                AND au.tenant_id = r.tenant_id
+
+            LEFT JOIN role_permissions rp
+                ON rp.role_id = r.id
+
+            LEFT JOIN permissions p
+                ON p.id = rp.permission_id
+                AND p.is_active = TRUE
+
+            WHERE r.tenant_id = %s
+            AND r.is_active = TRUE
+
+            GROUP BY
+                r.id,
+                r.role_name,
+                r.description
+
+            ORDER BY r.id
+            """,
+            (tenant_id,)
+        )
+
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]

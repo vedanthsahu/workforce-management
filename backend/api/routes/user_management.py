@@ -16,11 +16,13 @@ from backend.schemas.user_management import (
     AdminUserAccessUpdateRequest,
     AdminDirectoryRole,
     AdminDirectoryStatus,
+    UserDetailsResponse,
     AdminUserDirectoryResponse,
     UpdateMyProfileRequest,
 )
 from backend.services.user_management_service import (
     admin_update_user_access_service,
+    get_user_by_id_service,
     get_admin_user_directory,
     update_my_profile,
 )
@@ -49,7 +51,7 @@ def admin_user_directory(
         PGConnection,
         Depends(get_db),
     ],
-    role: AdminDirectoryRole | None = Query(default=None),
+    role: str | None = Query(default=None),
     roles: list[str] | None = Query(default=None),
     status: AdminDirectoryStatus | None = Query(default=None),
     page: int | None = Query(default=None, ge=1),
@@ -110,6 +112,28 @@ def update_profile(
         conn,
         current_user=current_user,
         payload=payload,
+    )
+
+@router.get(
+    "/users/{user_id}",
+    response_model=UserDetailsResponse,
+)
+def get_user_by_id(
+    user_id: str,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+) -> UserDetailsResponse:
+
+    return get_user_by_id_service(
+        conn,
+        current_user=current_user,
+        user_id=user_id,
     )
 
 
