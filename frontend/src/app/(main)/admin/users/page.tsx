@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import UsersTable from "@/features/users/components/UsersTable";
 import UsersPagination from "@/features/users/components/UsersPagination";
 import RoleFilterDropdown from "@/features/users/components/RoleFilterDropdown";
@@ -20,7 +20,7 @@ function UserManagementPage() {
   const searchParams = useSearchParams();
 
   const {
-    users, summary, loading,
+    users, summary, roles, loading,
     isSearchMode,
     search, setSearch,
     selectedRoles, setSelectedRoles,
@@ -102,7 +102,7 @@ function UserManagementPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc] min-h-screen flex flex-col">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc] flex-1 min-h-0 flex flex-col overflow-hidden">
 
       {successMessage && (
         <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 shrink-0">
@@ -139,18 +139,9 @@ function UserManagementPage() {
             </span>
           </h2>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center w-full sm:w-auto">
-            <input
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Search by name or email..."
-              className="h-9 w-full sm:w-64 px-3 text-sm border rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-            />
             <div className="flex items-center gap-2">
               <RoleFilterDropdown
-                roleCounts={summary?.roles ?? []}
+                roleCounts={roles}
                 selectedRoles={selectedRoles}
                 onChange={setSelectedRoles}
               />
@@ -159,10 +150,22 @@ function UserManagementPage() {
                 onChange={setStatusFilter}
               />
             </div>
+            <div className="relative w-full sm:w-44">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search by name ..."
+                className="h-10 w-full pl-9 pr-3 text-sm border border-gray-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              />
+            </div>
           </div>
         </div>
 
-        <div className="w-full overflow-x-auto overflow-y-auto flex-1 min-h-0">
+        <div className="w-full h-full overflow-x-auto flex-1 min-h-0">
           {loading ? (
             <TableBodySkeleton columns={5} rows={5} />
           ) : (
@@ -177,10 +180,14 @@ function UserManagementPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
           <span>
             {isSearchMode
-              ? `${users.length} result${users.length !== 1 ? "s" : ""} for "${search}"`
-              : summary
-                ? `Showing ${summary.filteredUsers === 0 ? 0 : (page - 1) * limit + 1} to ${Math.min(page * limit, summary.filteredUsers)} of ${summary.filteredUsers} users`
-                : "Loading…"}
+              ? users.length === 0
+                ? ""
+                : `${users.length} result${users.length !== 1 ? "s" : ""} for "${search}"`
+              : !summary
+                ? "Loading…"
+                : users.length === 0
+                  ? ""
+                  : `Showing ${(page - 1) * limit + 1} to ${Math.min(page * limit, summary.filteredUsers)} of ${summary.filteredUsers} users`}
           </span>
           {!isSearchMode && (
             <div className="self-center sm:self-auto">

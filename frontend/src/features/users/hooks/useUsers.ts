@@ -365,7 +365,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usersService } from "../services/usersService";
 import { mapApiUserToUser, mapSearchResultToUser } from "../utils/users.utils";
-
 import type { User, UsersSummary } from "../types/users.types";
 import { useUsersFilterStore } from "@/store/useUsersFilterStore";
 
@@ -476,12 +475,23 @@ export const useUsers = () => {
     if (!isSearchMode) fetchUsers();
   }, [isSearchMode, fetchUsers]);
 
+  // Reset to page 1 when a filter changes — but not on the initial mount,
+  // otherwise returning from change-role would wipe the restored page.
+  const didMountRef = useRef(false);
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
+    setPage(1);
+  }, [selectedRoles, statusFilter]);
+
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
   const totalPages = summary ? Math.max(1, Math.ceil(summary.filteredUsers / LIMIT)) : 1;
 
   return {
-    users, summary, loading, isSearchMode,
+    users, summary, roles: summary?.roles ?? [], loading, isSearchMode,
     search, setSearch,
     selectedRoles, setSelectedRoles,
     statusFilter, setStatusFilter,

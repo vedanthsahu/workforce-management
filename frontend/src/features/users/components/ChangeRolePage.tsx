@@ -63,6 +63,7 @@ export default function ChangeRolePage({ userId }: { userId: string }) {
               currentRole={user.currentRole}
               selectedRole={selectedRole}
               setSelectedRole={setSelectedRole}
+              currentStatus={user.status}
               selectedStatus={selectedStatus}
               setSelectedStatus={setSelectedStatus}
               hasChanged={hasChanged}
