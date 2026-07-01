@@ -8,9 +8,20 @@ export type { RoleKey };
 export type ApiUserStatus = "ACTIVE" | "INACTIVE";
 export type UserStatus = "active" | "inactive";
 
-export interface RoleCount {
+export interface ApiRolePermission {
+  id: number;
+  permissionKey: string;
+  description: string;
+  moduleName: string;
+}
+
+export interface ApiRoleSummary {
+  roleId: number;
   roleName: RoleKey;
-  count: number;
+  roleDescription: string;
+  userCount: number;
+  permissionCount: number;
+  permissions: ApiRolePermission[];
 }
 
 export interface UsersSummary {
@@ -18,7 +29,6 @@ export interface UsersSummary {
   filteredUsers: number;
   activeUsers: number;
   inactiveUsers: number;
-  roles: RoleCount[];
 }
 
 // ─── Backend AdminUserDirectoryItem (camelCase from CamelModel) ──────────────
@@ -34,8 +44,18 @@ export interface ApiUser {
   email: string;
 }
 
+export interface ApiUsersPagination {
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
+}
+
 export interface ApiUsersResponse {
   summary: UsersSummary;
+  roles: ApiRoleSummary[];
+  pagination: ApiUsersPagination | null;
   items: ApiUser[];
 }
 
