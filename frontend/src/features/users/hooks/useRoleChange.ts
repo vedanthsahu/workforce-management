@@ -1,14 +1,120 @@
+// import { useCallback, useEffect, useState } from "react";
+// import { usersService } from "../services/usersService";
+// import { mapApiUserToUser } from "../utils/users.utils";
+// import type { RoleKey, User } from "../types/users.types";
+
+// const ALL_ROLES: RoleKey[] = [
+//   "EMPLOYEE",
+//   "TALENT",
+//   "TALENT_GUEST_COORDINATOR",
+//   "SECURITY",
+//   "TENANT_ADMIN",
+// ];
+
+// export const useRoleChange = (userId: string) => {
+//   const [user, setUser] = useState<User | null>(null);
+//   const [loading, setLoading] = useState(false);
+//   const [notFound, setNotFound] = useState(false);
+
+//   const [selectedRole, setSelectedRole] = useState<RoleKey | null>(null);
+//   const [confirmOpen, setConfirmOpen] = useState(false);
+//   const [submitting, setSubmitting] = useState(false);
+//   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+//   useEffect(() => {
+//     if (!userId) return;
+//     let active = true;
+//     (async () => {
+//       try {
+//         setLoading(true);
+//         setNotFound(false);
+//         setErrorMessage(null);
+//         const apiUser = await usersService.getUserById(userId);
+//         if (!active) return;
+//         if (apiUser) {
+//           const mapped = mapApiUserToUser(apiUser);
+//           setUser(mapped);
+//           setSelectedRole(mapped.currentRole);
+//         } else {
+//           setNotFound(true);
+//         }
+//       } catch (error) {
+//         console.error("Error fetching user", error);
+//         if (active) setErrorMessage("Could not load this user. Please try again.");
+//       } finally {
+//         if (active) setLoading(false);
+//       }
+//     })();
+//     return () => {
+//       active = false;
+//     };
+//   }, [userId]);
+
+//   const hasChanged = !!user && !!selectedRole && selectedRole !== user.currentRole;
+
+//   // "Save Role" -> opens the confirm popup
+//   const openConfirm = useCallback(() => {
+//     if (!hasChanged) return;
+//     setErrorMessage(null);
+//     setConfirmOpen(true);
+//   }, [hasChanged]);
+
+//   const closeConfirm = useCallback(() => {
+//     setConfirmOpen(false);
+//   }, []);
+
+//   // "Confirm Change" in the popup
+//   const confirmRoleChange = useCallback(async (): Promise<boolean> => {
+//     if (!user || !selectedRole) return false;
+//     try {
+//       setSubmitting(true);
+//       setErrorMessage(null);
+//       await usersService.updateUserRole(user.id, { role: selectedRole });
+//       setConfirmOpen(false);
+//       return true;
+//     } catch (error) {
+//       console.error("Error updating role", error);
+//       setErrorMessage("Could not update the role. Please try again.");
+//       return false;
+//     } finally {
+//       setSubmitting(false);
+//     }
+//   }, [user, selectedRole]);
+
+//   return {
+//     user,
+//     loading,
+//     notFound,
+
+//     roles: ALL_ROLES,
+//     selectedRole,
+//     setSelectedRole,
+//     hasChanged,
+
+//     confirmOpen,
+//     openConfirm,
+//     closeConfirm,
+
+//     submitting,
+//     errorMessage,
+//     confirmRoleChange,
+//   };
+// };
+
+
+
 import { useCallback, useEffect, useState } from "react";
 import { usersService } from "../services/usersService";
-import { mapApiUserToUser } from "../utils/users.utils";
-import type { RoleKey, User } from "../types/users.types";
+import { mapApiUserToUser, toApiStatus } from "../utils/users.utils";
+import type { RoleKey, User, UserStatus } from "../types/users.types";
 
+// Only roles the backend accepts (AdminUserAccessUpdateRequest) AND that exist in RoleKey.
+// TENANT_ADMIN/PRODUCT_ADMIN/TALENT_GUEST_COORDINATOR cannot be assigned via this endpoint.
+// MANAGER is accepted by backend but not yet in the frontend RoleKey union.
 const ALL_ROLES: RoleKey[] = [
   "EMPLOYEE",
   "TALENT",
-  "TALENT_GUEST_COORDINATOR",
   "SECURITY",
-  "TENANT_ADMIN",
 ];
 
 export const useRoleChange = (userId: string) => {
@@ -17,6 +123,7 @@ export const useRoleChange = (userId: string) => {
   const [notFound, setNotFound] = useState(false);
 
   const [selectedRole, setSelectedRole] = useState<RoleKey | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<UserStatus>("active");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -35,6 +142,7 @@ export const useRoleChange = (userId: string) => {
           const mapped = mapApiUserToUser(apiUser);
           setUser(mapped);
           setSelectedRole(mapped.currentRole);
+          setSelectedStatus(mapped.status);
         } else {
           setNotFound(true);
         }
@@ -45,58 +153,49 @@ export const useRoleChange = (userId: string) => {
         if (active) setLoading(false);
       }
     })();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [userId]);
 
-  const hasChanged = !!user && !!selectedRole && selectedRole !== user.currentRole;
+  const hasChanged =
+    !!user &&
+    ((!!selectedRole && selectedRole !== user.currentRole) ||
+      selectedStatus !== user.status);
 
-  // "Save Role" -> opens the confirm popup
   const openConfirm = useCallback(() => {
     if (!hasChanged) return;
     setErrorMessage(null);
     setConfirmOpen(true);
   }, [hasChanged]);
 
-  const closeConfirm = useCallback(() => {
-    setConfirmOpen(false);
-  }, []);
+  const closeConfirm = useCallback(() => setConfirmOpen(false), []);
 
-  // "Confirm Change" in the popup
   const confirmRoleChange = useCallback(async (): Promise<boolean> => {
     if (!user || !selectedRole) return false;
     try {
       setSubmitting(true);
       setErrorMessage(null);
-      await usersService.updateUserRole(user.id, { role: selectedRole });
+      await usersService.updateUserAccess(user.id, {
+        role_name: selectedRole,
+        status: toApiStatus(selectedStatus),
+      });
       setConfirmOpen(false);
       return true;
     } catch (error) {
-      console.error("Error updating role", error);
-      setErrorMessage("Could not update the role. Please try again.");
+      console.error("Error updating access", error);
+      setErrorMessage("Could not update role/status. Please try again.");
       return false;
     } finally {
       setSubmitting(false);
     }
-  }, [user, selectedRole]);
+  }, [user, selectedRole, selectedStatus]);
 
   return {
-    user,
-    loading,
-    notFound,
-
+    user, loading, notFound,
     roles: ALL_ROLES,
-    selectedRole,
-    setSelectedRole,
+    selectedRole, setSelectedRole,
+    selectedStatus, setSelectedStatus,
     hasChanged,
-
-    confirmOpen,
-    openConfirm,
-    closeConfirm,
-
-    submitting,
-    errorMessage,
-    confirmRoleChange,
+    confirmOpen, openConfirm, closeConfirm,
+    submitting, errorMessage, confirmRoleChange,
   };
 };

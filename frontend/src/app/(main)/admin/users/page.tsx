@@ -10,32 +10,25 @@ import type { User } from "@/features/users/types/users.types";
 import { TableSkeleton, TableBodySkeleton } from "@/components/ui/table-skeleton";
 
 const PIN_DURATION = 4000;
-const ITEMS_PER_PAGE = 10;
 
 function UserManagementPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { users, totalUsers, loading, search, setSearch } = useUsers();
+  const {
+    users, summary, loading,
+    search, setSearch,
+    page, setPage, totalPages,
+  } = useUsers();
 
   const [successMessage, setSuccessMessage] = useState("");
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
-  const [pinnedId, setPinnedId] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
   const pinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ─── Shared helper: pin + highlight a row for PIN_DURATION ───────────────
-  const activatePin = (id: string, message: string) => {
+  const showBanner = (message: string) => {
     if (pinTimerRef.current) clearTimeout(pinTimerRef.current);
-    setPinnedId(id);
-    setHighlightedId(id);
     setSuccessMessage(message);
-    setCurrentPage(1);
-    pinTimerRef.current = setTimeout(() => {
-      setPinnedId(null);
-      setHighlightedId(null);
-      setSuccessMessage("");
-    }, PIN_DURATION);
+    pinTimerRef.current = setTimeout(() => setSuccessMessage(""), PIN_DURATION);
   };
 
   // ─── Role-change flow: read ?roleChanged=ID&newRole=ROLE after the Change
@@ -43,22 +36,26 @@ function UserManagementPage() {
   useEffect(() => {
     const changedId = searchParams.get("roleChanged");
     const newRole = searchParams.get("newRole");
-    if (!changedId || !users.length) return;
-    const exists = users.some((u) => u.id === changedId);
-    if (!exists) return;
-    activatePin(changedId, `Role changed successfully${newRole ? ` to ${newRole}` : ""}.`);
+    if (!changedId) return;
+    showBanner(`Role changed successfully${newRole ? ` to ${newRole}` : ""}.`);
+    setHighlightedId(changedId);
+    setPage(1);
     router.replace("/admin/users");
-  }, [searchParams, users]);
+    setTimeout(() => setHighlightedId(null), PIN_DURATION);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // ─── Add User flow: read ?added=ID after the Add User page redirects back ─
   useEffect(() => {
     const addedId = searchParams.get("added");
-    if (!addedId || !users.length) return;
-    const exists = users.some((u) => u.id === addedId);
-    if (!exists) return;
-    activatePin(addedId, "User added successfully!");
+    if (!addedId) return;
+    showBanner("User added successfully!");
+    setHighlightedId(addedId);
+    setPage(1);
     router.replace("/admin/users");
-  }, [searchParams, users]);
+    setTimeout(() => setHighlightedId(null), PIN_DURATION);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Cleanup timer on unmount
   useEffect(() => () => { if (pinTimerRef.current) clearTimeout(pinTimerRef.current); }, []);
@@ -67,19 +64,6 @@ function UserManagementPage() {
   const handleChangeRole = (user: User) => {
     router.push(`/admin/users/${user.id}/change-role`);
   };
-
-  // ─── Pin the changed row to the top temporarily ──────────────────────────
-  const sortedUsers = pinnedId
-    ? [
-        ...users.filter((u) => u.id === pinnedId),
-        ...users.filter((u) => u.id !== pinnedId),
-      ]
-    : users;
-
-  // ─── Pagination — 10 per page, same pattern as Amenities/Building/Floors ─
-  const totalPages = Math.ceil(sortedUsers.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedUsers = sortedUsers.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc] min-h-screen flex flex-col">
@@ -120,7 +104,7 @@ function UserManagementPage() {
           <h2 className="text-sm sm:text-base font-semibold text-gray-800 flex items-center gap-2">
             User Management
             <span className="text-[11px] font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
-              {totalUsers}
+              {summary?.totalUsers ?? 0}
             </span>
           </h2>
           <div className="w-full sm:w-auto">
@@ -128,7 +112,7 @@ function UserManagementPage() {
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
-                setCurrentPage(1);
+                setPage(1);
               }}
               placeholder="Search by name or email..."
               className="h-9 w-full sm:w-72 px-3 text-sm border rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
@@ -144,7 +128,7 @@ function UserManagementPage() {
             <TableBodySkeleton columns={5} rows={5} />
           ) : (
             <UsersTable
-              users={paginatedUsers}
+              users={users}
               highlightedUserId={highlightedId}
               onChangeRole={handleChangeRole}
             />
@@ -154,15 +138,15 @@ function UserManagementPage() {
         {/* FOOTER */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
           <span>
-            Showing {sortedUsers.length === 0 ? 0 : startIndex + 1} to{" "}
-            {Math.min(startIndex + ITEMS_PER_PAGE, sortedUsers.length)} of{" "}
-            {sortedUsers.length} users
+            {summary
+              ? `Showing ${summary.filteredUsers === 0 ? 0 : (page - 1) * 10 + 1} to ${Math.min(page * 10, summary.filteredUsers)} of ${summary.filteredUsers} users`
+              : "Loading…"}
           </span>
           <div className="self-center sm:self-auto">
             <UsersPagination
-              currentPage={currentPage}
+              currentPage={page}
               totalPages={totalPages}
-              onPageChange={setCurrentPage}
+              onPageChange={setPage}
             />
           </div>
         </div>
