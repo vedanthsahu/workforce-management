@@ -1,5 +1,3 @@
-
-// ─── Raw API response types (mirrors future backend schema) ─────────────────
 import type { RoleKey } from "@/features/roles/types/roles.types";
 
 export type { RoleKey };
@@ -11,25 +9,42 @@ export interface ApiPermission {
   permission_label: string;
 }
 
+// ─── Backend AdminUserDirectoryItem (camelCase from CamelModel) ──────────────
 export interface ApiUser {
-  user_id: string;
-  full_name: string;
-  email: string;
-  department: string;
-  employee_id: string;
-  status: ApiUserStatus;
-  joined_on: string;
-  current_role: RoleKey;
-  role_assigned_on: string;
-  permissions: ApiPermission[];
+  id: string;
+  employeeId?: string | null;
+  fullName?: string | null;
+  roleName: string;
+  department?: string | null;
+  jobTitle?: string | null;
+  mobilePhone?: string | null;
+  status: string;
+  email?: string | null;
+}
+
+export interface AdminUserDirectorySummary {
+  totalUsers: number;
+  filteredUsers: number;
+  activeUsers: number;
+  inactiveUsers: number;
+}
+
+export interface AdminUsersPagination {
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
 }
 
 export interface ApiUsersResponse {
+  summary: AdminUserDirectorySummary;
+  roles: import("@/features/roles/types/roles.types").ApiRole[];
+  pagination?: AdminUsersPagination;
   items: ApiUser[];
-  total: number;
 }
 
-// ─── Frontend display types ──────────────────────────────────────────────
+// ─── Frontend display type ────────────────────────────────────────────────────
 export interface User {
   id: string;
   fullName: string;
@@ -38,26 +53,27 @@ export interface User {
   employeeId: string;
   status: ApiUserStatus;
   joinedOn: string;
-  currentRole: RoleKey;
+  currentRole: string;
   roleAssignedOn: string;
   permissions: string[];
+  jobTitle?: string;
+  mobilePhone?: string;
 }
 
-// ─── Payloads ─────────────────────────────────────────────────────────────
+// ─── Payloads ─────────────────────────────────────────────────────────────────
 export interface UpdateUserRolePayload {
   role: RoleKey;
 }
 
 export interface RoleChangeResult {
   user_id: string;
-  previous_role: RoleKey;
-  new_role: RoleKey;
+  previous_role: string;
+  new_role: string;
   updated_permissions: ApiPermission[];
   sessions_invalidated: boolean;
   changed_at: string;
 }
 
-// "+ Add User" form
 export interface UserFormData {
   full_name: string;
   email: string;

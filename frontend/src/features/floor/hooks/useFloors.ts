@@ -48,7 +48,7 @@ export const useFloors = () => {
   const fetchSites = async () => {
     try {
       const response = await floorService.getSites();
-      setSites(response.filter((site) => site.status === "ACTIVE"));
+      setSites(response);
     } catch (error) {
       console.error(error);
     }

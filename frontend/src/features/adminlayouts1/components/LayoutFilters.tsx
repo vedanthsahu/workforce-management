@@ -91,7 +91,7 @@ export default function LayoutFilters({ onChange }: Props) {
         onChange={(e) => handleSiteChange(e.target.value)}
         className="h-10 border rounded-md px-3 text-sm"
       >
-        <option value="">All Sites</option>
+        <option value="" disabled hidden>All Sites</option>
         {sites.map((s) => (
           <option key={s.site_id} value={s.site_id}>
             {s.site_name}
@@ -105,7 +105,7 @@ export default function LayoutFilters({ onChange }: Props) {
         onChange={(e) => handleBuildingChange(e.target.value)}
         className="h-10 border rounded-md px-3 text-sm"
       >
-        <option value="">All Buildings</option>
+        <option value="" disabled hidden>All Buildings</option>
         {buildings.map((b) => (
           <option key={b.building_id} value={b.building_id}>
             {b.building_name}
@@ -119,7 +119,7 @@ export default function LayoutFilters({ onChange }: Props) {
         onChange={(e) => handleFloorChange(e.target.value)}
         className="h-10 border rounded-md px-3 text-sm"
       >
-        <option value="">All Floors</option>
+        <option value="" disabled hidden>All Floors</option>
         {floors.map((f) => (
           <option key={f.floor_id} value={f.floor_id}>
             {f.floor_name}
@@ -133,7 +133,7 @@ export default function LayoutFilters({ onChange }: Props) {
         onChange={(e) => handleStatusChange(e.target.value)}
         className="h-10 border rounded-md px-3 text-sm"
       >
-        <option value="">All Status</option>
+        <option value="" disabled hidden>All Status</option>
         <option value="DRAFT">Draft</option>
         <option value="PUBLISHED">Published</option>
         <option value="ARCHIVED">Archived</option>

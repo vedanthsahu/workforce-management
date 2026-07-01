@@ -297,9 +297,9 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                   }));
                   onFloorLayoutInfo?.(null);
                 }}
-                className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="" disabled>Select Site</option>
+                <option value="" disabled hidden>Select a site</option>
                 {sites.map((s) => (
                   <option key={s.site_id} value={String(s.site_id)}>
                     {s.site_name}
@@ -331,9 +331,9 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                   }));
                   onFloorLayoutInfo?.(null);
                 }}
-                className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="" disabled>Select Building</option>
+                <option value="" disabled hidden>Select a building</option>
                 {buildings.map((b) => (
                   <option key={b.building_id} value={String(b.building_id)}>
                     {b.building_name}
@@ -385,9 +385,9 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                     layoutLastUpdated: floor.layout_last_updated,
                   });
                 }}
-                className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="" disabled>Select Floor</option>
+                <option value="" disabled hidden>Select a floor</option>
                 {floors.map((f) => (
                   <option key={f.floor_id} value={String(f.floor_id)}>
                     {f.floor_name || f.floor_code}

@@ -76,10 +76,11 @@ export default function RoleDetailModal({ role, onClose }: Props) {
             Permissions ({role.permissionCount})
           </p>
           <ul className="space-y-1.5">
-            {role.permissions.map((perm, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+            {role.permissions.map((perm) => (
+              <li key={perm.id ?? perm.key} className="flex items-start gap-2 text-sm text-gray-700">
                 <CheckCircle2 size={14} className="text-emerald-500 mt-0.5 shrink-0" />
-                {perm}
+                <span>{perm.description}</span>
+                <span className="ml-auto text-[10px] text-gray-400 font-mono">{perm.key}</span>
               </li>
             ))}
           </ul>

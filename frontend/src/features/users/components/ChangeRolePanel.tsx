@@ -4,9 +4,9 @@ import { ChevronDown } from "lucide-react";
 import type { RoleKey } from "../types/users.types";
 
 type Props = {
-  roles: RoleKey[];
-  selectedRole: RoleKey | null;
-  setSelectedRole: (role: RoleKey) => void;
+  roles: string[];
+  selectedRole: string | null;
+  setSelectedRole: (role: string) => void;
   hasChanged: boolean;
   onSave: () => void;
   onCancel: () => void;
