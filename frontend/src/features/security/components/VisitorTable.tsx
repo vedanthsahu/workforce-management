@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -59,33 +60,49 @@ function RowMenu({
   onCancel: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (!btnRef.current?.contains(target)) setOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  const handleOpen = () => {
+    if (!btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    const menuH = 130;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow < menuH
+      ? rect.top + window.scrollY - menuH - 4
+      : rect.bottom + window.scrollY + 4;
+    setMenuPos({ top, left: rect.right + window.scrollX - 176 });
+    setOpen((v) => !v);
+  };
+
   const isCancellable = visitor.status === "SCHEDULED" || visitor.status === "OVERDUE";
 
   return (
-    <div className="relative" ref={menuRef}>
+    <>
       <button
-        onClick={() => setOpen((v) => !v)}
+        ref={btnRef}
+        onClick={handleOpen}
         className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-gray-100 transition text-gray-400"
         aria-label="More options"
       >
         <MoreVertical className="w-4 h-4" />
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-8 z-30 bg-white border border-gray-100 rounded-xl shadow-xl w-44 py-1.5 text-sm overflow-hidden">
+      {open && typeof document !== "undefined" && createPortal(
+        <div
+          style={{ position: "absolute", top: menuPos.top, left: menuPos.left, zIndex: 9999, width: 176 }}
+          className="bg-white border border-gray-100 rounded-xl shadow-xl py-1.5 text-sm overflow-hidden"
+        >
           <button
             onClick={() => { setOpen(false); onViewDetails(); }}
             className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 transition"
@@ -107,9 +124,10 @@ function RowMenu({
           >
             Cancel visit
           </button>
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
 
@@ -175,7 +193,7 @@ export function VisitorTable({
                       key={h}
                       className={cn(
                         "py-2.5 px-4 text-[11px] font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap bg-gray-50 text-left",
-                        h === "Actions" && "w-[160px]"
+                        false
                       )}
                     >
                       {h}
@@ -260,8 +278,8 @@ export function VisitorTable({
                     </td>
 
                     {/* Actions */}
-                    <td className="py-3 px-4 w-[160px]">
-                      <div className="flex items-center justify-center gap-1.5">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center justify-end gap-2">
                         <CheckInButton
                           visitor={v}
                           isLoading={checkingInId === v.id}

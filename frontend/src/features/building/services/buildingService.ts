@@ -29,11 +29,7 @@ export const buildingService = {
     search?: string;
     status?: string;
   }): Promise<SiteOption[]> {
-    const { data } = await axiosInstance.get("/sites", {
-      params: {
-        status: "ACTIVE",
-      },
-    });
+    const { data } = await axiosInstance.get("/sites");
 
     return data;
   },

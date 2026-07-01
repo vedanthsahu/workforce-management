@@ -16,7 +16,7 @@ export const useRoleChange = (userId: string) => {
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
 
-  const [selectedRole, setSelectedRole] = useState<RoleKey | null>(null);
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -69,7 +69,7 @@ export const useRoleChange = (userId: string) => {
     try {
       setSubmitting(true);
       setErrorMessage(null);
-      await usersService.updateUserRole(user.id, { role: selectedRole });
+      await usersService.updateUserRole(user.id, { role: selectedRole as import("../types/users.types").RoleKey });
       setConfirmOpen(false);
       return true;
     } catch (error) {

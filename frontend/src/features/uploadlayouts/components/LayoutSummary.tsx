@@ -24,7 +24,7 @@ function formatLastUpdated(value?: string | null) {
 }
 
 export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
-  const hasFloor      = !!formData.floor?.id;
+  const hasFloor = !!formData.floor?.id;
   const [showModal, setShowModal] = useState(false);
 
   return (
@@ -120,7 +120,7 @@ export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
                   <span className="font-medium">v{floorLayoutInfo.layoutVersionNo ?? "—"}</span>
                 </div>
 
-                {/* <div className="flex justify-between">
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">Published By</span>
                   <span className="font-medium">{floorLayoutInfo.publishedByName ?? "—"}</span>
                 </div>
@@ -130,27 +130,6 @@ export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
                   <span className="font-medium">
                     {formatLastUpdated(floorLayoutInfo.layoutLastUpdated)}
                   </span>
-                </div> */}
-                 <div className="flex justify-between">
-
-                  <span className="text-muted-foreground">Published By</span>
-
-                  <span className="font-medium">Ankitha Kulal</span>
-
-                </div>
-
-
-
-                <div className="flex justify-between">
-
-                  <span className="text-muted-foreground">Last Updated</span>
-
-                  <span className="font-medium">
-
-   15/06/2026
-
-                  </span>
-
                 </div>
 
                 {/* ── Preview button ── */}

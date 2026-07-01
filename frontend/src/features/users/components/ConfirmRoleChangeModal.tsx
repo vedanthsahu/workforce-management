@@ -3,12 +3,12 @@
 import { useEffect, useRef } from "react";
 import { AlertTriangle, Check, X } from "lucide-react";
 import { getRoleBadgeClass } from "../utils/users.utils";
-import type { RoleKey, User } from "../types/users.types";
+import type { User } from "../types/users.types";
 
 type Props = {
   open: boolean;
   user: User;
-  newRole: RoleKey | null;
+  newRole: string | null;
   submitting: boolean;
   errorMessage: string | null;
   onCancel: () => void;

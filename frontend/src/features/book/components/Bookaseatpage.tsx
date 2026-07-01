@@ -303,11 +303,11 @@ const BookASeatPage: React.FC = () => {
                     value={form.siteId ?? ""}
                     onChange={(e) => setSiteId(e.target.value || null)}
                     disabled={loadingSites}
-                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <option value="" disabled>{loadingSites ? "Loading…" : "Select site"}</option>
+                    <option value="" disabled hidden>{loadingSites ? "Loading…" : "Select site"}</option>
                     {sites.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
+                      <option key={s.id} value={s.id} style={{ color: '#111827' }}>{s.name}</option>
                     ))}
                   </select>
                 </div>
@@ -318,11 +318,11 @@ const BookASeatPage: React.FC = () => {
                     value={form.buildingId ?? ""}
                     onChange={(e) => setBuildingId(e.target.value || null)}
                     disabled={!form.siteId || loadingBuildings}
-                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <option value="" disabled>{loadingBuildings ? "Loading…" : "Select building"}</option>
+                    <option value="" disabled hidden>{loadingBuildings ? "Loading…" : "Select building"}</option>
                     {buildings.map((b) => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
+                      <option key={b.id} value={b.id} style={{ color: '#111827' }}>{b.name}</option>
                     ))}
                   </select>
                 </div>
@@ -333,11 +333,11 @@ const BookASeatPage: React.FC = () => {
                     value={form.floorId ?? ""}
                     onChange={(e) => setFloorId(e.target.value || null)}
                     disabled={!form.buildingId || loadingFloors}
-                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <option value="" disabled>{loadingFloors ? "Loading…" : "Select floor"}</option>
+                    <option value="" disabled hidden>{loadingFloors ? "Loading…" : "Select floor"}</option>
                     {floors.map((f) => (
-                      <option key={f.id} value={f.id}>{f.name}</option>
+                      <option key={f.id} value={f.id} style={{ color: '#111827' }}>{f.name}</option>
                     ))}
                   </select>
                 </div>
@@ -538,7 +538,7 @@ const BookASeatPage: React.FC = () => {
                   </div>
                   <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50 border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Seat</span>
-                    <span className="text-[12.5px] font-semibold text-[#0f172a]">Seat {selectedSeat?.label ?? "—"}</span>
+                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedSeat?.label ?? "—"}</span>
                   </div>
                   <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Date</span>
