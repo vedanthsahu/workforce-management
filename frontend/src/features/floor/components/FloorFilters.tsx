@@ -30,11 +30,11 @@ export default function FloorFilters({
       <select
         value={selectedSite}
         onChange={(e) => onSiteChange(e.target.value)}
-        className="h-9 w-55 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
       >
-        <option value="" disabled>Select Office</option>
+        <option value="" disabled hidden>All Sites</option>
         {sites.map((site) => (
-          <option key={site.site_id} value={site.site_id}>{site.site_name}</option>
+          <option key={site.site_id} value={site.site_id} className="text-gray-900">{site.site_name}</option>
         ))}
       </select>
         
@@ -42,9 +42,9 @@ export default function FloorFilters({
         value={selectedBuilding}  
         disabled={!selectedSite}
         onChange={(e) => onBuildingChange(e.target.value)}
-        className="h-9 w-55 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+        className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-gray-900"
       >
-        <option value="" disabled>Select Building</option>
+        <option value="" disabled hidden>All Buildings</option>
         {buildings.map((building) => (
           <option key={building.building_id} value={building.building_id}>{building.building_name}</option>
         ))}

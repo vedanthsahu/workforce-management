@@ -21,6 +21,7 @@ export interface UsersSummary {
   roles: RoleCount[];
 }
 
+// ─── Backend AdminUserDirectoryItem (camelCase from CamelModel) ──────────────
 export interface ApiUser {
   id: string;
   employeeId: string | null;
@@ -38,7 +39,7 @@ export interface ApiUsersResponse {
   items: ApiUser[];
 }
 
-// ─── Frontend display types ──────────────────────────────────────────────
+// ─── Frontend display type ────────────────────────────────────────────────────
 export interface User {
   id: string;
   fullName: string;

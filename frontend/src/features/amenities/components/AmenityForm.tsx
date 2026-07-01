@@ -123,7 +123,7 @@ export default function AmenityForm() {
                 onChange={(e) => handleChange("category_id", e.target.value)}
                 className={selectClass}
               >
-                <option value="">Select category</option>
+                <option value="" disabled hidden>Select category</option>
                 {categories.map((category) => (
                   <option key={category.category_id} value={category.category_id}>
                     {category.category_name}

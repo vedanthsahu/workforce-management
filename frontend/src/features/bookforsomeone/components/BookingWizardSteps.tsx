@@ -751,7 +751,7 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               onChange={(e) => onChange({ siteId: e.target.value, buildingId: "", floorId: "" })}
               disabled={readOnlyLocation}
             >
-              <option value="">Select a site</option>
+              <option value="" disabled hidden>Select a site</option>
               {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
@@ -769,7 +769,7 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               onChange={(e) => onChange({ buildingId: e.target.value, floorId: "" })}
               disabled={readOnlyLocation || !visitDetails.siteId}
             >
-              <option value="">
+              <option value="" disabled hidden>
                 {!visitDetails.siteId ? "Select a site first" : isLoadingBuildings ? "Loading…" : "Select a building"}
               </option>
               {buildings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -789,7 +789,7 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               onChange={(e) => onChange({ floorId: e.target.value })}
               disabled={readOnlyLocation || !visitDetails.buildingId}
             >
-              <option value="">
+              <option value="" disabled hidden>
                 {!visitDetails.buildingId ? "Select a building first" : isLoadingFloors ? "Loading…" : "Select a floor"}
               </option>
               {floors.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}

@@ -14,12 +14,14 @@ from backend.repositories.user_repository import (
     admin_update_user_access,
     fetch_admin_user_directory,
     fetch_user_by_id,
+    fetch_user_details_by_id,
     update_user_profile,
     search_users,
 )
 from backend.schemas.auth import UserResponse
 from backend.schemas.user_management import (
     AdminDirectoryRole,
+    UserDetailsResponse,
     AdminDirectoryStatus,
     AdminUserDirectoryResponse,
 )
@@ -37,7 +39,7 @@ ADMIN_DIRECTORY_ROLES = {
     "TALENT",
     "SECURITY",
     "TENANT_ADMIN",
-    "PRODUCT_ADMIN",
+    "TALENT_GUEST_COORDINATOR",
 }
 
 ADMIN_DIRECTORY_STATUSES = {"ACTIVE", "INACTIVE", "LOCKED"}
@@ -232,3 +234,27 @@ def _normalize_admin_directory_roles(
             if normalized and normalized not in roles:
                 roles.append(normalized)
     return roles
+
+def get_user_by_id_service(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    user_id: str,
+) -> UserDetailsResponse:
+
+    user = fetch_user_details_by_id(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        user_id=user_id,
+    )
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "user_not_found",
+                "message": "User not found.",
+            },
+        )
+
+    return UserDetailsResponse(**user)

@@ -34,7 +34,7 @@ export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) 
 
           {roles.map((role) => (
             <tr
-              key={role.key}
+              key={role.roleId}
               className={`border-b last:border-0 hover:bg-gray-50/60 transition-colors ${
                 activeRoleKey === role.key ? "bg-indigo-50/40" : ""
               }`}

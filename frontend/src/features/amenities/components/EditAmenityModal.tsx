@@ -65,7 +65,7 @@ export default function EditAmenityModal({
                 onChange={(e) => handleChange("category_id", e.target.value)}
                 className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="" disabled>Select category</option>
+                <option value="" disabled hidden>Select category</option>
                 {categories.map((category) => (
                   <option key={category.category_id} value={String(category.category_id)}>
                     {category.category_name}
