@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { getRoleBadgeClass } from "../utils/users.utils";
+import { getRoleBadgeClass, normalizeRoleKey } from "../utils/users.utils";
 import type { RoleCount, RoleKey } from "../types/users.types";
 
 type Props = {
@@ -67,7 +67,8 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
               <span className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={selectedRoles.includes(roleName)}
+                  // checked={selectedRoles.includes(roleName)}
+                  checked={selectedRoles.some((r) => normalizeRoleKey(r) === normalizeRoleKey(roleName))}
                   onChange={() => toggleRole(roleName)}
                   className="accent-blue-600"
                 />

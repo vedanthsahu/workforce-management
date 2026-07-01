@@ -68,6 +68,7 @@ import {
 import { getInitials, type User } from "@/features/auth/types/auth.types";
 import { cn } from "@/lib/utils";
 import { useBookForSomeoneStore } from "@/store/useBookForSomeoneStore";
+import { useUsersFilterStore } from "@/store/useUsersFilterStore";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -330,6 +331,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
     const path = ROUTE_MAP[id];
     if (!path) return;
     if (id === "team") useBookForSomeoneStore.getState().resetFormState();
+    if (id === "users") useUsersFilterStore.getState().reset();
     router.push(path);
   };
 
