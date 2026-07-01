@@ -15,7 +15,7 @@ AdminDirectoryRole = Literal[
     "TALENT",
     "SECURITY",
     "TENANT_ADMIN",
-    "PRODUCT_ADMIN",
+    "TALENT_GUEST_COORDINATOR",
 ]
 
 AdminDirectoryStatus = Literal[
@@ -59,9 +59,7 @@ class UserSearchResponse(BaseModel):
     department: str | None = None
 
 
-class RoleSummary(CamelModel):
-    role_name: str = Field(alias="roleName")
-    count: int
+
 
 
 class AdminUserDirectorySummary(CamelModel):
@@ -69,7 +67,6 @@ class AdminUserDirectorySummary(CamelModel):
     filtered_users: int = Field(alias="filteredUsers")
     active_users: int = Field(alias="activeUsers")
     inactive_users: int = Field(alias="inactiveUsers")
-    roles: list[RoleSummary] = Field(default_factory=list)
 
 
 class AdminUserDirectoryItem(CamelModel):
@@ -84,6 +81,96 @@ class AdminUserDirectoryItem(CamelModel):
     email: str | None = None
 
 
+
+
+class UserDetailsResponse(CamelModel):
+    id: str
+
+    email: str
+    full_name: str = Field(alias="fullName")
+    display_name: str | None = Field(
+        default=None,
+        alias="displayName",
+    )
+
+    role_name: str = Field(alias="roleName")
+    status: str
+
+    employee_id: str | None = Field(
+        default=None,
+        alias="employeeId",
+    )
+
+    mobile_phone: str | None = Field(
+        default=None,
+        alias="mobilePhone",
+    )
+
+    office_location: str | None = Field(
+        default=None,
+        alias="officeLocation",
+    )
+
+    job_title: str | None = Field(
+        default=None,
+        alias="jobTitle",
+    )
+
+    department: str | None = None
+
+    company_name: str | None = Field(
+        default=None,
+        alias="companyName",
+    )
+
+    manager_user_id: str | None = Field(
+        default=None,
+        alias="managerUserId",
+    )
+
+    home_site_id: str | None = Field(
+        default=None,
+        alias="homeSiteId",
+    )
+
+class PermissionMetadata(CamelModel):
+    id: int
+    permission_key: str = Field(alias="permissionKey")
+    description: str
+    module_name: str = Field(alias="moduleName")
+
+
+class RoleMetadata(CamelModel):
+    role_id: int = Field(alias="roleId")
+    role_name: str = Field(alias="roleName")
+    role_description: str = Field(alias="roleDescription")
+
+    user_count: int = Field(alias="userCount")
+
+    permission_count: int = Field(alias="permissionCount")
+
+    permissions: list[PermissionMetadata] = Field(
+        default_factory=list
+    )
+
+
+class PaginationMetadata(CamelModel):
+    page: int
+    limit: int
+
+    total_pages: int = Field(alias="totalPages")
+
+    has_next: bool = Field(alias="hasNext")
+    has_previous: bool = Field(alias="hasPrevious")
+
+
 class AdminUserDirectoryResponse(CamelModel):
     summary: AdminUserDirectorySummary
+
+    roles: list[RoleMetadata] = Field(
+        default_factory=list
+    )
+
+    pagination: PaginationMetadata | None = None
+
     items: list[AdminUserDirectoryItem]
