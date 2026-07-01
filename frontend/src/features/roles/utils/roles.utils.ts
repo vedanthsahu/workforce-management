@@ -10,9 +10,9 @@ export function mapApiRoleToRole(item: ApiRole): Role {
     permissionCount: item.permissionCount,
     permissions: item.permissions.map((p) => ({
       id: p.id,
-      key: p.key,
+      permissionKey: p.permissionKey,
       description: p.description,
-      module: p.module,
+      moduleName: p.moduleName,
     })),
     users: [],
   };

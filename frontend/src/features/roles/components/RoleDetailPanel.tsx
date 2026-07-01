@@ -47,10 +47,10 @@ export default function RoleDetailPanel({ role, onClose }: Props) {
         </p>
         <ul className="space-y-1.5">
           {role.permissions.map((perm) => (
-            <li key={perm.id ?? perm.key} className="flex items-start gap-2 text-sm text-gray-700">
+            <li key={perm.id} className="flex items-start gap-2 text-sm text-gray-700">
               <CheckCircle2 size={14} className="text-emerald-500 mt-0.5 shrink-0" />
-              <span>{perm.description}</span>
-              <span className="ml-auto text-[10px] text-gray-400 font-mono">{perm.key}</span>
+              <span className="flex-1">{perm.description}</span>
+              <span className="text-[10px] text-gray-400 font-mono shrink-0">{perm.permissionKey}</span>
             </li>
           ))}
         </ul>

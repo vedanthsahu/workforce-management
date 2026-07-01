@@ -11,9 +11,9 @@ export type RoleKey =
 
 export interface ApiPermission {
   id: number;
-  key: string;
+  permissionKey: string;
   description: string;
-  module: string;
+  moduleName: string;
 }
 
 export interface ApiRole {
@@ -69,9 +69,9 @@ export interface ApiRolesResponseLegacy {
 
 export interface RolePermission {
   id: number;
-  key: string;
+  permissionKey: string;
   description: string;
-  module: string;
+  moduleName: string;
 }
 
 export interface RoleUser {
