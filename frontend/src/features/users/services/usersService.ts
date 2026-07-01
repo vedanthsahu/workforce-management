@@ -4,6 +4,7 @@ import { axiosInstance } from "@/lib/http/axios";
 import type {
   ApiUser,
   ApiUsersResponse,
+  ApiUserSearchResult,
   GetUsersParams,
   UpdateUserAccessPayload,
   UserAccessResult,
@@ -52,6 +53,11 @@ export const usersService = {
       if (page >= totalPages) return null;
       page++;
     }
+  },
+
+  async searchUsers(q: string, limit = 20): Promise<ApiUserSearchResult[]> {
+    const { data } = await axiosInstance.get("/users", { params: { q, limit } });
+    return data;
   },
 
   async createUser(): Promise<never> {

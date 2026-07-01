@@ -108,19 +108,14 @@ import { usersService } from "../services/usersService";
 import { mapApiUserToUser, toApiStatus } from "../utils/users.utils";
 import type { RoleKey, User, UserStatus } from "../types/users.types";
 
-// Only roles the backend accepts (AdminUserAccessUpdateRequest) AND that exist in RoleKey.
-// TENANT_ADMIN/PRODUCT_ADMIN/TALENT_GUEST_COORDINATOR cannot be assigned via this endpoint.
-// MANAGER is accepted by backend but not yet in the frontend RoleKey union.
-const ALL_ROLES: RoleKey[] = [
-  "EMPLOYEE",
-  "TALENT",
-  "SECURITY",
-];
+// Admin-only roles the PATCH /admin/users/{id}/access endpoint will not accept.
+const NON_ASSIGNABLE_ROLES = new Set(["TENANT_ADMIN", "PRODUCT_ADMIN"]);
 
 export const useRoleChange = (userId: string) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [roles, setRoles] = useState<RoleKey[]>([]);
 
   const [selectedRole, setSelectedRole] = useState<RoleKey | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<UserStatus>("active");
@@ -136,8 +131,19 @@ export const useRoleChange = (userId: string) => {
         setLoading(true);
         setNotFound(false);
         setErrorMessage(null);
-        const apiUser = await usersService.getUserById(userId);
+
+        // One request gets all users + summary.roles — no second round-trip needed.
+        const { items, summary } = await usersService.getUsers({ limit: 100 });
         if (!active) return;
+
+        // Populate assignable roles from the API — excludes admin-only roles.
+        const assignable = summary.roles
+          .filter(({ roleName }) => !NON_ASSIGNABLE_ROLES.has(roleName))
+          .map(({ roleName }) => roleName as RoleKey);
+        setRoles(assignable);
+
+        // Find the target user in the returned items.
+        const apiUser = items.find((u) => u.id === userId) ?? null;
         if (apiUser) {
           const mapped = mapApiUserToUser(apiUser);
           setUser(mapped);
@@ -191,7 +197,7 @@ export const useRoleChange = (userId: string) => {
 
   return {
     user, loading, notFound,
-    roles: ALL_ROLES,
+    roles,
     selectedRole, setSelectedRole,
     selectedStatus, setSelectedStatus,
     hasChanged,
