@@ -37,6 +37,7 @@ export function toApiStatus(status: import("../types/users.types").UserStatus): 
 }
 
 export function formatDate(iso: string): string {
+  if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",

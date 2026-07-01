@@ -58,9 +58,9 @@ function CascadeSelect({
       value={value}
       onChange={(e) => { if (e.target.value) onValueChange(e.target.value); }}
       disabled={disabled}
-      className="w-full sm:w-auto sm:min-w-40 h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+      className="w-full sm:w-auto sm:min-w-40 h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      {!value && <option value="">{placeholder}</option>}
+      {!value && <option value="" disabled hidden>{placeholder}</option>}
       {items.map((item) => (
         <option key={item.value} value={item.value}>
           {item.label}

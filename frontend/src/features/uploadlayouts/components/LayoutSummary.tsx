@@ -24,7 +24,7 @@ function formatLastUpdated(value?: string | null) {
 }
 
 export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
-  const hasFloor      = !!formData.floor?.id;
+  const hasFloor = !!formData.floor?.id;
   const [showModal, setShowModal] = useState(false);
 
   return (

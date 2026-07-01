@@ -403,7 +403,7 @@ export function useBookingForm() {
     setForm((f) => ({
       ...f,
       fromDate: v,
-      toDate: isModifyMode ? v : f.toDate < v ? v : f.toDate,
+      toDate: v,
     }));
 
   const setToDate = (v: string) =>

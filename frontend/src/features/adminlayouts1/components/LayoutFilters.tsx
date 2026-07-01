@@ -91,7 +91,7 @@ export default function LayoutFilters({ onChange }: Props) {
         onChange={(e) => handleSiteChange(e.target.value)}
         className="h-9 w-44 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <option value="" disabled>Select Site</option>
+        <option value="" disabled hidden>All Sites</option>
         {sites.map((s) => (
           <option key={s.site_id} value={s.site_id}>{s.site_name}</option>
         ))}
@@ -103,7 +103,7 @@ export default function LayoutFilters({ onChange }: Props) {
         onChange={(e) => handleBuildingChange(e.target.value)}
         className="h-9 w-44 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <option value="" disabled>Select Building</option>
+        <option value="" disabled hidden>All Buildings</option>
         {buildings.map((b) => (
           <option key={b.building_id} value={b.building_id}>{b.building_name}</option>
         ))}
@@ -115,7 +115,7 @@ export default function LayoutFilters({ onChange }: Props) {
         onChange={(e) => handleFloorChange(e.target.value)}
         className="h-9 w-44 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <option value="" disabled>Select Floor</option>
+        <option value="" disabled hidden>All Floors</option>
         {floors.map((f) => (
           <option key={f.floor_id} value={f.floor_id}>{f.floor_name}</option>
         ))}
@@ -127,7 +127,7 @@ export default function LayoutFilters({ onChange }: Props) {
         onChange={(e) => handleStatusChange(e.target.value)}
         className="h-9 w-44 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <option value="" disabled>Select Status</option>
+        <option value="" disabled hidden>All Status</option>
         <option value="DRAFT">Draft</option>
         <option value="PUBLISHED">Published</option>
         <option value="ARCHIVED">Archived</option>
