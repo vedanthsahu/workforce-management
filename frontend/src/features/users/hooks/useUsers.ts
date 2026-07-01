@@ -68,7 +68,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usersService } from "../services/usersService";
 import { mapApiUserToUser, mapSearchResultToUser } from "../utils/users.utils";
-import type { ApiUserStatus, RoleKey, User, UsersSummary } from "../types/users.types";
+import type { ApiRoleSummary, User, UsersSummary } from "../types/users.types";
+import { useUsersFilterStore } from "@/store/useUsersFilterStore";
 
 const LIMIT = 25;
 const SEARCH_DEBOUNCE_MS = 350;
@@ -76,13 +77,20 @@ const SEARCH_DEBOUNCE_MS = 350;
 export const useUsers = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [summary, setSummary] = useState<UsersSummary | null>(null);
+  const [roles, setRoles] = useState<ApiRoleSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [isSearchMode, setIsSearchMode] = useState(false);
 
-  const [search, setSearch] = useState("");
-  const [selectedRoles, setSelectedRoles] = useState<RoleKey[]>([]);
-  const [statusFilter, setStatusFilter] = useState<ApiUserStatus | "ALL">("ALL");
-  const [page, setPage] = useState(1);
+  // Persisted in a store (not useState) so it survives navigating to
+  // /admin/users/[id]/change-role and back.
+  const search = useUsersFilterStore((s) => s.search);
+  const setSearch = useUsersFilterStore((s) => s.setSearch);
+  const selectedRoles = useUsersFilterStore((s) => s.selectedRoles);
+  const setSelectedRoles = useUsersFilterStore((s) => s.setSelectedRoles);
+  const statusFilter = useUsersFilterStore((s) => s.statusFilter);
+  const setStatusFilter = useUsersFilterStore((s) => s.setStatusFilter);
+  const page = useUsersFilterStore((s) => s.page);
+  const setPage = useUsersFilterStore((s) => s.setPage);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -98,6 +106,7 @@ export const useUsers = () => {
       });
       setUsers(response.items.map(mapApiUserToUser));
       setSummary(response.summary);
+      setRoles(response.roles);
     } catch (error) {
       console.error("Error fetching users", error);
     } finally {
@@ -138,7 +147,16 @@ export const useUsers = () => {
     if (!isSearchMode) fetchUsers();
   }, [isSearchMode, fetchUsers]);
 
-  useEffect(() => { setPage(1); }, [selectedRoles, statusFilter]);
+  // Reset to page 1 when a filter changes — but not on the initial mount,
+  // otherwise returning from change-role would wipe the restored page.
+  const didMountRef = useRef(false);
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
+    setPage(1);
+  }, [selectedRoles, statusFilter]);
 
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
@@ -147,6 +165,7 @@ export const useUsers = () => {
   return {
     users,
     summary,
+    roles,
     loading,
     isSearchMode,
     search, setSearch,

@@ -67,6 +67,7 @@ type Props = {
   currentRole: RoleKey;
   selectedRole: RoleKey | null;
   setSelectedRole: (role: RoleKey) => void;
+  currentStatus: UserStatus;
   selectedStatus: UserStatus;
   setSelectedStatus: (status: UserStatus) => void;
   hasChanged: boolean;
@@ -76,7 +77,7 @@ type Props = {
 
 export default function ChangeRolePanel({
   roles, currentRole, selectedRole, setSelectedRole,
-  selectedStatus, setSelectedStatus,
+  currentStatus, selectedStatus, setSelectedStatus,
   hasChanged, onSave, onCancel,
 }: Props) {
   const handleRoleChange = (value: string) => {
@@ -84,6 +85,14 @@ export default function ChangeRolePanel({
       setSelectedRole(currentRole);
     } else {
       setSelectedRole(value as RoleKey);
+    }
+  };
+
+  const handleStatusChange = (value: string) => {
+    if (value === "__NO_CHANGE__") {
+      setSelectedStatus(currentStatus);
+    } else {
+      setSelectedStatus(value as UserStatus);
     }
   };
 
@@ -121,11 +130,12 @@ export default function ChangeRolePanel({
           <div className="relative">
             <select
               value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value as UserStatus)}
+              onChange={(e) => handleStatusChange(e.target.value)}
               className="w-full appearance-none h-10 px-3 pr-8 text-sm border border-gray-200 rounded-xl bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:border-blue-400 transition-colors"
             >
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
+              <option value="__NO_CHANGE__">No Changes</option>
             </select>
             <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
           </div>

@@ -109,7 +109,7 @@ export default function RoleManagementPage() {
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc] min-h-screen">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc] flex-1 min-h-0 flex flex-col overflow-hidden">
 
       {/* HEADER */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -131,7 +131,7 @@ export default function RoleManagementPage() {
       </div>
 
       {/* FULL-WIDTH ROLE LIST */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col flex-1 min-h-0">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-b shrink-0">
           <h2 className="text-sm sm:text-base font-semibold text-gray-800 flex items-center gap-2">
             Role Management
@@ -149,10 +149,7 @@ export default function RoleManagementPage() {
           </div>
         </div>
 
-        <div
-          className="w-full overflow-x-auto overflow-y-auto"
-          style={{ maxHeight: "calc(100vh - 320px)", minHeight: "200px" }}
-        >
+        <div className="w-full h-full overflow-x-auto flex-1 min-h-0">
           {loading ? (
             <div className="p-6 text-sm text-gray-500">Loading...</div>
           ) : (
@@ -161,7 +158,7 @@ export default function RoleManagementPage() {
         </div>
 
         <div className="px-4 sm:px-6 py-3 border-t shrink-0 text-xs text-gray-500">
-          Showing 1 to {roles.length} of {totalRoles} roles
+          {roles.length > 0 && `Showing 1 to ${roles.length} of ${totalRoles} roles`}
         </div>
       </div>
 

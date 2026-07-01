@@ -132,12 +132,12 @@ export const useRoleChange = (userId: string) => {
         setNotFound(false);
         setErrorMessage(null);
 
-        // One request gets all users + summary.roles — no second round-trip needed.
-        const { items, summary } = await usersService.getUsers({ limit: 100 });
+        // One request gets all users + roles — no second round-trip needed.
+        const { items, roles: apiRoles } = await usersService.getUsers({ limit: 100 });
         if (!active) return;
 
         // Populate assignable roles from the API — excludes admin-only roles.
-        const assignable = summary.roles
+        const assignable = apiRoles
           .filter(({ roleName }) => !NON_ASSIGNABLE_ROLES.has(roleName))
           .map(({ roleName }) => roleName as RoleKey);
         setRoles(assignable);
