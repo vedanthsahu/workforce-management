@@ -90,50 +90,57 @@ export default function AdminRecentBookings({ bookings, loading }: Props) {
         </div>
 
         {/* ── Desktop table (hidden below md) ──────────────── */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead className="bg-gray-50 border-b">
-              <tr className="text-left text-muted-foreground">
-                <th className="px-6 py-3 font-medium whitespace-nowrap">User</th>
-                <th className="px-6 py-3 font-medium whitespace-nowrap">Type</th>
-                <th className="px-6 py-3 font-medium whitespace-nowrap">Office</th>
-                <th className="px-6 py-3 font-medium whitespace-nowrap">Seat / Visit</th>
-                <th className="px-6 py-3 font-medium whitespace-nowrap">Date</th>
-                <th className="px-6 py-3 font-medium whitespace-nowrap">Status</th>
+        <div className="hidden md:block">
+          <table className="w-full text-sm border-collapse" style={{ tableLayout: "fixed" }}>
+            <thead className="block w-full bg-blue-100">
+              <tr className="table w-full text-blue-600" style={{ tableLayout: "fixed" }}>
+                <th className="px-1 py-3 font-medium text-center border-b border-gray-200 w-[28%]">User</th>
+                <th className="pl-1 pr-4 py-3 font-medium text-center border-b border-gray-200 w-[11%]">Type</th>
+                <th className="px-4 py-3 font-medium text-center border-b border-gray-200 w-[22%]">Office</th>
+                <th className="px-4 py-3 font-medium text-center border-b border-gray-200 w-[17%]">Seat / Visit</th>
+                <th className="px-4 py-3 font-medium text-center whitespace-nowrap border-b border-gray-200 w-[12%]">Date</th>
+                <th className="px-4 py-3 font-medium text-center border-b border-gray-200 w-[10%]">Status</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody
+              className="block overflow-y-auto max-h-[320px] w-full"
+              style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
+            >
               {bookings.map((item, index) => (
-                <tr key={index} className="border-b hover:bg-gray-50 transition">
-                  <td className="px-6 py-4 align-middle">
+                <tr key={index} className="table w-full border-b hover:bg-gray-50 transition" style={{ tableLayout: "fixed" }}>
+                  <td className="px-4 py-4 align-middle w-[28%]">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium shrink-0">
                         {item.name.charAt(0)}
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-medium whitespace-nowrap">{item.name}</p>
-                        <p className="text-xs text-muted-foreground whitespace-nowrap">{item.email}</p>
+                      <div className="min-w-0 overflow-hidden">
+                        <p className="font-medium truncate">{item.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{item.email}</p>
                         {item.bookedByName && (
-                          <p className="text-xs text-blue-600 whitespace-nowrap">
+                          <p className="text-xs text-blue-600 truncate">
                             Booked by {item.bookedByName}
                           </p>
                         )}
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 align-middle whitespace-nowrap">
+                  <td className="pl-1 pr-4 py-4 align-middle text-center w-[11%]">
                     <TypeBadge type={item.type} />
                   </td>
-                  <td className="px-6 py-4 align-middle whitespace-nowrap">{item.office}</td>
-                  <td className="px-6 py-4 align-middle whitespace-nowrap">{item.seat}</td>
-                  <td className="px-6 py-4 align-middle whitespace-nowrap">{item.date}</td>
-                  <td className="px-6 py-4 align-middle whitespace-nowrap">
+                  <td className="px-4 py-4 align-middle text-center w-[22%]">
+                    <div>{item.office}</div>
+                  </td>
+                  <td className="px-4 py-4 align-middle text-center w-[17%]">
+                    <div>{item.seat}</div>
+                  </td>
+                  <td className="px-4 py-4 align-middle text-center whitespace-nowrap w-[12%]">{item.date}</td>
+                  <td className="px-4 py-4 align-middle text-center w-[10%]">
                     <StatusBadge status={item.status} />
                   </td>
                 </tr>
               ))}
               {bookings.length === 0 && (
-                <tr>
+                <tr className="table w-full" style={{ tableLayout: "fixed" }}>
                   <td colSpan={6} className="text-center py-6 text-gray-400">No bookings found</td>
                 </tr>
               )}

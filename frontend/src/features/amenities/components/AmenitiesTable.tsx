@@ -61,7 +61,6 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
                 </div>
                 <div className="min-w-0">
                   <p className="font-medium text-sm truncate">{amenity.amenity_name}</p>
-                  <p className="text-xs text-gray-400 truncate">{amenity.amenity_key}</p>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
                       {amenity.category_name}
@@ -92,22 +91,22 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
         <table className="w-full text-xs" style={{ minWidth: "860px" }}>
           <colgroup>
             <col style={{ width: "200px" }} />
-            <col style={{ width: "120px" }} />
+            <col style={{ width: "170px" }} />
             <col style={{ width: "220px" }} />
             <col style={{ width: "70px" }} />
             <col style={{ width: "90px" }} />
             <col style={{ width: "110px" }} />
             <col style={{ width: "70px" }} />
           </colgroup>
-          <thead className="text-xs text-gray-500 bg-gray-50 border-b sticky top-0 z-10">
+          <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
             <tr>
               <th className="px-3 py-3 text-left font-medium">Amenity Name</th>
-              <th className="px-3 py-3 text-left font-medium">Category</th>
+              <th className="px-3 py-3 text-center font-medium">Category</th>
               <th className="px-3 py-3 text-left font-medium">Description</th>
-              <th className="px-3 py-3 text-left font-medium">Icon</th>
-              <th className="px-3 py-3 text-left font-medium">Status</th>
-              <th className="px-3 py-3 text-left font-medium">Assigned Seats</th>
-              <th className="px-3 py-3 text-left font-medium">Actions</th>
+              <th className="px-3 py-3 text-center font-medium">Icon</th>
+              <th className="px-3 py-3 text-center font-medium">Status</th>
+              <th className="px-3 py-3 text-center font-medium">Assigned Seats</th>
+              <th className="px-3 py-3 text-center font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -125,11 +124,10 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
                       </div>
                       <div>
                         <p className="font-medium text-gray-900">{amenity.amenity_name}</p>
-                        <p className="text-xs text-gray-400">{amenity.amenity_key}</p>
                       </div>
                     </div>
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3 text-center">
                     <span className="inline-flex px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 font-medium whitespace-nowrap">
                       {amenity.category_name}
                     </span>
@@ -140,14 +138,14 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
                   <td className="px-3 py-3 text-center">
                     <Icon className="w-4 h-4 mx-auto text-gray-600" />
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3 text-center">
                     <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap ${
                       amenity.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
                     }`}>
                       {amenity.is_active ? "Active" : "Inactive"}
                     </span>
                   </td>
-                  <td className="px-3 py-3 text-left font-medium">
+                  <td className="px-3 py-3 text-center font-medium">
                     {amenity.assigned_seat_count.toLocaleString()}
                   </td>
                   <td className="px-3 py-3 text-center">

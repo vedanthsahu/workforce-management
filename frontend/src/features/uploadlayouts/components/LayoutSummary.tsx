@@ -40,30 +40,30 @@ export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
           </CardHeader>
 
           <CardContent className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Site</span>
-              <span className="text-right font-medium truncate max-w-[180px]">
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground shrink-0">Office</span>
+              <span className="text-right font-medium wrap-break-word">
                 {formData.site?.name || "-"}
               </span>
             </div>
 
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Building</span>
-              <span className="text-right font-medium truncate max-w-[180px]">
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground shrink-0">Building</span>
+              <span className="text-right font-medium wrap-break-word">
                 {formData.building?.name || "-"}
               </span>
             </div>
 
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Floor</span>
-              <span className="text-right font-medium truncate max-w-[180px]">
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground shrink-0">Floor</span>
+              <span className="text-right font-medium wrap-break-word">
                 {formData.floor?.name || "-"}
               </span>
             </div>
 
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Layout Name</span>
-              <span className="text-right font-medium truncate max-w-[180px]">
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground shrink-0">Layout Name</span>
+              <span className="text-right font-medium wrap-break-word">
                 {formData.layoutName || "-"}
               </span>
             </div>
@@ -120,7 +120,7 @@ export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
                   <span className="font-medium">v{floorLayoutInfo.layoutVersionNo ?? "—"}</span>
                 </div>
 
-                {/* <div className="flex justify-between">
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">Published By</span>
                   <span className="font-medium">{floorLayoutInfo.publishedByName ?? "—"}</span>
                 </div>
@@ -130,27 +130,6 @@ export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
                   <span className="font-medium">
                     {formatLastUpdated(floorLayoutInfo.layoutLastUpdated)}
                   </span>
-                </div> */}
-                 <div className="flex justify-between">
-
-                  <span className="text-muted-foreground">Published By</span>
-
-                  <span className="font-medium">Ankitha Kulal</span>
-
-                </div>
-
-
-
-                <div className="flex justify-between">
-
-                  <span className="text-muted-foreground">Last Updated</span>
-
-                  <span className="font-medium">
-
-   15/06/2026
-
-                  </span>
-
                 </div>
 
                 {/* ── Preview button ── */}

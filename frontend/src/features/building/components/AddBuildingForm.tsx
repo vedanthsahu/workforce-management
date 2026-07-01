@@ -44,10 +44,10 @@ export default function AddBuildingForm() {
   };
 
   const inputClass =
-    "w-full h-9 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-150";
+    "w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-150";
 
   const selectClass =
-    "w-full h-9 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-150 cursor-pointer";
+    "w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-150 cursor-pointer";
 
   const labelClass =
     "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
@@ -55,13 +55,13 @@ export default function AddBuildingForm() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc]">
 
-      <Link
+      {/* <Link
         href="/admin/building"
         className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 mb-5 transition-colors"
       >
         <ArrowLeft size={14} />
         Back to Buildings
-      </Link>
+      </Link> */}
 
       {/* ERROR BANNER */}
       {errorMessage && (
@@ -110,7 +110,7 @@ export default function AddBuildingForm() {
 
           <div>
             <label className={labelClass}>
-              Site Name <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
+              Office Name <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
             </label>
             <select
               value={formData.site_id || ""}
@@ -120,7 +120,7 @@ export default function AddBuildingForm() {
               }}
               className={selectClass}
             >
-
+              <option value="" disabled>Select Office</option>
               {sites.map((site) => (
                 <option key={site.site_id} value={site.site_id}>{site.site_name}</option>
               ))}

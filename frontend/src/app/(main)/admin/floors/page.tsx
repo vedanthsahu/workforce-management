@@ -140,7 +140,7 @@ function FloorsPage() {
             <div className="p-6 text-sm text-red-500">{error}</div>
           ) : !selectedBuilding ? (
             <div className="p-10 text-center text-gray-500">
-              Select a Site and Building to view floors.
+              
             </div>
           ) : (
             <FloorTable
@@ -174,9 +174,11 @@ function FloorsPage() {
         {/* FOOTER */}
         <div className="flex justify-between items-center px-6 py-4 border-t shrink-0 text-sm text-gray-500">
           <span>
-            Showing {filteredFloors.length === 0 ? 0 : startIndex + 1} to{" "}
-            {Math.min(startIndex + itemsPerPage, filteredFloors.length)} of{" "}
-            {filteredFloors.length} entries
+            {filteredFloors.length > 0 &&
+              `Showing ${startIndex + 1} to ${Math.min(
+                startIndex + itemsPerPage,
+                filteredFloors.length
+              )} of ${filteredFloors.length} entries`}
           </span>
           <FloorPagination
             currentPage={currentPage}

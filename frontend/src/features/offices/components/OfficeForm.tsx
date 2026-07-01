@@ -81,15 +81,7 @@ export default function OfficeForm() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 bg-[#f7f8fa]">
 
-      {/* BACK BUTTON */}
-      <button
-        onClick={() => router.push("/admin/offices")}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 mb-5 transition-colors"
-      >
-        <ArrowLeft size={14} />
-        Back to Offices
-      </button>
-
+     
       {/* ERROR BANNER */}
       {errorMessage && (
         <div className="mb-4 flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700 px-3.5 py-2.5 rounded-lg text-sm">

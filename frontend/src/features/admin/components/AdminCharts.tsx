@@ -145,7 +145,7 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
 
         </CardContent>
 
-        <div className="mx-6 mb-5 mt-2 flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-600">
+        <div className="mx-6 mb-5 mt-2 flex items-center gap-2 rounded-md  bg-blue-100 px-3 py-2 text-xs text-blue-600">
           <Info className="w-4 h-4" />
           Occupancy rate is calculated based on all bookable seats.
         </div>
@@ -161,7 +161,7 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
           <select
             value={selectedWeek}
             onChange={(e) => setSelectedWeek(e.target.value as WeekFilter)}
-            className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="h-8 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="this-week">This Week</option>
             <option value="last-week">Last Week</option>
