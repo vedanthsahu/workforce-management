@@ -1,35 +1,6 @@
-// import type { ApiUser, User } from "../types/users.types";
-
-// // Re-exported here so users components can `import { getRoleBadgeClass } from
-// // "../utils/users.utils"` without needing to know it actually lives in the
-// // roles feature — keeps role colors identical to Role Management everywhere.
-// export { getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
-
-// export function mapApiUserToUser(item: ApiUser): User {
-//   return {
-//     id: item.user_id,
-//     fullName: item.full_name,
-//     email: item.email,
-//     department: item.department,
-//     employeeId: item.employee_id,
-//     status: item.status,
-//     joinedOn: item.joined_on,
-//     currentRole: item.current_role,
-//     roleAssignedOn: item.role_assigned_on,
-//     permissions: item.permissions.map((p) => p.permission_label),
-//   };
-// }
-
-// export function formatDate(iso: string): string {
-//   return new Date(iso).toLocaleDateString("en-IN", {
-//     day: "2-digit",
-//     month: "short",
-//     year: "numeric",
-//   });
-// }
 
 
-import type { ApiUser, User } from "../types/users.types";
+import type { ApiUser, ApiUserSearchResult, User } from "../types/users.types";
 
 export { getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
 
@@ -44,6 +15,20 @@ export function mapApiUserToUser(item: ApiUser): User {
     mobilePhone: item.mobilePhone,
     status: item.status === "ACTIVE" ? "active" : "inactive",
     currentRole: item.roleName,
+  };
+}
+
+export function mapSearchResultToUser(item: ApiUserSearchResult): User {
+  return {
+    id: item.user_id,
+    fullName: item.full_name,
+    email: item.email,
+    department: item.department ?? "",
+    employeeId: item.employee_id,
+    jobTitle: "",
+    mobilePhone: "",
+    status: item.status === "ACTIVE" ? "active" : "inactive",
+    currentRole: item.role_name,
   };
 }
 
