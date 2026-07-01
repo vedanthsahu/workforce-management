@@ -279,7 +279,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>
-                Site <span className="text-red-500">*</span>
+                Office <span className="text-red-500">*</span>
               </Label>
               <select
                 value={formData.site ? String(formData.site.id) : ""}
@@ -299,7 +299,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                 }}
                 className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="" disabled>Select Site</option>
+                <option value="" disabled>Select Office</option>
                 {sites.map((s) => (
                   <option key={s.site_id} value={String(s.site_id)}>
                     {s.site_name}

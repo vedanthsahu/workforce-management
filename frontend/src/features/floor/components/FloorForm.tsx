@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useFloorForm } from "../hooks/useFloorForm";
 
@@ -10,6 +10,7 @@ export default function FloorForm() {
 
   const {
     loading,
+    errorMessage,
     sites,
     buildings,
     formData,
@@ -34,10 +35,10 @@ export default function FloorForm() {
   };
 
   const inputClass =
-    "w-full h-9 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-150";
+    "w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-150";
 
   const selectClass =
-    "w-full h-9 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-150 cursor-pointer disabled:bg-gray-100 disabled:cursor-not-allowed";
+    "w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-150 cursor-pointer disabled:bg-gray-100 disabled:cursor-not-allowed";
 
   const labelClass =
     "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
@@ -45,13 +46,13 @@ export default function FloorForm() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc]">
 
-      <Link
-        href="/admin/floors"
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 mb-5 transition-colors"
-      >
-        <ArrowLeft size={14} />
-        Back to Floors
-      </Link>
+     
+      {errorMessage && (
+        <div className="mb-4 flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700 px-3.5 py-2.5 rounded-lg text-sm">
+          <AlertCircle size={15} className="shrink-0" />
+          {errorMessage}
+        </div>
+      )}
 
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
@@ -93,14 +94,14 @@ export default function FloorForm() {
           {/* SITE */}
           <div>
             <label className={labelClass}>
-              Site <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
+              Office <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
             </label>
             <select
               value={formData.site_id}
               onChange={(e) => handleChange("site_id", e.target.value)}
               className={selectClass}
             >
-
+              <option value="" disabled>Select Office</option>
               {sites.map((site) => (
                 <option key={site.site_id} value={site.site_id}>
                   {site.site_name}
@@ -121,7 +122,7 @@ export default function FloorForm() {
               onChange={(e) => handleChange("building_id", e.target.value)}
               className={selectClass}
             >
-         
+              <option value="" disabled>Select Building</option>
               {buildings.map((building) => (
                 <option key={building.building_id} value={building.building_id}>
                   {building.building_name}

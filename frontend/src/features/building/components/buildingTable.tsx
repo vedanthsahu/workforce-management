@@ -66,11 +66,11 @@ export default function BuildingTable({ data, onEdit, highlightedId }: Props) {
             <col style={{ width: "100px" }} /><col style={{ width: "80px" }} />
             <col style={{ width: "70px" }} />
           </colgroup>
-          <thead className="text-xs text-gray-500 bg-gray-50 border-b sticky top-0 z-10">
+          <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
             <tr>
               <th className="px-3 py-3 text-left font-medium">Building Code</th>
               <th className="px-3 py-3 text-left font-medium">Building Name</th>
-              <th className="px-3 py-3 text-left font-medium">Site Name</th>
+              <th className="px-3 py-3 text-left font-medium">Office Name</th>
               <th className="px-3 py-3 text-left font-medium">Floors</th>
               <th className="px-3 py-3 text-left font-medium">Total Seats</th>
               <th className="px-3 py-3 text-left font-medium">Active Seats</th>

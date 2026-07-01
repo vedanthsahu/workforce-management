@@ -178,9 +178,11 @@ function AmenitiesPage() {
         {/* FOOTER */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
           <span>
-            Showing {filteredAmenities.length === 0 ? 0 : startIndex + 1} to{" "}
-            {Math.min(startIndex + itemsPerPage, filteredAmenities.length)} of{" "}
-            {filteredAmenities.length} entries
+            {filteredAmenities.length > 0 &&
+              `Showing ${startIndex + 1} to ${Math.min(
+                startIndex + itemsPerPage,
+                filteredAmenities.length
+              )} of ${filteredAmenities.length} entries`}
           </span>
           <div className="self-center sm:self-auto">
             <AmenitiesPagination

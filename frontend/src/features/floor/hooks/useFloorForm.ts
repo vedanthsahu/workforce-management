@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import axios from "axios";
 
 import { floorService } from "../services/floorService";
 import { FloorSite, FloorBuilding } from "../types/floor.types";
 
 export const useFloorForm = () => {
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const [sites, setSites] = useState<FloorSite[]>([]);
   const [buildings, setBuildings] = useState<FloorBuilding[]>([]);
@@ -52,6 +54,7 @@ export const useFloorForm = () => {
   const handleSubmit = async () => {
     try {
       setLoading(true);
+      setErrorMessage("");
 
       const createdFloor = await floorService.createFloor({
         site_id: Number(formData.site_id),
@@ -69,11 +72,12 @@ export const useFloorForm = () => {
         })
       );
 
-
       return createdFloor.floor_id;
     } catch (error) {
-      console.error(error);
-
+      const message = axios.isAxiosError(error)
+        ? error.response?.data?.error?.message ?? error.response?.data?.message
+        : undefined;
+      setErrorMessage(message || "Failed to create floor. Please try again.");
       return null;
     } finally {
       setLoading(false);
@@ -82,6 +86,7 @@ export const useFloorForm = () => {
 
   return {
     loading,
+    errorMessage,
     sites,
     buildings,
     formData,

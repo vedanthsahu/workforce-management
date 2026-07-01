@@ -1,6 +1,7 @@
 "use client";
 
 import { Eye, Download, Settings } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useLayoutsTable }  from "@/features/adminlayouts1/hooks/useLayoutsTable";
 import { useLayoutsStore }  from "@/store/useLayoutsStore";
 import LayoutPagination     from "./LayoutPagination";
@@ -62,49 +63,58 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
   }, []);
 
   // ── Pagination ───────────────────────────────────────────────────────────
-  const { page, rowsPerPage, total, paginated, setPage, setRowsPerPage } =
+  const { page, rowsPerPage, total, paginated, setPage } =
     useLayoutsTable(layouts);
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
-    <div className="bg-white border rounded-xl p-6 shadow-sm">
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
 
-      <div className="flex flex-wrap items-center justify-between gap-y-2 mb-6">
-        <h2 className="text-sm font-semibold">
+      {/* HEADER */}
+      <div className="flex items-center justify-between px-6 py-4 border-b">
+        <h2 className="text-base font-semibold text-gray-800">
           Floor Layouts — {selection.buildingName} / {selection.floorName}
         </h2>
-        <span className="text-xs bg-gray-100 px-3 py-1 rounded-full">
+        <span className="text-xs bg-gray-100 px-3 py-1 rounded-full text-gray-600">
           {total} Layouts
         </span>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-500 border-b">
-              <th className="py-3 px-4 text-left">Layout Name</th>
-              <th className="py-3 px-4 text-left">Version</th>
-              <th className="py-3 px-4 text-left">Status</th>
-              <th className="py-3 px-4 text-left">Published</th>
-              <th className="py-3 px-4 text-left">Uploaded By</th>
-              <th className="py-3 px-4 text-left">Actions</th>
+      {/* TABLE */}
+      <div className="w-full overflow-x-auto">
+        <table className="w-full text-xs" style={{ minWidth: "700px" }}>
+          <colgroup>
+            <col style={{ width: "220px" }} />
+            <col style={{ width: "80px" }} />
+            <col style={{ width: "110px" }} />
+            <col style={{ width: "90px" }} />
+            <col style={{ width: "160px" }} />
+            <col style={{ width: "90px" }} />
+          </colgroup>
+          <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
+            <tr>
+              <th className="px-3 py-3 font-medium text-left">Layout Name</th>
+              <th className="px-3 py-3 font-medium text-center">Version</th>
+              <th className="px-3 py-3 font-medium text-center">Status</th>
+              <th className="px-3 py-3 font-medium text-center">Published</th>
+              <th className="px-3 py-3 font-medium text-left">Uploaded By</th>
+              <th className="px-3 py-3 font-medium text-center">Actions</th>
             </tr>
           </thead>
-
-          <tbody>
+          <tbody className="divide-y divide-gray-100">
             {loading ? (
               Array.from({ length: 3 }).map((_, i) => (
-                <tr key={i} className="border-b animate-pulse">
+                <tr key={i} className="animate-pulse">
                   {Array.from({ length: 6 }).map((_, j) => (
-                    <td key={j} className="py-4">
-                      <div className="h-4 bg-gray-100 rounded w-3/4" />
+                    <td key={j} className="px-3 py-3">
+                      <div className="h-3 bg-gray-100 rounded w-3/4" />
                     </td>
                   ))}
                 </tr>
               ))
             ) : paginated.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-6 text-gray-400">
+                <td colSpan={6} className="text-center py-10 text-gray-400">
                   {selection.floorId
                     ? "No layouts found for this floor"
                     : "Select a floor to view layouts"}
@@ -114,15 +124,15 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
               paginated.map((row) => (
                 <tr
                   key={row.layout_id}
-                  className={`hover:bg-gray-50 ${
+                  className={`transition-colors ${
                     String(row.layout_id) === String(selectedLayoutId)
-                      ? "bg-indigo-50" : ""
+                      ? "bg-indigo-50" : "hover:bg-gray-50"
                   }`}
                 >
-                  <td className="py-4">{row.layout_name}</td>
-                  <td>{row.version_no}</td>
-                  <td>
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                  <td className="px-3 py-3 font-medium">{row.layout_name}</td>
+                  <td className="px-3 py-3 text-center">{row.version_no}</td>
+                  <td className="px-3 py-3 text-center">
+                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
                       row.status === "PUBLISHED" ? "bg-green-100 text-green-600"
                       : row.status === "DRAFT"   ? "bg-blue-100 text-blue-600"
                                                  : "bg-gray-100 text-gray-600"
@@ -130,25 +140,20 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                       {row.status}
                     </span>
                   </td>
-                  <td>{row.is_published ? "Yes" : "No"}</td>
-                  <td>{row.uploaded_by_name ?? row.uploaded_by_user_id}</td>
-                  <td>
-                    <div className="flex justify-center gap-2">
-                      <button
-                        onClick={() => handleView(row)}
-                        className="p-2 border rounded-md hover:bg-gray-100"
-                      >
-                        <Eye className="w-4 h-4 text-indigo-600" />
-                      </button>
-
-                      {/* Prefetch on hover too — double guarantee for instant nav */}
-                      <button
+                  <td className="px-3 py-3 text-center">{row.is_published ? "Yes" : "No"}</td>
+                  <td className="px-3 py-3">{row.uploaded_by_name ?? row.uploaded_by_user_id}</td>
+                  <td className="px-3 py-3 text-center">
+                    <div className="flex justify-center gap-1.5">
+                      <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => handleView(row)}>
+                        <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                      </Button>
+                      <Button
+                        variant="outline" size="icon" className="h-7 w-7"
                         onClick={() => handleManage(row)}
                         onMouseEnter={() => router.prefetch("/admin/layouts/manage-layout")}
-                        className="p-2 border rounded-md hover:bg-gray-100"
                       >
-                        <Settings className="w-4 h-4 text-gray-600" />
-                      </button>
+                        <Settings className="w-3.5 h-3.5 text-gray-600" />
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -159,18 +164,19 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
       </div>
 
       {/* FOOTER */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4 text-xs sm:text-sm text-gray-500">
+      <div className="flex items-center justify-between px-6 py-4 border-t text-sm text-gray-500">
         <span>
-          Showing {total === 0 ? 0 : (page - 1) * rowsPerPage + 1} to{" "}
-          {Math.min(page * rowsPerPage, total)} of {total} entries
+          {total > 0 &&
+            `Showing ${(page - 1) * rowsPerPage + 1} to ${Math.min(
+              page * rowsPerPage,
+              total
+            )} of ${total} entries`}
         </span>
-        <div className="self-center sm:self-auto">
-          <LayoutPagination
-            currentPage={page}
-            totalPages={Math.ceil(total / rowsPerPage)}
-            onPageChange={setPage}
-          />
-        </div>
+        <LayoutPagination
+          currentPage={page}
+          totalPages={Math.ceil(total / rowsPerPage)}
+          onPageChange={setPage}
+        />
       </div>
 
       {previewUrl && (

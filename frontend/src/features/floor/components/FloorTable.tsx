@@ -71,9 +71,9 @@ export default function FloorTable({ data, onEdit, highlightedId }: Props) {
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-xs" style={{ minWidth: "860px" }}>
           <colgroup>
-            <col style={{ width: "140px" }} />
             <col style={{ width: "180px" }} />
-            <col style={{ width: "160px" }} />
+            <col style={{ width: "100px" }} />
+            <col style={{ width: "90px" }} />
             <col style={{ width: "70px" }} />
             <col style={{ width: "90px" }} />
             <col style={{ width: "100px" }} />
@@ -81,17 +81,17 @@ export default function FloorTable({ data, onEdit, highlightedId }: Props) {
             <col style={{ width: "90px" }} />
             <col style={{ width: "70px" }} />
           </colgroup>
-          <thead className="text-xs text-gray-500 bg-gray-50 border-b sticky top-0 z-10">
+          <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
             <tr>
-              <th className="px-3 py-3 text-left font-medium">Floor Code</th>
+              <th className="px-3 py-3 text-center font-medium">Floor Code</th>
               <th className="px-3 py-3 text-left font-medium">Floor Name</th>
-              <th className="px-3 py-3 text-left font-medium">Building</th>
-              <th className="px-3 py-3 text-left font-medium">Seats</th>
-              <th className="px-3 py-3 text-left font-medium">Active Seats</th>
-              <th className="px-3 py-3 text-left font-medium">Bookable Seats</th>
-              <th className="px-3 py-3 text-left font-medium">Layouts</th>
-              <th className="px-3 py-3 text-left font-medium">Status</th>
-              <th className="px-3 py-3 text-left font-medium">Actions</th>
+              <th className="px-3 py-3 text-center font-medium">Building</th>
+              <th className="px-3 py-3 text-center font-medium">Seats</th>
+              <th className="px-3 py-3 text-center font-medium whitespace-nowrap">Active Seats</th>
+              <th className="px-3 py-3 text-center font-medium whitespace-nowrap">Bookable Seats</th>
+              <th className="px-3 py-3 text-center font-medium">Layouts</th>
+              <th className="px-3 py-3 text-center font-medium">Status</th>
+              <th className="px-3 py-3 text-center font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">

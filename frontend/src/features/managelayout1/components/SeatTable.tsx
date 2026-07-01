@@ -301,61 +301,64 @@ export default function SeatTable({
       {/* Pagination */}
       <div className="flex items-center justify-between mt-3 px-1">
         <p className="text-xs text-gray-400">
-          Showing {Math.min(start + 1, seats.length)}–{Math.min(start + pageSize, seats.length)} of {seats.length} seats
+          {seats.length > 0 &&
+            `Showing ${Math.min(start + 1, seats.length)}–${Math.min(start + pageSize, seats.length)} of ${seats.length} seats`}
         </p>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span>Rows</span>
-            <select
-              value={pageSize}
-              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-              className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
-            >
-              {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
+        {seats.length > 0 && (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>Rows</span>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              >
+                {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft size={13} />
+              </button>
+
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pg = i + 1;
+                if (totalPages > 5) {
+                  if (page <= 3) pg = i + 1;
+                  else if (page >= totalPages - 2) pg = totalPages - 4 + i;
+                  else pg = page - 2 + i;
+                }
+                return (
+                  <button
+                    key={pg}
+                    onClick={() => setPage(pg)}
+                    className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-medium transition-colors ${
+                      page === pg
+                        ? "bg-indigo-600 text-white border border-indigo-600"
+                        : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    {pg}
+                  </button>
+                );
+              })}
+
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight size={13} />
+              </button>
+            </div>
           </div>
-
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft size={13} />
-            </button>
-
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              let pg = i + 1;
-              if (totalPages > 5) {
-                if (page <= 3) pg = i + 1;
-                else if (page >= totalPages - 2) pg = totalPages - 4 + i;
-                else pg = page - 2 + i;
-              }
-              return (
-                <button
-                  key={pg}
-                  onClick={() => setPage(pg)}
-                  className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-medium transition-colors ${
-                    page === pg
-                      ? "bg-indigo-600 text-white border border-indigo-600"
-                      : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  {pg}
-                </button>
-              );
-            })}
-
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronRight size={13} />
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

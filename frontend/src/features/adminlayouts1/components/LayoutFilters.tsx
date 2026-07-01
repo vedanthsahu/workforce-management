@@ -83,19 +83,17 @@ export default function LayoutFilters({ onChange }: Props) {
   };
 
   return (
-    <div className="bg-white border rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+    <div className="bg-white border rounded-lg p-4 flex flex-wrap gap-3">
 
       {/* SITE */}
       <select
         value={selectedSite}
         onChange={(e) => handleSiteChange(e.target.value)}
-        className="h-10 border rounded-md px-3 text-sm"
+        className="h-9 w-44 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <option value="">All Sites</option>
+        <option value="" disabled>Select Site</option>
         {sites.map((s) => (
-          <option key={s.site_id} value={s.site_id}>
-            {s.site_name}
-          </option>
+          <option key={s.site_id} value={s.site_id}>{s.site_name}</option>
         ))}
       </select>
 
@@ -103,13 +101,11 @@ export default function LayoutFilters({ onChange }: Props) {
       <select
         value={selectedBuilding}
         onChange={(e) => handleBuildingChange(e.target.value)}
-        className="h-10 border rounded-md px-3 text-sm"
+        className="h-9 w-44 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <option value="">All Buildings</option>
+        <option value="" disabled>Select Building</option>
         {buildings.map((b) => (
-          <option key={b.building_id} value={b.building_id}>
-            {b.building_name}
-          </option>
+          <option key={b.building_id} value={b.building_id}>{b.building_name}</option>
         ))}
       </select>
 
@@ -117,13 +113,11 @@ export default function LayoutFilters({ onChange }: Props) {
       <select
         value={selectedFloor}
         onChange={(e) => handleFloorChange(e.target.value)}
-        className="h-10 border rounded-md px-3 text-sm"
+        className="h-9 w-44 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <option value="">All Floors</option>
+        <option value="" disabled>Select Floor</option>
         {floors.map((f) => (
-          <option key={f.floor_id} value={f.floor_id}>
-            {f.floor_name}
-          </option>
+          <option key={f.floor_id} value={f.floor_id}>{f.floor_name}</option>
         ))}
       </select>
 
@@ -131,9 +125,9 @@ export default function LayoutFilters({ onChange }: Props) {
       <select
         value={status}
         onChange={(e) => handleStatusChange(e.target.value)}
-        className="h-10 border rounded-md px-3 text-sm"
+        className="h-9 w-44 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <option value="">All Status</option>
+        <option value="" disabled>Select Status</option>
         <option value="DRAFT">Draft</option>
         <option value="PUBLISHED">Published</option>
         <option value="ARCHIVED">Archived</option>
