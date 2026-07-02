@@ -7,7 +7,12 @@ import type {
   EditProfileForm,
   EditPreferencesForm,
 } from "../types/profile.types";
-import { getProfileData, updatePreferences, updateProfile, uploadAvatar } from "../services/profile.service.";
+import {
+  getProfileData,
+  updatePreferences,
+  updateProfile,
+  uploadAvatar,
+} from "../services/profile.service.";
 
 interface UseProfileState {
   data:                ProfilePageData | null;
@@ -25,10 +30,6 @@ export interface UseProfileReturn extends UseProfileState {
   handleUpdateProfile:     (form: EditProfileForm)     => Promise<void>;
   handleUpdatePreferences: (form: EditPreferencesForm) => Promise<void>;
   handleUploadAvatar:      (file: File)                => Promise<void>;
-}
-
-function parseCommaSeparated(val: string): string[] {
-  return val.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
 export function useProfile(): UseProfileReturn {
@@ -61,11 +62,8 @@ export function useProfile(): UseProfileReturn {
     setState((s) => ({ ...s, isSavingProfile: true }));
     try {
       const updated = await updateProfile({
-        display_name:   form.displayName   || undefined,
-        phone:          form.phone         || undefined,
-        personal_email: form.personalEmail || undefined,
-        bio:            form.bio           || undefined,
-        skills:         form.skills.length ? form.skills : undefined,
+        bio:    form.bio    || undefined,
+        skills: form.skills.length ? form.skills : undefined,
       });
       setState((s) => ({
         ...s,
@@ -82,13 +80,10 @@ export function useProfile(): UseProfileReturn {
     setState((s) => ({ ...s, isSavingPreferences: true }));
     try {
       const updated = await updatePreferences({
-        preferred_office:  form.preferredOffice  || undefined,
-        preferred_floor:   form.preferredFloor   || undefined,
-        seat_type:         form.seatType         || undefined,
-        near_teammates:    parseCommaSeparated(form.nearTeammates),
-        away_from:         parseCommaSeparated(form.awayFrom),
-        noise_preference:  form.noisePreference  || undefined,
-        other_preferences: parseCommaSeparated(form.otherPreferences),
+        preferred_office:    form.preferredOfficeId   || undefined,
+        preferred_building:  form.preferredBuildingId || undefined,
+        preferred_floor:     form.preferredFloorId    || undefined,
+        preferred_amenities: form.preferredAmenityIds,
       });
       setState((s) => ({
         ...s,

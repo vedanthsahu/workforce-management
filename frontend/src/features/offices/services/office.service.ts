@@ -1,5 +1,10 @@
 import { axiosInstance } from "@/lib/http/axios";
-import { Office ,UpdateOfficePayload ,OfficeStatsSummary,} from "../types/office.types";
+import {
+  Office,
+  UpdateOfficePayload,
+  OfficeStatsSummary,
+  CreateOfficePayload,
+} from "../types/office.types";
 
 
 export const officeService = {
@@ -13,14 +18,29 @@ export const officeService = {
     const { data } = await axiosInstance.get("/sites", {
       params,
     });
+
     return data;
   },
-  //  UPDATE SITE
+
+  // CREATE SITE
+  async createSite(
+    payload: CreateOfficePayload
+  ) {
+    const { data } = await axiosInstance.post(
+      "/sites",
+      payload
+    );
+
+
+    return data;
+  },
+
+
+  // UPDATE SITE
   async updateSite(
     site_id: string,
     payload: UpdateOfficePayload
   ) {
-
     const { data } = await axiosInstance.patch(
       `/sites/${site_id}`,
       payload
@@ -30,16 +50,15 @@ export const officeService = {
   },
 
   async getOfficeStats(): Promise<OfficeStatsSummary> {
+    const { data } = await axiosInstance.get(
+      "/admin/dashboard/summary"
+    );
 
-  const { data } = await axiosInstance.get(
-    "/admin/dashboard/summary"
-  );
-
-  return {
-    total_offices: data.total_offices,
-    active_sites: data.active_sites,
-    inactive_sites: data.inactive_sites,
-    total_seats: data.total_seats,
-  };
-},
+    return {
+      total_offices: data.total_offices,
+      active_sites: data.active_sites,
+      inactive_sites: data.inactive_sites,
+      total_seats: data.total_seats,
+    };
+  },
 };

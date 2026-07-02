@@ -28,6 +28,12 @@ export interface ApiBooking {
   cancellation_reason?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  booking_type?: "EMPLOYEE" | "GUEST";
+  booked_by_user_id?: string;
+  booked_by_name?: string | null;
+  booked_by_email?: string | null;
+  booked_for_user_id?: string | null;
+  booked_for_name?: string | null;
 }
 
 export interface ApiTeamMemberSeat {
@@ -96,9 +102,12 @@ export interface Booking {
   seatId: string;
   /** Raw numeric/string seat ID passed to the book page for modify */
   rawSeatId?: string;
-  /** Raw floor ID passed to fetchSeatAmenities */
   floorId?: string;
   managerNote: string;
+  bookedOn?: string;
+  bookingType?: "self" | "on_behalf";
+  bookedByName?: string;
+  bookedByEmail?: string;
 }
 
 export interface TeamMember {
@@ -112,14 +121,6 @@ export interface TeamMember {
   buildingId?: string;
 }
 
-export interface Announcement {
-  id: string;
-  title: string;
-  description: string;
-  type: "warning" | "info" | "success";
-  date?: string;
-}
-
 export interface FavouriteSeat {
   id: string;
   label: string;
@@ -129,7 +130,6 @@ export interface FavouriteSeat {
 }
 
 export interface DashboardStats {
-  daysInMonth: number;
   trend: number;
   teamInOffice: number;
   teamRemoteCount: number;
@@ -158,10 +158,7 @@ export interface DashboardData {
   weekDays: WeekDay[];
   upcomingBookings: Booking[];
   teamInOfficeToday: TeamMember[];
-  announcements: Announcement[];
   favouriteSeat: FavouriteSeat | null;
-  teamOnlineCount: number;
-  teamOfflineCount: number;
   nextBookingDate: string;
   todayBooking: TodayBookingInfo;
   daysInOffice: number;

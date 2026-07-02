@@ -67,9 +67,21 @@ ROLE_NAMES = {
     "TALENT",
     "SECURITY",
     "TENANT_ADMIN",
+    "TALENT_GUEST_COORDINATOR",
 }
 
 USER_STATUSES = {"ACTIVE", "INACTIVE", "LOCKED"}
+
+ROLE_DISTRIBUTION_ORDER = (
+    "EMPLOYEE",
+    "TALENT",
+    "SECURITY",
+    "MANAGER",
+    "TENANT_ADMIN",
+    "TALENT_GUEST_COORDINATOR",
+)
+
+GRAPH_MANAGED_ROLE_NAMES = ("EMPLOYEE", "TALENT")
 
 ADMIN_NOTIFICATION_ROLES = (
     "TENANT_ADMIN",
@@ -117,6 +129,21 @@ def fetch_default_tenant_id(conn: PGConnection) -> str:
             "Multiple active tenants exist; tenant cannot be resolved without an azure_tenant_id."
         )
     return rows[0][0]
+
+
+def fetch_active_tenant_ids(conn: PGConnection) -> list[str]:
+    """Fetch active tenant ids in deterministic order."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id::text
+            FROM tenants
+            WHERE status = 'ACTIVE'
+            ORDER BY id
+            """
+        )
+        rows = cur.fetchall()
+    return [str(row[0]) for row in rows]
 
 
 def fetch_tenant_by_azure_tenant_id(conn: PGConnection, azure_tenant_id: str) -> dict[str, Any] | None:
@@ -382,10 +409,11 @@ def create_app_user_from_graph(
     company_name: str | None,
     employee_id: str | None,
     manager_user_id: str | None,
+    role_name: str = "EMPLOYEE",
 ) -> dict[str, Any]:
     """Create a first-time SSO user in app_users using schema-valid fields."""
     normalized_email = _required_text(_normalize_email(email), field_name="email", max_length=200)
-    normalized_role = "EMPLOYEE"
+    normalized_role = _required_text(role_name, field_name="role_name", max_length=30).upper()
     normalized_status = "ACTIVE"
 
     if normalized_role not in ROLE_NAMES:
@@ -415,7 +443,22 @@ def create_app_user_from_graph(
                 graph_last_synced_at
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-            ON CONFLICT (tenant_id, microsoft_object_id) DO NOTHING
+            ON CONFLICT (tenant_id, microsoft_object_id) DO UPDATE
+            SET email = EXCLUDED.email,
+                full_name = EXCLUDED.full_name,
+                role_name = EXCLUDED.role_name,
+                microsoft_object_id = EXCLUDED.microsoft_object_id,
+                user_principal_name = EXCLUDED.user_principal_name,
+                display_name = EXCLUDED.display_name,
+                mobile_phone = COALESCE(app_users.mobile_phone, EXCLUDED.mobile_phone),
+                office_location = COALESCE(app_users.office_location, EXCLUDED.office_location),
+                job_title = EXCLUDED.job_title,
+                department = EXCLUDED.department,
+                company_name = EXCLUDED.company_name,
+                employee_id = EXCLUDED.employee_id,
+                manager_user_id = EXCLUDED.manager_user_id,
+                graph_last_synced_at = NOW(),
+                updated_at = NOW()
             RETURNING {USER_RETURNING_FIELDS}
             """,
             (
@@ -735,6 +778,118 @@ def admin_update_user_access(
 
     return dict(row) if row else None
 
+
+def fetch_graph_managed_role_users(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+) -> list[dict[str, Any]]:
+    """Fetch users whose role is controlled by Graph group membership."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {USER_SELECT_FIELDS}
+            {USER_SELECT_FROM}
+            WHERE au.tenant_id = %s
+              AND au.role_name = ANY(%s::text[])
+              AND au.microsoft_object_id IS NOT NULL
+              AND au.microsoft_object_id <> ''
+            ORDER BY au.id
+            """,
+            (
+                tenant_id,
+                list(GRAPH_MANAGED_ROLE_NAMES),
+            ),
+        )
+        rows = cur.fetchall()
+    return [dict(row) for row in rows]
+
+
+def update_user_role(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    role_name: str,
+) -> dict[str, Any] | None:
+    """Update one user's role_name and return the schema-native user row."""
+    normalized_role = _required_text(role_name, field_name="role_name", max_length=30).upper()
+    if normalized_role not in ROLE_NAMES:
+        raise ValueError("Invalid role_name.")
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            UPDATE app_users
+            SET role_name = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING {USER_RETURNING_FIELDS}
+            """,
+            (
+                normalized_role,
+                tenant_id,
+                user_id,
+            ),
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def sync_app_user_from_graph(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    microsoft_object_id: str,
+    email: str,
+    full_name: str,
+    user_principal_name: str | None,
+    display_name: str | None,
+    role_name: str,
+    mobile_phone: str | None,
+    office_location: str | None,
+) -> dict[str, Any] | None:
+    """Hydrate Graph-controlled fields while preserving user-maintained values."""
+    normalized_role = _required_text(role_name, field_name="role_name", max_length=30).upper()
+    if normalized_role not in ROLE_NAMES:
+        raise ValueError("Invalid role_name.")
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            UPDATE app_users
+            SET email = %s,
+                full_name = %s,
+                display_name = %s,
+                role_name = %s,
+                microsoft_object_id = %s,
+                user_principal_name = %s,
+                mobile_phone = COALESCE(mobile_phone, %s),
+                office_location = COALESCE(office_location, %s),
+                graph_last_synced_at = NOW(),
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING {USER_RETURNING_FIELDS}
+            """,
+            (
+                _required_text(_normalize_email(email), field_name="email", max_length=200),
+                _required_text(full_name, field_name="full_name", max_length=200),
+                _normalize_text(display_name, max_length=200),
+                normalized_role,
+                _required_text(microsoft_object_id, field_name="microsoft_object_id", max_length=150),
+                _normalize_text(user_principal_name, max_length=200),
+                _normalize_text(mobile_phone, max_length=50),
+                _normalize_text(office_location, max_length=200),
+                tenant_id,
+                user_id,
+            ),
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
 def fetch_favorite_seat(
     conn: PGConnection,
     *,
@@ -753,7 +908,8 @@ def fetch_favorite_seat(
                 ON s.id = b.seat_id
                 AND s.tenant_id = b.tenant_id
             WHERE b.tenant_id = %s
-              AND b.user_id = %s
+              AND b.booked_for_user_id = %s
+              AND b.booking_type = 'EMPLOYEE'
               AND b.booking_status = 'CONFIRMED'
             GROUP BY s.id, s.seat_code
             ORDER BY booking_count DESC, s.id
@@ -777,7 +933,8 @@ def fetch_days_in_office(
             SELECT COUNT(DISTINCT booking_date)
             FROM bookings
             WHERE tenant_id = %s
-              AND user_id = %s
+              AND booked_for_user_id = %s
+              AND booking_type = 'EMPLOYEE'
               AND booking_status = 'CONFIRMED'
               AND booking_date <= CURRENT_DATE
             """,
@@ -797,7 +954,8 @@ def fetch_days_in_office_current_month(
             SELECT COUNT(DISTINCT booking_date)
             FROM bookings
             WHERE tenant_id = %s
-              AND user_id = %s
+              AND booked_for_user_id = %s
+              AND booking_type = 'EMPLOYEE'
               AND booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
               AND booking_date <= CURRENT_DATE
               AND DATE_TRUNC('month', booking_date)
@@ -821,7 +979,8 @@ def fetch_days_in_office_current_year(
             SELECT COUNT(DISTINCT booking_date)
             FROM bookings
             WHERE tenant_id = %s
-              AND user_id = %s
+              AND booked_for_user_id = %s
+              AND booking_type = 'EMPLOYEE'
               AND booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
               AND booking_date <= CURRENT_DATE
               AND DATE_TRUNC('year', booking_date)
@@ -855,8 +1014,9 @@ def fetch_team_rank_current_year(
                 FROM team_members tm
                 CROSS JOIN primary_team pt
                 LEFT JOIN bookings b
-                    ON b.user_id = tm.user_id
+                    ON b.booked_for_user_id = tm.user_id
                    AND b.tenant_id = tm.tenant_id
+                   AND b.booking_type = 'EMPLOYEE'
                    AND b.booking_status IN (
                         'CONFIRMED',
                         'CHECKED_IN',
@@ -907,3 +1067,377 @@ def fetch_team_rank_current_year(
         "team_rank_current_year": int(row["team_rank"]),
         "team_member_count": int(row["team_member_count"]),
     }
+
+
+
+def search_users(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    search_text: str,
+    include_inactive: bool = False,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    search_text = search_text.strip().lower()
+
+    status_clause = ""
+    if not include_inactive:
+        status_clause = "AND au.status = 'ACTIVE'"
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {USER_SELECT_FIELDS}
+            {USER_SELECT_FROM}
+            WHERE au.tenant_id = %s
+            {status_clause}
+              AND (
+                    EXISTS (
+                        SELECT 1
+                        FROM unnest(
+                            regexp_split_to_array(
+                                lower(coalesce(au.full_name, '')),
+                                '\s+'
+                            )
+                        ) AS name_part
+                        WHERE name_part LIKE %s || '%%'
+                    )
+                 OR lower(coalesce(au.employee_id, ''))
+                        LIKE %s || '%%'
+                 OR coalesce(au.mobile_phone, '')
+                        LIKE %s || '%%'
+              )
+            ORDER BY
+                CASE
+                    WHEN lower(coalesce(au.full_name, ''))
+                         LIKE %s || '%%'
+                    THEN 1
+                    ELSE 2
+                END,
+                au.full_name,
+                au.id
+            LIMIT %s
+            """,
+            (
+                tenant_id,
+
+                # WHERE
+                search_text,
+                search_text,
+                search_text,
+
+                # ORDER BY
+                search_text,
+
+                limit,
+            ),
+        )
+
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def build_admin_directory_pagination(
+    *,
+    page: int | None,
+    limit: int | None,
+    filtered_users: int,
+) -> dict[str, Any] | None:
+
+    if page is None or limit is None:
+        return None
+
+    total_pages = (
+        filtered_users + limit - 1
+    ) // limit
+
+    return {
+        "page": page,
+        "limit": limit,
+        "total_pages": total_pages,
+        "has_next": page < total_pages,
+        "has_previous": page > 1,
+    }
+
+
+def fetch_admin_user_directory(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    role_name: str | None = None,
+    role_names: list[str] | tuple[str, ...] | None = None,
+    status: str | None = None,
+    page: int | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+
+    normalized_role_names: list[str] | None = None
+
+    if role_names is not None:
+        normalized_role_names = [
+            _required_text(
+                str(role),
+                field_name="role_name",
+                max_length=30,
+            ).upper()
+            for role in role_names
+        ]
+
+    elif role_name is not None:
+        normalized_role_names = [
+            _required_text(
+                role_name,
+                field_name="role_name",
+                max_length=30,
+            ).upper()
+        ]
+
+    params = {
+        "tenant_id": tenant_id,
+        "role_names": normalized_role_names,
+        "status": status,
+    }
+
+    filtered_where = """
+        WHERE au.tenant_id = %(tenant_id)s
+          AND (
+                %(role_names)s IS NULL
+                OR au.role_name = ANY(
+                    %(role_names)s::text[]
+                )
+          )
+          AND (
+                %(status)s IS NULL
+                OR au.status = %(status)s
+          )
+    """
+
+    pagination_clause = ""
+
+    if page is not None or limit is not None:
+
+        effective_page = page or 1
+        effective_limit = limit or 20
+
+        params["limit"] = effective_limit
+        params["offset"] = (
+            effective_page - 1
+        ) * effective_limit
+
+        pagination_clause = """
+            LIMIT %(limit)s
+            OFFSET %(offset)s
+        """
+
+    with conn.cursor(
+        cursor_factory=RealDictCursor,
+    ) as cur:
+
+        # ---------------------------
+        # summary
+        # ---------------------------
+
+        cur.execute(
+            f"""
+            SELECT
+                (
+                    SELECT COUNT(*)::integer
+                    FROM app_users all_users
+                    WHERE all_users.tenant_id = %(tenant_id)s
+                ) AS total_users,
+
+                COUNT(*)::integer AS filtered_users,
+
+                COUNT(*) FILTER (
+                    WHERE au.status = 'ACTIVE'
+                )::integer AS active_users,
+
+                COUNT(*) FILTER (
+                    WHERE au.status = 'INACTIVE'
+                )::integer AS inactive_users
+
+            FROM app_users au
+            {filtered_where}
+            """,
+            params,
+        )
+
+        summary = cur.fetchone()
+
+        # ---------------------------
+        # roles metadata
+        # ---------------------------
+
+        role_metadata = fetch_admin_role_metadata(
+            conn,
+            tenant_id=tenant_id,
+        )
+
+        # ---------------------------
+        # users
+        # ---------------------------
+
+        cur.execute(
+            f"""
+            SELECT
+                au.id::text AS id,
+                au.employee_id,
+                au.full_name,
+                au.role_name,
+                au.department,
+                au.job_title,
+                au.mobile_phone,
+                au.status,
+                au.email
+            FROM app_users au
+            {filtered_where}
+            ORDER BY
+                LOWER(au.full_name)
+                    ASC NULLS LAST,
+                au.id ASC
+            {pagination_clause}
+            """,
+            params,
+        )
+
+        rows = cur.fetchall()
+
+    summary_payload = (
+        dict(summary)
+        if summary
+        else {
+            "total_users": 0,
+            "filtered_users": 0,
+            "active_users": 0,
+            "inactive_users": 0,
+        }
+    )
+
+    pagination_payload = (
+        build_admin_directory_pagination(
+            page=page,
+            limit=limit,
+            filtered_users=summary_payload[
+                "filtered_users"
+            ],
+        )
+    )
+
+    return {
+        "summary": summary_payload,
+        "roles": role_metadata,
+        "pagination": pagination_payload,
+        "items": [
+            dict(row)
+            for row in rows
+        ],
+    }
+
+
+
+def fetch_user_details_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+) -> dict[str, Any] | None:
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT
+            au.id::text AS id,
+            au.email,
+            au.full_name,
+            au.display_name,
+            au.role_name,
+            au.status,
+            au.employee_id,
+            au.mobile_phone,
+            au.office_location,
+            au.job_title,
+            au.department,
+            au.company_name,
+            au.manager_user_id::text,
+            au.home_site_id::text
+        FROM app_users au
+        WHERE au.tenant_id = %s
+        AND au.id = %s
+        LIMIT 1
+            """,
+            (
+                tenant_id,
+                user_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+def fetch_admin_role_metadata(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+) -> list[dict[str, Any]]:
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                r.id AS role_id,
+                r.role_name,
+                r.description AS role_description,
+
+                COUNT(DISTINCT au.id)::integer AS user_count,
+
+                COUNT(DISTINCT p.id)::integer
+                    AS permission_count,
+
+                COALESCE(
+                    json_agg(
+                        DISTINCT jsonb_build_object(
+                            'id', p.id,
+                            'permission_key',
+                                p.permission_key,
+                            'description',
+                                p.description,
+                            'module_name',
+                                p.module_name
+                        )
+                    )
+                    FILTER (
+                        WHERE p.id IS NOT NULL
+                    ),
+                    '[]'::json
+                ) AS permissions
+
+            FROM roles r
+
+            LEFT JOIN app_users au
+                ON au.role_name = r.role_name
+                AND au.tenant_id = r.tenant_id
+
+            LEFT JOIN role_permissions rp
+                ON rp.role_id = r.id
+
+            LEFT JOIN permissions p
+                ON p.id = rp.permission_id
+                AND p.is_active = TRUE
+
+            WHERE r.tenant_id = %s
+            AND r.is_active = TRUE
+
+            GROUP BY
+                r.id,
+                r.role_name,
+                r.description
+
+            ORDER BY r.id
+            """,
+            (tenant_id,)
+        )
+
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]

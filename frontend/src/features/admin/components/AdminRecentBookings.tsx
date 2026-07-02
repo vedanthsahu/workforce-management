@@ -7,103 +7,141 @@ import {
   CardContent,
 } from "@/components/ui/card";
 
+import type { RecentBooking } from "../types/admin.types";
 
 type Props = {
-  bookings: any[];
+  bookings: RecentBooking[];
+  loading?: boolean;
 };
 
-export default function AdminBookings({ bookings }: Props) {  
+const TYPE_STYLES: Record<RecentBooking["type"], string> = {
+  Self: "bg-blue-100 text-blue-600",
+  Employee: "bg-purple-100 text-purple-600",
+  Guest: "bg-amber-100 text-amber-600",
+};
+
+function TypeBadge({ type, className = "" }: { type: RecentBooking["type"]; className?: string }) {
+  return (
+    <span className={`px-2 py-1 rounded-full text-xs font-medium ${TYPE_STYLES[type]} ${className}`}>
+      {type}
+    </span>
+  );
+}
+
+const STATUS_STYLES: Record<RecentBooking["status"], string> = {
+  Booked: "bg-green-100 text-green-600",
+  "Checked In": "bg-blue-100 text-blue-600",
+  Completed: "bg-gray-100 text-gray-600",
+  Cancelled: "bg-red-100 text-red-600",
+  "No Show": "bg-orange-100 text-orange-600",
+  Modified: "bg-amber-100 text-amber-600",
+};
+
+function StatusBadge({ status, className = "" }: { status: RecentBooking["status"]; className?: string }) {
+  return (
+    <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${STATUS_STYLES[status]} ${className}`}>
+      {status}
+    </span>
+  );
+}
+
+export default function AdminRecentBookings({ bookings, loading }: Props) {
   return (
     <Card>
-
       <CardHeader>
-        <CardTitle className="text-sm font-semibold">
-          Recent Bookings
-        </CardTitle>
+        <CardTitle className="text-sm font-semibold">Recent Activities</CardTitle>
       </CardHeader>
 
       <CardContent className="p-0">
 
-        <table className="w-full text-sm">
-
-          {/* TABLE HEADER */}
-          <thead className="bg-gray-50 border-b">
-            <tr className="text-left text-muted-foreground">
-              <th className="px-6 py-3 font-medium">User</th>
-              <th className="px-6 py-3 font-medium">Office</th>
-              <th className="px-6 py-3 font-medium">Seat</th>
-              <th className="px-6 py-3 font-medium">Date</th>
-              <th className="px-6 py-3 font-medium">Status</th>
-            </tr>
-          </thead>
-
-          {/* TABLE BODY */}
-          <tbody>
-
-           {bookings?.map((item, index) => (
-              <tr
-                key={index}
-                className="border-b hover:bg-gray-50 transition"
-              >
-
-                {/* USER */}
-                <td className="px-6 py-4 flex items-center gap-3">
-
-                  {/* Avatar */}
-                  <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium">
-                    {item.name.charAt(0)}
+        {/* ── Mobile card list (hidden on md+) ─────────────── */}
+        <div className="md:hidden divide-y">
+          {bookings.length === 0 ? (
+            <p className="text-center py-6 text-gray-400 text-sm">No bookings found</p>
+          ) : (
+            bookings.map((item, index) => (
+              <div key={index} className="flex items-start gap-3 px-4 py-3">
+                <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium shrink-0">
+                  {item.name.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-sm truncate">{item.name}</p>
+                    <TypeBadge type={item.type} className="shrink-0 text-[10px] px-1.5 py-0.5" />
                   </div>
-
-                  <div>
-                    <p className="font-medium">{item.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.email}
+                  <p className="text-xs text-muted-foreground truncate">{item.email}</p>
+                  {item.bookedByName && (
+                    <p className="text-xs text-blue-600  truncate">
+                      Booked by {item.bookedByName}
                     </p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                    <span className="text-xs text-gray-500">{item.office}</span>
+                    <span className="text-xs text-gray-400">·</span>
+                    <span className="text-xs text-gray-500">{item.seat}</span>
+                    <span className="text-xs text-gray-400">·</span>
+                    <span className="text-xs text-gray-500">{item.date}</span>
                   </div>
+                </div>
+                <StatusBadge status={item.status} className="shrink-0" />
+              </div>
+            ))
+          )}
+        </div>
 
-                </td>
-
-                {/* OFFICE */}
-                <td className="px-6 py-4">{item.office}</td>
-
-                {/* SEAT */}
-                <td className="px-6 py-4">{item.seat}</td>
-
-                {/* DATE */}
-                <td className="px-6 py-4">{item.date}</td>
-
-                {/* STATUS */}
-                <td className="px-6 py-4">
-
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      item.status === "Booked" || item.status === "CONFIRMED"
-                        ? "bg-green-100 text-green-600"
-                        : "bg-red-100 text-red-600"
-                    }`}
-                  >
-                    
-                    {item.status}
-                  </span>
-
-                </td>
-
+        {/* ── Desktop table (hidden below md) ──────────────── */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="bg-gray-50 border-b">
+              <tr className="text-left text-muted-foreground">
+                <th className="px-6 py-3 font-medium whitespace-nowrap">User</th>
+                <th className="px-6 py-3 font-medium whitespace-nowrap">Type</th>
+                <th className="px-6 py-3 font-medium whitespace-nowrap">Office</th>
+                <th className="px-6 py-3 font-medium whitespace-nowrap">Seat / Visit</th>
+                <th className="px-6 py-3 font-medium whitespace-nowrap">Date</th>
+                <th className="px-6 py-3 font-medium whitespace-nowrap">Status</th>
               </tr>
-            ))}
-            {bookings.length === 0 && (
-  <tr>
-    <td colSpan={5} className="text-center py-6 text-gray-400">
-      No bookings found
-    </td>
-  </tr>
-)}
-
-
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {bookings.map((item, index) => (
+                <tr key={index} className="border-b hover:bg-gray-50 transition">
+                  <td className="px-6 py-4 align-middle">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium shrink-0">
+                        {item.name.charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium whitespace-nowrap">{item.name}</p>
+                        <p className="text-xs text-muted-foreground whitespace-nowrap">{item.email}</p>
+                        {item.bookedByName && (
+                          <p className="text-xs text-blue-600 whitespace-nowrap">
+                            Booked by {item.bookedByName}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 align-middle whitespace-nowrap">
+                    <TypeBadge type={item.type} />
+                  </td>
+                  <td className="px-6 py-4 align-middle whitespace-nowrap">{item.office}</td>
+                  <td className="px-6 py-4 align-middle whitespace-nowrap">{item.seat}</td>
+                  <td className="px-6 py-4 align-middle whitespace-nowrap">{item.date}</td>
+                  <td className="px-6 py-4 align-middle whitespace-nowrap">
+                    <StatusBadge status={item.status} />
+                  </td>
+                </tr>
+              ))}
+              {bookings.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="text-center py-6 text-gray-400">No bookings found</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
       </CardContent>
-
     </Card>
   );
 }

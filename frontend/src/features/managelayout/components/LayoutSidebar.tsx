@@ -1,14 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useEffect, useCallback, ReactNode } from "react";
 import { Layout } from "../types/layout.types";
 
 interface LayoutSidebarProps {
   layout: Layout | null;
   selectedLayoutId: string;
-  selectedFloorId?: string;
+  selectedFloorId?:    string;
   selectedBuildingId?: string;
-  selectedSiteId?: string;
+  selectedSiteId?:     string;
 }
 
 // ── icons ─────────────────────────────────────────────────────────────────────
@@ -64,16 +65,6 @@ function AmenityIcon() {
   );
 }
 
-function BlockedIcon() {
-  return (
-    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-    </svg>
-  );
-}
-
 function AlertIcon() {
   return (
     <svg className="w-4 h-4 text-amber-500 flex-shrink-0" viewBox="0 0 24 24" fill="none"
@@ -89,11 +80,8 @@ function AlertIcon() {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
-    month:  "short",
-    day:    "numeric",
-    year:   "numeric",
-    hour:   "numeric",
-    minute: "2-digit",
+    month: "short", day: "numeric", year: "numeric",
+    hour: "numeric", minute: "2-digit",
   });
 }
 
@@ -101,9 +89,9 @@ function fileName(url: string): string {
   return url.split("/").pop() ?? url;
 }
 
-// ── info row ──────────────────────────────────────────────────────────────────
+// ── sub-components ────────────────────────────────────────────────────────────
 
-function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
+function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-start gap-2">
       <span className="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">{label}</span>
@@ -112,8 +100,6 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
     </div>
   );
 }
-
-// ── status badge ──────────────────────────────────────────────────────────────
 
 function StatusBadge({ status, isPublished }: { status: string; isPublished: boolean }) {
   if (isPublished) {
@@ -139,6 +125,12 @@ function StatusBadge({ status, isPublished }: { status: string; isPublished: boo
 
 // ── component ─────────────────────────────────────────────────────────────────
 
+// Static routes that never change — safe to prefetch unconditionally
+const STATIC_PREFETCH_ROUTES = [
+  "/admin/layouts/manage-seats",
+  "/admin/amenities",
+];
+
 export default function LayoutSidebar({
   layout,
   selectedLayoutId,
@@ -148,14 +140,22 @@ export default function LayoutSidebar({
 }: LayoutSidebarProps) {
   const router = useRouter();
 
-  const buildQuery = () => {
+  // Build query string once — reused by both prefetch and push
+  const buildQuery = useCallback(() => {
     const params = new URLSearchParams();
     if (selectedLayoutId)   params.set("layoutId",   selectedLayoutId);
     if (selectedFloorId)    params.set("floorId",    selectedFloorId);
     if (selectedBuildingId) params.set("buildingId", selectedBuildingId);
     if (selectedSiteId)     params.set("siteId",     selectedSiteId);
     return params.toString() ? `?${params.toString()}` : "";
-  };
+  }, [selectedLayoutId, selectedFloorId, selectedBuildingId, selectedSiteId]);
+
+  // Prefetch all quick action routes on mount.
+  // The JS bundles for these pages are downloaded in the background
+  // so clicking any action button is instant.
+  useEffect(() => {
+    STATIC_PREFETCH_ROUTES.forEach((route) => router.prefetch(route));
+  }, [router]);
 
   const quickActions = [
     {
@@ -163,22 +163,18 @@ export default function LayoutSidebar({
       label: "Manage Seats",
       sub:   "Configure seat details and settings",
       color: "text-indigo-600 bg-indigo-50",
-      href:  `/admin/layouts/manage-seats${buildQuery()}`,
+      // Static base path — query added at click time
+      basePath: "/admin/layouts/manage-seats",
+      href: `/admin/layouts/manage-seats${buildQuery()}`,
     },
     {
       icon:  <AmenityIcon />,
       label: "Manage Amenities",
       sub:   "Manage amenities master data",
       color: "text-violet-600 bg-violet-50",
-      href:  `/admin/amenities`,
+      basePath: "/admin/amenities",
+      href: `/admin/amenities`,
     },
-    // {
-    //   icon:  <BlockedIcon />,
-    //   label: "Manage Blocked Areas",
-    //   sub:   "View and manage blocked areas",
-    //   color: "text-rose-600 bg-rose-50",
-    //   href:  `/admin/layouts/blocked-areas${buildQuery()}`,
-    // },
   ];
 
   if (!layout) {
@@ -204,9 +200,7 @@ export default function LayoutSidebar({
         <h3 className="text-sm font-semibold text-gray-900 mb-3">Layout Information</h3>
 
         <div className="space-y-2.5">
-          <InfoRow label="Layout Name">
-            {layout.layout_name ?? "—"}
-          </InfoRow>
+          <InfoRow label="Layout Name">{layout.layout_name ?? "—"}</InfoRow>
 
           <InfoRow label="Version">
             <span className="flex items-center gap-1.5">
@@ -215,9 +209,7 @@ export default function LayoutSidebar({
             </span>
           </InfoRow>
 
-          <InfoRow label="Uploaded By">
-            {layout.uploaded_by_name ?? "—"}
-          </InfoRow>
+          <InfoRow label="Uploaded By">{layout.uploaded_by_name ?? "—"}</InfoRow>
 
           <InfoRow label="Uploaded On">
             {layout.updated_at ? formatDate(layout.updated_at) : "—"}
@@ -257,6 +249,7 @@ export default function LayoutSidebar({
             <button
               key={action.label}
               onClick={() => router.push(action.href)}
+              onMouseEnter={() => router.prefetch(action.basePath)}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 transition-colors text-left group"
             >
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${action.color}`}>

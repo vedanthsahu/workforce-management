@@ -1,58 +1,26 @@
 import { axiosInstance } from "@/lib/http/axios";
-import { Seat, SeatUpdatePayload, BulkUpdatePayload } from "../types/seat.types";
+import { Seat } from "../types/seat.types";
 import { LayoutSeatStats } from "../types/layout.types";
 
-// ─── Seat CRUD ────────────────────────────────────────────────────────────────
+// ─── Mapper ───────────────────────────────────────────────────────────────────
+// No fake defaults — null stays null so the UI can show "—" for unconfigured seats
 
-export async function fetchSeatsByFloor(floorId: string): Promise<Seat[]> {
-  const { data } = await axiosInstance.get<Seat[]>(
-    `/floors/${floorId}/seats`
-  );
-  return data;
-}
-
-export async function fetchSeatById(seatId: string): Promise<Seat> {
-  const { data } = await axiosInstance.get<Seat>(`/admin/seats/${seatId}`);
-  return data;
-}
-
-export async function updateSeat(payload: SeatUpdatePayload): Promise<Seat> {
-  const { data } = await axiosInstance.put<Seat>(
-    `/admin/seats/${payload.seat_svg_id}`,
-    payload
-  );
-  return data;
-}
-
-export async function bulkUpdateSeats(payload: BulkUpdatePayload): Promise<void> {
-  await axiosInstance.put("/admin/seats/bulk", payload);
-}
-
-// ─── Stats ────────────────────────────────────────────────────────────────────
-
-export async function fetchLayoutSeatStats(layoutId: string): Promise<LayoutSeatStats> {
-  const { data } = await axiosInstance.get<LayoutSeatStats>(
-    `/admin/floor-layouts/${layoutId}/seat-stats`
-  );
-  return data;
-}
-
-function mapApiItemToSeat(item: any): Seat {
+function mapApiItemToSeat(item: any, forceConfigured = false): Seat {
   return {
-    seat_id:             String(item.layout_seat_mapping_id), // use mapping id as the row key
-    seat_svg_id:         String(item.svg_element_id),
+    seat_id:                String(item.layout_seat_mapping_id),
+    seat_svg_id:            String(item.svg_element_id),
     layout_seat_mapping_id: String(item.layout_seat_mapping_id),
-    seat_code:           item.seat_code,
-    seat_name:           item.seat_name ?? "",
-    seat_type:           item.seat_type ?? "WORKSTATION",
-    status:              item.status ?? "ACTIVE",
-    is_bookable:         item.is_bookable ?? true,
-    is_reserved:         item.is_reserved ?? false,
-    is_configured:       item.is_configured ?? false,
-    configuration_status: item.configuration_status ?? "PENDING",
-    amenity_ids:         (item.amenity_ids ?? []).map(String),
-    layout_id:           String(item.layout_id),
-    notes:               item.notes ?? "",
+    seat_code:              item.seat_code,
+    seat_name:              item.seat_name ?? "",
+    seat_type:              item.seat_type ?? null,
+    status:                 item.status ?? null,
+    is_bookable:            item.is_bookable ?? null,
+    is_reserved:            item.is_reserved ?? false,
+    is_configured:          forceConfigured ? true : (item.is_configured ?? false),
+    configuration_status:   item.configuration_status ?? null,
+    amenity_ids:            (item.amenity_ids ?? []).map(String),
+    layout_id:              String(item.layout_id),
+    notes:                  item.notes ?? "",
   };
 }
 
@@ -73,15 +41,16 @@ export async function fetchLayoutSeats(
     `/admin/floor-layouts/${layoutId}/seats`
   );
 
-  const seats = data.items.map(mapApiItemToSeat);
+  const items = data.items ?? [];
+  const seats = items.map((item) => mapApiItemToSeat(item));
 
   const stats: LayoutSeatStats = {
     layout_id:          String(data.layout_id),
     total_seats:        data.total_seats,
     configured_seats:   data.configured_seats,
     unconfigured_seats: data.pending_seats,
-    non_bookable_seats: seats.filter((s) => !s.is_bookable).length,
-    bookable_seats:     seats.filter((s) => s.is_bookable).length,
+    non_bookable_seats: seats.filter((s) => s.is_bookable === false).length,
+    bookable_seats:     seats.filter((s) => s.is_bookable === true).length,
   };
 
   return { seats, stats };
@@ -90,81 +59,27 @@ export async function fetchLayoutSeats(
 // ─── Configure a single seat ──────────────────────────────────────────────────
 
 export interface SeatConfigPayload {
-  seat_name?:   string;
-  seat_type:    string;
-  status:       string;
-  is_bookable:  boolean;
-  is_reserved:  boolean;
-  amenity_ids:  number[];
+  seat_name?:  string;
+  seat_type:   string;
+  status:      string;
+  is_bookable: boolean;
+  is_reserved: boolean;
+  amenity_ids: number[];
 }
-
-// export async function configureSeat(
-//   layoutSeatMappingId: string,
-//   payload: SeatConfigPayload
-// ): Promise<Seat> {
-//   const { data } = await axiosInstance.patch(
-//     `/layout-seats/${layoutSeatMappingId}/configuration`,
-//     payload
-//   );
-//   return mapApiItemToSeat(data);
-// }
-
-// export async function configureSeat(
-//   layoutSeatMappingId: string,
-//   payload: SeatConfigPayload
-// ): Promise<Seat> {
-//   console.log("[configureSeat] payload:", JSON.stringify(payload, null, 2));
-//   const { data } = await axiosInstance.patch(
-//     `/layout-seats/${layoutSeatMappingId}/configuration`,
-//     payload
-//   );
-//   return mapApiItemToSeat(data);
-// }
-
-// export async function configureSeat(
-//   layoutSeatMappingId: string,
-//   payload: SeatConfigPayload
-// ): Promise<Seat> {
-//   console.log("[configureSeat] payload:", JSON.stringify(payload, null, 2));
-//   try {
-//     const { data } = await axiosInstance.patch(
-//       `/layout-seats/${layoutSeatMappingId}/configuration`,
-//       payload
-//     );
-//     return mapApiItemToSeat(data);
-//   } catch (err: any) {
-//     console.error(
-//       "[configureSeat] error:",
-//       err?.response?.status,
-//       JSON.stringify(err?.response?.data, null, 2)  // ← this will show the exact reason
-//     );
-//     throw err;
-//   }
-// }
 
 export async function configureSeat(
   layoutSeatMappingId: string,
   payload: SeatConfigPayload
 ): Promise<Seat> {
-  console.log("[configureSeat] payload:", JSON.stringify(payload, null, 2));
-  try {
-    const { data } = await axiosInstance.patch(
-      `/layout-seats/${layoutSeatMappingId}/configuration`,
-      payload,
-      {
-        transformRequest: [(data) => JSON.stringify(data)],  // ← bypass interceptor
-        headers: { "Content-Type": "application/json" },
-      }
-    );
-    return mapApiItemToSeat(data);
-  } catch (err: any) {
-    console.error(
-      "[configureSeat] error:",
-      err?.response?.status,
-      JSON.stringify(err?.response?.data, null, 2)
-    );
-    throw err;
-  }
+  const { data } = await axiosInstance.patch(
+    `/layout-seats/${layoutSeatMappingId}/configuration`,
+    payload,
+    {
+      transformRequest: [(data) => JSON.stringify(data)],
+      headers: { "Content-Type": "application/json" },
+    }
+  );
+  return mapApiItemToSeat(data, true);
 }
 
 // ─── Bulk configure ───────────────────────────────────────────────────────────

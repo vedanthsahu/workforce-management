@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -139,6 +140,7 @@ class BuildingResponse(BaseModel):
 
     building_id: str
     site_id: str
+    site_name: str
     building_code: str
     building_name: str
     status: str | None = None
@@ -224,6 +226,8 @@ class FloorResponse(BaseModel):
     layout_status: str | None = None
     layout_is_published: bool | None = None
     layout_version_no: int | None = None
+    published_by_name: str | None = None
+    layout_last_updated: datetime | None = None
     active_layout: FloorLayoutInfo | None = None
 
 
@@ -324,7 +328,7 @@ class LayoutSeatConfigurationResponse(BaseModel):
 
     layout_seat_mapping_id: str
 
-    seat_id: str
+    seat_id: str | None = None
 
     layout_id: str
 

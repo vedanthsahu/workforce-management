@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+import sys
 from typing import Annotated, Any, Callable
 
 import psycopg2
@@ -37,10 +38,11 @@ from backend.repositories.user_repository import (
     fetch_active_tenant_for_login,
     fetch_user_by_id,
     fetch_user_by_microsoft_object_id,
+    sync_app_user_from_graph,
     sync_graph_groups_for_user,
     upsert_user_graph_profile,
 )
-from backend.services.auth_service import AuthTokens, issue_tokens_for_user
+from backend.services.auth_service import AuthTokens, determine_graph_onboarding_role, issue_tokens_for_user
 import logging
 
 router = APIRouter(tags=["SSO"])
@@ -77,7 +79,7 @@ def auth_callback(
     error_description: str | None = None,
 ):
     def debug(msg):
-        logger.debug("sso.callback %s", msg)
+        logger.warning("sso.callback %s", msg)
 
     debug("=== auth_callback started ===")
 
@@ -106,8 +108,23 @@ def auth_callback(
         debug("Token exchange OK")
 
         debug("Verifying id_token...")
-        claims = verify_id_token(token_payload["id_token"])
-        debug(f"Claims OK, keys: {list(claims.keys())}")
+
+        try:
+            claims = verify_id_token(token_payload["id_token"])
+            debug(f"Claims OK, keys: {list(claims.keys())}")
+        except Exception as exc:
+            import traceback
+
+            logger.error(
+                "verify_id_token failed: %s: %s",
+                type(exc).__name__,
+                str(exc),
+                exc_info=True,
+            )
+
+            traceback.print_exc()
+
+            raise
     except SSOError as exc:
         debug(f"SSOError: {exc.code} - {exc.message}")
         return _error_response(exc.status_code, exc.code, exc.message, exc.details)
@@ -150,7 +167,9 @@ def auth_callback(
 
         if user is None:
             debug("Fetching Graph /me...")
+            debug("STEP_GRAPH_ME_START")
             graph_profile = _fetch_graph_payload(fetch_graph_me, token_payload["access_token"], required=True)
+            debug("STEP_GRAPH_ME_END")
             debug(f"Graph /me keys: {list(graph_profile.keys())}")
             graph_object_id = _resolve_graph_object_id(graph_profile)
             if microsoft_object_id and graph_object_id != microsoft_object_id:
@@ -175,6 +194,7 @@ def auth_callback(
                 graph_profile=graph_profile,
                 graph_manager=graph_manager,
                 graph_groups=graph_groups,
+                access_token=token_payload["access_token"],
             )
             debug(f"Provisioned user: {user}")
 
@@ -198,7 +218,11 @@ def auth_callback(
     except PermissionError as exc:
         conn.rollback()
         debug(f"PermissionError: {exc}")
-        return _error_response(403, "inactive_user", str(exc))
+        settings = get_settings()
+        return RedirectResponse(
+            url=f"{settings.frontend_url}/login?error=inactive_user",
+            status_code=status.HTTP_302_FOUND,
+        )
     except (LookupError, ValueError) as exc:
         conn.rollback()
         debug(f"LookupError/ValueError: {exc}")
@@ -268,6 +292,7 @@ def _provision_first_time_user(
     graph_profile: dict[str, Any],
     graph_manager: dict[str, Any],
     graph_groups: dict[str, Any],
+    access_token: str,
 ) -> dict[str, Any]:
     """Create the app user and Graph enrichment rows required on first login."""
     manager_graph_object_id = _resolve_manager_subject_identifier(graph_manager)
@@ -285,6 +310,10 @@ def _provision_first_time_user(
     user_principal_name = _resolve_user_principal_name(claims, graph_profile)
     display_name = _resolve_display_name(claims, graph_profile)
     full_name = _resolve_full_name(display_name=display_name, email=email)
+    role_name = determine_graph_onboarding_role(
+        access_token=access_token,
+        microsoft_object_id=microsoft_object_id,
+    )
 
     user = create_app_user_from_graph(
         conn,
@@ -301,8 +330,24 @@ def _provision_first_time_user(
         company_name=_resolve_optional_graph_text(graph_profile, "companyName"),
         employee_id=_resolve_optional_graph_text(graph_profile, "employeeId"),
         manager_user_id=manager_user_id,
+        role_name=role_name,
     )
     user_id = str(user["user_id"])
+    synced_user = sync_app_user_from_graph(
+        conn,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        microsoft_object_id=microsoft_object_id,
+        email=email,
+        full_name=full_name,
+        user_principal_name=user_principal_name,
+        display_name=display_name,
+        role_name=role_name,
+        mobile_phone=_resolve_optional_graph_text(graph_profile, "mobilePhone"),
+        office_location=_resolve_optional_graph_text(graph_profile, "officeLocation"),
+    )
+    if synced_user is not None:
+        user = synced_user
     create_auth_identity_for_user(
         conn,
         tenant_id=tenant_id,

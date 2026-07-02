@@ -6,11 +6,21 @@ import {
   getBuildings,
   getFloors,
 } from "@/features/adminlayouts1/services/locationService";
+import { Site, Building, Floor } from "@/features/adminlayouts1/types/layout.types";
 
-export default function LayoutFilters({ onChange }: any) {
-  const [sites, setSites] = useState([]);
-  const [buildings, setBuildings] = useState([]);
-  const [floors, setFloors] = useState([]);
+type Props = {
+  onChange: (filters: {
+    siteId: string;
+    buildingId: string;
+    floorId: string;
+    status: string;
+  }) => void;
+};
+
+export default function LayoutFilters({ onChange }: Props) {
+  const [sites, setSites] = useState<Site[]>([]);
+  const [buildings, setBuildings] = useState<Building[]>([]);
+  const [floors, setFloors] = useState<Floor[]>([]);
 
   const [selectedSite, setSelectedSite] = useState("");
   const [selectedBuilding, setSelectedBuilding] = useState("");
@@ -73,8 +83,8 @@ export default function LayoutFilters({ onChange }: any) {
   };
 
   return (
-    <div className="bg-white border rounded-lg p-4 grid grid-cols-4 gap-4">
-      
+    <div className="bg-white border rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+
       {/* SITE */}
       <select
         value={selectedSite}
@@ -82,7 +92,7 @@ export default function LayoutFilters({ onChange }: any) {
         className="h-10 border rounded-md px-3 text-sm"
       >
         <option value="">All Sites</option>
-        {sites.map((s: any) => (
+        {sites.map((s) => (
           <option key={s.site_id} value={s.site_id}>
             {s.site_name}
           </option>
@@ -96,7 +106,7 @@ export default function LayoutFilters({ onChange }: any) {
         className="h-10 border rounded-md px-3 text-sm"
       >
         <option value="">All Buildings</option>
-        {buildings.map((b: any) => (
+        {buildings.map((b) => (
           <option key={b.building_id} value={b.building_id}>
             {b.building_name}
           </option>
@@ -110,7 +120,7 @@ export default function LayoutFilters({ onChange }: any) {
         className="h-10 border rounded-md px-3 text-sm"
       >
         <option value="">All Floors</option>
-        {floors.map((f: any) => (
+        {floors.map((f) => (
           <option key={f.floor_id} value={f.floor_id}>
             {f.floor_name}
           </option>

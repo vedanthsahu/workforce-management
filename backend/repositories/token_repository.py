@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import Json, RealDictCursor
 from psycopg2.extensions import connection as PGConnection
 
 
@@ -289,10 +289,11 @@ def record_auth_event(
     *,
     tenant_id: str,
     user_id: str,
-    session_id: str,
+    session_id: str | None = None,
     event_type: str,
     user_agent: str | None = None,
     ip_address: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     """Insert an auth lifecycle event."""
     with conn.cursor() as cur:
@@ -304,11 +305,20 @@ def record_auth_event(
                 session_id,
                 event_type,
                 user_agent,
-                ip_address
+                ip_address,
+                metadata
             )
-            VALUES (%s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            (tenant_id, user_id, session_id, event_type, user_agent, ip_address),
+            (
+                tenant_id,
+                user_id,
+                session_id,
+                event_type,
+                user_agent,
+                ip_address,
+                Json(metadata) if metadata is not None else None,
+            ),
         )
 
 

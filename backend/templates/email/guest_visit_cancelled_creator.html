@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<body style="font-family: Arial, sans-serif; color: #222; line-height: 1.5;">
+    <h2>Guest visit cancelled</h2>
+    <p>Hello {{ recipient_name }},</p>
+    <p>A guest visit you created has been cancelled.</p>
+    <table cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
+        <tr><td><strong>Visit ID</strong></td><td>{{ guest_visit_id }}</td></tr>
+        <tr><td><strong>Guest</strong></td><td>{{ guest_name }} ({{ guest_email }})</td></tr>
+        <tr><td><strong>Host</strong></td><td>{{ host_name }} ({{ host_email }})</td></tr>
+        <tr><td><strong>Date</strong></td><td>{{ visit_date }}</td></tr>
+        <tr><td><strong>Reason</strong></td><td>{{ cancellation_reason }}</td></tr>
+    </table>
+    <p>Thank you,<br />Seat Management Team</p>
+</body>
+</html>

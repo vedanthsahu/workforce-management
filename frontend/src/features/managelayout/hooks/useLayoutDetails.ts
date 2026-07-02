@@ -1,32 +1,23 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Building, Floor, Layout, LayoutSeatStats, Site } from "../types/layout.types";
 import {
+  activateLayout,
   fetchBuildings,
   fetchFloors,
   fetchLayoutSeatStats,
   fetchSites,
   getLayoutsByFloor,
 } from "../services/layoutService";
+import { useSeatsStore } from "@/store/seatStore";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// useLayoutSeatStats — static mock, swap for real fetch when API is ready
+// useLayoutSeatStats
 // ─────────────────────────────────────────────────────────────────────────────
-
-function getMockStats(layoutId: string): LayoutSeatStats {
-  return {
-    layout_id:          layoutId,
-    total_seats:        48,
-    configured_seats:   42,
-    unconfigured_seats: 6,
-    non_bookable_seats: 4,
-    bookable_seats:     38,
-  };
-}
 
 interface UseLayoutSeatStatsResult {
-  stats: LayoutSeatStats | null;
+  stats:   LayoutSeatStats | null;
   loading: boolean;
-  error: boolean;
+  error:   boolean;
 }
 
 export function useLayoutSeatStats(layoutId: string | null): UseLayoutSeatStatsResult {
@@ -55,28 +46,83 @@ export function useLayoutSeatStats(layoutId: string | null): UseLayoutSeatStatsR
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// usePublishLayout
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface UsePublishLayoutReturn {
+  publishing:    boolean;
+  publishError:  boolean;
+  canPublish:    boolean;
+  allConfigured: boolean;
+  publishLayout: () => Promise<void>;
+}
+
+export function usePublishLayout(
+  layout:           Layout | null,
+  stats:            LayoutSeatStats | null,
+  onPublishSuccess: () => void,
+): UsePublishLayoutReturn {
+  const [publishing,   setPublishing]   = useState(false);
+  const [publishError, setPublishError] = useState(false);
+
+  const { isDirty, clearDirty } = useSeatsStore();
+
+  const allConfigured =
+    stats != null &&
+    stats.total_seats > 0 &&
+    stats.configured_seats === stats.total_seats;
+
+  const canPublish =
+    !!layout &&
+    allConfigured &&
+    (
+      layout.status === "DRAFT" ||
+      layout.status === "ARCHIVED" ||
+      (layout.is_published && isDirty)
+    );
+
+  const publishLayout = useCallback(async () => {
+    if (!layout?.layout_id) return;
+    setPublishing(true);
+    setPublishError(false);
+    try {
+      await activateLayout(layout.layout_id);
+      clearDirty();
+      onPublishSuccess();
+    } catch (err) {
+      console.error("[publishLayout]", err);
+      setPublishError(true);
+    } finally {
+      setPublishing(false);
+    }
+  }, [layout?.layout_id, onPublishSuccess, clearDirty]);
+
+  return { publishing, publishError, canPublish, allConfigured, publishLayout };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // useCascadeLocation
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface UseCascadeLocationOptions {
-  initialSiteId?: string;
+  initialSiteId?:     string;
   initialBuildingId?: string;
-  initialFloorId?: string;
+  initialFloorId?:    string;
 }
 
 interface UseCascadeLocationReturn {
-  sites: Site[];
-  buildings: Building[];
-  floors: Floor[];
-  selectedSiteId: string;
-  selectedBuildingId: string;
-  selectedFloorId: string;
-  setSelectedSiteId: (id: string) => void;
+  sites:                Site[];
+  buildings:            Building[];
+  floors:               Floor[];
+  selectedSiteId:       string;
+  selectedBuildingId:   string;
+  selectedFloorId:      string;
+  setSelectedSiteId:     (id: string) => void;
   setSelectedBuildingId: (id: string) => void;
-  setSelectedFloorId: (id: string) => void;
-  loadingSites: boolean;
+  setSelectedFloorId:    (id: string) => void;
+  loadingSites:     boolean;
   loadingBuildings: boolean;
-  loadingFloors: boolean;
+  loadingFloors:    boolean;
 }
 
 export function useCascadeLocation(
@@ -96,7 +142,21 @@ export function useCascadeLocation(
   const [loadingBuildings, setLoadingBuildings] = useState(false);
   const [loadingFloors,    setLoadingFloors]    = useState(false);
 
-  // load sites on mount
+  // Track the previous initialSiteId so we can detect navigation to a new context
+  // (e.g. returning from manage-layout after changing office/building on the admin page)
+  const prevInitialSiteId = useRef(initialSiteId);
+
+  useEffect(() => {
+    if (initialSiteId && initialSiteId !== prevInitialSiteId.current) {
+      prevInitialSiteId.current = initialSiteId;
+      setSelectedSiteId(initialSiteId);
+      // Pre-seed building + floor immediately so the cascade effects below pick them up
+      if (initialBuildingId) setSelectedBuildingId(initialBuildingId);
+      if (initialFloorId)    setSelectedFloorId(initialFloorId);
+    }
+  }, [initialSiteId, initialBuildingId, initialFloorId]);
+
+  // ── Load sites once on mount ───────────────────────────────────────────
   useEffect(() => {
     setLoadingSites(true);
     fetchSites()
@@ -110,44 +170,53 @@ export function useCascadeLocation(
       .finally(() => setLoadingSites(false));
   }, []);
 
-  // load buildings when site changes
+  // ── Load buildings whenever the selected site changes ─────────────────
   useEffect(() => {
     if (!selectedSiteId) return;
     setBuildings([]);
     setFloors([]);
-    if (selectedSiteId !== initialSiteId) {
-      setSelectedBuildingId("");
-      setSelectedFloorId("");
-    }
     setLoadingBuildings(true);
+
     fetchBuildings(selectedSiteId)
       .then((data) => {
         setBuildings(data);
-        if (!initialBuildingId && data.length > 0) {
-          setSelectedBuildingId(String(data[0].id));
-        } else if (initialBuildingId) {
+
+        const inList = (id: string) => data.some((b) => String(b.id) === id);
+
+        if (selectedBuildingId && inList(selectedBuildingId)) {
+          // Current selection is still valid for this site — keep it
+        } else if (initialBuildingId && inList(initialBuildingId)) {
           setSelectedBuildingId(initialBuildingId);
+        } else if (data.length > 0) {
+          setSelectedBuildingId(String(data[0].id));
+        } else {
+          setSelectedBuildingId("");
         }
       })
       .catch(console.error)
       .finally(() => setLoadingBuildings(false));
   }, [selectedSiteId]);
 
-  // load floors when building changes
+  // ── Load floors whenever the selected building changes ────────────────
   useEffect(() => {
     if (!selectedBuildingId) return;
     setFloors([]);
-    if (selectedBuildingId !== initialBuildingId) {
-      setSelectedFloorId("");
-    }
     setLoadingFloors(true);
+
     fetchFloors(selectedBuildingId)
       .then((data) => {
         setFloors(data);
-        if (!initialFloorId && data.length > 0) {
-          setSelectedFloorId(String(data[0].id));
-        } else if (initialFloorId) {
+
+        const inList = (id: string) => data.some((f) => String(f.id) === id);
+
+        if (selectedFloorId && inList(selectedFloorId)) {
+          // Current selection is still valid for this building — keep it
+        } else if (initialFloorId && inList(initialFloorId)) {
           setSelectedFloorId(initialFloorId);
+        } else if (data.length > 0) {
+          setSelectedFloorId(String(data[0].id));
+        } else {
+          setSelectedFloorId("");
         }
       })
       .catch(console.error)
@@ -179,11 +248,11 @@ interface UseFloorLayoutsOptions {
 }
 
 interface UseFloorLayoutsReturn {
-  layouts: Layout[];
-  selectedLayoutId: string;
-  selectedLayout: Layout | null;
+  layouts:             Layout[];
+  selectedLayoutId:    string;
+  selectedLayout:      Layout | null;
   setSelectedLayoutId: (id: string) => void;
-  loading: boolean;
+  loading:             boolean;
 }
 
 export function useFloorLayouts(
@@ -205,6 +274,7 @@ export function useFloorLayouts(
     setLoading(true);
     setLayouts([]);
     setSelectedLayoutId("");
+
     getLayoutsByFloor(floorId)
       .then((data) => {
         setLayouts(data);
@@ -229,46 +299,4 @@ export function useFloorLayouts(
     setSelectedLayoutId,
     loading,
   };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// useLayoutSvg
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface UseLayoutSvgReturn {
-  svgContent: string | null;
-  loading: boolean;
-  error: boolean;
-}
-
-export function useLayoutSvg(fileUrl: string | null): UseLayoutSvgReturn {
-  const [svgContent, setSvgContent] = useState<string | null>(null);
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState(false);
-
-  useEffect(() => {
-    if (!fileUrl || !fileUrl.startsWith("https://")) {
-      setSvgContent(null);
-      setError(false);
-      return;
-    }
-    setSvgContent(null);
-    setError(false);
-    setLoading(true);
-    fetch(fileUrl)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.text();
-      })
-      .then((text) => {
-        const fluid = text
-          .replace(/\bwidth="[^"]*"/, 'width="100%"')
-          .replace(/\bheight="[^"]*"/, 'height="100%"');
-        setSvgContent(fluid);
-      })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
-  }, [fileUrl]);
-
-  return { svgContent, loading, error };
 }

@@ -5,6 +5,7 @@ export type LayoutItem = {
   date: string;
   user: string;
 };
+
 export type Site = {
   site_id: string;
   site_name: string;
@@ -32,8 +33,12 @@ export type LayoutTableItem = {
   user: string;
   file: string;
 };
+
 export type LayoutApiResponse = {
   layout_id: string;
+  site_id: string;
+  building_id: string;
+  floor_id: string;
   layout_name: string;
   layout_file_url: string;
   version_no: number;
@@ -41,6 +46,7 @@ export type LayoutApiResponse = {
   status: string;
   created_at: string;
   uploaded_by_user_id: string;
+  uploaded_by_name: string | null;
 };
 
 export type LayoutSelection = {
