@@ -249,20 +249,22 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       if (!layoutId) {
         console.error("layout_id not returned from createLayout response", res);
         resetForm();
+        setIsSubmitting(false);
         return;
       }
- 
+
       const params = new URLSearchParams({
         layoutId: String(layoutId),
         floorId: String(formData.floor.id),
         buildingId: String(formData.building.id),
         siteId: String(formData.site.id),
       });
+      // Keep isSubmitting=true so the button stays disabled while navigation
+      // completes — the component will unmount once the new page loads.
       router.push(`/admin/layouts/manage-layout?${params.toString()}`);
     } catch (err: any) {
       console.error("[LayoutForm] Upload error:", err?.response?.data || err.message);
       setSubmitError(err?.response?.data?.message || "Failed to save layout. Please try again.");
-    } finally {
       setIsSubmitting(false);
     }
   };

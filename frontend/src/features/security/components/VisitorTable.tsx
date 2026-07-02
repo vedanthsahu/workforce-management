@@ -62,12 +62,18 @@ function RowMenu({
   const [open, setOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (!btnRef.current?.contains(target)) setOpen(false);
+      if (
+        !btnRef.current?.contains(target) &&
+        !menuRef.current?.contains(target)
+      ) {
+        setOpen(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -100,6 +106,7 @@ function RowMenu({
 
       {open && typeof document !== "undefined" && createPortal(
         <div
+          ref={menuRef}
           style={{ position: "absolute", top: menuPos.top, left: menuPos.left, zIndex: 9999, width: 176 }}
           className="bg-white border border-gray-100 rounded-xl shadow-xl py-1.5 text-sm overflow-hidden"
         >

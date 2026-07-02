@@ -95,9 +95,9 @@ export default function RoleDetailModal({ role, onClose }: Props) {
         </div>
 
         <div className="pt-2 border-t">
-          <p className="text-xs font-medium text-gray-500 mb-2">
+          {/* <p className="text-xs font-medium text-gray-500 mb-2">
             Users with this role ({role.userCount})
-          </p>
+          </p> */}
           <ul className="space-y-2">
             {role.users.slice(0, USERS_PREVIEW_COUNT).map((u) => (
               <li
