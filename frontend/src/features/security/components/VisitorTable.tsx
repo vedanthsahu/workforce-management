@@ -116,21 +116,21 @@ function RowMenu({
           >
             View details
           </button>
-          <button
+          {/* <button
             onClick={() => { setOpen(false); onModify(); }}
             disabled={!isCancellable}
             className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Edit visit
-          </button>
-          <div className="my-1 border-t border-gray-100" />
-          <button
+          </button> */}
+          {/* <div className="my-1 border-t border-gray-100" /> */}
+          {/* <button
             onClick={() => { setOpen(false); onCancel(); }}
             disabled={!isCancellable}
             className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-500 font-medium transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Cancel visit
-          </button>
+          </button> */}
         </div>,
         document.body
       )}
