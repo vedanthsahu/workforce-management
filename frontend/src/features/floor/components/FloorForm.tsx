@@ -46,7 +46,7 @@ export default function FloorForm() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc]">
 
-     
+
       {errorMessage && (
         <div className="mb-4 flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700 px-3.5 py-2.5 rounded-lg text-sm">
           <AlertCircle size={15} className="shrink-0" />
@@ -57,7 +57,7 @@ export default function FloorForm() {
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900 leading-tight">Add Floor</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Add Floor</h1>
           <p className="text-xs text-gray-500 mt-0.5">Create a new floor for the selected building.</p>
         </div>
 
@@ -72,11 +72,10 @@ export default function FloorForm() {
             onClick={saveFloor}
             onMouseEnter={() => router.prefetch("/admin/floors")}
             disabled={isDisabled || loading}
-            className={`h-9 px-4 text-sm font-medium rounded-lg text-white transition-all ${
-              !isDisabled && !loading
-                ? "bg-blue-600 hover:bg-blue-700 shadow-sm shadow-blue-200"
-                : "bg-gray-300 cursor-not-allowed"
-            }`}
+            className={`h-9 px-4 text-sm font-medium rounded-lg text-white transition-all ${!isDisabled && !loading
+              ? "bg-blue-600 hover:bg-blue-700 shadow-sm shadow-blue-200"
+              : "bg-gray-300 cursor-not-allowed"
+              }`}
           >
             {loading ? "Saving..." : "Save Floor"}
           </button>
@@ -101,7 +100,7 @@ export default function FloorForm() {
               onChange={(e) => handleChange("site_id", e.target.value)}
               className={selectClass}
             >
-              <option value="" disabled>Select Office</option>
+              <option value="" disabled hidden >Select Office</option>
               {sites.map((site) => (
                 <option key={site.site_id} value={site.site_id}>
                   {site.site_name}
@@ -122,7 +121,7 @@ export default function FloorForm() {
               onChange={(e) => handleChange("building_id", e.target.value)}
               className={selectClass}
             >
-              <option value="" disabled>Select Building</option>
+              <option value="" disabled hidden>Select Building</option>
               {buildings.map((building) => (
                 <option key={building.building_id} value={building.building_id}>
                   {building.building_name}

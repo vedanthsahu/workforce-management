@@ -8,8 +8,10 @@ import UsersPagination from "@/features/users/components/UsersPagination";
 import RoleFilterDropdown from "@/features/users/components/RoleFilterDropdown";
 import StatusFilterDropdown from "@/features/users/components/StatusFilterDropdown";
 import { useUsers } from "@/features/users/hooks/useUsers";
-import type { User } from "@/features/users/types/users.types";
+import type { RoleKey, User } from "@/features/users/types/users.types";
 import { TableSkeleton, TableBodySkeleton } from "@/components/ui/table-skeleton";
+import { normalizeRoleKey } from "@/features/users/utils/users.utils";
+import { useUsersFilterStore } from "@/store/useUsersFilterStore";
 
 const PIN_DURATION = 4000;
 
@@ -29,6 +31,13 @@ function UserManagementPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const pinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const roleFilterAppliedRef = useRef(false);
+
+  // Reset filter state on every mount so the page always starts clean.
+  // The URL-param effect below then re-applies the role filter if ?role= is present.
+  // Using getState() avoids adding resetFilters to deps and prevents cleanup-on-unmount
+  // races where the reset fires after the new filter has already been applied.
+  useEffect(() => { useUsersFilterStore.getState().reset(); }, []);
 
   const showBanner = (message: string) => {
     if (pinTimerRef.current) clearTimeout(pinTimerRef.current);
@@ -45,7 +54,7 @@ function UserManagementPage() {
     setPage(1);
     router.replace("/admin/users");
     setTimeout(() => setHighlightedId(null), PIN_DURATION);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   useEffect(() => {
@@ -56,8 +65,35 @@ function UserManagementPage() {
     setPage(1);
     router.replace("/admin/users");
     setTimeout(() => setHighlightedId(null), PIN_DURATION);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  // Preselect role filter when navigated from RoleDetailModal.
+  // NOTE: intentionally does NOT call router.replace() here — doing so while
+  // this component sits inside a Suspense boundary that reads useSearchParams()
+  // causes Next to re-suspend/remount the subtree, wiping selectedRoles right
+  // after it's set. We just guard with a ref so it only applies once.
+  // useEffect(() => {
+  //   const roleParam = searchParams.get("role");
+  //   if (!roleParam || roleFilterAppliedRef.current) return;
+  //   roleFilterAppliedRef.current = true;
+  //   setSelectedRoles([roleParam as RoleKey]);
+  //   setPage(1);
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [searchParams]);
+  useEffect(() => {
+    const roleParam = searchParams.get("role");
+    if (!roleParam || roleFilterAppliedRef.current || !summary?.roles?.length) return;
+
+    const match = summary.roles.find(
+      (r) => normalizeRoleKey(r.roleName) === normalizeRoleKey(roleParam)
+    );
+    if (!match) return; // wait for summary to load, or role truly doesn't exist
+
+    roleFilterAppliedRef.current = true;
+    setSelectedRoles([match.roleName]); // use the EXACT roleName the API returns
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, summary]);
 
   useEffect(() => () => { if (pinTimerRef.current) clearTimeout(pinTimerRef.current); }, []);
 
@@ -99,7 +135,7 @@ function UserManagementPage() {
           <h2 className="text-sm sm:text-base font-semibold text-gray-800 flex items-center gap-2">
             User Management
             <span className="text-[11px] font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
-              {summary?.totalUsers ?? 0}
+              {summary?.filteredUsers ?? 0}
             </span>
           </h2>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center w-full sm:w-auto">

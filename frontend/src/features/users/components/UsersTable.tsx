@@ -76,9 +76,8 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
                   </td>
                   <td className="py-3 pl-8 pr-4 w-[14%]">
                     <span
-                      className={`inline-flex items-center gap-1.5 text-sm font-medium ${
-                        user.status === "active" ? "text-emerald-600" : "text-gray-400"
-                      }`}
+                      className={`inline-flex items-center gap-1.5 text-sm font-medium ${user.status === "active" ? "text-emerald-600" : "text-gray-400"
+                        }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current" />
                       {user.status === "active" ? "Active" : "Inactive"}
@@ -88,8 +87,8 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
                     <div className="flex items-center gap-3">
                       {/* placeholder for now — not clickable */}
                       <span
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-md border text-gray-400 cursor-default select-none"
-                        title="View"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-400 text-gray-300 cursor-not-allowed select-none opacity-50"
+                        title="View (coming soon)"
                       >
                         <Eye size={14} />
                       </span>

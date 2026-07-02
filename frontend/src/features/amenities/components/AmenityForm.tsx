@@ -58,7 +58,7 @@ export default function AmenityForm() {
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900">Add Amenity</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Add Amenity</h1>
           <p className="text-[11px] text-gray-400 mt-1">
             Create a new amenity to make it available in your workspace.
           </p>
@@ -76,11 +76,10 @@ export default function AmenityForm() {
           <button
             onClick={handleSave}
             disabled={!isFormValid || loading}
-            className={`h-9 px-4 text-sm font-medium rounded-lg text-white transition-all ${
-              isFormValid && !loading
+            className={`h-9 px-4 text-sm font-medium rounded-lg text-white transition-all ${isFormValid && !loading
                 ? "bg-blue-600 hover:bg-blue-700 shadow-sm shadow-blue-200"
                 : "bg-gray-300 cursor-not-allowed"
-            }`}
+              }`}
           >
             {loading ? "Saving..." : "Save Amenity"}
           </button>

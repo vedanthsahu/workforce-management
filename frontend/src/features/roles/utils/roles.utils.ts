@@ -8,7 +8,7 @@ export function mapApiRoleToRole(item: ApiRole): Role {
     description: item.roleDescription,
     userCount: item.userCount,
     permissionCount: item.permissionCount,
-    permissions: item.permissions.map((p) => ({
+    permissions: (item.permissions ?? []).map((p) => ({
       id: p.id,
       permissionKey: p.permissionKey,
       description: p.description,

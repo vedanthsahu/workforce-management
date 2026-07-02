@@ -44,3 +44,8 @@ export function formatDate(iso: string): string {
     year: "numeric",
   });
 }
+
+export function normalizeRoleKey(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.trim().toUpperCase().replace(/[\s_-]+/g, "_");
+}

@@ -74,7 +74,7 @@ export default function AddBuildingForm() {
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900 leading-tight">Add Building</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Add Building</h1>
           <p className="text-xs text-gray-500 mt-0.5">Fill in the details to create a new building.</p>
         </div>
 
@@ -89,11 +89,10 @@ export default function AddBuildingForm() {
             onClick={handleSave}
             onMouseEnter={() => router.prefetch("/admin/building")}
             disabled={!isFormValid || loading}
-            className={`h-9 px-4 text-sm font-medium rounded-lg text-white transition-all ${
-              isFormValid && !loading
-                ? "bg-blue-600 hover:bg-blue-700 shadow-sm shadow-blue-200"
-                : "bg-gray-300 cursor-not-allowed"
-            }`}
+            className={`h-9 px-4 text-sm font-medium rounded-lg text-white transition-all ${isFormValid && !loading
+              ? "bg-blue-600 hover:bg-blue-700 shadow-sm shadow-blue-200"
+              : "bg-gray-300 cursor-not-allowed"
+              }`}
           >
             {loading ? "Saving..." : "Save Building"}
           </button>
@@ -120,7 +119,7 @@ export default function AddBuildingForm() {
               }}
               className={selectClass}
             >
-              <option value="" disabled>Select Office</option>
+              <option value="" disabled hidden>Select Office</option>
               {sites.map((site) => (
                 <option key={site.site_id} value={site.site_id}>{site.site_name}</option>
               ))}

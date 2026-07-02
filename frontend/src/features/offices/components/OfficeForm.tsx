@@ -81,7 +81,7 @@ export default function OfficeForm() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 bg-[#f7f8fa]">
 
-     
+
       {/* ERROR BANNER */}
       {errorMessage && (
         <div className="mb-4 flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700 px-3.5 py-2.5 rounded-lg text-sm">
@@ -93,7 +93,7 @@ export default function OfficeForm() {
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900 leading-tight">Add Office</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Add Office</h1>
           <p className="text-xs text-gray-500 mt-0.5">
             Fill in the details to create a new office location.
           </p>
