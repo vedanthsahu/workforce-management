@@ -1,26 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import { LayoutFormState } from "../types/layout.types";
 
-type SelectOption = {
-  id: number;
-  name: string;
-};
+interface UseLayoutFormOptions {
+  initialSiteId?: number | null;
+  initialBuildingId?: number | null;
+  initialFloorId?: number | null;
+}
 
-type LayoutFormState = {
-  site: SelectOption | null;
-  building: SelectOption | null;
-  floor: SelectOption | null;
-  layoutName: string;
-  file: File | null;
-};
+export const useLayoutForm = (options: UseLayoutFormOptions = {}) => {
+  const { initialSiteId, initialBuildingId, initialFloorId } = options;
 
-export const useLayoutForm = () => {
   const [formData, setFormData] = useState<LayoutFormState>({
-    site: null,
-    building: null,
-    floor: null,
+    // Pre-seed IDs from URL params; names are resolved inside LayoutForm on mount
+    site: initialSiteId ? { id: initialSiteId, name: "", code: "" } : null,
+    building: initialBuildingId ? { id: initialBuildingId, name: "", code: "" } : null,
+    floor: initialFloorId ? { id: initialFloorId, name: "", code: "" } : null,
     layoutName: "",
+    description: "",
     file: null,
   });
 

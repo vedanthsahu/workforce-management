@@ -71,12 +71,48 @@ class FloorLayoutResponse(BaseModel):
     updated_at: datetime
 
     
+# class LayoutSeatResponse(BaseModel):
+
+#     layout_seat_mapping_id: str
+
+#     layout_id: str
+
+#     site_id: str
+#     building_id: str
+#     floor_id: str
+
+#     seat_id: str | None = None
+
+#     svg_element_id: str
+
+#     seat_code: str
+
+#     seat_name: str | None = None
+
+#     seat_type: str
+
+#     status: str
+
+#     is_bookable: bool
+
+#     is_reserved: bool
+
+#     is_configured: bool
+
+#     configuration_status: str
+
+#     notes: str | None = None
+
+#     amenity_ids: list[int]
+
+#     created_at: datetime
+
+#     updated_at: datetime
+
+
 class LayoutSeatResponse(BaseModel):
-
     layout_seat_mapping_id: str
-
     layout_id: str
-
     site_id: str
     building_id: str
     floor_id: str
@@ -86,27 +122,20 @@ class LayoutSeatResponse(BaseModel):
     svg_element_id: str
 
     seat_code: str
-
     seat_name: str | None = None
 
-    seat_type: str
-
-    status: str
+    seat_type: str | None = None        # ← was: str
+    status: str | None = None           # ← was: str (can also be NULL on new seats)
+    configuration_status: str | None = None  # ← was: str
 
     is_bookable: bool
-
     is_reserved: bool
-
     is_configured: bool
 
-    configuration_status: str
-
     notes: str | None = None
-
-    amenity_ids: list[int]
+    amenity_ids: list[int] = []         # ← guard against NULL list too
 
     created_at: datetime
-
     updated_at: datetime
 
 

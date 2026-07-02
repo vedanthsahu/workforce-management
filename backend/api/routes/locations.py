@@ -19,7 +19,7 @@ from psycopg2.extensions import connection as PGConnection
 from backend.api.deps import get_current_user
 from backend.db.connection import get_db
 
-from backend.schemas.booking import AvailableSeatResponse
+from backend.schemas.booking import AvailableSeatListResponse
 
 from backend.schemas.location import (
     BuildingResponse,
@@ -150,31 +150,27 @@ def update_site_route(
 
 @router.get("/buildings", response_model=list[BuildingResponse])
 def buildings(
-    site_id: Annotated[int, Query(gt=0)],
-
     current_user: Annotated[
         dict[str, Any],
         Depends(get_current_user),
     ],
-
     conn: Annotated[
         PGConnection,
         Depends(get_db),
     ],
-
+    site_id: Annotated[int | None, Query(gt=0)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int | None, Query(ge=1, le=200)] = None,
     search: Annotated[str | None, Query()] = None,
     status_filter: Annotated[str | None, Query(alias="status")] = None,
 ) -> list[BuildingResponse]:
-
     return get_buildings_by_site(
         conn,
         tenant_id=str(current_user["tenant_id"]),
-        site_id=str(site_id),
+        site_id=site_id,
         page=page,
         limit=limit,
-        search=search,
+        search=search,  
         status_filter=status_filter,
     )
 
@@ -360,7 +356,7 @@ def update_seat_configuration_route(
 
 @router.get(
     "/floors/{floor_id}/seats",
-    response_model=list[AvailableSeatResponse],
+    response_model=AvailableSeatListResponse,
 )
 def available_seats(
     floor_id: Annotated[int, Path(gt=0)],
@@ -386,8 +382,21 @@ def available_seats(
         list[int] | None,
         Query(),
     ] = None,
+    modify_booking_id: Annotated[
+    str | None,
+    Query(alias="modifyBookingId"),
+    ] = None,
+    is_guest_booking: Annotated[
+        bool,
+        Query(),
+    ] = False,
 
-) -> list[AvailableSeatResponse]:
+    booked_for_guest_id: Annotated[
+        int | None,
+        Query(),
+    ] = None,
+
+) -> AvailableSeatListResponse:
 
     if start_date > end_date:
 
@@ -409,22 +418,36 @@ def available_seats(
             },
         )
 
-    effective_user_id = (
-        booked_for_user_id
-        if booked_for_user_id is not None
-        else current_user["user_id"]
-    )
+    effective_user_id = None
+
+    if not is_guest_booking:
+        effective_user_id = (
+            booked_for_user_id
+            if booked_for_user_id is not None
+            else current_user["user_id"]
+        )
 
     return get_available_seats_by_range(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        floor_id=str(floor_id),
-        start_date=start_date,
-        end_date=end_date,
-        current_user=current_user,
-        booked_for_user_id=str(effective_user_id),
-        amenity_ids=amenity_ids,
-    )
+            conn,
+            tenant_id=str(current_user["tenant_id"]),
+            floor_id=str(floor_id),
+            start_date=start_date,
+            end_date=end_date,
+            current_user=current_user,
+            booked_for_user_id=(
+                str(effective_user_id)
+                if effective_user_id is not None
+                else None
+            ),
+            booked_for_guest_id=(
+                str(booked_for_guest_id)
+                if booked_for_guest_id is not None
+                else None
+            ),
+            is_guest_booking=is_guest_booking,
+            amenity_ids=amenity_ids,
+            exclude_booking_id=modify_booking_id,
+        )
 
 
 @router.patch(

@@ -41,7 +41,7 @@ export type AppRole =
   | "MANAGER"
   | "EMPLOYEE"
   | "TALENT"
-  | "RECEPTIONIST"
+  | "SECURITY"
   | "FACILITIES"
   | string;
 
@@ -51,8 +51,7 @@ export function usePermissions() {
   const { user } = useAuthContext();
 
   // user.permissions comes from /auth/me as string[].
-  // We cast here because the shared User type may not include it yet.
-  const permissions: string[] = (user as any)?.permissions ?? [];
+  const permissions: string[] = user?.permissions ?? [];
   const role: AppRole         = user?.role ?? "EMPLOYEE";
 
   /**

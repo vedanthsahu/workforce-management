@@ -19,10 +19,6 @@ const AuthContext = createContext<AuthContextType | null>(null);
 // Routes where the /me fetch is skipped entirely (truly public pages)
 const SKIP_AUTH_ROUTES = ["/login", "/auth/callback"];
 
-// Routes where the redirect guard does NOT fire
-// "/" is included because the root page handles its own redirect via useAuthContext
-const PUBLIC_ROUTES = ["/login", "/auth/callback", "/"];
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router   = useRouter();
   const pathname = usePathname();
@@ -91,36 +87,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("auth:refresh-end",   onRefreshEnd as EventListener);
     };
   }, []);
-
-  // ── Redirect guard ────────────────────────────────────────────────────────
-  useEffect(() => {
-    // Wait until /me has fully resolved
-    if (isLoading || isRefreshing || user === undefined) return;
-
-    // Skip guard on public routes — they handle their own navigation
-    if (PUBLIC_ROUTES.includes(pathname)) return;
-
-    const isAdmin = user?.role === "TENANT_ADMIN";
-    const home    = isAdmin ? "/admin" : "/dashboard";
-
-    // Not logged in on a protected route → login
-    if (user === null) {
-      router.replace("/login");
-      return;
-    }
-
-    // Admin accidentally on /dashboard/* → correct to /admin
-    if (isAdmin && pathname.startsWith("/dashboard")) {
-      router.replace("/admin");
-      return;
-    }
-
-    // Non-admin accidentally on /admin/* → correct to /dashboard
-    if (!isAdmin && pathname.startsWith("/admin")) {
-      router.replace("/dashboard");
-      return;
-    }
-  }, [isLoading, isRefreshing, user, pathname, router]);
 
   // ── Logout ────────────────────────────────────────────────────────────────
   const logout = useCallback(async () => {

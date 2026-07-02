@@ -53,27 +53,31 @@ class AdminDashboardServiceTests(unittest.TestCase):
             "invalid_hierarchy_combination",
         )
 
-    def test_booking_list_maps_paginated_rows(self) -> None:
+    def test_activity_list_maps_rows(self) -> None:
         row = {
+            "activity_id": "employee-booking-1001",
+            "activity_type": "EMPLOYEE_BOOKING",
+            "has_booking": True,
+            "activity_status": "CONFIRMED",
+            "activity_date": date(2026, 5, 22),
             "booking_id": "1001",
-            "booking_date": date(2026, 5, 22),
-            "booking_status": "CONFIRMED",
-            "source_channel": "WEB",
+            "guest_visit_id": None,
             "check_in_at": None,
             "checked_out_at": None,
             "created_at": datetime(2026, 5, 22, 8, 30),
-            "user_id": "42",
-            "user_email": "employee@example.com",
-            "user_full_name": "Employee One",
-            "user_role_name": "EMPLOYEE",
-            "user_department": "Engineering",
-            "user_job_title": "Developer",
-            "booked_for_user_id": "42",
-            "booked_for_user_email": "employee@example.com",
-            "booked_for_user_full_name": "Employee One",
-            "booked_for_user_role_name": "EMPLOYEE",
-            "booked_for_user_department": "Engineering",
-            "booked_for_user_job_title": "Developer",
+            "booked_by_id": "42",
+            "booked_by_email": "employee@example.com",
+            "booked_by_name": "Employee One",
+            "booked_by_role": "EMPLOYEE",
+            "booked_by_department": "Engineering",
+            "booked_by_job_title": "Developer",
+            "booked_for_id": "42",
+            "booked_for_email": "employee@example.com",
+            "booked_for_name": "Employee One",
+            "booked_for_role": "EMPLOYEE",
+            "booked_for_department": "Engineering",
+            "booked_for_job_title": "Developer",
+            "booked_for_guest_type": None,
             "seat_id": "501",
             "seat_code": "A-101",
             "seat_type": "STANDARD",
@@ -91,23 +95,22 @@ class AdminDashboardServiceTests(unittest.TestCase):
 
         with patch.object(service, "_validate_hierarchy_filters") as validate, patch.object(
             service,
-            "fetch_admin_booking_list",
-            return_value={"items": [row], "total": 51, "page": 2, "limit": 50},
+            "fetch_admin_activity_list",
+            return_value=[row],
         ) as fetch:
-            response = service.get_booking_list(
+            response = service.get_admin_activity_list(
                 object(),
                 tenant_id="1",
                 selected_date=date(2026, 5, 22),
-                page=2,
-                limit=50,
             )
 
         validate.assert_called_once()
         fetch.assert_called_once()
         payload = response.model_dump(by_alias=True)
-        self.assertEqual(payload["totalPages"], 2)
+        self.assertEqual(payload["items"][0]["activityId"], "employee-booking-1001")
         self.assertEqual(payload["items"][0]["bookingId"], "1001")
-        self.assertEqual(payload["items"][0]["bookedForUser"]["userId"], "42")
+        self.assertEqual(payload["items"][0]["bookedFor"]["entityType"], "EMPLOYEE")
+        self.assertEqual(payload["items"][0]["bookedFor"]["id"], "42")
 
 
 if __name__ == "__main__":

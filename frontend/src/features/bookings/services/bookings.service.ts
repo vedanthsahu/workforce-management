@@ -1,6 +1,7 @@
 import { axiosInstance } from "@/lib/http/axios";
 import { Booking, BookingSummary, RawBooking } from "../types/bookings.types";
 import type { ApiTeamGroup } from "@/features/dashboard/types/dashboard.types";
+import type { User } from "@/features/auth/types/auth.types";
 import { fetchPreferences } from "@/features/book/services/Bookingform.service";
 
 const BASE = "/bookings";
@@ -48,14 +49,31 @@ function extractPreferenceKeys(raw: RawBooking): string[] {
 
 // ── Mapper ────────────────────────────────────────────────────────────────────
 
-function mapRawBooking(raw: RawBooking): Booking {
-  const bookedDate = new Date(raw.created_at);
+function deriveBookingType(raw: RawBooking, currentUserId: string): Booking["bookingType"] {
+  if (raw.activity_source === "GUEST_VISIT") {
+    return (raw.booking_id && raw.seat_id) ? "guest" : "visit";
+  }
+  if (raw.booking_type === "GUEST") return "guest";
+  const bookedForId = raw.booked_for_user_id ?? raw.user_id;
+  const bookedById  = raw.booked_by_user_id;
+  if (!bookedById || bookedById === bookedForId) {
+    if (bookedForId === currentUserId) return "self";
+    return "employee";
+  }
+  if (bookedForId === currentUserId) return "on_behalf";
+  return "employee";
+}
+
+function mapRawBooking(raw: RawBooking, currentUserId: string): Booking {
+  const createdAt = raw.created_at ?? raw.booking_date;
+  const bookedDate = new Date(createdAt);
   const bookedOn   = bookedDate.toLocaleDateString("en-US", {
     month: "short",
     day:   "numeric",
   });
 
   const status = normaliseStatus(raw.booking_status);
+  const bookingType = deriveBookingType(raw, currentUserId);
 
   const tagList: Booking["tags"] = [];
 
@@ -71,22 +89,21 @@ function mapRawBooking(raw: RawBooking): Booking {
     else                               tagList.push({ label: t,                  variant: "zone"    });
   }
 
-  // ── Date range ──────────────────────────────────────────────────────────
-  // Prefer explicit from_date/to_date if the API returns them.
-  // Fall back to booking_date for both (single-day booking).
   const fromDate = raw.from_date ?? raw.booking_date;
   const toDate   = raw.to_date   ?? raw.booking_date;
 
+  const id = raw.booking_id ?? raw.guest_visit_id ?? "";
+  const isVisitOnly = raw.activity_source === "GUEST_VISIT";
+
   return {
-    id:               raw.booking_id,
+    id,
     location:         raw.site_name      ?? "Office",
     building:         raw.building_name  ?? "",
     floor:            raw.floor_name     ?? (raw.floor_id ? `Floor ${raw.floor_id}` : ""),
-    seat:             raw.seat_code      ?? raw.seat_id,
-    // Keep `date` for backward compat — always equals fromDate
+    seat:             raw.seat_code      ?? raw.seat_id ?? (isVisitOnly ? "—" : ""),
     date:             raw.booking_date,
-    fromDate,                            // ← NEW
-    toDate,                              // ← NEW
+    fromDate,
+    toDate,
     startTime:        raw.start_time     ?? "9:00 AM",
     endTime:          raw.end_time       ?? "6:00 PM",
     isFullDay:        raw.is_full_day    ?? false,
@@ -95,67 +112,117 @@ function mapRawBooking(raw: RawBooking): Booking {
     tags:             tagList,
     isRecurring:      raw.is_recurring      ?? false,
     recurringPattern: raw.recurring_pattern,
-    preferences:      extractPreferenceKeys(raw), // ← NEW
-    floorId:  raw.floor_id  ? String(raw.floor_id)  : undefined,
-seatId:   raw.seat_id   ? String(raw.seat_id)   : undefined,
+    preferences:      extractPreferenceKeys(raw),
+    siteId:           raw.site_id     ? String(raw.site_id)     : undefined,
+    buildingId:       raw.building_id ? String(raw.building_id) : undefined,
+    floorId:          raw.floor_id    ? String(raw.floor_id)    : undefined,
+    seatId:           raw.seat_id     ? String(raw.seat_id)     : undefined,
+    bookingType,
+    bookedByUserId:   raw.booked_by_user_id,
+    bookedByName:     raw.booked_by_name ?? undefined,
+    bookedByRole:     raw.booked_by_email ?? undefined,
+    bookedForUserId:  raw.booked_for_user_id ?? undefined,
+    bookedForName:    raw.booked_for_name ?? raw.guest_name ?? undefined,
+    bookedForGuestId: raw.booked_for_guest_id ?? undefined,
+    guestName:        raw.guest_name ?? undefined,
+    guestEmail:       raw.guest_email ?? undefined,
+    guestType:        raw.guest_type ?? undefined,
+    purposeOfVisit:   raw.purpose_of_visit ?? undefined,
+    hostName:         raw.host_name ?? undefined,
+    hostUserId:       raw.host_user_id ? String(raw.host_user_id) : undefined,
+    guestVisitId:     raw.guest_visit_id ?? undefined,
+    activitySource:   (raw.activity_source as Booking["activitySource"]) ?? "BOOKING",
+    createdAt:        raw.created_at ?? raw.booking_date,
   };
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────
 
-export async function fetchCurrentBookings(): Promise<Booking[]> {
+export async function fetchCurrentBookings(currentUserId: string): Promise<Booking[]> {
   const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/me/current`);
-  return data.map(mapRawBooking);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
 }
 
-export async function fetchFutureBookings(): Promise<Booking[]> {
+export async function fetchFutureBookings(currentUserId: string): Promise<Booking[]> {
   const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/me/future`);
-  return data.map(mapRawBooking);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
 }
 
-export async function fetchPastBookings(): Promise<Booking[]> {
+export async function fetchPastBookings(currentUserId: string): Promise<Booking[]> {
   const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/me/past`);
-  return data.map(mapRawBooking);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
 }
 
-export async function fetchCancelledBookings(): Promise<Booking[]> {
+export async function fetchCancelledBookings(currentUserId: string): Promise<Booking[]> {
   const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/me/cancelled`);
-  return data.map(mapRawBooking);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
+}
+
+// ── Delegated bookings (booked BY current user for others) ───────────────────
+
+export async function fetchDelegatedCurrentBookings(currentUserId: string): Promise<Booking[]> {
+  const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/delegated/current`);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
+}
+
+export async function fetchDelegatedFutureBookings(currentUserId: string): Promise<Booking[]> {
+  const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/delegated/future`);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
+}
+
+export async function fetchDelegatedPastBookings(currentUserId: string): Promise<Booking[]> {
+  const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/delegated/past`);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
 }
 
 export async function cancelBooking(
   bookingId: string,
   cancellationReason?: string,
 ): Promise<void> {
-  try {
-    await axiosInstance.post(`${BASE}/${bookingId}/cancel`, {
-      cancellation_reason: cancellationReason?.trim() || null,
-    });
-  } catch (err: any) {
-    console.error("cancelBooking failed:", JSON.stringify(err?.response?.data, null, 2));
-    throw err;
-  }
+  await axiosInstance.post(`${BASE}/${bookingId}/cancel`, {
+    cancellation_reason: cancellationReason?.trim() || null,
+  });
 }
 
-export interface ModifyBookingPayload {
-  site_id:      number;
-  building_id:  number;
-  floor_id:     number;
-  seat_id:      number;
-  booking_date: string;
-}
-
-export async function modifyBooking(
+export async function cancelGuestBooking(
   bookingId: string,
-  payload: ModifyBookingPayload,
+  cancellationReason?: string,
 ): Promise<void> {
-  await axiosInstance.post(`${BASE}/${bookingId}/modify`, payload);
+  await axiosInstance.post(`/guest-bookings/${bookingId}/cancel`, {
+    cancellation_reason: cancellationReason?.trim() || null,
+  });
+}
+
+// ── Delegated cancelled bookings ─────────────────────────────────────────────
+
+export async function fetchDelegatedCancelledBookings(currentUserId: string): Promise<Booking[]> {
+  const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/delegated/cancelled`);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
+}
+
+export type GuestWorkflowAction =
+  | "MODIFY_VISIT_ONLY"
+  | "MODIFY_VISIT_AND_BOOKING"
+  | "ADD_BOOKING"
+  | "CANCEL_BOOKING"
+  | "CANCEL_VISIT";
+
+export async function guestVisitWorkflow(
+  guestVisitId: string,
+  action: GuestWorkflowAction,
+  payload?: Record<string, unknown>,
+): Promise<unknown> {
+  const { data } = await axiosInstance.post(
+    `/guest-visits/${guestVisitId}/workflow`,
+    { action, ...payload },
+  );
+  return data;
 }
 
 // ── Team / user ───────────────────────────────────────────────────────────────
 
-export async function fetchCurrentUser() {
-  const { data } = await axiosInstance.get("/auth/me");
+export async function fetchCurrentUser(): Promise<User> {
+  const { data } = await axiosInstance.get<User>("/auth/me");
   return data;
 }
 
@@ -166,55 +233,6 @@ export async function fetchTeamGroups(): Promise<ApiTeamGroup[]> {
 
 // ── Summary aggregation ───────────────────────────────────────────────────────
 
-// export function deriveBookingSummary(
-//   current:       Booking[],
-//   future:        Booking[],
-//   past:          Booking[],
-//   teamGroups:    ApiTeamGroup[] = [],
-//   currentUserId: string        = "",
-// ): BookingSummary {
-//   const upcoming = [...current, ...future]
-//     .filter((b) => b.status !== "cancelled")
-//     .sort(
-//       (a, b) =>
-//         new Date(a.date + "T00:00:00").getTime() -
-//         new Date(b.date + "T00:00:00").getTime(),
-//     );
-
-//   const nextBooking = upcoming[0];
-
-//   const nextBookingDate = nextBooking
-//     ? (() => {
-//         const d     = new Date(nextBooking.date + "T00:00:00");
-//         const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-//         return `Next: ${label} · ${nextBooking.seat}`;
-//       })()
-//     : null;
-
-//   const now                = new Date();
-//   const completedThisMonth = past.filter((b) => {
-//     const d = new Date(b.date);
-//     return (
-//       d.getMonth()    === now.getMonth() &&
-//       d.getFullYear() === now.getFullYear()
-//     );
-//   }).length;
-
-//   const teamInOffice = teamGroups.reduce((acc, g) => {
-//     const selfMember      = g.members.find((m) => m.user_id === currentUserId);
-//     const selfBookedToday = selfMember?.seat != null;
-//     return acc + g.booked_today_count - (selfBookedToday ? 1 : 0);
-//   }, 0);
-
-//   return {
-//     upcomingCount:      upcoming.length,
-//     nextBookingDate,
-//     completedThisMonth,
-//     daysInOffice:       completedThisMonth,
-//     teamInOffice,
-//   };
-// }
-
 export function deriveBookingSummary(
   current:       Booking[],   // today's bookings from /bookings/me/current
   future:        Booking[],   // future bookings  from /bookings/me/future
@@ -222,9 +240,8 @@ export function deriveBookingSummary(
   teamGroups:    ApiTeamGroup[] = [],
   currentUserId: string        = "",
 ): BookingSummary {
- 
   const todayIso = new Date().toISOString().slice(0, 10);
- 
+
   // All non-cancelled upcoming (current + future), sorted ascending by date
   const upcoming = [...current, ...future]
     .filter((b) => b.status !== "cancelled")
@@ -233,26 +250,19 @@ export function deriveBookingSummary(
         new Date(a.date + "T00:00:00").getTime() -
         new Date(b.date + "T00:00:00").getTime(),
     );
- 
+
   // ── Next booking label ────────────────────────────────────────────────────
-  // Priority: today first, then earliest future date.
-  const todayBooking  = upcoming.find((b) => b.date === todayIso);
-  const futureBooking = upcoming.find((b) => b.date >  todayIso);
- 
-  const nextBookingDate = (() => {
-    // if (todayBooking) {
-    //   // There is a booking today — show it as "Today · Seat X"
-    //   return `Today · ${todayBooking.seat}`;
-    // }
-    if (futureBooking) {
-      // No booking today but one coming up — show formatted date
-      const d     = new Date(futureBooking.date + "T00:00:00");
-      const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      return `Next: ${label} · ${futureBooking.seat}`;
-    }
-    return null;
-  })();
- 
+  // Earliest upcoming date strictly after today.
+  const futureBooking = upcoming.find((b) => b.date > todayIso);
+
+  const nextBookingDate = futureBooking
+    ? (() => {
+        const d     = new Date(futureBooking.date + "T00:00:00");
+        const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        return `Next: ${label} · ${futureBooking.seat}`;
+      })()
+    : null;
+
   // ── Completed this month ──────────────────────────────────────────────────
   const now                = new Date();
   const completedThisMonth = past.filter((b) => {
@@ -262,14 +272,14 @@ export function deriveBookingSummary(
       d.getFullYear() === now.getFullYear()
     );
   }).length;
- 
+
   // ── Team in office ────────────────────────────────────────────────────────
   const teamInOffice = teamGroups.reduce((acc, g) => {
     const selfMember      = g.members.find((m) => m.user_id === currentUserId);
     const selfBookedToday = selfMember?.seat != null;
     return acc + g.booked_today_count - (selfBookedToday ? 1 : 0);
   }, 0);
- 
+
   return {
     upcomingCount:      upcoming.length,
     nextBookingDate,
@@ -278,83 +288,13 @@ export function deriveBookingSummary(
     teamInOffice,
   };
 }
-// bookings.service.ts  — add this new export
 
-// export async function fetchSeatAmenities(
-//   floorId: string,
-//   seatId: string,
-//   bookingDate: string,
-// ): Promise<string[]> {
-//   try {
-//     const { data } = await axiosInstance.get<any[]>(
-//       `/floors/${floorId}/seats`,
-//       {
-//         params: {
-//           start_date: bookingDate,
-//           end_date:   bookingDate,
-//         },
-//       },
-//     );
-//     const match = data.find(
-//       (s) => String(s.seat_id) === String(seatId),
-//     );
-//     if (!match) return [];
-//     // matched_amenities contains names like "Window View"; we need the keys.
-//     // If your API returns amenity keys directly, use those. Otherwise derive
-//     // keys from names by lowercasing + removing spaces — adjust to match your
-//     // Preference.key values (e.g. "window", "dualMonitor", "cafeteria").
-//     const names: string[] = match.matched_amenities ?? [];
-//     return names.map((n: string) =>
-//       n.toLowerCase().replace(/\s+/g, ""),  // "Window View" → "windowview"
-//     );
-//   } catch {
-//     return [];
-//   }
-// }
+// ── Seat amenities ────────────────────────────────────────────────────────────
 
-// export async function fetchSeatAmenities(
-//   floorId: string,
-//   seatId: string,
-//   bookingDate: string,
-// ): Promise<string[]> {
-
-//   // ── Add the mapping HERE, at the top of the function ──
-//   const AMENITY_NAME_TO_KEY: Record<string, string> = {
-//     "window view":   "window",
-//     "window":        "window",
-//     "cafeteria":     "cafeteria",
-//     "dual monitor":  "dualMonitor",
-//     "dual monitors": "dualMonitor",
-//     "elevator":      "elevator",
-//   };
-
-//   try {
-//     const { data } = await axiosInstance.get<any[]>(
-//       `/floors/${floorId}/seats`,
-//       {
-//         params: {
-//           start_date: bookingDate,
-//           end_date:   bookingDate,
-//         },
-//       },
-//     );
-// console.log("fetchSeatAmenities raw data:", data);  // ← ADD THIS
-//     const match = data.find(
-//       (s) => String(s.seat_id) === String(seatId),
-//     );
-//     if (!match) return [];
-
-//     const names: string[] = match.matched_amenities ?? [];
-
-//     // ── Use the mapping HERE instead of the raw .map() ──
-//     return names
-//       .map((n: string) => AMENITY_NAME_TO_KEY[n.toLowerCase()] ?? null)
-//       .filter(Boolean) as string[];
-
-//   } catch {
-//     return [];
-//   }
-// }
+interface SeatAmenityMatch {
+  seat_id: string | number;
+  matched_amenities?: string[];
+}
 
 export async function fetchSeatAmenities(
   floorId: string,
@@ -362,14 +302,12 @@ export async function fetchSeatAmenities(
   bookingDate: string,
 ): Promise<string[]> {
   try {
-    // Step 1: fetch all preferences to get their ids AND keys
+    // Step 1: fetch all preferences to get their ids and keys
     const allPrefs = await fetchPreferences();
-    // e.g. [{id: 1, key: "window", name: "Window View"}, ...]
-
     const allAmenityIds = allPrefs.map((p) => p.id);
 
-    // Step 2: fetch seats passing ALL amenity ids so backend populates matched_amenities
-    const { data } = await axiosInstance.get<any[]>(
+    // Step 2: fetch seats passing all amenity ids so the backend populates matched_amenities
+    const { data: resp } = await axiosInstance.get<any>(
       `/floors/${floorId}/seats`,
       {
         params: {
@@ -392,24 +330,21 @@ export async function fetchSeatAmenities(
     );
 
     // Step 3: find our specific seat
-    const match = data.find((s) => String(s.seat_id) === String(seatId));
+    const items: SeatAmenityMatch[] = Array.isArray(resp) ? resp : resp.items ?? [];
+    const match = items.find((s) => String(s.seat_id) === String(seatId));
     if (!match) return [];
 
-    console.log("matched seat amenities:", match.matched_amenities);
-
     // Step 4: map display names → keys using the preferences list (no hardcoding)
-    const names: string[] = match.matched_amenities ?? [];
+    const names = match.matched_amenities ?? [];
     return names
-      .map((name: string) => {
+      .map((name) => {
         const pref = allPrefs.find(
           (p) => p.name.toLowerCase() === name.toLowerCase()
         );
         return pref?.key ?? null;
       })
-      .filter(Boolean) as string[];
-
+      .filter((key): key is string => key !== null);
   } catch {
-    // console.error("fetchSeatAmenities failed:", e);
     return [];
   }
 }

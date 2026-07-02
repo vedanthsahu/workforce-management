@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NoReturn
 
 import psycopg2
 from fastapi import HTTPException, status
@@ -281,16 +281,17 @@ def update_layout_seat_configuration(
         amenity_ids = payload.amenity_ids or []
 
         updated_mapping = update_layout_seat_mapping_configuration(
-            conn,
-            tenant_id=tenant_id,
-            layout_seat_mapping_id=layout_seat_mapping_id,
-            seat_name=payload.seat_name,
-            seat_type=payload.seat_type,
-            status=payload.status,
-            is_bookable=payload.is_bookable,
-            is_reserved=payload.is_reserved,
-            updated_by=str(current_user["user_id"]),
-        )
+                conn,
+                tenant_id=tenant_id,
+                layout_seat_mapping_id=layout_seat_mapping_id,
+                seat_name=payload.seat_name,
+                seat_type=payload.seat_type,
+                status=payload.status,
+                is_bookable=payload.is_bookable,
+                is_reserved=payload.is_reserved,
+                amenity_ids=amenity_ids,
+                updated_by=str(current_user["user_id"]),
+            )
 
         seat = upsert_operational_seat(
             conn,
@@ -300,9 +301,9 @@ def update_layout_seat_configuration(
             building_id=str(mapping["building_id"]),
             floor_id=str(mapping["floor_id"]),
             seat_code=str(mapping["seat_code"]),
-            seat_type=payload.seat_type,
-            status=payload.status,
-            is_bookable=payload.is_bookable,
+            seat_type=updated_mapping["seat_type"],
+            status=updated_mapping["status"],
+            is_bookable=updated_mapping["is_bookable"],
             svg_element_id=str(mapping["svg_element_id"]),
         )
 
@@ -314,17 +315,11 @@ def update_layout_seat_configuration(
             assigned_by_user_id=str(current_user["user_id"]),
         )
 
-        final_amenity_ids = fetch_seat_amenity_ids(
-            conn,
-            tenant_id=tenant_id,
-            seat_id=str(seat["seat_id"]),
-        )
-
         conn.commit()
 
         return LayoutSeatConfigurationResponse(
             layout_seat_mapping_id=str(updated_mapping["id"]),
-            seat_id=str(seat["seat_id"]),
+            seat_id=None,
             layout_id=str(mapping["layout_id"]),
             floor_id=str(mapping["floor_id"]),
             seat_code=str(mapping["seat_code"]),
@@ -335,7 +330,7 @@ def update_layout_seat_configuration(
             is_reserved=updated_mapping["is_reserved"],
             is_configured=True,
             configuration_status="COMPLETED",
-            amenity_ids=final_amenity_ids,
+            amenity_ids=updated_mapping.get("amenity_ids") or [],
         )
 
     except HTTPException:
@@ -390,7 +385,7 @@ def get_buildings_by_site(
     conn: PGConnection,
     *,
     tenant_id: str,
-    site_id: str,
+    site_id: str | None = None,
     page: int | None = None,
     limit: int | None = None,
     search: str | None = None,
@@ -884,7 +879,7 @@ def _raise_floor_duplicate_if_needed(
             _raise_duplicate("floor_name", "Floor name already exists for this building.")
 
 
-def _raise_duplicate(field_name: str, message: str) -> None:
+def _raise_duplicate(field_name: str, message: str) -> NoReturn:
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
         detail={
@@ -894,7 +889,7 @@ def _raise_duplicate(field_name: str, message: str) -> None:
     )
 
 
-def _raise_not_found(entity_name: str) -> None:
+def _raise_not_found(entity_name: str) -> NoReturn:
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail={
@@ -904,7 +899,7 @@ def _raise_not_found(entity_name: str) -> None:
     )
 
 
-def _raise_invalid_hierarchy(message: str) -> None:
+def _raise_invalid_hierarchy(message: str) -> NoReturn:
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail={
@@ -920,7 +915,7 @@ def _raise_write_error(
     duplicate_code: str,
     fallback_code: str,
     fallback_message: str,
-) -> None:
+) -> NoReturn:
     if exc.pgcode == errorcodes.UNIQUE_VIOLATION:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

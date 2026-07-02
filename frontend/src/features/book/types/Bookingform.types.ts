@@ -28,6 +28,7 @@ export interface Floor {
   buildingId: string;
   name: string;
   number: number;
+  layoutFileUrl?: string;
 }
 
 // ── Booking form state ────────────────────────────────────────────────────────
@@ -83,45 +84,6 @@ export interface Seat {
   uiState?: UiState;
 }
 
-// ── Raw API shape from GET /floors/{floor_id}/seats ──────────────────────────
-
-export interface SeatAvailability {
-  /** Seat identifier */
-  seat_id: string | number;
-
-  /** Human-readable seat code, e.g. "T3-13-001" */
-  code: string;
-
-  /** SVG/canvas position (kept for future dynamic layouts) */
-  x?: number | null;
-  y?: number | null;
-  w?: number | null;
-  h?: number | null;
-  rotation_angle?: number;
-
-  /** "AVAILABLE" | "BOOKED" | "BLOCKED" | "YOURS" */
-  status: string;
-
-  /** Whether the seat can be booked right now (replaces is_bookable) */
-  selectable: boolean;
-
-  /** IDs of amenities that matched the request */
-  matched_amenity_ids?: number[];
-  /** How many amenities matched */
-  matched_amenity_count?: number;
-  /** How many amenities were requested */
-  requested_amenity_count?: number;
-  /** Backend-computed match bucket */
-  preference_match_status?: PreferenceMatchStatus;
-  /** Backend-computed rendering hint */
-  ui_state?: UiState;
-
-  // Optional — may not be returned by this endpoint
-  seat_type?: string;
-  seat_neighborhood?: string;
-  matched_amenity_names?: string[];
-}
-
 // ── Parameters for fetchSeatsWithAvailability ─────────────────────────────────
 
 export interface FetchSeatsParams {
@@ -131,7 +93,15 @@ export interface FetchSeatsParams {
   preferences?: string[];
   /** Numeric amenity IDs sent as repeated query params */
   amenityIds?: number[];
-   currentSeatId?: string;  
+  /** Seat currently held by the booking being modified — shown as "yours" even if otherwise unavailable */
+  currentSeatId?: string;
+  /** Booking being modified, if any — passed through to the availability API */
+  modifyBookingId?: string | null;
+  /** When booking for an employee */
+  bookedForUserId?: string | null;
+  /** When booking for a guest */
+  isGuestBooking?: boolean;
+  bookedForGuestId?: string | null;
 }
 
 // ── Booking payload / response ────────────────────────────────────────────────
@@ -142,6 +112,22 @@ export interface CreateBookingPayload {
   floor_id: number;
   seat_id: number;
   booking_date: string;
+  booked_for_user_id?: number;
+}
+
+export interface CreateGuestBookingPayload {
+  site_id: number;
+  building_id: number;
+  floor_id: number;
+  seat_id: number;
+  visit_date: string;
+  guest_id: number;
+  host_user_id: number;
+  guest_type: string;
+  purpose_of_visit?: string;
+  start_time?: string;
+  end_time?: string;
+  notes?: string;
 }
 
 export interface CreateBookingResponse {
@@ -165,3 +151,33 @@ export interface CreateBookingResponse {
 }
 
 export type BookingStep = 1 | 2 | 3;
+
+// ── Floor map visual configuration ────────────────────────────────────────────
+
+export interface SeatPalette {
+  body: string;
+  bodyStroke: string;
+  armrest: string;
+  back: string;
+  backStroke: string;
+  curve: string;
+  arc: string;
+  opacity: string;
+}
+
+export interface DayStatusConfig {
+  bg: string;
+  text: string;
+  dot: string;
+  label: string;
+}
+
+export interface TooltipStatusConfig {
+  label: string;
+  color: string;
+  bg: string;
+}
+
+export interface PreferenceMatchConfig extends TooltipStatusConfig {
+  icon: string;
+}

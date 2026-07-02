@@ -27,16 +27,26 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
   const [saveError,   setSaveError]   = useState(false);
   const [saved,       setSaved]       = useState(false);
 
+  // useEffect(() => {
+  //   if (!seat) return;
+  //   setSeatType(seat.seat_type as SeatType);
+  //   setBookable(seat.is_bookable);
+  //   setStatus(seat.status);
+  //   setAmenityIds([...seat.amenity_ids]);
+  //   setNotes(seat.notes ?? "");
+  //   setSaved(false);
+  //   setSaveError(false);
+  // }, [seat]);
   useEffect(() => {
-    if (!seat) return;
-    setSeatType(seat.seat_type as SeatType);
-    setBookable(seat.is_bookable);
-    setStatus(seat.status);
-    setAmenityIds([...seat.amenity_ids]);
-    setNotes(seat.notes ?? "");
-    setSaved(false);
-    setSaveError(false);
-  }, [seat]);
+  if (!seat) return;
+  setSeatType((seat.seat_type as SeatType) ?? "STANDARD");  // ← fallback for null
+  setBookable(seat.is_bookable ?? true);                     // ← fallback for null
+  setStatus((seat.status as SeatStatus) ?? "ACTIVE");       // ← also null-safe
+  setAmenityIds([...seat.amenity_ids]);
+  setNotes(seat.notes ?? "");
+  setSaved(false);
+  setSaveError(false);
+}, [seat]);
 
   const toggleAmenity = (id: string) => {
     setSaved(false);

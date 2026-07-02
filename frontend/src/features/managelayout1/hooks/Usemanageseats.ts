@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-import type { Layout, LayoutSeatStats } from "@/features/managelayout/types/layout.types";
+import type { Layout } from "@/features/managelayout/types/layout.types";
 import type {
   Seat,
   SeatFilters,
@@ -17,7 +17,6 @@ import {
   fetchAllPreferences,
 } from "@/features/managelayout/services/layoutService";
 import {
-  fetchLayoutSeats,
   configureSeat,
   bulkConfigureSeats,
 } from "../services/seatService";
@@ -46,15 +45,16 @@ export function useManageSeats() {
     loading: statsLoading,
     fetchSeats,
     updateSeat,
+    markDirty,
   } = useSeatsStore();
 
   // ── Layout ─────────────────────────────────────────────────────────────
   const [layout,        setLayout]        = useState<Layout | null>(null);
-  const [layoutLoading, setLayoutLoading] = useState(false);
+  const [layoutLoading, setLayoutLoading] = useState(true);
   const [layoutError,   setLayoutError]   = useState(false);
 
   useEffect(() => {
-    if (!floorId || !layoutId) { setLayout(null); return; }
+    if (!floorId || !layoutId) { setLayout(null); setLayoutLoading(false); return; }
     setLayoutLoading(true);
     setLayoutError(false);
     setLayout(null);
@@ -96,74 +96,20 @@ export function useManageSeats() {
 
   const resetFilters = useCallback(() => setFilters(DEFAULT_FILTERS), []);
 
-  // const filteredSeats = useMemo(() => {
-  //   return seats.filter((s) => {
-  //     if (filters.search    && !s.seat_code.toLowerCase().includes(filters.search.toLowerCase())) return false;
-  //     if (filters.seat_type !== "All" && s.seat_type  !== filters.seat_type)                      return false;
-  //     if (filters.status    !== "All" && s.status     !== filters.status)                         return false;
-  //     if (filters.bookable  !== "All" && s.is_bookable !== (filters.bookable === "Yes"))           return false;
-  //     if (filters.amenity   !== "All" && !s.amenity_ids.includes(filters.amenity))                return false;
-  //     return true;
-  //   });
-  // }, [seats, filters]);
-//   const filteredSeats = useMemo(() => {
-//   const query = filters.search.trim().toLowerCase();
-//   return seats.filter((s) => {
-//     if (query && !s.seat_code.toLowerCase().startsWith(query))               return false;
-//     if (filters.seat_type !== "All" && s.seat_type  !== filters.seat_type)   return false;
-//     if (filters.status    !== "All" && s.status     !== filters.status)      return false;
-//     if (filters.bookable  !== "All" && s.is_bookable !== (filters.bookable === "Yes")) return false;
-//     if (filters.amenity   !== "All" && !s.amenity_ids.includes(filters.amenity))      return false;
-//     return true;
-//   });
-// }, [seats, filters]);
-// const filteredSeats = useMemo(() => {
-//   const query = filters.search.trim().toLowerCase();
-//   return seats.filter((s) => {
-//     if (query && !s.seat_code.toLowerCase().startsWith(query)) return false;
+  const filteredSeats = useMemo(() => {
+    const query = filters.search.trim().toLowerCase();
+    return seats.filter((s) => {
+      if (query && s.seat_code.toLowerCase() !== query)                                                          return false;
+      if (filters.seat_type !== "All" && (s.seat_type ?? "").toUpperCase() !== filters.seat_type.toUpperCase()) return false;
+      if (filters.status    !== "All" && (s.status    ?? "").toUpperCase() !== filters.status.toUpperCase())    return false;
+      if (filters.bookable  !== "All" && s.is_bookable !== (filters.bookable === "Yes"))                        return false;
+      if (filters.amenity   !== "All" && !s.amenity_ids.includes(filters.amenity))                              return false;
+      return true;
+    });
+  }, [seats, filters]);
 
-//     if (filters.seat_type !== "All" && 
-//         s.seat_type.toUpperCase() !== filters.seat_type.toUpperCase()) return false;
-
-//     if (filters.status !== "All" && 
-//         s.status.toUpperCase() !== filters.status.toUpperCase()) return false;
-
-//     if (filters.bookable !== "All" && 
-//         s.is_bookable !== (filters.bookable === "Yes")) return false;
-
-//     if (filters.amenity !== "All" && 
-//         !s.amenity_ids.includes(filters.amenity)) return false;
-
-//     return true;
-//   });
-// }, [seats, filters]);
-// const filteredSeats = useMemo(() => {
-//   const query = filters.search.trim().toLowerCase();
-//   return seats.filter((s) => {
-//     if (query && !s.seat_code.toLowerCase().startsWith(query))                    return false;
-//     if (filters.seat_type !== "All" && s.seat_type.toUpperCase() !== filters.seat_type.toUpperCase()) return false;
-//     if (filters.status    !== "All" && s.status.toUpperCase()    !== filters.status.toUpperCase())    return false;
-//     if (filters.bookable  !== "All" && s.is_bookable !== (filters.bookable === "Yes"))                return false;
-//     if (filters.amenity   !== "All" && !s.amenity_ids.includes(filters.amenity))                     return false;
-//     return true;
-//   });
-// }, [seats, filters]);
-const filteredSeats = useMemo(() => {
-  const query = filters.search.trim().toLowerCase();
-  return seats.filter((s) => {
-    if (query && s.seat_code.toLowerCase() !== query)                                                 return false;
-    if (filters.seat_type !== "All" && s.seat_type.toUpperCase() !== filters.seat_type.toUpperCase()) return false;
-    if (filters.status    !== "All" && s.status.toUpperCase()    !== filters.status.toUpperCase())    return false;
-    if (filters.bookable  !== "All" && s.is_bookable !== (filters.bookable === "Yes"))                return false;
-    if (filters.amenity   !== "All" && !s.amenity_ids.includes(filters.amenity))                     return false;
-    return true;
-  });
-}, [seats, filters]);
-
-  const seatTypes = useMemo(
-    () => ["All", ...Array.from(new Set(seats.map((s) => s.seat_type)))],
-    [seats]
-  );
+  // Static list — always show all types regardless of what's configured
+  const seatTypes = ["All", "STANDARD", "WINDOW", "CABIN", "ACCESSIBLE", "HOT_DESK"];
 
   // ── Selection ──────────────────────────────────────────────────────────
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -193,7 +139,7 @@ const filteredSeats = useMemo(() => {
     const seat = seats.find((s) => s.seat_svg_id === payload.seat_svg_id);
     if (!seat) throw new Error("Seat not found");
 
-    const updated = await configureSeat(seat.layout_seat_mapping_id, {
+    await configureSeat(seat.layout_seat_mapping_id, {
       seat_name:   seat.seat_code,
       seat_type:   payload.seat_type,
       status:      payload.status,
@@ -202,16 +148,22 @@ const filteredSeats = useMemo(() => {
       amenity_ids: payload.amenity_ids.map(Number),
     });
 
-    // ✅ Update Zustand store — ManageLayoutPage reflects this instantly
-    updateSeat(updated);
+    const updated: Seat = {
+      ...seat,
+      seat_type:     payload.seat_type,
+      status:        payload.status,
+      is_bookable:   payload.is_bookable,
+      is_configured: true,
+      amenity_ids:   payload.amenity_ids,
+      notes:         payload.notes ?? seat.notes,
+    };
 
-    // Keep edit panel in sync
-    setEditingSeat((prev) =>
-      prev?.seat_svg_id === updated.seat_svg_id ? updated : prev
-    );
+    updateSeat(updated);
+    markDirty();
+    setEditingSeat(null);
 
     return updated;
-  }, [seats, updateSeat]);
+  }, [seats, updateSeat, markDirty]);
 
   // ── Bulk edit ──────────────────────────────────────────────────────────
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -227,22 +179,30 @@ const filteredSeats = useMemo(() => {
     const first      = affectedSeats[0];
 
     await bulkConfigureSeats(mappingIds, {
-      seat_type:   payload.seat_type   ?? first.seat_type,
-      status:      payload.status      ?? first.status,
-      is_bookable: payload.is_bookable ?? first.is_bookable,
+      seat_type:   payload.seat_type   ?? first.seat_type   ?? "STANDARD",
+      status:      payload.status      ?? first.status      ?? "ACTIVE",
+      is_bookable: payload.is_bookable ?? first.is_bookable ?? true,
       is_reserved: first.is_reserved,
       amenity_ids: (payload.amenity_ids ?? first.amenity_ids).map(Number),
     });
 
-    // ✅ Re-fetch into Zustand after bulk save so everything is in sync
     await fetchSeats(layoutId);
+    markDirty();
 
     clearSelection();
     setBulkOpen(false);
-  }, [seats, layoutId, clearSelection, fetchSeats]);
+  }, [seats, layoutId, clearSelection, fetchSeats, markDirty]);
 
   // ── View toggle ────────────────────────────────────────────────────────
   const [view, setView] = useState<ViewMode>("list");
+
+  const handleSetView = useCallback((v: ViewMode) => {
+    setView(v);
+    if (v !== "list") {
+      setEditingSeat(null);  // collapse edit sidebar when leaving list view
+      setBulkOpen(false);    // close bulk edit panel too
+    }
+  }, []);
 
   return {
     // layout
@@ -294,6 +254,6 @@ const filteredSeats = useMemo(() => {
 
     // view
     view,
-    setView,
+    setView: handleSetView,
   };
 }

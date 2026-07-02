@@ -13,6 +13,7 @@ expectations of the API layer.
 """
 
 import logging
+import threading
 from time import perf_counter
 from typing import Any
 from uuid import uuid4
@@ -24,6 +25,9 @@ from fastapi.responses import JSONResponse
 from backend.api.routes.dashboard import router as dashboard_router
 from backend.api.routes.auth import router as auth_router
 from backend.api.routes.bookings import router as bookings_router
+from backend.api.routes.guest_bookings import router as guest_bookings_router
+from backend.api.routes.guest_visits import router as guest_visits_router
+from backend.api.routes.guests import router as guests_router
 from backend.api.routes.locations import router as locations_router
 from backend.api.routes.sso import router as sso_router
 from backend.core.config import get_settings
@@ -39,6 +43,7 @@ from backend.repositories.token_repository import (
     purge_expired_refresh_tokens,
     purge_expired_sessions,
 )
+from backend.services.auth_service import sync_graph_managed_roles
 from backend.api.routes import teams
 from backend.api.routes.preferences import router as preferences_router
 from backend.api.routes.admin_dashboard import router as admin_dashboard_router
@@ -52,6 +57,9 @@ if settings.app_trace_functions:
     enable_backend_function_trace()
 
 request_logger = logging.getLogger(f"{LOGGER_NAME}.requests")
+graph_role_sync_logger = logging.getLogger(f"{LOGGER_NAME}.graph_role_sync")
+_graph_role_sync_stop = threading.Event()
+_graph_role_sync_thread: threading.Thread | None = None
 
 # The application exposes a single frontend origin and composes feature routers
 # from the authentication, SSO, booking, and location modules.
@@ -66,6 +74,9 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(sso_router)
 app.include_router(bookings_router)
+app.include_router(guests_router)
+app.include_router(guest_visits_router)
+app.include_router(guest_bookings_router)
 app.include_router(locations_router)
 app.include_router(teams.router)
 app.include_router(dashboard_router)
@@ -198,6 +209,13 @@ def startup() -> None:
         purge_expired_refresh_tokens(conn)
         purge_expired_sessions(conn, settings.session_ttl)
         conn.commit()
+    _start_graph_role_sync_scheduler()
+
+
+@app.on_event("shutdown")
+def shutdown() -> None:
+    """Stop optional background workers before process shutdown."""
+    _stop_graph_role_sync_scheduler()
 
 
 @app.get("/")
@@ -231,7 +249,12 @@ def index() -> dict[str, object]:
             "GET /bookings/me/past",
             "GET /bookings/me/current",
             "GET /bookings/me/future",
-            "GET /bookings/available",
+            "GET /bookings/me/cancelled",
+            "POST /guests",
+            "GET /guests?q={search}",
+            "POST /guest-visits",
+            "POST /guest-bookings",
+            "GET /guest-bookings",
             "GET /sites",
             "POST /sites",
             "PATCH /sites/{site_id}",
@@ -373,6 +396,52 @@ def _safe_query_string(request: Request) -> str:
     if len(query_string) > 500:
         return f"{query_string[:500]}..."
     return query_string
+
+
+def _start_graph_role_sync_scheduler() -> None:
+    global _graph_role_sync_thread
+    if not settings.graph_role_sync_enabled:
+        return
+    if _graph_role_sync_thread and _graph_role_sync_thread.is_alive():
+        return
+
+    _graph_role_sync_stop.clear()
+    _graph_role_sync_thread = threading.Thread(
+        target=_graph_role_sync_loop,
+        name="graph-role-sync",
+        daemon=True,
+    )
+    _graph_role_sync_thread.start()
+
+
+def _stop_graph_role_sync_scheduler() -> None:
+    if _graph_role_sync_thread is None:
+        return
+    _graph_role_sync_stop.set()
+    _graph_role_sync_thread.join(timeout=5)
+
+
+def _graph_role_sync_loop() -> None:
+    interval_seconds = settings.graph_role_sync_interval_minutes * 60
+    while not _graph_role_sync_stop.is_set():
+        try:
+            with get_db_connection() as conn:
+                result = sync_graph_managed_roles(conn)
+            graph_role_sync_logger.info(
+                (
+                    "graph_role_sync.complete scanned=%s changed=%s "
+                    "promoted=%s demoted=%s"
+                ),
+                result.scanned_users,
+                result.changed_users,
+                result.promoted_users,
+                result.demoted_users,
+            )
+        except Exception:
+            graph_role_sync_logger.exception("graph_role_sync.failed")
+
+        if _graph_role_sync_stop.wait(interval_seconds):
+            break
 
 
 if __name__ == "__main__":

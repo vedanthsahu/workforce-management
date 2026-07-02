@@ -1,15 +1,13 @@
 "use client";
 
-import { Calendar } from "lucide-react";
 type Props = {
   selectedDate: string;
   setSelectedDate: (date: string) => void;
- 
 };
-export default function AdminHeader({ selectedDate, setSelectedDate}: Props) {
 
+export default function AdminHeader({ selectedDate, setSelectedDate }: Props) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
       {/* LEFT */}
       <div>
@@ -22,25 +20,15 @@ export default function AdminHeader({ selectedDate, setSelectedDate}: Props) {
       {/* RIGHT FILTERS */}
       <div className="flex items-center gap-3">
 
-        {/* Offices Dropdown */}
-        {/* <select 
-        className="h-9 px-3 rounded-md border bg-white text-sm">
-          <option>All Offices</option>
-        </select> */}
-
-        {/* Floors Dropdown */}
-        {/* <select className="h-9 px-3 rounded-md border bg-white text-sm">
-          <option>All Floors</option>
-        </select> */}
-
         {/* Date */}
-        <div className="flex items-center gap-2 h-9 px-3 rounded-md border bg-white text-sm">
-         
+        <div className="flex items-center gap-2 h-9 px-3 py-2 rounded-md border bg-white text-sm w-full sm:w-auto">
           <input
-  type="date"
-  value={selectedDate}
-  onChange={(e) => setSelectedDate(e.target.value)}
-/> Filter by date
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="outline-none bg-transparent"
+          />
+          <span>Filter by date</span>
         </div>
 
       </div>

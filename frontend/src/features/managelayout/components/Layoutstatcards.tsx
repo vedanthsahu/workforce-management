@@ -57,10 +57,11 @@ function pct(part: number, total: number): string {
 export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps) {
   if (loading || !stats) {
     return (
-      <div className="grid grid-cols-4 gap-4">
+      // FIX: 2-col on mobile, 4-col on md+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className={`bg-white rounded-xl border border-gray-100 p-4 h-[84px] ${loading ? "animate-pulse" : ""}`}>
-            <div className="h-2.5 w-24 bg-gray-100 rounded mb-3" />
+          <div key={i} className={`bg-white rounded-xl border border-gray-100 p-3 sm:p-4 h-[76px] sm:h-[84px] ${loading ? "animate-pulse" : ""}`}>
+            <div className="h-2.5 w-20 bg-gray-100 rounded mb-3" />
             <div className="h-6 w-10 bg-gray-100 rounded" />
           </div>
         ))}
@@ -80,7 +81,7 @@ export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps
       valueColor: "text-gray-900",
     },
     {
-      label:      "Configured Seats",
+      label:      "Configured",
       value:      configured_seats,
       sub:        pct(configured_seats, total_seats),
       icon:       <CheckCircleIcon />,
@@ -88,7 +89,7 @@ export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps
       valueColor: "text-emerald-600",
     },
     {
-      label:      "Unconfigured Seats",
+      label:      "Unconfigured",
       value:      unconfigured_seats,
       sub:        pct(unconfigured_seats, total_seats),
       icon:       <AlertCircleIcon />,
@@ -96,7 +97,7 @@ export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps
       valueColor: "text-amber-600",
     },
     {
-      label:      "Non-bookable Seats",
+      label:      "Non-bookable",
       value:      non_bookable_seats,
       sub:        pct(non_bookable_seats, total_seats),
       icon:       <LockIcon />,
@@ -106,18 +107,20 @@ export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-4">
+    // FIX: 2-col on mobile, 4-col on md+. Tighter gap + padding on mobile.
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
       {cards.map((card) => (
         <div
           key={card.label}
-          className="bg-white rounded-xl border border-gray-100 px-4 py-4 flex items-center gap-3"
+          className="bg-white rounded-xl border border-gray-100 px-3 py-3 sm:px-4 sm:py-4 flex items-center gap-2 sm:gap-3"
         >
-          <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${card.iconBg}`}>
+          <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0 ${card.iconBg}`}>
             {card.icon}
           </div>
           <div className="min-w-0">
+            {/* FIX: shorter label text already set above; truncate on very small cards */}
             <p className="text-xs text-gray-500 font-medium mb-0.5 truncate">{card.label}</p>
-            <p className={`text-xl font-semibold leading-none ${card.valueColor}`}>
+            <p className={`text-lg sm:text-xl font-semibold leading-none ${card.valueColor}`}>
               {card.value}
               {card.sub && (
                 <span className="text-xs font-normal text-gray-400 ml-1">{card.sub}</span>

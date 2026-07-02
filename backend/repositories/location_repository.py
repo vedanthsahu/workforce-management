@@ -7,7 +7,7 @@ from typing import Any
 
 from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
-
+from psycopg2.extras import Json
 
 def fetch_sites(
     conn: PGConnection,
@@ -83,7 +83,7 @@ def fetch_buildings_by_site(
     conn: PGConnection,
     *,
     tenant_id: str,
-    site_id: str,
+    site_id: str | None = None,
     page: int | None = None,
     limit: int | None = None,
     search: str | None = None,
@@ -94,6 +94,7 @@ def fetch_buildings_by_site(
         SELECT
             b.id::text AS building_id,
             b.site_id::text AS site_id,
+            s.site_name,
             b.building_code,
             b.building_name,
             b.status,
@@ -124,9 +125,13 @@ def fetch_buildings_by_site(
               AND st.building_id = b.id
         ) AS seat_counts ON TRUE
         WHERE b.tenant_id = %s
-          AND b.site_id = %s
     """
-    params: list[Any] = [tenant_id, site_id]
+    params: list[Any] = [tenant_id]
+    if site_id is not None:
+        query += """
+        AND b.site_id = %s
+    """
+        params.append(site_id)
     query, params = _apply_status_filter(query, params, "b.status", status_filter)
     query, params = _apply_search_filter(
         query,
@@ -136,6 +141,7 @@ def fetch_buildings_by_site(
     )
     query += " ORDER BY b.building_code, b.id"
     query, params = _apply_pagination(query, params, page=page, limit=limit)
+  
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(query, params)
@@ -174,7 +180,9 @@ def fetch_floors_by_building(
             fl.layout_file_url,
             fl.status AS layout_status,
             fl.is_published AS layout_is_published,
-            fl.version_no AS layout_version_no
+            fl.version_no AS layout_version_no,
+            fl.updated_at AS layout_last_updated,
+            pub.full_name AS published_by_name
         FROM floors AS f
         JOIN buildings AS b
             ON f.building_id = b.id
@@ -211,7 +219,9 @@ def fetch_floors_by_building(
                 fl.status,
                 fl.is_published,
                 fl.version_no,
-                fl.created_at
+                fl.created_at,
+                fl.updated_at,
+                fl.published_by_user_id
             FROM floor_layouts AS fl
             WHERE fl.tenant_id = f.tenant_id
               AND fl.site_id = f.site_id
@@ -229,6 +239,9 @@ def fetch_floors_by_building(
                 fl.id DESC
             LIMIT 1
         ) AS fl ON TRUE
+        LEFT JOIN app_users AS pub
+            ON pub.id = fl.published_by_user_id
+           AND pub.tenant_id = f.tenant_id
         WHERE b.id = %s
           AND f.tenant_id = %s
     """
@@ -428,6 +441,7 @@ def update_site(
     return fetch_site_by_id(conn, tenant_id=tenant_id, site_id=str(row["site_id"]))
 
 
+
 def fetch_building_by_id(
     conn: PGConnection,
     *,
@@ -441,6 +455,7 @@ def fetch_building_by_id(
             SELECT
                 b.id::text AS building_id,
                 b.site_id::text AS site_id,
+                s.site_name,
                 b.building_code,
                 b.building_name,
                 b.status,
@@ -449,6 +464,9 @@ def fetch_building_by_id(
                 COALESCE(seat_counts.active_seat_count, 0)::integer AS active_seat_count,
                 COALESCE(seat_counts.bookable_seat_count, 0)::integer AS bookable_seat_count
             FROM buildings AS b
+            INNER JOIN sites AS s
+                ON s.id = b.site_id
+            AND s.tenant_id = b.tenant_id
             LEFT JOIN LATERAL (
                 SELECT COUNT(*)::integer AS floor_count
                 FROM floors AS f
@@ -474,6 +492,9 @@ def fetch_building_by_id(
         )
         row = cur.fetchone()
     return dict(row) if row else None
+
+ 
+ 
 
 
 def fetch_building_duplicates(
@@ -753,6 +774,7 @@ def fetch_layout_seat_mapping_by_id(
 
     return dict(row) if row else None
 
+
 def update_layout_seat_mapping_configuration(
     conn: PGConnection,
     *,
@@ -763,6 +785,7 @@ def update_layout_seat_mapping_configuration(
     status: str | None,
     is_bookable: bool | None,
     is_reserved: bool | None,
+    amenity_ids: list[int] | None,
     updated_by: str,
 ) -> dict[str, Any]:
 
@@ -777,12 +800,18 @@ def update_layout_seat_mapping_configuration(
                 status = COALESCE(%s, status),
                 is_bookable = COALESCE(%s, is_bookable),
                 is_reserved = COALESCE(%s, is_reserved),
+
+                amenity_ids = COALESCE(%s::jsonb, amenity_ids),
+
                 is_configured = TRUE,
                 configuration_status = 'COMPLETED',
+
                 updated_by = %s,
                 updated_at = NOW()
+
             WHERE tenant_id = %s
               AND id = %s
+
             RETURNING *
             """,
             (
@@ -791,6 +820,9 @@ def update_layout_seat_mapping_configuration(
                 status,
                 is_bookable,
                 is_reserved,
+
+                Json(amenity_ids) if amenity_ids is not None else None,
+
                 updated_by,
                 tenant_id,
                 layout_seat_mapping_id,
@@ -803,6 +835,7 @@ def update_layout_seat_mapping_configuration(
         raise LookupError("Layout seat mapping update failed.")
 
     return dict(row)
+
 def upsert_operational_seat(
     conn: PGConnection,
     *,
@@ -1248,7 +1281,7 @@ def fetch_seats_by_floor(
             )
             SELECT
                 id::text AS seat_id,
-                code,
+                code AS seat_code,
                 x,
                 y,
                 w,

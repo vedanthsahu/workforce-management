@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Pencil, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Pencil, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from "lucide-react";
 import { Seat } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
 
@@ -20,7 +20,15 @@ interface Props {
 
 const PAGE_SIZES = [10, 25, 50];
 
-function BookablePill({ bookable }: { bookable: boolean }) {
+type SortKey = "seat_code" | "is_configured";
+type SortOrder = "asc" | "desc";
+
+function Dash() {
+  return <span className="text-gray-400 text-xs">—</span>;
+}
+
+function BookablePill({ bookable }: { bookable: boolean | null }) {
+  if (bookable === null) return <Dash />;
   return (
     <span
       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
@@ -34,7 +42,8 @@ function BookablePill({ bookable }: { bookable: boolean }) {
   );
 }
 
-function StatusPill({ status }: { status: string }) {
+function StatusPill({ status }: { status: string | null }) {
+  if (!status) return <Dash />;
   const styles: Record<string, string> = {
     ACTIVE:      "bg-emerald-50 text-emerald-700 border-emerald-200",
     INACTIVE:    "bg-gray-100 text-gray-500 border-gray-200",
@@ -43,8 +52,8 @@ function StatusPill({ status }: { status: string }) {
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${styles[status] ?? "bg-gray-100 text-gray-500 border-gray-200"}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${
-        status === "ACTIVE" ? "bg-emerald-500" :
-        status === "MAINTENANCE" ? "bg-amber-500" :
+        status === "ACTIVE"      ? "bg-emerald-500" :
+        status === "MAINTENANCE" ? "bg-amber-500"   :
         "bg-gray-400"
       }`} />
       {status}
@@ -52,49 +61,78 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+function ConfiguredPill({ configured }: { configured: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
+        configured
+          ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+          : "bg-amber-50 text-amber-700 border-amber-200"
+      }`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${configured ? "bg-indigo-500" : "bg-amber-400"}`} />
+      {configured ? "Configured" : "Not Configured"}
+    </span>
+  );
+}
+
+function SortIcon({ active, order }: { active: boolean; order: SortOrder }) {
+  if (!active) return <ArrowUp size={11} className="opacity-25" />;
+  return order === "asc"
+    ? <ArrowUp size={11} className="text-indigo-500" />
+    : <ArrowDown size={11} className="text-indigo-500" />;
+}
+
 export default function SeatTable({
   seats, preferences, selected, isAllSelected, isIndeterminate,
   onToggleSelect, onSelectAll, onClearSelection, onEditSeat, onBulkEdit,
 }: Props) {
-  const [page, setPage]         = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  //const [sortOrder, setSortOrder] = useState<"asc" | "desc" | null>(null);
-const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [page, setPage]           = useState(1);
+  const [pageSize, setPageSize]   = useState(10);
+  const [sortKey, setSortKey]     = useState<SortKey>("seat_code");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+
   const prefMap = Object.fromEntries(preferences.map((p) => [p.preference_id, p.preference_name]));
 
-  // const toggleSort = () => {
-  //   setSortOrder((prev) => (prev === "asc" ? "desc" : prev === "desc" ? null : "asc"));
-  // };
-  const toggleSort = () => {
-  setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-};
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortOrder("asc");
+    }
+  };
 
   const sortedSeats = useMemo(() => {
-    if (!sortOrder) return seats;
     return [...seats].sort((a, b) => {
-      const aNum = parseInt(a.seat_code, 10);
-      const bNum = parseInt(b.seat_code, 10);
-      const aVal = isNaN(aNum) ? a.seat_code : aNum;
-      const bVal = isNaN(bNum) ? b.seat_code : bNum;
-      if (aVal < bVal) return sortOrder === "asc" ? -1 : 1;
-      if (aVal > bVal) return sortOrder === "asc" ? 1 : -1;
+      if (sortKey === "seat_code") {
+        const aNum = parseInt(a.seat_code, 10);
+        const bNum = parseInt(b.seat_code, 10);
+        const aVal = isNaN(aNum) ? a.seat_code : aNum;
+        const bVal = isNaN(bNum) ? b.seat_code : bNum;
+        if (aVal < bVal) return sortOrder === "asc" ? -1 : 1;
+        if (aVal > bVal) return sortOrder === "asc" ? 1 : -1;
+        return 0;
+      }
+      if (sortKey === "is_configured") {
+        const aVal = a.is_configured ? 1 : 0;
+        const bVal = b.is_configured ? 1 : 0;
+        return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
+      }
       return 0;
     });
-  }, [seats, sortOrder]);
+  }, [seats, sortKey, sortOrder]);
 
   const totalPages = Math.max(1, Math.ceil(sortedSeats.length / pageSize));
   const start      = (page - 1) * pageSize;
   const pageSeats  = sortedSeats.slice(start, start + pageSize);
 
-  // Reset page on seat list change
   React.useEffect(() => { setPage(1); }, [seats.length]);
 
   const handleSelectAll = () => {
     if (isAllSelected) onClearSelection();
     else onSelectAll();
   };
-
-  const COLUMNS = ["Seat Code", "Seat Type", "Amenities", "Bookable", "Status", "Actions"];
 
   return (
     <div className="flex flex-col">
@@ -103,7 +141,7 @@ const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-gray-800">{seats.length} Seats</span>
           {selected.size > 0 && (
-            <span className="text-xs text-gray-500 bg-indigo-50 border border-indigo-200 text-indigo-600 px-2 py-0.5 rounded-full font-medium">
+            <span className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-600 px-2 py-0.5 rounded-full font-medium">
               {selected.size} selected
             </span>
           )}
@@ -120,8 +158,8 @@ const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm border-collapse">
+      <div className="rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
+        <table className="min-w-[700px] w-full text-sm border-collapse">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="w-10 px-4 py-3">
@@ -133,38 +171,45 @@ const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
                   className="w-4 h-4 rounded border-gray-300 accent-indigo-600 cursor-pointer"
                 />
               </th>
-              {COLUMNS.map((h) => (
-                <th
-                  key={h}
-                  className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500"
+              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                <button
+                  onClick={() => handleSort("seat_code")}
+                  className="flex items-center gap-1 hover:text-gray-800 transition-colors"
                 >
-                  {h === "Seat Code" ? (
-                    <button
-                      onClick={toggleSort}
-                      className="flex items-center gap-1 hover:text-gray-800 transition-colors"
-                    >
-                      Seat Code
-                      {/* {sortOrder === "asc"  ? (
-                        <ArrowUp size={11} className="text-indigo-500" />
-                      ) : sortOrder === "desc" ? (
-                        <ArrowDown size={11} className="text-indigo-500" />
-                      ) : (
-                        <ArrowUpDown size={11} className="opacity-40" />
-                      )} */}
-                      {sortOrder === "asc"
-                          ? <ArrowUp size={11} className="text-indigo-500" />
-                          : <ArrowDown size={11} className="text-indigo-500" />
-                        }
-                    </button>
-                  ) : h}
-                </th>
-              ))}
+                  Seat Code
+                  <SortIcon active={sortKey === "seat_code"} order={sortOrder} />
+                </button>
+              </th>
+              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                Seat Type
+              </th>
+              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                Amenities
+              </th>
+              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                Bookable
+              </th>
+              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                Status
+              </th>
+              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                <button
+                  onClick={() => handleSort("is_configured")}
+                  className="flex items-center gap-1 hover:text-gray-800 transition-colors"
+                >
+                  Configuration
+                  <SortIcon active={sortKey === "is_configured"} order={sortOrder} />
+                </button>
+              </th>
+              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
             {pageSeats.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-16 text-center text-sm text-gray-400">
+                <td colSpan={8} className="py-16 text-center text-sm text-gray-400">
                   No seats match the current filters.
                 </td>
               </tr>
@@ -194,10 +239,16 @@ const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
                         {seat.seat_code}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-gray-700 text-xs font-medium">{seat.seat_type}</td>
+
+                    {/* Seat Type — null shows dash */}
+                    <td className="px-4 py-3 text-gray-700 text-xs font-medium">
+                      {seat.seat_type ?? <Dash />}
+                    </td>
+
+                    {/* Amenities */}
                     <td className="px-4 py-3">
                       {seat.amenity_ids.length === 0 ? (
-                        <span className="text-gray-400 text-xs">—</span>
+                        <Dash />
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {seat.amenity_ids.slice(0, 2).map((id) => (
@@ -216,11 +267,19 @@ const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
                         </div>
                       )}
                     </td>
+
+                    {/* Bookable — null shows dash */}
                     <td className="px-4 py-3">
                       <BookablePill bookable={seat.is_bookable} />
                     </td>
+
+                    {/* Status — null shows dash */}
                     <td className="px-4 py-3">
                       <StatusPill status={seat.status} />
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <ConfiguredPill configured={seat.is_configured} />
                     </td>
                     <td className="px-4 py-3">
                       <button
@@ -246,7 +305,6 @@ const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
         </p>
 
         <div className="flex items-center gap-3">
-          {/* Page size */}
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <span>Rows</span>
             <select
@@ -258,7 +316,6 @@ const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
             </select>
           </div>
 
-          {/* Page numbers */}
           <div className="flex items-center gap-1">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}

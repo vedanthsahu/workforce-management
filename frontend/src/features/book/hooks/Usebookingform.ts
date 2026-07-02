@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import axios from "axios";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   BookingFormState,
@@ -15,13 +16,16 @@ import {
 
 import {
   createBooking,
+  createGuestBooking,
   modifyBooking,
+  modifyGuestBooking,
   fetchBuildings,
   fetchFloors,
   fetchPreferences,
   fetchSeatsWithAvailability,
   fetchSites,
 } from "../services/Bookingform.service";
+import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -43,14 +47,33 @@ const DEFAULT_STATE: BookingFormState = {
 
 // ── URL builder ───────────────────────────────────────────────────────────────
 
+interface GuestUrlParams {
+  guestId?: string | null;
+  hostUserId?: string | null;
+  guestType?: string | null;
+  purposeOfVisit?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  notes?: string | null;
+}
+
 function buildUrl(
   step: number,
   form: BookingFormState,
   modifyBookingId?: string | null,
+  bookedForUserId?: string | null,
+  guestParams?: GuestUrlParams | null,
+  bookingForName?: string | null,
+  visitId?: string | null,
+  isGuestModify?: boolean,
 ): string {
   const params = new URLSearchParams();
   params.set("step", String(step));
   if (modifyBookingId)             params.set("modifyBookingId", modifyBookingId);
+  if (bookedForUserId)             params.set("bookedForUserId", bookedForUserId);
+  if (bookingForName)              params.set("bookingForName",  bookingForName);
+  if (visitId)                     params.set("visitId",         visitId);
+  if (isGuestModify)               params.set("isGuestModify",   "true");
   if (form.siteId)                 params.set("siteId",          form.siteId);
   if (form.buildingId)             params.set("buildingId",      form.buildingId);
   if (form.floorId)                params.set("floorId",         form.floorId);
@@ -58,6 +81,13 @@ function buildUrl(
   if (form.toDate)                 params.set("toDate",          form.toDate);
   if (form.selectedSeatId)         params.set("seatId",          form.selectedSeatId);
   if (form.preferences.length > 0) params.set("preferences",     form.preferences.join(","));
+  if (guestParams?.guestId)        params.set("guestId",         guestParams.guestId);
+  if (guestParams?.hostUserId)     params.set("hostUserId",      guestParams.hostUserId);
+  if (guestParams?.guestType)      params.set("guestType",       guestParams.guestType);
+  if (guestParams?.purposeOfVisit) params.set("purposeOfVisit",  guestParams.purposeOfVisit);
+  if (guestParams?.startTime)      params.set("startTime",       guestParams.startTime);
+  if (guestParams?.endTime)        params.set("endTime",         guestParams.endTime);
+  if (guestParams?.notes)          params.set("notes",           guestParams.notes);
   return `/book?${params.toString()}`;
 }
 
@@ -80,14 +110,28 @@ export function useBookingForm() {
   const prefillFromDate = searchParams.get("fromDate") ?? null;
   const prefillToDate   = searchParams.get("toDate")   ?? null;
 
-  // preferences passed as keys (when API returned real data)
+  const bookedForUserId = searchParams.get("bookedForUserId") ?? null;
+  const bookingForName  = searchParams.get("bookingForName")  ?? null;
+
+  // Guest booking params — present only when coming from book-for-someone (visitor path)
+  const guestId       = searchParams.get("guestId")        ?? null;
+  const hostUserId    = searchParams.get("hostUserId")      ?? null;
+  const guestType     = searchParams.get("guestType")       ?? null;
+  const purposeOfVisit = searchParams.get("purposeOfVisit") ?? null;
+  const guestStartTime = searchParams.get("startTime")      ?? null;
+  const guestEndTime   = searchParams.get("endTime")        ?? null;
+  const guestNotes     = searchParams.get("notes")          ?? null;
+  const visitId        = searchParams.get("visitId")         ?? null;
+  const isGuestModify  = searchParams.get("isGuestModify") === "true";
+  const isGuestBooking = Boolean(guestId);
+  const isAddBookingToVisit = Boolean(visitId);
+  const isBookingForSomeone = Boolean(bookedForUserId || guestId);
+
   const prefillPreferencesParam = searchParams.get("preferences") ?? null;
   const prefillPreferences: string[] = prefillPreferencesParam
     ? prefillPreferencesParam.split(",").filter(Boolean)
     : [];
 
-  // preferenceNames passed as display names (when using fallback from MyBookingsPage)
-  // These are resolved to real keys once the /preferences API responds.
   const prefillPreferenceNamesParam = searchParams.get("preferenceNames") ?? null;
   const prefillPreferenceNames: string[] = prefillPreferenceNamesParam
     ? prefillPreferenceNamesParam.split(",").filter(Boolean)
@@ -118,7 +162,6 @@ export function useBookingForm() {
       fromDate:       initialFromDate,
       toDate:         initialToDate,
       selectedSeatId: searchParams.get("seatId")     ?? null,
-      // Only seed preferences from keys — name-based prefill happens after API loads
       preferences:    prefillPreferences,
     };
   });
@@ -132,6 +175,9 @@ export function useBookingForm() {
   const [floors,               setFloors]               = useState<Floor[]>([]);
   const [seats,                setSeats]                = useState<Seat[]>([]);
   const [availablePreferences, setAvailablePreferences] = useState<Preference[]>([]);
+
+  // ── Floor layout URL — derived from the selected floor ───────────────────
+  const [floorLayoutUrl, setFloorLayoutUrl] = useState<string | null>(null);
 
   const [loadingSites,       setLoadingSites]       = useState(false);
   const [loadingBuildings,   setLoadingBuildings]   = useState(false);
@@ -152,26 +198,17 @@ export function useBookingForm() {
     setBuildings([]);
     setFloors([]);
     setSeats([]);
+    setFloorLayoutUrl(null);
     setConfirmation(null);
     setError(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.toString()]);
 
   // ── Resolve prefill preferences once the API list is available ───────────
-  //
-  // Two resolution paths:
-  //
-  //  1. `preferences` param (real keys from API) — filter to only valid keys.
-  //  2. `preferenceNames` param (display names, fallback) — match by name
-  //     case-insensitively and resolve to keys.
-  //
-  // Path 2 runs only when there are no real keys already set, so it never
-  // overrides a legitimate selection.
 
   useEffect(() => {
     if (availablePreferences.length === 0) return;
 
-    // Path 1: validate prefill keys that came from the API
     if (prefillPreferences.length > 0) {
       const validKeys = prefillPreferences.filter((k) =>
         availablePreferences.some((p) => p.key === k)
@@ -182,7 +219,6 @@ export function useBookingForm() {
       return;
     }
 
-    // Path 2: resolve display names → keys (fallback path from MyBookingsPage)
     if (prefillPreferenceNames.length > 0) {
       const resolvedKeys = prefillPreferenceNames
         .map((name) =>
@@ -196,7 +232,6 @@ export function useBookingForm() {
       if (resolvedKeys.length > 0) {
         setForm((f) => ({
           ...f,
-          // Only set if the form has no preferences yet (don't overwrite user picks)
           preferences: f.preferences.length === 0 ? resolvedKeys : f.preferences,
         }));
       }
@@ -206,12 +241,17 @@ export function useBookingForm() {
 
   // ── Navigate helper ───────────────────────────────────────────────────────
 
+  const guestUrlParams: GuestUrlParams | null = isGuestBooking
+    ? { guestId, hostUserId, guestType, purposeOfVisit, startTime: guestStartTime, endTime: guestEndTime, notes: guestNotes }
+    : null;
+
   const navigateTo = useCallback(
     (nextStep: BookingStep, nextForm: BookingFormState) => {
       setStepState(nextStep);
-      router.push(buildUrl(nextStep, nextForm, modifyBookingId));
+      router.push(buildUrl(nextStep, nextForm, modifyBookingId, bookedForUserId, guestUrlParams, bookingForName, visitId, isGuestModify));
     },
-    [router, modifyBookingId],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [router, modifyBookingId, bookedForUserId, isGuestBooking, visitId, isGuestModify],
   );
 
   // ── Data fetching ─────────────────────────────────────────────────────────
@@ -252,6 +292,13 @@ export function useBookingForm() {
       .catch((e) => setError(e.message))
       .finally(() => setLoadingFloors(false));
   }, [form.buildingId]);
+
+  // ── Derive floor layout URL from the selected floor ───────────────────────
+
+  useEffect(() => {
+    const floor = floors.find((f) => f.id === form.floorId);
+    setFloorLayoutUrl(floor?.layoutFileUrl ?? null);
+  }, [floors, form.floorId]);
 
   // ── Prefill resolution: display names → IDs ──────────────────────────────
 
@@ -297,27 +344,6 @@ export function useBookingForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seats, prefillSeatLabel]);
 
-  // ── Re-fetch seats on step 2 page refresh ────────────────────────────────
-
-  useEffect(() => {
-    if (step === 2 && seats.length === 0 && form.floorId && form.fromDate && form.toDate) {
-      setLoadingSeats(true);
-      const amenityIds = resolveAmenityIds(form.preferences);
-      fetchSeatsWithAvailability({
-        floorId:       form.floorId,
-        fromDate:      form.fromDate,
-        toDate:        form.toDate,
-        preferences:   form.preferences,
-        amenityIds,
-        currentSeatId: searchParams.get("seatId") ?? undefined,
-      })
-        .then(setSeats)
-        .catch((e) => setError(e.message))
-        .finally(() => setLoadingSeats(false));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
-
   // ── Preference resolver ───────────────────────────────────────────────────
 
   const resolveAmenityIds = useCallback(
@@ -329,6 +355,38 @@ export function useBookingForm() {
         .filter((id) => !isNaN(id)),
     [availablePreferences],
   );
+
+  // ── Re-fetch seats on step 2 page refresh ────────────────────────────────
+
+  useEffect(() => {
+    if (
+      step === 2 &&
+      seats.length === 0 &&
+      form.floorId &&
+      form.fromDate &&
+      form.toDate &&
+      availablePreferences.length > 0
+    ) {
+      setLoadingSeats(true);
+      const amenityIds = resolveAmenityIds(form.preferences);
+      fetchSeatsWithAvailability({
+        floorId:         form.floorId,
+        fromDate:        form.fromDate,
+        toDate:          form.toDate,
+        preferences:     form.preferences,
+        amenityIds,
+        currentSeatId:   searchParams.get("seatId") ?? undefined,
+        modifyBookingId: modifyBookingId ?? null,
+        bookedForUserId: bookedForUserId ?? null,
+        isGuestBooking:  isGuestBooking,
+        bookedForGuestId: guestId ?? null,
+      })
+        .then(setSeats)
+        .catch((e) => setError(e instanceof Error ? e.message : "Failed to load seats"))
+        .finally(() => setLoadingSeats(false));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, availablePreferences]);
 
   // ── Field setters ─────────────────────────────────────────────────────────
 
@@ -370,26 +428,35 @@ export function useBookingForm() {
     try {
       const amenityIds = resolveAmenityIds(form.preferences);
       const data = await fetchSeatsWithAvailability({
-        floorId:       form.floorId,
-        fromDate:      form.fromDate,
-        toDate:        form.toDate,
-        preferences:   form.preferences,
+        floorId:         form.floorId,
+        fromDate:        form.fromDate,
+        toDate:          form.toDate,
+        preferences:     form.preferences,
         amenityIds,
-        currentSeatId: searchParams.get("seatId") ?? undefined,
+        currentSeatId:   searchParams.get("seatId") ?? undefined,
+        modifyBookingId: modifyBookingId ?? null,
+        bookedForUserId: bookedForUserId ?? null,
+        isGuestBooking:  isGuestBooking,
+        bookedForGuestId: guestId ?? null,
       });
       setSeats(data);
       navigateTo(2, form);
-    } catch (e: any) {
-      const status = e?.response?.status;
-      if (status === 409) {
-        setError("This seat is already booked for the selected date. Please choose a different seat.");
-      } else if (status === 400) {
-        setError(e instanceof Error ? e.message : "Failed to load seats");
+    } catch (e) {
+      if (axios.isAxiosError(e)) {
+        const data = e.response?.data as { detail?: { message?: string } | string; message?: string; error?: { message?: string } } | undefined;
+        const msg =
+          (typeof data?.detail === "object" ? data?.detail?.message : typeof data?.detail === "string" ? data.detail : null)
+          ?? data?.error?.message
+          ?? data?.message
+          ?? e.message;
+        setError(msg);
+      } else {
+        setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
       }
     } finally {
       setLoadingSeats(false);
     }
-  }, [form, resolveAmenityIds, navigateTo, searchParams]);
+  }, [form, resolveAmenityIds, navigateTo, searchParams, modifyBookingId]);
 
   // ── Step 2: select seat ───────────────────────────────────────────────────
 
@@ -410,7 +477,7 @@ export function useBookingForm() {
     setSubmitting(true);
     setError(null);
 
-    const payload = {
+    const basePayload = {
       site_id:      Number(form.siteId),
       building_id:  Number(form.buildingId),
       floor_id:     Number(form.floorId),
@@ -421,38 +488,62 @@ export function useBookingForm() {
     try {
       let result: CreateBookingResponse;
 
-      if (isModifyMode && modifyBookingId) {
-        result = await modifyBooking(modifyBookingId, payload);
+      if (isModifyMode && modifyBookingId && isGuestModify) {
+        console.log("[ConfirmBooking] Branch: MODIFY_GUEST", { modifyBookingId });
+        result = await modifyGuestBooking(modifyBookingId, basePayload);
+      } else if (isModifyMode && modifyBookingId) {
+        console.log("[ConfirmBooking] Branch: MODIFY", { modifyBookingId });
+        result = await modifyBooking(modifyBookingId, basePayload);
+      } else if (isAddBookingToVisit && visitId) {
+        const workflowPayload = {
+          site_id:      Number(form.siteId),
+          building_id:  Number(form.buildingId),
+          floor_id:     Number(form.floorId),
+          seat_id:      Number(form.selectedSeatId),
+          visit_date:   form.fromDate,
+          guest_type:   guestType ?? "OTHER",
+          host_user_id: hostUserId ? Number(hostUserId) : undefined,
+        };
+        console.log("[ConfirmBooking] Branch: ADD_BOOKING", { visitId, workflowPayload });
+        const res = await guestVisitWorkflow(visitId, "ADD_BOOKING", workflowPayload);
+        console.log("[ConfirmBooking] ADD_BOOKING response:", res);
+        const wf = res as { booking?: CreateBookingResponse };
+        result = wf.booking ?? { booking_id: "", booking_status: "CONFIRMED", booking_date: form.fromDate } as CreateBookingResponse;
+      } else if (isGuestBooking && guestId && hostUserId && guestType) {
+        console.log("[ConfirmBooking] Branch: CREATE_GUEST_BOOKING", { guestId, hostUserId, guestType });
+        result = await createGuestBooking({
+          site_id:      Number(form.siteId),
+          building_id:  Number(form.buildingId),
+          floor_id:     Number(form.floorId),
+          seat_id:      Number(form.selectedSeatId),
+          visit_date:   form.fromDate,
+          guest_id:     Number(guestId),
+          host_user_id: Number(hostUserId),
+          guest_type:   guestType,
+          ...(purposeOfVisit ? { purpose_of_visit: purposeOfVisit } : {}),
+          ...(guestStartTime ? { start_time: guestStartTime }       : {}),
+          ...(guestEndTime   ? { end_time:   guestEndTime }         : {}),
+          ...(guestNotes     ? { notes:      guestNotes }           : {}),
+        });
       } else {
-        result = await createBooking(payload);
+        result = await createBooking(
+          bookedForUserId ? { ...basePayload, booked_for_user_id: Number(bookedForUserId) } : basePayload
+        );
       }
 
       setConfirmation(result);
       setStepState(3);
-    } catch (err: any) {
-      const status = err?.response?.status;
-      if (status === 409) {
-        setError("This seat is already booked for the selected date. Please choose a different seat.");
-      } else if (status === 400) {
-        setError(
-          err?.response?.data?.detail?.message ??
-          "Invalid booking details. Please go back and check your selection."
-        );
-      } else if (status === 403) {
-        setError("You don't have permission to book this seat.");
-      } else if (status === 404) {
-        setError(
-          isModifyMode
-            ? "The original booking could not be found. It may have already been cancelled."
-            : "The selected seat is no longer available. Please go back and choose another."
-        );
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const data = err.response?.data as { detail?: { message?: string } | string; message?: string; error?: { message?: string } } | undefined;
+        const msg =
+          (typeof data?.detail === "object" ? data?.detail?.message : typeof data?.detail === "string" ? data.detail : null)
+          ?? data?.error?.message
+          ?? data?.message
+          ?? err.message;
+        setError(msg);
       } else {
-        setError(
-          err?.response?.data?.detail?.message ??
-          err?.response?.data?.message ??
-          err?.message ??
-          "Failed to confirm booking. Please try again.",
-        );
+        setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       }
     } finally {
       setSubmitting(false);
@@ -468,16 +559,22 @@ export function useBookingForm() {
     navigateTo(prevStep, clearedForm);
   };
 
+  // ── FIX: after confirmation (both book & modify) go to My Bookings ────────
   const resetForm = () => {
-    const fresh = { ...DEFAULT_STATE, fromDate: todayIso(), toDate: todayIso() };
-    setForm(fresh);
+    setForm({ ...DEFAULT_STATE, fromDate: todayIso(), toDate: todayIso() });
     setStepState(1);
     setBuildings([]);
     setFloors([]);
     setSeats([]);
+    setFloorLayoutUrl(null);
     setConfirmation(null);
     setError(null);
-    router.push("/book");
+    if (isModifyMode) {
+      const forSomeone = isBookingForSomeone || isGuestModify || Boolean(bookedForUserId);
+      router.push(forSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings");
+    } else {
+      router.push("/book");
+    }
   };
 
   // ── Derived values ────────────────────────────────────────────────────────
@@ -525,7 +622,11 @@ export function useBookingForm() {
     dayCount,
     step1Valid,
     isModifyMode,
+    isBookingForSomeone,
+    isGuestBooking,
+    bookingForName,
     modifyBookingId,
+    floorLayoutUrl,
     setSiteId,
     setBuildingId,
     setFloorId,

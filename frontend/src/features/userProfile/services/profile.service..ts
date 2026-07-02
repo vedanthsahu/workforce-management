@@ -1,15 +1,58 @@
+
 import { axiosInstance } from "@/lib/http/axios";
 import type {
+  ApiAuthMe,
+  ApiBooking,
+  ApiBuilding,
   ApiDashboardMe,
-  ApiUpdateProfilePayload,
+  ApiFloor,
+  ApiSite,
   ApiUpdatePreferencesPayload,
+  ApiUpdateProfilePayload,
+  AccountInfo,
+  ActivitySummary,
+  BookingData,
   ProfileData,
   ProfileResult,
   ProfileSectionError,
   SeatPreferences,
+  ApiAmenity,
 } from "../types/profile.types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function safeStr(val: unknown): string {
+  if (typeof val === "string") return val;
+  if (val === null || val === undefined) return "—";
+  if (typeof val === "object") {
+    const o = val as Record<string, unknown>;
+    return String(o.display_name ?? o.full_name ?? o.name ?? o.email ?? "—");
+  }
+  return String(val);
+}
+
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString("en-IN", {
+      day: "numeric", month: "short", year: "numeric",
+    });
+  } catch {
+    return "—";
+  }
+}
+
+function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("en-IN", {
+      day: "numeric", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  } catch {
+    return "—";
+  }
+}
 
 function classifyError(
   err: unknown,
@@ -21,91 +64,246 @@ function classifyError(
     };
     const status = axiosErr.response?.status;
     const detail = axiosErr.response?.data?.detail;
-
     if (status === 401) return { section, code: "unauthenticated", message: "Session expired. Please log in again.", status };
     if (status === 403) return { section, code: "forbidden",       message: "You don't have permission to view this.", status };
-
     if (detail && typeof detail === "object" && detail.code) {
       return { section, code: detail.code, message: detail.message ?? "An error occurred.", status };
     }
-    if (status) {
-      return { section, code: `http_${status}`, message: `Request failed (${status}).`, status };
-    }
+    if (status) return { section, code: `http_${status}`, message: `Request failed (${status}).`, status };
   }
   return { section, code: "network_error", message: "Could not connect to the server." };
 }
 
 // ─── Mappers ──────────────────────────────────────────────────────────────────
 
-function mapDashboardMe(api: ApiDashboardMe): ProfileData {
+function mapDashboardMe(api: ApiDashboardMe, authMe?: ApiAuthMe): ProfileData {
   return {
-    // From API
-    displayName:      api.display_name ?? api.full_name,
-    email:            api.email,
-    phone:            api.mobile_phone     ?? "—",
-    role:             api.profile_metadata.role_name,
-    jobTitle:         api.title ?? api.job_title ?? "—",
-    department:       api.department       ?? "—",
-    workLocation:     api.office_info      ?? "—",
-    employeeId:       api.profile_metadata.employee_id ?? "—",
-    reportingManager: api.manager          ?? "—",
-    // Not in API yet
+    displayName:      safeStr(api.display_name ?? api.full_name),
+    email:            safeStr(api.email),
+    phone:            safeStr(api.mobile_phone),
+    role:             safeStr(api.profile_metadata?.role_name ?? authMe?.role_name),
+    jobTitle:         safeStr(api.title ?? api.job_title),
+    department:       safeStr(api.department),
+    workLocation:     safeStr(api.office_info ?? authMe?.office_location),
     avatarUrl:        null,
-    dateOfJoining:    "—",
-    dateOfBirth:      "—",
-    gender:           "—",
-    employmentType:   "—",
-    personalEmail:    "—",
-    bio:              "",
-    skills:           [],
+    employeeId:       safeStr(api.profile_metadata?.employee_id ?? authMe?.employee_id),
+    reportingManager: safeStr(api.manager),
+    dateOfJoining:    formatDate(api.profile_metadata?.created_at ?? authMe?.created_at),
+    bio:
+      "Curious developer exploring AI, building intelligent solutions, learning endlessly.",
+
+    skills: ["Next.js", "React", "TypeScript", "FastAPI", "AWS"],
+    status: safeStr(api.profile_metadata?.status ?? authMe?.status),
   };
 }
 
-function mapPreferences(api: ApiDashboardMe, override: LocalPrefsOverride): SeatPreferences {
+function mapAuthMe(api: ApiAuthMe): AccountInfo {
   return {
-    preferredAmenities: (api.preferences?.amenities ?? []).map((a) => a.name),
-    preferredOffice:    override.preferredOffice ?? "—",
-    preferredFloor:     override.preferredFloor  ?? "—",
-    seatType:           override.seatType        ?? "—",
-    nearTeammates:      override.nearTeammates   ?? [],
-    awayFrom:           override.awayFrom        ?? [],
-    noisePreference:    override.noisePreference ?? "—",
-    otherPreferences:   override.otherPreferences ?? [],
+    username:          api.display_name || api.full_name || api.email,
+    role:              api.role_name || api.role,
+    lastLogin:         formatDateTime(api.updated_at),
+    userPrincipalName: api.user_principal_name || api.email,
   };
 }
 
-// ─── In-memory overrides ──────────────────────────────────────────────────────
+function mapPreferences(
+  api: ApiDashboardMe,
+  override: LocalPrefsOverride,
+): SeatPreferences {
+  const amenities: { id: string; name: string }[] =
+    override.preferredAmenities ??
+    (api.preferences?.amenities ?? []).map((a) => ({ id: a.id, name: a.name }));
+
+  return {
+    preferredOfficeId:     override.preferredOfficeId    ?? "",
+    preferredOfficeName:   override.preferredOfficeName  ?? "—",
+    preferredBuildingId:   override.preferredBuildingId  ?? "",
+    preferredBuildingName: override.preferredBuildingName ?? "—",
+    preferredFloorId:      override.preferredFloorId     ?? "",
+    preferredFloorName:    override.preferredFloorName   ?? "—",
+    preferredAmenities:    amenities,
+  };
+}
+
+function computeActivitySummary(bookings: BookingData): ActivitySummary {
+  const total = bookings.current.length + bookings.future.length + bookings.past.length;
+  return {
+    totalBookings:    total,
+    upcomingBookings: bookings.future.length + bookings.current.length,
+    pastBookings:     bookings.past.length,
+  };
+}
+
+// ─── Local override types ─────────────────────────────────────────────────────
 
 interface LocalProfileOverride {
-  displayName?:   string;
-  phone?:         string;
-  personalEmail?: string;
-  bio?:           string;
-  skills?:        string[];
-  avatarUrl?:     string;
+  bio?:      string;
+  skills?:   string[];
+  avatarUrl?: string;
 }
 
 interface LocalPrefsOverride {
-  preferredOffice?:  string;
-  preferredFloor?:   string;
-  seatType?:         string;
-  nearTeammates?:    string[];
-  awayFrom?:         string[];
-  noisePreference?:  string;
-  otherPreferences?: string[];
+  preferredOfficeId?:    string;
+  preferredOfficeName?:  string;
+  preferredBuildingId?:  string;
+  preferredBuildingName?: string;
+  preferredFloorId?:     string;
+  preferredFloorName?:   string;
+  preferredAmenities?:   { id: string; name: string }[];
 }
 
-let localProfileOverride: LocalProfileOverride = {};
-let localPrefsOverride:   LocalPrefsOverride   = {};
+// ─── Persistent overrides (survive refresh via localStorage) ─────────────────
+
+// const PROFILE_OVERRIDE_KEY = "seatbook:profile_override";
+const PROFILE_OVERRIDE_KEY = (userId: string) =>
+  `seatbook:profile_override:${userId}`;
+const PREFS_OVERRIDE_KEY = (userId: string) =>
+  `seatbook:prefs_override:${userId}`;
+
+// function loadProfileOverride(): LocalProfileOverride {
+//   try {
+//     const raw = localStorage.getItem(PROFILE_OVERRIDE_KEY);
+//     return raw ? JSON.parse(raw) : {};
+//   } catch { return {}; }
+// }
+
+
+function loadProfileOverride(userId: string): LocalProfileOverride {
+  try {
+    const raw = localStorage.getItem(PROFILE_OVERRIDE_KEY(userId));
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+
+// function saveProfileOverride(data: LocalProfileOverride) {
+//   try { localStorage.setItem(PROFILE_OVERRIDE_KEY, JSON.stringify(data)); } catch {}
+// }
+
+function saveProfileOverride(
+  userId: string,
+  data: LocalProfileOverride
+) {
+  try {
+    localStorage.setItem(
+      PROFILE_OVERRIDE_KEY(userId),
+      JSON.stringify(data)
+    );
+  } catch {}
+}
+
+function loadPrefsOverride(userId: string): LocalPrefsOverride {
+  try {
+    const raw = localStorage.getItem(
+      PREFS_OVERRIDE_KEY(userId)
+    );
+
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function savePrefsOverride(
+  userId: string,
+  data: LocalPrefsOverride
+) {
+  try {
+    localStorage.setItem(
+      PREFS_OVERRIDE_KEY(userId),
+      JSON.stringify(data)
+    );
+  } catch {}
+}
 
 // ─── Main fetch ───────────────────────────────────────────────────────────────
 
 export async function getProfileData(): Promise<ProfileResult> {
   try {
-    const { data } = await axiosInstance.get<ApiDashboardMe>("/dashboard/me");
-    const profile     = { ...mapDashboardMe(data), ...localProfileOverride };
-    const preferences = mapPreferences(data, localPrefsOverride);
-    return { ok: true, data: { profile, preferences }, errors: [] };
+    const [dashboardResult, authResult, currentResult, futureResult, pastResult] =
+      await Promise.allSettled([
+        axiosInstance.get<ApiDashboardMe>("/dashboard/me"),
+        axiosInstance.get<ApiAuthMe>("/auth/me"),
+        axiosInstance.get<ApiBooking[]>("/bookings/me/current"),
+        axiosInstance.get<ApiBooking[]>("/bookings/me/future"),
+        axiosInstance.get<ApiBooking[]>("/bookings/me/past"),
+      ]);
+
+    if (dashboardResult.status === "rejected") {
+      return { ok: false, fatal: classifyError(dashboardResult.reason, "profile") };
+    }
+
+    const dashboardData = dashboardResult.value.data;
+    const profileOverride =
+  loadProfileOverride(dashboardData.user_id);
+
+  const prefsOverride =
+  loadPrefsOverride(dashboardData.user_id);
+    const authData      = authResult.status === "fulfilled" ? authResult.value.data : undefined;
+
+    const errors: ProfileSectionError[] = [];
+
+    if (authResult.status === "rejected") {
+      errors.push(classifyError(authResult.reason, "account"));
+    }
+    if (
+      currentResult.status === "rejected" ||
+      futureResult.status  === "rejected" ||
+      pastResult.status    === "rejected"
+    ) {
+      errors.push({ section: "bookings", code: "fetch_failed", message: "Could not load booking data." });
+    }
+
+    const bookings: BookingData = {
+      current: currentResult.status === "fulfilled" ? (currentResult.value.data ?? []) : [],
+      future:  futureResult.status  === "fulfilled" ? (futureResult.value.data  ?? []) : [],
+      past:    pastResult.status    === "fulfilled" ? (pastResult.value.data    ?? []) : [],
+    };
+
+    const bestStr = (...vals: (string | null | undefined)[]): string => {
+      for (const v of vals) {
+        if (v && typeof v === "string" && v.trim() !== "") return v.trim();
+      }
+      return "—";
+    };
+
+    const mergedProfile: ProfileData = {
+      ...mapDashboardMe(dashboardData, authData),
+      workLocation:  bestStr(authData?.office_location, dashboardData.office_info),
+      employeeId:    bestStr(authData?.employee_id,     dashboardData.profile_metadata?.employee_id),
+      jobTitle:      bestStr(authData?.job_title,       dashboardData.job_title,  dashboardData.title),
+      department:    bestStr(authData?.department,      dashboardData.department),
+      phone:         bestStr(authData?.mobile_phone,    dashboardData.mobile_phone),
+      status:        bestStr(authData?.status,          dashboardData.profile_metadata?.status),
+      dateOfJoining: formatDate(authData?.created_at ?? dashboardData.profile_metadata?.created_at),
+      ...profileOverride,  // ← persisted bio/skills/avatar applied last
+    };
+
+    const accountInfo: AccountInfo = authData
+      ? mapAuthMe(authData)
+      : {
+          username:          mergedProfile.displayName,
+          role:              mergedProfile.role,
+          lastLogin:         "—",
+          userPrincipalName: mergedProfile.email,
+        };
+
+    return {
+      ok: true,
+      data: {
+        profile:         mergedProfile,
+        preferences: mapPreferences(
+  dashboardData,
+  prefsOverride
+),  // ← persisted prefs
+        accountInfo,
+        activitySummary: computeActivitySummary(bookings),
+        bookings,
+      },
+      errors,
+    };
   } catch (err) {
     return { ok: false, fatal: classifyError(err, "profile") };
   }
@@ -114,37 +312,150 @@ export async function getProfileData(): Promise<ProfileResult> {
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
 export async function updateProfile(payload: ApiUpdateProfilePayload): Promise<ProfileData> {
-  localProfileOverride = {
-    ...localProfileOverride,
-    ...(payload.display_name   !== undefined && { displayName:   payload.display_name   }),
-    ...(payload.phone          !== undefined && { phone:         payload.phone          }),
-    ...(payload.personal_email !== undefined && { personalEmail: payload.personal_email }),
-    ...(payload.bio            !== undefined && { bio:           payload.bio            }),
-    ...(payload.skills         !== undefined && { skills:        payload.skills         }),
-    ...(payload.avatar_url     !== undefined && { avatarUrl:     payload.avatar_url     }),
-  };
+  const dashResponse =
+  await axiosInstance.get<ApiDashboardMe>("/dashboard/me");
 
-  const { data } = await axiosInstance.get<ApiDashboardMe>("/dashboard/me");
-  return { ...mapDashboardMe(data), ...localProfileOverride };
+const userId = dashResponse.data.user_id;
+
+const existing = loadProfileOverride(userId);
+  const updated: LocalProfileOverride = {
+    ...existing,
+    ...(payload.bio        !== undefined && { bio:       payload.bio        }),
+    ...(payload.skills     !== undefined && { skills:    payload.skills     }),
+    ...(payload.avatar_url !== undefined && { avatarUrl: payload.avatar_url }),
+  };
+  saveProfileOverride(userId, updated); // ← persist immediately
+
+  const [dashResult, authResult] = await Promise.allSettled([
+    axiosInstance.get<ApiDashboardMe>("/dashboard/me"),
+    axiosInstance.get<ApiAuthMe>("/auth/me"),
+  ]);
+
+  const dashData = dashResult.status === "fulfilled" ? dashResult.value.data : null;
+  const authData = authResult.status === "fulfilled" ? authResult.value.data : undefined;
+
+  if (!dashData) throw new Error("Failed to refresh profile data");
+
+  return {
+    ...mapDashboardMe(dashData, authData),
+    ...updated,  // ← use the freshly saved override
+  };
 }
 
 export async function updatePreferences(
   payload: ApiUpdatePreferencesPayload,
 ): Promise<SeatPreferences> {
-  localPrefsOverride = {
-    preferredOffice:  payload.preferred_office  ?? localPrefsOverride.preferredOffice,
-    preferredFloor:   payload.preferred_floor   ?? localPrefsOverride.preferredFloor,
-    seatType:         payload.seat_type         ?? localPrefsOverride.seatType,
-    nearTeammates:    payload.near_teammates     ?? localPrefsOverride.nearTeammates,
-    awayFrom:         payload.away_from         ?? localPrefsOverride.awayFrom,
-    noisePreference:  payload.noise_preference  ?? localPrefsOverride.noisePreference,
-    otherPreferences: payload.other_preferences ?? localPrefsOverride.otherPreferences,
-  };
+  const dashResponse =
+  await axiosInstance.get<ApiDashboardMe>(
+    "/dashboard/me"
+  );
 
+const userId = dashResponse.data.user_id;
+
+const existing =
+  loadPrefsOverride(userId);
+
+  let officeName:   string | undefined;
+  let buildingName: string | undefined;
+  let floorName:    string | undefined;
+  let amenityPairs: { id: string; name: string }[] | undefined;
+
+  if (payload.preferred_office) {
+    try {
+      const { data } = await axiosInstance.get<ApiSite[]>("/sites");
+      const site = data.find((s) => s.site_id === payload.preferred_office);
+      officeName = site?.site_name;
+    } catch { /* keep previous */ }
+  }
+
+  if (payload.preferred_building && payload.preferred_office) {
+    try {
+      const { data } = await axiosInstance.get<ApiBuilding[]>(`/buildings?site_id=${payload.preferred_office}`);
+      const building = data.find((b) => b.building_id === payload.preferred_building);
+      buildingName = building?.building_name;
+    } catch { /* keep previous */ }
+  }
+
+  if (payload.preferred_floor && payload.preferred_building) {
+    try {
+      const { data } = await axiosInstance.get<ApiFloor[]>(
+        `/buildings/${payload.preferred_building}/floors`,
+      );
+      const floor = data.find((f) => f.floor_id === payload.preferred_floor);
+      floorName = floor?.floor_name;
+    } catch { /* keep previous */ }
+  }
+
+  if (payload.preferred_amenities !== undefined) {
+    try {
+      const { data } = await axiosInstance.get<{ amenities: ApiAmenity[] }>("/preferences");
+      amenityPairs = payload.preferred_amenities
+        .map((id) => {
+          const a = data.amenities.find((x) => x.id === id);
+          return a ? { id: a.id, name: a.name } : null;
+        })
+        .filter(Boolean) as { id: string; name: string }[];
+    } catch { /* keep previous */ }
+  }
+
+  const updated: LocalPrefsOverride = {
+    preferredOfficeId:     payload.preferred_office    ?? existing.preferredOfficeId,
+    preferredOfficeName:   officeName                  ?? existing.preferredOfficeName,
+    preferredBuildingId:   payload.preferred_building  ?? existing.preferredBuildingId,
+    preferredBuildingName: buildingName                ?? existing.preferredBuildingName,
+    preferredFloorId:      payload.preferred_floor     ?? existing.preferredFloorId,
+    preferredFloorName:    floorName                   ?? existing.preferredFloorName,
+    preferredAmenities:    amenityPairs                ?? existing.preferredAmenities,
+  };
+   savePrefsOverride(userId, updated);
+
+   
   const { data } = await axiosInstance.get<ApiDashboardMe>("/dashboard/me");
-  return mapPreferences(data, localPrefsOverride);
+  return mapPreferences(data, updated);
 }
 
 export async function uploadAvatar(_file: File): Promise<string> {
   return "";
+}
+
+export async function getAvailableAmenities(): Promise<ApiAmenity[]> {
+  try {
+    const { data } = await axiosInstance.get<{ amenities: ApiAmenity[] }>("/preferences");
+    return data.amenities ?? [];
+  } catch {
+    return [];
+  }
+}
+
+// ─── Location cascade helpers ─────────────────────────────────────────────────
+
+export async function getSites(): Promise<ApiSite[]> {
+  try {
+    const { data } = await axiosInstance.get<ApiSite[]>("/sites?page=1&limit=200");
+    return data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getBuildingsBySite(siteId: string): Promise<ApiBuilding[]> {
+  try {
+    const { data } = await axiosInstance.get<ApiBuilding[]>(
+      `/buildings?site_id=${siteId}&page=1&limit=200`,
+    );
+    return data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getFloorsByBuilding(buildingId: string): Promise<ApiFloor[]> {
+  try {
+    const { data } = await axiosInstance.get<ApiFloor[]>(
+      `/buildings/${buildingId}/floors?page=1&limit=200`,
+    );
+    return data ?? [];
+  } catch {
+    return [];
+  }
 }
