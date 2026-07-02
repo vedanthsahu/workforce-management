@@ -1,27 +1,24 @@
 
-
-import type { RoleKey } from "@/features/roles/types/roles.types";
+import type { RoleKey, ApiPermission } from "@/features/roles/types/roles.types";
 
 export type { RoleKey };
 
-// ─── Raw API types (mirrors backend schema) ─────────────────────────────
 export type ApiUserStatus = "ACTIVE" | "INACTIVE";
 export type UserStatus = "active" | "inactive";
 
-export interface ApiRolePermission {
-  id: number;
-  permissionKey: string;
-  description: string;
-  moduleName: string;
+export interface RoleCount {
+  roleName: string;
+  count: number;
 }
 
-export interface ApiRoleSummary {
+// Matches the real top-level `roles` array in the API payload
+export interface ApiRoleSummaryItem {
   roleId: number;
   roleName: RoleKey;
   roleDescription: string;
   userCount: number;
   permissionCount: number;
-  permissions: ApiRolePermission[];
+  permissions: ApiPermission[];
 }
 
 export interface UsersSummary {
@@ -29,9 +26,9 @@ export interface UsersSummary {
   filteredUsers: number;
   activeUsers: number;
   inactiveUsers: number;
+  roles: RoleCount[]; // derived on the frontend, not sent as-is by the API
 }
 
-// ─── Backend AdminUserDirectoryItem (camelCase from CamelModel) ──────────────
 export interface ApiUser {
   id: string;
   employeeId: string | null;
@@ -52,14 +49,19 @@ export interface ApiUsersPagination {
   hasPrevious: boolean;
 }
 
+// Matches the actual raw API shape
 export interface ApiUsersResponse {
-  summary: UsersSummary;
-  roles: ApiRoleSummary[];
-  pagination: ApiUsersPagination | null;
+  summary: {
+    totalUsers: number;
+    filteredUsers: number;
+    activeUsers: number;
+    inactiveUsers: number;
+  };
+  roles: ApiRoleSummaryItem[];
+  pagination: unknown | null;
   items: ApiUser[];
 }
 
-// ─── Frontend display type ────────────────────────────────────────────────────
 export interface User {
   id: string;
   fullName: string;
@@ -72,7 +74,6 @@ export interface User {
   currentRole: RoleKey;
 }
 
-// ─── Query params for GET /admin/users ───────────────────────────────────
 export interface GetUsersParams {
   role?: RoleKey;
   roles?: RoleKey[];
@@ -81,7 +82,6 @@ export interface GetUsersParams {
   limit?: number;
 }
 
-// ─── PATCH /admin/users/{user_id}/access ─────────────────────────────────
 export interface UpdateUserAccessPayload {
   role_name: RoleKey;
   status: ApiUserStatus;
@@ -93,7 +93,6 @@ export interface UserAccessResult {
   status: ApiUserStatus;
 }
 
-// "+ Add User" form (no backend endpoint yet — still stubbed)
 export interface UserFormData {
   full_name: string;
   email: string;
@@ -110,7 +109,6 @@ export interface CreateUserPayload {
   role: RoleKey;
 }
 
-// ─── GET /users?q= search response (snake_case, no summary/pagination) ──────
 export interface ApiUserSearchResult {
   user_id: string;
   tenant_id: string;

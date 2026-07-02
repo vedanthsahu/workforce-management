@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { getRoleBadgeClass } from "../utils/users.utils";
-import type { ApiRoleSummary, RoleKey } from "../types/users.types";
+import { getRoleBadgeClass, normalizeRoleKey } from "../utils/users.utils";
+import type { RoleCount, RoleKey } from "../types/users.types";
 
 type Props = {
-  roleCounts: ApiRoleSummary[];
+  roleCounts: RoleCount[];
   selectedRoles: RoleKey[];
   onChange: (roles: RoleKey[]) => void;
 };
@@ -59,7 +59,7 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
             All Roles
           </button>
           <div className="my-1 border-t" />
-          {roleCounts.map(({ roleName, userCount }) => (
+          {roleCounts.map(({ roleName, count }) => (
             <label
               key={roleName}
               className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-50 cursor-pointer"
@@ -67,7 +67,8 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
               <span className="flex items-center gap-2 min-w-0">
                 <input
                   type="checkbox"
-                  checked={selectedRoles.includes(roleName)}
+                  // checked={selectedRoles.includes(roleName)}
+                  checked={selectedRoles.some((r) => normalizeRoleKey(r) === normalizeRoleKey(roleName))}
                   onChange={() => toggleRole(roleName)}
                   className="accent-blue-600 shrink-0"
                 />
@@ -75,7 +76,7 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
                   {roleName}
                 </span>
               </span>
-              <span className="text-xs text-gray-400 shrink-0">{userCount}</span>
+              <span className="text-xs text-gray-400 shrink-0">{count}</span>
             </label>
           ))}
         </div>

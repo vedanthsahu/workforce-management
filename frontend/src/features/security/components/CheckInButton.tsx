@@ -43,5 +43,5 @@ export function CheckInButton({ visitor, isLoading, onCheckIn, onCheckOut }: Pro
     );
   }
 
-  return null;
+  return <span className="inline-block w-[80px] h-8" />;
 }

@@ -20,7 +20,7 @@ export default function BuildingFilters({ sites, selectedSiteId, setSelectedSite
         onChange={(e) => setSelectedSiteId(e.target.value)}
         className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <option value="" disabled hidden>All Offices</option>
+        <option value=""  >All Offices</option>
         {sites.map((site) => (
           <option key={site.site_id} value={String(site.site_id)}>{site.site_name}</option>
         ))}

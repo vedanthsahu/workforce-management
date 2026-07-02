@@ -36,7 +36,7 @@ export default function ChangeRolePage({ userId }: { userId: string }) {
 
   return (
     <div className="p-4 sm:p-6 bg-[#f8fafc] min-h-screen">
-      <button
+      {/* <button
         type="button"
         onClick={() => router.push("/admin/users")}
         onMouseEnter={() => router.prefetch("/admin/users")}
@@ -44,7 +44,7 @@ export default function ChangeRolePage({ userId }: { userId: string }) {
       >
         <ArrowLeft size={16} />
         Back to User Management
-      </button>
+      </button> */}
 
       {loading && <ChangeRoleSkeleton />}
       {!loading && notFound && <div className="text-sm text-red-600">{errorMessage ?? "User not found."}</div>}

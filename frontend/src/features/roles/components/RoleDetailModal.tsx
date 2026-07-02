@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { X, CheckCircle2 } from "lucide-react";
 import { getRoleBadgeClass } from "../utils/roles.utils";
 import type { Role } from "../types/roles.types";
+import { useUsersFilterStore } from "@/store/useUsersFilterStore";
 
 type Props = {
   role: Role | null;
@@ -14,6 +16,7 @@ const USERS_PREVIEW_COUNT = 2;
 
 export default function RoleDetailModal({ role, onClose }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   // Close on Escape
   useEffect(() => {
@@ -39,6 +42,12 @@ export default function RoleDetailModal({ role, onClose }: Props) {
     if (e.target === overlayRef.current) onClose();
   };
 
+  const handleViewUsers = () => {
+    useUsersFilterStore.getState().reset();
+    router.push(`/admin/users?role=${encodeURIComponent(role.key)}`);
+    onClose();
+  };
+
   return (
     <div
       ref={overlayRef}
@@ -50,9 +59,9 @@ export default function RoleDetailModal({ role, onClose }: Props) {
           <div>
             <p className="text-xs text-gray-400 mb-1">Role</p>
             <span
-            //   className={`inline-flex items-center px-2.5 py-1 rounded-md text-sm font-semibold ring-1 ${getRoleBadgeClass(
-            //     role.key
-            //   )}`}
+              className={`inline-flex items-center px-2.5 py-1 rounded-md text-sm font-semibold ring-1 ${getRoleBadgeClass(
+                role.key
+              )}`}
             >
               {role.name}
             </span>
@@ -80,28 +89,41 @@ export default function RoleDetailModal({ role, onClose }: Props) {
               <li key={perm.id} className="flex items-start gap-2 text-sm text-gray-700">
                 <CheckCircle2 size={14} className="text-emerald-500 mt-0.5 shrink-0" />
                 <span className="flex-1">{perm.description}</span>
-                {/* <span className="text-[10px] text-gray-400 font-mono shrink-0">{perm.permissionKey}</span> */}
               </li>
             ))}
           </ul>
         </div>
 
         <div className="pt-2 border-t">
-          <p className="text-xs font-medium text-gray-500 mb-2">
+          {/* <p className="text-xs font-medium text-gray-500 mb-2">
             Users with this role ({role.userCount})
-          </p>
+          </p> */}
           <ul className="space-y-2">
             {role.users.slice(0, USERS_PREVIEW_COUNT).map((u) => (
-              <li key={u.id} className="text-sm">
+              <li
+                key={u.id}
+                className="text-sm cursor-pointer hover:bg-gray-50 rounded-md -mx-2 px-2 py-1 transition-colors"
+                onClick={handleViewUsers}
+              >
                 <p className="font-medium text-gray-800">{u.fullName}</p>
                 <p className="text-xs text-gray-400">{u.email}</p>
               </li>
             ))}
           </ul>
 
-          {role.userCount > USERS_PREVIEW_COUNT && (
+          {/* {role.userCount > USERS_PREVIEW_COUNT && (
             <button
               type="button"
+              onClick={handleViewUsers}
+              className="text-xs font-medium text-indigo-600 hover:text-indigo-800 mt-2"
+            >
+              View all {role.userCount} users
+            </button>
+          )} */}
+          {role.userCount > 0 && (
+            <button
+              type="button"
+              onClick={handleViewUsers}
               className="text-xs font-medium text-indigo-600 hover:text-indigo-800 mt-2"
             >
               View all {role.userCount} users
