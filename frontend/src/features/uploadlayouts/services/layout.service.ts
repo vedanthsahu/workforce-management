@@ -25,7 +25,7 @@ export const layoutService = {
 
   async getSites(): Promise<Site[]> {
     const { data } = await axiosInstance.get("/sites", {
-      params: { status: "ACTIVE" },
+      params: {},
     });
     return data;
   },
