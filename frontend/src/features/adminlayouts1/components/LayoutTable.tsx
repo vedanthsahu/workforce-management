@@ -8,31 +8,122 @@ import LayoutPagination     from "./LayoutPagination";
 import { useCallback, useEffect, useState } from "react";
 import { LayoutSelection, LayoutApiResponse } from "../types/layout.types";
 import { useRouter }        from "next/navigation";
-import SvgViewer            from "./SvgViewer";
+import { fetchLayoutSeats } from "@/features/managelayout1/services/seatService";
+import type { Seat }        from "@/features/managelayout1/types/seat.types";
 
 type Props = {
   selection:         LayoutSelection;
   selectedLayoutId?: string;
 };
 
+// ── Seat color helpers (same rules as LayoutPreview.tsx) ─────────────────────
+
+function resolveSeatFill(seat: Seat): string {
+  if (!seat.is_configured)        return "#D1D5DB"; // unconfigured — gray
+  if (seat.status === "INACTIVE") return "#EF4444"; // inactive     — red
+  if (!seat.is_bookable)          return "#F59E0B"; // non-bookable — amber
+  return "#22C55E";                                 // bookable     — green
+}
+
+function applyColors(svgText: string, seats: Seat[]): string {
+  let result = svgText;
+  for (const seat of seats) {
+    const fill = resolveSeatFill(seat);
+    const re   = new RegExp(
+      `(<g[^>]*\\bid="${seat.seat_svg_id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`,
+      "m",
+    );
+    result = result.replace(re, (_m, open, inner, close) => {
+      const colored = inner
+        .replace(/fill="[^"]*"/g,      `fill="${fill}"`)
+        .replace(/fill:[^;"}\s]*/g,    `fill:${fill}`);
+      return `${open}${colored}${close}`;
+    });
+  }
+  return result;
+}
+
+// ── Legend ───────────────────────────────────────────────────────────────────
+
+const LEGEND = [
+  { label: "Bookable",     color: "#22C55E" },
+  { label: "Non-bookable", color: "#F59E0B" },
+  { label: "Inactive",     color: "#EF4444" },
+  { label: "Unconfigured", color: "#D1D5DB" },
+] as const;
+
+// ── Component ────────────────────────────────────────────────────────────────
+
 export default function LayoutTable({ selection, selectedLayoutId }: Props) {
   const { layouts, loading } = useLayoutsStore();
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const router = useRouter();
 
-  // Prefetch manage-layout route as soon as layouts are loaded so the
-  // settings icon click feels instant.
+  const [previewLayout,   setPreviewLayout]   = useState<LayoutApiResponse | null>(null);
+  const [coloredSvg,      setColoredSvg]      = useState<string | null>(null);
+  const [previewLoading,  setPreviewLoading]  = useState(false);
+  const [previewError,    setPreviewError]    = useState(false);
+  const [downloading,     setDownloading]     = useState(false);
+
   useEffect(() => {
-    if (layouts.length > 0) {
-      router.prefetch("/admin/layouts/manage-layout");
-    }
+    if (layouts.length > 0) router.prefetch("/admin/layouts/manage-layout");
   }, [layouts, router]);
 
-  // ── Handlers ────────────────────────────────────────────────────────────
-  const handleView = useCallback((row: LayoutApiResponse) => {
-    setPreviewUrl(row.layout_file_url);
+  // ── Open preview ─────────────────────────────────────────────────────────
+  // Fetch SVG text + seat data in parallel, then apply seat colors to the SVG.
+  const handleView = useCallback(async (row: LayoutApiResponse) => {
+    setPreviewLayout(row);
+    setColoredSvg(null);
+    setPreviewError(false);
+    setPreviewLoading(true);
+    try {
+      const [svgRes, { seats }] = await Promise.all([
+        fetch(row.layout_file_url),
+        fetchLayoutSeats(row.layout_id),
+      ]);
+      if (!svgRes.ok) throw new Error(`SVG fetch ${svgRes.status}`);
+      const raw   = await svgRes.text();
+      // Make SVG fluid so it fills the modal container
+      const fluid = raw
+        .replace(/\bwidth="[^"]*"/,  'width="100%"')
+        .replace(/\bheight="[^"]*"/, 'height="100%"');
+      setColoredSvg(applyColors(fluid, seats));
+    } catch (err) {
+      console.error("[LayoutTable] preview load failed", err);
+      setPreviewError(true);
+    } finally {
+      setPreviewLoading(false);
+    }
   }, []);
 
+  const handleClose = useCallback(() => {
+    setPreviewLayout(null);
+    setColoredSvg(null);
+    setPreviewError(false);
+  }, []);
+
+  // ── Download ─────────────────────────────────────────────────────────────
+  // The colored SVG string is already in memory — no extra S3 fetch needed.
+  const handleDownloadSvg = useCallback(async () => {
+    if (!coloredSvg || !previewLayout) return;
+    setDownloading(true);
+    try {
+      const blob    = new Blob([coloredSvg], { type: "image/svg+xml" });
+      const blobUrl = URL.createObjectURL(blob);
+      const link    = document.createElement("a");
+      link.href     = blobUrl;
+      link.download = `${previewLayout.layout_name ?? "layout"}.svg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("[LayoutTable] download failed", err);
+    } finally {
+      setDownloading(false);
+    }
+  }, [coloredSvg, previewLayout]);
+
+  // ── Navigate to manage-layout ────────────────────────────────────────────
   const handleManage = useCallback((row: LayoutApiResponse) => {
     const params = new URLSearchParams({
       layoutId:   row.layout_id,
@@ -43,30 +134,8 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
     router.push(`/admin/layouts/manage-layout?${params.toString()}`);
   }, [router]);
 
-  const handleDownloadSvg = useCallback(() => {
-    try {
-      const svgElement = document.querySelector("svg");
-      if (!svgElement) { alert("SVG not found"); return; }
-      const svgString = new XMLSerializer().serializeToString(svgElement);
-      const blob      = new Blob([svgString], { type: "image/svg+xml" });
-      const url       = URL.createObjectURL(blob);
-      const link      = document.createElement("a");
-      link.href       = url;
-      link.download   = "layout.svg";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Download failed", err);
-    }
-  }, []);
+  const { page, rowsPerPage, total, paginated, setPage } = useLayoutsTable(layouts);
 
-  // ── Pagination ───────────────────────────────────────────────────────────
-  const { page, rowsPerPage, total, paginated, setPage } =
-    useLayoutsTable(layouts);
-
-  // ── Render ──────────────────────────────────────────────────────────────
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
 
@@ -179,27 +248,68 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
         />
       </div>
 
-      {previewUrl && (
+      {/* PREVIEW MODAL */}
+      {previewLayout && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl w-[90vw] sm:w-[70%] md:w-[50%] h-[90vh] md:h-[95%] flex flex-col shadow-xl">
-            <div className="flex items-center justify-between px-4 py-3 border-b">
-              <h2 className="text-sm font-semibold">Layout Preview</h2>
+          <div className="bg-white rounded-xl w-[90vw] sm:w-[70%] md:w-[55%] h-[90vh] md:h-[95%] flex flex-col shadow-xl">
+
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0">
+              <h2 className="text-sm font-semibold text-gray-800">
+                {previewLayout.layout_name ?? "Layout Preview"}
+              </h2>
               <div className="flex items-center gap-2">
-                <button onClick={handleDownloadSvg}
-                  className="p-2 border rounded-md hover:bg-gray-100">
-                  <Download className="w-4 h-4 text-gray-600" />
+                <button
+                  onClick={handleDownloadSvg}
+                  disabled={downloading || !coloredSvg}
+                  className="p-2 border rounded-md hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Download SVG with seat colors"
+                >
+                  {downloading
+                    ? <span className="w-4 h-4 block border-2 border-gray-400 border-t-gray-600 rounded-full animate-spin" />
+                    : <Download className="w-4 h-4 text-gray-600" />
+                  }
                 </button>
-                <button onClick={() => setPreviewUrl(null)}
-                  className="p-2 border rounded-md hover:bg-gray-100">
+                <button
+                  onClick={handleClose}
+                  className="p-2 border rounded-md hover:bg-gray-100 text-gray-500"
+                >
                   ✕
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-auto bg-gray-100 flex items-center justify-center">
-              <div className="p-4">
-                <SvgViewer url={previewUrl} />
-              </div>
+
+            {/* Modal body */}
+            <div className="flex-1 overflow-hidden bg-gray-100 flex items-center justify-center p-4 min-h-0">
+              {previewLoading && (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+                  <p className="text-xs text-gray-400">Loading floor plan…</p>
+                </div>
+              )}
+              {!previewLoading && previewError && (
+                <p className="text-sm text-gray-400">Failed to load preview. Please try again.</p>
+              )}
+              {!previewLoading && coloredSvg && (
+                <div
+                  className="w-full h-full"
+                  dangerouslySetInnerHTML={{ __html: coloredSvg }}
+                />
+              )}
             </div>
+
+            {/* Legend */}
+            {!previewLoading && coloredSvg && (
+              <div className="flex items-center gap-4 px-4 py-2.5 border-t flex-shrink-0">
+                {LEGEND.map(({ label, color }) => (
+                  <span key={label} className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                    {label}
+                  </span>
+                ))}
+              </div>
+            )}
+
           </div>
         </div>
       )}

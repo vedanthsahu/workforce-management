@@ -110,13 +110,13 @@ const currentUserId = data?.user.user_id;
     scrollAreaRef.current?.scrollTo({ top: 0, behavior: "instant" });
   }, [step]);
 
-  const [guestView, setGuestView] = useState<"list" | "create">("list");
+  const [guestView, setGuestView] = useState<"list" | "create" | "edit">("list");
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
   const [checkingEligibility, setCheckingEligibility] = useState(false);
   const errorBannerRef = useRef<HTMLDivElement>(null);
-  const isCreatingGuest = bookingType === "visitor" && step === 1 && guestView === "create";
+  const isCreatingGuest = bookingType === "visitor" && step === 1 && guestView !== "list";
 
   useEffect(() => {
     setEligibilityError(null);

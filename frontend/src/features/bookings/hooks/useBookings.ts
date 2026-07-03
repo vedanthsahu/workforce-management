@@ -162,15 +162,17 @@ export function useBookings(): UseBookingsReturn {
       case "upcoming":
         return [...currentBookings, ...futureBookings]
           .filter((b) => b.status !== "cancelled")
-          .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+          .sort((a, b) => new Date(a.fromDate).getTime() - new Date(b.fromDate).getTime());
       case "past":
-        return pastBookings;
+        return pastBookings
+          .sort((a, b) => new Date(b.fromDate).getTime() - new Date(a.fromDate).getTime());
       case "recurring":
-        return [...currentBookings, ...futureBookings].filter(
-          (b) => b.isRecurring && b.status !== "cancelled"
-        );
+        return [...currentBookings, ...futureBookings]
+          .filter((b) => b.isRecurring && b.status !== "cancelled")
+          .sort((a, b) => new Date(a.fromDate).getTime() - new Date(b.fromDate).getTime());
       case "cancelled":
-        return cancelledBookings;
+        return cancelledBookings
+          .sort((a, b) => new Date(b.fromDate).getTime() - new Date(a.fromDate).getTime());
       default:
         return [];
     }
