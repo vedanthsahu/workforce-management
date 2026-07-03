@@ -1,8 +1,37 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useCallback, ReactNode } from "react";
+import { useEffect, useCallback, useState, ReactNode } from "react";
 import { Layout } from "../types/layout.types";
+import { fetchLayoutSeats } from "@/features/managelayout1/services/seatService";
+import type { Seat } from "@/features/managelayout1/types/seat.types";
+
+// ── Seat color helpers (same rules as LayoutPreview.tsx / LayoutTable.tsx) ────
+
+function resolveSeatFill(seat: Seat): string {
+  if (!seat.is_configured)        return "#D1D5DB";
+  if (seat.status === "INACTIVE") return "#EF4444";
+  if (!seat.is_bookable)          return "#F59E0B";
+  return "#22C55E";
+}
+
+function applyColors(svgText: string, seats: Seat[]): string {
+  let result = svgText;
+  for (const seat of seats) {
+    const fill = resolveSeatFill(seat);
+    const re   = new RegExp(
+      `(<g[^>]*\\bid="${seat.seat_svg_id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`,
+      "m",
+    );
+    result = result.replace(re, (_m, open, inner, close) => {
+      const colored = inner
+        .replace(/fill="[^"]*"/g,   `fill="${fill}"`)
+        .replace(/fill:[^;"}\s]*/g, `fill:${fill}`);
+      return `${open}${colored}${close}`;
+    });
+  }
+  return result;
+}
 
 interface LayoutSidebarProps {
   layout: Layout | null;
@@ -139,6 +168,34 @@ export default function LayoutSidebar({
   selectedSiteId     = "",
 }: LayoutSidebarProps) {
   const router = useRouter();
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownloadSvg = useCallback(async () => {
+    if (!layout?.layout_file_url || !layout?.layout_id) return;
+    setDownloading(true);
+    try {
+      const [svgRes, { seats }] = await Promise.all([
+        fetch(layout.layout_file_url),
+        fetchLayoutSeats(layout.layout_id),
+      ]);
+      if (!svgRes.ok) throw new Error(`HTTP ${svgRes.status}`);
+      const raw     = await svgRes.text();
+      const colored = applyColors(raw, seats);
+      const blob    = new Blob([colored], { type: "image/svg+xml" });
+      const blobUrl = URL.createObjectURL(blob);
+      const link    = document.createElement("a");
+      link.href     = blobUrl;
+      link.download = `${layout.layout_name ?? fileName(layout.layout_file_url)}.svg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Download failed", err);
+    } finally {
+      setDownloading(false);
+    }
+  }, [layout]);
 
   // Build query string once — reused by both prefetch and push
   const buildQuery = useCallback(() => {
@@ -221,19 +278,21 @@ export default function LayoutSidebar({
                 <FileIcon />
                 <span
                   className="truncate text-indigo-600 max-w-[150px]"
-                  title={fileName(layout.layout_file_url)}
+                  title={`${layout.layout_name ?? fileName(layout.layout_file_url)}.svg`}
                 >
-                  {fileName(layout.layout_file_url)}
+                  {layout.layout_name ? `${layout.layout_name}.svg` : fileName(layout.layout_file_url)}
                 </span>
-                <a
-                  href={layout.layout_file_url}
-                  download
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex-shrink-0 text-indigo-500 hover:text-indigo-700"
+                <button
+                  onClick={handleDownloadSvg}
+                  disabled={downloading}
+                  className="flex-shrink-0 text-indigo-500 hover:text-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Download file"
                 >
-                  <DownloadIcon />
-                </a>
+                  {downloading
+                    ? <span className="w-3.5 h-3.5 block border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
+                    : <DownloadIcon />
+                  }
+                </button>
               </span>
             </InfoRow>
           )}

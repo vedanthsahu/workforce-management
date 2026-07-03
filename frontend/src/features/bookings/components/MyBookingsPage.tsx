@@ -399,7 +399,14 @@ export default function MyBookingsPage() {
         return true;
       });
   const filteredDelegated = applyBfsFilters(bfsBaseFiltered, bfsSearch, bfsBookingType)
-    .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+    .sort((a, b) => {
+      if (bfsSubTab === "past" || bfsSubTab === "cancelled") {
+        // Most recent date first for past/cancelled
+        return new Date(b.fromDate).getTime() - new Date(a.fromDate).getTime();
+      }
+      // Upcoming and all: soonest date first (today at top)
+      return new Date(a.fromDate).getTime() - new Date(b.fromDate).getTime();
+    });
 
   return (
     <>

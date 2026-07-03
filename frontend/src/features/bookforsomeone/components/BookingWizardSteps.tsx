@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import axios from "axios";
 import Link from "next/link";
 import {
   Avatar,
@@ -142,8 +143,8 @@ const EMPTY_GUEST_DRAFT = {
 
 interface GuestSelectStepProps {
   selectedGuest: Guest | null;
-  view: "list" | "create";
-  onViewChange: (view: "list" | "create") => void;
+  view: "list" | "create" | "edit";
+  onViewChange: (view: "list" | "create" | "edit") => void;
   onSelect: (guest: Guest | null) => void;
   onCreate: (data: CreateGuestInput) => Promise<Guest>;
 }
@@ -160,6 +161,20 @@ export function GuestSelectStep({ selectedGuest, view, onViewChange, onSelect, o
         onSave={async (data) => {
           const guest = await onCreate(data);
           onSelect(guest);
+          onViewChange("list");
+        }}
+      />
+    );
+  }
+
+  if (view === "edit" && selectedGuest) {
+    return (
+      <EditGuestForm
+        guest={selectedGuest}
+        onCancel={() => onViewChange("list")}
+        onSave={(updated) => {
+          // TODO: call PATCH /guests/:id when API is available
+          onSelect(updated);
           onViewChange("list");
         }}
       />
@@ -269,25 +284,26 @@ export function GuestSelectStep({ selectedGuest, view, onViewChange, onSelect, o
               ))}
             </dl>
           </div>
-          <button
-            type="button"
-            onClick={handleClear}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              marginTop: "0.625rem",
-              fontSize: "0.8125rem",
-              fontWeight: 500,
-              color: "#4f46e5",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              padding: "2px 0",
-            }}
-          >
-            <IconEdit /> Change Guest
-          </button>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "0.625rem" }}>
+            <button
+              type="button"
+              onClick={() => onViewChange("edit")}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: "0.8125rem",
+                fontWeight: 500,
+                color: "#4f46e5",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "2px 0",
+              }}
+            >
+              <IconEdit /> Edit Guest
+            </button>
+          </div>
         </div>
       )}
 
@@ -437,8 +453,11 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
         phone: v.phone || undefined,
         organization: v.organization || undefined,
       });
-    } catch {
-      setApiError("Failed to save guest. Please try again.");
+    } catch (err) {
+      const serverMsg = axios.isAxiosError(err)
+        ? err.response?.data?.error?.message || err.response?.data?.message || err.response?.data?.detail
+        : null;
+      setApiError(serverMsg ?? "Failed to save guest. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -446,6 +465,15 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
 
   return (
     <div>
+      {apiError && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-600 text-[12.5px] flex items-start gap-3">
+          <svg className="w-4 h-4 mt-0.5 shrink-0" viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm9-3a1 1 0 00-2 0v3a1 1 0 002 0V5zm-.25 5.75a.75.75 0 10-1.5 0 .75.75 0 001.5 0z" /></svg>
+          <span className="flex-1">{apiError}</span>
+          <button onClick={() => setApiError(null)} className="text-red-400 hover:text-red-600 shrink-0">
+            <svg className="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 1l12 12M13 1L1 13" /></svg>
+          </button>
+        </div>
+      )}
       <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>New Guest</h2>
       <p style={{ fontSize: "0.8125rem", color: "#6b7280", marginTop: 4, marginBottom: "1.25rem" }}>
         Add the visitor&apos;s details. They&apos;ll be saved for future visits.
@@ -540,10 +568,6 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
           )}
         </div>
       </div>
-
-      {apiError && (
-        <p style={{ fontSize: "0.8125rem", color: "#dc2626", marginTop: "1rem" }}>{apiError}</p>
-      )}
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "1.25rem" }}>
         <button
@@ -965,6 +989,134 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ─── EditGuestForm ────────────────────────────────────────────────────────────
+
+interface EditGuestFormProps {
+  guest: Guest;
+  onCancel: () => void;
+  onSave: (updated: Guest) => void;
+}
+
+function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
+  const spaceIdx = guest.fullName.indexOf(" ");
+  const [form, setForm] = useState({
+    firstName:    spaceIdx >= 0 ? guest.fullName.slice(0, spaceIdx) : guest.fullName,
+    lastName:     spaceIdx >= 0 ? guest.fullName.slice(spaceIdx + 1) : "",
+    email:        guest.email ?? "",
+    phone:        guest.phone ?? "",
+    organization: guest.organization ?? "",
+  });
+  const [errors,  setErrors]  = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setForm((prev) => ({ ...prev, [field]: value }));
+    if (touched[field]) validateField(field, value);
+  };
+
+  const handleBlur = (field: string) => () => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    validateField(field, form[field as keyof typeof form]);
+  };
+
+  const validateField = (field: string, value: string) => {
+    const partial = { ...form, [field]: value };
+    const result = createGuestSchema.safeParse(partial);
+    if (result.success) {
+      setErrors((prev) => { const next = { ...prev }; delete next[field]; return next; });
+    } else {
+      const issue = result.error.issues.find((i) => String(i.path[0]) === field);
+      if (issue) setErrors((prev) => ({ ...prev, [field]: issue.message }));
+      else       setErrors((prev) => { const next = { ...prev }; delete next[field]; return next; });
+    }
+  };
+
+  const handleSave = () => {
+    setTouched({ firstName: true, lastName: true, email: true, phone: true, organization: true });
+    const result = createGuestSchema.safeParse(form);
+    if (!result.success) {
+      const fieldErrors: Record<string, string> = {};
+      for (const issue of result.error.issues) {
+        const key = String(issue.path[0]);
+        if (!fieldErrors[key]) fieldErrors[key] = issue.message;
+      }
+      setErrors(fieldErrors);
+      return;
+    }
+    const v = result.data;
+    onSave({
+      ...guest,
+      fullName:     `${v.firstName} ${v.lastName}`.trim(),
+      email:        v.email,
+      phone:        v.phone || undefined,
+      organization: v.organization || undefined,
+    });
+  };
+
+  return (
+    <div>
+      <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Edit Guest</h2>
+      <p style={{ fontSize: "0.8125rem", color: "#6b7280", marginTop: 4, marginBottom: "1.25rem" }}>
+        Update the visitor&apos;s details.
+      </p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+        {/* First Name */}
+        <div>
+          <FieldLabel htmlFor="eg-firstName" required>First Name</FieldLabel>
+          <input id="eg-firstName" type="text" style={inputStyle()} placeholder="First name"
+            value={form.firstName} onChange={handleChange("firstName")} onBlur={handleBlur("firstName")} />
+          {errors.firstName && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.firstName}</p>}
+        </div>
+
+        {/* Last Name */}
+        <div>
+          <FieldLabel htmlFor="eg-lastName" required>Last Name</FieldLabel>
+          <input id="eg-lastName" type="text" style={inputStyle()} placeholder="Last name"
+            value={form.lastName} onChange={handleChange("lastName")} onBlur={handleBlur("lastName")} />
+          {errors.lastName && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.lastName}</p>}
+        </div>
+
+        {/* Email */}
+        <div>
+          <FieldLabel htmlFor="eg-email" required>Email Address</FieldLabel>
+          <input id="eg-email" type="email" style={inputStyle()} placeholder="email@example.com"
+            value={form.email} onChange={handleChange("email")} onBlur={handleBlur("email")} />
+          {errors.email && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.email}</p>}
+        </div>
+
+        {/* Phone */}
+        <div>
+          <FieldLabel htmlFor="eg-phone">Phone Number</FieldLabel>
+          <input id="eg-phone" type="tel" style={inputStyle()} placeholder="Phone number"
+            value={form.phone} onChange={handleChange("phone")} onBlur={handleBlur("phone")} />
+          {errors.phone && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.phone}</p>}
+        </div>
+      </div>
+
+      {/* Organization */}
+      <div style={{ marginTop: "1rem" }}>
+        <FieldLabel htmlFor="eg-org">Organization / Company <span style={{ fontWeight: 400, color: "#9ca3af" }}>(Optional)</span></FieldLabel>
+        <input id="eg-org" type="text" style={inputStyle()} placeholder="Company name"
+          value={form.organization} onChange={handleChange("organization")} onBlur={handleBlur("organization")} />
+        {errors.organization && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.organization}</p>}
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "1.5rem" }}>
+        <button type="button" onClick={onCancel}
+          style={{ padding: "0.5rem 1.25rem", fontSize: "0.875rem", fontWeight: 500, color: "#374151", background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
+          Cancel
+        </button>
+        <button type="button" onClick={handleSave}
+          style={{ padding: "0.5rem 1.25rem", fontSize: "0.875rem", fontWeight: 600, color: "#fff", background: "#4f46e5", border: "none", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
+          Save Changes
+        </button>
       </div>
     </div>
   );
