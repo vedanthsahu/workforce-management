@@ -9,11 +9,20 @@ from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user
 from backend.db.connection import get_db
-from backend.schemas.guest import CreateGuestRequest, GuestResponse
+from backend.schemas.guest import (
+    CreateGuestRequest,
+    GuestResponse,
+    GuestVisitHistoryResponse,
+    UpdateGuestRequest,
+    UpdateGuestStatusRequest,
+)
 from backend.services.guest_service import (
     create_guest_profile,
     get_guest_profile,
+    get_guest_visit_history,
     search_guest_profiles,
+    update_guest_profile,
+    update_guest_status,
 )
 
 router = APIRouter(prefix="/guests", tags=["guests"])
@@ -64,4 +73,53 @@ def fetch_guest_record(
         conn,
         current_user=current_user,
         guest_id=str(guest_id),
+    )
+
+
+@router.patch("/{guest_id}", response_model=GuestResponse)
+def update_guest_record(
+    guest_id: Annotated[int, Path(gt=0)],
+    payload: UpdateGuestRequest,
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> GuestResponse:
+    return update_guest_profile(
+        conn,
+        current_user=current_user,
+        guest_id=str(guest_id),
+        payload=payload,
+    )
+
+
+@router.patch("/{guest_id}/status", response_model=GuestResponse)
+def update_guest_status_record(
+    guest_id: Annotated[int, Path(gt=0)],
+    payload: UpdateGuestStatusRequest,
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> GuestResponse:
+    return update_guest_status(
+        conn,
+        current_user=current_user,
+        guest_id=str(guest_id),
+        payload=payload,
+    )
+
+
+@router.get("/{guest_id}/visits", response_model=GuestVisitHistoryResponse)
+def fetch_guest_visit_history_record(
+    guest_id: Annotated[int, Path(gt=0)],
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    include_cancelled: bool = Query(False),
+) -> GuestVisitHistoryResponse:
+    return get_guest_visit_history(
+        conn,
+        current_user=current_user,
+        guest_id=str(guest_id),
+        page=page,
+        limit=limit,
+        include_cancelled=include_cancelled,
     )

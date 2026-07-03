@@ -29,6 +29,21 @@ class CreateGuestRequest(BaseModel):
     organization: str | None = Field(default=None, max_length=255)
 
 
+class UpdateGuestRequest(BaseModel):
+    full_name: str | None = Field(default=None, max_length=255)
+    email: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=100)
+    organization: str | None = Field(default=None, max_length=255)
+
+
+GuestStatus = Literal["ACTIVE", "INACTIVE"]
+
+
+class UpdateGuestStatusRequest(BaseModel):
+    status: GuestStatus
+    cancel_future_bookings: bool = False
+
+
 class GuestResponse(BaseModel):
     guest_id: str
     tenant_id: str
@@ -286,3 +301,54 @@ class CancelledGuestVisitItem(BaseModel):
 
 class CancelledGuestVisitResponse(BaseModel):
     items: list[CancelledGuestVisitItem]
+
+
+class GuestVisitHistorySummary(BaseModel):
+    total_visits: int = 0
+    total_bookings: int = 0
+    scheduled: int = 0
+    checked_in: int = 0
+    checked_out: int = 0
+    cancelled: int = 0
+    modified: int = 0
+    requires_seat_count: int = 0
+
+
+class GuestVisitHistoryItem(BaseModel):
+    guest_visit_id: str
+    visit_date: date
+    visit_status: GuestVisitStatus
+    guest_type: str | None = None
+    purpose_of_visit: str | None = None
+    start_time: time | None = None
+    end_time: time | None = None
+    notes: str | None = None
+    requires_seat: bool
+    checked_in_at: datetime | None = None
+    checked_out_at: datetime | None = None
+    cancelled_at: datetime | None = None
+    cancellation_reason: str | None = None
+
+    host_user_id: str | None = None
+    host_name: str | None = None
+    host_email: str | None = None
+
+    site_id: str
+    site_name: str
+    building_id: str
+    building_name: str
+    floor_id: str | None = None
+    floor_name: str | None = None
+
+    booking_id: str | None = None
+    booking_status: str | None = None
+    seat_id: str | None = None
+    seat_code: str | None = None
+    booking_date: date | None = None
+
+
+class GuestVisitHistoryResponse(BaseModel):
+    guest: GuestResponse
+    summary: GuestVisitHistorySummary = Field(default_factory=GuestVisitHistorySummary)
+    items: list[GuestVisitHistoryItem]
+    pagination: PaginationMetadata
