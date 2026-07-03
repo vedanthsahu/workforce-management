@@ -37,7 +37,7 @@ function ComboboxContent({ className, children, ...props }: ComboboxContentProps
         <ComboboxPrimitive.Popup
           data-slot="combobox-content"
           className={cn(
-            "max-h-64 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white text-sm shadow-md",
+            "max-h-64 w-full overflow-y-auto border border-gray-200 bg-white text-sm shadow-md",
             className
           )}
           {...props}
@@ -57,7 +57,7 @@ function ComboboxItem({ className, children, ...props }: ComboboxPrimitive.Item.
     <ComboboxPrimitive.Item
       data-slot="combobox-item"
       className={cn(
-        "relative flex cursor-pointer items-center justify-between gap-2 px-4 py-2 outline-none data-highlighted:bg-blue-50",
+        "relative flex cursor-pointer items-center justify-between gap-2 px-4 py-2 outline-none hover:bg-gray-500 data-highlighted:bg-gray-500",
         className
       )}
       {...props}

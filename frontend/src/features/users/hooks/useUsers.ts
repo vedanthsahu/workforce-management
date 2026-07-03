@@ -368,7 +368,6 @@ import { mapApiUserToUser, mapSearchResultToUser } from "../utils/users.utils";
 import type { User, UsersSummary } from "../types/users.types";
 import { useUsersFilterStore } from "@/store/useUsersFilterStore";
 
-const LIMIT = 25;
 const SEARCH_DEBOUNCE_MS = 350;
 
 export const useUsers = () => {
@@ -381,10 +380,12 @@ export const useUsers = () => {
   const selectedRoles = useUsersFilterStore((s) => s.selectedRoles);
   const statusFilter = useUsersFilterStore((s) => s.statusFilter);
   const page = useUsersFilterStore((s) => s.page);
+  const limit = useUsersFilterStore((s) => s.limit);
   const setSearch = useUsersFilterStore((s) => s.setSearch);
   const setSelectedRoles = useUsersFilterStore((s) => s.setSelectedRoles);
   const setStatusFilter = useUsersFilterStore((s) => s.setStatusFilter);
   const setPage = useUsersFilterStore((s) => s.setPage);
+  const setLimit = useUsersFilterStore((s) => s.setLimit);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -398,7 +399,7 @@ export const useUsers = () => {
         roles: selectedRoles.length ? selectedRoles : undefined,
         status: statusFilter === "ALL" ? undefined : statusFilter,
         page,
-        limit: LIMIT,
+        limit,
       });
 
       setUsers(response.items.map(mapApiUserToUser));
@@ -414,7 +415,7 @@ export const useUsers = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedRoles, statusFilter, page]);
+  }, [selectedRoles, statusFilter, page, limit]);
 
   const fetchSearch = useCallback(async (q: string) => {
     try {
@@ -488,7 +489,7 @@ export const useUsers = () => {
 
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
-  const totalPages = summary ? Math.max(1, Math.ceil(summary.filteredUsers / LIMIT)) : 1;
+  const totalPages = summary ? Math.max(1, Math.ceil(summary.filteredUsers / limit)) : 1;
 
   return {
     users, summary, roles: summary?.roles ?? [], loading, isSearchMode,
@@ -496,7 +497,7 @@ export const useUsers = () => {
     selectedRoles, setSelectedRoles,
     statusFilter, setStatusFilter,
     page, setPage,
-    totalPages, limit: LIMIT,
+    totalPages, limit, setLimit,
     fetchUsers,
   };
 };
