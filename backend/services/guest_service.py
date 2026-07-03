@@ -51,7 +51,11 @@ from backend.repositories.guest_repository import (
     fetch_guest_by_email,
     fetch_guest_by_id,
     fetch_guest_by_phone,
+    fetch_guest_by_email_excluding_guest,
+    fetch_guest_by_phone_excluding_guest,
     search_guests,
+    update_guest,
+    update_guest_status as update_guest_status_repo,
 )
 from backend.repositories.guest_visit_repository import (
     insert_guest_visit,
@@ -65,6 +69,12 @@ from backend.repositories.guest_visit_repository import (
     fetch_active_booking_for_guest_visit,
     fetch_guest_visit_by_id_for_update,
     mark_guest_visit_modified,
+    fetch_guest_visit_history,
+    fetch_guest_visit_history_summary,
+    cancel_future_guest_visits_for_guest,
+)
+from backend.repositories.booking_repository import (
+    cancel_future_guest_bookings_for_guest,
 )
 from backend.repositories.location_repository import (
     fetch_building_by_id,
@@ -83,6 +93,11 @@ from backend.schemas.guest import (
     GuestWorkflowAction,
     GuestWorkflowRequest,
     GuestWorkflowResponse,
+    UpdateGuestRequest,
+    UpdateGuestStatusRequest,
+    GuestVisitHistoryResponse,
+    GuestVisitHistorySummary,
+    GuestVisitHistoryItem,
 )
 from backend.services.booking_service import _normalize_cancellation_reason
 from backend.services.notification_service import (
@@ -479,7 +494,231 @@ def search_guest_profiles(
     )
     return [GuestResponse(**row) for row in rows]
 
- 
+
+def update_guest_profile(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    guest_id: str,
+    payload: UpdateGuestRequest,
+) -> GuestResponse:
+    _require_guest_operator(current_user)
+    tenant_id = str(current_user["tenant_id"])
+    fields_set = payload.model_fields_set
+
+    try:
+        guest = _resolve_guest(
+            conn,
+            tenant_id=tenant_id,
+            guest_id=guest_id,
+            require_active=False,
+        )
+
+        updates: dict[str, Any] = {}
+
+        if "full_name" in fields_set:
+            full_name = str(payload.full_name or "").strip()
+            if not full_name:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "code": "invalid_guest_full_name",
+                        "message": "full_name cannot be empty.",
+                    },
+                )
+            updates["full_name"] = full_name
+
+        if "email" in fields_set:
+            email = payload.email
+            if email is None or not email.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "code": "invalid_guest_email",
+                        "message": "email cannot be null or empty.",
+                    },
+                )
+            email = email.strip()
+            if fetch_guest_by_email_excluding_guest(
+                conn,
+                tenant_id=tenant_id,
+                email=email,
+                exclude_guest_id=guest_id,
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "guest_email_exists",
+                        "message": "A guest already exists with this email address.",
+                    },
+                )
+            updates["email"] = email
+
+        if "phone" in fields_set:
+            phone = payload.phone
+            if phone is None or not phone.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "code": "invalid_guest_phone",
+                        "message": "phone cannot be null or empty.",
+                    },
+                )
+            phone = phone.strip()
+            if fetch_guest_by_phone_excluding_guest(
+                conn,
+                tenant_id=tenant_id,
+                phone=phone,
+                exclude_guest_id=guest_id,
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "guest_phone_exists",
+                        "message": "A guest already exists with this phone number.",
+                    },
+                )
+            updates["phone"] = phone
+
+        if "organization" in fields_set:
+            updates["organization"] = _clean_optional(payload.organization)
+
+        if not updates:
+            return GuestResponse(**guest)
+
+        updated = update_guest(
+            conn,
+            tenant_id=tenant_id,
+            guest_id=guest_id,
+            updates=updates,
+        )
+        conn.commit()
+        return GuestResponse(**updated)
+    except HTTPException:
+        conn.rollback()
+        raise
+    except (LookupError, ValueError) as exc:
+        conn.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_guest",
+                "message": str(exc),
+            },
+        ) from exc
+    except psycopg2.Error as exc:
+        conn.rollback()
+        _translate_guest_db_error(exc, action="update")
+
+
+def update_guest_status(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    guest_id: str,
+    payload: UpdateGuestStatusRequest,
+) -> GuestResponse:
+    _require_guest_operator(current_user)
+    tenant_id = str(current_user["tenant_id"])
+
+    try:
+        _resolve_guest(
+            conn,
+            tenant_id=tenant_id,
+            guest_id=guest_id,
+            require_active=False,
+        )
+
+        updated = update_guest_status_repo(
+            conn,
+            tenant_id=tenant_id,
+            guest_id=guest_id,
+            status=payload.status,
+        )
+
+        if payload.status == "INACTIVE" and payload.cancel_future_bookings:
+            cancel_future_guest_bookings_for_guest(
+                conn,
+                tenant_id=tenant_id,
+                guest_id=guest_id,
+                cancellation_reason="Guest deactivated",
+            )
+            cancel_future_guest_visits_for_guest(
+                conn,
+                tenant_id=tenant_id,
+                guest_id=guest_id,
+                cancellation_reason="Guest deactivated",
+            )
+
+        conn.commit()
+        return GuestResponse(**updated)
+    except HTTPException:
+        conn.rollback()
+        raise
+    except (LookupError, ValueError) as exc:
+        conn.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_guest_status_update",
+                "message": str(exc),
+            },
+        ) from exc
+    except psycopg2.Error as exc:
+        conn.rollback()
+        _translate_guest_db_error(exc, action="status_update")
+
+
+def get_guest_visit_history(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    guest_id: str,
+    page: int = 1,
+    limit: int = 20,
+    include_cancelled: bool = False,
+) -> GuestVisitHistoryResponse:
+    _require_guest_operator(current_user)
+    tenant_id = str(current_user["tenant_id"])
+
+    guest = _resolve_guest(
+        conn,
+        tenant_id=tenant_id,
+        guest_id=guest_id,
+        require_active=False,
+    )
+
+    summary = fetch_guest_visit_history_summary(
+        conn,
+        tenant_id=tenant_id,
+        guest_id=guest_id,
+    )
+
+    total = int(summary.get("total_visits") or 0)
+    if not include_cancelled:
+        total -= int(summary.get("cancelled") or 0)
+
+    offset = (page - 1) * limit
+    rows = fetch_guest_visit_history(
+        conn,
+        tenant_id=tenant_id,
+        guest_id=guest_id,
+        include_cancelled=include_cancelled,
+        limit=limit,
+        offset=offset,
+    )
+
+    return GuestVisitHistoryResponse(
+        guest=GuestResponse(**guest),
+        summary=GuestVisitHistorySummary(**summary),
+        items=[GuestVisitHistoryItem(**row) for row in rows],
+        pagination=PaginationMetadata(
+            total=total,
+            page=page,
+            limit=limit,
+            total_pages=math.ceil(total / limit) if total else 0,
+        ),
+    )
 
 
 def create_guest_visit(
