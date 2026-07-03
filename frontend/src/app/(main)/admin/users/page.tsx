@@ -14,6 +14,7 @@ import { normalizeRoleKey } from "@/features/users/utils/users.utils";
 import { useUsersFilterStore } from "@/store/useUsersFilterStore";
 
 const PIN_DURATION = 4000;
+const PAGE_SIZES = [10, 25, 50, 75, 100];
 
 function UserManagementPage() {
   const router = useRouter();
@@ -25,7 +26,7 @@ function UserManagementPage() {
     search, setSearch,
     selectedRoles, setSelectedRoles,
     statusFilter, setStatusFilter,
-    page, setPage, totalPages, limit,
+    page, setPage, totalPages, limit, setLimit,
   } = useUsers();
 
   const [successMessage, setSuccessMessage] = useState("");
@@ -190,7 +191,17 @@ function UserManagementPage() {
                   : `Showing ${(page - 1) * limit + 1} to ${Math.min(page * limit, summary.filteredUsers)} of ${summary.filteredUsers} users`}
           </span>
           {!isSearchMode && (
-            <div className="self-center sm:self-auto">
+            <div className="flex items-center gap-3 self-center sm:self-auto">
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span>Rows</span>
+                <select
+                  value={limit}
+                  onChange={(e) => setLimit(Number(e.target.value))}
+                  className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                >
+                  {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
               <UsersPagination
                 currentPage={page}
                 totalPages={totalPages}
