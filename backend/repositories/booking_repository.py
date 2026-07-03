@@ -951,6 +951,34 @@ def cancel_booking(
             raise LookupError("Booking was not found for cancellation.")
 
 
+def cancel_future_guest_bookings_for_guest(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_id: str,
+    cancellation_reason: str = "Guest deactivated",
+) -> int:
+    """Cancel one guest's future CONFIRMED bookings. Does not touch active/past bookings."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE bookings
+            SET
+                booking_status = 'CANCELLED',
+                cancelled_at = NOW(),
+                cancellation_reason = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND booking_type = 'GUEST'
+              AND booked_for_guest_id = %s
+              AND booking_date >= CURRENT_DATE
+              AND booking_status = 'CONFIRMED'
+            """,
+            (cancellation_reason, tenant_id, guest_id),
+        )
+        return cur.rowcount
+
+
 def fetch_past_bookings_for_user(
     conn: PGConnection,
     *,
