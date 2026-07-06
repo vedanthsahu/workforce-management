@@ -100,19 +100,6 @@ def fetch_floor_for_layout(
     return dict(row) if row else None
 
 
-def archive_existing_published_layout(
-    conn: PGConnection,
-    *,
-    tenant_id: str,
-    floor_id: str,
-) -> None:
-    archive_existing_published_layouts(
-        conn,
-        tenant_id=tenant_id,
-        floor_id=floor_id,
-    )
-
-
 def archive_existing_published_layouts(
     conn: PGConnection,
     *,
