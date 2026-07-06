@@ -28,6 +28,7 @@ from backend.repositories.floor_layout_repository import (
     fetch_layout_seats_by_layout_id,
     get_next_layout_version,
     insert_floor_layout,
+    soft_delete_floor_layout,
 )
 from backend.repositories.user_repository import fetch_admin_notification_emails
 from backend.schemas.floor_layout import (
@@ -236,13 +237,33 @@ def get_floor_layout_seats(
     layout_id: str,
 ) -> LayoutSeatListResponse:
 
+    tenant_id = str(current_user["tenant_id"])
+
     try:
+
+        layout = fetch_floor_layout_by_id(
+            conn,
+            tenant_id=tenant_id,
+            layout_id=layout_id,
+        )
+
+        if layout is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "floor_layout_not_found",
+                    "message": "Floor layout was not found.",
+                },
+            )
 
         seats = fetch_layout_seats_by_layout_id(
             conn,
-            tenant_id=str(current_user["tenant_id"]),
+            tenant_id=tenant_id,
             layout_id=layout_id,
         )
+
+    except HTTPException:
+        raise
 
     except psycopg2.Error as exc:
 
@@ -358,6 +379,79 @@ def activate_floor_layout(
         ) from exc
 
     return FloorLayoutResponse(**activated_layout)
+
+
+def delete_floor_layout(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    layout_id: str,
+) -> FloorLayoutResponse:
+    """Soft delete one tenant-scoped floor layout.
+
+    Rows are never removed; PUBLISHED layouts are protected and DELETED
+    layouts are treated as already gone (404), never as a distinct state.
+    """
+    tenant_id = str(current_user["tenant_id"])
+
+    try:
+        layout = fetch_floor_layout_by_id(
+            conn,
+            tenant_id=tenant_id,
+            layout_id=layout_id,
+        )
+
+        if layout is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "floor_layout_not_found",
+                    "message": "Floor layout was not found.",
+                },
+            )
+
+        if layout["status"] == LayoutStatus.PUBLISHED.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "floor_layout_published",
+                    "message": "Published floor layouts cannot be deleted.",
+                },
+            )
+
+        deleted_layout = soft_delete_floor_layout(
+            conn,
+            tenant_id=tenant_id,
+            layout_id=layout_id,
+        )
+
+        if deleted_layout is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "floor_layout_not_found",
+                    "message": "Floor layout was not found.",
+                },
+            )
+
+        conn.commit()
+
+    except HTTPException:
+        conn.rollback()
+        raise
+
+    except psycopg2.Error as exc:
+        conn.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "floor_layout_delete_failed",
+                "message": "Failed to delete floor layout.",
+            },
+        ) from exc
+
+    return FloorLayoutResponse(**deleted_layout)
 
 
 def _queue_floor_layout_uploaded_email(

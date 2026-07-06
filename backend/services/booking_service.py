@@ -69,7 +69,7 @@ logger = logging.getLogger(f"{LOGGER_NAME}.bookings")
 # Shared with guest_service.py so the guest-operator role set is defined once.
 GUEST_OPERATION_ROLES = {
     "TENANT_ADMIN",
-    "TALENT",
+    "FACILITATOR",
     "SECURITY",
 }
 
@@ -95,7 +95,7 @@ def _can_book_for_user(
         return True
 
     role = _user_role(current_user)
-    if role in {"TENANT_ADMIN", "TALENT"}:
+    if role in {"TENANT_ADMIN", "FACILITATOR"}:
         return True
 
     return (

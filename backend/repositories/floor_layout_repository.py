@@ -9,7 +9,7 @@ from typing import Any
 from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
 
-from backend.core.enums import LayoutStatus
+from backend.core.enums import LayoutStatus, NON_DELETED_LAYOUT_STATUSES
 from backend.repositories.location_repository import (
     upsert_operational_seat,
     replace_seat_amenities,
@@ -161,7 +161,7 @@ def fetch_floor_layouts_by_floor(
     tenant_id: str,
     floor_id: str,
 ) -> list[dict[str, Any]]:
-    """Fetch all layouts for a tenant-scoped floor, newest version first."""
+    """Fetch all non-deleted layouts for a tenant-scoped floor, newest version first."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
@@ -172,11 +172,13 @@ def fetch_floor_layouts_by_floor(
             {FLOOR_LAYOUT_LOCATION_JOINS}
             WHERE fl.tenant_id = %s
               AND fl.floor_id = %s
+              AND fl.status = ANY(%s)
             ORDER BY fl.version_no DESC, fl.created_at DESC, fl.id DESC
             """,
             (
                 tenant_id,
                 floor_id,
+                list(NON_DELETED_LAYOUT_STATUSES),
             ),
         )
 
@@ -185,13 +187,18 @@ def fetch_floor_layouts_by_floor(
     return [dict(row) for row in rows]
 
 
-def fetch_floor_layout_by_id(
+def _fetch_floor_layout_row(
     conn: PGConnection,
     *,
     tenant_id: str,
     layout_id: str,
+    include_deleted: bool = False,
 ) -> dict[str, Any] | None:
-    """Fetch one layout by id within a tenant."""
+    status_filter = "" if include_deleted else "AND fl.status = ANY(%s)"
+    params: tuple[Any, ...] = (tenant_id, layout_id)
+    if not include_deleted:
+        params += (list(NON_DELETED_LAYOUT_STATUSES),)
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
@@ -202,16 +209,32 @@ def fetch_floor_layout_by_id(
             {FLOOR_LAYOUT_LOCATION_JOINS}
             WHERE fl.tenant_id = %s
               AND fl.id = %s
+              {status_filter}
             """,
-            (
-                tenant_id,
-                layout_id,
-            ),
+            params,
         )
 
         row = cur.fetchone()
 
     return dict(row) if row else None
+
+
+def fetch_floor_layout_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+) -> dict[str, Any] | None:
+    """Fetch one non-deleted layout by id within a tenant.
+
+    Deleted layouts must behave as if they do not exist, so this is the
+    single place every consumer (activate, seats, delete) goes through.
+    """
+    return _fetch_floor_layout_row(
+        conn,
+        tenant_id=tenant_id,
+        layout_id=layout_id,
+    )
 
 
 def activate_floor_layout(
@@ -254,6 +277,51 @@ def activate_floor_layout(
         conn,
         tenant_id=tenant_id,
         layout_id=str(row["layout_id"]),
+    )
+
+
+def soft_delete_floor_layout(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+) -> dict[str, Any] | None:
+    """Soft delete one tenant-scoped DRAFT/ARCHIVED layout.
+
+    Rows are never removed; PUBLISHED and already-DELETED layouts are
+    excluded here so an out-of-band transition can never sneak through.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            UPDATE floor_layouts
+            SET
+                status = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+              AND status = ANY(%s)
+            RETURNING
+                id::text AS layout_id
+            """,
+            (
+                LayoutStatus.DELETED.value,
+                tenant_id,
+                layout_id,
+                [LayoutStatus.DRAFT.value, LayoutStatus.ARCHIVED.value],
+            ),
+        )
+
+        row = cur.fetchone()
+
+    if row is None:
+        return None
+
+    return _fetch_floor_layout_row(
+        conn,
+        tenant_id=tenant_id,
+        layout_id=str(row["layout_id"]),
+        include_deleted=True,
     )
 
 
