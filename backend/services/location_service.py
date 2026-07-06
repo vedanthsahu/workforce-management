@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, NoReturn
 
 import psycopg2
@@ -9,6 +10,7 @@ from fastapi import HTTPException, status
 from psycopg2 import errorcodes
 from psycopg2.extensions import connection as PGConnection
 
+from backend.core.app_logging import LOGGER_NAME
 from backend.repositories.location_repository import (
     fetch_building_by_id,
     fetch_building_duplicates,
@@ -51,6 +53,8 @@ from backend.schemas.location import (
     UpdateFloorRequest,
     UpdateSiteRequest,
 )
+
+logger = logging.getLogger(f"{LOGGER_NAME}.locations")
 
 SITE_UPDATE_FIELDS = {
     "site_name",
@@ -134,7 +138,7 @@ def get_sites(
             status_filter=status_filter,
         )
     except psycopg2.Error as exc:
-        print("DEBUG_DB_ERROR", repr(exc))
+        logger.exception("location.db_error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -192,7 +196,7 @@ def create_site(
         ) from exc
     except psycopg2.Error as exc:
         conn.rollback()
-        print("DEBUG_DB_ERROR", repr(exc))
+        logger.exception("location.db_error")
         _raise_write_error(
             exc,
             duplicate_code="site_duplicate",
@@ -246,7 +250,7 @@ def update_site_metadata(
         raise
     except psycopg2.Error as exc:
         conn.rollback()
-        print("DEBUG_DB_ERROR", repr(exc))
+        logger.exception("location.db_error")
         _raise_write_error(
             exc,
             duplicate_code="site_duplicate",
@@ -339,7 +343,7 @@ def update_layout_seat_configuration(
 
     except psycopg2.Error as exc:
         conn.rollback()
-        print("DEBUG_DB_ERROR", repr(exc))
+        logger.exception("location.db_error")
 
         _raise_write_error(
             exc,
@@ -359,7 +363,7 @@ def get_site_details(
     try:
         site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=site_id)
     except psycopg2.Error as exc:
-        print("DEBUG_DB_ERROR", repr(exc))
+        logger.exception("location.db_error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -404,7 +408,7 @@ def get_buildings_by_site(
             status_filter=status_filter,
         )
     except psycopg2.Error as exc:
-        print("DEBUG_DB_ERROR", repr(exc))
+        logger.exception("location.db_error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -463,7 +467,7 @@ def create_building(
         ) from exc
     except psycopg2.Error as exc:
         conn.rollback()
-        print("DEBUG_DB_ERROR", repr(exc))
+        logger.exception("location.db_error")
         _raise_write_error(
             exc,
             duplicate_code="building_duplicate",
@@ -521,7 +525,7 @@ def update_building_metadata(
         raise
     except psycopg2.Error as exc:
         conn.rollback()
-        print("DEBUG_DB_ERROR", repr(exc))
+        logger.exception("location.db_error")
         _raise_write_error(
             exc,
             duplicate_code="building_duplicate",
@@ -555,7 +559,7 @@ def get_floors_by_building(
             status_filter=status_filter,
         )
     except psycopg2.Error as exc:
-        print("DEBUG_DB_ERROR", repr(exc))
+        logger.exception("location.db_error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -624,7 +628,7 @@ def create_floor(
         ) from exc
     except psycopg2.Error as exc:
         conn.rollback()
-        print("DEBUG_DB_ERROR", repr(exc))
+        logger.exception("location.db_error")
         _raise_write_error(
             exc,
             duplicate_code="floor_duplicate",
@@ -678,7 +682,7 @@ def update_floor_metadata(
         raise
     except psycopg2.Error as exc:
         conn.rollback()
-        print("DEBUG_DB_ERROR", repr(exc))
+        logger.exception("location.db_error")
         _raise_write_error(
             exc,
             duplicate_code="floor_duplicate",
@@ -725,7 +729,7 @@ def update_seat_configuration_metadata(
         raise
     except psycopg2.Error as exc:
         conn.rollback()
-        print("DEBUG_DB_ERROR", repr(exc))
+        logger.exception("location.db_error")
         _raise_write_error(
             exc,
             duplicate_code="seat_conflict",

@@ -5,7 +5,6 @@ Service layer for floor layout workflows.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
 from typing import Any
 
 import psycopg2
@@ -16,11 +15,10 @@ from psycopg2.extensions import connection as PGConnection
 
 from backend.core.config import get_settings
 from backend.core.enums import LayoutStatus
-from backend.core.logging import LOGGER_NAME
+from backend.core.app_logging import LOGGER_NAME
 from backend.core.storage import upload_svg_to_s3
 from backend.repositories.floor_layout_repository import (
     activate_floor_layout as activate_floor_layout_record,
-    archive_existing_published_layout,
     archive_existing_published_layouts,
     sync_published_layout_seats,
     publish_layout_seat_configurations,
@@ -38,12 +36,57 @@ from backend.schemas.floor_layout import (
     LayoutSeatListResponse,
     LayoutSeatResponse,
 )
-from backend.services.notification_service import queue_floor_layout_uploaded_notification
+from backend.services.notification_service import (
+    format_notification_value,
+    queue_floor_layout_uploaded_notification,
+)
 from backend.repositories.layout_seat_mapping_repository import (
     bulk_insert_layout_seat_mappings,
 )
 
 logger = logging.getLogger(f"{LOGGER_NAME}.floor_layouts")
+
+
+def _normalize_seat_ids(seat_ids: list[str]) -> list[str]:
+    """Split comma-joined seat IDs, then dedupe and upper-case them.
+
+    Moved from the route layer: this is layout business validation
+    (duplicate/empty detection), not request parsing.
+    """
+    expanded_seat_ids: list[str] = []
+    for raw_value in seat_ids:
+        expanded_seat_ids.extend(str(raw_value).split(","))
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+
+    for raw_value in expanded_seat_ids:
+        candidate = str(raw_value or "").strip()
+
+        if not candidate:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "invalid_seat_id",
+                    "message": "Seat IDs cannot be empty.",
+                },
+            )
+
+        normalized_candidate = candidate.upper()
+
+        if normalized_candidate in seen:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "duplicate_seat_id",
+                    "message": f"Duplicate seat ID detected: {normalized_candidate}",
+                },
+            )
+
+        seen.add(normalized_candidate)
+        normalized.append(normalized_candidate)
+
+    return normalized
 
 
 def create_floor_layout(
@@ -57,6 +100,7 @@ def create_floor_layout(
 
     tenant_id = str(current_user["tenant_id"])
     user_id = str(current_user["user_id"])
+    normalized_seat_ids = _normalize_seat_ids(payload.seat_ids)
 
     try:
         floor = fetch_floor_for_layout(
@@ -92,7 +136,7 @@ def create_floor_layout(
         )
 
         if payload.status == "PUBLISHED":
-            archive_existing_published_layout(
+            archive_existing_published_layouts(
                 conn,
                 tenant_id=tenant_id,
                 floor_id=str(payload.floor_id),
@@ -111,8 +155,6 @@ def create_floor_layout(
             layout_metadata=payload.layout_metadata,
             uploaded_by_user_id=user_id,
         )
-        print("DEBUG_SEAT_IDS", payload.seat_ids)
-        print("DEBUG_SEAT_IDS_TYPE", type(payload.seat_ids))
         bulk_insert_layout_seat_mappings(
             conn,
             tenant_id=tenant_id,
@@ -120,7 +162,7 @@ def create_floor_layout(
             site_id=str(payload.site_id),
             building_id=str(payload.building_id),
             floor_id=str(payload.floor_id),
-            seat_ids=payload.seat_ids,
+            seat_ids=normalized_seat_ids,
             created_by=user_id,
         )
 
@@ -384,28 +426,17 @@ def _floor_layout_email_context(layout: dict[str, Any]) -> dict[str, str]:
     uploader_name = (
         layout.get("uploaded_by_name")
         or layout.get("uploaded_by_email")
-        or layout.get("uploaded_by_user_id")
-        or "Unknown"
+        or ""
     )
     return {
-        "layout_name": _format_template_value(layout.get("layout_name")),
-        "version_no": _format_template_value(layout.get("version_no")),
-        "layout_type": _format_template_value(layout.get("layout_type")),
+        "layout_name": format_notification_value(layout.get("layout_name")),
+        "version_no": format_notification_value(layout.get("version_no")),
+        "layout_type": format_notification_value(layout.get("layout_type")),
         "uploaded_by": str(uploader_name),
-        "uploaded_by_email": _format_template_value(layout.get("uploaded_by_email")),
-        "floor_name": _format_template_value(layout.get("floor_name") or layout.get("floor_id")),
-        "building_name": _format_template_value(layout.get("building_name") or layout.get("building_id")),
-        "site_name": _format_template_value(layout.get("site_name") or layout.get("site_id")),
-        "uploaded_at": _format_template_value(layout.get("created_at")),
-        "status": _format_template_value(layout.get("status")),
+        "uploaded_by_email": format_notification_value(layout.get("uploaded_by_email")),
+        "floor_name": format_notification_value(layout.get("floor_name")),
+        "building_name": format_notification_value(layout.get("building_name")),
+        "site_name": format_notification_value(layout.get("site_name")),
+        "uploaded_at": format_notification_value(layout.get("created_at")),
+        "status": format_notification_value(layout.get("status")),
     }
-
-
-def _format_template_value(value: Any) -> str:
-    if isinstance(value, datetime):
-        return value.isoformat(sep=" ", timespec="seconds")
-    if isinstance(value, date):
-        return value.isoformat()
-    if value is None:
-        return "Not available"
-    return str(value)
