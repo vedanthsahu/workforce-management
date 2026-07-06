@@ -96,7 +96,7 @@ class GuestWorkflowTests(unittest.TestCase):
         self.current_user = {
             "tenant_id": "1",
             "user_id": "10",
-            "role_name": "TALENT",
+            "role_name": "FACILITATOR",
         }
 
     def test_schema_does_not_accept_guest_id_and_route_is_registered(self) -> None:

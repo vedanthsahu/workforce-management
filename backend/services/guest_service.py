@@ -137,7 +137,7 @@ def _require_guest_operator(current_user: dict[str, Any]) -> None:
             detail={
                 "code": "guest_operation_not_allowed",
                 "message": (
-                    "Guest operations require the TALENT, TENANT_ADMIN, "
+                    "Guest operations require the FACILITATOR, TENANT_ADMIN, "
                     "or SECURITY role."
                 ),
             },

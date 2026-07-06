@@ -32,6 +32,7 @@ from backend.schemas.floor_layout import (
 from backend.services.floor_layout_service import (
     activate_floor_layout,
     create_floor_layout,
+    delete_floor_layout,
     get_floor_layout_seats,
     get_floor_layouts_by_floor,
 )
@@ -130,6 +131,28 @@ def activate_floor_layout_route(
         layout_id=str(layout_id),
         background_tasks=background_tasks,
     )
+
+@router.delete(
+    "/{layout_id}",
+    response_model=FloorLayoutResponse,
+)
+def delete_floor_layout_route(
+    layout_id: Annotated[int, Path(gt=0)],
+
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_permission("layout:publish")),
+    ],
+
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> FloorLayoutResponse:
+
+    return delete_floor_layout(
+        conn,
+        current_user=current_user,
+        layout_id=str(layout_id),
+    )
+
 
 @router.get(
     "/{layout_id}/seats",
