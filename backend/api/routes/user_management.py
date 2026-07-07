@@ -19,9 +19,11 @@ from backend.schemas.user_management import (
     UserDetailsResponse,
     AdminUserDirectoryResponse,
     UpdateMyProfileRequest,
+    UserBookingHistoryResponse,
 )
 from backend.services.user_management_service import (
     admin_update_user_access_service,
+    get_user_booking_history,
     get_user_by_id_service,
     get_admin_user_directory,
     update_my_profile,
@@ -131,6 +133,29 @@ def get_user_by_id(
 ) -> UserDetailsResponse:
 
     return get_user_by_id_service(
+        conn,
+        current_user=current_user,
+        user_id=user_id,
+    )
+
+
+@router.get(
+    "/users/{user_id}/bookings",
+    response_model=UserBookingHistoryResponse,
+)
+def get_user_bookings(
+    user_id: str,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_any_permission(["admin_dashboard:view", "users:view", "user:view"])),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+) -> UserBookingHistoryResponse:
+
+    return get_user_booking_history(
         conn,
         current_user=current_user,
         user_id=user_id,

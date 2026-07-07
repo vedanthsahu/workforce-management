@@ -14,9 +14,11 @@ from backend.schemas.preferences import (
     AmenityListResponse,
     CreateAmenityCategoryRequest,
     CreateAmenityRequest,
+    MyPreferencesResponse,
     PreferencesResponse,
     UpdateAmenityCategoryRequest,
     UpdateAmenityRequest,
+    UpdateMyPreferencesRequest,
 )
 from backend.services.preferences_service import (
     create_amenity,
@@ -25,9 +27,11 @@ from backend.services.preferences_service import (
     get_amenity,
     get_amenity_categories,
     get_amenity_category,
+    get_my_preferences,
     get_preferences,
     update_amenity_category_metadata,
     update_amenity_metadata,
+    update_my_preferences,
 )
 
 router = APIRouter(tags=["preferences"])
@@ -48,6 +52,23 @@ def preferences(
     )
 
     return PreferencesResponse(**payload)
+
+
+@router.post(
+    "/preferences/me",
+    response_model=MyPreferencesResponse,
+)
+def update_my_preferences_route(
+    payload: UpdateMyPreferencesRequest,
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> MyPreferencesResponse:
+
+    return update_my_preferences(
+        conn,
+        current_user=current_user,
+        payload=payload,
+    )
 
 
 @router.get("/amenities", response_model=AmenityListResponse)

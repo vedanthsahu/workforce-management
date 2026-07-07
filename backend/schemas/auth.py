@@ -12,6 +12,12 @@ class MessageResponse(BaseModel):
 class FavoriteSeatResponse(BaseModel):
     seat_id: str
     seat_code: str
+    site_id: str | None = None
+    site_name: str | None = None
+    building_id: str | None = None
+    building_name: str | None = None
+    floor_id: str | None = None
+    floor_name: str | None = None
     booking_count: int
 
 

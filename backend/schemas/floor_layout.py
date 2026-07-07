@@ -61,7 +61,21 @@ class FloorLayoutResponse(BaseModel):
     uploaded_by_department: str | None = None
     uploaded_by_job_title: str | None = None
 
+    # Placeholder: floor_layouts has no updated_by column yet, so this
+    # mirrors uploaded_by until a real column/join is added.
+    updated_by_user_id: str
+    updated_by_name: str | None = None
+    updated_by_email: str | None = None
+    updated_by_role: str | None = None
+    updated_by_department: str | None = None
+    updated_by_job_title: str | None = None
+
     published_by_user_id: str | None = None
+    published_by_name: str | None = None
+    published_by_email: str | None = None
+    published_by_role: str | None = None
+    published_by_department: str | None = None
+    published_by_job_title: str | None = None
 
     published_at: datetime | None = None
 
