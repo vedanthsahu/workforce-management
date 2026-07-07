@@ -120,9 +120,15 @@ class AdminManagementRepositoryTests(unittest.TestCase):
         sql, params = cursor.executions[0]
         self.assertIn("layout_count", sql)
         self.assertIn("published_layout_exists", sql)
+        self.assertIn("flc.status = ANY(%s)", sql)
+        self.assertIn("fl.status = ANY(%s)", sql)
         self.assertIn("f.status = %s", sql)
         self.assertIn("f.floor_name ILIKE %s", sql)
-        self.assertEqual(params[:2], ["3", "1"])
+        self.assertEqual(
+            params[:2],
+            [["DRAFT", "ARCHIVED", "PUBLISHED"], ["DRAFT", "ARCHIVED", "PUBLISHED"]],
+        )
+        self.assertEqual(params[2:4], ["3", "1"])
 
     def test_amenity_listing_returns_metrics_and_assignment_counts(self) -> None:
         cursor = FakeCursor(
