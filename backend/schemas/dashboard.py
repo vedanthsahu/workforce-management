@@ -8,7 +8,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from backend.schemas.auth import FavoriteSeatResponse
-from backend.schemas.preferences import AmenityResponse
+from backend.schemas.preferences import AmenityResponse, MyPreferencesResponse
 
 
 class DashboardManagerResponse(BaseModel):
@@ -59,6 +59,11 @@ class DashboardMeResponse(BaseModel):
     office_info: DashboardOfficeInfoResponse | None = None
     preferences: DashboardPreferencesResponse | None = None
     profile_metadata: DashboardProfileMetadataResponse | None = None
+
+    # User-saved defaults from POST /preferences/me (user_work_preferences +
+    # user_preferred_amenities), distinct from `preferences` above which is
+    # the full tenant amenity catalog used to populate a selection UI.
+    work_preferences: MyPreferencesResponse | None = None
 
     favorite_seat: FavoriteSeatResponse | None = None
 

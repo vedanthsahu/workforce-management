@@ -902,16 +902,39 @@ def fetch_favorite_seat(
             SELECT
                 s.id::text AS seat_id,
                 s.seat_code,
+                s.site_id::text AS site_id,
+                si.site_name,
+                s.building_id::text AS building_id,
+                bu.building_name,
+                s.floor_id::text AS floor_id,
+                fl.floor_name,
                 COUNT(*) AS booking_count
             FROM bookings b
             JOIN seats s
                 ON s.id = b.seat_id
                 AND s.tenant_id = b.tenant_id
+            LEFT JOIN sites si
+                ON si.id = s.site_id
+               AND si.tenant_id = s.tenant_id
+            LEFT JOIN buildings bu
+                ON bu.id = s.building_id
+               AND bu.tenant_id = s.tenant_id
+            LEFT JOIN floors fl
+                ON fl.id = s.floor_id
+               AND fl.tenant_id = s.tenant_id
             WHERE b.tenant_id = %s
               AND b.booked_for_user_id = %s
               AND b.booking_type = 'EMPLOYEE'
               AND b.booking_status = 'CONFIRMED'
-            GROUP BY s.id, s.seat_code
+            GROUP BY
+                s.id,
+                s.seat_code,
+                s.site_id,
+                si.site_name,
+                s.building_id,
+                bu.building_name,
+                s.floor_id,
+                fl.floor_name
             ORDER BY booking_count DESC, s.id
             LIMIT 1
             """,

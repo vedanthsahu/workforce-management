@@ -74,6 +74,41 @@ class PreferencesResponse(BaseModel):
     amenities: list[AmenityResponse]
 
 
+PreferredSeatType = Literal[
+    "STANDARD",
+    "WINDOW",
+    "CABIN",
+    "ACCESSIBLE",
+    "HOT_DESK",
+]
+
+
+class UpdateMyPreferencesRequest(BaseModel):
+    """Self-service update for work-location and amenity preferences.
+
+    Every field is independently optional since user_work_preferences has no
+    required columns beyond tenant_id/user_id; omitted fields are saved as
+    null (i.e. "no preference"), and amenity_ids replaces the full selection.
+    """
+
+    site_id: int | None = Field(default=None, gt=0)
+    building_id: int | None = Field(default=None, gt=0)
+    floor_id: int | None = Field(default=None, gt=0)
+    seat_type: PreferredSeatType | None = None
+    amenity_ids: list[int] = Field(default_factory=list)
+
+
+class MyPreferencesResponse(BaseModel):
+    site_id: str | None = None
+    site_name: str | None = None
+    building_id: str | None = None
+    building_name: str | None = None
+    floor_id: str | None = None
+    floor_name: str | None = None
+    seat_type: str | None = None
+    amenities: list[AmenityResponse] = Field(default_factory=list)
+
+
 class CreateAmenityRequest(BaseModel):
     amenity_name: str = Field(min_length=1, max_length=200)
     category_id: int = Field(gt=0)
