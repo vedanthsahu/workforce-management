@@ -1,53 +1,19 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <title>Floor Layout Uploaded</title>
-</head>
-<body style="font-family: Arial, sans-serif; color: #222; line-height: 1.5;">
-    <h2 style="margin-bottom: 16px;">Floor layout uploaded</h2>
-
-    <p>A floor layout was uploaded or updated in Seat Management.</p>
-
-    <table cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
-        <tr>
-            <td><strong>Layout</strong></td>
-            <td>{{ layout_name }}</td>
-        </tr>
-        <tr>
-            <td><strong>Version</strong></td>
-            <td>{{ version_no }}</td>
-        </tr>
-        <tr>
-            <td><strong>Type</strong></td>
-            <td>{{ layout_type }}</td>
-        </tr>
-        <tr>
-            <td><strong>Status</strong></td>
-            <td>{{ status }}</td>
-        </tr>
-        <tr>
-            <td><strong>Uploaded by</strong></td>
-            <td>{{ uploaded_by }} ({{ uploaded_by_email }})</td>
-        </tr>
-        <tr>
-            <td><strong>Site</strong></td>
-            <td>{{ site_name }}</td>
-        </tr>
-        <tr>
-            <td><strong>Building</strong></td>
-            <td>{{ building_name }}</td>
-        </tr>
-        <tr>
-            <td><strong>Floor</strong></td>
-            <td>{{ floor_name }}</td>
-        </tr>
-        <tr>
-            <td><strong>Uploaded at</strong></td>
-            <td>{{ uploaded_at }}</td>
-        </tr>
-    </table>
-
-    <p>Seat Management Team</p>
-</body>
-</html>
+{% extends "_base.html" %}
+{% from "_macros.html" import heading, lead, details_open, details_close, row %}
+{% block title %}Floor layout {{ "published" if status == "PUBLISHED" else "uploaded" }}{% endblock %}
+{% block preheader %}{{ layout_name }} ({{ floor_name }}) — version {{ version_no }}.{% endblock %}
+{% block content %}
+{% set action = "published" if status == "PUBLISHED" else "uploaded" %}
+{{ heading("Floor layout " ~ action) }}
+{{ lead("A floor layout has been " ~ action ~ " in SeatBook." ~ (" Seats from this layout are now live on the floor." if status == "PUBLISHED" else " It is saved as a draft and has no effect on live seats yet.")) }}
+{{ details_open() }}
+{{ row("Layout", layout_name) }}
+{{ row("Version", version_no) }}
+{{ row("Status", status|title if status else "") }}
+{{ row("Floor", floor_name) }}
+{{ row("Building", building_name) }}
+{{ row("Site", site_name) }}
+{{ row("Uploaded by", uploaded_by) }}
+{{ row("Uploaded at", uploaded_at) }}
+{{ details_close() }}
+{% endblock %}

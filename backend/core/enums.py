@@ -9,6 +9,15 @@ class LayoutStatus(str, Enum):
     DRAFT = "DRAFT"
     PUBLISHED = "PUBLISHED"
     ARCHIVED = "ARCHIVED"
+    DELETED = "DELETED"
+
+
+NON_DELETED_LAYOUT_STATUSES: tuple[str, ...] = (
+    LayoutStatus.DRAFT.value,
+    LayoutStatus.ARCHIVED.value,
+    LayoutStatus.PUBLISHED.value,
+    LayoutStatus.DELETED.value,
+)
 
 
 class SeatAvailabilityStatus(str, Enum):

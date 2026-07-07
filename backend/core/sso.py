@@ -7,6 +7,7 @@ API calls used by the backend's SSO flow.
 
 from __future__ import annotations
 
+import logging
 import secrets
 from dataclasses import dataclass
 from typing import Any
@@ -15,7 +16,10 @@ from urllib.parse import urlencode
 import requests
 from jose import ExpiredSignatureError, JWTError, jwt
 
+from backend.core.app_logging import LOGGER_NAME
 from backend.core.config import get_settings
+
+logger = logging.getLogger(f"{LOGGER_NAME}.sso")
 
 MICROSOFT_GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 MICROSOFT_TOKEN_BASE_URL = "https://login.microsoftonline.com"
@@ -113,7 +117,7 @@ def exchange_code_for_token(code: str) -> dict[str, str]:
             message="Microsoft callback did not include an authorization code.",
         )
 
-    print("TOKEN URL:", settings.token_url)
+    logger.debug("sso.token_exchange.request url=%s", settings.token_url)
 
     try:
         response = requests.post(
@@ -129,24 +133,22 @@ def exchange_code_for_token(code: str) -> dict[str, str]:
             timeout=20,
         )
 
-        print("TOKEN STATUS:", response.status_code)
+        logger.debug("sso.token_exchange.response status=%s", response.status_code)
 
-    except Exception as exc:
-        import traceback
-
-        print("TOKEN EXCEPTION TYPE:", type(exc).__name__)
-        print("TOKEN EXCEPTION:", repr(exc))
-
-        traceback.print_exc()
-
+    except Exception:
+        logger.exception("sso.token_exchange.request_failed")
         raise
 
     payload = _safe_json(response)
 
-    print("TOKEN PAYLOAD KEYS:", list(payload.keys()))
+    logger.debug("sso.token_exchange.payload_keys keys=%s", sorted(payload.keys()))
 
     if response.status_code != 200:
-        print("TOKEN ERROR PAYLOAD:", payload)
+        logger.warning(
+            "sso.token_exchange.failed status=%s error=%s",
+            response.status_code,
+            _provider_error_details(payload),
+        )
 
         raise SSOError(
             status_code=400,
@@ -420,7 +422,7 @@ def fetch_graph_manager(access_token: str) -> dict[str, Any]:
 def _fetch_jwks():
     settings = get_settings()
 
-    print("JWKS URL:", settings.jwks_url)
+    logger.debug("sso.jwks.request url=%s", settings.jwks_url)
 
     try:
         response = requests.get(
@@ -428,23 +430,17 @@ def _fetch_jwks():
             timeout=20,
         )
 
-        print("STATUS:", response.status_code)
+        logger.debug("sso.jwks.response status=%s", response.status_code)
 
         response.raise_for_status()
 
-    except Exception as exc:
-        import traceback
-
-        print("EXCEPTION TYPE:", type(exc).__name__)
-        print("EXCEPTION:", repr(exc))
-
-        traceback.print_exc()
-
+    except Exception:
+        logger.exception("sso.jwks.fetch_failed")
         raise
 
     payload = _safe_json(response)
 
-    print("JWKS KEYS:", len(payload.get("keys", [])))
+    logger.debug("sso.jwks.keys_loaded count=%s", len(payload.get("keys", [])))
 
     return payload
 
@@ -494,7 +490,7 @@ def _graph_get(
     params: dict[str, str] | None = None,
 ) -> dict[str, Any]:
 
-    print(f"GRAPH START {path}")
+    logger.debug("sso.graph.request path=%s", path)
 
     if not access_token:
         raise GraphAPIError(
@@ -512,10 +508,10 @@ def _graph_get(
             timeout=20,
         )
 
-        print(f"GRAPH STATUS {path}: {response.status_code}")
+        logger.debug("sso.graph.response path=%s status=%s", path, response.status_code)
 
-    except requests.RequestException as exc:
-        print(f"GRAPH EXCEPTION {path}: {type(exc).__name__}: {exc}")
+    except requests.RequestException:
+        logger.exception("sso.graph.request_failed path=%s", path)
         raise GraphAPIError(
             status_code=502,
             code="graph_request_unavailable",
@@ -548,7 +544,7 @@ def _graph_get(
             details=_provider_error_details(payload),
         )
 
-    print(f"GRAPH OK {path}")
+    logger.debug("sso.graph.success path=%s", path)
 
     return payload
 

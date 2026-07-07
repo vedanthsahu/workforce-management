@@ -1258,5 +1258,198 @@ def fetch_cancelled_guest_visits(
         )
 
         return [dict(row) for row in cur.fetchall()]
-    
+
+
+GUEST_VISIT_HISTORY_SELECT = """
+    gv.id::text AS guest_visit_id,
+    gv.visit_date,
+    gv.visit_status,
+    gv.guest_type,
+    gv.purpose_of_visit,
+    gv.start_time,
+    gv.end_time,
+    gv.notes,
+    gv.requires_seat,
+    gv.checked_in_at,
+    gv.checked_out_at,
+    gv.cancelled_at,
+    gv.cancellation_reason,
+
+    au.id::text AS host_user_id,
+    au.full_name AS host_name,
+    au.email AS host_email,
+
+    si.id::text AS site_id,
+    si.site_name,
+
+    bu.id::text AS building_id,
+    bu.building_name,
+
+    fl.id::text AS floor_id,
+    fl.floor_name,
+
+    b.id::text AS booking_id,
+    b.booking_status,
+    b.seat_id::text AS seat_id,
+    s.seat_code,
+    b.booking_date
+"""
+
+GUEST_VISIT_HISTORY_ORDER = """
+    ORDER BY
+        CASE WHEN gv.visit_date >= CURRENT_DATE THEN 0 ELSE 1 END,
+        CASE WHEN gv.visit_date >= CURRENT_DATE THEN gv.visit_date END ASC,
+        CASE WHEN gv.visit_date < CURRENT_DATE THEN gv.visit_date END DESC,
+        gv.id DESC
+"""
+
+
+def fetch_guest_visit_history(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_id: str,
+    include_cancelled: bool = False,
+    limit: int = 20,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
+    """Fetch one guest's visit history with embedded booking details."""
+    query = f"""
+        SELECT
+            {GUEST_VISIT_HISTORY_SELECT}
+        FROM guest_visits gv
+
+        LEFT JOIN app_users au
+            ON au.id = gv.host_user_id
+           AND au.tenant_id = gv.tenant_id
+
+        INNER JOIN sites si
+            ON si.id = gv.site_id
+           AND si.tenant_id = gv.tenant_id
+
+        INNER JOIN buildings bu
+            ON bu.id = gv.building_id
+           AND bu.tenant_id = gv.tenant_id
+
+        LEFT JOIN floors fl
+            ON fl.id = gv.floor_id
+           AND fl.tenant_id = gv.tenant_id
+
+        LEFT JOIN LATERAL (
+            SELECT b.*
+            FROM bookings b
+            WHERE b.guest_visit_id = gv.id
+              AND b.tenant_id = gv.tenant_id
+              AND b.booking_type = 'GUEST'
+            ORDER BY b.updated_at DESC, b.id DESC
+            LIMIT 1
+        ) b ON TRUE
+
+        LEFT JOIN seats s
+            ON s.id = b.seat_id
+           AND s.tenant_id = b.tenant_id
+
+        WHERE gv.tenant_id = %s
+          AND gv.guest_id = %s
+    """
+    params: list[Any] = [tenant_id, guest_id]
+
+    if not include_cancelled:
+        query += " AND gv.visit_status <> 'CANCELLED'"
+
+    query += GUEST_VISIT_HISTORY_ORDER
+    query += " LIMIT %s OFFSET %s"
+    params.extend([limit, offset])
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(query, params)
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def fetch_guest_visit_history_summary(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_id: str,
+) -> dict[str, Any]:
+    """Summarize one guest's visits and bookings, regardless of pagination filters."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                COUNT(*)::integer AS total_visits,
+                COUNT(*) FILTER (
+                    WHERE gv.visit_status = 'SCHEDULED'
+                )::integer AS scheduled,
+                COUNT(*) FILTER (
+                    WHERE gv.visit_status = 'CHECKED_IN'
+                )::integer AS checked_in,
+                COUNT(*) FILTER (
+                    WHERE gv.visit_status = 'CHECKED_OUT'
+                )::integer AS checked_out,
+                COUNT(*) FILTER (
+                    WHERE gv.visit_status = 'CANCELLED'
+                )::integer AS cancelled,
+                COUNT(*) FILTER (
+                    WHERE gv.visit_status = 'MODIFIED'
+                )::integer AS modified,
+                COUNT(*) FILTER (
+                    WHERE gv.requires_seat IS TRUE
+                )::integer AS requires_seat_count,
+                (
+                    SELECT COUNT(*)::integer
+                    FROM bookings b
+                    WHERE b.tenant_id = %s
+                      AND b.booked_for_guest_id = %s
+                      AND b.booking_type = 'GUEST'
+                ) AS total_bookings
+            FROM guest_visits gv
+            WHERE gv.tenant_id = %s
+              AND gv.guest_id = %s
+            """,
+            (tenant_id, guest_id, tenant_id, guest_id),
+        )
+        row = cur.fetchone()
+
+    if row is None:
+        return {
+            "total_visits": 0,
+            "total_bookings": 0,
+            "scheduled": 0,
+            "checked_in": 0,
+            "checked_out": 0,
+            "cancelled": 0,
+            "modified": 0,
+            "requires_seat_count": 0,
+        }
+    return dict(row)
+
+
+def cancel_future_guest_visits_for_guest(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_id: str,
+    cancellation_reason: str = "Guest deactivated",
+) -> int:
+    """Cancel one guest's future SCHEDULED visits. Does not touch active/past visits."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE guest_visits
+            SET
+                visit_status = 'CANCELLED',
+                cancelled_at = NOW(),
+                cancellation_reason = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND guest_id = %s
+              AND visit_date >= CURRENT_DATE
+              AND visit_status = 'SCHEDULED'
+            """,
+            (cancellation_reason, tenant_id, guest_id),
+        )
+        return cur.rowcount
 

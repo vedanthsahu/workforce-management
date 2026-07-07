@@ -32,6 +32,7 @@ from backend.schemas.floor_layout import (
 from backend.services.floor_layout_service import (
     activate_floor_layout,
     create_floor_layout,
+    delete_floor_layout,
     get_floor_layout_seats,
     get_floor_layouts_by_floor,
 )
@@ -72,7 +73,7 @@ def create_floor_layout_route(
     layout_name=layout_name,
     status=status,
     layout_metadata=_parse_layout_metadata(layout_metadata),
-    seat_ids=_normalize_seat_ids(seat_ids),
+    seat_ids=seat_ids,
     )
 
 
@@ -131,6 +132,28 @@ def activate_floor_layout_route(
         background_tasks=background_tasks,
     )
 
+@router.delete(
+    "/{layout_id}",
+    response_model=FloorLayoutResponse,
+)
+def delete_floor_layout_route(
+    layout_id: Annotated[int, Path(gt=0)],
+
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_permission("layout:publish")),
+    ],
+
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> FloorLayoutResponse:
+
+    return delete_floor_layout(
+        conn,
+        current_user=current_user,
+        layout_id=str(layout_id),
+    )
+
+
 @router.get(
     "/{layout_id}/seats",
     response_model=LayoutSeatListResponse,
@@ -184,55 +207,3 @@ def _parse_layout_metadata(
         )
 
     return parsed_metadata
-
-
-def _normalize_seat_ids(
-    seat_ids: list[str],
-) -> list[str]:
-
-    normalized: list[str] = []
-
-    seen: set[str] = set()
-
-    expanded_seat_ids: list[str] = []
-
-    for raw_value in seat_ids:
-
-        split_values = str(raw_value).split(",")
-
-        for split_value in split_values:
-            expanded_seat_ids.append(split_value)
-
-    print("DEBUG_EXPANDED_SEAT_IDS", expanded_seat_ids)
-
-    for raw_value in expanded_seat_ids:
-
-        candidate = str(raw_value or "").strip()
-
-        if not candidate:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "code": "invalid_seat_id",
-                    "message": "Seat IDs cannot be empty.",
-                },
-            )
-
-        normalized_candidate = candidate.upper()
-
-        if normalized_candidate in seen:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "code": "duplicate_seat_id",
-                    "message": f"Duplicate seat ID detected: {normalized_candidate}",
-                },
-            )
-
-        seen.add(normalized_candidate)
-
-        normalized.append(normalized_candidate)
-
-    print("DEBUG_NORMALIZED_SEAT_IDS", normalized)
-
-    return normalized
