@@ -95,16 +95,16 @@ function FloorsPage() {
       )}
 
       {/* HEADER */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Manage Floors</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Manage Floors</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">
             View, add, edit and manage all floors.
           </p>
         </div>
         <Link
           href="/admin/floors/add"
-          className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm"
+          className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm self-start sm:self-auto"
         >
           <Plus size={16} />
           Add Floor
@@ -119,7 +119,7 @@ function FloorsPage() {
 
         {/* TABLE HEADER */}
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center px-6 py-4 border-b">
-          <h2 className="text-base font-semibold text-gray-800">Floors List</h2>
+          <h2 className="text-sm sm:text-base font-semibold text-gray-800">Floors List</h2>
           <FloorFilters
             sites={sites}
             buildings={buildings}
@@ -172,7 +172,7 @@ function FloorsPage() {
         )}
 
         {/* FOOTER */}
-        <div className="flex justify-between items-center px-6 py-4 border-t shrink-0 text-sm text-gray-500">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
           <span>
             {filteredFloors.length > 0 &&
               `Showing ${startIndex + 1} to ${Math.min(

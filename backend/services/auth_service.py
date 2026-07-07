@@ -104,7 +104,7 @@ def determine_graph_onboarding_role(
 ) -> str:
     """Return EMPLOYEE or FACILITATOR for first-time SSO provisioning."""
     settings = get_settings()
-    graph_group_id = settings.graph_talent_group_id
+    graph_group_id = settings.graph_facilitator_group_id
     if not graph_group_id:
         return "EMPLOYEE"
 
@@ -112,12 +112,12 @@ def determine_graph_onboarding_role(
     last_error: GraphAPIError | None = None
     for attempt in range(attempts):
         try:
-            is_talent = check_graph_group_membership(
+            is_facilitator = check_graph_group_membership(
                 access_token,
                 group_id=graph_group_id,
                 microsoft_object_id=microsoft_object_id,
             )
-            return "FACILITATOR" if is_talent else "EMPLOYEE"
+            return "FACILITATOR" if is_facilitator else "EMPLOYEE"
         except GraphAPIError as exc:
             last_error = exc
             if attempt < attempts - 1 and settings.graph_role_lookup_backoff_seconds:
@@ -147,15 +147,15 @@ def sync_graph_managed_roles(
     if not settings.graph_role_sync_enabled:
         return GraphRoleSyncResult(
             enabled=False,
-            graph_group_id=settings.graph_talent_group_id,
+            graph_group_id=settings.graph_facilitator_group_id,
         )
-    if not settings.graph_talent_group_id:
+    if not settings.graph_facilitator_group_id:
         return GraphRoleSyncResult(
             enabled=True,
             graph_group_id=None,
         )
 
-    graph_group_id = settings.graph_talent_group_id
+    graph_group_id = settings.graph_facilitator_group_id
     graph_access_token = access_token or exchange_client_credentials_for_graph_token()
     graph_member_ids = {
         member_id.lower()

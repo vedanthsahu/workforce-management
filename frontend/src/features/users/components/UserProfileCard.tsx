@@ -4,11 +4,11 @@ import type { User } from "../types/users.types";
 
 export default function UserProfileCard({ user }: { user: User }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 flex flex-col gap-5 h-full">
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 sm:p-6 flex flex-col gap-5 h-full">
 
       {/* Avatar + name */}
       <div className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-linear-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-base font-bold text-white shrink-0 shadow-sm">
+        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-linear-to-br from-blue-500 to-blue-600 flex items-center justify-center text-base font-bold text-white shrink-0 shadow-sm">
           {initialsFor(user.fullName)}
         </div>
         <div className="min-w-0">
@@ -18,7 +18,7 @@ export default function UserProfileCard({ user }: { user: User }) {
       </div>
 
       {/* Details grid */}
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-gray-100 pt-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 border-t border-gray-100 pt-5">
         <Field label="Department" value={user.department} />
         <Field label="Employee ID" value={user.employeeId ?? "—"} />
         <Field label="Job Title" value={user.jobTitle} />

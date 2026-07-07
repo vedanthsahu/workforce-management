@@ -14,6 +14,7 @@ import { normalizeRoleKey } from "@/features/users/utils/users.utils";
 import { useUsersFilterStore } from "@/store/useUsersFilterStore";
 
 const PIN_DURATION = 4000;
+const PAGE_SIZES = [10, 25, 50, 75, 100];
 
 function UserManagementPage() {
   const router = useRouter();
@@ -25,7 +26,7 @@ function UserManagementPage() {
     search, setSearch,
     selectedRoles, setSelectedRoles,
     statusFilter, setStatusFilter,
-    page, setPage, totalPages, limit,
+    page, setPage, totalPages, limit, setLimit,
   } = useUsers();
 
   const [successMessage, setSuccessMessage] = useState("");
@@ -33,11 +34,13 @@ function UserManagementPage() {
   const pinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const roleFilterAppliedRef = useRef(false);
 
-  // Reset filter state on every mount so the page always starts clean.
+  // Reset search/role/status filters on every mount so the page always starts
+  // clean, without wiping the page/rows-per-page the user had set — those
+  // should survive round-trips like navigating to change-role and back.
   // The URL-param effect below then re-applies the role filter if ?role= is present.
   // Using getState() avoids adding resetFilters to deps and prevents cleanup-on-unmount
   // races where the reset fires after the new filter has already been applied.
-  useEffect(() => { useUsersFilterStore.getState().reset(); }, []);
+  useEffect(() => { useUsersFilterStore.getState().resetFilters(); }, []);
 
   const showBanner = (message: string) => {
     if (pinTimerRef.current) clearTimeout(pinTimerRef.current);
@@ -48,10 +51,20 @@ function UserManagementPage() {
   useEffect(() => {
     const changedId = searchParams.get("roleChanged");
     const newRole = searchParams.get("newRole");
+    const newStatus = searchParams.get("newStatus");
     if (!changedId) return;
-    showBanner(`Role changed successfully${newRole ? ` to ${newRole}` : ""}.`);
+
+    const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    let message = "Changes saved successfully.";
+    if (newRole && newStatus) {
+      message = `Role changed successfully to ${newRole} and status changed successfully to ${capitalize(newStatus)}.`;
+    } else if (newRole) {
+      message = `Role changed successfully to ${newRole}.`;
+    } else if (newStatus) {
+      message = `Status changed successfully to ${capitalize(newStatus)}.`;
+    }
+    showBanner(message);
     setHighlightedId(changedId);
-    setPage(1);
     router.replace("/admin/users");
     setTimeout(() => setHighlightedId(null), PIN_DURATION);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -190,7 +203,17 @@ function UserManagementPage() {
                   : `Showing ${(page - 1) * limit + 1} to ${Math.min(page * limit, summary.filteredUsers)} of ${summary.filteredUsers} users`}
           </span>
           {!isSearchMode && (
-            <div className="self-center sm:self-auto">
+            <div className="flex items-center gap-3 self-center sm:self-auto">
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span>Rows</span>
+                <select
+                  value={limit}
+                  onChange={(e) => setLimit(Number(e.target.value))}
+                  className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                >
+                  {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
               <UsersPagination
                 currentPage={page}
                 totalPages={totalPages}

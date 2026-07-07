@@ -53,7 +53,7 @@ export function mapOccupancyRangeToTrend(
         month: "short",
         year: "numeric",
       }),
-      occupancy: found?.occupancyRate ?? 0,
+      occupancy: Math.round((found?.occupancyRate ?? 0) * 10) / 10,
     });
   }
 

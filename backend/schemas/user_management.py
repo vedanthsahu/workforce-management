@@ -15,7 +15,7 @@ AdminDirectoryRole = Literal[
     "FACILITATOR",
     "SECURITY",
     "TENANT_ADMIN",
-    "TALENT_GUEST_COORDINATOR",
+    "FACILITATOR_GUEST_COORDINATOR",
 ]
 
 AdminDirectoryStatus = Literal[

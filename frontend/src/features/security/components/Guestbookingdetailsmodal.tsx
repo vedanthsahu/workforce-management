@@ -124,11 +124,7 @@ export function GuestBookingDetailsModal({ visitor, onClose }: Props) {
                     {visitor.bookingStatus}
                   </span>
                 )}
-                {visitor.guestType && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-violet-50 text-violet-600 ring-1 ring-violet-200">
-                    {getGuestTypeLabel(visitor.guestType)}
-                  </span>
-                )}
+                {/* guestType removed from view per request */}
               </div>
             </div>
           </div>
@@ -137,8 +133,7 @@ export function GuestBookingDetailsModal({ visitor, onClose }: Props) {
           <Section title="Guest Information">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <InfoRow icon={Mail} label="Email" value={visitor.guestEmail} />
-              <InfoRow icon={Phone} label="Phone" value={visitor.guestPhone} />
-              <InfoRow icon={Briefcase} label="Purpose" value={visitor.purpose} />
+              {/* Purpose removed from view per request */}
             </div>
           </Section>
 
@@ -147,7 +142,6 @@ export function GuestBookingDetailsModal({ visitor, onClose }: Props) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <InfoRow icon={User} label="Host Name" value={visitor.hostName} />
               <InfoRow icon={Mail} label="Host Email" value={visitor.hostEmail} />
-              <InfoRow icon={Phone} label="Host Phone" value={visitor.hostPhone} />
               <InfoRow icon={Building} label="Department" value={visitor.hostDepartment} />
             </div>
           </Section>
