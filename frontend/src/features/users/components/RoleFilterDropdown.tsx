@@ -30,9 +30,9 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
   }, []);
 
   const openDropdown = () => {
-    // selectedRoles.length === 0 means "no filter" (i.e. every role included) —
-    // expand that into the explicit full list so checkboxes start checked.
-    setPendingRoles(selectedRoles.length === 0 ? allRoleNames : selectedRoles);
+    // Default state (no filter applied yet) should open with every checkbox
+    // unchecked, not pre-checked — only reflect an actual prior selection.
+    setPendingRoles(selectedRoles);
     setOpen((o) => !o);
   };
 
@@ -47,6 +47,17 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
 
   const allChecked = pendingRoles.length === allRoleNames.length;
   const noneChecked = pendingRoles.length === 0;
+
+  // Effective selection pendingRoles would apply as (mirrors handleApply's
+  // "all checked" -> [] collapsing), compared against the already-applied
+  // selectedRoles to detect a no-op Apply.
+  const effectivePending = allChecked ? [] : pendingRoles;
+  const isUnchanged =
+    effectivePending.length === selectedRoles.length &&
+    effectivePending
+      .map(normalizeRoleKey)
+      .sort()
+      .every((r, i) => r === selectedRoles.map(normalizeRoleKey).sort()[i]);
 
   const handleApply = () => {
     if (noneChecked) return;
@@ -100,8 +111,14 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
               <button
                 type="button"
                 onClick={handleApply}
-                disabled={noneChecked}
-                title={noneChecked ? "Select at least one role" : undefined}
+                disabled={noneChecked || isUnchanged}
+                title={
+                  noneChecked
+                    ? "Select at least one role"
+                    : isUnchanged
+                      ? "No changes to apply"
+                      : undefined
+                }
                 className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:bg-gray-200"
               >
                 Apply

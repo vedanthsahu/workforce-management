@@ -131,7 +131,7 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
                 Booked Seats
               </p>
               <p className="font-medium">
-                {booked} ({occupancy.toFixed(1)}%)
+                {occupancy.toFixed(1)}% ({booked})
               </p>
             </div>
 

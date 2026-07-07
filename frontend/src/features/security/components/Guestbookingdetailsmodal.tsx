@@ -133,7 +133,6 @@ export function GuestBookingDetailsModal({ visitor, onClose }: Props) {
           <Section title="Guest Information">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <InfoRow icon={Mail} label="Email" value={visitor.guestEmail} />
-              <InfoRow icon={Phone} label="Phone" value={visitor.guestPhone} />
               {/* Purpose removed from view per request */}
             </div>
           </Section>
