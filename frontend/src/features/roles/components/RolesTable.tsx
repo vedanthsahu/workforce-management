@@ -23,11 +23,11 @@ export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) 
         .roles-tbody-scroll::-webkit-scrollbar-track { background: transparent; }
       `}</style>
 
-      <div className="w-full h-full overflow-x-auto flex flex-col">
-        <table className="w-full flex-1 min-h-0 flex flex-col text-left border-collapse" style={{ tableLayout: "fixed" }}>
+      <div className="w-full overflow-x-auto flex flex-col">
+        <table className="w-full flex flex-col text-left border-collapse" style={{ tableLayout: "fixed" }}>
           <thead className="block w-full shrink-0 pr-2 text-xs text-blue-600 bg-blue-100 border-b">
             <tr className="table w-full" style={{ tableLayout: "fixed" }}>
-              <th className="pl-8 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[24%]">Role Name</th>
+              <th className="pl-12 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[24%]">Role Name</th>
               <th className="pl-10 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[38%]">Description</th>
               <th className="py-2.5 px-6 font-bold whitespace-nowrap text-left w-[10%]">Users</th>
               <th className="py-2.5 pl-8 pr-4 font-bold whitespace-nowrap text-left w-[20%]">Permissions</th>
@@ -35,7 +35,7 @@ export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) 
             </tr>
           </thead>
           <tbody
-            className="roles-tbody-scroll block w-full flex-1 min-h-0 divide-y divide-gray-100 overflow-y-auto"
+            className="roles-tbody-scroll block w-full max-h-125 divide-y divide-gray-100 overflow-y-auto"
             style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
           >
             {roles.map((role) => (
@@ -46,7 +46,7 @@ export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) 
                 }`}
                 style={{ tableLayout: "fixed" }}
               >
-                <td className="py-3 px-4 w-[24%]">
+                <td className="py-3 pl-10 px-4 w-[24%]">
                   <span
                     className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ring-1 ${getRoleBadgeClass(
                       role.key
@@ -55,11 +55,11 @@ export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) 
                     {role.name}
                   </span>
                 </td>
-                <td className="py-3 px-4 text-xs text-gray-600 w-[38%] truncate">
+                <td className="py-3 px-4 text-sm text-gray-600 w-[38%] truncate">
                   {role.description}
                 </td>
-                <td className="py-3 px-1 text-xs text-gray-700 w-[10%]">{role.userCount}</td>
-                <td className="py-3 pl-8 pr-4 text-xs text-gray-700 w-[16%]">{role.permissionCount}</td>
+                <td className="py-3 px-1 text-sm text-gray-700 w-[10%]">{role.userCount}</td>
+                <td className="py-3 pl-8 pr-4 text-sm text-gray-700 w-[16%]">{role.permissionCount}</td>
                 <td className="py-3 px-4 w-[10%]">
                   <button
                     type="button"

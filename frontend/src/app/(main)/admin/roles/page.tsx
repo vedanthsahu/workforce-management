@@ -131,7 +131,7 @@ export default function RoleManagementPage() {
       </div>
 
       {/* FULL-WIDTH ROLE LIST */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col flex-1 min-h-0">
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-b shrink-0">
           <h2 className="text-sm sm:text-base font-semibold text-gray-800 flex items-center gap-2">
             Role Management
@@ -149,7 +149,7 @@ export default function RoleManagementPage() {
           </div>
         </div>
 
-        <div className="w-full h-full overflow-x-auto flex-1 min-h-0">
+        <div className="w-full overflow-x-auto">
           {loading ? (
             <div className="p-6 text-sm text-gray-500">Loading...</div>
           ) : (

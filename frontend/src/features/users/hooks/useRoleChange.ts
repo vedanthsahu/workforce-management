@@ -5,8 +5,8 @@
 
 // const ALL_ROLES: RoleKey[] = [
 //   "EMPLOYEE",
-//   "TALENT",
-//   "TALENT_GUEST_COORDINATOR",
+//   "FACILITATOR",
+//   "FACILITATOR_GUEST_COORDINATOR",
 //   "SECURITY",
 //   "TENANT_ADMIN",
 // ];

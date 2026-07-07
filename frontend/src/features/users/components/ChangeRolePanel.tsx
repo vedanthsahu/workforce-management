@@ -115,6 +115,7 @@ export default function ChangeRolePanel({
               onChange={(e) => handleRoleChange(e.target.value)}
               className="w-full appearance-none h-10 px-3 pr-8 text-sm border border-gray-200 rounded-xl bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:border-blue-400 transition-colors"
             >
+              <option value="__NO_CHANGE__">{currentRole}</option>
               <option value="" disabled hidden>{currentRole}</option>
 
               {roles
@@ -123,7 +124,7 @@ export default function ChangeRolePanel({
                   <option key={r} value={r}>{r}</option>
                 ))}
 
-              <option value="__NO_CHANGE__">{currentRole}</option>
+              
             </select>
             <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
           </div>
@@ -133,7 +134,7 @@ export default function ChangeRolePanel({
           <label className="block text-xs font-medium text-gray-500 mb-1.5">Account Status</label>
           <div className="relative">
             <select
-              value={selectedStatus === currentStatus ? "__NO_CHANGE__" : selectedStatus}
+              value={selectedStatus}
               onChange={(e) => handleStatusChange(e.target.value)}
               className="w-full appearance-none h-10 px-3 pr-8 text-sm border border-gray-200 rounded-xl bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:border-blue-400 transition-colors"
             >

@@ -76,7 +76,7 @@ def _can_book_guest(current_user: dict[str, Any]) -> bool:
 
     return role in {
         "TENANT_ADMIN",
-        "TALENT",
+        "FACILITATOR",
         "SECURITY",
     }
 
@@ -99,7 +99,7 @@ def _can_book_for_user(
         return True
 
     role = _user_role(current_user)
-    if role in {"TENANT_ADMIN", "TALENT"}:
+    if role in {"TENANT_ADMIN", "FACILITATOR"}:
         return True
 
     return (
@@ -1264,7 +1264,7 @@ def book_guest_seat(
             detail={
                 "code": "guest_booking_not_allowed",
                 "message": (
-                    "Only Talent and Tenant Admin users "
+                    "Only FACILITATOR and Tenant Admin users "
                     "can create guest bookings."
                 ),
             },
@@ -1450,7 +1450,7 @@ def create_guest_visit(
             detail={
                 "code": "guest_visit_not_allowed",
                 "message": (
-                    "Only Talent and Tenant Admin users "
+                    "Only FACILITATOR and Tenant Admin users "
                     "can create guest visits."
                 ),
             },

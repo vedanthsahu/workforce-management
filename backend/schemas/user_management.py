@@ -12,10 +12,10 @@ class CamelModel(BaseModel):
 AdminDirectoryRole = Literal[
     "EMPLOYEE",
     "MANAGER",
-    "TALENT",
+    "FACILITATOR",
     "SECURITY",
     "TENANT_ADMIN",
-    "TALENT_GUEST_COORDINATOR",
+    "FACILITATOR_GUEST_COORDINATOR",
 ]
 
 AdminDirectoryStatus = Literal[
@@ -36,7 +36,7 @@ class AdminUserAccessUpdateRequest(BaseModel):
     role_name: Literal[
         "EMPLOYEE",
         "MANAGER",
-        "TALENT",
+        "FACILITATOR",
         "SECURITY",
     ] | None = None
 

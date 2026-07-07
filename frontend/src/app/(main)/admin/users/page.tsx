@@ -51,8 +51,19 @@ function UserManagementPage() {
   useEffect(() => {
     const changedId = searchParams.get("roleChanged");
     const newRole = searchParams.get("newRole");
+    const newStatus = searchParams.get("newStatus");
     if (!changedId) return;
-    showBanner(`Role changed successfully${newRole ? ` to ${newRole}` : ""}.`);
+
+    const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    let message = "Changes saved successfully.";
+    if (newRole && newStatus) {
+      message = `Role changed successfully to ${newRole} and status changed successfully to ${capitalize(newStatus)}.`;
+    } else if (newRole) {
+      message = `Role changed successfully to ${newRole}.`;
+    } else if (newStatus) {
+      message = `Status changed successfully to ${capitalize(newStatus)}.`;
+    }
+    showBanner(message);
     setHighlightedId(changedId);
     router.replace("/admin/users");
     setTimeout(() => setHighlightedId(null), PIN_DURATION);
