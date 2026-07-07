@@ -50,6 +50,25 @@ const LEGEND = [
   { label: "Unconfigured", color: "#D1D5DB" },
 ] as const;
 
+// ── Status dot config ─────────────────────────────────────────────────────────
+
+function statusConfig(status: string, isPublished: boolean, isDiscarded: boolean) {
+  if (isDiscarded) return { dot: "bg-red-400", text: "Discarded" };
+  if (isPublished && status === "PUBLISHED") return { dot: "bg-green-500", text: "Published" };
+  if (status === "DRAFT") return { dot: "bg-blue-500", text: "Draft" };
+  if (status === "ARCHIVED") return { dot: "bg-gray-600", text: "Archived" };
+  return { dot: "bg-gray-400", text: status };
+}
+
+function formatDetailDate(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date();
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  if (d.toDateString() === today.toDateString()) return `Today, ${time}`;
+  const date = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  return `${date}, ${time}`;
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function LayoutTable({ selection, selectedLayoutId }: Props) {
@@ -201,27 +220,26 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
           Floor Layouts — {selection.buildingName} / {selection.floorName}
         </h2>
         <span className="text-xs bg-gray-100 px-3 py-1 rounded-full text-gray-600">
-          {total} Layouts
+          {total} Versions
         </span>
       </div>
 
       {/* TABLE */}
-      <div className="w-full overflow-x-auto">
-        <table className="w-full text-xs" style={{ minWidth: "700px" }}>
+      <div className="w-full">
+        <table className="w-full text-xs table-fixed">
           <colgroup>
-            <col style={{ width: "260px" }} />
-            <col style={{ width: "70px" }} />
-            <col style={{ width: "110px" }} />
-            <col style={{ width: "90px" }} />
-            <col style={{ width: "110px" }} />
-            <col style={{ width: "90px" }} />
+            <col style={{ width: "32%" }} />
+            <col style={{ width: "13%" }} />
+            <col style={{ width: "22%" }} />
+            <col style={{ width: "22%" }} />
+            <col style={{ width: "7%" }} />
           </colgroup>
           <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
             <tr>
               <th className="px-3 py-3 font-medium text-left">Layout Name</th>
-              <th className="px-3 py-3 font-medium text-center">Version</th>
-              <th className="px-3 py-3 font-medium text-center">Status</th>
-              <th className="px-3 py-3 font-medium text-left">Uploaded By</th>
+              <th className="px-3 py-3 font-medium text-left">Status</th>
+              <th className="px-3 py-3 font-medium text-left">Created Details</th>
+              <th className="px-3 py-3 font-medium text-left">Last Updated Details</th>
               <th className="px-3 py-3 font-medium text-center">Actions</th>
             </tr>
           </thead>
@@ -258,24 +276,44 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                       : "hover:bg-gray-50"
                       }`}
                   >
-                    <td className="px-3 py-3 font-medium">
+                    <td className="px-3 py-3 font-medium text-gray-900">
                       {row.layout_name}
                     </td>
-                    <td className="px-3 py-3 text-center">
-                      {row.version_no}
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${isDiscarded
-                        ? "bg-red-200 text-red-400"
-                        : row.status === "PUBLISHED" ? "bg-green-100 text-green-600"
-                          : row.status === "DRAFT" ? "bg-blue-100 text-blue-600"
-                            : "bg-gray-100 text-gray-600"
-                        }`}>
-                        {isDiscarded ? "DISCARDED" : row.status}
-                      </span>
+                    <td className="px-3 py-3">
+                      {(() => {
+                        const { dot, text } = statusConfig(row.status, row.is_published, isDiscarded);
+                        return (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
+                            <span className="text-xs text-gray-700 whitespace-nowrap">{text}</span>
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-3">
-                      {row.uploaded_by_name ?? row.uploaded_by_user_id}
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs font-medium text-gray-800">
+                          {row.uploaded_by_name ?? "—"}
+                        </span>
+                        <span className="text-[11px] text-gray-400">
+                          {row.created_at ? formatDetailDate(row.created_at) : "—"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      {(() => {
+                        const isPublished = row.status === "PUBLISHED" && row.is_published;
+                        const name = isPublished ? (row.published_by_name ?? "—") : (row.updated_by_name ?? "—");
+                        const date = isPublished ? row.published_at : row.updated_at;
+                        return (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-xs font-medium text-gray-800">{name}</span>
+                            <span className="text-[11px] text-gray-400">
+                              {date ? formatDetailDate(date) : "—"}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     {/* ── 3-dot menu ── */}
