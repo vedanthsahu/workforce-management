@@ -145,7 +145,7 @@ export function VisitorTable({
                         <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] font-semibold text-indigo-700 shrink-0">
                           {v.guestInitials}
                         </div>
-                        <span className="text-sm font-medium text-gray-800 truncate">
+                        <span className="text-sm font-medium text-black truncate">
                           {v.guestName}
                         </span>
                       </div>
@@ -153,19 +153,19 @@ export function VisitorTable({
 
                     {/* Host */}
                     <td className="py-3 px-4 text-center">
-                      <p className="text-sm text-gray-700">{v.hostName}</p>
+                      <p className="text-sm text-black">{v.hostName}</p>
                       {v.hostEmail && (
-                        <p className="text-[11px] text-gray-400 truncate">{v.hostEmail}</p>
+                        <p className="text-xs text-black truncate">{v.hostEmail}</p>
                       )}
                     </td>
 
                     {/* Visit Time */}
-                    <td className="py-3 px-4 text-sm text-gray-600 whitespace-nowrap text-center">
+                    <td className="py-3 px-4 text-sm text-black whitespace-nowrap text-center">
                       {v.visitTimeLabel}
                     </td>
 
                     {/* Location */}
-                    <td className="py-3 px-4 text-sm text-gray-600 text-center">{v.location}</td>
+                    <td className="py-3 px-4 text-sm text-black text-center">{v.location}</td>
 
                     {/* Seat Booked */}
                     <td className="py-3 px-4 text-center">
