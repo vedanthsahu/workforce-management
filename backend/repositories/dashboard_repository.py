@@ -188,6 +188,21 @@ def fetch_admin_dashboard_summary(
                     st.status,
                     st.is_bookable
                 FROM seats AS st
+                INNER JOIN sites AS ss
+                    ON ss.id = st.site_id
+                   AND ss.tenant_id = st.tenant_id
+                   AND ss.status = 'ACTIVE'
+                INNER JOIN buildings AS sb
+                    ON sb.id = st.building_id
+                   AND sb.tenant_id = st.tenant_id
+                   AND sb.site_id = st.site_id
+                   AND sb.status = 'ACTIVE'
+                INNER JOIN floors AS sf
+                    ON sf.id = st.floor_id
+                   AND sf.tenant_id = st.tenant_id
+                   AND sf.site_id = st.site_id
+                   AND sf.building_id = st.building_id
+                   AND sf.status = 'ACTIVE'
                 WHERE st.tenant_id = %(tenant_id)s
                   AND (
                         %(site_id)s IS NULL
@@ -199,12 +214,21 @@ def fetch_admin_dashboard_summary(
                   )
             ),
 
+            bookable_seats AS (
+                SELECT id
+                FROM scoped_seats
+                WHERE status = 'ACTIVE'
+                  AND is_bookable = TRUE
+            ),
+
             booked_seats AS (
                 SELECT
                     b.id,
                     b.seat_id,
                     b.booked_for_user_id
                 FROM bookings AS b
+                INNER JOIN bookable_seats AS bks
+                    ON bks.id = b.seat_id
                 WHERE b.tenant_id = %(tenant_id)s
                   AND b.booking_date = %(selected_date)s
                   AND b.booking_status IN (
@@ -224,6 +248,8 @@ def fetch_admin_dashboard_summary(
             blocked_seat_counts AS (
                 SELECT COUNT(DISTINCT bs.seat_id) AS blocked_seats
                 FROM blocked_seats AS bs
+                INNER JOIN bookable_seats AS bks
+                    ON bks.id = bs.seat_id
                 WHERE bs.tenant_id = %(tenant_id)s
                   AND bs.status = 'ACTIVE'
                   AND %(selected_date)s BETWEEN bs.blocked_from AND bs.blocked_to
@@ -256,9 +282,7 @@ def fetch_admin_dashboard_summary(
 
                     (
                         SELECT COUNT(*)
-                        FROM scoped_seats
-                        WHERE status = 'ACTIVE'
-                          AND is_bookable = TRUE
+                        FROM bookable_seats
                     ) AS total_seats,
 
                     (
@@ -333,12 +357,13 @@ def fetch_admin_dashboard_summary(
             utilization_metrics AS (
                 SELECT
                     *,
+                    GREATEST(total_seats - blocked_seats, 0) AS available_seats,
                     COALESCE(
                         ROUND(
                             (
                                 booked_seats_count::numeric
                                 /
-                                NULLIF(total_seats, 0)
+                                NULLIF(GREATEST(total_seats - blocked_seats, 0), 0)
                             ) * 100,
                             1
                         ),
@@ -795,6 +820,21 @@ def fetch_date_range_occupancy(
                     s.building_id,
                     s.floor_id
                 FROM seats AS s
+                INNER JOIN sites AS si
+                    ON si.id = s.site_id
+                   AND si.tenant_id = s.tenant_id
+                   AND si.status = 'ACTIVE'
+                INNER JOIN buildings AS bu
+                    ON bu.id = s.building_id
+                   AND bu.tenant_id = s.tenant_id
+                   AND bu.site_id = s.site_id
+                   AND bu.status = 'ACTIVE'
+                INNER JOIN floors AS fl
+                    ON fl.id = s.floor_id
+                   AND fl.tenant_id = s.tenant_id
+                   AND fl.site_id = s.site_id
+                   AND fl.building_id = s.building_id
+                   AND fl.status = 'ACTIVE'
                 WHERE s.tenant_id = %(tenant_id)s
                   AND s.status = 'ACTIVE'
                   AND s.is_bookable = TRUE
