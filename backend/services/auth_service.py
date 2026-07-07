@@ -33,6 +33,7 @@ from backend.repositories.token_repository import (
     create_user_session,
     fetch_session_by_refresh_token,
     record_auth_event,
+    revoke_all_user_sessions,
     revoke_user_session,
     rotate_refresh_token,
 )

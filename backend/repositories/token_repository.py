@@ -9,11 +9,6 @@ from psycopg2.extras import Json, RealDictCursor
 from psycopg2.extensions import connection as PGConnection
 
 
-def ensure_revoked_tokens_table(conn: PGConnection) -> None:
-    """Legacy compatibility no-op."""
-    del conn
-
-
 def ensure_refresh_tokens_table(conn: PGConnection) -> None:
     """Legacy compatibility no-op for the provided schema."""
     del conn
@@ -23,27 +18,6 @@ def ensure_sessions_table(conn: PGConnection) -> None:
     """Legacy compatibility no-op for the provided schema."""
     del conn
 
-
-def is_token_revoked(conn: PGConnection, jti: str) -> bool:
-    """Access-token revocation is not persisted in the provided schema."""
-    del conn, jti
-    return False
-
-
-def revoke_token(
-    conn: PGConnection,
-    *,
-    jti: str,
-    user_id: str,
-    expires_at: datetime,
-) -> None:
-    """Access-token revocation is not persisted in the provided schema."""
-    del conn, jti, user_id, expires_at
-
-
-def purge_expired_revoked_tokens(conn: PGConnection) -> None:
-    """Legacy compatibility no-op."""
-    del conn
 
 def revoke_all_user_sessions(
     conn: PGConnection,

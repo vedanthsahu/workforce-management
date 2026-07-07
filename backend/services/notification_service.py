@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import date, datetime, time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -14,10 +15,82 @@ from fastapi import BackgroundTasks
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateError, select_autoescape
 
 from backend.core.config import Settings, get_settings
-from backend.core.logging import LOGGER_NAME
+from backend.core.app_logging import LOGGER_NAME
 from backend.core.retry import aws_retry
 
 logger = logging.getLogger(f"{LOGGER_NAME}.notifications")
+
+
+def format_notification_value(value: Any) -> str:
+    """Render a DB value for email templates; null/blank become "" so templates
+    can hide the row entirely with a truthiness guard.
+
+    Shared by booking_service.py, guest_service.py, and floor_layout_service.py
+    so every notification context formats dates, times, and missing values the
+    same way.
+    """
+    if isinstance(value, datetime):
+        return value.strftime("%a, %d %b %Y, %H:%M")
+    if isinstance(value, date):
+        return value.strftime("%a, %d %b %Y")
+    if isinstance(value, time):
+        return value.strftime("%H:%M")
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def format_person(name: Any, email: Any) -> str:
+    """Render a "Name (email)" label for email templates; blank when both absent."""
+    display_name = str(name or "").strip()
+    display_email = str(email or "").strip()
+    if display_name and display_email:
+        return f"{display_name} ({display_email})"
+    return display_name or display_email
+
+
+def booking_notification_details(booking: dict[str, Any]) -> dict[str, str]:
+    """Build the common booking-fact context shared by every booking email.
+
+    Absent values are empty strings (never placeholders or database ids) so the
+    templates render only the rows that apply to the event.
+    """
+    seat = str(booking.get("seat_code") or "").strip()
+    location = ", ".join(
+        str(value)
+        for value in (
+            booking.get("floor_name"),
+            booking.get("building_name"),
+            booking.get("site_name"),
+        )
+        if value
+    )
+
+    return {
+        "booking_id": format_notification_value(booking.get("booking_id")),
+        "booking_date": format_notification_value(booking.get("booking_date")),
+        "site": format_notification_value(booking.get("site_name")),
+        "building": format_notification_value(booking.get("building_name")),
+        "floor": format_notification_value(booking.get("floor_name")),
+        "seat": seat,
+        "booked_for": format_person(
+            booking.get("booked_for_name"),
+            booking.get("booked_for_email"),
+        ),
+        "booked_by": format_person(
+            booking.get("booked_by_name"),
+            booking.get("booked_by_email"),
+        ),
+        "guest_visit_id": format_notification_value(booking.get("guest_visit_id")),
+        "host_name": format_notification_value(booking.get("host_name")),
+        "host_email": format_notification_value(booking.get("host_email")),
+        "guest_name": format_notification_value(booking.get("guest_name")),
+        "guest_email": format_notification_value(booking.get("guest_email")),
+        "guest_phone": format_notification_value(booking.get("guest_phone")),
+        "guest_organization": format_notification_value(booking.get("guest_organization")),
+        "seat_name": seat,
+        "location": location,
+    }
 
 
 class NotificationService:
