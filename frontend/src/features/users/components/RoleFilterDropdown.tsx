@@ -13,8 +13,13 @@ type Props = {
 
 export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange }: Props) {
   const [open, setOpen] = useState(false);
+  // pendingRoles is always an explicit list of checked roles while the dropdown
+  // is open — never overloaded to mean "all". [] unambiguously means "nothing
+  // checked yet", which is what lets us disable Apply on an empty selection.
   const [pendingRoles, setPendingRoles] = useState<RoleKey[]>(selectedRoles);
   const ref = useRef<HTMLDivElement>(null);
+
+  const allRoleNames = roleCounts.map((r) => r.roleName);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -25,18 +30,29 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
   }, []);
 
   const openDropdown = () => {
-    setPendingRoles(selectedRoles);
+    // selectedRoles.length === 0 means "no filter" (i.e. every role included) —
+    // expand that into the explicit full list so checkboxes start checked.
+    setPendingRoles(selectedRoles.length === 0 ? allRoleNames : selectedRoles);
     setOpen((o) => !o);
   };
 
   const togglePendingRole = (role: RoleKey) => {
-    setPendingRoles((prev) =>
-      prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
-    );
+    setPendingRoles((prev) => {
+      const isChecked = prev.some((r) => normalizeRoleKey(r) === normalizeRoleKey(role));
+      return isChecked
+        ? prev.filter((r) => normalizeRoleKey(r) !== normalizeRoleKey(role))
+        : [...prev, role];
+    });
   };
 
+  const allChecked = pendingRoles.length === allRoleNames.length;
+  const noneChecked = pendingRoles.length === 0;
+
   const handleApply = () => {
-    onChange(pendingRoles);
+    if (noneChecked) return;
+    // Everything checked is equivalent to "no filter" — keep that represented
+    // as [] so the rest of the app's `selectedRoles.length ? ... : undefined` holds.
+    onChange(allChecked ? [] : pendingRoles);
     setOpen(false);
   };
 
@@ -62,19 +78,35 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
           <div className="flex items-center justify-between gap-2 px-3 py-1">
             <button
               type="button"
-              onClick={() => setPendingRoles([])}
+              onClick={() => setPendingRoles(allChecked ? [] : allRoleNames)}
               className="flex items-center gap-2 text-left text-sm text-gray-700 hover:text-gray-900"
             >
-              <input type="checkbox" readOnly checked={pendingRoles.length === 0} className="accent-blue-600 shrink-0" />
+              <input
+                type="checkbox"
+                readOnly
+                checked={allChecked}
+                className="accent-blue-600 shrink-0"
+              />
               All Roles
             </button>
-            <button
-              type="button"
-              onClick={handleApply}
-              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700"
-            >
-              Apply
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingRoles([])}
+                className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={handleApply}
+                disabled={noneChecked}
+                title={noneChecked ? "Select at least one role" : undefined}
+                className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:bg-gray-200"
+              >
+                Apply
+              </button>
+            </div>
           </div>
           <div className="my-1 border-t" />
           <div className="max-h-72 overflow-y-auto overflow-x-hidden">

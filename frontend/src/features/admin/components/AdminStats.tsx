@@ -81,7 +81,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
 
             {/* HEADER */}
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-bold text-gray-700">
+              <CardTitle className="text-sm font-semibold text-gray-700">
   {item.title}
 </CardTitle>
 

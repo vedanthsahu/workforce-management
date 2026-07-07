@@ -35,7 +35,7 @@ export default function ChangeRolePage({ userId }: { userId: string }) {
   };
 
   return (
-    <div className="p-4 sm:p-6 bg-[#f8fafc] min-h-screen">
+    <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-[#f8fafc]">
       {/* <button
         type="button"
         onClick={() => router.push("/admin/users")}
@@ -76,6 +76,7 @@ export default function ChangeRolePage({ userId }: { userId: string }) {
             open={confirmOpen}
             user={user}
             newRole={selectedRole}
+            newStatus={selectedStatus}
             submitting={submitting}
             errorMessage={errorMessage}
             onCancel={closeConfirm}

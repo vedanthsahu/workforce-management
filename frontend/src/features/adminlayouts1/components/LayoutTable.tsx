@@ -72,7 +72,7 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
 
       {/* HEADER */}
       <div className="flex items-center justify-between px-6 py-4 border-b">
-        <h2 className="text-base font-semibold text-gray-800">
+        <h2 className="text-sm sm:text-base font-semibold text-gray-800">
           Floor Layouts — {selection.buildingName} / {selection.floorName}
         </h2>
         <span className="text-xs bg-gray-100 px-3 py-1 rounded-full text-gray-600">
@@ -88,17 +88,17 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
             <col style={{ width: "80px" }} />
             <col style={{ width: "110px" }} />
             <col style={{ width: "90px" }} />
-            <col style={{ width: "160px" }} />
+            <col style={{ width: "110px" }} />
             <col style={{ width: "90px" }} />
           </colgroup>
           <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
             <tr>
-              <th className="px-3 py-3 font-medium text-left">Layout Name</th>
-              <th className="px-3 py-3 font-medium text-center">Version</th>
-              <th className="px-3 py-3 font-medium text-center">Status</th>
-              <th className="px-3 py-3 font-medium text-center">Published</th>
-              <th className="px-3 py-3 font-medium text-left">Uploaded By</th>
-              <th className="px-3 py-3 font-medium text-center">Actions</th>
+              <th className="px-3 py-3 font-bold text-center">Layout Name</th>
+              <th className="px-3 py-3 font-bold text-center">Version</th>
+              <th className="px-3 py-3 font-bold text-center">Status</th>
+              <th className="px-3 py-3 font-bold text-center">Published</th>
+              <th className="pl-2 px-3 py-3 font-bold text-left">Uploaded By</th>
+              <th className="px-3 py-3 font-bold text-center">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -164,7 +164,7 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
       </div>
 
       {/* FOOTER */}
-      <div className="flex items-center justify-between px-6 py-4 border-t text-sm text-gray-500">
+      <div className="flex items-center justify-between px-6 py-4 border-t text-xs sm:text-sm text-gray-500">
         <span>
           {total > 0 &&
             `Showing ${(page - 1) * rowsPerPage + 1} to ${Math.min(

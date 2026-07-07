@@ -1,26 +1,46 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MoreVertical, ShieldEllipsis } from "lucide-react";
 
 type Props = {
   onChangeRole: () => void;
+  /** Last row on the page — always open the menu upward instead of downward. */
+  openUpward?: boolean;
 };
 
-export default function UserRowMenu({ onChangeRole }: Props) {
+export default function UserRowMenu({ onChangeRole, openUpward = false }: Props) {
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState({ top: 0, right: 0 });
+  const [position, setPosition] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const openMenu = () => {
     const rect = buttonRef.current?.getBoundingClientRect();
     if (rect) {
-      setPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+      setPosition(
+        openUpward
+          ? { bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right }
+          : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
+      );
     }
     setOpen(true);
   };
+
+  // Once the menu has rendered we know its real height — if it doesn't fit
+  // below the button (e.g. a row near the viewport bottom), flip it to open
+  // upward instead of getting clipped.
+  useLayoutEffect(() => {
+    if (!open || openUpward || !buttonRef.current || !menuRef.current) return;
+    const buttonRect = buttonRef.current.getBoundingClientRect();
+    const menuHeight = menuRef.current.offsetHeight;
+    const spaceBelow = window.innerHeight - buttonRect.bottom;
+    const spaceAbove = buttonRect.top;
+    if (spaceBelow < menuHeight + 8 && spaceAbove > spaceBelow) {
+      setPosition({ bottom: window.innerHeight - buttonRect.top + 4, right: window.innerWidth - buttonRect.right });
+    }
+  }, [open, openUpward]);
 
   useEffect(() => {
     if (!open) return;
@@ -62,7 +82,7 @@ export default function UserRowMenu({ onChangeRole }: Props) {
         createPortal(
           <div
             ref={menuRef}
-            style={{ position: "fixed", top: position.top, right: position.right }}
+            style={{ position: "fixed", top: position.top, bottom: position.bottom, right: position.right }}
             className="z-50 w-44 rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
           >
             <button

@@ -157,7 +157,7 @@ export default function RoleManagementPage() {
           )}
         </div>
 
-        <div className="px-4 sm:px-6 py-3 border-t shrink-0 text-xs text-gray-500">
+        <div className="px-4 sm:px-6 py-3 border-t shrink-0 text-xs sm:text-sm text-gray-500">
           {roles.length > 0 && `Showing 1 to ${roles.length} of ${totalRoles} roles`}
         </div>
       </div>

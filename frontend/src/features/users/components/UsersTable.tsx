@@ -37,19 +37,20 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
           {/* pr-2 reserves the same 8px the tbody's scrollbar takes, so header and body columns line up */}
           <thead className="block w-full shrink-0 pr-2 text-xs text-blue-600 bg-blue-100 border-b">
             <tr className="table w-full" style={{ tableLayout: "fixed" }}>
-              <th className="py-2.5 px-4 font-medium whitespace-nowrap text-left w-[22%]">Name</th>
-              <th className="py-2.5 px-4 font-medium whitespace-nowrap text-left w-[34%]">Email</th>
-              <th className="py-2.5 px-4 font-medium whitespace-nowrap text-left w-[18%]">Current Role</th>
-              <th className="py-2.5 pl-8 pr-4 font-medium whitespace-nowrap text-left w-[14%]">Status</th>
-              <th className="py-2.5 px-4 font-medium whitespace-nowrap text-left w-[12%]">Action</th>
+              <th className="pl-15 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[22%]">Name</th>
+              <th className="pl-15 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[34%]">Email</th>
+              <th className="pl-6 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[18%]">Current Role</th>
+              <th className="py-2.5 pl-8 pr-4 font-bold whitespace-nowrap text-left w-[14%]">Status</th>
+              <th className="pl-8 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[12%]">Action</th>
             </tr>
           </thead>
           <tbody
             className="users-tbody-scroll block w-full flex-1 min-h-0 divide-y divide-gray-100 overflow-y-auto"
             style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
           >
-            {users.map((user) => {
+            {users.map((user, index) => {
               const isHighlighted = user.id === highlightedUserId;
+              const isLastRow = index === users.length - 1;
               return (
                 <tr
                   key={user.id}
@@ -61,10 +62,10 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
                       <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-[11px] font-semibold text-indigo-700 shrink-0">
                         {initialsFor(user.fullName)}
                       </div>
-                      <span className="text-sm font-medium text-gray-900 truncate">{user.fullName}</span>
+                      <span className="text-xs font-medium text-gray-900 truncate">{user.fullName}</span>
                     </div>
                   </td>
-                  <td className="py-3 px-4 text-sm text-gray-600 w-[34%] truncate">{user.email}</td>
+                  <td className="py-3 px-4 text-xs text-gray-600 w-[34%] truncate">{user.email}</td>
                   <td className="py-3 px-4 w-[18%]">
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ring-1 ${getRoleBadgeClass(
@@ -76,7 +77,7 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
                   </td>
                   <td className="py-3 pl-8 pr-4 w-[14%]">
                     <span
-                      className={`inline-flex items-center gap-1.5 text-sm font-medium ${user.status === "active" ? "text-emerald-600" : "text-gray-400"
+                      className={`inline-flex items-center gap-1.5 text-xs font-medium ${user.status === "active" ? "text-emerald-600" : "text-gray-400"
                         }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current" />
@@ -92,7 +93,7 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
                       >
                         <Eye size={14} />
                       </span>
-                      <UserRowMenu onChangeRole={() => onChangeRole(user)} />
+                      <UserRowMenu onChangeRole={() => onChangeRole(user)} openUpward={isLastRow} />
                     </div>
                   </td>
                 </tr>
