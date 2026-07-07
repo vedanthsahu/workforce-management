@@ -76,7 +76,7 @@ export type AppRole =
   | "TENANT_ADMIN"
   | "MANAGER"
   | "EMPLOYEE"
-  | "TALENT"
+  | "FACILITATOR"
   | "SECURITY"
   | "FACILITIES"
   | string;
@@ -200,7 +200,7 @@ const ROLE_LABELS: Record<string, string> = {
   TENANT_ADMIN: "Admin",
   MANAGER:      "Manager",
   EMPLOYEE:     "Employee",
-  TALENT:       "Talent",
+  FACILITATOR:  "Facilitator",
   SECURITY:     "Security",
   FACILITIES:   "Facilities",
 };
@@ -209,7 +209,7 @@ const ROLE_BADGE_STYLES: Record<string, string> = {
   TENANT_ADMIN: "bg-rose-50 text-rose-600 ring-rose-200",
   MANAGER:      "bg-violet-50 text-violet-600 ring-violet-200",
   EMPLOYEE:     "bg-blue-50 text-blue-600 ring-blue-200",
-  TALENT:       "bg-teal-50 text-teal-600 ring-teal-200",
+  FACILITATOR:  "bg-teal-50 text-teal-600 ring-teal-200",
   SECURITY: "bg-amber-50 text-amber-600 ring-amber-200",
   FACILITIES:   "bg-orange-50 text-orange-600 ring-orange-200",
 };

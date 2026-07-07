@@ -29,8 +29,15 @@ export default function ChangeRolePage({ userId }: { userId: string }) {
 
   const handleConfirm = async () => {
     const success = await confirmRoleChange();
-    if (success && selectedRole) {
-      router.push(`/admin/users?roleChanged=${userId}&newRole=${selectedRole}`);
+    if (success && user) {
+      const roleDidChange = !!selectedRole && selectedRole !== user.currentRole;
+      const statusDidChange = selectedStatus !== user.status;
+
+      const params = new URLSearchParams({ roleChanged: userId });
+      if (roleDidChange) params.set("newRole", selectedRole!);
+      if (statusDidChange) params.set("newStatus", selectedStatus);
+
+      router.push(`/admin/users?${params.toString()}`);
     }
   };
 

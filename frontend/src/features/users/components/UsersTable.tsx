@@ -40,7 +40,7 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
               <th className="pl-15 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[22%]">Name</th>
               <th className="pl-15 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[34%]">Email</th>
               <th className="pl-6 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[18%]">Current Role</th>
-              <th className="py-2.5 pl-8 pr-4 font-bold whitespace-nowrap text-left w-[14%]">Status</th>
+              <th className="py-2.5 pl-10 pr-4 font-bold whitespace-nowrap text-left w-[14%]">Status</th>
               <th className="pl-8 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[12%]">Action</th>
             </tr>
           </thead>
@@ -62,10 +62,10 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
                       <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-[11px] font-semibold text-indigo-700 shrink-0">
                         {initialsFor(user.fullName)}
                       </div>
-                      <span className="text-xs font-medium text-gray-900 truncate">{user.fullName}</span>
+                      <span className="text-sm font-medium text-gray-900 truncate">{user.fullName}</span>
                     </div>
                   </td>
-                  <td className="py-3 px-4 text-xs text-gray-600 w-[34%] truncate">{user.email}</td>
+                  <td className="py-3 px-4 text-sm text-black w-[34%] truncate">{user.email}</td>
                   <td className="py-3 px-4 w-[18%]">
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ring-1 ${getRoleBadgeClass(
@@ -77,7 +77,7 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
                   </td>
                   <td className="py-3 pl-8 pr-4 w-[14%]">
                     <span
-                      className={`inline-flex items-center gap-1.5 text-xs font-medium ${user.status === "active" ? "text-emerald-600" : "text-gray-400"
+                      className={`inline-flex items-center gap-1.5 text-sm font-medium ${user.status === "active" ? "text-emerald-600" : "text-gray-400"
                         }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current" />

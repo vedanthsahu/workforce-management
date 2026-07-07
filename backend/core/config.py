@@ -92,7 +92,7 @@ class Settings(BaseSettings):
     email_template_dir: str = "templates/email"
     notification_admin_emails: str | tuple[str, ...] = ()
 
-    graph_talent_group_id: str | None = None
+    graph_facilitator_group_id: str | None = None
     graph_role_lookup_retries: int = 2
     graph_role_lookup_backoff_seconds: float = 0.5
     graph_role_sync_enabled: bool = False
@@ -170,10 +170,10 @@ class Settings(BaseSettings):
         if self.graph_role_sync_interval_minutes <= 0:
             raise ValueError("graph_role_sync_interval_minutes must be greater than zero")
 
-        graph_group_id = str(self.graph_talent_group_id or "").strip()
+        graph_group_id = str(self.graph_facilitator_group_id or "").strip()
         object.__setattr__(
             self,
-            "graph_talent_group_id",
+            "graph_facilitator_group_id",
             graph_group_id or None,
         )
 

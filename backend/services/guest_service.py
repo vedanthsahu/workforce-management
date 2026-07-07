@@ -94,7 +94,7 @@ from backend.services.notification_service import (
 
 logger = logging.getLogger(f"{LOGGER_NAME}.guests")
 
-GUEST_OPERATION_ROLES = {"TALENT", "TENANT_ADMIN", "SECURITY"}
+GUEST_OPERATION_ROLES = {"FACILITATOR", "TENANT_ADMIN", "SECURITY"}
 BOOKING_STATUSES = {
     "CONFIRMED",
     "CANCELLED",
@@ -121,7 +121,7 @@ def _require_guest_operator(current_user: dict[str, Any]) -> None:
             detail={
                 "code": "guest_operation_not_allowed",
                 "message": (
-                    "Guest operations require the TALENT, TENANT_ADMIN, "
+                    "Guest operations require the FACILITATOR, TENANT_ADMIN, "
                     "or SECURITY role."
                 ),
             },
