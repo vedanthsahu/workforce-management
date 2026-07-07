@@ -37,7 +37,18 @@ FLOOR_LAYOUT_SELECT_FIELDS = """
     au.role_name AS uploaded_by_role,
     au.department AS uploaded_by_department,
     au.job_title AS uploaded_by_job_title,
+    fl.uploaded_by_user_id::text AS updated_by_user_id,
+    au.full_name AS updated_by_name,
+    au.email AS updated_by_email,
+    au.role_name AS updated_by_role,
+    au.department AS updated_by_department,
+    au.job_title AS updated_by_job_title,
     fl.published_by_user_id::text AS published_by_user_id,
+    pub.full_name AS published_by_name,
+    pub.email AS published_by_email,
+    pub.role_name AS published_by_role,
+    pub.department AS published_by_department,
+    pub.job_title AS published_by_job_title,
     fl.published_at,
     fl.status,
     fl.created_at,
@@ -45,10 +56,13 @@ FLOOR_LAYOUT_SELECT_FIELDS = """
 """
 
 
-FLOOR_LAYOUT_UPLOADER_JOIN = """
+FLOOR_LAYOUT_USER_JOINS = """
     LEFT JOIN app_users AS au
         ON au.id = fl.uploaded_by_user_id
        AND au.tenant_id = fl.tenant_id
+    LEFT JOIN app_users AS pub
+        ON pub.id = fl.published_by_user_id
+       AND pub.tenant_id = fl.tenant_id
 """
 
 
@@ -161,19 +175,33 @@ def fetch_floor_layouts_by_floor(
     tenant_id: str,
     floor_id: str,
 ) -> list[dict[str, Any]]:
-    """Fetch all non-deleted layouts for a tenant-scoped floor, newest version first."""
+    """
+    Fetch all non-deleted layouts for a tenant-scoped floor.
+
+    Ordered PUBLISHED, then DRAFT, then ARCHIVED, then DELETED; within each
+    group, most recently updated first.
+    """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
             SELECT
                 {FLOOR_LAYOUT_SELECT_FIELDS}
             FROM floor_layouts AS fl
-            {FLOOR_LAYOUT_UPLOADER_JOIN}
+            {FLOOR_LAYOUT_USER_JOINS}
             {FLOOR_LAYOUT_LOCATION_JOINS}
             WHERE fl.tenant_id = %s
               AND fl.floor_id = %s
               AND fl.status = ANY(%s)
-            ORDER BY fl.version_no DESC, fl.created_at DESC, fl.id DESC
+            ORDER BY
+                CASE fl.status
+                    WHEN 'PUBLISHED' THEN 0
+                    WHEN 'DRAFT' THEN 1
+                    WHEN 'ARCHIVED' THEN 2
+                    WHEN 'DELETED' THEN 3
+                    ELSE 4
+                END,
+                fl.updated_at DESC,
+                fl.id DESC
             """,
             (
                 tenant_id,
@@ -205,7 +233,7 @@ def _fetch_floor_layout_row(
             SELECT
                 {FLOOR_LAYOUT_SELECT_FIELDS}
             FROM floor_layouts AS fl
-            {FLOOR_LAYOUT_UPLOADER_JOIN}
+            {FLOOR_LAYOUT_USER_JOINS}
             {FLOOR_LAYOUT_LOCATION_JOINS}
             WHERE fl.tenant_id = %s
               AND fl.id = %s
