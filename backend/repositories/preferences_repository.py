@@ -43,6 +43,188 @@ def fetch_active_amenities(
     return [dict(row) for row in rows]
 
 
+def fetch_amenity_ids(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    amenity_ids: list[str],
+) -> set[str]:
+    """Return the subset of amenity_ids that are active and tenant-scoped."""
+    if not amenity_ids:
+        return set()
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id::text
+            FROM amenities
+            WHERE tenant_id = %s
+              AND id = ANY(%s::bigint[])
+              AND is_active = TRUE
+            """,
+            (tenant_id, amenity_ids),
+        )
+        rows = cur.fetchall()
+
+    return {str(row[0]) for row in rows}
+
+
+def fetch_user_preferred_amenities(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+) -> list[dict[str, Any]]:
+    """Fetch one user's saved preferred amenities, resolved to display fields."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                a.id::text AS id,
+                a.amenity_key AS key,
+                a.amenity_name AS name,
+                COALESCE(ac.category_name, a.category) AS category,
+                a.description,
+                a.icon_name AS icon
+            FROM user_preferred_amenities AS upa
+            INNER JOIN amenities AS a
+                ON a.id = upa.amenity_id
+               AND a.tenant_id = upa.tenant_id
+            LEFT JOIN amenity_categories AS ac
+                ON ac.id = a.category_id
+               AND (
+                    ac.tenant_id = a.tenant_id
+                    OR ac.tenant_id IS NULL
+               )
+            WHERE upa.tenant_id = %s
+              AND upa.user_id = %s
+            ORDER BY
+                COALESCE(ac.category_name, a.category),
+                a.amenity_name
+            """,
+            (tenant_id, user_id),
+        )
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def replace_user_preferred_amenities(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    amenity_ids: list[str],
+) -> None:
+    """Replace one user's preferred-amenity selection wholesale."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            DELETE FROM user_preferred_amenities
+            WHERE tenant_id = %s
+              AND user_id = %s
+            """,
+            (tenant_id, user_id),
+        )
+
+        if not amenity_ids:
+            return
+
+        cur.executemany(
+            """
+            INSERT INTO user_preferred_amenities (
+                tenant_id,
+                user_id,
+                amenity_id
+            )
+            VALUES (%s, %s, %s)
+            """,
+            [(tenant_id, user_id, amenity_id) for amenity_id in amenity_ids],
+        )
+
+
+def fetch_user_work_preferences(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+) -> dict[str, Any] | None:
+    """Fetch one user's saved work preferences, resolved to display fields."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                wp.preference_id::text AS preference_id,
+                wp.default_site_id::text AS site_id,
+                si.site_name,
+                wp.default_building_id::text AS building_id,
+                bu.building_name,
+                wp.default_floor_id::text AS floor_id,
+                fl.floor_name,
+                wp.preferred_seat_type AS seat_type,
+                wp.created_at,
+                wp.updated_at
+            FROM user_work_preferences AS wp
+            LEFT JOIN sites AS si
+                ON si.id = wp.default_site_id
+               AND si.tenant_id = wp.tenant_id
+            LEFT JOIN buildings AS bu
+                ON bu.id = wp.default_building_id
+               AND bu.tenant_id = wp.tenant_id
+            LEFT JOIN floors AS fl
+                ON fl.id = wp.default_floor_id
+               AND fl.tenant_id = wp.tenant_id
+            WHERE wp.tenant_id = %s
+              AND wp.user_id = %s
+            """,
+            (tenant_id, user_id),
+        )
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+
+def upsert_user_work_preferences(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    default_site_id: str | None,
+    default_building_id: str | None,
+    default_floor_id: str | None,
+    preferred_seat_type: str | None,
+) -> None:
+    """Insert or replace one user's work preferences row."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO user_work_preferences (
+                tenant_id,
+                user_id,
+                default_site_id,
+                default_building_id,
+                default_floor_id,
+                preferred_seat_type
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (tenant_id, user_id) DO UPDATE
+            SET default_site_id = EXCLUDED.default_site_id,
+                default_building_id = EXCLUDED.default_building_id,
+                default_floor_id = EXCLUDED.default_floor_id,
+                preferred_seat_type = EXCLUDED.preferred_seat_type,
+                updated_at = NOW()
+            """,
+            (
+                tenant_id,
+                user_id,
+                default_site_id,
+                default_building_id,
+                default_floor_id,
+                preferred_seat_type,
+            ),
+        )
+
+
 def fetch_amenity_categories(
     conn: PGConnection,
     *,
