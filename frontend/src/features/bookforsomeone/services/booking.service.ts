@@ -89,6 +89,19 @@ export async function createGuest(input: CreateGuestInput): Promise<Guest> {
   return mapGuest(data);
 }
 
+export async function updateGuest(
+  guestId: string,
+  input: { fullName?: string; email?: string; phone?: string; organization?: string },
+): Promise<Guest> {
+  const { data } = await axiosInstance.patch<RawGuest>(`/guests/${guestId}`, {
+    full_name: input.fullName,
+    email: input.email || undefined,
+    phone: input.phone || undefined,
+    organization: input.organization || undefined,
+  });
+  return mapGuest(data);
+}
+
 // ── Sites & Buildings ────────────────────────────────────────────────────────
 
 interface RawSite {

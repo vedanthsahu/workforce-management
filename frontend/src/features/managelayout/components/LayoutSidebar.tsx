@@ -3,42 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useCallback, useState, ReactNode } from "react";
 import { Layout } from "../types/layout.types";
-import { fetchLayoutSeats } from "@/features/managelayout1/services/seatService";
-import type { Seat } from "@/features/managelayout1/types/seat.types";
-
-// ── Seat color helpers (same rules as LayoutPreview.tsx / LayoutTable.tsx) ────
-
-function resolveSeatFill(seat: Seat): string {
-  if (!seat.is_configured)        return "#D1D5DB";
-  if (seat.status === "INACTIVE") return "#EF4444";
-  if (!seat.is_bookable)          return "#F59E0B";
-  return "#22C55E";
-}
-
-function applyColors(svgText: string, seats: Seat[]): string {
-  let result = svgText;
-  for (const seat of seats) {
-    const fill = resolveSeatFill(seat);
-    const re   = new RegExp(
-      `(<g[^>]*\\bid="${seat.seat_svg_id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`,
-      "m",
-    );
-    result = result.replace(re, (_m, open, inner, close) => {
-      const colored = inner
-        .replace(/fill="[^"]*"/g,   `fill="${fill}"`)
-        .replace(/fill:[^;"}\s]*/g, `fill:${fill}`);
-      return `${open}${colored}${close}`;
-    });
-  }
-  return result;
-}
 
 interface LayoutSidebarProps {
   layout: Layout | null;
   selectedLayoutId: string;
-  selectedFloorId?:    string;
+  selectedFloorId?: string;
   selectedBuildingId?: string;
-  selectedSiteId?:     string;
+  selectedSiteId?: string;
 }
 
 // ── icons ─────────────────────────────────────────────────────────────────────
@@ -163,25 +134,24 @@ const STATIC_PREFETCH_ROUTES = [
 export default function LayoutSidebar({
   layout,
   selectedLayoutId,
-  selectedFloorId    = "",
+  selectedFloorId = "",
   selectedBuildingId = "",
-  selectedSiteId     = "",
+  selectedSiteId = "",
 }: LayoutSidebarProps) {
   const router = useRouter();
   const [downloading, setDownloading] = useState(false);
 
   const handleDownloadSvg = useCallback(async () => {
-    if (!layout?.layout_file_url || !layout?.layout_id) return;
+    if (!layout?.layout_file_url) return;
     setDownloading(true);
     try {
-      const [svgRes, { seats }] = await Promise.all([
-        fetch(layout.layout_file_url),
-        fetchLayoutSeats(layout.layout_id),
-      ]);
+      const svgRes = await fetch(layout.layout_file_url);
       if (!svgRes.ok) throw new Error(`HTTP ${svgRes.status}`);
-      const raw     = await svgRes.text();
-      const colored = applyColors(raw, seats);
-      const blob    = new Blob([colored], { type: "image/svg+xml" });
+      const raw   = await svgRes.text();
+      const fluid = raw
+        .replace(/\bwidth="[^"]*"/,  'width="100%"')
+        .replace(/\bheight="[^"]*"/, 'height="100%"');
+      const blob    = new Blob([fluid], { type: "image/svg+xml" });
       const blobUrl = URL.createObjectURL(blob);
       const link    = document.createElement("a");
       link.href     = blobUrl;
@@ -200,10 +170,10 @@ export default function LayoutSidebar({
   // Build query string once — reused by both prefetch and push
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams();
-    if (selectedLayoutId)   params.set("layoutId",   selectedLayoutId);
-    if (selectedFloorId)    params.set("floorId",    selectedFloorId);
+    if (selectedLayoutId) params.set("layoutId", selectedLayoutId);
+    if (selectedFloorId) params.set("floorId", selectedFloorId);
     if (selectedBuildingId) params.set("buildingId", selectedBuildingId);
-    if (selectedSiteId)     params.set("siteId",     selectedSiteId);
+    if (selectedSiteId) params.set("siteId", selectedSiteId);
     return params.toString() ? `?${params.toString()}` : "";
   }, [selectedLayoutId, selectedFloorId, selectedBuildingId, selectedSiteId]);
 
@@ -216,18 +186,18 @@ export default function LayoutSidebar({
 
   const quickActions = [
     {
-      icon:  <SeatIcon />,
+      icon: <SeatIcon />,
       label: "Manage Seats",
-      sub:   "Configure seat details and settings",
+      sub: "Configure seat details and settings",
       color: "text-indigo-600 bg-indigo-50",
       // Static base path — query added at click time
       basePath: "/admin/layouts/manage-seats",
       href: `/admin/layouts/manage-seats${buildQuery()}`,
     },
     {
-      icon:  <AmenityIcon />,
+      icon: <AmenityIcon />,
       label: "Manage Amenities",
-      sub:   "Manage amenities master data",
+      sub: "Manage amenities master data",
       color: "text-violet-600 bg-violet-50",
       basePath: "/admin/amenities",
       href: `/admin/amenities`,
@@ -246,7 +216,7 @@ export default function LayoutSidebar({
     );
   }
 
-  const isDraft    = !layout.is_published && layout.status !== "ARCHIVED";
+  const isDraft = !layout.is_published && layout.status !== "ARCHIVED";
   const isArchived = layout.status === "ARCHIVED";
 
   return (
@@ -327,7 +297,7 @@ export default function LayoutSidebar({
       </div>
 
       {/* ── Draft warning ──────────────────────────────────────────────── */}
-      {isDraft && (
+      {/* {isDraft && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex gap-2.5">
           <AlertIcon />
           <div>
@@ -337,7 +307,7 @@ export default function LayoutSidebar({
             </p>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* ── Archived warning ───────────────────────────────────────────── */}
       {isArchived && (

@@ -28,6 +28,7 @@ import {
   Site,
   VisitDetails,
 } from "../types/booking";
+import { updateGuest } from "../services/booking.service";
 
 // ─── StepProgressBar ────────────────────────────────────────────────────────
 
@@ -173,7 +174,6 @@ export function GuestSelectStep({ selectedGuest, view, onViewChange, onSelect, o
         guest={selectedGuest}
         onCancel={() => onViewChange("list")}
         onSave={(updated) => {
-          // TODO: call PATCH /guests/:id when API is available
           onSelect(updated);
           onViewChange("list");
         }}
@@ -1011,8 +1011,10 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
     phone:        guest.phone ?? "",
     organization: guest.organization ?? "",
   });
-  const [errors,  setErrors]  = useState<Record<string, string>>({});
-  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [errors,   setErrors]   = useState<Record<string, string>>({});
+  const [touched,  setTouched]  = useState<Record<string, boolean>>({});
+  const [saving,   setSaving]   = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -1037,7 +1039,7 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setTouched({ firstName: true, lastName: true, email: true, phone: true, organization: true });
     const result = createGuestSchema.safeParse(form);
     if (!result.success) {
@@ -1050,17 +1052,37 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
       return;
     }
     const v = result.data;
-    onSave({
-      ...guest,
-      fullName:     `${v.firstName} ${v.lastName}`.trim(),
-      email:        v.email,
-      phone:        v.phone || undefined,
-      organization: v.organization || undefined,
-    });
+    setSaving(true);
+    setApiError(null);
+    try {
+      const updated = await updateGuest(guest.id, {
+        fullName:     `${v.firstName} ${v.lastName}`.trim(),
+        email:        v.email,
+        phone:        v.phone || undefined,
+        organization: v.organization || undefined,
+      });
+      onSave(updated);
+    } catch (err) {
+      const serverMsg = axios.isAxiosError(err)
+        ? err.response?.data?.error?.message || err.response?.data?.message || err.response?.data?.detail
+        : null;
+      setApiError(serverMsg ?? "Failed to update guest. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div>
+      {apiError && (
+        <div style={{ marginBottom: "1rem", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: "0.75rem 1rem", color: "#dc2626", fontSize: "0.78125rem", display: "flex", alignItems: "flex-start", gap: "0.75rem" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <span style={{ flex: 1 }}>{apiError}</span>
+          <button type="button" onClick={() => setApiError(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", padding: 0, lineHeight: 1 }}>✕</button>
+        </div>
+      )}
       <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Edit Guest</h2>
       <p style={{ fontSize: "0.8125rem", color: "#6b7280", marginTop: 4, marginBottom: "1.25rem" }}>
         Update the visitor&apos;s details.
@@ -1109,13 +1131,14 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "1.5rem" }}>
-        <button type="button" onClick={onCancel}
-          style={{ padding: "0.5rem 1.25rem", fontSize: "0.875rem", fontWeight: 500, color: "#374151", background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
+        <button type="button" onClick={onCancel} disabled={saving}
+          style={{ padding: "0.5rem 1.25rem", fontSize: "0.875rem", fontWeight: 500, color: "#374151", background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 8, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1, fontFamily: "inherit" }}>
           Cancel
         </button>
-        <button type="button" onClick={handleSave}
-          style={{ padding: "0.5rem 1.25rem", fontSize: "0.875rem", fontWeight: 600, color: "#fff", background: "#4f46e5", border: "none", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
-          Save Changes
+        <button type="button" onClick={handleSave} disabled={saving}
+          style={{ padding: "0.5rem 1.25rem", fontSize: "0.875rem", fontWeight: 600, color: "#fff", background: "#4f46e5", border: "none", borderRadius: 8, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          {saving && <span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />}
+          {saving ? "Saving…" : "Save Changes"}
         </button>
       </div>
     </div>
