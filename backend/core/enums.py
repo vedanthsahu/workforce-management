@@ -16,6 +16,7 @@ NON_DELETED_LAYOUT_STATUSES: tuple[str, ...] = (
     LayoutStatus.DRAFT.value,
     LayoutStatus.ARCHIVED.value,
     LayoutStatus.PUBLISHED.value,
+    LayoutStatus.DELETED.value,
 )
 
 

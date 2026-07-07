@@ -1,76 +1,97 @@
 "use client";
 
-import { Eye, Download, Settings } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useLayoutsTable }  from "@/features/adminlayouts1/hooks/useLayoutsTable";
-import { useLayoutsStore }  from "@/store/useLayoutsStore";
-import LayoutPagination     from "./LayoutPagination";
-import { useCallback, useEffect, useState } from "react";
+import { Eye, Download, MoreHorizontal, Settings2, Trash2 } from "lucide-react";
+import { useLayoutsTable } from "@/features/adminlayouts1/hooks/useLayoutsTable";
+import { useLayoutsStore } from "@/store/useLayoutsStore";
+import LayoutPagination from "./LayoutPagination";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LayoutSelection, LayoutApiResponse } from "../types/layout.types";
-import { useRouter }        from "next/navigation";
+import { useRouter } from "next/navigation";
 import { fetchLayoutSeats } from "@/features/managelayout1/services/seatService";
-import type { Seat }        from "@/features/managelayout1/types/seat.types";
+import { deleteLayout } from "@/features/adminlayouts1/services/locationService";
+import type { Seat } from "@/features/managelayout1/types/seat.types";
 
 type Props = {
-  selection:         LayoutSelection;
+  selection: LayoutSelection;
   selectedLayoutId?: string;
 };
 
-// ── Seat color helpers (same rules as LayoutPreview.tsx) ─────────────────────
+// ── Seat color helpers ────────────────────────────────────────────────────────
 
 function resolveSeatFill(seat: Seat): string {
-  if (!seat.is_configured)        return "#D1D5DB"; // unconfigured — gray
-  if (seat.status === "INACTIVE") return "#EF4444"; // inactive     — red
-  if (!seat.is_bookable)          return "#F59E0B"; // non-bookable — amber
-  return "#22C55E";                                 // bookable     — green
+  if (!seat.is_configured) return "#D1D5DB";
+  if (seat.status === "INACTIVE") return "#EF4444";
+  if (!seat.is_bookable) return "#F59E0B";
+  return "#22C55E";
 }
 
 function applyColors(svgText: string, seats: Seat[]): string {
   let result = svgText;
   for (const seat of seats) {
     const fill = resolveSeatFill(seat);
-    const re   = new RegExp(
+    const re = new RegExp(
       `(<g[^>]*\\bid="${seat.seat_svg_id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`,
       "m",
     );
     result = result.replace(re, (_m, open, inner, close) => {
       const colored = inner
-        .replace(/fill="[^"]*"/g,      `fill="${fill}"`)
-        .replace(/fill:[^;"}\s]*/g,    `fill:${fill}`);
+        .replace(/fill="[^"]*"/g, `fill="${fill}"`)
+        .replace(/fill:[^;"}\s]*/g, `fill:${fill}`);
       return `${open}${colored}${close}`;
     });
   }
   return result;
 }
 
-// ── Legend ───────────────────────────────────────────────────────────────────
-
 const LEGEND = [
-  { label: "Bookable",     color: "#22C55E" },
+  { label: "Bookable", color: "#22C55E" },
   { label: "Non-bookable", color: "#F59E0B" },
-  { label: "Inactive",     color: "#EF4444" },
+  { label: "Inactive", color: "#EF4444" },
   { label: "Unconfigured", color: "#D1D5DB" },
 ] as const;
 
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function LayoutTable({ selection, selectedLayoutId }: Props) {
-  const { layouts, loading } = useLayoutsStore();
+  const { layouts, loading, fetchLayouts, invalidateFloor } = useLayoutsStore();
   const router = useRouter();
 
-  const [previewLayout,   setPreviewLayout]   = useState<LayoutApiResponse | null>(null);
-  const [coloredSvg,      setColoredSvg]      = useState<string | null>(null);
-  const [previewLoading,  setPreviewLoading]  = useState(false);
-  const [previewError,    setPreviewError]    = useState(false);
-  const [downloading,     setDownloading]     = useState(false);
+  // ── Preview state ─────────────────────────────────────────────────────────
+  const [previewLayout, setPreviewLayout] = useState<LayoutApiResponse | null>(null);
+  const [coloredSvg, setColoredSvg] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  // ── 3-dot menu state ──────────────────────────────────────────────────────
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // ── Discard confirmation state ────────────────────────────────────────────
+  const [discardTarget, setDiscardTarget] = useState<LayoutApiResponse | null>(null);
+  const [discarding, setDiscarding] = useState(false);
+  const [discardError, setDiscardError] = useState<string | null>(null);
+  const [discardedIds, setDiscardedIds] = useState<Set<string>>(new Set());
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [openMenuId]);
 
   useEffect(() => {
     if (layouts.length > 0) router.prefetch("/admin/layouts/manage-layout");
   }, [layouts, router]);
 
-  // ── Open preview ─────────────────────────────────────────────────────────
-  // Fetch SVG text + seat data in parallel, then apply seat colors to the SVG.
+  // ── Preview ───────────────────────────────────────────────────────────────
   const handleView = useCallback(async (row: LayoutApiResponse) => {
+    setOpenMenuId(null);
     setPreviewLayout(row);
     setColoredSvg(null);
     setPreviewError(false);
@@ -81,10 +102,9 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
         fetchLayoutSeats(row.layout_id),
       ]);
       if (!svgRes.ok) throw new Error(`SVG fetch ${svgRes.status}`);
-      const raw   = await svgRes.text();
-      // Make SVG fluid so it fills the modal container
+      const raw = await svgRes.text();
       const fluid = raw
-        .replace(/\bwidth="[^"]*"/,  'width="100%"')
+        .replace(/\bwidth="[^"]*"/, 'width="100%"')
         .replace(/\bheight="[^"]*"/, 'height="100%"');
       setColoredSvg(applyColors(fluid, seats));
     } catch (err) {
@@ -101,16 +121,15 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
     setPreviewError(false);
   }, []);
 
-  // ── Download ─────────────────────────────────────────────────────────────
-  // The colored SVG string is already in memory — no extra S3 fetch needed.
+  // ── Download ──────────────────────────────────────────────────────────────
   const handleDownloadSvg = useCallback(async () => {
     if (!coloredSvg || !previewLayout) return;
     setDownloading(true);
     try {
-      const blob    = new Blob([coloredSvg], { type: "image/svg+xml" });
+      const blob = new Blob([coloredSvg], { type: "image/svg+xml" });
       const blobUrl = URL.createObjectURL(blob);
-      const link    = document.createElement("a");
-      link.href     = blobUrl;
+      const link = document.createElement("a");
+      link.href = blobUrl;
       link.download = `${previewLayout.layout_name ?? "layout"}.svg`;
       document.body.appendChild(link);
       link.click();
@@ -123,16 +142,53 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
     }
   }, [coloredSvg, previewLayout]);
 
-  // ── Navigate to manage-layout ────────────────────────────────────────────
+  // ── Manage Layout ─────────────────────────────────────────────────────────
   const handleManage = useCallback((row: LayoutApiResponse) => {
+    setOpenMenuId(null);
     const params = new URLSearchParams({
-      layoutId:   row.layout_id,
-      floorId:    row.floor_id,
+      layoutId: row.layout_id,
+      floorId: row.floor_id,
       buildingId: row.building_id,
-      siteId:     row.site_id,
+      siteId: row.site_id,
     });
     router.push(`/admin/layouts/manage-layout?${params.toString()}`);
   }, [router]);
+
+  // ── Discard ───────────────────────────────────────────────────────────────
+  const handleDiscardClick = useCallback((row: LayoutApiResponse) => {
+    setOpenMenuId(null);
+    setDiscardTarget(row);
+    setDiscardError(null);
+  }, []);
+
+  const handleDiscardConfirm = useCallback(async () => {
+    if (!discardTarget) return;
+    setDiscarding(true);
+    setDiscardError(null);
+    try {
+      await deleteLayout(discardTarget.layout_id);
+      // Immediately mask the row while the list refetches
+      setDiscardedIds((prev) => new Set([...prev, discardTarget.layout_id]));
+      setDiscardTarget(null);
+      invalidateFloor(discardTarget.floor_id);
+      await fetchLayouts(discardTarget.floor_id);
+      // Clean up mask — row is gone from list now
+      setDiscardedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(discardTarget.layout_id);
+        return next;
+      });
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: { message?: string }; message?: string; detail?: string } } })
+          ?.response?.data?.error?.message ||
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        "Failed to discard layout. Please try again.";
+      setDiscardError(msg);
+    } finally {
+      setDiscarding(false);
+    }
+  }, [discardTarget, invalidateFloor, fetchLayouts]);
 
   const { page, rowsPerPage, total, paginated, setPage } = useLayoutsTable(layouts);
 
@@ -153,19 +209,17 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
       <div className="w-full overflow-x-auto">
         <table className="w-full text-xs" style={{ minWidth: "700px" }}>
           <colgroup>
-            <col style={{ width: "220px" }} />
-            <col style={{ width: "80px" }} />
+            <col style={{ width: "260px" }} />
+            <col style={{ width: "70px" }} />
             <col style={{ width: "110px" }} />
-            <col style={{ width: "90px" }} />
-            <col style={{ width: "160px" }} />
-            <col style={{ width: "90px" }} />
+            <col style={{ width: "140px" }} />
+            <col style={{ width: "70px" }} />
           </colgroup>
           <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
             <tr>
               <th className="px-3 py-3 font-medium text-left">Layout Name</th>
               <th className="px-3 py-3 font-medium text-center">Version</th>
               <th className="px-3 py-3 font-medium text-center">Status</th>
-              <th className="px-3 py-3 font-medium text-center">Published</th>
               <th className="px-3 py-3 font-medium text-left">Uploaded By</th>
               <th className="px-3 py-3 font-medium text-center">Actions</th>
             </tr>
@@ -174,7 +228,7 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
             {loading ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <tr key={i} className="animate-pulse">
-                  {Array.from({ length: 6 }).map((_, j) => (
+                  {Array.from({ length: 5 }).map((_, j) => (
                     <td key={j} className="px-3 py-3">
                       <div className="h-3 bg-gray-100 rounded w-3/4" />
                     </td>
@@ -183,50 +237,101 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
               ))
             ) : paginated.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-10 text-gray-400">
+                <td colSpan={5} className="text-center py-10 text-gray-400">
                   {selection.floorId
                     ? "No layouts found for this floor"
                     : "Select a floor to view layouts"}
                 </td>
               </tr>
             ) : (
-              paginated.map((row) => (
-                <tr
-                  key={row.layout_id}
-                  className={`transition-colors ${
-                    String(row.layout_id) === String(selectedLayoutId)
-                      ? "bg-indigo-50" : "hover:bg-gray-50"
-                  }`}
-                >
-                  <td className="px-3 py-3 font-medium">{row.layout_name}</td>
-                  <td className="px-3 py-3 text-center">{row.version_no}</td>
-                  <td className="px-3 py-3 text-center">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
-                      row.status === "PUBLISHED" ? "bg-green-100 text-green-600"
-                      : row.status === "DRAFT"   ? "bg-blue-100 text-blue-600"
-                                                 : "bg-gray-100 text-gray-600"
-                    }`}>
-                      {row.status}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 text-center">{row.is_published ? "Yes" : "No"}</td>
-                  <td className="px-3 py-3">{row.uploaded_by_name ?? row.uploaded_by_user_id}</td>
-                  <td className="px-3 py-3 text-center">
-                    <div className="flex justify-center gap-1.5">
-                      <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => handleView(row)}>
-                        <Eye className="w-3.5 h-3.5 text-indigo-600" />
-                      </Button>
-                      <Button
-                        variant="outline" size="icon" className="h-7 w-7"
-                        onClick={() => handleManage(row)}
-                        onMouseEnter={() => router.prefetch("/admin/layouts/manage-layout")}
-                      >
-                        <Settings className="w-3.5 h-3.5 text-gray-600" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              paginated.map((row, rowIndex) => {
+                const isDiscarded = discardedIds.has(row.layout_id) || row.status === "DELETED";
+                const isDraft = row.status === "DRAFT";
+                const isNearBottom = rowIndex >= paginated.length - 3;
+
+                return (
+                  <tr
+                    key={row.layout_id}
+                    className={`transition-colors ${String(row.layout_id) === String(selectedLayoutId)
+                      ? "bg-indigo-50"
+                      : "hover:bg-gray-50"
+                      }`}
+                  >
+                    <td className="px-3 py-3 font-medium">
+                      {row.layout_name}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      {row.version_no}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${isDiscarded
+                        ? "bg-red-200 text-red-400"
+                        : row.status === "PUBLISHED" ? "bg-green-100 text-green-600"
+                          : row.status === "DRAFT" ? "bg-blue-100 text-blue-600"
+                            : "bg-gray-100 text-gray-600"
+                        }`}>
+                        {isDiscarded ? "DISCARDED" : row.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      {row.uploaded_by_name ?? row.uploaded_by_user_id}
+                    </td>
+
+                    {/* ── 3-dot menu ── */}
+                    <td className="px-3 py-3 text-center">
+                      {isDiscarded ? (
+                        <span className="text-gray-300">—</span>
+                      ) : (
+                        <div className="relative flex justify-center" ref={openMenuId === row.layout_id ? menuRef : undefined}>
+                          <button
+                            onClick={() => setOpenMenuId(openMenuId === row.layout_id ? null : row.layout_id)}
+                            className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 transition-colors"
+                          >
+                            <MoreHorizontal className="w-4 h-4" />
+                          </button>
+
+                          {openMenuId === row.layout_id && (
+                            <div className={`absolute right-0 z-30 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1 text-left ${isNearBottom ? "bottom-8" : "top-8"}`}>
+                              {/* View Layout */}
+                              <button
+                                onClick={() => handleView(row)}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                                View Layout
+                              </button>
+
+                              {/* Manage Layout */}
+                              <button
+                                onClick={() => handleManage(row)}
+                                onMouseEnter={() => router.prefetch("/admin/layouts/manage-layout")}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+                              >
+                                <Settings2 className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                                Manage Layout
+                              </button>
+
+                              {/* Discard — DRAFT only */}
+                              {isDraft && (
+                                <>
+                                  <div className="my-1 border-t border-gray-100" />
+                                  <button
+                                    onClick={() => handleDiscardClick(row)}
+                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-red-600 hover:bg-red-50 transition-colors"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
+                                    Discard
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -248,12 +353,10 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
         />
       </div>
 
-      {/* PREVIEW MODAL */}
+      {/* ── PREVIEW MODAL ── */}
       {previewLayout && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl w-[90vw] sm:w-[70%] md:w-[55%] h-[90vh] md:h-[95%] flex flex-col shadow-xl">
-
-            {/* Modal header */}
             <div className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0">
               <h2 className="text-sm font-semibold text-gray-800">
                 {previewLayout.layout_name ?? "Layout Preview"}
@@ -270,16 +373,11 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                     : <Download className="w-4 h-4 text-gray-600" />
                   }
                 </button>
-                <button
-                  onClick={handleClose}
-                  className="p-2 border rounded-md hover:bg-gray-100 text-gray-500"
-                >
+                <button onClick={handleClose} className="p-2 border rounded-md hover:bg-gray-100 text-gray-500">
                   ✕
                 </button>
               </div>
             </div>
-
-            {/* Modal body */}
             <div className="flex-1 overflow-hidden bg-gray-100 flex items-center justify-center p-4 min-h-0">
               {previewLoading && (
                 <div className="flex flex-col items-center gap-3">
@@ -291,14 +389,9 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                 <p className="text-sm text-gray-400">Failed to load preview. Please try again.</p>
               )}
               {!previewLoading && coloredSvg && (
-                <div
-                  className="w-full h-full"
-                  dangerouslySetInnerHTML={{ __html: coloredSvg }}
-                />
+                <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: coloredSvg }} />
               )}
             </div>
-
-            {/* Legend */}
             {!previewLoading && coloredSvg && (
               <div className="flex items-center gap-4 px-4 py-2.5 border-t flex-shrink-0">
                 {LEGEND.map(({ label, color }) => (
@@ -309,7 +402,53 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
 
+      {/* ── DISCARD CONFIRMATION MODAL ── */}
+      {discardTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-sm mx-4 shadow-xl p-6 flex flex-col gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-4 h-4 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Discard Layout</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  Are you sure you want to discard{" "}
+                  <span className="font-medium text-gray-700">{discardTarget.layout_name}</span>?
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            {discardError && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {discardError}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2.5 pt-1">
+              <button
+                onClick={() => { setDiscardTarget(null); setDiscardError(null); }}
+                disabled={discarding}
+                className="px-4 py-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDiscardConfirm}
+                disabled={discarding}
+                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              >
+                {discarding && (
+                  <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                )}
+                {discarding ? "Discarding…" : "Yes, Discard"}
+              </button>
+            </div>
           </div>
         </div>
       )}
