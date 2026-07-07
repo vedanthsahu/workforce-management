@@ -8,6 +8,11 @@ from fastapi import HTTPException, status
 from psycopg2 import errorcodes
 from psycopg2.extensions import connection as PGConnection
 
+from backend.repositories.dashboard_repository import (
+    fetch_building_scope,
+    fetch_floor_scope,
+    fetch_site_scope,
+)
 from backend.repositories.preferences_repository import (
     count_amenities_for_category,
     fetch_amenities,
@@ -17,21 +22,29 @@ from backend.repositories.preferences_repository import (
     fetch_amenity_category_duplicates,
     fetch_amenity_category_metrics,
     fetch_amenity_duplicates,
+    fetch_amenity_ids,
     fetch_active_amenities,
+    fetch_user_preferred_amenities,
+    fetch_user_work_preferences,
     insert_amenity,
     insert_amenity_category,
+    replace_user_preferred_amenities,
     update_amenity,
     update_amenity_category,
+    upsert_user_work_preferences,
 )
 from backend.schemas.preferences import (
     AdminAmenityResponse,
     AmenityCategoryListResponse,
     AmenityCategoryResponse,
     AmenityListResponse,
+    AmenityResponse,
     CreateAmenityCategoryRequest,
     CreateAmenityRequest,
+    MyPreferencesResponse,
     UpdateAmenityCategoryRequest,
     UpdateAmenityRequest,
+    UpdateMyPreferencesRequest,
     generate_amenity_key,
     generate_category_key,
 )
@@ -95,6 +108,199 @@ def get_preferences(
                 "message": "Failed to fetch preferences.",
             },
         ) from exc
+
+
+def get_my_preferences(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+) -> MyPreferencesResponse:
+    """Return one user's saved work-location and amenity preferences."""
+    work_preferences = fetch_user_work_preferences(
+        conn,
+        tenant_id=tenant_id,
+        user_id=user_id,
+    ) or {}
+    amenities = fetch_user_preferred_amenities(
+        conn,
+        tenant_id=tenant_id,
+        user_id=user_id,
+    )
+
+    return MyPreferencesResponse(
+        site_id=work_preferences.get("site_id"),
+        site_name=work_preferences.get("site_name"),
+        building_id=work_preferences.get("building_id"),
+        building_name=work_preferences.get("building_name"),
+        floor_id=work_preferences.get("floor_id"),
+        floor_name=work_preferences.get("floor_name"),
+        seat_type=work_preferences.get("seat_type"),
+        amenities=[AmenityResponse(**row) for row in amenities],
+    )
+
+
+def update_my_preferences(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    payload: UpdateMyPreferencesRequest,
+) -> MyPreferencesResponse:
+    """Save one user's default work location, seat type, and preferred amenities."""
+    tenant_id = str(current_user["tenant_id"])
+    user_id = str(current_user["user_id"])
+
+    site_id = str(payload.site_id) if payload.site_id is not None else None
+    building_id = str(payload.building_id) if payload.building_id is not None else None
+    floor_id = str(payload.floor_id) if payload.floor_id is not None else None
+    amenity_ids = [str(amenity_id) for amenity_id in payload.amenity_ids]
+
+    try:
+        _validate_preference_location(
+            conn,
+            tenant_id=tenant_id,
+            site_id=site_id,
+            building_id=building_id,
+            floor_id=floor_id,
+        )
+        _validate_preferred_amenity_ids(
+            conn,
+            tenant_id=tenant_id,
+            amenity_ids=amenity_ids,
+        )
+
+        upsert_user_work_preferences(
+            conn,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            default_site_id=site_id,
+            default_building_id=building_id,
+            default_floor_id=floor_id,
+            preferred_seat_type=payload.seat_type,
+        )
+        replace_user_preferred_amenities(
+            conn,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            amenity_ids=amenity_ids,
+        )
+
+        response = get_my_preferences(
+            conn,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+        conn.commit()
+    except HTTPException:
+        conn.rollback()
+        raise
+    except psycopg2.Error as exc:
+        conn.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "preferences_update_failed",
+                "message": "Failed to update preferences.",
+            },
+        ) from exc
+
+    return response
+
+
+def _validate_preference_location(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str | None,
+    building_id: str | None,
+    floor_id: str | None,
+) -> None:
+    if building_id is not None and site_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_preference_location",
+                "message": "siteId is required when buildingId is provided.",
+            },
+        )
+    if floor_id is not None and building_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_preference_location",
+                "message": "buildingId is required when floorId is provided.",
+            },
+        )
+
+    if site_id is not None:
+        site = fetch_site_scope(conn, tenant_id=tenant_id, site_id=site_id)
+        if site is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "site_not_found",
+                    "message": "The requested site was not found for the authenticated tenant.",
+                },
+            )
+
+    if building_id is not None:
+        building = fetch_building_scope(conn, tenant_id=tenant_id, building_id=building_id)
+        if building is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "building_not_found",
+                    "message": "The requested building was not found for the authenticated tenant.",
+                },
+            )
+        if str(building["site_id"]) != site_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "invalid_preference_location",
+                    "message": "buildingId does not belong to siteId.",
+                },
+            )
+
+    if floor_id is not None:
+        floor = fetch_floor_scope(conn, tenant_id=tenant_id, floor_id=floor_id)
+        if floor is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "floor_not_found",
+                    "message": "The requested floor was not found for the authenticated tenant.",
+                },
+            )
+        if str(floor["building_id"]) != building_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "invalid_preference_location",
+                    "message": "floorId does not belong to buildingId.",
+                },
+            )
+
+
+def _validate_preferred_amenity_ids(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    amenity_ids: list[str],
+) -> None:
+    if not amenity_ids:
+        return
+
+    valid_ids = fetch_amenity_ids(conn, tenant_id=tenant_id, amenity_ids=amenity_ids)
+    missing = sorted(set(amenity_ids) - valid_ids, key=int)
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_amenity_ids",
+                "message": f"Unknown or inactive amenity ids: {', '.join(missing)}.",
+            },
+        )
 
 
 def get_amenity_categories(

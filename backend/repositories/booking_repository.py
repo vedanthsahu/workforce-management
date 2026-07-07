@@ -1002,6 +1002,30 @@ def fetch_past_bookings_for_user(
         rows = cur.fetchall()
     return [dict(row) for row in rows]
 
+def fetch_all_confirmed_bookings_for_user(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+) -> list[dict[str, Any]]:
+    """Fetch every confirmed employee booking for one user, newest first."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {BOOKING_SELECT_FIELDS}
+            {BOOKING_SELECT_FROM}
+            WHERE b.booked_for_user_id = %s
+              AND b.tenant_id = %s
+              AND b.booking_type = 'EMPLOYEE'
+              AND b.booking_status = 'CONFIRMED'
+            ORDER BY b.booking_date DESC, b.id DESC
+            """,
+            (user_id, tenant_id),
+        )
+        rows = cur.fetchall()
+    return [dict(row) for row in rows]
+
+
 def fetch_current_bookings_for_user(
     conn: PGConnection,
     *,

@@ -19,6 +19,7 @@ from backend.repositories.user_repository import (
     fetch_user_profile_context,
 )
 from backend.repositories.preferences_repository import fetch_active_amenities
+from backend.services.preferences_service import get_my_preferences
 from backend.schemas.dashboard import (
     DashboardManagerResponse,
     DashboardMeResponse,
@@ -44,6 +45,12 @@ def get_dashboard_me(
         amenities = fetch_active_amenities(
             conn,
             tenant_id=tenant_id,
+        )
+
+        work_preferences = get_my_preferences(
+            conn,
+            tenant_id=tenant_id,
+            user_id=user_id,
         )
 
         favorite_seat = fetch_favorite_seat(
@@ -108,6 +115,7 @@ def get_dashboard_me(
         manager=_build_manager(profile),
         office_info=_build_office_info(profile),
         preferences=DashboardPreferencesResponse(amenities=amenities),
+        work_preferences=work_preferences,
         profile_metadata=DashboardProfileMetadataResponse(
             status=profile.get("status"),
             role_name=profile.get("role_name") or profile.get("role"),
