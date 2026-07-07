@@ -9,6 +9,8 @@ from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
 from psycopg2.extras import Json
 
+from backend.core.enums import NON_DELETED_LAYOUT_STATUSES
+
 def fetch_sites(
     conn: PGConnection,
     *,
@@ -210,6 +212,7 @@ def fetch_floors_by_building(
             FROM floor_layouts AS flc
             WHERE flc.tenant_id = f.tenant_id
               AND flc.floor_id = f.id
+              AND flc.status = ANY(%s)
         ) AS layout_counts ON TRUE
         LEFT JOIN LATERAL (
             SELECT
@@ -227,6 +230,7 @@ def fetch_floors_by_building(
               AND fl.site_id = f.site_id
               AND fl.building_id = f.building_id
               AND fl.floor_id = f.id
+              AND fl.status = ANY(%s)
             ORDER BY
                 CASE
                     WHEN fl.is_published = TRUE
@@ -245,7 +249,12 @@ def fetch_floors_by_building(
         WHERE b.id = %s
           AND f.tenant_id = %s
     """
-    params: list[Any] = [building_id, tenant_id]
+    params: list[Any] = [
+        list(NON_DELETED_LAYOUT_STATUSES),
+        list(NON_DELETED_LAYOUT_STATUSES),
+        building_id,
+        tenant_id,
+    ]
     query, params = _apply_status_filter(query, params, "f.status", status_filter)
     query, params = _apply_search_filter(
         query,
@@ -676,6 +685,7 @@ def fetch_floor_by_id(
                 FROM floor_layouts AS flc
                 WHERE flc.tenant_id = f.tenant_id
                   AND flc.floor_id = f.id
+                  AND flc.status = ANY(%s)
             ) AS layout_counts ON TRUE
             LEFT JOIN LATERAL (
                 SELECT
@@ -689,6 +699,7 @@ def fetch_floor_by_id(
                 FROM floor_layouts AS fl
                 WHERE fl.tenant_id = f.tenant_id
                   AND fl.floor_id = f.id
+                  AND fl.status = ANY(%s)
                 ORDER BY
                     CASE
                         WHEN fl.is_published = TRUE
@@ -704,7 +715,12 @@ def fetch_floor_by_id(
             WHERE f.tenant_id = %s
               AND f.id = %s
             """,
-            (tenant_id, floor_id),
+            (
+                list(NON_DELETED_LAYOUT_STATUSES),
+                list(NON_DELETED_LAYOUT_STATUSES),
+                tenant_id,
+                floor_id,
+            ),
         )
         row = cur.fetchone()
     return dict(row) if row else None
@@ -759,14 +775,19 @@ def fetch_layout_seat_mapping_by_id(
         cur.execute(
             """
             SELECT
-                *
-            FROM layout_seat_mappings
-            WHERE tenant_id = %s
-              AND id = %s
+                lsm.*
+            FROM layout_seat_mappings AS lsm
+            JOIN floor_layouts AS fl
+                ON fl.id = lsm.layout_id
+               AND fl.tenant_id = lsm.tenant_id
+            WHERE lsm.tenant_id = %s
+              AND lsm.id = %s
+              AND fl.status = ANY(%s)
             """,
             (
                 tenant_id,
                 layout_seat_mapping_id,
+                list(NON_DELETED_LAYOUT_STATUSES),
             ),
         )
 

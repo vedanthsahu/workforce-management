@@ -54,7 +54,7 @@ class AuthTokens:
     refresh_token: str
 
 
-GRAPH_MANAGED_ROLES = {"EMPLOYEE", "TALENT"}
+GRAPH_MANAGED_ROLES = {"EMPLOYEE", "FACILITATOR"}
 GRAPH_PROTECTED_ROLES = {
     "SECURITY",
     "MANAGER",
@@ -102,7 +102,7 @@ def determine_graph_onboarding_role(
     access_token: str,
     microsoft_object_id: str,
 ) -> str:
-    """Return EMPLOYEE or TALENT for first-time SSO provisioning."""
+    """Return EMPLOYEE or FACILITATOR for first-time SSO provisioning."""
     settings = get_settings()
     graph_group_id = settings.graph_talent_group_id
     if not graph_group_id:
@@ -117,7 +117,7 @@ def determine_graph_onboarding_role(
                 group_id=graph_group_id,
                 microsoft_object_id=microsoft_object_id,
             )
-            return "TALENT" if is_talent else "EMPLOYEE"
+            return "FACILITATOR" if is_talent else "EMPLOYEE"
         except GraphAPIError as exc:
             last_error = exc
             if attempt < attempts - 1 and settings.graph_role_lookup_backoff_seconds:
@@ -142,7 +142,7 @@ def sync_graph_managed_roles(
     access_token: str | None = None,
     commit: bool = True,
 ) -> GraphRoleSyncResult:
-    """Synchronize EMPLOYEE/TALENT roles from Microsoft Graph group membership."""
+    """Synchronize EMPLOYEE/FACILITATOR roles from Microsoft Graph group membership."""
     settings = get_settings()
     if not settings.graph_role_sync_enabled:
         return GraphRoleSyncResult(
@@ -182,7 +182,7 @@ def sync_graph_managed_roles(
                     continue
 
                 object_id = str(user.get("microsoft_object_id") or "").strip().lower()
-                new_role = "TALENT" if object_id in graph_member_ids else "EMPLOYEE"
+                new_role = "FACILITATOR" if object_id in graph_member_ids else "EMPLOYEE"
                 if old_role == new_role:
                     continue
 
@@ -209,7 +209,7 @@ def sync_graph_managed_roles(
                 }
                 event_type = (
                     "GRAPH_ROLE_PROMOTED"
-                    if old_role == "EMPLOYEE" and new_role == "TALENT"
+                    if old_role == "EMPLOYEE" and new_role == "FACILITATOR"
                     else "GRAPH_ROLE_DEMOTED"
                 )
                 record_auth_event(
@@ -228,7 +228,7 @@ def sync_graph_managed_roles(
                 )
 
                 changed += 1
-                if new_role == "TALENT":
+                if new_role == "FACILITATOR":
                     promoted += 1
                 else:
                     demoted += 1

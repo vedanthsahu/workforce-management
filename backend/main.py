@@ -31,7 +31,7 @@ from backend.api.routes.guests import router as guests_router
 from backend.api.routes.locations import router as locations_router
 from backend.api.routes.sso import router as sso_router
 from backend.core.config import get_settings
-from backend.core.logging import (
+from backend.core.app_logging import (
     LOGGER_NAME,
     configure_console_logging,
     enable_backend_function_trace,

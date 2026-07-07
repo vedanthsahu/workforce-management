@@ -121,7 +121,7 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
         )
         self.assertTrue(
             booking_service._can_book_for_user(
-                current_user={"user_id": "99", "role_name": "TALENT"},
+                current_user={"user_id": "99", "role_name": "FACILITATOR"},
                 booking_user=target,
             )
         )
@@ -245,7 +245,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
         self.current_user = {
             "tenant_id": "1",
             "user_id": "10",
-            "role_name": "TALENT",
+            "role_name": "FACILITATOR",
         }
 
     def _guest_create_patches(self):

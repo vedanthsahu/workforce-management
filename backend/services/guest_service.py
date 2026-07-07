@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import date, datetime
+from datetime import date
 from enum import Enum
 from typing import Any
 
@@ -34,7 +34,7 @@ from backend.schemas.guest import (
     ModifyGuestVisitRequest,
     GuestVisitStatusUpdateResponse,
 )
-from backend.core.logging import LOGGER_NAME
+from backend.core.app_logging import LOGGER_NAME
 from backend.repositories.booking_repository import (
     cancel_booking,
     count_guest_bookings,
@@ -99,8 +99,15 @@ from backend.schemas.guest import (
     GuestVisitHistorySummary,
     GuestVisitHistoryItem,
 )
-from backend.services.booking_service import _normalize_cancellation_reason
+from backend.services.booking_service import (
+    GUEST_OPERATION_ROLES,
+    _display_cancellation_reason,
+    _normalize_cancellation_reason,
+    _user_role,
+)
 from backend.services.notification_service import (
+    booking_notification_details,
+    format_notification_value,
     queue_email_notification,
     queue_booking_cancelled_notification,
     queue_booking_created_notification,
@@ -109,7 +116,6 @@ from backend.services.notification_service import (
 
 logger = logging.getLogger(f"{LOGGER_NAME}.guests")
 
-GUEST_OPERATION_ROLES = {"TALENT", "TENANT_ADMIN", "SECURITY"}
 BOOKING_STATUSES = {
     "CONFIRMED",
     "CANCELLED",
@@ -125,18 +131,13 @@ def _current_user_id(current_user: dict[str, Any]) -> str:
 
 
 def _require_guest_operator(current_user: dict[str, Any]) -> None:
-    role = str(
-        current_user.get("role_name")
-        or current_user.get("role")
-        or ""
-    ).strip().upper()
-    if role not in GUEST_OPERATION_ROLES:
+    if _user_role(current_user) not in GUEST_OPERATION_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "code": "guest_operation_not_allowed",
                 "message": (
-                    "Guest operations require the TALENT, TENANT_ADMIN, "
+                    "Guest operations require the FACILITATOR, TENANT_ADMIN, "
                     "or SECURITY role."
                 ),
             },
@@ -1227,57 +1228,6 @@ def _validate_mutable_guest_booking(
         )
 
 
-def _booking_email_details(booking: dict[str, Any]) -> dict[str, str]:
-    location = ", ".join(
-        str(value)
-        for value in (
-            booking.get("floor_name"),
-            booking.get("building_name"),
-            booking.get("site_name"),
-        )
-        if value
-    )
-    booking_date = booking.get("booking_date")
-    seat = str(booking.get("seat_code") or booking.get("seat_id") or "Not available")
-    return {
-        "booking_id": _format_notification_value(booking.get("booking_id")),
-        "booking_date": (
-            booking_date.isoformat()
-            if isinstance(booking_date, (date, datetime))
-            else str(booking_date)
-        ),
-        "site": _format_notification_value(booking.get("site_name") or booking.get("site_id")),
-        "building": _format_notification_value(booking.get("building_name") or booking.get("building_id")),
-        "floor": _format_notification_value(booking.get("floor_name") or booking.get("floor_id")),
-        "seat": seat,
-        "booked_for": _format_booking_person(
-            booking.get("booked_for_name"),
-            booking.get("booked_for_email"),
-        ),
-        "booked_by": _format_booking_person(
-            booking.get("booked_by_name"),
-            booking.get("booked_by_email"),
-        ),
-        "guest_visit_id": _format_notification_value(booking.get("guest_visit_id")),
-        "host_name": _format_notification_value(booking.get("host_name")),
-        "host_email": _format_notification_value(booking.get("host_email")),
-        "guest_name": _format_notification_value(booking.get("guest_name")),
-        "guest_email": _format_notification_value(booking.get("guest_email")),
-        "guest_phone": _format_notification_value(booking.get("guest_phone")),
-        "guest_organization": _format_notification_value(booking.get("guest_organization")),
-        "seat_name": seat,
-        "location": location or "Not available",
-    }
-
-
-def _format_booking_person(name: Any, email: Any) -> str:
-    display_name = str(name or "").strip()
-    display_email = str(email or "").strip()
-    if display_name and display_email:
-        return f"{display_name} ({display_email})"
-    return display_name or display_email or "Not available"
-
-
 def _guest_recipients(guest: dict[str, Any]) -> list[str]:
     email = str(guest.get("email") or "").strip()
     return [email] if email else []
@@ -1297,7 +1247,7 @@ def _queue_guest_booking_created(
             to_emails=_guest_recipients(guest),
             context={
                 "user_name": guest.get("full_name") or "Guest",
-                **_booking_email_details(booking),
+                **booking_notification_details(booking),
             },
         )
     except Exception:
@@ -1321,10 +1271,8 @@ def _queue_guest_booking_cancelled(
             to_emails=_guest_recipients(guest),
             context={
                 "user_name": guest.get("full_name") or "Guest",
-                "cancellation_reason": (
-                    booking.get("cancellation_reason") or "Cancelled"
-                ),
-                **_booking_email_details(booking),
+                "cancellation_reason": _display_cancellation_reason(booking),
+                **booking_notification_details(booking),
             },
         )
     except Exception:
@@ -1349,8 +1297,8 @@ def _queue_guest_booking_modified(
             to_emails=_guest_recipients(guest),
             context={
                 "user_name": guest.get("full_name") or "Guest",
-                "old_booking": _booking_email_details(old_booking),
-                "new_booking": _booking_email_details(new_booking),
+                "old_booking": booking_notification_details(old_booking),
+                "new_booking": booking_notification_details(new_booking),
             },
         )
     except Exception:
@@ -1430,10 +1378,14 @@ def _guest_visit_email_context(
     cancellation_reason: str | None,
 ) -> dict[str, str]:
     return {
-        "guest_visit_id": _format_notification_value(visit.get("guest_visit_id")),
+        "guest_visit_id": format_notification_value(visit.get("guest_visit_id")),
         "guest_name": _first_text(visit.get("guest_name"), guest.get("full_name") if guest else None),
         "guest_email": _first_text(visit.get("guest_email"), guest.get("email") if guest else None),
         "guest_phone": _first_text(visit.get("guest_phone"), guest.get("phone") if guest else None),
+        "guest_organization": _first_text(
+            visit.get("guest_organization"),
+            guest.get("organization") if guest else None,
+        ),
         "host_name": _first_text(visit.get("host_name"), host.get("full_name") if host else None),
         "host_email": _first_text(visit.get("host_email"), host.get("email") if host else None),
         "creator_name": _first_text(
@@ -1443,16 +1395,16 @@ def _guest_visit_email_context(
             creator.get("email"),
         ),
         "creator_email": _first_text(visit.get("created_by_email"), creator.get("email")),
-        "visit_date": _format_notification_value(visit.get("visit_date")),
-        "start_time": _format_notification_value(visit.get("start_time")),
-        "end_time": _format_notification_value(visit.get("end_time")),
-        "site": _first_text(visit.get("site_name"), visit.get("site_id")),
-        "building": _first_text(visit.get("building_name"), visit.get("building_id")),
-        "floor": _first_text(visit.get("floor_name"), visit.get("floor_id")),
-        "guest_type": _format_notification_value(visit.get("guest_type")),
-        "purpose_of_visit": _format_notification_value(visit.get("purpose_of_visit")),
-        "notes": _format_notification_value(visit.get("notes")),
-        "cancellation_reason": _format_notification_value(cancellation_reason or "Cancelled"),
+        "visit_date": format_notification_value(visit.get("visit_date")),
+        "start_time": format_notification_value(visit.get("start_time")),
+        "end_time": format_notification_value(visit.get("end_time")),
+        "site": _first_text(visit.get("site_name")),
+        "building": _first_text(visit.get("building_name")),
+        "floor": _first_text(visit.get("floor_name")),
+        "guest_type": format_notification_value(visit.get("guest_type")),
+        "purpose_of_visit": format_notification_value(visit.get("purpose_of_visit")),
+        "notes": format_notification_value(visit.get("notes")),
+        "cancellation_reason": format_notification_value(cancellation_reason),
     }
 
 
@@ -1464,15 +1416,36 @@ def _first_text(*values: Any) -> str:
     return ""
 
 
-def _format_notification_value(value: Any) -> str:
-    if isinstance(value, datetime):
-        return value.isoformat(sep=" ", timespec="seconds")
-    if isinstance(value, date):
-        return value.isoformat()
-    if value is None:
-        return "Not available"
-    normalized = str(value).strip()
-    return normalized or "Not available"
+def _restrict_visit_scope_for_security_role(
+    current_user: dict[str, Any],
+    *,
+    visit_scope: str,
+    site_id: str | None,
+) -> str | None:
+    """SECURITY users may only see today's visits at their own home site.
+
+    Business rule (not a general permission grant): confining SECURITY to
+    CURRENT-scope, home-site visits. Kept as a role check rather than a
+    permission because it restricts *scope*, not just access.
+    """
+    if _user_role(current_user) != "SECURITY":
+        return site_id
+
+    home_site_id = current_user.get("home_site_id")
+    if not home_site_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Security user does not have a home site configured.",
+        )
+
+    if visit_scope != "CURRENT":
+        raise HTTPException(
+            status_code=403,
+            detail="Security can only access current visits.",
+        )
+
+    return str(home_site_id)
+
 
 def list_guest_visits(
     conn: PGConnection,
@@ -1490,29 +1463,11 @@ def list_guest_visits(
 
     tenant_id = str(current_user["tenant_id"])
 
-    role = (
-        current_user.get("role_name")
-        or current_user.get("role")
-        or ""
-    ).upper()
-
-    if role == "SECURITY":
-
-        home_site_id = current_user.get("home_site_id")
-
-        if not home_site_id:
-            raise HTTPException(
-                status_code=403,
-                detail="Security user does not have a home site configured.",
-            )
-
-        site_id = str(home_site_id)
-
-        if visit_scope != "CURRENT":
-            raise HTTPException(
-                status_code=403,
-                detail="Security can only access current visits.",
-            )
+    site_id = _restrict_visit_scope_for_security_role(
+        current_user,
+        visit_scope=visit_scope,
+        site_id=site_id,
+    )
 
     summary = fetch_guest_visit_summary(
         conn,

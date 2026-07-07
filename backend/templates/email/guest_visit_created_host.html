@@ -1,17 +1,23 @@
-<!DOCTYPE html>
-<html lang="en">
-<body style="font-family: Arial, sans-serif; color: #222; line-height: 1.5;">
-    <h2>Guest visit scheduled</h2>
-    <p>Hello {{ recipient_name }},</p>
-    <p>A guest visit has been scheduled with you as host.</p>
-    <table cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
-        <tr><td><strong>Visit ID</strong></td><td>{{ guest_visit_id }}</td></tr>
-        <tr><td><strong>Guest</strong></td><td>{{ guest_name }} ({{ guest_email }})</td></tr>
-        <tr><td><strong>Date</strong></td><td>{{ visit_date }}</td></tr>
-        <tr><td><strong>Time</strong></td><td>{{ start_time }} - {{ end_time }}</td></tr>
-        <tr><td><strong>Location</strong></td><td>{{ site }}, {{ building }}, {{ floor }}</td></tr>
-        <tr><td><strong>Created by</strong></td><td>{{ creator_name }} ({{ creator_email }})</td></tr>
-    </table>
-    <p>Thank you,<br />Seat Management Team</p>
-</body>
-</html>
+{% extends "_base.html" %}
+{% from "_macros.html" import heading, lead, details_open, details_close, row %}
+{% block title %}You're hosting a guest{% endblock %}
+{% block preheader %}{{ guest_name }} is visiting you on {{ visit_date }}.{% endblock %}
+{% block content %}
+{% set time_window = (start_time ~ " – " ~ end_time) if (start_time and end_time) else (start_time or end_time) %}
+{% set purpose = purpose_of_visit.replace("_", " ")|title if purpose_of_visit else "" %}
+{% set guest_display = (guest_name ~ (" (" ~ guest_organization ~ ")" if guest_organization else "")) if guest_name else guest_organization %}
+{{ heading("You're hosting a guest") }}
+{{ lead("Hello " ~ recipient_name ~ ", a guest visit has been scheduled with you as the host.") }}
+{{ details_open() }}
+{{ row("Guest", guest_display) }}
+{{ row("Guest email", guest_email) }}
+{{ row("Guest phone", guest_phone) }}
+{{ row("Date", visit_date) }}
+{{ row("Time", time_window) }}
+{{ row("Purpose", purpose) }}
+{{ row("Floor", floor) }}
+{{ row("Building", building) }}
+{{ row("Site", site) }}
+{{ row("Notes", notes) }}
+{{ details_close() }}
+{% endblock %}

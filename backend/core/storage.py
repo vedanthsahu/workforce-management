@@ -14,7 +14,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import HTTPException, UploadFile, status
 
 from backend.core.config import get_settings
-from backend.core.logging import LOGGER_NAME
+from backend.core.app_logging import LOGGER_NAME
 from backend.core.retry import aws_retry
 
 logger = logging.getLogger(f"{LOGGER_NAME}.storage")

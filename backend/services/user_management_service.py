@@ -29,14 +29,14 @@ from backend.schemas.user_management import (
 ASSIGNABLE_ROLE_NAMES = {
     "EMPLOYEE",
     "MANAGER",
-    "TALENT",
+    "FACILITATOR",
     "SECURITY",
 }
 
 ADMIN_DIRECTORY_ROLES = {
     "EMPLOYEE",
     "MANAGER",
-    "TALENT",
+    "FACILITATOR",
     "SECURITY",
     "TENANT_ADMIN",
     "TALENT_GUEST_COORDINATOR",
