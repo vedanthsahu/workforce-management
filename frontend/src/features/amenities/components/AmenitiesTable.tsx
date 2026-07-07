@@ -90,7 +90,7 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
       <div className="hidden md:block">
         <table className="w-full text-xs" style={{ minWidth: "860px" }}>
           <colgroup>
-            <col style={{ width: "200px" }} />
+            <col style={{ width: "150px" }} />
             <col style={{ width: "170px" }} />
             <col style={{ width: "220px" }} />
             <col style={{ width: "70px" }} />
@@ -100,13 +100,13 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
           </colgroup>
           <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
             <tr>
-              <th className="px-3 py-3 text-left font-medium">Amenity Name</th>
-              <th className="px-3 py-3 text-center font-medium">Category</th>
-              <th className="px-3 py-3 text-left font-medium">Description</th>
-              <th className="px-3 py-3 text-center font-medium">Icon</th>
-              <th className="px-3 py-3 text-center font-medium">Status</th>
-              <th className="px-3 py-3 text-center font-medium">Assigned Seats</th>
-              <th className="px-3 py-3 text-center font-medium">Actions</th>
+              <th className="pl-10 px-3 py-3 text-left font-bold">Amenity Name</th>
+              <th className="px-3 py-3 text-center font-bold">Category</th>
+              <th className="pl-18 px-3 py-3 text-left font-bold">Description</th>
+              <th className="px-3 py-3 text-center font-bold">Icon</th>
+              <th className="px-3 py-3 text-center font-bold">Status</th>
+              <th className="px-3 py-3 text-center font-bold">Assigned Seats</th>
+              <th className="px-3 py-3 text-center font-bold">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">

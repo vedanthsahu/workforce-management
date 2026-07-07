@@ -1035,6 +1035,9 @@ def fetch_hierarchy_occupancy(
 
 def _hierarchy_group_sql(group_level: HierarchyGroupLevel) -> tuple[str, str]:
     if group_level == "site":
+        # Top Offices by Occupancy should list every site regardless of
+        # active/inactive status — occupancy is still meaningful (usually 0%)
+        # for an inactive site with leftover bookable seats.
         return (
             """
             SELECT
@@ -1042,7 +1045,6 @@ def _hierarchy_group_sql(group_level: HierarchyGroupLevel) -> tuple[str, str]:
                 si.site_name AS group_name
             FROM sites AS si
             WHERE si.tenant_id = %(tenant_id)s
-              AND si.status = 'ACTIVE'
             """,
             "site_id",
         )

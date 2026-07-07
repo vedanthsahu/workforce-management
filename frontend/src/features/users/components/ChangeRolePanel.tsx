@@ -97,7 +97,7 @@ export default function ChangeRolePanel({
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 flex flex-col gap-5 h-full">
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 sm:p-6 flex flex-col gap-5 h-full">
 
       {/* Header */}
       <div>
@@ -111,15 +111,19 @@ export default function ChangeRolePanel({
           <label className="block text-xs font-medium text-gray-500 mb-1.5">Select Role</label>
           <div className="relative">
             <select
-              value={selectedRole ?? ""}
+              value={selectedRole === currentRole ? "" : selectedRole ?? ""}
               onChange={(e) => handleRoleChange(e.target.value)}
               className="w-full appearance-none h-10 px-3 pr-8 text-sm border border-gray-200 rounded-xl bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:border-blue-400 transition-colors"
             >
-              <option value="" disabled hidden>Select Role</option>
-              {roles.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
+              <option value="" disabled hidden>{currentRole}</option>
 
+              {roles
+                .filter((r) => r !== currentRole)
+                .map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+
+              <option value="__NO_CHANGE__">{currentRole}</option>
             </select>
             <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
           </div>
@@ -129,7 +133,7 @@ export default function ChangeRolePanel({
           <label className="block text-xs font-medium text-gray-500 mb-1.5">Account Status</label>
           <div className="relative">
             <select
-              value={selectedStatus}
+              value={selectedStatus === currentStatus ? "__NO_CHANGE__" : selectedStatus}
               onChange={(e) => handleStatusChange(e.target.value)}
               className="w-full appearance-none h-10 px-3 pr-8 text-sm border border-gray-200 rounded-xl bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:border-blue-400 transition-colors"
             >
@@ -150,7 +154,7 @@ export default function ChangeRolePanel({
       </p>
 
       {/* Actions */}
-      <div className="flex gap-3">
+      <div className="flex flex-col-reverse sm:flex-row gap-3">
         <button
           type="button"
           onClick={onCancel}

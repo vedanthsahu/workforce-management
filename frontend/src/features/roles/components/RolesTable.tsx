@@ -27,11 +27,11 @@ export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) 
         <table className="w-full flex-1 min-h-0 flex flex-col text-left border-collapse" style={{ tableLayout: "fixed" }}>
           <thead className="block w-full shrink-0 pr-2 text-xs text-blue-600 bg-blue-100 border-b">
             <tr className="table w-full" style={{ tableLayout: "fixed" }}>
-              <th className="py-2.5 px-4 font-medium whitespace-nowrap text-left w-[24%]">Role Name</th>
-              <th className="py-2.5 px-4 font-medium whitespace-nowrap text-left w-[38%]">Description</th>
-              <th className="py-2.5 px-4 font-medium whitespace-nowrap text-left w-[10%]">Users</th>
-              <th className="py-2.5 pl-8 pr-4 font-medium whitespace-nowrap text-left w-[16%]">Permissions</th>
-              <th className="py-2.5 px-4 font-medium whitespace-nowrap text-left w-[12%]">Action</th>
+              <th className="pl-8 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[24%]">Role Name</th>
+              <th className="pl-10 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[38%]">Description</th>
+              <th className="py-2.5 px-6 font-bold whitespace-nowrap text-left w-[10%]">Users</th>
+              <th className="py-2.5 pl-8 pr-4 font-bold whitespace-nowrap text-left w-[20%]">Permissions</th>
+              <th className="py-2.5 px-4 font-bold whitespace-nowrap text-left w-[10%]">Action</th>
             </tr>
           </thead>
           <tbody
@@ -55,12 +55,12 @@ export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) 
                     {role.name}
                   </span>
                 </td>
-                <td className="py-3 px-4 text-sm text-gray-600 w-[38%] truncate">
+                <td className="py-3 px-4 text-xs text-gray-600 w-[38%] truncate">
                   {role.description}
                 </td>
-                <td className="py-3 px-4 text-sm text-gray-700 w-[10%]">{role.userCount}</td>
-                <td className="py-3 pl-8 pr-4 text-sm text-gray-700 w-[16%]">{role.permissionCount}</td>
-                <td className="py-3 px-4 w-[12%]">
+                <td className="py-3 px-1 text-xs text-gray-700 w-[10%]">{role.userCount}</td>
+                <td className="py-3 pl-8 pr-4 text-xs text-gray-700 w-[16%]">{role.permissionCount}</td>
+                <td className="py-3 px-4 w-[10%]">
                   <button
                     type="button"
                     onClick={() => onViewRole(role)}
