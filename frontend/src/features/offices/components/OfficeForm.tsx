@@ -13,11 +13,16 @@ import {
   ComboboxItem,
 } from "@/components/ui/combobox";
 import useCreateSite from "../hooks/useCreateSite";
+import { Country } from "country-state-city";
 
 const TIMEZONES = [
   "Asia/Kolkata",
   ...Intl.supportedValuesOf("timeZone"),
 ].filter((value, index, self) => self.indexOf(value) === index).sort();
+
+const COUNTRIES = Country.getAllCountries()
+  .map((c) => c.name)
+  .sort();
 
 export default function OfficeForm() {
   const router = useRouter();
@@ -169,12 +174,23 @@ export default function OfficeForm() {
             <Label>
               Country <span className="text-red-400 font-normal">*</span>
             </Label>
-            <Input
-              name="country"
-              value={formData.country}
-              onChange={handleChange}
-              placeholder="e.g. India"
-            />
+            <Combobox
+              items={COUNTRIES}
+              value={formData.country || null}
+              onValueChange={(value) => {
+                setErrorMessage("");
+                setFormData((prev) => ({ ...prev, country: value ?? "" }));
+              }}
+            >
+              <ComboboxInput placeholder="Select a country…" />
+              <ComboboxContent>
+                {(country: string) => (
+                  <ComboboxItem key={country} value={country}>
+                    {country}
+                  </ComboboxItem>
+                )}
+              </ComboboxContent>
+            </Combobox>
           </div>
 
           <div className="sm:col-span-2 space-y-1.5">

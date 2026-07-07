@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   PieChart,
@@ -25,7 +25,7 @@ import {
   CardContent,
 } from "@/components/ui/card";
 
-import { Info } from "lucide-react";
+import { ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import type {
@@ -44,12 +44,21 @@ type Props = {
 };
 
 // ---------- COMPONENT ----------
-export default function AdminCharts({ data, trendData, selectedWeek, setSelectedWeek, topOffices }: Props) {
-  const [showAll, setShowAll] = useState(false);
+const OFFICES_PER_PAGE = 5;
 
-  const visibleOffices = showAll
-    ? topOffices
-    : topOffices.slice(0, 5);
+export default function AdminCharts({ data, trendData, selectedWeek, setSelectedWeek, topOffices }: Props) {
+  const [officePage, setOfficePage] = useState(0);
+
+  const totalOfficePages = Math.max(1, Math.ceil(topOffices.length / OFFICES_PER_PAGE));
+  const visibleOffices = topOffices.slice(
+    officePage * OFFICES_PER_PAGE,
+    officePage * OFFICES_PER_PAGE + OFFICES_PER_PAGE
+  );
+
+  // Clamp back to a valid page if a refetch shrinks the list (e.g. date change)
+  useEffect(() => {
+    if (officePage > totalOfficePages - 1) setOfficePage(totalOfficePages - 1);
+  }, [officePage, totalOfficePages]);
 
   // HANDLE LOADING
   if (!data) {
@@ -122,7 +131,7 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
                 Booked Seats
               </p>
               <p className="font-medium">
-                {booked} ({occupancy.toFixed(1)}%)
+                {occupancy.toFixed(1)}% ({booked})
               </p>
             </div>
 
@@ -238,15 +247,30 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
             </div>
           ))}
 
-          {topOffices.length > 5 && (
-            <div className="flex justify-center pt-2">
+          {topOffices.length > OFFICES_PER_PAGE && (
+            <div className="flex items-center justify-between">
               <button
-                onClick={() => setShowAll(!showAll)}
-                className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                type="button"
+                onClick={() => setOfficePage((p) => Math.max(0, p - 1))}
+                disabled={officePage === 0}
+                aria-label="Previous offices"
+                className="rounded-md border border-gray-200 p-1 text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {showAll
-                  ? "View Less"
-                  : `View More (${topOffices.length - 5})`}
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <span className="text-xs text-muted-foreground">
+                {officePage + 1} / {totalOfficePages}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setOfficePage((p) => Math.min(totalOfficePages - 1, p + 1))}
+                disabled={officePage >= totalOfficePages - 1}
+                aria-label="Next offices"
+                className="rounded-md border border-gray-200 p-1 text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           )}

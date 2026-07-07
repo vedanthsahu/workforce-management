@@ -1196,6 +1196,288 @@ def get_available_seats_by_range(
         )
 
 
+def book_guest_seat(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    payload,
+    background_tasks: BackgroundTasks | None = None,
+) -> BookingResponse:
+
+    tenant_id = str(current_user["tenant_id"])
+    booked_by_user_id = _current_user_id(current_user)
+
+    if not _can_book_guest(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "guest_booking_not_allowed",
+                "message": (
+                    "Only FACILITATOR and Tenant Admin users "
+                    "can create guest bookings."
+                ),
+            },
+        )
+
+    try:
+
+        guest = fetch_guest_by_id(
+            conn,
+            tenant_id=tenant_id,
+            guest_id=str(payload.guest_id),
+        )
+
+        if guest is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "guest_not_found",
+                    "message": "Guest does not exist.",
+                },
+            )
+
+        host_user = fetch_user_by_id(
+            conn,
+            tenant_id=tenant_id,
+            user_id=str(payload.host_user_id),
+        )
+
+        if host_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "host_not_found",
+                    "message": "Host user does not exist.",
+                },
+            )
+
+        if str(host_user.get("status", "")).upper() != "ACTIVE":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "host_inactive",
+                    "message": "Host user is not active.",
+                },
+            )
+
+        seat = fetch_seat_for_booking(
+            conn,
+            tenant_id=tenant_id,
+            site_id=str(payload.site_id),
+            building_id=str(payload.building_id),
+            floor_id=str(payload.floor_id),
+            seat_id=str(payload.seat_id),
+        )
+
+        if seat is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "seat_not_found",
+                    "message": "Seat does not exist.",
+                },
+            )
+
+        if seat.get("status") != "ACTIVE":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "booking_seat_inactive",
+                    "message": "Bookings can only target ACTIVE seats.",
+                },
+            )
+
+        if seat.get("is_bookable") is not True:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "booking_seat_not_bookable",
+                    "message": "The requested seat is not bookable.",
+                },
+            )
+
+        if has_active_booking_conflict(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+            booking_date=payload.visit_date,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "booking_conflict",
+                    "message": "The requested seat already has an active booking.",
+                },
+            )
+
+        visit = insert_guest_visit(
+            conn,
+            tenant_id=tenant_id,
+            guest_id=str(payload.guest_id),
+            host_user_id=str(payload.host_user_id),
+            site_id=str(payload.site_id),
+            building_id=str(payload.building_id),
+            floor_id=str(payload.floor_id),
+            visit_date=payload.visit_date,
+            guest_type=payload.guest_type,
+            purpose_of_visit=payload.purpose_of_visit,
+            start_time=payload.start_time,
+            end_time=payload.end_time,
+            notes=payload.notes,
+            requires_seat=True,
+            created_by_user_id=booked_by_user_id,
+        )
+
+        booking = insert_guest_booking(
+            conn,
+            tenant_id=tenant_id,
+            guest_id=str(payload.guest_id),
+            guest_visit_id=str(
+                visit["guest_visit_id"]
+            ),
+            booked_by_user_id=booked_by_user_id,
+            seat=seat,
+            booking_date=payload.visit_date,
+        )
+
+        conn.commit()
+
+        return BookingResponse(**booking)
+
+    except HTTPException:
+        conn.rollback()
+        raise
+
+    except ValueError as exc:
+        conn.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_guest_booking",
+                "message": str(exc),
+            },
+        ) from exc
+
+    except LookupError as exc:
+        conn.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "guest_booking_failed",
+                "message": str(exc),
+            },
+        ) from exc
+
+    except psycopg2.Error as exc:
+        conn.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "guest_booking_failed",
+                "message": "Failed to create guest booking.",
+            },
+        ) from exc
+def create_guest_visit(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    payload,
+) -> dict[str, Any]:
+
+    tenant_id = str(current_user["tenant_id"])
+
+    created_by_user_id = _current_user_id(
+        current_user
+    )
+
+    if not _can_book_guest(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "guest_visit_not_allowed",
+                "message": (
+                    "Only FACILITATOR and Tenant Admin users "
+                    "can create guest visits."
+                ),
+            },
+        )
+
+    try:
+
+        guest = fetch_guest_by_id(
+            conn,
+            tenant_id=tenant_id,
+            guest_id=str(payload.guest_id),
+        )
+
+        if guest is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "guest_not_found",
+                    "message": "Guest does not exist.",
+                },
+            )
+
+        host_user = fetch_user_by_id(
+            conn,
+            tenant_id=tenant_id,
+            user_id=str(payload.host_user_id),
+        )
+
+        if host_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "host_not_found",
+                    "message": "Host user does not exist.",
+                },
+            )
+
+        visit = insert_guest_visit(
+            conn,
+            tenant_id=tenant_id,
+            guest_id=str(payload.guest_id),
+            host_user_id=str(payload.host_user_id),
+            site_id=str(payload.site_id),
+            building_id=str(payload.building_id),
+            floor_id=(
+                str(payload.floor_id)
+                if payload.floor_id is not None
+                else None
+            ),
+            visit_date=payload.visit_date,
+            guest_type=payload.guest_type,
+            purpose_of_visit=payload.purpose_of_visit,
+            start_time=payload.start_time,
+            end_time=payload.end_time,
+            notes=payload.notes,
+            requires_seat=False,
+            created_by_user_id=created_by_user_id,
+        )
+
+        conn.commit()
+
+        return visit
+
+    except HTTPException:
+        conn.rollback()
+        raise
+
+    except psycopg2.Error as exc:
+        conn.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "guest_visit_create_failed",
+                "message": "Failed to create guest visit.",
+            },
+        ) from exc
+
 def check_booking_eligibility(
 conn: PGConnection,
 *,

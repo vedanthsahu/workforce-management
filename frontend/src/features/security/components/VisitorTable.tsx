@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { MoreVertical } from "lucide-react";
+import { useState } from "react";
+import { Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { VisitorSearchBar } from "./VisitorSearchBar";
 import VisitorPagination from "./VisitorPagination";
 import { CheckInButton } from "./CheckInButton";
@@ -47,97 +45,6 @@ type Props = {
   total: number;
 };
 
-// ── Kebab menu ────────────────────────────────────────────────────────────────
-function RowMenu({
-  visitor,
-  onViewDetails,
-  onModify,
-  onCancel,
-}: {
-  visitor: Visitor;
-  onViewDetails: () => void;
-  onModify: () => void;
-  onCancel: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        !btnRef.current?.contains(target) &&
-        !menuRef.current?.contains(target)
-      ) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  const handleOpen = () => {
-    if (!btnRef.current) return;
-    const rect = btnRef.current.getBoundingClientRect();
-    const menuH = 130;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const top = spaceBelow < menuH
-      ? rect.top + window.scrollY - menuH - 4
-      : rect.bottom + window.scrollY + 4;
-    setMenuPos({ top, left: rect.right + window.scrollX - 176 });
-    setOpen((v) => !v);
-  };
-
-  const isCancellable = visitor.status === "SCHEDULED" || visitor.status === "OVERDUE";
-
-  return (
-    <>
-      <button
-        ref={btnRef}
-        onClick={handleOpen}
-        className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-gray-100 transition text-gray-400"
-        aria-label="More options"
-      >
-        <MoreVertical className="w-4 h-4" />
-      </button>
-
-      {open && typeof document !== "undefined" && createPortal(
-        <div
-          ref={menuRef}
-          style={{ position: "absolute", top: menuPos.top, left: menuPos.left, zIndex: 9999, width: 176 }}
-          className="bg-white border border-gray-100 rounded-xl shadow-xl py-1.5 text-sm overflow-hidden"
-        >
-          <button
-            onClick={() => { setOpen(false); onViewDetails(); }}
-            className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 transition"
-          >
-            View details
-          </button>
-          {/* <button
-            onClick={() => { setOpen(false); onModify(); }}
-            disabled={!isCancellable}
-            className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Edit visit
-          </button> */}
-          {/* <div className="my-1 border-t border-gray-100" /> */}
-          {/* <button
-            onClick={() => { setOpen(false); onCancel(); }}
-            disabled={!isCancellable}
-            className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-500 font-medium transition disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Cancel visit
-          </button> */}
-        </div>,
-        document.body
-      )}
-    </>
-  );
-}
-
 // ── Main table ────────────────────────────────────────────────────────────────
 export function VisitorTable({
   title,
@@ -172,35 +79,37 @@ export function VisitorTable({
 
   return (
     <>
-      <Card>
-        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-6 py-4 border-b">
+          <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2 whitespace-nowrap">
             {title}
             <span className="text-[11px] font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
               {count}
             </span>
-          </CardTitle>
-          <div className="w-full sm:max-w-xs">
+          </h2>
+          <div className="w-full flex justify-end">
             <VisitorSearchBar
               search={search}
               onSearchChange={onSearchChange}
               placeholder="Search by guest name…"
             />
           </div>
-        </CardHeader>
+        </div>
 
-        <CardContent className="p-0">
+        <div>
           {/* ── Desktop table ──────────────────────────────────────── */}
           <div className={cn("hidden md:block overflow-x-auto overflow-y-auto max-h-[480px]", MIN_TABLE_HEIGHT)}>
-            <table className="w-full text-left">
-              <thead className="sticky top-0 z-10">
-                <tr className="border-b bg-gray-50">
+            <table className="w-full text-left text-xs">
+              <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
+                <tr>
                   {TABLE_HEADERS.map((h) => (
                     <th
                       key={h}
                       className={cn(
-                        "py-2.5 px-4 text-[11px] font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap bg-gray-50 text-left",
-                        false
+                        "px-4 py-3 font-bold whitespace-nowrap",
+                        ["Guest Name", "Host", "Visit Time", "Location", "Seat Booked", "Status", "Actions"].includes(h)
+                          ? "text-center"
+                          : "text-left"
                       )}
                     >
                       {h}
@@ -208,7 +117,7 @@ export function VisitorTable({
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-gray-100">
                 {loading && (
                   <tr>
                     <td colSpan={TABLE_HEADERS.length} className="py-8 text-center text-sm text-gray-400">
@@ -228,41 +137,38 @@ export function VisitorTable({
                 {!loading && visitors.map((v, index) => (
                   <tr
                     key={v.id ?? `row-${index}`}
-                    className="border-b last:border-0 hover:bg-gray-50/60 transition-colors"
+                    className="hover:bg-gray-50 transition-colors"
                   >
                     {/* Guest Name */}
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 text-center">
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] font-semibold text-indigo-700 shrink-0">
                           {v.guestInitials}
                         </div>
-                        <span className="text-sm font-medium text-gray-800 truncate">
+                        <span className="text-sm font-medium text-black truncate">
                           {v.guestName}
                         </span>
                       </div>
                     </td>
 
                     {/* Host */}
-                    <td className="py-3 px-4">
-                      <p className="text-sm text-gray-700">{v.hostName}</p>
+                    <td className="py-3 px-4 text-center">
+                      <p className="text-sm text-black">{v.hostName}</p>
                       {v.hostEmail && (
-                        <p className="text-[11px] text-gray-400 truncate">{v.hostEmail}</p>
-                      )}
-                      {v.hostPhone && (
-                        <p className="text-[11px] text-gray-400">{v.hostPhone}</p>
+                        <p className="text-xs text-black truncate">{v.hostEmail}</p>
                       )}
                     </td>
 
                     {/* Visit Time */}
-                    <td className="py-3 px-4 text-sm text-gray-600 whitespace-nowrap">
+                    <td className="py-3 px-4 text-sm text-black whitespace-nowrap text-center">
                       {v.visitTimeLabel}
                     </td>
 
                     {/* Location */}
-                    <td className="py-3 px-4 text-sm text-gray-600">{v.location}</td>
+                    <td className="py-3 px-4 text-sm text-black text-center">{v.location}</td>
 
                     {/* Seat Booked */}
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 text-center">
                       {v.seatBooked ? (
                         <span className="text-sm font-medium text-emerald-600">
                           Yes {v.seatCode ? `(${v.seatCode})` : ""}
@@ -273,7 +179,7 @@ export function VisitorTable({
                     </td>
 
                     {/* Status */}
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 text-center">
                       <span
                         className={cn(
                           "inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold ring-1",
@@ -285,20 +191,22 @@ export function VisitorTable({
                     </td>
 
                     {/* Actions */}
-                    <td className="py-3 px-4">
-                      <div className="flex items-center justify-end gap-2">
+                    <td className="py-3 px-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
                         <CheckInButton
                           visitor={v}
                           isLoading={checkingInId === v.id}
                           onCheckIn={handleCheckIn}
                           onCheckOut={handleCheckOut}
                         />
-                        <RowMenu
-                          visitor={v}
-                          onViewDetails={() => openModal("details", v)}
-                          onModify={() => openModal("modify", v)}
-                          onCancel={() => openModal("cancel", v)}
-                        />
+                        <button
+                          type="button"
+                          onClick={() => openModal("details", v)}
+                          className="w-7 h-7 rounded-md border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition"
+                          aria-label="View details"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -338,12 +246,14 @@ export function VisitorTable({
                     >
                       {getStatusLabel(v.status)}
                     </span>
-                    <RowMenu
-                      visitor={v}
-                      onViewDetails={() => openModal("details", v)}
-                      onModify={() => openModal("modify", v)}
-                      onCancel={() => openModal("cancel", v)}
-                    />
+                    <button
+                      type="button"
+                      onClick={() => openModal("details", v)}
+                      className="w-7 h-7 rounded-md border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition"
+                      aria-label="View details"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                    </button>
                   </div>
                 </div>
 
@@ -386,10 +296,10 @@ export function VisitorTable({
 
           {/* ── Footer ─────────────────────────────────────────────── */}
           {!loading && total > 0 && (
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t">
-              <p className="text-xs text-gray-500">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-4 border-t text-sm text-gray-500">
+              <span>
                 Showing {pageStart}–{pageEnd} of {total}
-              </p>
+              </span>
               <VisitorPagination
                 currentPage={page}
                 totalPages={totalPages}
@@ -397,8 +307,8 @@ export function VisitorTable({
               />
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* ── Modals ─────────────────────────────────────────────────── */}
       {/* Details reads straight off the already-fetched table data —

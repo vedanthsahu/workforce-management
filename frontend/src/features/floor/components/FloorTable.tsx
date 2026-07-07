@@ -69,29 +69,29 @@ export default function FloorTable({ data, onEdit, highlightedId }: Props) {
 
       {/* ── Desktop table (hidden below md) ───────────────── */}
       <div className="hidden md:block overflow-x-auto">
-        <table className="w-full text-xs" style={{ minWidth: "860px" }}>
+        <table className="w-full text-xs table-fixed" style={{ minWidth: "1000px" }}>
           <colgroup>
-            <col style={{ width: "180px" }} />
             <col style={{ width: "100px" }} />
-            <col style={{ width: "90px" }} />
+            <col style={{ width: "80px" }} />
+            <col style={{ width: "80px" }} />
             <col style={{ width: "70px" }} />
-            <col style={{ width: "90px" }} />
-            <col style={{ width: "100px" }} />
             <col style={{ width: "70px" }} />
-            <col style={{ width: "90px" }} />
+            <col style={{ width: "70px" }} />
+            <col style={{ width: "70px" }} />
+            <col style={{ width: "70px" }} />
             <col style={{ width: "70px" }} />
           </colgroup>
           <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
             <tr>
-              <th className="px-3 py-3 text-center font-medium">Floor Code</th>
-              <th className="px-3 py-3 text-left font-medium">Floor Name</th>
-              <th className="px-3 py-3 text-center font-medium">Building</th>
-              <th className="px-3 py-3 text-center font-medium">Seats</th>
-              <th className="px-3 py-3 text-center font-medium whitespace-nowrap">Active Seats</th>
-              <th className="px-3 py-3 text-center font-medium whitespace-nowrap">Bookable Seats</th>
-              <th className="px-3 py-3 text-center font-medium">Layouts</th>
-              <th className="px-3 py-3 text-center font-medium">Status</th>
-              <th className="px-3 py-3 text-center font-medium">Actions</th>
+              <th className="pl-13 px-3 py-3 text-left font-bold">Floor Code</th>
+              <th className="pl-4 pr-3 py-3 text-left font-bold">Floor Name</th>
+              <th className="pl-6 px-3 py-3 text-left font-bold">Building</th>
+              <th className="px-3 py-3 text-center font-bold">Seats</th>
+              <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Active Seats</th>
+              <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Bookable Seats</th>
+              <th className="px-3 py-3 text-center font-bold">Layouts</th>
+              <th className="px-3 py-3 text-center font-bold">Status</th>
+              <th className="px-3 py-3 text-center font-bold">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -109,13 +109,13 @@ export default function FloorTable({ data, onEdit, highlightedId }: Props) {
                       <span className="font-medium">{floor.floor_code}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-3 max-w-0"><span className="block font-medium truncate">{floor.floor_name}</span></td>
+                  <td className="pl-5 pr-3 py-3 max-w-0"><span className="block font-medium truncate">{floor.floor_name}</span></td>
                   <td className="px-3 py-3 max-w-0"><span className="block truncate">{floor.building_name}</span></td>
                   <td className="px-3 py-3 text-center">{floor.seat_count}</td>
                   <td className="px-3 py-3 text-center">{floor.active_seat_count}</td>
                   <td className="px-3 py-3 text-center">{floor.bookable_seat_count}</td>
                   <td className="px-3 py-3 text-center">{floor.layout_count}</td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3 text-center">
                     <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap ${
                       floor.status === "ACTIVE" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
                     }`}>

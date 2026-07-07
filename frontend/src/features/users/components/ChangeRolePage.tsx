@@ -29,13 +29,20 @@ export default function ChangeRolePage({ userId }: { userId: string }) {
 
   const handleConfirm = async () => {
     const success = await confirmRoleChange();
-    if (success && selectedRole) {
-      router.push(`/admin/users?roleChanged=${userId}&newRole=${selectedRole}`);
+    if (success && user) {
+      const roleDidChange = !!selectedRole && selectedRole !== user.currentRole;
+      const statusDidChange = selectedStatus !== user.status;
+
+      const params = new URLSearchParams({ roleChanged: userId });
+      if (roleDidChange) params.set("newRole", selectedRole!);
+      if (statusDidChange) params.set("newStatus", selectedStatus);
+
+      router.push(`/admin/users?${params.toString()}`);
     }
   };
 
   return (
-    <div className="p-4 sm:p-6 bg-[#f8fafc] min-h-screen">
+    <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-[#f8fafc]">
       {/* <button
         type="button"
         onClick={() => router.push("/admin/users")}
@@ -76,6 +83,7 @@ export default function ChangeRolePage({ userId }: { userId: string }) {
             open={confirmOpen}
             user={user}
             newRole={selectedRole}
+            newStatus={selectedStatus}
             submitting={submitting}
             errorMessage={errorMessage}
             onCancel={closeConfirm}

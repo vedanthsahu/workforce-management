@@ -37,7 +37,7 @@ export default function OfficeTable({ data, onEdit, highlightedId }: OfficeTable
                   <MapPin className="w-4 h-4 text-blue-600" />
                 </div>
                 <div className="min-w-0">
-                  <p className="font-medium text-sm truncate">{o.site_name}</p>
+                  <p className="font-medium text-sm line-clamp-2">{o.site_name}</p>
                   <p className="text-xs text-gray-400 truncate">{o.site_code} · {o.city}, {o.country}</p>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className="text-xs text-gray-500">{o.building_count} bldgs · {o.floor_count} floors · {o.seat_count?.toLocaleString()} seats</span>
@@ -57,26 +57,26 @@ export default function OfficeTable({ data, onEdit, highlightedId }: OfficeTable
 
       {/* ── Desktop table ─────────────────────────────────── */}
       <div className="hidden md:block overflow-x-auto">
-        <table className="w-full text-xs" style={{ minWidth: "860px" }}>
+        <table className="w-full text-xs table-fixed" style={{ minWidth: "860px" }}>
           <colgroup>
-            <col style={{ width: "140px" }} /><col style={{ width: "180px" }} />
-            <col style={{ width: "110px" }} /><col style={{ width: "110px" }} />
+            <col style={{ width: "120px" }} /><col style={{ width: "160px" }} />
+            <col style={{ width: "140px" }} /><col style={{ width: "110px" }} />
             <col style={{ width: "160px" }} /><col style={{ width: "60px" }} />
             <col style={{ width: "60px" }} /><col style={{ width: "60px" }} />
             <col style={{ width: "90px" }} /><col style={{ width: "70px" }} />
           </colgroup>
           <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
             <tr>
-              <th className="px-3 py-3 text-left font-medium">Office Code</th>
-              <th className="px-3 py-3 text-left font-medium">Office Name</th>
-              <th className="px-3 py-3 text-left font-medium">City</th>
-              <th className="px-3 py-3 text-left font-medium">Country</th>
-              <th className="px-3 py-3 text-left font-medium">Timezone</th>
-              <th className="px-3 py-3 text-left font-medium">Buildings</th>
-              <th className="px-3 py-3 text-left font-medium">Floors</th>
-              <th className="px-3 py-3 text-left font-medium">Seats</th>
-              <th className="px-3 py-3 text-left font-medium">Status</th>
-              <th className="px-3 py-3 text-left font-medium">Actions</th>
+              <th className="pl-6 px-3 py-3 text-left font-bold">Office Code</th>
+              <th className="pl-4 px-3 py-3 text-left font-bold">Office Name</th>
+              <th className="pl-6 pr-3 py-3 text-left font-bold">City</th>
+              <th className="px-3 py-3 text-left font-bold">Country</th>
+              <th className="pl-6 px-3 py-3 text-left font-bold">Timezone</th>
+              <th className="px-1 py-3 text-center font-bold">Buildings</th>
+              <th className="px-4 py-3 text-center font-bold">Floors</th>
+              <th className="px-3 py-3 text-center font-bold">Seats</th>
+              <th className="pl-6 px-3 py-3 text-left font-bold">Status</th>
+              <th className="px-3 py-3 text-center font-bold">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -92,10 +92,10 @@ export default function OfficeTable({ data, onEdit, highlightedId }: OfficeTable
                       <span className="font-medium">{o.site_code}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-3 max-w-0"><span className="block font-medium truncate">{o.site_name}</span></td>
-                  <td className="px-3 py-3 max-w-0"><span className="block truncate">{o.city}</span></td>
-                  <td className="px-3 py-3 max-w-0"><span className="block truncate">{o.country}</span></td>
-                  <td className="px-3 py-3 max-w-0"><span className="block truncate">{o.timezone}</span></td>
+                  <td className="px-3 py-3 max-w-0"><span title={o.site_name} className="block font-medium line-clamp-2">{o.site_name}</span></td>
+                  <td className="pl-1 pr-3 py-3 max-w-0"><span title={o.city} className="block line-clamp-2">{o.city}</span></td>
+                  <td className="px-3 py-3 max-w-0"><span title={o.country} className="block line-clamp-2">{o.country}</span></td>
+                  <td className="px-3 py-3 max-w-0"><span title={o.timezone} className="block line-clamp-2">{o.timezone}</span></td>
                   <td className="px-3 py-3 text-center">{o.building_count}</td>
                   <td className="px-3 py-3 text-center">{o.floor_count}</td>
                   <td className="px-3 py-3 text-center">{o.seat_count?.toLocaleString()}</td>

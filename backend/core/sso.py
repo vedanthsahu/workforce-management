@@ -345,7 +345,7 @@ def check_graph_group_membership(
         raise GraphAPIError(
             status_code=500,
             code="missing_graph_group_id",
-            message="GRAPH_TALENT_GROUP_ID is required for Graph role lookup.",
+            message="GRAPH_FACILITATOR_GROUP_ID is required for Graph role lookup.",
         )
     if not microsoft_object_id:
         raise GraphAPIError(
@@ -373,7 +373,7 @@ def fetch_graph_group_member_ids(access_token: str, *, group_id: str) -> set[str
         raise GraphAPIError(
             status_code=500,
             code="missing_graph_group_id",
-            message="GRAPH_TALENT_GROUP_ID is required for Graph role sync.",
+            message="GRAPH_FACILITATOR_GROUP_ID is required for Graph role sync.",
         )
 
     member_ids: set[str] = set()

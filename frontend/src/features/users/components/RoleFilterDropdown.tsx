@@ -13,7 +13,13 @@ type Props = {
 
 export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange }: Props) {
   const [open, setOpen] = useState(false);
+  // pendingRoles is always an explicit list of checked roles while the dropdown
+  // is open — never overloaded to mean "all". [] unambiguously means "nothing
+  // checked yet", which is what lets us disable Apply on an empty selection.
+  const [pendingRoles, setPendingRoles] = useState<RoleKey[]>(selectedRoles);
   const ref = useRef<HTMLDivElement>(null);
+
+  const allRoleNames = roleCounts.map((r) => r.roleName);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -23,12 +29,42 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const toggleRole = (role: RoleKey) => {
-    if (selectedRoles.includes(role)) {
-      onChange(selectedRoles.filter((r) => r !== role));
-    } else {
-      onChange([...selectedRoles, role]);
-    }
+  const openDropdown = () => {
+    // Default state (no filter applied yet) should open with every checkbox
+    // unchecked, not pre-checked — only reflect an actual prior selection.
+    setPendingRoles(selectedRoles);
+    setOpen((o) => !o);
+  };
+
+  const togglePendingRole = (role: RoleKey) => {
+    setPendingRoles((prev) => {
+      const isChecked = prev.some((r) => normalizeRoleKey(r) === normalizeRoleKey(role));
+      return isChecked
+        ? prev.filter((r) => normalizeRoleKey(r) !== normalizeRoleKey(role))
+        : [...prev, role];
+    });
+  };
+
+  const allChecked = pendingRoles.length === allRoleNames.length;
+  const noneChecked = pendingRoles.length === 0;
+
+  // Effective selection pendingRoles would apply as (mirrors handleApply's
+  // "all checked" -> [] collapsing), compared against the already-applied
+  // selectedRoles to detect a no-op Apply.
+  const effectivePending = allChecked ? [] : pendingRoles;
+  const isUnchanged =
+    effectivePending.length === selectedRoles.length &&
+    effectivePending
+      .map(normalizeRoleKey)
+      .sort()
+      .every((r, i) => r === selectedRoles.map(normalizeRoleKey).sort()[i]);
+
+  const handleApply = () => {
+    if (noneChecked) return;
+    // Everything checked is equivalent to "no filter" — keep that represented
+    // as [] so the rest of the app's `selectedRoles.length ? ... : undefined` holds.
+    onChange(allChecked ? [] : pendingRoles);
+    setOpen(false);
   };
 
   const label = selectedRoles.length === 0
@@ -41,7 +77,7 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
     <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={openDropdown}
         className="flex items-center justify-between gap-2 h-10 w-44 px-4 border border-gray-200 rounded-lg text-sm bg-white hover:bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
         <span className="truncate">{label}</span>
@@ -49,36 +85,68 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-1 w-60 rounded-lg border border-gray-200 bg-white py-1.5 shadow-lg max-h-72 overflow-y-auto overflow-x-hidden">
-          <button
-            type="button"
-            onClick={() => onChange([])}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50"
-          >
-            <input type="checkbox" readOnly checked={selectedRoles.length === 0} className="accent-blue-600 shrink-0" />
-            All Roles
-          </button>
-          <div className="my-1 border-t" />
-          {roleCounts.map(({ roleName, count }) => (
-            <label
-              key={roleName}
-              className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-50 cursor-pointer"
+        <div className="absolute right-0 z-20 mt-1 w-64 rounded-lg border border-gray-200 bg-white py-1.5 shadow-lg">
+          <div className="flex items-center justify-between gap-2 px-3 py-1">
+            <button
+              type="button"
+              onClick={() => setPendingRoles(allChecked ? [] : allRoleNames)}
+              className="flex items-center gap-2 text-left text-sm text-gray-700 hover:text-gray-900"
             >
-              <span className="flex items-center gap-2 min-w-0">
-                <input
-                  type="checkbox"
-                  // checked={selectedRoles.includes(roleName)}
-                  checked={selectedRoles.some((r) => normalizeRoleKey(r) === normalizeRoleKey(roleName))}
-                  onChange={() => toggleRole(roleName)}
-                  className="accent-blue-600 shrink-0"
-                />
-                <span className={`inline-flex items-center whitespace-nowrap px-1.5 py-0.5 rounded text-[11px] font-semibold ring-1 ${getRoleBadgeClass(roleName)}`}>
-                  {roleName}
+              <input
+                type="checkbox"
+                readOnly
+                checked={allChecked}
+                className="accent-blue-600 shrink-0"
+              />
+              All Roles
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingRoles([])}
+                className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={handleApply}
+                disabled={noneChecked || isUnchanged}
+                title={
+                  noneChecked
+                    ? "Select at least one role"
+                    : isUnchanged
+                      ? "No changes to apply"
+                      : undefined
+                }
+                className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:bg-gray-200"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+          <div className="my-1 border-t" />
+          <div className="max-h-72 overflow-y-auto overflow-x-hidden">
+            {roleCounts.map(({ roleName, count }) => (
+              <label
+                key={roleName}
+                className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-50 cursor-pointer"
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={pendingRoles.some((r) => normalizeRoleKey(r) === normalizeRoleKey(roleName))}
+                    onChange={() => togglePendingRole(roleName)}
+                    className="accent-blue-600 shrink-0"
+                  />
+                  <span className={`inline-flex items-center whitespace-nowrap px-1.5 py-0.5 rounded text-[11px] font-semibold ring-1 ${getRoleBadgeClass(roleName)}`}>
+                    {roleName}
+                  </span>
                 </span>
-              </span>
-              <span className="text-xs text-gray-400 shrink-0">{count}</span>
-            </label>
-          ))}
+                <span className="text-xs text-gray-400 shrink-0">{count}</span>
+              </label>
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -116,6 +116,7 @@ from backend.services.notification_service import (
 
 logger = logging.getLogger(f"{LOGGER_NAME}.guests")
 
+GUEST_OPERATION_ROLES = {"FACILITATOR", "TENANT_ADMIN", "SECURITY"}
 BOOKING_STATUSES = {
     "CONFIRMED",
     "CANCELLED",
