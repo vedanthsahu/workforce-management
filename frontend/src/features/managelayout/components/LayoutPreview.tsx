@@ -70,7 +70,7 @@ function colorSeats(svgText: string, seats: Seat[], filteredIds?: Set<string>): 
   seats.forEach((seat) => {
     const id = seat.seat_svg_id;
     const fill = hasFilter && filteredIds!.has(id)
-      ? "#FEF9C3"          // Highlight matching seats — light yellow
+      ? "#FACC15"          // Highlight matching seats — vivid yellow
       : resolveSeatFill(seat);
 
     const groupRegex = new RegExp(

@@ -5,7 +5,9 @@ export const layoutService = {
   async createLayout(payload: CreateLayoutPayload) {
     const formData = new FormData();
 
-    formData.append("file", payload.file);
+    const safeName = payload.layout_name.replace(/[^a-zA-Z0-9_\-\s]/g, "").trim() || "layout";
+    const renamedFile = new File([payload.file], `${safeName}.svg`, { type: payload.file.type });
+    formData.append("file", renamedFile);
     formData.append("site_id", String(payload.site_id));
     formData.append("building_id", String(payload.building_id));
     formData.append("floor_id", String(payload.floor_id));
