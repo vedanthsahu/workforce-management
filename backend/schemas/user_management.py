@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.schemas.booking import BookingResponse
+
 
 class CamelModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -132,6 +134,21 @@ class UserDetailsResponse(CamelModel):
         default=None,
         alias="homeSiteId",
     )
+
+
+class UserBookingsSummary(CamelModel):
+    items: list[BookingResponse] = Field(default_factory=list)
+
+
+class UserBookingHistoryResponse(CamelModel):
+    user: UserDetailsResponse
+    has_today_booking: bool = Field(alias="hasTodayBooking")
+    today_booking: BookingResponse | None = Field(
+        default=None,
+        alias="todayBooking",
+    )
+    bookings: UserBookingsSummary
+
 
 class PermissionMetadata(CamelModel):
     id: int
