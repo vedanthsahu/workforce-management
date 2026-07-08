@@ -84,10 +84,14 @@ function mapFavouriteSeat(seat: ApiFavouriteSeat | null): FavouriteSeat | null {
   const site  = seat.site_name ?? seat.building_name ?? "Office";
   return {
     id:          seat.seat_id,
+    seatCode:    seat.seat_code ?? seat.seat_id,
     label:       seat.seat_code ?? seat.seat_id,
     location:    [floor, site].filter(Boolean).join(" · "),
     description: "Favourite seat",
     floor,
+    floorId:     seat.floor_id ?? null,
+    buildingId:  seat.building_id ?? null,
+    siteId:      seat.site_id ?? null,
   };
 }
 
@@ -263,6 +267,7 @@ export async function getDashboardData(): Promise<DashboardResult> {
     sectionErrors.push(classifyError(dashboardMeResult.reason, "dashboardMe"));
     return {
       favorite_seat:                null,
+      second_favorite_seat:         null,
       days_in_office_total:         0,
       days_in_office_current_month: 0,
       days_in_office_current_year:  0,
@@ -310,7 +315,8 @@ export async function getDashboardData(): Promise<DashboardResult> {
       weekDays:         buildWeekDays(allBookedDates),
       upcomingBookings,
       teamInOfficeToday,
-      favouriteSeat:    mapFavouriteSeat(dashboardMe.favorite_seat),
+      favouriteSeat:       mapFavouriteSeat(dashboardMe.favorite_seat),
+      secondFavouriteSeat: mapFavouriteSeat(dashboardMe.second_favorite_seat ?? null),
       nextBookingDate:  upcomingBookings[0]?.date ?? "—",
       todayBooking,
       daysInOffice:     dashboardMe.days_in_office_current_month,

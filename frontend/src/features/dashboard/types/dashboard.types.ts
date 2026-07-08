@@ -74,6 +74,7 @@ export interface ApiFavouriteSeat {
 
 export interface ApiDashboardMe {
   favorite_seat: ApiFavouriteSeat | null;
+  second_favorite_seat?: ApiFavouriteSeat | null;
   days_in_office_total: number;
   days_in_office_current_month: number;
   days_in_office_current_year: number;
@@ -123,10 +124,14 @@ export interface TeamMember {
 
 export interface FavouriteSeat {
   id: string;
+  seatCode: string;
   label: string;
   location: string;
   description: string;
   floor: string;
+  floorId: string | null;
+  buildingId: string | null;
+  siteId: string | null;
 }
 
 export interface DashboardStats {
@@ -159,6 +164,7 @@ export interface DashboardData {
   upcomingBookings: Booking[];
   teamInOfficeToday: TeamMember[];
   favouriteSeat: FavouriteSeat | null;
+  secondFavouriteSeat: FavouriteSeat | null;
   nextBookingDate: string;
   todayBooking: TodayBookingInfo;
   daysInOffice: number;

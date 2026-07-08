@@ -53,7 +53,7 @@ def get_dashboard_me(
             user_id=user_id,
         )
 
-        favorite_seat = fetch_favorite_seat(
+        favorite_seat, second_favorite_seat = fetch_favorite_seat(
             conn,
             tenant_id=tenant_id,
             user_id=user_id,
@@ -128,6 +128,7 @@ def get_dashboard_me(
             updated_at=profile.get("updated_at"),
         ),
         favorite_seat=favorite_seat,
+        second_favorite_seat=second_favorite_seat,
         days_in_office_total=days_in_office_total,
         days_in_office_current_month=days_in_office_current_month,
         days_in_office_current_year=days_in_office_current_year,

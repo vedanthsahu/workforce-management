@@ -553,6 +553,10 @@ export function useBookingForm() {
   // ── Navigation helpers ────────────────────────────────────────────────────
 
   const goBack = () => {
+    if (searchParams.get("source") === "dashboard") {
+      router.push("/dashboard?openFavDialog=1");
+      return;
+    }
     const prevStep    = (step > 1 ? step - 1 : 1) as BookingStep;
     const clearedForm = prevStep < 2 ? { ...form, selectedSeatId: null } : form;
     setForm(clearedForm);
