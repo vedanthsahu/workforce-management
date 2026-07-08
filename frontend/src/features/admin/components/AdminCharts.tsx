@@ -34,6 +34,7 @@ import type {
   TopOffice,
   WeekFilter,
 } from "../types/admin.types";
+import { ceilPercentage } from "../utils/dashboard.utils";
 
 type Props = {
   data: DashboardSummary | null;
@@ -75,7 +76,7 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
   const totalSeats = data.total_seats;
   const booked = data.booked_today;
   const available = totalSeats - booked;
-  const occupancy = data.occupancy_percentage;
+  const occupancy = ceilPercentage(data.occupancy_percentage);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -117,7 +118,7 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
 
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <p className="text-2xl font-semibold">
-                {occupancy.toFixed(1)}%
+                {occupancy}%
               </p>
               <p className="text-xs text-muted-foreground">
                 Occupancy
@@ -131,7 +132,7 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
                 Booked Seats
               </p>
               <p className="font-medium">
-                {occupancy.toFixed(1)}% ({booked})
+                {occupancy}% ({booked})
               </p>
             </div>
 
@@ -187,12 +188,14 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
             }}
             className="h-[240px] w-full"
           >
-            <AreaChart data={trendData}>
+            <AreaChart data={trendData} margin={{ left: -19 }}>
               <XAxis dataKey="day" axisLine={false} tickLine={false} />
               <YAxis
-                domain={[0, 100]}
+                domain={[0, 25]}
+                ticks={[0, 5, 10, 15, 20, 25]}
                 axisLine={true}
                 tickLine={true}
+                width={40}
               />
 
               <ChartTooltip
@@ -204,6 +207,10 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
                       const item = payload[0].payload;
 
                       return `${item.day} (${item.date})`;
+                    }}
+                    formatter={(value, _name, item) => {
+                      const bookedSeats = item.payload.bookedSeats;
+                      return `Occupancy: ${value}% (${bookedSeats})`;
                     }}
                   />
                 }
