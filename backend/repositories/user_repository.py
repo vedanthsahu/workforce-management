@@ -895,7 +895,11 @@ def fetch_favorite_seat(
     *,
     tenant_id: str,
     user_id: str,
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Return the top two most-booked seats that exist in the current published layout.
+
+    Returns a (first, second) tuple; either element may be None.
+    """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
@@ -908,7 +912,8 @@ def fetch_favorite_seat(
                 bu.building_name,
                 s.floor_id::text AS floor_id,
                 fl.floor_name,
-                COUNT(*) AS booking_count
+                COUNT(*) AS booking_count,
+                MAX(b.booking_date) AS last_booked_date
             FROM bookings b
             JOIN seats s
                 ON s.id = b.seat_id
@@ -926,6 +931,20 @@ def fetch_favorite_seat(
               AND b.booked_for_user_id = %s
               AND b.booking_type = 'EMPLOYEE'
               AND b.booking_status = 'CONFIRMED'
+              AND EXISTS (
+                  SELECT 1
+                  FROM floor_layouts fla
+                  JOIN layout_seat_mappings lsm
+                      ON lsm.layout_id = fla.id
+                     AND lsm.tenant_id = fla.tenant_id
+                     AND lsm.floor_id  = s.floor_id
+                     AND lsm.seat_code = s.seat_code
+                  WHERE fla.floor_id  = s.floor_id
+                    AND fla.tenant_id = s.tenant_id
+                    AND fla.is_published = TRUE
+                    AND fla.status = 'PUBLISHED'
+                    AND b.created_at >= fla.published_at
+              )
             GROUP BY
                 s.id,
                 s.seat_code,
@@ -935,13 +954,15 @@ def fetch_favorite_seat(
                 bu.building_name,
                 s.floor_id,
                 fl.floor_name
-            ORDER BY booking_count DESC, s.id
-            LIMIT 1
+            ORDER BY booking_count DESC, last_booked_date DESC, s.id
+            LIMIT 2
             """,
             (tenant_id, user_id),
         )
-        row = cur.fetchone()
-    return dict(row) if row else None
+        rows = cur.fetchall()
+    first  = dict(rows[0]) if len(rows) > 0 else None
+    second = dict(rows[1]) if len(rows) > 1 else None
+    return first, second
 
 
 def fetch_days_in_office(

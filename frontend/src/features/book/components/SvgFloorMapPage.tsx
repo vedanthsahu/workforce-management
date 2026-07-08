@@ -70,12 +70,21 @@ function recolorSeat(svg: string, svgId: string, paletteKey: string): string {
   block = block.replace(/stroke="#707070"/g, `stroke="${p.curve}"`);
   block = block.replace(/stroke="#A0A0A0"/g, `stroke="${p.arc}"`);
   const isClickable = ["available", "best_match", "partial_match", "yours", "selected"].includes(paletteKey);
+  const isSelected  = paletteKey === "selected";
   block = block.replace(
     `<g id="${svgId}">`,
-    `<g id="${svgId}" style="opacity:${p.opacity};cursor:${isClickable ? "pointer" : "default"}">`
+    `<g id="${svgId}"${isSelected ? ` class="_sel-pulse"` : ""} style="opacity:${p.opacity};cursor:${isClickable ? "pointer" : "default"}">`
   );
   return before + block + after;
 }
+
+const SELECTED_PULSE_STYLE = `<style>
+@keyframes _selGlow{
+  0%,100%{filter:drop-shadow(0 0 4px #6366f1) drop-shadow(0 0 8px #818cf8);}
+  50%{filter:drop-shadow(0 0 12px #6366f1) drop-shadow(0 0 24px #818cf8) brightness(1.12);}
+}
+._sel-pulse{animation:_selGlow 1.6s ease-in-out infinite;}
+</style>`;
 
 // svgSeatIds: dynamically extracted from the fetched SVG, not hardcoded
 function buildColoredSvg(
@@ -92,6 +101,11 @@ function buildColoredSvg(
     const key = !seat ? "unloaded" : getPaletteKey(seat, seat.id === selectedSeatId);
     svg = recolorSeat(svg, svgId, key);
   });
+  // Inject pulse keyframes when a seat is selected
+  if (selectedSeatId) {
+    const firstClose = svg.indexOf('>');
+    if (firstClose !== -1) svg = svg.slice(0, firstClose + 1) + SELECTED_PULSE_STYLE + svg.slice(firstClose + 1);
+  }
   return svg;
 }
 
