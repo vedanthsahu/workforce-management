@@ -21,6 +21,7 @@ import {
   modifyGuestBooking,
   fetchBuildings,
   fetchFloors,
+  fetchMyWorkPreferences,
   fetchPreferences,
   fetchSeatsWithAvailability,
   fetchSites,
@@ -189,6 +190,8 @@ export function useBookingForm() {
   const [error,        setError]        = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<CreateBookingResponse | null>(null);
 
+  const [myPreferencesApplied, setMyPreferencesApplied] = useState(false);
+
   // ── Reset on clean /book navigation ──────────────────────────────────────
 
   useEffect(() => {
@@ -238,6 +241,49 @@ export function useBookingForm() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availablePreferences]);
+
+  // ── Auto-fill office/building/floor/amenities from the user's saved
+  // preferences (GET /dashboard/me), for a fresh self-booking visit only.
+  // Skipped for "book for someone" (facilitator flow — TODO separately),
+  // modify mode, and any deep-linked/resumed visit that already carries
+  // its own siteId etc. If the user has never saved a preference, the
+  // form is left exactly as it was (all fields blank).
+  const [savedPreferenceNames, setSavedPreferenceNames] = useState<{
+    siteName: string | null;
+    buildingName: string | null;
+    floorName: string | null;
+  }>({ siteName: null, buildingName: null, floorName: null });
+
+  useEffect(() => {
+    if (myPreferencesApplied) return;
+    if (hasAnyParam || isBookingForSomeone || isModifyMode) return;
+    if (availablePreferences.length === 0) return;
+
+    setMyPreferencesApplied(true);
+    fetchMyWorkPreferences()
+      .then((prefs) => {
+        if (!prefs) return;
+        const preferenceKeys = prefs.amenityIds
+          .map((id) => availablePreferences.find((p) => p.id === id)?.key)
+          .filter((key): key is string => Boolean(key));
+
+        setSavedPreferenceNames({
+          siteName:     prefs.siteName,
+          buildingName: prefs.buildingName,
+          floorName:    prefs.floorName,
+        });
+
+        setForm((f) => ({
+          ...f,
+          siteId:     prefs.siteId     ?? f.siteId,
+          buildingId: prefs.buildingId ?? f.buildingId,
+          floorId:    prefs.floorId    ?? f.floorId,
+          preferences: preferenceKeys.length > 0 ? preferenceKeys : f.preferences,
+        }));
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availablePreferences, hasAnyParam, isBookingForSomeone, isModifyMode, myPreferencesApplied]);
 
   // ── Navigate helper ───────────────────────────────────────────────────────
 
@@ -292,6 +338,42 @@ export function useBookingForm() {
       .catch((e) => setError(e.message))
       .finally(() => setLoadingFloors(false));
   }, [form.buildingId]);
+
+  // ── Guarantee the selects can always render a saved-preference id ───────
+  // The site/building/floor cascades below are independent GET calls (their
+  // own pagination/status filters) from the one that returned the saved
+  // site/building/floor id in the first place (GET /dashboard/me). If a
+  // saved id isn't present in its fetched list for any reason, inject a
+  // synthetic option (labeled from the name /dashboard/me already gave us)
+  // rather than silently showing a blank select for a value that's actually
+  // set.
+
+  useEffect(() => {
+    if (loadingSites || !form.siteId) return;
+    if (sites.some((s) => s.id === form.siteId)) return;
+    setSites((prev) => [
+      ...prev,
+      { id: form.siteId, name: savedPreferenceNames.siteName ?? `Site ${form.siteId}`, city: "", country: "", timezone: "" },
+    ]);
+  }, [sites, loadingSites, form.siteId, savedPreferenceNames.siteName]);
+
+  useEffect(() => {
+    if (loadingBuildings || !form.buildingId) return;
+    if (buildings.some((b) => b.id === form.buildingId)) return;
+    setBuildings((prev) => [
+      ...prev,
+      { id: form.buildingId, siteId: form.siteId, name: savedPreferenceNames.buildingName ?? `Building ${form.buildingId}` },
+    ]);
+  }, [buildings, loadingBuildings, form.buildingId, form.siteId, savedPreferenceNames.buildingName]);
+
+  useEffect(() => {
+    if (loadingFloors || !form.floorId) return;
+    if (floors.some((f) => f.id === form.floorId)) return;
+    setFloors((prev) => [
+      ...prev,
+      { id: form.floorId, buildingId: form.buildingId, name: savedPreferenceNames.floorName ?? `Floor ${form.floorId}`, number: 0 },
+    ]);
+  }, [floors, loadingFloors, form.floorId, form.buildingId, savedPreferenceNames.floorName]);
 
   // ── Derive floor layout URL from the selected floor ───────────────────────
 
