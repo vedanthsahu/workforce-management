@@ -132,7 +132,7 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
                       {amenity.category_name}
                     </span>
                   </td>
-                  <td className="px-3 py-3 text-gray-500 max-w-0">
+                  <td className="px-3 py-3 text-black max-w-0">
                     <span className="block truncate">{amenity.description}</span>
                   </td>
                   <td className="px-3 py-3 text-center">

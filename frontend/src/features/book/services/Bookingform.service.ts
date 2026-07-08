@@ -379,3 +379,48 @@ export async function fetchPreferences(): Promise<Preference[]> {
     icon: a.icon ?? null,
   }));
 }
+
+// ── Saved location/amenity preferences — GET /dashboard/me ──────────────────
+// Used to auto-fill the booking form for the logged-in user's own booking.
+// Returns null when the user has never saved a preference (site_id unset),
+// so the caller can leave the form untouched in that case.
+
+interface RawWorkPreferences {
+  site_id?: string | null;
+  site_name?: string | null;
+  building_id?: string | null;
+  building_name?: string | null;
+  floor_id?: string | null;
+  floor_name?: string | null;
+  amenities?: { id: string }[];
+}
+
+interface RawDashboardMe {
+  work_preferences?: RawWorkPreferences | null;
+}
+
+export interface MyWorkPreferences {
+  siteId: string | null;
+  siteName: string | null;
+  buildingId: string | null;
+  buildingName: string | null;
+  floorId: string | null;
+  floorName: string | null;
+  amenityIds: string[];
+}
+
+export async function fetchMyWorkPreferences(): Promise<MyWorkPreferences | null> {
+  const { data } = await axiosInstance.get<RawDashboardMe>("/dashboard/me");
+  const wp = data.work_preferences;
+  if (!wp?.site_id) return null;
+
+  return {
+    siteId: wp.site_id,
+    siteName: wp.site_name ?? null,
+    buildingId: wp.building_id ?? null,
+    buildingName: wp.building_name ?? null,
+    floorId: wp.floor_id ?? null,
+    floorName: wp.floor_name ?? null,
+    amenityIds: (wp.amenities ?? []).map((a) => a.id),
+  };
+}
