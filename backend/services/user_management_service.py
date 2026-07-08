@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 import psycopg2
 from fastapi import HTTPException, status
 from psycopg2.extensions import connection as PGConnection
 
+from backend.repositories.booking_repository import (
+    fetch_all_confirmed_bookings_for_user,
+)
 from backend.repositories.token_repository import (
     record_auth_event,
     revoke_all_user_sessions,
@@ -19,11 +23,14 @@ from backend.repositories.user_repository import (
     search_users,
 )
 from backend.schemas.auth import UserResponse
+from backend.schemas.booking import BookingResponse
 from backend.schemas.user_management import (
     AdminDirectoryRole,
     UserDetailsResponse,
     AdminDirectoryStatus,
     AdminUserDirectoryResponse,
+    UserBookingHistoryResponse,
+    UserBookingsSummary,
 )
 
 ASSIGNABLE_ROLE_NAMES = {
@@ -258,3 +265,60 @@ def get_user_by_id_service(
         )
 
     return UserDetailsResponse(**user)
+
+
+def get_user_booking_history(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    user_id: str,
+) -> UserBookingHistoryResponse:
+    """Return one user's profile plus today's booking (if any) and history.
+
+    `today_booking` is pulled out of the confirmed-booking list so the UI
+    can render "today" state without scanning `bookings.items`; the same
+    booking is not duplicated into `items`.
+    """
+
+    tenant_id = str(current_user["tenant_id"])
+
+    user = fetch_user_details_by_id(
+        conn,
+        tenant_id=tenant_id,
+        user_id=user_id,
+    )
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "user_not_found",
+                "message": "User not found.",
+            },
+        )
+
+    bookings = fetch_all_confirmed_bookings_for_user(
+        conn,
+        tenant_id=tenant_id,
+        user_id=user_id,
+    )
+
+    today = date.today()
+    today_booking_row = next(
+        (row for row in bookings if row.get("booking_date") == today),
+        None,
+    )
+    other_rows = [row for row in bookings if row is not today_booking_row]
+
+    return UserBookingHistoryResponse(
+        user=UserDetailsResponse(**user),
+        has_today_booking=today_booking_row is not None,
+        today_booking=(
+            BookingResponse(**today_booking_row)
+            if today_booking_row is not None
+            else None
+        ),
+        bookings=UserBookingsSummary(
+            items=[BookingResponse(**row) for row in other_rows],
+        ),
+    )
