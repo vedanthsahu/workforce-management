@@ -9,6 +9,7 @@ import type {
   ApiSite,
   ApiUpdatePreferencesPayload,
   ApiUpdateProfilePayload,
+  ApiWorkPreferences,
   AccountInfo,
   ActivitySummary,
   BookingData,
@@ -106,22 +107,17 @@ function mapAuthMe(api: ApiAuthMe): AccountInfo {
   };
 }
 
-function mapPreferences(
-  api: ApiDashboardMe,
-  override: LocalPrefsOverride,
-): SeatPreferences {
-  const amenities: { id: string; name: string }[] =
-    override.preferredAmenities ??
-    (api.preferences?.amenities ?? []).map((a) => ({ id: a.id, name: a.name }));
-
+function mapPreferences(api: ApiDashboardMe): SeatPreferences {
+  const wp = api.work_preferences;
   return {
-    preferredOfficeId:     override.preferredOfficeId    ?? "",
-    preferredOfficeName:   override.preferredOfficeName  ?? "—",
-    preferredBuildingId:   override.preferredBuildingId  ?? "",
-    preferredBuildingName: override.preferredBuildingName ?? "—",
-    preferredFloorId:      override.preferredFloorId     ?? "",
-    preferredFloorName:    override.preferredFloorName   ?? "—",
-    preferredAmenities:    amenities,
+    preferredOfficeId:     wp?.site_id       ?? "",
+    preferredOfficeName:   wp?.site_name     ?? "—",
+    preferredBuildingId:   wp?.building_id   ?? "",
+    preferredBuildingName: wp?.building_name ?? "—",
+    preferredFloorId:      wp?.floor_id      ?? "",
+    preferredFloorName:    wp?.floor_name    ?? "—",
+    preferredSeatType:     wp?.seat_type     ?? null,
+    preferredAmenities:    (wp?.amenities ?? []).map((a) => ({ id: a.id, name: a.name })),
   };
 }
 
@@ -142,23 +138,12 @@ interface LocalProfileOverride {
   avatarUrl?: string;
 }
 
-interface LocalPrefsOverride {
-  preferredOfficeId?:    string;
-  preferredOfficeName?:  string;
-  preferredBuildingId?:  string;
-  preferredBuildingName?: string;
-  preferredFloorId?:     string;
-  preferredFloorName?:   string;
-  preferredAmenities?:   { id: string; name: string }[];
-}
-
 // ─── Persistent overrides (survive refresh via localStorage) ─────────────────
+// Bio/skills/avatar have no backend endpoint yet, so they stay local-only.
 
 // const PROFILE_OVERRIDE_KEY = "seatbook:profile_override";
 const PROFILE_OVERRIDE_KEY = (userId: string) =>
   `seatbook:profile_override:${userId}`;
-const PREFS_OVERRIDE_KEY = (userId: string) =>
-  `seatbook:prefs_override:${userId}`;
 
 // function loadProfileOverride(): LocalProfileOverride {
 //   try {
@@ -194,30 +179,6 @@ function saveProfileOverride(
   } catch {}
 }
 
-function loadPrefsOverride(userId: string): LocalPrefsOverride {
-  try {
-    const raw = localStorage.getItem(
-      PREFS_OVERRIDE_KEY(userId)
-    );
-
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function savePrefsOverride(
-  userId: string,
-  data: LocalPrefsOverride
-) {
-  try {
-    localStorage.setItem(
-      PREFS_OVERRIDE_KEY(userId),
-      JSON.stringify(data)
-    );
-  } catch {}
-}
-
 // ─── Main fetch ───────────────────────────────────────────────────────────────
 
 export async function getProfileData(): Promise<ProfileResult> {
@@ -239,8 +200,6 @@ export async function getProfileData(): Promise<ProfileResult> {
     const profileOverride =
   loadProfileOverride(dashboardData.user_id);
 
-  const prefsOverride =
-  loadPrefsOverride(dashboardData.user_id);
     const authData      = authResult.status === "fulfilled" ? authResult.value.data : undefined;
 
     const errors: ProfileSectionError[] = [];
@@ -294,10 +253,7 @@ export async function getProfileData(): Promise<ProfileResult> {
       ok: true,
       data: {
         profile:         mergedProfile,
-        preferences: mapPreferences(
-  dashboardData,
-  prefsOverride
-),  // ← persisted prefs
+        preferences:     mapPreferences(dashboardData),
         accountInfo,
         activitySummary: computeActivitySummary(bookings),
         bookings,
@@ -345,73 +301,21 @@ const existing = loadProfileOverride(userId);
 export async function updatePreferences(
   payload: ApiUpdatePreferencesPayload,
 ): Promise<SeatPreferences> {
-  const dashResponse =
-  await axiosInstance.get<ApiDashboardMe>(
-    "/dashboard/me"
+  const { data } = await axiosInstance.post<ApiWorkPreferences>(
+    "/preferences/me",
+    payload,
   );
 
-const userId = dashResponse.data.user_id;
-
-const existing =
-  loadPrefsOverride(userId);
-
-  let officeName:   string | undefined;
-  let buildingName: string | undefined;
-  let floorName:    string | undefined;
-  let amenityPairs: { id: string; name: string }[] | undefined;
-
-  if (payload.preferred_office) {
-    try {
-      const { data } = await axiosInstance.get<ApiSite[]>("/sites");
-      const site = data.find((s) => s.site_id === payload.preferred_office);
-      officeName = site?.site_name;
-    } catch { /* keep previous */ }
-  }
-
-  if (payload.preferred_building && payload.preferred_office) {
-    try {
-      const { data } = await axiosInstance.get<ApiBuilding[]>(`/buildings?site_id=${payload.preferred_office}`);
-      const building = data.find((b) => b.building_id === payload.preferred_building);
-      buildingName = building?.building_name;
-    } catch { /* keep previous */ }
-  }
-
-  if (payload.preferred_floor && payload.preferred_building) {
-    try {
-      const { data } = await axiosInstance.get<ApiFloor[]>(
-        `/buildings/${payload.preferred_building}/floors`,
-      );
-      const floor = data.find((f) => f.floor_id === payload.preferred_floor);
-      floorName = floor?.floor_name;
-    } catch { /* keep previous */ }
-  }
-
-  if (payload.preferred_amenities !== undefined) {
-    try {
-      const { data } = await axiosInstance.get<{ amenities: ApiAmenity[] }>("/preferences");
-      amenityPairs = payload.preferred_amenities
-        .map((id) => {
-          const a = data.amenities.find((x) => x.id === id);
-          return a ? { id: a.id, name: a.name } : null;
-        })
-        .filter(Boolean) as { id: string; name: string }[];
-    } catch { /* keep previous */ }
-  }
-
-  const updated: LocalPrefsOverride = {
-    preferredOfficeId:     payload.preferred_office    ?? existing.preferredOfficeId,
-    preferredOfficeName:   officeName                  ?? existing.preferredOfficeName,
-    preferredBuildingId:   payload.preferred_building  ?? existing.preferredBuildingId,
-    preferredBuildingName: buildingName                ?? existing.preferredBuildingName,
-    preferredFloorId:      payload.preferred_floor     ?? existing.preferredFloorId,
-    preferredFloorName:    floorName                   ?? existing.preferredFloorName,
-    preferredAmenities:    amenityPairs                ?? existing.preferredAmenities,
+  return {
+    preferredOfficeId:     data.site_id       ?? "",
+    preferredOfficeName:   data.site_name     ?? "—",
+    preferredBuildingId:   data.building_id   ?? "",
+    preferredBuildingName: data.building_name ?? "—",
+    preferredFloorId:      data.floor_id      ?? "",
+    preferredFloorName:    data.floor_name    ?? "—",
+    preferredSeatType:     data.seat_type     ?? null,
+    preferredAmenities:    (data.amenities ?? []).map((a) => ({ id: a.id, name: a.name })),
   };
-   savePrefsOverride(userId, updated);
-
-   
-  const { data } = await axiosInstance.get<ApiDashboardMe>("/dashboard/me");
-  return mapPreferences(data, updated);
 }
 
 export async function uploadAvatar(_file: File): Promise<string> {

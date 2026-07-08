@@ -33,6 +33,12 @@ export function getWeekRange(
   };
 }
 
+// Occupancy percentages always round up to the next whole number
+// (e.g. 0.2 -> 1, 1.1 -> 2) rather than rounding to nearest.
+export function ceilPercentage(value: number): number {
+  return Math.ceil(value);
+}
+
 export function mapOccupancyRangeToTrend(
   items: OccupancyRangeItem[],
   targetDate: Date
@@ -53,7 +59,8 @@ export function mapOccupancyRangeToTrend(
         month: "short",
         year: "numeric",
       }),
-      occupancy: Math.round((found?.occupancyRate ?? 0) * 10) / 10,
+      occupancy: ceilPercentage(found?.occupancyRate ?? 0),
+      bookedSeats: found?.bookedSeats ?? 0,
     });
   }
 
@@ -62,7 +69,7 @@ export function mapOccupancyRangeToTrend(
 
 export function mapHierarchyToTopOffices(items: OccupancyHierarchyItem[]): TopOffice[] {
   return items
-    .map((item) => ({ name: item.siteName, value: item.occupancyRate }))
+    .map((item) => ({ name: item.siteName, value: ceilPercentage(item.occupancyRate) }))
     .sort((a, b) => b.value - a.value);
 }
 
