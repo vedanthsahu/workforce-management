@@ -409,8 +409,7 @@ export interface MyWorkPreferences {
   amenityIds: string[];
 }
 
-export async function fetchMyWorkPreferences(): Promise<MyWorkPreferences | null> {
-  const { data } = await axiosInstance.get<RawDashboardMe>("/dashboard/me");
+function parseWorkPreferences(data: RawDashboardMe): MyWorkPreferences | null {
   const wp = data.work_preferences;
   if (!wp?.site_id) return null;
 
@@ -423,4 +422,22 @@ export async function fetchMyWorkPreferences(): Promise<MyWorkPreferences | null
     floorName: wp.floor_name ?? null,
     amenityIds: (wp.amenities ?? []).map((a) => a.id),
   };
+}
+
+export async function fetchMyWorkPreferences(): Promise<MyWorkPreferences | null> {
+  const { data } = await axiosInstance.get<RawDashboardMe>("/dashboard/me");
+  return parseWorkPreferences(data);
+}
+
+// ── Saved location/amenity preferences for a specific employee ──────────────
+// GET /dashboard/employee/{userId} — same shape as /dashboard/me, used when a
+// facilitator/admin/manager books a seat on behalf of that employee.
+
+export async function fetchEmployeeWorkPreferences(
+  userId: string
+): Promise<MyWorkPreferences | null> {
+  const { data } = await axiosInstance.get<RawDashboardMe>(
+    `/dashboard/employee/${userId}`
+  );
+  return parseWorkPreferences(data);
 }

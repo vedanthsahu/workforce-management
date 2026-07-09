@@ -20,6 +20,7 @@ import {
   modifyBooking,
   modifyGuestBooking,
   fetchBuildings,
+  fetchEmployeeWorkPreferences,
   fetchFloors,
   fetchMyWorkPreferences,
   fetchPreferences,
@@ -242,12 +243,15 @@ export function useBookingForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availablePreferences]);
 
-  // ── Auto-fill office/building/floor/amenities from the user's saved
-  // preferences (GET /dashboard/me), for a fresh self-booking visit only.
-  // Skipped for "book for someone" (facilitator flow — TODO separately),
-  // modify mode, and any deep-linked/resumed visit that already carries
-  // its own siteId etc. If the user has never saved a preference, the
-  // form is left exactly as it was (all fields blank).
+  // ── Auto-fill office/building/floor/amenities from saved preferences ─────
+  // Self-booking: GET /dashboard/me, only on a fresh visit (no URL params).
+  // Facilitator booking for an employee: GET /dashboard/employee/{id}, using
+  // whoever bookedForUserId points at — not gated on hasAnyParam, since that
+  // flow always carries bookedForUserId/bookingForName (and sometimes
+  // fromDate) but never a siteId of its own to preserve.
+  // Skipped for guest bookings (no work_preferences exist for a guest) and
+  // modify mode. If the target user has never saved a preference, the form
+  // is left exactly as it was (all fields blank).
   const [savedPreferenceNames, setSavedPreferenceNames] = useState<{
     siteName: string | null;
     buildingName: string | null;
@@ -256,11 +260,16 @@ export function useBookingForm() {
 
   useEffect(() => {
     if (myPreferencesApplied) return;
-    if (hasAnyParam || isBookingForSomeone || isModifyMode) return;
+    if (isModifyMode || isGuestBooking) return;
+    if (!bookedForUserId && hasAnyParam) return;
     if (availablePreferences.length === 0) return;
 
     setMyPreferencesApplied(true);
-    fetchMyWorkPreferences()
+    const prefsPromise = bookedForUserId
+      ? fetchEmployeeWorkPreferences(bookedForUserId)
+      : fetchMyWorkPreferences();
+
+    prefsPromise
       .then((prefs) => {
         if (!prefs) return;
         const preferenceKeys = prefs.amenityIds
@@ -283,7 +292,7 @@ export function useBookingForm() {
       })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [availablePreferences, hasAnyParam, isBookingForSomeone, isModifyMode, myPreferencesApplied]);
+  }, [availablePreferences, hasAnyParam, bookedForUserId, isGuestBooking, isModifyMode, myPreferencesApplied]);
 
   // ── Navigate helper ───────────────────────────────────────────────────────
 
@@ -350,29 +359,35 @@ export function useBookingForm() {
 
   useEffect(() => {
     if (loadingSites || !form.siteId) return;
-    if (sites.some((s) => s.id === form.siteId)) return;
-    setSites((prev) => [
-      ...prev,
-      { id: form.siteId, name: savedPreferenceNames.siteName ?? `Site ${form.siteId}`, city: "", country: "", timezone: "" },
-    ]);
+    setSites((prev) => {
+      if (prev.some((s) => s.id === form.siteId)) return prev;
+      return [
+        ...prev,
+        { id: form.siteId, name: savedPreferenceNames.siteName ?? `Site ${form.siteId}`, city: "", country: "", timezone: "" },
+      ];
+    });
   }, [sites, loadingSites, form.siteId, savedPreferenceNames.siteName]);
 
   useEffect(() => {
     if (loadingBuildings || !form.buildingId) return;
-    if (buildings.some((b) => b.id === form.buildingId)) return;
-    setBuildings((prev) => [
-      ...prev,
-      { id: form.buildingId, siteId: form.siteId, name: savedPreferenceNames.buildingName ?? `Building ${form.buildingId}` },
-    ]);
+    setBuildings((prev) => {
+      if (prev.some((b) => b.id === form.buildingId)) return prev;
+      return [
+        ...prev,
+        { id: form.buildingId, siteId: form.siteId, name: savedPreferenceNames.buildingName ?? `Building ${form.buildingId}` },
+      ];
+    });
   }, [buildings, loadingBuildings, form.buildingId, form.siteId, savedPreferenceNames.buildingName]);
 
   useEffect(() => {
     if (loadingFloors || !form.floorId) return;
-    if (floors.some((f) => f.id === form.floorId)) return;
-    setFloors((prev) => [
-      ...prev,
-      { id: form.floorId, buildingId: form.buildingId, name: savedPreferenceNames.floorName ?? `Floor ${form.floorId}`, number: 0 },
-    ]);
+    setFloors((prev) => {
+      if (prev.some((f) => f.id === form.floorId)) return prev;
+      return [
+        ...prev,
+        { id: form.floorId, buildingId: form.buildingId, name: savedPreferenceNames.floorName ?? `Floor ${form.floorId}`, number: 0 },
+      ];
+    });
   }, [floors, loadingFloors, form.floorId, form.buildingId, savedPreferenceNames.floorName]);
 
   // ── Derive floor layout URL from the selected floor ───────────────────────

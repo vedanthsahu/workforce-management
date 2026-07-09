@@ -126,11 +126,16 @@ function mapApiBooking(b: ApiBooking, currentUserId: string): Booking {
 
 function mapApiTeamToMembers(groups: ApiTeamGroup[], currentUserId: string): TeamMember[] {
   const members: TeamMember[] = [];
+  const seenUserIds = new Set<string>();
   let colorIndex = 0;
   for (const group of groups) {
     for (const m of group.members) {
       if (m.user_id === currentUserId) continue;
       if (!m.seat) continue;
+      // A colleague can belong to more than one team shared with the
+      // current user (groups aren't mutually exclusive) — show them once.
+      if (seenUserIds.has(m.user_id)) continue;
+      seenUserIds.add(m.user_id);
       members.push({
         id:          m.user_id,
         name:        m.full_name,

@@ -28,7 +28,7 @@ export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) 
           <thead className="block w-full shrink-0 pr-2 text-xs text-blue-600 bg-blue-100 border-b">
             <tr className="table w-full" style={{ tableLayout: "fixed" }}>
               <th className="pl-12 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[24%]">Role Name</th>
-              <th className="pl-10 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[38%]">Description</th>
+              <th className="pl-18 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[38%]">Description</th>
               <th className="py-2.5 px-6 font-bold whitespace-nowrap text-left w-[10%]">Users</th>
               <th className="py-2.5 pl-8 pr-4 font-bold whitespace-nowrap text-left w-[20%]">Permissions</th>
               <th className="py-2.5 px-4 font-bold whitespace-nowrap text-left w-[10%]">Action</th>
@@ -55,7 +55,7 @@ export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) 
                     {role.name}
                   </span>
                 </td>
-                <td className="py-3 px-4 text-sm text-gray-600 w-[38%] truncate">
+                <td className="py-3 px-4 text-sm text-gray-600 w-[38%] ">
                   {role.description}
                 </td>
                 <td className="py-3 px-1 text-sm text-gray-700 w-[10%]">{role.userCount}</td>

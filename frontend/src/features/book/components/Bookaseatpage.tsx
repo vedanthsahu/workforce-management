@@ -247,8 +247,8 @@ const BookASeatPage: React.FC = () => {
 
       </div>
 
-      {/* ── Scrollable content ── */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex flex-col gap-4 sm:gap-5">
+      {/* ── Page content ── */}
+      <div className="flex-1 overflow-y-auto px-4 sm:px-5 lg:px-6 py-3 sm:py-4 flex flex-col gap-3 sm:gap-4">
 
         {/* ── Step indicator ── */}
         {step === 1 && (
@@ -515,7 +515,7 @@ const BookASeatPage: React.FC = () => {
                 )}
               </div>
 
-              <div className="p-5 sm:p-6 flex flex-col gap-5">
+              <div className="p-4 sm:p-5 flex flex-col gap-3">
                 {/* Summary rows — single clean list */}
                 <div className="rounded-xl border border-gray-100 overflow-hidden">
                   {isBookingForSomeone && bookingForName && (
@@ -524,23 +524,23 @@ const BookASeatPage: React.FC = () => {
                       <span className="text-[12.5px] font-semibold text-indigo-700">{bookingForName} ({isGuestBooking ? "Guest" : "Employee"})</span>
                     </div>
                   )}
-                  <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-50">
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-white border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Location</span>
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedSite?.name ?? "—"}</span>
                   </div>
-                  <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50 border-b border-gray-50">
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-slate-50/50 border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Building</span>
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedBuilding?.name ?? "—"}</span>
                   </div>
-                  <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-50">
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-white border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Floor</span>
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedFloor?.name ?? "—"}</span>
                   </div>
-                  <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50 border-b border-gray-50">
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-slate-50/50 border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Seat</span>
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedSeat?.label ?? "—"}</span>
                   </div>
-                  <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-50">
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-white border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Date</span>
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{fmtDate(form.fromDate)}</span>
                   </div>
@@ -598,8 +598,8 @@ const BookASeatPage: React.FC = () => {
 
               {/* Success header strip */}
               <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-6 text-white text-center">
-                <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
-                  <CheckCircle2 size={30} className="text-white" />
+                <div className="w-13 h-13 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
+                  <CheckCircle2 size={26} className="text-white" />
                 </div>
                 <p className="text-[18px] sm:text-[20px] font-bold">
                   {isModifyMode ? "Booking Modified!" : "Booking Confirmed!"}
@@ -617,20 +617,20 @@ const BookASeatPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="p-5 sm:p-6 flex flex-col gap-5">
+              <div className="p-4 sm:p-5 flex flex-col gap-4">
                 {/* Summary rows */}
                 <div className="rounded-xl border border-gray-100 overflow-hidden">
                   {isBookingForSomeone && bookingForName && (
-                    <div className="flex justify-between items-center px-4 py-3 bg-indigo-50/50 border-b border-gray-100">
+                    <div className="flex justify-between items-center px-4 py-2.5 bg-indigo-50/50 border-b border-gray-100">
                       <span className="text-[12.5px] text-gray-500">Booked For</span>
                       <span className="text-[12.5px] font-semibold text-indigo-700">{bookingForName} ({isGuestBooking ? "Guest" : "Employee"})</span>
                     </div>
                   )}
-                  <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-50">
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-white border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Location</span>
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{confirmation.site_name ?? "—"}</span>
                   </div>
-                  <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50 border-b border-gray-50">
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-slate-50/50 border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Building</span>
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{confirmation.building_name ?? "—"}</span>
                   </div>

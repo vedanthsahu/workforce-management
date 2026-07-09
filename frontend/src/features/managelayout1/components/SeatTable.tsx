@@ -139,7 +139,7 @@ export default function SeatTable({
       {/* Table header info */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-gray-800">{seats.length} Seats</span>
+          <span className="text-sm font-semibold text-gray-800 pl-2">{seats.length} Seats</span>
           {selected.size > 0 && (
             <span className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-600 px-2 py-0.5 rounded-full font-medium">
               {selected.size} selected
@@ -149,7 +149,7 @@ export default function SeatTable({
         {selected.size > 0 && (
           <button
             onClick={onBulkEdit}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 mr-4 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
           >
             <Pencil size={12} />
             Bulk Edit
@@ -158,50 +158,60 @@ export default function SeatTable({
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
-        <table className="min-w-[700px] w-full text-sm border-collapse">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="w-10 px-4 py-3">
+      <div className="overflow-x-auto">
+        <table className="min-w-[700px] w-full text-xs table-fixed border-collapse">
+          <colgroup>
+            <col style={{ width: "48px" }} />
+            <col style={{ width: "160px" }} />
+            <col style={{ width: "130px" }} />
+            <col style={{ width: "150px" }} />
+            <col style={{ width: "90px" }} />
+            <col style={{ width: "110px" }} />
+            <col style={{ width: "140px" }} />
+            <col style={{ width: "100px" }} />
+          </colgroup>
+          <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
+            <tr>
+              <th className="px-3 py-3">
                 <input
                   type="checkbox"
                   checked={isAllSelected}
                   ref={(el) => { if (el) el.indeterminate = isIndeterminate; }}
                   onChange={handleSelectAll}
-                  className="w-4 h-4 rounded border-gray-300 accent-indigo-600 cursor-pointer"
+                  className="mr-2 w-4 h-4 rounded border-gray-300 accent-indigo-600 cursor-pointer"
                 />
               </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+              <th className="pl-6 px-3 py-3 text-left font-bold">
                 <button
                   onClick={() => handleSort("seat_code")}
-                  className="flex items-center gap-1 hover:text-gray-800 transition-colors"
+                  className="flex items-center gap-1 hover:text-blue-800 transition-colors"
                 >
                   Seat Code
                   <SortIcon active={sortKey === "seat_code"} order={sortOrder} />
                 </button>
               </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+              <th className="pl-4 px-3 py-3 text-left font-bold">
                 Seat Type
               </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+              <th className="pl-6 px-3 py-3 text-left font-bold">
                 Amenities
               </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+              <th className="pr-12 px-3 py-3 text-center font-bold">
                 Bookable
               </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+              <th className="pr-12 px-3 py-3 text-center font-bold">
                 Status
               </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+              <th className="pl-6 px-3 py-3 text-left font-bold">
                 <button
                   onClick={() => handleSort("is_configured")}
-                  className="flex items-center gap-1 hover:text-gray-800 transition-colors"
+                  className="flex items-center gap-1 hover:text-blue-800 transition-colors"
                 >
                   Configuration
                   <SortIcon active={sortKey === "is_configured"} order={sortOrder} />
                 </button>
               </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+              <th className="px-3 py-3 text-center font-bold">
                 Actions
               </th>
             </tr>
@@ -281,7 +291,7 @@ export default function SeatTable({
                     <td className="px-4 py-3">
                       <ConfiguredPill configured={seat.is_configured} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-9 py-3 text-right">
                       <button
                         onClick={() => onEditSeat(seat)}
                         className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 bg-white hover:bg-indigo-50 hover:border-indigo-300 text-gray-500 hover:text-indigo-600 transition-colors"
