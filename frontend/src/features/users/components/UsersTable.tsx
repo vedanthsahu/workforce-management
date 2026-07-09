@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { Eye } from "lucide-react";
@@ -62,10 +60,10 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
                       <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-[11px] font-semibold text-indigo-700 shrink-0">
                         {initialsFor(user.fullName)}
                       </div>
-                      <span className="text-sm font-medium text-gray-900 truncate">{user.fullName}</span>
+                      <span className="text-sm font-medium  text-gray-900 truncate">{user.fullName}</span>
                     </div>
                   </td>
-                  <td className="py-3 px-4 text-sm text-black w-[34%] truncate">{user.email}</td>
+                  <td className="py-3 px-6 text-sm text-black w-[34%] truncate">{user.email}</td>
                   <td className="py-3 px-4 w-[18%]">
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ring-1 ${getRoleBadgeClass(
@@ -93,7 +91,13 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
                       >
                         <Eye size={14} />
                       </span>
-                      <UserRowMenu onChangeRole={() => onChangeRole(user)} openUpward={isLastRow} />
+                      <UserRowMenu
+                        onChangeRole={() => onChangeRole(user)}
+                        openUpward={isLastRow}
+                        disabledReason={
+                          user.currentRole === "TENANT_ADMIN" ? "Admin role not able to change" : null
+                        }
+                      />
                     </div>
                   </td>
                 </tr>

@@ -228,19 +228,19 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
       <div className="w-full">
         <table className="w-full text-xs table-fixed">
           <colgroup>
-            <col style={{ width: "32%" }} />
+            <col style={{ width: "16%" }} />
             <col style={{ width: "13%" }} />
             <col style={{ width: "22%" }} />
             <col style={{ width: "22%" }} />
-            <col style={{ width: "7%" }} />
+            <col style={{ width: "9%" }} />
           </colgroup>
           <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
             <tr>
-              <th className="px-3 py-3 font-medium text-left">Layout Name</th>
-              <th className="px-3 py-3 font-medium text-left">Status</th>
-              <th className="px-3 py-3 font-medium text-left">Created Details</th>
-              <th className="px-3 py-3 font-medium text-left">Last Updated Details</th>
-              <th className="px-3 py-3 font-medium text-center">Actions</th>
+              <th className="pl-5 px-3 py-3 font-bold text-left">Layout Name</th>
+              <th className="pl-7 px-3 py-3 font-bold text-left">Status</th>
+              <th className="px-3 py-3 font-bold text-left">Created Details</th>
+              <th className="px-3 py-3 font-bold text-left">Last Updated Details</th>
+              <th className="px-3 py-3 font-bold text-center">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
