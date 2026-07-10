@@ -24,6 +24,17 @@ export interface ApiProfileMetadata {
   updated_at:           string | null;
 }
 
+export interface ApiWorkPreferences {
+  site_id:          string | null;
+  site_name:        string | null;
+  building_id:      string | null;
+  building_name:    string | null;
+  floor_id:         string | null;
+  floor_name:       string | null;
+  seat_type:        string | null;
+  amenities:        ApiAmenity[];
+}
+
 export interface ApiDashboardMe {
   user_id:          string;
   tenant_id:        string;
@@ -39,6 +50,7 @@ export interface ApiDashboardMe {
   office_info:      string | null;
   preferences:      ApiPreferences;
   profile_metadata: ApiProfileMetadata;
+  work_preferences: ApiWorkPreferences | null;
 }
 
 // ─── Auth/Me API response ─────────────────────────────────────────────────────
@@ -159,11 +171,14 @@ export interface ApiUpdateProfilePayload {
   avatar_url?:     string;
 }
 
+// Matches backend's UpdateMyPreferencesRequest — POST /preferences/me
+// always replaces the full saved row, so every field must be resent.
 export interface ApiUpdatePreferencesPayload {
-  preferred_office?:    string;   // site_id
-  preferred_building?:  string;   // building_id
-  preferred_floor?:     string;   // floor_id
-  preferred_amenities?: string[]; // amenity ids
+  site_id:      number | null;
+  building_id:  number | null;
+  floor_id:     number | null;
+  seat_type:    string | null;
+  amenity_ids:  number[];
 }
 
 // ─── App shapes ───────────────────────────────────────────────────────────────
@@ -199,6 +214,7 @@ export interface SeatPreferences {
   preferredBuildingName: string;
   preferredFloorId:   string;
   preferredFloorName: string;
+  preferredSeatType:  string | null;
   preferredAmenities: { id: string; name: string }[]; // id+name pairs for display
 }
 

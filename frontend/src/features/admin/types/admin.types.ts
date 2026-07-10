@@ -91,12 +91,14 @@ export type DashboardFilters = {
 export interface OccupancyRangeItem {
   date: string;
   occupancyRate: number;
+  bookedSeats: number;
 }
 
 export interface OccupancyTrendPoint {
   day: string;
   date: string;
   occupancy: number;
+  bookedSeats: number;
 }
 
 // ── Top offices (occupancy hierarchy) ───────────────────────────────────────

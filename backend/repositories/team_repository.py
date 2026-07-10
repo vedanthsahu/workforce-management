@@ -12,7 +12,7 @@ def fetch_team_members_with_today_booking(
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
-            SELECT 
+            SELECT DISTINCT ON (t.id, u.id)
                 u.id::text AS user_id,
                 u.full_name,
                 u.email,
@@ -56,6 +56,8 @@ def fetch_team_members_with_today_booking(
 
             WHERE tm_target.user_id = %s
               AND tm_target.tenant_id = %s
+
+            ORDER BY t.id, u.id, b.id DESC NULLS LAST
             """,
             (user_id, tenant_id),
         )
