@@ -51,6 +51,7 @@ export async function fetchLayoutSeats(
     unconfigured_seats: data.pending_seats,
     non_bookable_seats: seats.filter((s) => s.is_bookable === false).length,
     bookable_seats:     seats.filter((s) => s.is_bookable === true).length,
+    inactive_seats:     seats.filter((s) => s.status === "INACTIVE").length,
   };
 
   return { seats, stats };
