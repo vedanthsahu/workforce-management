@@ -49,6 +49,7 @@ export const useSeatsStore = create<SeatsState>((set) => ({
               non_bookable_seats: newSeats.filter((s) => !s.is_bookable).length,
               configured_seats:   newSeats.filter((s) => s.is_configured).length,
               unconfigured_seats: newSeats.filter((s) => !s.is_configured).length,
+              inactive_seats:     newSeats.filter((s) => s.status === "INACTIVE").length,
             }
           : null,
       };
