@@ -25,6 +25,7 @@ def fetch_team_members_with_today_booking(
 
                 s.seat_code,
                 s.floor_id::text AS floor_id,
+                fl.floor_name,
                 s.building_id::text AS building_id,
 
                 CASE WHEN b.id IS NOT NULL THEN TRUE ELSE FALSE END AS has_booking_today
@@ -54,10 +55,14 @@ def fetch_team_members_with_today_booking(
                 ON s.id = b.seat_id
                 AND s.tenant_id = b.tenant_id
 
+            LEFT JOIN floors fl
+                ON fl.id = s.floor_id
+                AND fl.tenant_id = s.tenant_id
+
             WHERE tm_target.user_id = %s
               AND tm_target.tenant_id = %s
 
-            ORDER BY t.id, u.id, b.id DESC NULLS LAST
+            ORDER BY t.id, u.id, b.created_at DESC NULLS LAST
             """,
             (user_id, tenant_id),
         )

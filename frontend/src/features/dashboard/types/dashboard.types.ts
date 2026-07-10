@@ -40,6 +40,7 @@ export interface ApiTeamMemberSeat {
   seat_id: string;
   seat_code: string;
   floor_id: string;
+  floor_name?: string | null;
   building_id: string;
 }
 
