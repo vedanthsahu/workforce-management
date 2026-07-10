@@ -106,11 +106,15 @@ export interface OccupancyTrendPoint {
 export interface OccupancyHierarchyItem {
   siteName: string;
   occupancyRate: number;
+  bookedSeats: number;
+  totalSeats: number;
 }
 
 export interface TopOffice {
   name: string;
   value: number;
+  bookedSeats: number;
+  totalSeats: number;
 }
 
 // ── Admin activities (recent bookings / guest visits) ───────────────────────
