@@ -50,6 +50,7 @@ def get_my_team_overview(
                 "seat_id": row["seat_id"],
                 "seat_code": row["seat_code"],
                 "floor_id": row["floor_id"],
+                "floor_name": row["floor_name"],
                 "building_id": row["building_id"],
             }
             team_map[team_id]["booked_today_count"] += 1

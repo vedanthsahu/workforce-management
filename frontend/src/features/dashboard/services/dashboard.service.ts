@@ -140,7 +140,7 @@ function mapApiTeamToMembers(groups: ApiTeamGroup[], currentUserId: string): Tea
         id:          m.user_id,
         name:        m.full_name,
         initials:    toInitials(m.full_name),
-        floor:       m.seat.floor_id ? `Floor ${m.seat.floor_id}` : "—",
+        floor:       m.seat.floor_name ?? (m.seat.floor_id ? `Floor ${m.seat.floor_id}` : "—"),
         avatarColor: pickAvatarColor(colorIndex++),
         seatCode:    m.seat.seat_code ?? undefined,
         email:       m.email ?? undefined,
