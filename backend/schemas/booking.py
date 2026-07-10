@@ -112,6 +112,8 @@ class BookingResponse(BaseModel):
     notes: str | None = None
     requires_seat: bool | None = None
 
+    amenities: list[str] = Field(default_factory=list)
+
 
 class PaginatedBookingResponse(BaseModel):
     items: list[BookingResponse]

@@ -396,6 +396,11 @@ def available_seats(
         Query(),
     ] = None,
 
+    calendar_mode: Annotated[
+        bool,
+        Query(),
+    ] = False,
+
 ) -> AvailableSeatListResponse:
 
     if start_date > end_date:
@@ -420,7 +425,8 @@ def available_seats(
 
     effective_user_id = None
 
-    if not is_guest_booking:
+    # In calendar_mode we only need raw seat status — skip booking-conflict checks
+    if not is_guest_booking and not calendar_mode:
         effective_user_id = (
             booked_for_user_id
             if booked_for_user_id is not None
@@ -447,6 +453,7 @@ def available_seats(
             is_guest_booking=is_guest_booking,
             amenity_ids=amenity_ids,
             exclude_booking_id=modify_booking_id,
+            calendar_mode=calendar_mode,
         )
 
 

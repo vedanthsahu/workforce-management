@@ -1014,6 +1014,31 @@ def fetch_seat_amenity_ids(
     return [int(row[0]) for row in rows]
 
 
+def fetch_seat_amenity_names(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seat_id: str,
+) -> list[str]:
+    """Return amenity display names for a single seat, ordered alphabetically."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT a.amenity_name
+            FROM seat_amenities sa
+            INNER JOIN amenities a
+                ON a.id = sa.amenity_id
+               AND a.tenant_id = sa.tenant_id
+            WHERE sa.tenant_id = %s
+              AND sa.seat_id = %s
+            ORDER BY a.amenity_name
+            """,
+            (tenant_id, seat_id),
+        )
+        rows = cur.fetchall()
+    return [row[0] for row in rows]
+
+
 
 
 

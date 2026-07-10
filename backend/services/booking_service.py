@@ -1071,6 +1071,7 @@ def get_available_seats_by_range(
     booked_for_guest_id: str | None = None,
     is_guest_booking: bool = False,
     exclude_booking_id: str | None = None,
+    calendar_mode: bool = False,
 ) -> AvailableSeatListResponse:
     """
     Fetch seat availability across a date range.
@@ -1079,71 +1080,73 @@ def get_available_seats_by_range(
     normalized_amenity_ids = sorted(set(amenity_ids or []))
 
     try:
-        if is_guest_booking:
-            if booked_for_guest_id is None:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={
-                        "code": "guest_id_required",
-                        "message": "booked_for_guest_id is required.",
-                    },
+        # calendar_mode: caller only wants raw seat status (no booking-eligibility checks)
+        if not calendar_mode:
+            if is_guest_booking:
+                if booked_for_guest_id is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail={
+                            "code": "guest_id_required",
+                            "message": "booked_for_guest_id is required.",
+                        },
+                    )
+
+                if guest_has_active_booking_in_range(
+                    conn,
+                    tenant_id=tenant_id,
+                    booked_for_guest_id=booked_for_guest_id,
+                    start_date=start_date,
+                    end_date=end_date,
+                    exclude_booking_id=exclude_booking_id,
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={
+                            "code": "booking_guest_conflict",
+                            "message": (
+                                "The guest already has an active booking "
+                                "in the requested date range."
+                            ),
+                        },
+                    )
+
+            elif booked_for_user_id is not None:
+
+                if current_user is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail={
+                            "code": "booking_forbidden",
+                            "message": (
+                                "Authenticated user context is required "
+                                "for delegated availability checks."
+                            ),
+                        },
+                    )
+
+                _resolve_booked_for_user(
+                    conn,
+                    tenant_id=tenant_id,
+                    current_user=current_user,
+                    booked_for_user_id=booked_for_user_id,
+                    forbidden_message=(
+                        "You are not allowed to check "
+                        "availability for this user."
+                    ),
                 )
 
-            if guest_has_active_booking_in_range(
-                conn,
-                tenant_id=tenant_id,
-                booked_for_guest_id=booked_for_guest_id,
-                start_date=start_date,
-                end_date=end_date,
-                exclude_booking_id=exclude_booking_id,
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail={
-                        "code": "booking_guest_conflict",
-                        "message": (
-                            "The guest already has an active booking "
-                            "in the requested date range."
-                        ),
-                    },
-                )
-
-        elif booked_for_user_id is not None:
-
-            if current_user is None:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail={
-                        "code": "booking_forbidden",
-                        "message": (
-                            "Authenticated user context is required "
-                            "for delegated availability checks."
-                        ),
-                    },
-                )
-
-            _resolve_booked_for_user(
-                conn,
-                tenant_id=tenant_id,
-                current_user=current_user,
-                booked_for_user_id=booked_for_user_id,
-                forbidden_message=(
-                    "You are not allowed to check "
-                    "availability for this user."
-                ),
-            )
-
-            if user_has_active_booking_in_range(
-                conn,
-                tenant_id=tenant_id,
-                booked_for_user_id=booked_for_user_id,
-                start_date=start_date,
-                end_date=end_date,
-                exclude_booking_id=exclude_booking_id,
-            ):
-                _raise_user_booking_conflict(
-                    "The booking owner already has an active booking in the requested date range.",
-                )
+                if user_has_active_booking_in_range(
+                    conn,
+                    tenant_id=tenant_id,
+                    booked_for_user_id=booked_for_user_id,
+                    start_date=start_date,
+                    end_date=end_date,
+                    exclude_booking_id=exclude_booking_id,
+                ):
+                    _raise_user_booking_conflict(
+                        "The booking owner already has an active booking in the requested date range.",
+                    )
 
         seats = fetch_available_seats_by_range(
                 conn,
@@ -1176,7 +1179,7 @@ def get_available_seats_by_range(
             if seat.availability.total_available_days > 0
         )
 
-    if available_count == 0:
+    if available_count == 0 and not calendar_mode:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
