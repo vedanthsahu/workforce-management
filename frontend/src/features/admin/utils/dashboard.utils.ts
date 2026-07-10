@@ -69,7 +69,12 @@ export function mapOccupancyRangeToTrend(
 
 export function mapHierarchyToTopOffices(items: OccupancyHierarchyItem[]): TopOffice[] {
   return items
-    .map((item) => ({ name: item.siteName, value: ceilPercentage(item.occupancyRate) }))
+    .map((item) => ({
+      name: item.siteName,
+      value: ceilPercentage(item.occupancyRate),
+      bookedSeats: item.bookedSeats,
+      totalSeats: item.totalSeats,
+    }))
     .sort((a, b) => b.value - a.value);
 }
 
