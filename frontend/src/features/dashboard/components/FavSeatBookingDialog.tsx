@@ -818,8 +818,8 @@ export default function FavSeatBookingDialog({
 }: Props) {
   const router = useRouter();
 
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(todayDate);
-  const [date, setDate] = useState<string>(toDateStr(todayDate()));
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [date, setDate] = useState<string>("");
   const [avail, setAvail] = useState<AvailState>({ phase: "idle" });
   const [mounted, setMounted] = useState(false);
   const [displayMonth, setDisplayMonth] = useState<Date>(() => {
@@ -937,10 +937,10 @@ export default function FavSeatBookingDialog({
       } catch { }
     }
 
-    const now = todayDate();
-    setSelectedDate(now);
-    setDate(toDateStr(now));
+    setSelectedDate(undefined);
+    setDate("");
     setAvail({ phase: "idle" });
+    const now = todayDate();
     const m = new Date(now.getFullYear(), now.getMonth(), 1);
     setDisplayMonth(m);
     fetchMonthAvailability(m);
