@@ -188,7 +188,7 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
             }}
             className="h-[240px] w-full"
           >
-            <AreaChart data={trendData} margin={{ left: -19 }}>
+            <AreaChart data={trendData} margin={{ left: -19                                                                                                        }}>
               <XAxis dataKey="day" axisLine={false} tickLine={false} />
               <YAxis
                 domain={[0, 25]}
@@ -199,7 +199,7 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
               />
 
               <ChartTooltip
-                content={
+                content={                                                                                                       
                   <ChartTooltipContent
                     labelFormatter={(_, payload) => {
                       if (!payload?.length) return "";
@@ -238,10 +238,10 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
         <CardContent className="space-y-4">
           {visibleOffices.map((item, i) => (
             <div key={i}>
-              <div className="flex justify-between text-sm">
-                <span>{item.name}</span>
-                <span className="text-muted-foreground">
-                  {item.value}%
+              <div className="flex justify-between items-baseline gap-2 text-sm">
+                <span className="min-w-0 flex-1 truncate text-xs">{item.name}</span>
+                <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+                  {item.value}% ({item.bookedSeats} out of {item.totalSeats})
                 </span>
               </div>
 
