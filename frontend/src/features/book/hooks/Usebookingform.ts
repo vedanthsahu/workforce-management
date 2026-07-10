@@ -192,6 +192,7 @@ export function useBookingForm() {
   const [confirmation, setConfirmation] = useState<CreateBookingResponse | null>(null);
 
   const [myPreferencesApplied, setMyPreferencesApplied] = useState(false);
+  const [userPrefsSettled,    setUserPrefsSettled]    = useState(false);
 
   // ── Reset on clean /book navigation ──────────────────────────────────────
 
@@ -260,8 +261,7 @@ export function useBookingForm() {
 
   useEffect(() => {
     if (myPreferencesApplied) return;
-    if (isModifyMode || isGuestBooking) return;
-    if (!bookedForUserId && hasAnyParam) return;
+    if (isModifyMode || isGuestBooking) { setUserPrefsSettled(true); return; }
     if (availablePreferences.length === 0) return;
 
     setMyPreferencesApplied(true);
@@ -284,13 +284,22 @@ export function useBookingForm() {
 
         setForm((f) => ({
           ...f,
-          siteId:     prefs.siteId     ?? f.siteId,
-          buildingId: prefs.buildingId ?? f.buildingId,
-          floorId:    prefs.floorId    ?? f.floorId,
-          preferences: preferenceKeys.length > 0 ? preferenceKeys : f.preferences,
+          // Only overwrite location on a fresh load — when URL params are already
+          // present (e.g. coming from the dashboard browse flow), preserve them.
+          ...(!hasAnyParam && {
+            siteId:     prefs.siteId     ?? f.siteId,
+            buildingId: prefs.buildingId ?? f.buildingId,
+            floorId:    prefs.floorId    ?? f.floorId,
+          }),
+          // Apply saved amenities only when the form has no preferences yet
+          // (prevents overwriting URL-specified or user-toggled preferences).
+          preferences: f.preferences.length === 0 && preferenceKeys.length > 0
+            ? preferenceKeys
+            : f.preferences,
         }));
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setUserPrefsSettled(true));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availablePreferences, hasAnyParam, bookedForUserId, isGuestBooking, isModifyMode, myPreferencesApplied]);
 
@@ -462,7 +471,8 @@ export function useBookingForm() {
       form.floorId &&
       form.fromDate &&
       form.toDate &&
-      availablePreferences.length > 0
+      availablePreferences.length > 0 &&
+      userPrefsSettled
     ) {
       setLoadingSeats(true);
       const amenityIds = resolveAmenityIds(form.preferences);
@@ -483,7 +493,7 @@ export function useBookingForm() {
         .finally(() => setLoadingSeats(false));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, availablePreferences]);
+  }, [step, availablePreferences, userPrefsSettled]);
 
   // ── Field setters ─────────────────────────────────────────────────────────
 
