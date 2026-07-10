@@ -147,7 +147,7 @@ def get_user_bookings(
     user_id: str,
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_any_permission(["admin_dashboard:view", "users:view", "user:view"])),
+        Depends(require_any_permission(["admin_dashboard:view", "users:view", "user:view", "teammate:view"])),
     ],
     conn: Annotated[
         PGConnection,

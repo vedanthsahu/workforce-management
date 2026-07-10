@@ -167,6 +167,7 @@ export async function fetchAvailability(params: {
   bookedForUserId?: string | null;
   isGuestBooking?: boolean;
   bookedForGuestId?: string | null;
+  calendarMode?: boolean;
 }): Promise<AvailableSeatResponse[]> {
   const { data } = await axiosInstance.get<any>(
     `/floors/${params.floorId}/seats`,
@@ -188,6 +189,9 @@ export async function fetchAvailability(params: {
           : {}),
         ...(params.bookedForGuestId
           ? { booked_for_guest_id: Number(params.bookedForGuestId) }
+          : {}),
+        ...(params.calendarMode
+          ? { calendar_mode: true }
           : {}),
       },
       paramsSerializer: (p) => {

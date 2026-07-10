@@ -630,6 +630,7 @@ export function useBookingForm() {
     isGuestBooking,
     bookingForName,
     modifyBookingId,
+    prefillSeatLabel,
     floorLayoutUrl,
     setSiteId,
     setBuildingId,

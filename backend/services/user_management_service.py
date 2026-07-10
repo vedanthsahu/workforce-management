@@ -10,6 +10,7 @@ from psycopg2.extensions import connection as PGConnection
 from backend.repositories.booking_repository import (
     fetch_all_confirmed_bookings_for_user,
 )
+from backend.repositories.location_repository import fetch_seat_amenity_names
 from backend.repositories.token_repository import (
     record_auth_event,
     revoke_all_user_sessions,
@@ -309,6 +310,14 @@ def get_user_booking_history(
         None,
     )
     other_rows = [row for row in bookings if row is not today_booking_row]
+
+    if today_booking_row is not None and today_booking_row.get("seat_id"):
+        amenity_names = fetch_seat_amenity_names(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=today_booking_row["seat_id"],
+        )
+        today_booking_row = {**today_booking_row, "amenities": amenity_names}
 
     return UserBookingHistoryResponse(
         user=UserDetailsResponse(**user),

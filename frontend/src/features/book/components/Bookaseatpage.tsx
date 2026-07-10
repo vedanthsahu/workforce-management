@@ -162,6 +162,7 @@ const BookASeatPage: React.FC = () => {
     isBookingForSomeone,
     isGuestBooking,
     bookingForName,
+    prefillSeatLabel,
     floorLayoutUrl,
     setSiteId,
     setBuildingId,
@@ -538,7 +539,7 @@ const BookASeatPage: React.FC = () => {
                   </div>
                   <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50 border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Seat</span>
-                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedSeat?.label ?? "—"}</span>
+                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedSeat?.label ?? prefillSeatLabel ?? "—"}</span>
                   </div>
                   <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Date</span>
