@@ -20,7 +20,9 @@ import {
   modifyBooking,
   modifyGuestBooking,
   fetchBuildings,
+  fetchEmployeeWorkPreferences,
   fetchFloors,
+  fetchMyWorkPreferences,
   fetchPreferences,
   fetchSeatsWithAvailability,
   fetchSites,
@@ -189,6 +191,8 @@ export function useBookingForm() {
   const [error,        setError]        = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<CreateBookingResponse | null>(null);
 
+  const [myPreferencesApplied, setMyPreferencesApplied] = useState(false);
+
   // ── Reset on clean /book navigation ──────────────────────────────────────
 
   useEffect(() => {
@@ -238,6 +242,57 @@ export function useBookingForm() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availablePreferences]);
+
+  // ── Auto-fill office/building/floor/amenities from saved preferences ─────
+  // Self-booking: GET /dashboard/me, only on a fresh visit (no URL params).
+  // Facilitator booking for an employee: GET /dashboard/employee/{id}, using
+  // whoever bookedForUserId points at — not gated on hasAnyParam, since that
+  // flow always carries bookedForUserId/bookingForName (and sometimes
+  // fromDate) but never a siteId of its own to preserve.
+  // Skipped for guest bookings (no work_preferences exist for a guest) and
+  // modify mode. If the target user has never saved a preference, the form
+  // is left exactly as it was (all fields blank).
+  const [savedPreferenceNames, setSavedPreferenceNames] = useState<{
+    siteName: string | null;
+    buildingName: string | null;
+    floorName: string | null;
+  }>({ siteName: null, buildingName: null, floorName: null });
+
+  useEffect(() => {
+    if (myPreferencesApplied) return;
+    if (isModifyMode || isGuestBooking) return;
+    if (!bookedForUserId && hasAnyParam) return;
+    if (availablePreferences.length === 0) return;
+
+    setMyPreferencesApplied(true);
+    const prefsPromise = bookedForUserId
+      ? fetchEmployeeWorkPreferences(bookedForUserId)
+      : fetchMyWorkPreferences();
+
+    prefsPromise
+      .then((prefs) => {
+        if (!prefs) return;
+        const preferenceKeys = prefs.amenityIds
+          .map((id) => availablePreferences.find((p) => p.id === id)?.key)
+          .filter((key): key is string => Boolean(key));
+
+        setSavedPreferenceNames({
+          siteName:     prefs.siteName,
+          buildingName: prefs.buildingName,
+          floorName:    prefs.floorName,
+        });
+
+        setForm((f) => ({
+          ...f,
+          siteId:     prefs.siteId     ?? f.siteId,
+          buildingId: prefs.buildingId ?? f.buildingId,
+          floorId:    prefs.floorId    ?? f.floorId,
+          preferences: preferenceKeys.length > 0 ? preferenceKeys : f.preferences,
+        }));
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availablePreferences, hasAnyParam, bookedForUserId, isGuestBooking, isModifyMode, myPreferencesApplied]);
 
   // ── Navigate helper ───────────────────────────────────────────────────────
 
@@ -292,6 +347,48 @@ export function useBookingForm() {
       .catch((e) => setError(e.message))
       .finally(() => setLoadingFloors(false));
   }, [form.buildingId]);
+
+  // ── Guarantee the selects can always render a saved-preference id ───────
+  // The site/building/floor cascades below are independent GET calls (their
+  // own pagination/status filters) from the one that returned the saved
+  // site/building/floor id in the first place (GET /dashboard/me). If a
+  // saved id isn't present in its fetched list for any reason, inject a
+  // synthetic option (labeled from the name /dashboard/me already gave us)
+  // rather than silently showing a blank select for a value that's actually
+  // set.
+
+  useEffect(() => {
+    if (loadingSites || !form.siteId) return;
+    setSites((prev) => {
+      if (prev.some((s) => s.id === form.siteId)) return prev;
+      return [
+        ...prev,
+        { id: form.siteId, name: savedPreferenceNames.siteName ?? `Site ${form.siteId}`, city: "", country: "", timezone: "" },
+      ];
+    });
+  }, [sites, loadingSites, form.siteId, savedPreferenceNames.siteName]);
+
+  useEffect(() => {
+    if (loadingBuildings || !form.buildingId) return;
+    setBuildings((prev) => {
+      if (prev.some((b) => b.id === form.buildingId)) return prev;
+      return [
+        ...prev,
+        { id: form.buildingId, siteId: form.siteId, name: savedPreferenceNames.buildingName ?? `Building ${form.buildingId}` },
+      ];
+    });
+  }, [buildings, loadingBuildings, form.buildingId, form.siteId, savedPreferenceNames.buildingName]);
+
+  useEffect(() => {
+    if (loadingFloors || !form.floorId) return;
+    setFloors((prev) => {
+      if (prev.some((f) => f.id === form.floorId)) return prev;
+      return [
+        ...prev,
+        { id: form.floorId, buildingId: form.buildingId, name: savedPreferenceNames.floorName ?? `Floor ${form.floorId}`, number: 0 },
+      ];
+    });
+  }, [floors, loadingFloors, form.floorId, form.buildingId, savedPreferenceNames.floorName]);
 
   // ── Derive floor layout URL from the selected floor ───────────────────────
 

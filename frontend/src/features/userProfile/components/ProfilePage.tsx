@@ -133,15 +133,15 @@ function SkillTag({ label }: { label: string }) {
 // ─── Cascade Select ───────────────────────────────────────────────────────────
 
 function CascadeSelect({
-  label, value, onChange, options, placeholder, disabled, loading,
+  label, value, onChange, options, disabled, loading, placeholder,
 }: {
   label:        string;
   value:        string;
   onChange:     (val: string) => void;
   options:      { value: string; label: string }[];
-  placeholder?: string;
   disabled?:    boolean;
   loading?:     boolean;
+  placeholder?: string;
 }) {
   return (
     <div className="space-y-1.5">
@@ -153,7 +153,7 @@ function CascadeSelect({
           disabled={disabled || loading}
           className="w-full h-9 rounded-md border border-gray-200 bg-white pl-3 pr-8 text-[13px] text-gray-800 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <option value="">{loading ? "Loading…" : (placeholder ?? "Select…")}</option>
+          {!value && <option value="" disabled hidden>{placeholder ?? ""}</option>}
           {options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
@@ -494,25 +494,33 @@ function EditPreferencesDialog({
       .finally(() => setLoadingAmenities(false));
   }, [open]);
 
-  // When site changes → load buildings, reset downstream
+  // Fetch the building list for the selected site. Selection resets are
+  // handled explicitly by handleSiteChange (user-driven only) — this effect
+  // must never touch selectedBuildingId/selectedFloorId, otherwise it races
+  // with the [open] hydration effect above and clobbers the restored value.
   useEffect(() => {
-    if (!selectedSiteId) { setBuildings([]); setFloors([]); setSelectedBuildingId(""); setSelectedFloorId(""); return; }
+    if (!selectedSiteId) { setBuildings([]); return; }
     setLoadingBuildings(true);
-    setBuildings([]);
-    setFloors([]);
-    setSelectedBuildingId("");
-    setSelectedFloorId("");
     getBuildingsBySite(selectedSiteId).then((data) => { setBuildings(data); setLoadingBuildings(false); });
   }, [selectedSiteId]);
 
-  // When building changes → load floors, reset floor
+  // Fetch the floor list for the selected building — same rule: no selection resets here.
   useEffect(() => {
-    if (!selectedBuildingId) { setFloors([]); setSelectedFloorId(""); return; }
+    if (!selectedBuildingId) { setFloors([]); return; }
     setLoadingFloors(true);
-    setFloors([]);
-    setSelectedFloorId("");
     getFloorsByBuilding(selectedBuildingId).then((data) => { setFloors(data); setLoadingFloors(false); });
   }, [selectedBuildingId]);
+
+  const handleSiteChange = (id: string) => {
+    setSelectedSiteId(id);
+    setSelectedBuildingId("");
+    setSelectedFloorId("");
+  };
+
+  const handleBuildingChange = (id: string) => {
+    setSelectedBuildingId(id);
+    setSelectedFloorId("");
+  };
 
   const handleSubmit = async () => {
     setError("");
@@ -545,21 +553,21 @@ function EditPreferencesDialog({
           <CascadeSelect
             label="Select Office"
             value={selectedSiteId}
-            onChange={setSelectedSiteId}
+            onChange={handleSiteChange}
             options={siteOptions}
-            placeholder="Select an office"
             loading={loadingSites}
+            placeholder="Select office"
           />
 
           {/* Building */}
           <CascadeSelect
             label="Select Building"
             value={selectedBuildingId}
-            onChange={setSelectedBuildingId}
+            onChange={handleBuildingChange}
             options={buildingOptions}
-            placeholder={selectedSiteId ? "Select a building" : "Select an office first"}
             disabled={!selectedSiteId}
             loading={loadingBuildings}
+            placeholder="Select building"
           />
 
           {/* Floor */}
@@ -568,9 +576,9 @@ function EditPreferencesDialog({
             value={selectedFloorId}
             onChange={setSelectedFloorId}
             options={floorOptions}
-            placeholder={selectedBuildingId ? "Select a floor" : "Select a building first"}
             disabled={!selectedBuildingId}
             loading={loadingFloors}
+            placeholder="Select floor"
           />
 
           {/* Amenities */}

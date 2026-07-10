@@ -174,7 +174,7 @@ function ManageSeatsPage() {
               className="w-full lg:flex-1 lg:min-w-0 bg-white rounded-xl border border-gray-200 flex flex-col overflow-hidden"
               style={{ height: tableHeight ?? "auto" }}
             >
-              <div className="flex-1 overflow-y-auto p-4">
+              <div className="flex-1 overflow-y-auto py-4">
                 {view === "map" ? (
                   <LayoutPreview
                     layout={layout}

@@ -8,9 +8,11 @@ type Props = {
   onChangeRole: () => void;
   /** Last row on the page — always open the menu upward instead of downward. */
   openUpward?: boolean;
+  /** When set, the menu button is disabled and shows this text as a tooltip. */
+  disabledReason?: string | null;
 };
 
-export default function UserRowMenu({ onChangeRole, openUpward = false }: Props) {
+export default function UserRowMenu({ onChangeRole, openUpward = false, disabledReason = null }: Props) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -65,6 +67,21 @@ export default function UserRowMenu({ onChangeRole, openUpward = false }: Props)
       window.removeEventListener("resize", handleScroll);
     };
   }, [open]);
+
+  if (disabledReason) {
+    return (
+      <div className="relative">
+        <button
+          type="button"
+          disabled
+          title={disabledReason}
+          className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-200 text-gray-300 cursor-not-allowed opacity-60"
+        >
+          <MoreVertical size={14} />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="relative">
