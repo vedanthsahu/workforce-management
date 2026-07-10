@@ -118,14 +118,14 @@ function TeamGroupCard({
           </div>
           <p className="text-[13px] font-semibold text-gray-800">{group.team_name}</p>
         </div>
-        <div className="flex items-center gap-2">
+        {/* <div className="flex items-center gap-2">
           <span className="text-[11px] text-emerald-600 font-medium bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
             {inOfficeCount} in office
           </span>
           <span className="text-[11px] text-gray-400">
             {group.total_members} members
           </span>
-        </div>
+        </div> */}
       </div>
 
       {/* Members */}
