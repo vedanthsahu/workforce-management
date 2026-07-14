@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/dialog";
 import { BulkUpdatePayload, SeatStatus, SeatType } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 
 interface Props {
   open: boolean;
@@ -116,6 +117,7 @@ export default function BulkEditModal({
             <div className="grid grid-cols-2 gap-1.5">
               {preferences.map((p) => {
                 const on = amenityIds.includes(p.preference_id);
+                const color = getAmenityColor(p.preference_name, p.preference_type);
                 return (
                   <button
                     key={p.preference_id}
@@ -126,6 +128,7 @@ export default function BulkEditModal({
                     <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${on ? "bg-indigo-600 border-indigo-600" : "border-gray-300"}`}>
                       {on && <svg viewBox="0 0 8 7" className="w-2.5 h-2.5"><path d="M1 3.5l2 2L7 1" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                     </div>
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${color.dot}`} />
                     {p.preference_name}
                   </button>
                 );

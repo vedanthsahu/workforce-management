@@ -8,6 +8,8 @@ import {
 import { useFindTeammate } from "../hooks/useFindTeammate";
 import { FindTeammateSkeleton } from "./FindTeammateSkeleton";
 import type { ApiTeamGroup, ApiTeamMember, RawTeammateBooking, TeammateResult } from "../types/findteammate.types";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
+import { amenitiesService } from "@/features/amenities/services/amenitiesService";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -252,6 +254,16 @@ function StatusCard({ inOffice, booking }: { inOffice: boolean; booking: RawTeam
 }
 
 function SeatDetailsGrid({ booking }: { booking: RawTeammateBooking }) {
+  const [categoryByName, setCategoryByName] = useState<Map<string, string | null>>(new Map());
+
+  useEffect(() => {
+    amenitiesService.getPreferences()
+      .then((res) => {
+        setCategoryByName(new Map(res.amenities.map((a) => [a.name.toLowerCase(), a.category])));
+      })
+      .catch(() => {});
+  }, []);
+
   const cells: { label: string; value: React.ReactNode }[] = [
     { label: "Building", value: booking.building_name ?? "—" },
     { label: "Floor", value: booking.floor_name ?? "—" },
@@ -264,12 +276,15 @@ function SeatDetailsGrid({ booking }: { booking: RawTeammateBooking }) {
       label: "Amenities",
       value: booking.amenities?.length ? (
         <span className="flex flex-wrap gap-1.5 mt-0.5">
-          {booking.amenities.map((a) => (
-            <span key={a} className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-600 bg-gray-100 rounded-md px-1.5 py-0.5">
-              <AmenityIcon name={a} />
-              {a}
-            </span>
-          ))}
+          {booking.amenities.map((a) => {
+            const color = getAmenityColor(a, categoryByName.get(a.toLowerCase()));
+            return (
+              <span key={a} className={`inline-flex items-center gap-1 text-[11px] font-medium rounded-md px-1.5 py-0.5 border ${color.bg} ${color.text} ${color.border}`}>
+                <AmenityIcon name={a} />
+                {a}
+              </span>
+            );
+          })}
         </span>
       ) : "—",
     },

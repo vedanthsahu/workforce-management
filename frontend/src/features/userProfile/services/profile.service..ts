@@ -117,7 +117,7 @@ function mapPreferences(api: ApiDashboardMe): SeatPreferences {
     preferredFloorId:      wp?.floor_id      ?? "",
     preferredFloorName:    wp?.floor_name    ?? "—",
     preferredSeatType:     wp?.seat_type     ?? null,
-    preferredAmenities:    (wp?.amenities ?? []).map((a) => ({ id: a.id, name: a.name })),
+    preferredAmenities:    (wp?.amenities ?? []).map((a) => ({ id: a.id, name: a.name, category: a.category })),
   };
 }
 
@@ -314,7 +314,7 @@ export async function updatePreferences(
     preferredFloorId:      data.floor_id      ?? "",
     preferredFloorName:    data.floor_name    ?? "—",
     preferredSeatType:     data.seat_type     ?? null,
-    preferredAmenities:    (data.amenities ?? []).map((a) => ({ id: a.id, name: a.name })),
+    preferredAmenities:    (data.amenities ?? []).map((a) => ({ id: a.id, name: a.name, category: a.category })),
   };
 }
 
