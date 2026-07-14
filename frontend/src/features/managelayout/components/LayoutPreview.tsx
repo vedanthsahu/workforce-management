@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Layout } from "../types/layout.types";
 import { Preference, Seat, SeatStatus, SeatType, SeatUpdatePayload } from "@/features/managelayout1";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 
 interface LayoutPreviewProps {
   layout: Layout | null;
@@ -264,6 +265,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
               <div className="grid grid-cols-2 gap-1.5">
                 {preferences.map((p) => {
                   const on = amenityIds.includes(p.preference_id);
+                  const color = getAmenityColor(p.preference_name, p.preference_type);
                   return (
                     <button
                       key={p.preference_id}
@@ -281,6 +283,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
                           </svg>
                         )}
                       </div>
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${color.dot}`} />
                       {p.preference_name}
                     </button>
                   );

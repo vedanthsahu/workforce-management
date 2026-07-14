@@ -215,7 +215,7 @@ export interface SeatPreferences {
   preferredFloorId:   string;
   preferredFloorName: string;
   preferredSeatType:  string | null;
-  preferredAmenities: { id: string; name: string }[]; // id+name pairs for display
+  preferredAmenities: { id: string; name: string; category: string }[]; // id+name+category for display
 }
 
 export interface ActivitySummary {

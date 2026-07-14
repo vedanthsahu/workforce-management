@@ -94,12 +94,12 @@ export default function AdminRecentBookings({ bookings, loading }: Props) {
           <table className="w-full text-sm border-collapse" style={{ tableLayout: "fixed" }}>
             <thead className="block w-full bg-blue-100">
               <tr className="table w-full text-blue-600" style={{ tableLayout: "fixed" }}>
-                <th className="px-1 py-3 font-medium text-center border-b border-gray-200 w-[28%]">User</th>
+                <th className="pr-14  px-1 py-3 font-medium text-center border-b border-gray-200 w-[28%]">User</th>
                 <th className="pl-1 pr-4 py-3 font-medium text-center border-b border-gray-200 w-[11%]">Type</th>
-                <th className="px-4 py-3 font-medium text-center border-b border-gray-200 w-[22%]">Office</th>
-                <th className="px-4 py-3 font-medium text-center border-b border-gray-200 w-[17%]">Seat / Visit</th>
-                <th className="px-4 py-3 font-medium text-center whitespace-nowrap border-b border-gray-200 w-[12%]">Date</th>
-                <th className="px-4 py-3 font-medium text-center border-b border-gray-200 w-[10%]">Status</th>
+                <th className="pr-8 px-4 py-3 font-medium text-center border-b border-gray-200 w-[22%]">Office</th>
+                <th className="pr-8 px-4 py-3 font-medium text-center border-b border-gray-200 w-[17%]">Seat / Visit</th>
+                <th className="pr-8 px-4 py-3 font-medium text-center whitespace-nowrap border-b border-gray-200 w-[12%]">Date</th>
+                <th className="pr-8 px-4 py-3 font-medium text-center border-b border-gray-200 w-[10%]">Status</th>
               </tr>
             </thead>
             <tbody

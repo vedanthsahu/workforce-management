@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
-import { Seat } from "../types/Bookingform.types";
+import { Seat, Preference } from "../types/Bookingform.types";
 import {
   SVG_W,
   SVG_H,
@@ -15,6 +15,7 @@ import {
   SEAT_STATUS_CONFIG,
   PREFERENCE_MATCH_CONFIG,
 } from "../utils/constants";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface SeatWithSvgId extends Seat {
@@ -223,7 +224,8 @@ interface TooltipState {
 const SeatTooltip: React.FC<{
   tooltip: TooltipState;
   containerRect: DOMRect | null;
-}> = ({ tooltip, containerRect }) => {
+  categoryByName: Map<string, string | null | undefined>;
+}> = ({ tooltip, containerRect, categoryByName }) => {
   if (!tooltip.visible || !tooltip.seat || !containerRect) return null;
 
   const seat = tooltip.seat;
@@ -332,7 +334,9 @@ const SeatTooltip: React.FC<{
                     fontSize: 10, fontWeight: 500,
                     color: "#374151", background: "#f3f4f6",
                     borderRadius: 5, padding: "2px 8px", textTransform: "capitalize",
+                    display: "inline-flex", alignItems: "center", gap: 4,
                   }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: getAmenityColor(a, categoryByName.get(a.toLowerCase())).hex, flexShrink: 0 }} />
                     {a}
                   </span>
                 ))}
@@ -352,16 +356,20 @@ const SeatTooltip: React.FC<{
                     Matched Amenities
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                    {(seat.matchedAmenityNames ?? []).map((name) => (
-                      <span key={name} style={{
-                        fontSize: 10, fontWeight: 600,
-                        color: "#047857", background: "#d1fae5",
-                        borderRadius: 5, padding: "2px 8px",
-                        display: "flex", alignItems: "center", gap: 3,
-                      }}>
-                        <span style={{ fontSize: 9 }}>✓</span> {name}
-                      </span>
-                    ))}
+                    {(seat.matchedAmenityNames ?? []).map((name) => {
+                      const color = getAmenityColor(name, categoryByName.get(name.toLowerCase()));
+                      return (
+                        <span key={name} style={{
+                          fontSize: 10, fontWeight: 600,
+                          color: color.hex, background: color.bgHex,
+                          borderRadius: 5, padding: "2px 8px",
+                          display: "flex", alignItems: "center", gap: 3,
+                        }}>
+                          <span style={{ fontSize: 9 }}>✓</span>
+                          {name}
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
               </>
@@ -379,13 +387,15 @@ const SeatTooltip: React.FC<{
                       const isMatched = (seat.matchedAmenityNames ?? [])
                         .map((n) => n.toLowerCase())
                         .some((n) => n.includes(a.toLowerCase()) || a.toLowerCase().includes(n));
+                      const color = getAmenityColor(a, categoryByName.get(a.toLowerCase()));
                       return (
                         <span key={a} style={{
                           fontSize: 10, fontWeight: 500,
-                          color: isMatched ? "#047857" : "#374151",
-                          background: isMatched ? "#d1fae5" : "#f3f4f6",
+                          color: color.hex, background: color.bgHex,
                           borderRadius: 5, padding: "2px 8px", textTransform: "capitalize",
+                          display: "inline-flex", alignItems: "center", gap: 4,
                         }}>
+                          {isMatched && <span style={{ fontSize: 9 }}>✓</span>}
                           {a}
                         </span>
                       );
@@ -411,7 +421,9 @@ const SeatTooltip: React.FC<{
                     fontSize: 10, fontWeight: 500,
                     color: "#374151", background: "#f3f4f6",
                     borderRadius: 5, padding: "2px 8px", textTransform: "capitalize",
+                    display: "inline-flex", alignItems: "center", gap: 4,
                   }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: getAmenityColor(a, categoryByName.get(a.toLowerCase())).hex, flexShrink: 0 }} />
                     {a}
                   </span>
                 ))}
@@ -497,6 +509,7 @@ interface SvgFloorMapPageProps {
   siteName?: string;
   buildingName?: string;
   floorName?: string;
+  preferences?: Preference[];
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -506,7 +519,13 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
   onSeatSelect,
   loading = false,
   svgUrl,
+  preferences = [],
 }) => {
+  const categoryByName = React.useMemo(
+    () => new Map(preferences.map((p) => [p.name.toLowerCase(), p.category])),
+    [preferences]
+  );
+
   const wrapperRef   = useRef<HTMLDivElement>(null);
   const transformRef = useRef<HTMLDivElement>(null);
 
@@ -842,7 +861,7 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
         )}
 
         {tooltip.visible && tooltip.seat && containerRectRef.current && (
-          <SeatTooltip tooltip={tooltip} containerRect={containerRectRef.current} />
+          <SeatTooltip tooltip={tooltip} containerRect={containerRectRef.current} categoryByName={categoryByName} />
         )}
       </div>
     </div>
