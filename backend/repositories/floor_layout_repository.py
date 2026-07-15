@@ -526,33 +526,88 @@ def fetch_layout_seats_by_layout_id(
         for row in rows
     ]
 
-def sync_published_layout_seats(
+def reconcile_published_layout_seats(
     conn: PGConnection,
     *,
     tenant_id: str,
     floor_id: str,
     layout_id: str,
 ) -> None:
+    """Make `seats` an exact projection of this layout's configured mappings.
 
-    with conn.cursor() as cur:
-
+    Seat codes that are no longer part of the published layout are removed
+    outright when nothing references them; seats with booking/block history
+    are retired in place (INACTIVE, unbookable, timestamped) instead of being
+    deleted, so historical booking integrity is never broken.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
-            UPDATE seats
-            SET
-                status = 'INACTIVE',
-                updated_at = NOW()
-            WHERE tenant_id = %s
-              AND floor_id = %s
-              AND layout_id IS NOT NULL
-              AND layout_id <> %s
+            SELECT
+                s.id::text AS seat_id,
+                (
+                    EXISTS (SELECT 1 FROM bookings b WHERE b.seat_id = s.id)
+                    OR EXISTS (SELECT 1 FROM blocked_seats bl WHERE bl.seat_id = s.id)
+                ) AS has_history
+            FROM seats AS s
+            WHERE s.tenant_id = %s
+              AND s.floor_id = %s
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM layout_seat_mappings AS lsm
+                  WHERE lsm.tenant_id = s.tenant_id
+                    AND lsm.layout_id = %s
+                    AND lsm.is_configured = TRUE
+                    AND lsm.seat_code = s.seat_code
+              )
             """,
-            (
-                tenant_id,
-                floor_id,
-                layout_id,
-            ),
+            (tenant_id, floor_id, layout_id),
         )
+        stale_seats = cur.fetchall()
+
+    if not stale_seats:
+        return
+
+    stale_ids = [row["seat_id"] for row in stale_seats]
+    deletable_ids = [row["seat_id"] for row in stale_seats if not row["has_history"]]
+    retire_ids = [row["seat_id"] for row in stale_seats if row["has_history"]]
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            DELETE FROM seat_amenities
+            WHERE tenant_id = %s
+              AND seat_id = ANY(%s::bigint[])
+            """,
+            (tenant_id, stale_ids),
+        )
+
+        if deletable_ids:
+            cur.execute(
+                """
+                DELETE FROM seats
+                WHERE tenant_id = %s
+                  AND id = ANY(%s::bigint[])
+                """,
+                (tenant_id, deletable_ids),
+            )
+
+        if retire_ids:
+            cur.execute(
+                """
+                UPDATE seats
+                SET
+                    status = 'INACTIVE',
+                    is_bookable = FALSE,
+                    is_reserved = FALSE,
+                    live_until = NOW(),
+                    retired_reason = 'LAYOUT_REPUBLISHED',
+                    updated_at = NOW()
+                WHERE tenant_id = %s
+                  AND id = ANY(%s::bigint[])
+                """,
+                (tenant_id, retire_ids),
+            )
 
 def publish_layout_seat_configurations(
     conn: PGConnection,
@@ -591,10 +646,13 @@ def publish_layout_seat_configurations(
             building_id=str(mapping["building_id"]),
             floor_id=str(mapping["floor_id"]),
             seat_code=str(mapping["seat_code"]),
+            seat_name=mapping.get("seat_name"),
             seat_type=mapping["seat_type"],
             status=mapping["status"],
             is_bookable=mapping["is_bookable"],
+            is_reserved=mapping.get("is_reserved"),
             svg_element_id=str(mapping["svg_element_id"]),
+            source_layout_mapping_id=str(mapping["id"]),
         )
 
         replace_seat_amenities(

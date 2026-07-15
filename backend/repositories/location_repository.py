@@ -866,10 +866,13 @@ def upsert_operational_seat(
     building_id: str,
     floor_id: str,
     seat_code: str,
+    seat_name: str | None = None,
     seat_type: str | None,
     status: str | None,
     is_bookable: bool | None,
+    is_reserved: bool | None = None,
     svg_element_id: str,
+    source_layout_mapping_id: str | None = None,
 ) -> dict[str, Any]:
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -883,10 +886,14 @@ def upsert_operational_seat(
                 building_id,
                 floor_id,
                 seat_code,
+                seat_name,
                 seat_type,
                 is_bookable,
+                is_reserved,
                 status,
-                svg_element_id
+                svg_element_id,
+                source_layout_mapping_id,
+                live_from
             )
             VALUES (
                 %s,
@@ -898,7 +905,11 @@ def upsert_operational_seat(
                 %s,
                 %s,
                 %s,
-                %s
+                %s,
+                %s,
+                %s,
+                %s,
+                NOW()
             )
 
             ON CONFLICT (
@@ -908,10 +919,16 @@ def upsert_operational_seat(
 
             DO UPDATE SET
                 layout_id = EXCLUDED.layout_id,
+                seat_name = EXCLUDED.seat_name,
                 seat_type = EXCLUDED.seat_type,
                 is_bookable = EXCLUDED.is_bookable,
+                is_reserved = EXCLUDED.is_reserved,
                 status = EXCLUDED.status,
                 svg_element_id = EXCLUDED.svg_element_id,
+                source_layout_mapping_id = EXCLUDED.source_layout_mapping_id,
+                live_from = COALESCE(seats.live_from, NOW()),
+                live_until = NULL,
+                retired_reason = NULL,
                 updated_at = NOW()
 
             RETURNING
@@ -924,10 +941,13 @@ def upsert_operational_seat(
                 building_id,
                 floor_id,
                 seat_code,
+                seat_name,
                 seat_type,
                 is_bookable,
+                is_reserved,
                 status,
                 svg_element_id,
+                source_layout_mapping_id,
             ),
         )
 
