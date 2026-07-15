@@ -24,10 +24,14 @@ type Props = {
 };
 
 const STATUS_STYLES: Record<BookingStatus, string> = {
+  Scheduled: "bg-indigo-100 text-indigo-700",
   Confirmed: "bg-blue-100 text-blue-700",
   "Checked In": "bg-green-100 text-green-700",
-  Cancelled: "bg-red-100 text-red-700",
+  "Checked Out": "bg-teal-100 text-teal-700",
   Completed: "bg-gray-100 text-gray-600",
+  Cancelled: "bg-red-100 text-red-700",
+  Modified: "bg-amber-100 text-amber-700",
+  "No Show": "bg-orange-100 text-orange-700",
 };
 
 function initialsOf(name: string) {
@@ -86,16 +90,20 @@ export default function BookingDetailsPanel({ booking, onClose, onModify, onCanc
 
         {/* Details */}
         <div className="divide-y divide-gray-50">
-          <DetailRow icon={<Armchair size={14} />} label="Seat" value={`${booking.seat_code} (${booking.seat_type})`} />
+          <DetailRow
+            icon={<Armchair size={14} />}
+            label="Seat"
+            value={booking.seat_code ? `${booking.seat_code} (${booking.seat_type})` : "Visit only"}
+          />
           <DetailRow icon={<MapPin size={14} />} label="Site" value={booking.site_name} />
           <DetailRow icon={<Building2 size={14} />} label="Building" value={booking.building_name} />
-          <DetailRow icon={<Layers size={14} />} label="Floor" value={booking.floor_name} />
+          <DetailRow icon={<Layers size={14} />} label="Floor" value={booking.floor_name || "--"} />
           <DetailRow
             icon={<CalendarDays size={14} />}
             label="Date"
             value={`${booking.date_label} (${booking.date_relative})`}
           />
-          <DetailRow icon={<Clock size={14} />} label="Time" value={booking.time_range} />
+          <DetailRow icon={<Clock size={14} />} label="Time" value={booking.time_range || "--"} />
           <DetailRow icon={<UserRound size={14} />} label="Booked By" value={booking.booked_by} />
           <DetailRow icon={<CalendarPlus size={14} />} label="Booked On" value={booking.booked_on} />
           <DetailRow icon={<LogIn size={14} />} label="Check In Time" value={booking.check_in_time ?? "--"} />

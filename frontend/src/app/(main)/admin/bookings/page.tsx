@@ -7,42 +7,94 @@ import BookingStatCards from "@/features/adminbookings/components/BookingStatCar
 import BookingsTable from "@/features/adminbookings/components/BookingsTable";
 import BookingDetailsPanel from "@/features/adminbookings/components/BookingDetailsPanel";
 import AmenitiesPagination from "@/features/amenities/components/AmenitiesPagination";
-import { MOCK_ADMIN_BOOKINGS } from "@/features/adminbookings/data/mockAdminBookings";
-import { AdminBooking, defaultAdminBookingFilters } from "@/features/adminbookings/types/adminBooking.types";
+import { AdminBooking, AdminActivityItem, defaultAdminBookingFilters } from "@/features/adminbookings/types/adminBooking.types";
+import { useAdminBookingLocations } from "@/features/adminbookings/hooks/useAdminBookingLocations";
+import { adminActivitiesService } from "@/features/adminbookings/services/adminActivities.service";
+import { mapActivityToAdminBooking } from "@/features/adminbookings/utils/mapAdminActivity";
 
-const ITEMS_PER_PAGE = 10;
+const PAGE_SIZES = [10, 25, 50, 75, 100];
 
 export default function AdminBookingsPage() {
   const [filters, setFilters] = useState(defaultAdminBookingFilters());
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(PAGE_SIZES[0]);
   const [selectedBooking, setSelectedBooking] = useState<AdminBooking | null>(null);
 
-  // Employee/Guest & Seat Number only take effect once "Search" is clicked,
-  // unlike the other filters which apply immediately on change.
+  // Employee/Guest & Seat Number filter live, debounced 300ms after typing
+  // stops — same pattern as the host/guest search in the facilitator's
+  // "Book for Someone" guest-booking flow (useEmployeeSearch/useGuestSearch).
   const [appliedSearch, setAppliedSearch] = useState("");
   const [appliedSeatNumber, setAppliedSeatNumber] = useState("");
 
-  const stats = useMemo(
-    () => ({
-      todays_bookings: MOCK_ADMIN_BOOKINGS.filter((b) => b.date_relative === "Today").length + 180,
-      checked_in: MOCK_ADMIN_BOOKINGS.filter((b) => b.status === "Checked In").length + 80,
-      not_checked_in: MOCK_ADMIN_BOOKINGS.filter((b) => b.status === "Confirmed").length + 91,
-      cancelled: MOCK_ADMIN_BOOKINGS.filter((b) => b.status === "Cancelled").length + 5,
-      guests: MOCK_ADMIN_BOOKINGS.filter((b) => b.person_type === "Guest").length + 11,
-    }),
-    []
-  );
+  useEffect(() => {
+    const timer = setTimeout(() => setAppliedSearch(filters.search), 300);
+    return () => clearTimeout(timer);
+  }, [filters.search]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setAppliedSeatNumber(filters.seatNumber), 300);
+    return () => clearTimeout(timer);
+  }, [filters.seatNumber]);
+
+  const { sites, buildings, floors, loadBuildings, loadFloors, setBuildings, setFloors } =
+    useAdminBookingLocations();
+
+  // GET /admin/activities only supports a single exact `date`, not a range —
+  // when the picked range collapses to one day we can push it server-side,
+  // otherwise we fetch unfiltered by date and apply the range client-side.
+  const exactDate = filters.dateFrom && filters.dateFrom === filters.dateTo ? filters.dateFrom : undefined;
+
+  const [activities, setActivities] = useState<AdminActivityItem[]>([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setActivitiesLoading(true);
+
+    adminActivitiesService
+      .list({
+        siteId: filters.site !== "All" ? filters.site : undefined,
+        buildingId: filters.building !== "All" ? filters.building : undefined,
+        floorId: filters.floor !== "All" ? filters.floor : undefined,
+        date: exactDate,
+      })
+      .then((res) => {
+        if (!cancelled) setActivities(res.items);
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) setActivities([]);
+      })
+      .finally(() => {
+        if (!cancelled) setActivitiesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.site, filters.building, filters.floor, exactDate]);
+
+  const mappedBookings = useMemo(() => activities.map(mapActivityToAdminBooking), [activities]);
+
+  const stats = useMemo(() => {
+    const todayIso = new Date().toISOString().slice(0, 10);
+    return {
+      todays_bookings: mappedBookings.filter((b) => b.activity_date === todayIso).length,
+      checked_in: mappedBookings.filter((b) => b.status === "Checked In").length,
+      not_checked_in: mappedBookings.filter((b) => b.status === "Confirmed").length,
+      cancelled: mappedBookings.filter((b) => b.status === "Cancelled").length,
+      guests: mappedBookings.filter((b) => b.person_type === "Guest").length,
+    };
+  }, [mappedBookings]);
 
   const bookings = useMemo(() => {
     const search = appliedSearch.trim().toLowerCase();
     const seatNumber = appliedSeatNumber.trim().toLowerCase();
-    const from = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null;
-    const to = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59`) : null;
+    // Only apply the range client-side when it wasn't already pushed server-side as `exactDate`.
+    const from = !exactDate && filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null;
+    const to = !exactDate && filters.dateTo ? new Date(`${filters.dateTo}T23:59:59`) : null;
 
-    return MOCK_ADMIN_BOOKINGS.filter((b) => {
-      if (filters.site !== "All" && b.site_name !== filters.site) return false;
-      if (filters.building !== "All" && b.building_name !== filters.building) return false;
-      if (filters.floor !== "All" && !b.floor_name.toLowerCase().startsWith(filters.floor.toLowerCase())) return false;
+    return mappedBookings.filter((b) => {
       if (filters.bookingType !== "All" && b.person_type !== filters.bookingType) return false;
       if (filters.status !== "All" && b.status !== filters.status) return false;
       if (filters.bookedBy !== "All" && b.booked_by !== filters.bookedBy) return false;
@@ -50,27 +102,28 @@ export default function AdminBookingsPage() {
       if (search && !b.person_name.toLowerCase().includes(search) && !b.person_email.toLowerCase().includes(search)) {
         return false;
       }
-      const bookingDate = new Date(b.date_label);
-      if (from && bookingDate < from) return false;
-      if (to && bookingDate > to) return false;
+      if (from || to) {
+        const activityDate = new Date(`${b.activity_date}T00:00:00`);
+        if (from && activityDate < from) return false;
+        if (to && activityDate > to) return false;
+      }
       return true;
     });
   }, [
-    filters.site,
-    filters.building,
-    filters.floor,
+    mappedBookings,
     filters.bookingType,
     filters.status,
     filters.bookedBy,
     filters.dateFrom,
     filters.dateTo,
+    exactDate,
     appliedSearch,
     appliedSeatNumber,
   ]);
 
-  const totalPages = Math.max(1, Math.ceil(bookings.length / ITEMS_PER_PAGE));
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedBookings = bookings.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(bookings.length / itemsPerPage));
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedBookings = bookings.slice(startIndex, startIndex + itemsPerPage);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -85,6 +138,7 @@ export default function AdminBookingsPage() {
     filters.dateTo,
     appliedSearch,
     appliedSeatNumber,
+    itemsPerPage,
   ]);
 
   const handleUpdateFilter = <K extends keyof typeof filters>(key: K, value: (typeof filters)[K]) => {
@@ -101,6 +155,25 @@ export default function AdminBookingsPage() {
     setAppliedSearch(filters.search);
     setAppliedSeatNumber(filters.seatNumber);
     setCurrentPage(1);
+  };
+
+  const handleSiteChange = (siteId: string) => {
+    setFilters((prev) => ({ ...prev, site: siteId, building: "All", floor: "All" }));
+    setFloors([]);
+    if (siteId === "All") {
+      setBuildings([]);
+      return;
+    }
+    loadBuildings(siteId);
+  };
+
+  const handleBuildingChange = (buildingId: string) => {
+    setFilters((prev) => ({ ...prev, building: buildingId, floor: "All" }));
+    if (buildingId === "All") {
+      setFloors([]);
+      return;
+    }
+    loadFloors(buildingId);
   };
 
   return (
@@ -142,6 +215,12 @@ export default function AdminBookingsPage() {
           onUpdate={handleUpdateFilter}
           onClear={handleClear}
           onSearch={handleSearch}
+          sites={sites}
+          buildings={buildings}
+          floors={floors}
+          onSiteChange={handleSiteChange}
+          onBuildingChange={handleBuildingChange}
+          bookings={mappedBookings}
         />
       </div>
 
@@ -158,19 +237,33 @@ export default function AdminBookingsPage() {
           </div>
 
           {/* TABLE BODY */}
-          <BookingsTable
-            data={paginatedBookings}
-            selectedBookingId={selectedBooking?.booking_id}
-            onView={setSelectedBooking}
-          />
+          {activitiesLoading ? (
+            <p className="px-6 py-12 text-center text-gray-400 text-sm">Loading bookings…</p>
+          ) : (
+            <BookingsTable
+              data={paginatedBookings}
+              selectedBookingId={selectedBooking?.booking_id}
+              onView={setSelectedBooking}
+            />
+          )}
 
           {/* FOOTER */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
             <span>
               {bookings.length > 0 &&
-                `Showing ${startIndex + 1} to ${Math.min(startIndex + ITEMS_PER_PAGE, bookings.length)} of ${bookings.length} entries`}
+                `Showing ${startIndex + 1} to ${Math.min(startIndex + itemsPerPage, bookings.length)} of ${bookings.length} entries`}
             </span>
-            <div className="self-center sm:self-auto">
+            <div className="flex items-center gap-3 self-center sm:self-auto">
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span>Rows</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                >
+                  {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
               <AmenitiesPagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
             </div>
           </div>
