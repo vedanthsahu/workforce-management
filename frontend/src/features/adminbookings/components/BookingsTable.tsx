@@ -10,10 +10,14 @@ type Props = {
 };
 
 const STATUS_STYLES: Record<BookingStatus, string> = {
+  Scheduled: "bg-indigo-100 text-indigo-700",
   Confirmed: "bg-blue-100 text-blue-700",
   "Checked In": "bg-green-100 text-green-700",
-  Cancelled: "bg-red-100 text-red-700",
+  "Checked Out": "bg-teal-100 text-teal-700",
   Completed: "bg-gray-100 text-gray-600",
+  Cancelled: "bg-red-100 text-red-700",
+  Modified: "bg-amber-100 text-amber-700",
+  "No Show": "bg-orange-100 text-orange-700",
 };
 
 function initialsOf(name: string) {
@@ -52,13 +56,13 @@ export default function BookingsTable({ data, selectedBookingId, onView }: Props
       <table className="w-full text-xs" style={{ minWidth: "980px" }}>
         <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
           <tr>
-            <th className="pl-10 px-6 py-3 text-left font-bold">Employee / Guest</th>
-            <th className="pl-4 px-3 py-3 text-left font-bold">Seat</th>
-            <th className="pl-6 px-3 py-3 text-left font-bold">Site</th>
-            <th className="px-2 py-3 text-left font-bold">Building</th>
-            <th className="pl-4 px-3 py-3 text-left font-bold">Floor</th>
+            <th className="pl-14 pr-2 py-3 text-left font-bold max-w-45">Employee / Guest</th>
+            <th className="pl-8 pr-3 py-3 text-left font-bold">Seat</th>
+            <th className="pl-2 pr-3 py-3 text-left font-bold">Office</th>
+            <th className="pl-3 pr-1 py-3 text-left font-bold">Building</th>
+            <th className="pl-4 pr-1 py-3 text-left font-bold">Floor</th>
             <th className="pl-6 px-3 py-3 text-left font-bold">Date</th>
-            <th className="pl-10 px-3 py-3 text-left font-bold">Status</th>
+            <th className="pl-8 px-3 py-3 text-left font-bold">Status</th>
             <th className="px-3 py-3 text-left font-bold">Booked By</th>
             <th className="px-3 py-3 text-center font-bold">Actions</th>
           </tr>
@@ -68,17 +72,23 @@ export default function BookingsTable({ data, selectedBookingId, onView }: Props
             const isSelected = booking.booking_id === selectedBookingId;
             return (
               <tr key={booking.booking_id} className={isSelected ? "bg-indigo-50/60" : "hover:bg-gray-50"}>
-                <td className="px-6 py-3">
+                <td className="pl-5 pr-3 py-3 max-w-46">
                   <PersonCell booking={booking} />
                 </td>
-                <td className="px-3 py-3">
-                  <p className="text-gray-900 font-medium">{booking.seat_code}</p>
-                  <p className="text-[11px] text-gray-400">{booking.seat_type}</p>
+                <td className="pl-1 pr-3 py-3">
+                  {booking.seat_code ? (
+                    <>
+                      <p className="text-gray-900 font-medium">{booking.seat_code}</p>
+                      <p className="text-[11px] text-gray-400">{booking.seat_type}</p>
+                    </>
+                  ) : (
+                    <p className="text-gray-400 italic">Visit only</p>
+                  )}
                 </td>
-                <td className="px-3 py-3 text-gray-700">{booking.site_name}</td>
-                <td className="px-3 py-3 text-gray-700">{booking.building_name}</td>
-                <td className="px-3 py-3 text-gray-700">{booking.floor_name}</td>
-                <td className="px-3 py-3">
+                <td className="pr-3 py-3 text-gray-700 max-w-[80px] break-words">{booking.site_name}</td>
+                <td className="pr-1 py-3 text-gray-700 max-w-[80px] break-words">{booking.building_name}</td>
+                <td className="pl-1 pr-1 py-3 text-gray-700">{booking.floor_name}</td>
+                <td className="pl-1 pr-3 py-3">
                   <p className="text-gray-900">{booking.date_label}</p>
                   <p className="text-[11px] text-gray-400">{booking.date_relative}</p>
                 </td>
