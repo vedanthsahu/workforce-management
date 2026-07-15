@@ -400,6 +400,37 @@ def fetch_graph_group_member_ids(access_token: str, *, group_id: str) -> set[str
     return member_ids
 
 
+def fetch_graph_users_with_department(access_token: str) -> dict[str, str | None]:
+    """Fetch {graph_object_id: department} for every user in the tenant directory.
+
+    Used by the background department/team sync so drift can be detected for
+    users who haven't logged in recently, mirroring the app-only, paginated
+    listing pattern used for Graph group membership.
+    """
+    departments: dict[str, str | None] = {}
+    url_or_path: str | None = "/users"
+    params: dict[str, str] | None = {"$select": "id,department", "$top": "999"}
+    while url_or_path:
+        payload = _graph_get(access_token, url_or_path, params=params)
+        users = payload.get("value", [])
+        if not isinstance(users, list):
+            raise GraphAPIError(
+                status_code=502,
+                code="invalid_graph_users_payload",
+                message="Microsoft Graph users response was invalid.",
+            )
+        for user in users:
+            if not isinstance(user, dict):
+                continue
+            object_id = str(user.get("id") or "").strip()
+            if object_id:
+                departments[object_id] = str(user.get("department") or "").strip() or None
+        next_link = str(payload.get("@odata.nextLink") or "").strip()
+        url_or_path = next_link or None
+        params = None
+    return departments
+
+
 def fetch_graph_manager(access_token: str) -> dict[str, Any]:
     """Fetch the signed-in user's manager relationship from Microsoft Graph.
 
