@@ -1002,8 +1002,12 @@ export default function FavSeatBookingDialog({
     const dateStr = toDateStr(d);
     setSelectedDate(d);
     setDate(dateStr);
-    // Booked (red): reveal reason without navigating; all other dates: check and navigate if OK
-    runAvailabilityCheck(dateStr, dayStatuses.get(dateStr) !== "booked");
+    setAvail({ phase: "idle" });
+    // Red dates: surface the conflict reason inline without navigating
+    // Green / unknown dates: just set the date — user must press Continue to Book
+    if (dayStatuses.get(dateStr) === "booked") {
+      runAvailabilityCheck(dateStr, false);
+    }
   };
 
   const handleMonthChange = (month: Date) => {

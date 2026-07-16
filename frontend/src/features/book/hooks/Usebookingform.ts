@@ -672,7 +672,8 @@ export function useBookingForm() {
 
   // ── FIX: after confirmation (both book & modify) go to My Bookings ────────
   const resetForm = () => {
-    setForm({ ...DEFAULT_STATE, fromDate: todayIso(), toDate: todayIso() });
+    const blankForm = { ...DEFAULT_STATE, fromDate: todayIso(), toDate: todayIso() };
+    setForm(blankForm);
     setStepState(1);
     setBuildings([]);
     setFloors([]);
@@ -683,6 +684,9 @@ export function useBookingForm() {
     if (isModifyMode) {
       const forSomeone = isBookingForSomeone || isGuestModify || Boolean(bookedForUserId);
       router.push(forSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings");
+    } else if (isBookingForSomeone) {
+      // Stay in the book-for-someone flow — go back to step 1 for the same person
+      router.push(buildUrl(1, blankForm, null, bookedForUserId, guestUrlParams, bookingForName, visitId, isGuestModify));
     } else {
       router.push("/book");
     }
