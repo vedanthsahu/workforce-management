@@ -20,7 +20,7 @@ from backend.core.storage import upload_svg_to_s3
 from backend.repositories.floor_layout_repository import (
     activate_floor_layout as activate_floor_layout_record,
     archive_existing_published_layouts,
-    sync_published_layout_seats,
+    reconcile_published_layout_seats,
     publish_layout_seat_configurations,
     fetch_floor_for_layout,
     fetch_floor_layout_by_id,
@@ -347,7 +347,7 @@ def activate_floor_layout(
             published_by_user_id=user_id,
         )
 
-        sync_published_layout_seats(
+        reconcile_published_layout_seats(
             conn,
             tenant_id=tenant_id,
             floor_id=str(layout["floor_id"]),

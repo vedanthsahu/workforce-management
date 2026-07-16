@@ -39,7 +39,8 @@ from backend.repositories.user_repository import (
     fetch_user_by_id,
     fetch_user_by_microsoft_object_id,
     sync_app_user_from_graph,
-    sync_graph_groups_for_user,
+    sync_department_team_for_user,
+    update_user_department,
     upsert_user_graph_profile,
 )
 from backend.services.auth_service import AuthTokens, determine_graph_onboarding_role, issue_tokens_for_user
@@ -182,9 +183,7 @@ def auth_callback(
         if user is None:
             debug("Provisioning first-time user...")
             graph_manager = _fetch_graph_payload(fetch_graph_manager, token_payload["access_token"], required=False)
-            graph_groups = _fetch_graph_payload(fetch_graph_groups, token_payload["access_token"], required=True)
             debug(f"Graph manager keys: {list(graph_manager.keys())}")
-            debug(f"Graph groups count: {len(graph_groups.get('value', []))}")
             user = _provision_first_time_user(
                 conn,
                 tenant_id=tenant_id,
@@ -193,10 +192,18 @@ def auth_callback(
                 claims=claims,
                 graph_profile=graph_profile,
                 graph_manager=graph_manager,
-                graph_groups=graph_groups,
                 access_token=token_payload["access_token"],
             )
             debug(f"Provisioned user: {user}")
+        else:
+            debug("Resyncing department team for returning user...")
+            _sync_existing_user_department_team(
+                conn,
+                tenant_id=tenant_id,
+                user=user,
+                graph_profile=graph_profile,
+                access_token=token_payload["access_token"],
+            )
 
         if user is None:
             raise LookupError("User could not be resolved after provisioning.")
@@ -291,7 +298,6 @@ def _provision_first_time_user(
     claims: dict[str, Any],
     graph_profile: dict[str, Any],
     graph_manager: dict[str, Any],
-    graph_groups: dict[str, Any],
     access_token: str,
 ) -> dict[str, Any]:
     """Create the app user and Graph enrichment rows required on first login."""
@@ -310,6 +316,7 @@ def _provision_first_time_user(
     user_principal_name = _resolve_user_principal_name(claims, graph_profile)
     display_name = _resolve_display_name(claims, graph_profile)
     full_name = _resolve_full_name(display_name=display_name, email=email)
+    department = _resolve_optional_graph_text(graph_profile, "department")
     role_name = determine_graph_onboarding_role(
         access_token=access_token,
         microsoft_object_id=microsoft_object_id,
@@ -326,7 +333,7 @@ def _provision_first_time_user(
         mobile_phone=_resolve_optional_graph_text(graph_profile, "mobilePhone"),
         office_location=_resolve_optional_graph_text(graph_profile, "officeLocation"),
         job_title=_resolve_optional_graph_text(graph_profile, "jobTitle"),
-        department=_resolve_optional_graph_text(graph_profile, "department"),
+        department=department,
         company_name=_resolve_optional_graph_text(graph_profile, "companyName"),
         employee_id=_resolve_optional_graph_text(graph_profile, "employeeId"),
         manager_user_id=manager_user_id,
@@ -365,16 +372,60 @@ def _provision_first_time_user(
         graph_profile=graph_profile,
         manager_graph_object_id=manager_graph_object_id,
     )
-    sync_graph_groups_for_user(
+    sync_department_team_for_user(
         conn,
         tenant_id=tenant_id,
         user_id=user_id,
-        graph_groups=graph_groups,
+        department=department,
     )
     resolved = fetch_user_by_id(conn, tenant_id=tenant_id, user_id=user_id)
     if resolved is None:
         raise LookupError("Created SSO user could not be reloaded.")
     return resolved
+
+
+def _sync_existing_user_department_team(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user: dict[str, Any],
+    graph_profile: dict[str, Any],
+    access_token: str,
+) -> None:
+    """Move a returning user to the team matching their current department.
+
+    Best-effort by design: a Graph or database failure here must never break
+    an otherwise-valid login, so every failure path logs and returns instead
+    of propagating.
+    """
+    user_id = str(user["user_id"])
+
+    if not graph_profile:
+        try:
+            graph_profile = _fetch_graph_payload(fetch_graph_me, access_token, required=False)
+        except GraphAPIError:
+            logger.warning("sso.department_sync.graph_me_failed user_id=%s", user_id)
+            return
+
+    department = _resolve_optional_graph_text(graph_profile, "department")
+
+    try:
+        if department != (user.get("department") or None):
+            update_user_department(
+                conn,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                department=department,
+            )
+        sync_department_team_for_user(
+            conn,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            department=department,
+        )
+    except (psycopg2.Error, LookupError, ValueError):
+        conn.rollback()
+        logger.exception("sso.department_sync.failed user_id=%s", user_id)
 
 
 def _fetch_graph_payload(
