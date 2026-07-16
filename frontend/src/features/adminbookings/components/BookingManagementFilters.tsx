@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, ChevronDown, RotateCcw, Search } from "lucide-react";
+import { adminActivitiesService } from "../services/adminActivities.service";
+import { CalendarDays, ChevronDown, RotateCcw, Search, X } from "lucide-react";
 import {
   AdminBooking,
   AdminBookingFilters,
@@ -66,14 +67,14 @@ function DateRangeField({
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, [open]);
 
-  const label = dateFrom && dateTo ? `${formatDate(dateFrom)} – ${formatDate(dateTo)}` : "All Dates";
+  const label = dateFrom && dateTo ? `${formatDate(dateFrom)} – ${formatDate(dateTo)}` : "Select date range";
 
   return (
     <div ref={rootRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="h-10 px-3 flex items-center gap-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors min-w-[200px]"
+        className="h-10 px-3 flex items-center gap-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors w-full"
       >
         <CalendarDays size={14} className="text-gray-400 shrink-0" />
         <span className="flex-1 text-left truncate">{label}</span>
@@ -138,15 +139,18 @@ function Field({
   minWidth = "150px",
   width,
 }: {
-  label: string;
+  label?: string;
   children: React.ReactNode;
   minWidth?: string;
-  /** Fixed width, overriding content-based sizing so sibling fields line up evenly. */
+  /** Preferred width on wide screens; the field still grows to fill its own line when wrapped on tablet/mobile. */
   width?: string;
 }) {
   return (
-    <div className="flex flex-col gap-1.5 shrink-0" style={{ minWidth, width }}>
-      <label className="text-xs font-medium text-gray-600">{label}</label>
+    <div
+      className="flex flex-col gap-1.5"
+      style={{ minWidth, maxWidth: "100%", flex: width ? `1 1 ${width}` : "1 1 auto" }}
+    >
+      {label && <label className="text-xs font-medium text-gray-600">{label}</label>}
       {children}
     </div>
   );
@@ -167,11 +171,14 @@ function NativeSelect({
   onChange,
   options,
   disabled,
+  placeholder,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   disabled?: boolean;
+  /** Shown as an unselectable placeholder when value is "" — not a real option, just a prompt. */
+  placeholder?: string;
 }) {
   return (
     <select
@@ -181,6 +188,11 @@ function NativeSelect({
       className={`${selectClass} disabled:opacity-50 disabled:cursor-not-allowed`}
       style={selectArrowStyle}
     >
+      {placeholder && (
+        <option value="" disabled hidden>
+          {placeholder}
+        </option>
+      )}
       {options.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}
@@ -216,12 +228,55 @@ export default function BookingManagementFilters({
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
+  // Load a full activities snapshot to drive suggestions so suggestions
+  // remain independent of the other active filters applied to the table.
+  const [allActivities, setAllActivities] = useState<AdminBooking[] | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const resp = await adminActivitiesService.list({});
+        if (!mounted) return;
+        const mapped: AdminBooking[] = (resp.items ?? []).map((it) => ({
+          booking_id: it.bookingId ?? it.guestVisitId ?? "",
+          person_name: it.bookedFor?.name ?? it.bookedBy?.name ?? "",
+          person_type: (it.bookedFor?.entityType === "GUEST" || it.bookedBy?.entityType === "GUEST") ? "Guest" : "Employee",
+          person_email: it.bookedFor?.email ?? it.bookedBy?.email ?? "",
+          avatar_url: undefined,
+          seat_code: it.seat?.seatCode ?? "",
+          seat_type: it.seat?.seatType ?? "",
+          site_name: it.site?.siteName ?? "",
+          building_name: it.building?.buildingName ?? "",
+          floor_name: it.floor?.floorName ?? "",
+          activity_date: it.activityDate ?? "",
+          date_label: it.activityDate ?? "",
+          date_relative: "",
+          time_range: "",
+          status: (it.activityStatus as any) ?? "Scheduled",
+          booked_by: "Self",
+          booked_on: it.createdAt ?? "",
+          check_in_time: it.checkInAt,
+          amenities: [],
+        }));
+        setAllActivities(mapped);
+      } catch {
+        setAllActivities([]);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  const activitySource = allActivities ?? bookings;
+
   const employeeSuggestions = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
     if (!q) return [];
     const seen = new Set<string>();
     const matches: AdminBooking[] = [];
-    for (const b of bookings) {
+    for (const b of activitySource) {
+      // Only respect bookingType toggle; ignore other filters (site/building/floor/date/status)
+      if (filters.bookingType === "Employee" && b.person_type !== "Employee") continue;
+      if (filters.bookingType === "Guest" && b.person_type !== "Guest") continue;
       if (!b.person_name.toLowerCase().includes(q) && !b.person_email.toLowerCase().includes(q)) continue;
       const key = `${b.person_name}|${b.person_email}`;
       if (seen.has(key)) continue;
@@ -230,14 +285,20 @@ export default function BookingManagementFilters({
       if (matches.length >= 8) break;
     }
     return matches;
-  }, [bookings, filters.search]);
+  }, [activitySource, filters.search, filters.bookingType]);
+
+  const searchPlaceholder = filters.bookingType === "Employee"
+    ? "Search by name or email"
+    : filters.bookingType === "Guest"
+      ? "Search by name or email"
+      : "Select Employee or Guest first";
 
   const seatSuggestions = useMemo(() => {
     const q = filters.seatNumber.trim().toLowerCase();
     if (!q) return [];
     const seen = new Set<string>();
     const matches: AdminBooking[] = [];
-    for (const b of bookings) {
+    for (const b of activitySource) {
       if (!b.seat_code || !b.seat_code.toLowerCase().includes(q)) continue;
       if (seen.has(b.seat_code)) continue;
       seen.add(b.seat_code);
@@ -245,13 +306,13 @@ export default function BookingManagementFilters({
       if (matches.length >= 8) break;
     }
     return matches;
-  }, [bookings, filters.seatNumber]);
+  }, [activitySource, filters.seatNumber]);
 
   return (
     <div className="flex flex-col gap-4">
       {/* Row 1 */}
-      <div className="flex items-end gap-3 flex-nowrap">
-        <Field label="Date Range">
+      <div className="flex items-end gap-3 flex-wrap">
+        <Field label="Date Range" width="235px">
           <DateRangeField
             dateFrom={filters.dateFrom}
             dateTo={filters.dateTo}
@@ -262,75 +323,125 @@ export default function BookingManagementFilters({
           />
         </Field>
 
-        <Field label="Office" width="187px">
+        <Field label="Office" width="185px">
           <NativeSelect
             value={filters.site}
             onChange={onSiteChange}
+            placeholder="Select Office"
             options={[
-              { value: "All", label: "All Offices" },
+              { value: "All", label: "All Office" },
               ...sites.map((s) => ({ value: s.site_id, label: s.site_name })),
             ]}
           />
         </Field>
 
-        <Field label="Building" width="187px">
+        <Field label="Building" width="185px">
           <NativeSelect
             value={filters.building}
             onChange={onBuildingChange}
-            disabled={filters.site === "All"}
+            disabled={!filters.site || filters.site === "All"}
+            placeholder="Select Building"
             options={[
-              { value: "All", label: "All Buildings" },
+              { value: "All", label: "All Building" },
               ...buildings.map((b) => ({ value: b.building_id, label: b.building_name })),
             ]}
           />
         </Field>
 
-        <Field label="Floor" width="187px">
+        <Field label="Floor" width="185px">
           <NativeSelect
             value={filters.floor}
             onChange={(v) => onUpdate("floor", v)}
-            disabled={filters.building === "All"}
+            disabled={!filters.building || filters.building === "All"}
+            placeholder="Select Floor"
             options={[
-              { value: "All", label: "All Floors" },
+              { value: "All", label: "All Floor" },
               ...floors.map((f) => ({ value: f.floor_id, label: f.floor_name })),
             ]}
           />
         </Field>
 
-        <Field label="Booking Type" width="187px">
+        <Field label="Status" width="170px">
           <NativeSelect
-            value={filters.bookingType}
-            onChange={(v) => onUpdate("bookingType", v)}
+            value={filters.status}
+            onChange={(v) => onUpdate("status", v)}
             options={[
-              { value: "All", label: "All" },
-              { value: "Employee", label: "Employee" },
-              { value: "Guest", label: "Guest" },
+              { value: "All", label: "All Status" },
+              { value: "Scheduled", label: "Scheduled" },
+              { value: "Confirmed", label: "Confirmed" },
+              { value: "Checked In", label: "Checked In" },
+              { value: "Checked Out", label: "Checked Out" },
+              { value: "Completed", label: "Completed" },
+              { value: "Cancelled", label: "Cancelled" },
+              { value: "Modified", label: "Modified" },
+              { value: "No Show", label: "No Show" },
             ]}
           />
         </Field>
       </div>
 
       {/* Row 2 */}
-      <div className="flex items-end gap-3 flex-wrap">
-        <Field label="Employee / Guest">
+      <div className="flex items-end gap-3 flex-wrap" >
+        <Field>
           <div ref={searchRef} className="relative w-full sm:w-64">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by name or email"
-              value={filters.search}
-              onChange={(e) => {
-                onUpdate("search", e.target.value);
-                setSearchOpen(true);
-              }}
-              onFocus={() => {
-                if (filters.search.trim()) setSearchOpen(true);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") setSearchOpen(false);
-              }}
-              className="h-10 pl-9 pr-3 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400"
-            />
+              <div className="mb-2">
+                <div className="inline-flex items-center bg-gray-100 p-1 rounded-full space-x-1">
+                  {(["Employee", "|", "Guest"] as const).map((opt) => {
+                    if (opt === "|") {
+                      return (
+                        <span key={opt} className="px-0.5 text-[12px] text-gray-900 select-none">
+                          |
+                        </span>
+                      );
+                    }
+                    const active = filters.bookingType === opt;
+                    return (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => onUpdate("bookingType", opt)}
+                        className={`px-3 py-1 text-[12px] leading-none rounded-full transition-colors duration-150 focus:outline-none ${active ? "bg-indigo-600 text-white shadow-sm" : "text-gray-600 hover:bg-white/60"}`}
+                      >
+                        {opt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* input wrapper is positioned relative so icon centers within input only */}
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder={searchPlaceholder}
+                  value={filters.search}
+                  disabled={!filters.bookingType}
+                  onChange={(e) => {
+                    onUpdate("search", e.target.value);
+                    setSearchOpen(true);
+                  }}
+                  onFocus={() => {
+                    if (filters.search.trim()) setSearchOpen(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setSearchOpen(false);
+                  }}
+                  className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
+                />
+                {filters.search && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onUpdate("search", "");
+                      setSearchOpen(false);
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
 
             {searchOpen && filters.search.trim() && (
               <div className="absolute top-[calc(100%+6px)] left-0 right-0 z-30 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
@@ -387,8 +498,20 @@ export default function BookingManagementFilters({
               onKeyDown={(e) => {
                 if (e.key === "Escape") setSeatOpen(false);
               }}
-              className="h-10 pl-9 pr-3 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400"
+              className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400"
             />
+            {filters.seatNumber && (
+              <button
+                type="button"
+                onClick={() => {
+                  onUpdate("seatNumber", "");
+                  setSeatOpen(false);
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            )}
 
             {seatOpen && filters.seatNumber.trim() && (
               <div className="absolute top-[calc(100%+6px)] left-0 right-0 z-30 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
@@ -424,32 +547,14 @@ export default function BookingManagementFilters({
             value={filters.bookedBy}
             onChange={(v) => onUpdate("bookedBy", v)}
             options={[
-              { value: "All", label: "All" },
+              { value: "All", label: "All Booked By" },
               { value: "Self", label: "Self" },
               { value: "Admin", label: "Admin" },
             ]}
           />
         </Field>
 
-        <Field label="Status"  width="187px">
-          <NativeSelect
-            value={filters.status}
-            onChange={(v) => onUpdate("status", v)}
-            options={[
-              { value: "All", label: "All" },
-              { value: "Scheduled", label: "Scheduled" },
-              { value: "Confirmed", label: "Confirmed" },
-              { value: "Checked In", label: "Checked In" },
-              { value: "Checked Out", label: "Checked Out" },
-              { value: "Completed", label: "Completed" },
-              { value: "Cancelled", label: "Cancelled" },
-              { value: "Modified", label: "Modified" },
-              { value: "No Show", label: "No Show" },
-            ]}
-          />
-        </Field>
-
-        <div className="flex items-center gap-2 ml-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto justify-end">
           <button
             type="button"
             onClick={onClear}
@@ -458,13 +563,14 @@ export default function BookingManagementFilters({
             <RotateCcw size={14} />
             Clear
           </button>
-          {/* <button
+          <button
             type="button"
             onClick={onSearch}
-            className="h-10 px-5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm"
+            className="h-10 px-5 flex items-center gap-1.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm"
           >
+            <Search size={14} />
             Search
-          </button> */}
+          </button>
         </div>
       </div>
     </div>

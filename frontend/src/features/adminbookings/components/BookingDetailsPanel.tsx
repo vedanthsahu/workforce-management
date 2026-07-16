@@ -7,12 +7,8 @@ import {
   Building2,
   Layers,
   CalendarDays,
-  Clock,
   UserRound,
   CalendarPlus,
-  LogIn,
-  Sparkles,
-  FileText,
 } from "lucide-react";
 import { AdminBooking, BookingStatus } from "../types/adminBooking.types";
 
@@ -55,8 +51,6 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
 
 export default function BookingDetailsPanel({ booking, onClose, onModify, onCancel }: Props) {
   const isGuest = booking.person_type === "Guest";
-  const shownAmenities = booking.amenities.slice(0, 3);
-  const remainingAmenities = booking.amenities.length - shownAmenities.length;
 
   return (
     <div className="w-full lg:w-80 shrink-0 bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
@@ -103,36 +97,8 @@ export default function BookingDetailsPanel({ booking, onClose, onModify, onCanc
             label="Date"
             value={`${booking.date_label} (${booking.date_relative})`}
           />
-          <DetailRow icon={<Clock size={14} />} label="Time" value={booking.time_range || "--"} />
           <DetailRow icon={<UserRound size={14} />} label="Booked By" value={booking.booked_by} />
           <DetailRow icon={<CalendarPlus size={14} />} label="Booked On" value={booking.booked_on} />
-          <DetailRow icon={<LogIn size={14} />} label="Check In Time" value={booking.check_in_time ?? "--"} />
-          <DetailRow
-            icon={<Sparkles size={14} />}
-            label="Amenities"
-            value={
-              booking.amenities.length === 0 ? (
-                "--"
-              ) : (
-                <span className="flex flex-wrap items-center gap-1">
-                  {shownAmenities.map((a) => (
-                    <span
-                      key={a.id}
-                      className="inline-flex px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-medium"
-                    >
-                      {a.label}
-                    </span>
-                  ))}
-                  {remainingAmenities > 0 && (
-                    <span className="inline-flex px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-medium">
-                      +{remainingAmenities}
-                    </span>
-                  )}
-                </span>
-              )
-            }
-          />
-          <DetailRow icon={<FileText size={14} />} label="Notes" value={booking.notes ?? "--"} />
         </div>
       </div>
 

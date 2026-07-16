@@ -15,26 +15,23 @@ import { mapActivityToAdminBooking } from "@/features/adminbookings/utils/mapAdm
 const PAGE_SIZES = [10, 25, 50, 75, 100];
 
 export default function AdminBookingsPage() {
+  // `filters` is the draft state the filter form is bound to — editing it
+  // (typing, picking a dropdown) never fetches or refilters anything.
+  // `appliedFilters` is only replaced on an explicit Search click (or Clear),
+  // and it alone drives the data fetch + table/card filtering below.
   const [filters, setFilters] = useState(defaultAdminBookingFilters());
+  const [appliedFilters, setAppliedFilters] = useState(defaultAdminBookingFilters());
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(PAGE_SIZES[0]);
   const [selectedBooking, setSelectedBooking] = useState<AdminBooking | null>(null);
 
-  // Employee/Guest & Seat Number filter live, debounced 300ms after typing
-  // stops — same pattern as the host/guest search in the facilitator's
-  // "Book for Someone" guest-booking flow (useEmployeeSearch/useGuestSearch).
-  const [appliedSearch, setAppliedSearch] = useState("");
-  const [appliedSeatNumber, setAppliedSeatNumber] = useState("");
+  // Cards & table stay empty until the user clicks Search — no data
+  // fetch/display happens on initial page load or on individual filter edits.
+  const [hasApplied, setHasApplied] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setAppliedSearch(filters.search), 300);
-    return () => clearTimeout(timer);
-  }, [filters.search]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setAppliedSeatNumber(filters.seatNumber), 300);
-    return () => clearTimeout(timer);
-  }, [filters.seatNumber]);
+  // Search is blocked until Employee/Guest is picked — surfaced as a
+  // centered message in the body instead of inline under the field.
+  const [searchError, setSearchError] = useState(false);
 
   const { sites, buildings, floors, loadBuildings, loadFloors, setBuildings, setFloors } =
     useAdminBookingLocations();
@@ -42,20 +39,29 @@ export default function AdminBookingsPage() {
   // GET /admin/activities only supports a single exact `date`, not a range —
   // when the picked range collapses to one day we can push it server-side,
   // otherwise we fetch unfiltered by date and apply the range client-side.
-  const exactDate = filters.dateFrom && filters.dateFrom === filters.dateTo ? filters.dateFrom : undefined;
+  const exactDate =
+    appliedFilters.dateFrom && appliedFilters.dateFrom === appliedFilters.dateTo
+      ? appliedFilters.dateFrom
+      : undefined;
 
   const [activities, setActivities] = useState<AdminActivityItem[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(true);
 
   useEffect(() => {
+    if (!hasApplied) {
+      setActivities([]);
+      setActivitiesLoading(false);
+      return;
+    }
+
     let cancelled = false;
     setActivitiesLoading(true);
 
     adminActivitiesService
       .list({
-        siteId: filters.site !== "All" ? filters.site : undefined,
-        buildingId: filters.building !== "All" ? filters.building : undefined,
-        floorId: filters.floor !== "All" ? filters.floor : undefined,
+        siteId: appliedFilters.site && appliedFilters.site !== "All" ? appliedFilters.site : undefined,
+        buildingId: appliedFilters.building && appliedFilters.building !== "All" ? appliedFilters.building : undefined,
+        floorId: appliedFilters.floor && appliedFilters.floor !== "All" ? appliedFilters.floor : undefined,
         date: exactDate,
       })
       .then((res) => {
@@ -72,7 +78,7 @@ export default function AdminBookingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [filters.site, filters.building, filters.floor, exactDate]);
+  }, [hasApplied, appliedFilters.site, appliedFilters.building, appliedFilters.floor, exactDate]);
 
   const mappedBookings = useMemo(() => activities.map(mapActivityToAdminBooking), [activities]);
 
@@ -88,16 +94,22 @@ export default function AdminBookingsPage() {
   }, [mappedBookings]);
 
   const bookings = useMemo(() => {
-    const search = appliedSearch.trim().toLowerCase();
-    const seatNumber = appliedSeatNumber.trim().toLowerCase();
+    const search = appliedFilters.search.trim().toLowerCase();
+    const seatNumber = appliedFilters.seatNumber.trim().toLowerCase();
     // Only apply the range client-side when it wasn't already pushed server-side as `exactDate`.
-    const from = !exactDate && filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null;
-    const to = !exactDate && filters.dateTo ? new Date(`${filters.dateTo}T23:59:59`) : null;
+    const from = !exactDate && appliedFilters.dateFrom ? new Date(`${appliedFilters.dateFrom}T00:00:00`) : null;
+    const to = !exactDate && appliedFilters.dateTo ? new Date(`${appliedFilters.dateTo}T23:59:59`) : null;
 
     return mappedBookings.filter((b) => {
-      if (filters.bookingType !== "All" && b.person_type !== filters.bookingType) return false;
-      if (filters.status !== "All" && b.status !== filters.status) return false;
-      if (filters.bookedBy !== "All" && b.booked_by !== filters.bookedBy) return false;
+      if (
+        appliedFilters.bookingType &&
+        appliedFilters.bookingType !== "All" &&
+        b.person_type !== appliedFilters.bookingType
+      ) {
+        return false;
+      }
+      if (appliedFilters.status !== "All" && b.status !== appliedFilters.status) return false;
+      if (appliedFilters.bookedBy !== "All" && b.booked_by !== appliedFilters.bookedBy) return false;
       if (seatNumber && !b.seat_code.toLowerCase().includes(seatNumber)) return false;
       if (search && !b.person_name.toLowerCase().includes(search) && !b.person_email.toLowerCase().includes(search)) {
         return false;
@@ -111,55 +123,57 @@ export default function AdminBookingsPage() {
     });
   }, [
     mappedBookings,
-    filters.bookingType,
-    filters.status,
-    filters.bookedBy,
-    filters.dateFrom,
-    filters.dateTo,
+    appliedFilters.bookingType,
+    appliedFilters.status,
+    appliedFilters.bookedBy,
+    appliedFilters.dateFrom,
+    appliedFilters.dateTo,
     exactDate,
-    appliedSearch,
-    appliedSeatNumber,
+    appliedFilters.search,
+    appliedFilters.seatNumber,
   ]);
 
   const totalPages = Math.max(1, Math.ceil(bookings.length / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedBookings = bookings.slice(startIndex, startIndex + itemsPerPage);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [
-    filters.site,
-    filters.building,
-    filters.floor,
-    filters.bookingType,
-    filters.status,
-    filters.bookedBy,
-    filters.dateFrom,
-    filters.dateTo,
-    appliedSearch,
-    appliedSeatNumber,
-    itemsPerPage,
-  ]);
-
   const handleUpdateFilter = <K extends keyof typeof filters>(key: K, value: (typeof filters)[K]) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
+    if ((key === "bookingType" || key === "seatNumber" || key === "floor") && value) setSearchError(false);
   };
 
   const handleClear = () => {
-    setFilters(defaultAdminBookingFilters());
-    setAppliedSearch("");
-    setAppliedSeatNumber("");
+    const defaults = defaultAdminBookingFilters();
+    setFilters(defaults);
+    setAppliedFilters(defaults);
+    setHasApplied(false);
+    setSearchError(false);
   };
 
   const handleSearch = () => {
-    setAppliedSearch(filters.search);
-    setAppliedSeatNumber(filters.seatNumber);
+    // Office/Building/Floor start on an unselected placeholder ("") — picking
+    // any of them (even explicitly choosing "All Office") counts as a filter,
+    // same as Employee/Guest or Seat Number. Block only when nothing at all is set.
+    const hasAnyFilter =
+      filters.bookingType ||
+      filters.seatNumber.trim() ||
+      filters.site ||
+      filters.building ||
+      filters.floor;
+    if (!hasAnyFilter) {
+      setSearchError(true);
+      return;
+    }
+    setSearchError(false);
+    setAppliedFilters(filters);
     setCurrentPage(1);
+    setHasApplied(true);
   };
 
   const handleSiteChange = (siteId: string) => {
-    setFilters((prev) => ({ ...prev, site: siteId, building: "All", floor: "All" }));
+    setFilters((prev) => ({ ...prev, site: siteId, building: "", floor: "" }));
     setFloors([]);
+    if (siteId) setSearchError(false);
     if (siteId === "All") {
       setBuildings([]);
       return;
@@ -168,7 +182,8 @@ export default function AdminBookingsPage() {
   };
 
   const handleBuildingChange = (buildingId: string) => {
-    setFilters((prev) => ({ ...prev, building: buildingId, floor: "All" }));
+    setFilters((prev) => ({ ...prev, building: buildingId, floor: "" }));
+    if (buildingId) setSearchError(false);
     if (buildingId === "All") {
       setFloors([]);
       return;
@@ -205,9 +220,6 @@ export default function AdminBookingsPage() {
         </div>
       </div>
 
-      {/* STATS */}
-      <BookingStatCards stats={stats} />
-
       {/* FILTERS CARD */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 sm:p-5">
         <BookingManagementFilters
@@ -224,61 +236,74 @@ export default function AdminBookingsPage() {
         />
       </div>
 
-      {/* TABLE + DETAILS */}
-      <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 items-start">
-        <div className="flex-1 min-w-0 w-full bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
-          {/* TABLE HEADER */}
-          <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b shrink-0">
-            <h2 className="text-sm sm:text-base font-semibold text-gray-800">Bookings ({bookings.length})</h2>
-            <button className="inline-flex items-center gap-1.5 h-8 px-3 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50">
-              <Settings2 size={13} />
-              Columns
-            </button>
-          </div>
-
-          {/* TABLE BODY */}
-          {activitiesLoading ? (
-            <p className="px-6 py-12 text-center text-gray-400 text-sm">Loading bookings…</p>
-          ) : (
-            <BookingsTable
-              data={paginatedBookings}
-              selectedBookingId={selectedBooking?.booking_id}
-              onView={setSelectedBooking}
-            />
-          )}
-
-          {/* FOOTER */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
-            <span>
-              {bookings.length > 0 &&
-                `Showing ${startIndex + 1} to ${Math.min(startIndex + itemsPerPage, bookings.length)} of ${bookings.length} entries`}
-            </span>
-            <div className="flex items-center gap-3 self-center sm:self-auto">
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span>Rows</span>
-                <select
-                  value={itemsPerPage}
-                  onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                  className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                >
-                  {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </div>
-              <AmenitiesPagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
-            </div>
-          </div>
+      {!hasApplied && searchError && (
+        <div className="flex items-center justify-center py-16">
+          <p className="text-sm font-medium text-red-500">Select at least one filter</p>
         </div>
+      )}
 
-        {/* DETAILS PANEL — only rendered once a row action opens it */}
-        {selectedBooking && (
-          <BookingDetailsPanel
-            booking={selectedBooking}
-            onClose={() => setSelectedBooking(null)}
-            onModify={setSelectedBooking}
-            onCancel={setSelectedBooking}
-          />
-        )}
-      </div>
+      {hasApplied && (
+        <>
+          {/* STATS */}
+          <BookingStatCards stats={stats} />
+
+          {/* TABLE + DETAILS */}
+          <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 items-start">
+            <div className="flex-1 min-w-0 w-full bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
+              {/* TABLE HEADER */}
+              <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b shrink-0">
+                <h2 className="text-sm sm:text-base font-semibold text-gray-800">Bookings ({bookings.length})</h2>
+                <button className="inline-flex items-center gap-1.5 h-8 px-3 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50">
+                  <Settings2 size={13} />
+                  Columns
+                </button>
+              </div>
+
+              {/* TABLE BODY */}
+              {activitiesLoading ? (
+                <p className="px-6 py-12 text-center text-gray-400 text-sm">Loading bookings…</p>
+              ) : (
+                <BookingsTable
+                  data={paginatedBookings}
+                  selectedBookingId={selectedBooking?.booking_id}
+                  onView={setSelectedBooking}
+                />
+              )}
+
+              {/* FOOTER */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
+                <span>
+                  {bookings.length > 0 &&
+                    `Showing ${startIndex + 1} to ${Math.min(startIndex + itemsPerPage, bookings.length)} of ${bookings.length} entries`}
+                </span>
+                <div className="flex items-center gap-3 self-center sm:self-auto">
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span>Rows</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                      className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                    >
+                      {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                  <AmenitiesPagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+                </div>
+              </div>
+            </div>
+
+            {/* DETAILS PANEL — only rendered once a row action opens it */}
+            {selectedBooking && (
+              <BookingDetailsPanel
+                booking={selectedBooking}
+                onClose={() => setSelectedBooking(null)}
+                onModify={setSelectedBooking}
+                onCancel={setSelectedBooking}
+              />
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

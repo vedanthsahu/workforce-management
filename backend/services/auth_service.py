@@ -41,6 +41,7 @@ from backend.repositories.user_repository import fetch_tenant_name_by_id, fetch_
 from backend.repositories.user_repository import (
     fetch_active_tenant_ids,
     fetch_graph_managed_role_users,
+    normalize_role_name,
     update_user_role,
 )
 from backend.schemas.auth import UserResponse
@@ -56,7 +57,7 @@ class AuthTokens:
 
 GRAPH_MANAGED_ROLES = {"EMPLOYEE", "FACILITATOR"}
 GRAPH_PROTECTED_ROLES = {
-    "SECURITY",
+    "FRONT_OFFICE",
     "MANAGER",
     "TENANT_ADMIN",
     "PRODUCT_ADMIN",
@@ -89,7 +90,7 @@ def _build_access_token_for_user(user: dict[str, Any], *, session_id: str) -> st
         "session_id": session_id,
     }
 
-    role = str(user.get("role_name") or user.get("role") or "").strip()
+    role = normalize_role_name(user.get("role_name") or user.get("role"))
     if role:
         extra_claims["role"] = role
 
@@ -255,9 +256,10 @@ def attach_permissions_to_user(
     user: dict[str, Any],
 ) -> dict[str, Any]:
     """Attach tenant-scoped database permissions to a loaded user record."""
-    role_name = str(user.get("role_name") or user.get("role") or "").strip()
+    role_name = normalize_role_name(user.get("role_name") or user.get("role"))
 
     user["role_name"] = role_name
+    user["role"] = role_name
     user["permissions"] = (
         fetch_permissions_for_role(
             conn,

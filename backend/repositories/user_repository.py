@@ -65,17 +65,28 @@ ROLE_NAMES = {
     "EMPLOYEE",
     "MANAGER",
     "FACILITATOR",
-    "SECURITY",
+    "FRONT_OFFICE",
     "TENANT_ADMIN",
     "FACILITATOR_GUEST_COORDINATOR",
 }
+
+
+def normalize_role_name(value: str | None) -> str:
+    """Canonicalize a role name read from an external source (DB row, JWT claim).
+
+    Existing rows can carry a space instead of the SCREAMING_SNAKE_CASE form
+    every role comparison in the codebase expects (e.g. "FRONT OFFICE" vs.
+    "FRONT_OFFICE") — normalize once at read time so callers can keep doing
+    plain `==` checks against the canonical constants.
+    """
+    return str(value or "").strip().upper().replace(" ", "_")
 
 USER_STATUSES = {"ACTIVE", "INACTIVE", "LOCKED"}
 
 ROLE_DISTRIBUTION_ORDER = (
     "EMPLOYEE",
     "FACILITATOR",
-    "SECURITY",
+    "FRONT_OFFICE",
     "MANAGER",
     "TENANT_ADMIN",
     "FACILITATOR_GUEST_COORDINATOR",
@@ -1459,7 +1470,7 @@ def fetch_admin_role_metadata(
             FROM roles r
 
             LEFT JOIN app_users au
-                ON au.role_name = r.role_name
+                ON UPPER(REPLACE(au.role_name, ' ', '_')) = UPPER(REPLACE(r.role_name, ' ', '_'))
                 AND au.tenant_id = r.tenant_id
 
             LEFT JOIN role_permissions rp

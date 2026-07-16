@@ -41,7 +41,7 @@ export type AppRole =
   | "MANAGER"
   | "EMPLOYEE"
   | "FACILITATOR"
-  | "SECURITY"
+  | "FRONT_OFFICE"
   | "FACILITIES"
   | string;
 
