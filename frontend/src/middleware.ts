@@ -33,7 +33,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
-  if (pathname.startsWith("/security") && role !== "SECURITY") {
+  if (pathname.startsWith("/front_office") && role !== "FRONT_OFFICE") {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 

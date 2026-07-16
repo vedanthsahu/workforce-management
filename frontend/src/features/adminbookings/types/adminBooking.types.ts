@@ -81,10 +81,10 @@ export interface AdminBookingFloorOption {
 export function defaultAdminBookingFilters(): AdminBookingFilters {
   return {
     search: "",
-    site: "All",
-    building: "All",
-    floor: "All",
-    bookingType: "All",
+    site: "",
+    building: "",
+    floor: "",
+    bookingType: "",
     status: "All",
     seatNumber: "",
     bookedBy: "All",

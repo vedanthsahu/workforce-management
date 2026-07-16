@@ -98,7 +98,7 @@ export function useFindTeammate() {
     } catch {
       setPhase({ status: "error", message: "Failed to load seat details. Please try again." });
     }
-  }, [query, teamGroups, resolveTeammate]);
+  }, [query, visibleTeamGroups, resolveTeammate]);
 
   // Triggered by clicking a member row in the team overview
   const selectMember = useCallback(
