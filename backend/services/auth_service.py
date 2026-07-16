@@ -27,6 +27,7 @@ from backend.core.sso import (
     check_graph_group_membership,
     exchange_client_credentials_for_graph_token,
     fetch_graph_group_member_ids,
+    fetch_graph_users_with_department,
 )
 from backend.repositories.permission_repository import fetch_permissions_for_role
 from backend.repositories.token_repository import (
@@ -40,7 +41,10 @@ from backend.repositories.token_repository import (
 from backend.repositories.user_repository import fetch_tenant_name_by_id, fetch_user_by_id
 from backend.repositories.user_repository import (
     fetch_active_tenant_ids,
+    fetch_graph_linked_users,
     fetch_graph_managed_role_users,
+    sync_department_team_for_user,
+    update_user_department,
     update_user_role,
 )
 from backend.schemas.auth import UserResponse
@@ -247,6 +251,83 @@ def sync_graph_managed_roles(
         changed_users=changed,
         promoted_users=promoted,
         demoted_users=demoted,
+    )
+
+
+@dataclass(frozen=True)
+class DepartmentTeamSyncResult:
+    """Summary returned by the background department/team sync."""
+
+    enabled: bool
+    scanned_users: int = 0
+    changed_users: int = 0
+
+
+def sync_department_teams(
+    conn: PGConnection,
+    *,
+    tenant_id: str | None = None,
+    access_token: str | None = None,
+    commit: bool = True,
+) -> DepartmentTeamSyncResult:
+    """Refresh every Graph-linked user's department and team membership.
+
+    Unlike the login-time sync, this reads department directly from Graph
+    for the whole tenant directory (app-only token), so drift is caught even
+    for users who haven't logged in recently. Only the `department` field is
+    touched here deliberately -- a full profile resync would fight with
+    user-editable profile fields and is left for a later task.
+    """
+    settings = get_settings()
+    if not settings.graph_team_sync_enabled:
+        return DepartmentTeamSyncResult(enabled=False)
+
+    graph_access_token = access_token or exchange_client_credentials_for_graph_token()
+    graph_departments = fetch_graph_users_with_department(graph_access_token)
+
+    scanned = 0
+    changed = 0
+
+    try:
+        tenant_ids = [tenant_id] if tenant_id is not None else fetch_active_tenant_ids(conn)
+        for scoped_tenant_id in tenant_ids:
+            users = fetch_graph_linked_users(conn, tenant_id=str(scoped_tenant_id))
+            for user in users:
+                scanned += 1
+                object_id = str(user.get("microsoft_object_id") or "").strip()
+                if object_id not in graph_departments:
+                    continue
+
+                department = graph_departments[object_id]
+                user_id = str(user["user_id"])
+
+                if department != (user.get("department") or None):
+                    update_user_department(
+                        conn,
+                        tenant_id=str(scoped_tenant_id),
+                        user_id=user_id,
+                        department=department,
+                    )
+                    changed += 1
+
+                sync_department_team_for_user(
+                    conn,
+                    tenant_id=str(scoped_tenant_id),
+                    user_id=user_id,
+                    department=department,
+                )
+
+        if commit:
+            conn.commit()
+    except Exception:
+        if commit:
+            _rollback_if_needed(conn)
+        raise
+
+    return DepartmentTeamSyncResult(
+        enabled=True,
+        scanned_users=scanned,
+        changed_users=changed,
     )
 
 
