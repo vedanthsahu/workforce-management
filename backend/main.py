@@ -46,6 +46,7 @@ from backend.repositories.token_repository import (
 from backend.services.auth_service import sync_department_teams, sync_graph_managed_roles
 from backend.api.routes import teams
 from backend.api.routes.preferences import router as preferences_router
+from backend.api.routes.admin_bookings import router as admin_bookings_router
 from backend.api.routes.admin_dashboard import router as admin_dashboard_router
 from backend.api.routes.floor_layouts import router as floor_layout_router
 from backend.api.routes.user_management import router as user_management_router
@@ -85,6 +86,7 @@ app.include_router(locations_router)
 app.include_router(teams.router)
 app.include_router(dashboard_router)
 app.include_router(admin_dashboard_router)
+app.include_router(admin_bookings_router)
 app.include_router(preferences_router)
 app.include_router(floor_layout_router)
 app.include_router(user_management_router)

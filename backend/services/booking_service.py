@@ -24,6 +24,8 @@ from backend.core.app_logging import LOGGER_NAME
 from backend.repositories.booking_repository import (
     fetch_available_seats,
     fetch_available_seats_by_range,
+    fetch_admin_bookings,
+    fetch_admin_bookings_summary,
     fetch_past_bookings_for_user,
     fetch_current_bookings_for_user,
     fetch_past_delegated_bookings,
@@ -48,6 +50,9 @@ from backend.repositories.booking_repository import (
 )
 from backend.repositories.user_repository import fetch_user_by_id
 from backend.schemas.booking import (
+    AdminBookingListQuery,
+    AdminBookingListResponse,
+    AdminBookingSummary,
     AvailableSeatResponse,
     AvailableSeatListResponse,
     AvailableSeatListSummary,
@@ -1083,6 +1088,18 @@ def get_available_seats_by_range(
         # calendar_mode: caller only wants raw seat status (no booking-eligibility checks)
         if not calendar_mode:
             if is_guest_booking:
+                if current_user is None or not _can_book_guest(current_user):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail={
+                            "code": "guest_booking_not_allowed",
+                            "message": (
+                                "Only FACILITATOR and Tenant Admin users "
+                                "can check guest booking availability."
+                            ),
+                        },
+                    )
+
                 if booked_for_guest_id is None:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
@@ -1697,3 +1714,78 @@ def get_delegated_cancelled_bookings(
     )
 
     return _booking_list_response(combined, page=page, limit=limit)
+
+
+def get_admin_bookings(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    query: AdminBookingListQuery,
+    page: int,
+    limit: int,
+) -> AdminBookingListResponse:
+    """Tenant-wide employee + guest booking search for the admin bookings screen.
+
+    Reuses the same BOOKING_SELECT_FIELDS/BOOKING_SELECT_FROM join shape (and
+    the BookingResponse DTO) as the delegated booking endpoints, just filtered
+    dynamically across the whole tenant instead of scoped to one delegator.
+    """
+    if (
+        query.start_date is not None
+        and query.end_date is not None
+        and query.start_date > query.end_date
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_date_range",
+                "message": "start_date must be earlier than end_date.",
+            },
+        )
+
+    filters: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "start_date": query.start_date,
+        "end_date": query.end_date,
+        "site_id": str(query.site_id) if query.site_id is not None else None,
+        "building_id": (
+            str(query.building_id) if query.building_id is not None else None
+        ),
+        "floor_id": str(query.floor_id) if query.floor_id is not None else None,
+        "booking_type": query.booking_type,
+        "booking_status": query.booking_status,
+        "search": query.search.strip() if query.search else None,
+        "seat_code": query.seat_code.strip() if query.seat_code else None,
+        "booked_by_user_id": (
+            str(query.booked_by_user_id)
+            if query.booked_by_user_id is not None
+            else None
+        ),
+    }
+
+    offset = (page - 1) * limit
+
+    try:
+        rows = fetch_admin_bookings(conn, limit=limit, offset=offset, **filters)
+        summary = fetch_admin_bookings_summary(conn, **filters)
+    except psycopg2.Error as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "admin_bookings_lookup_failed",
+                "message": "Failed to fetch admin bookings.",
+            },
+        ) from exc
+
+    total = summary["total_bookings"]
+
+    return AdminBookingListResponse(
+        items=[BookingResponse(**row) for row in rows],
+        summary=AdminBookingSummary(**summary),
+        pagination=PaginationMetadata(
+            total=total,
+            page=page,
+            limit=limit,
+            total_pages=math.ceil(total / limit) if total else 0,
+        ),
+    )

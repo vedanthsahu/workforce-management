@@ -294,7 +294,7 @@ def sync_department_teams(
             users = fetch_graph_linked_users(conn, tenant_id=str(scoped_tenant_id))
             for user in users:
                 scanned += 1
-                object_id = str(user.get("microsoft_object_id") or "").strip()
+                object_id = str(user.get("microsoft_object_id") or "").strip().lower()
                 if object_id not in graph_departments:
                     continue
 

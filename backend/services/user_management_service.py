@@ -53,6 +53,36 @@ ADMIN_DIRECTORY_ROLES = {
 ADMIN_DIRECTORY_STATUSES = {"ACTIVE", "INACTIVE", "LOCKED"}
 
 
+def _current_user_id(current_user: dict[str, Any]) -> str:
+    return str(current_user.get("user_id") or current_user.get("id") or "")
+
+
+def _user_role(user: dict[str, Any]) -> str:
+    return str(user.get("role_name") or user.get("role") or "").strip().upper()
+
+
+def _can_view_user_resource(
+    *,
+    current_user: dict[str, Any],
+    target_user: dict[str, Any],
+) -> bool:
+    """Same delegation rule used for dashboards/bookings: self, TENANT_ADMIN,
+    FACILITATOR, or the target's own MANAGER."""
+    current_user_id = _current_user_id(current_user)
+
+    if current_user_id == str(target_user.get("id") or target_user.get("user_id") or ""):
+        return True
+
+    role = _user_role(current_user)
+    if role in {"TENANT_ADMIN", "FACILITATOR"}:
+        return True
+
+    return (
+        role == "MANAGER"
+        and str(target_user.get("manager_user_id") or "") == current_user_id
+    )
+
+
 def update_my_profile(
     conn: PGConnection,
     *,
@@ -265,6 +295,15 @@ def get_user_by_id_service(
             },
         )
 
+    if not _can_view_user_resource(current_user=current_user, target_user=user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "user_view_forbidden",
+                "message": "You are not allowed to view this user's details.",
+            },
+        )
+
     return UserDetailsResponse(**user)
 
 
@@ -295,6 +334,15 @@ def get_user_booking_history(
             detail={
                 "code": "user_not_found",
                 "message": "User not found.",
+            },
+        )
+
+    if not _can_view_user_resource(current_user=current_user, target_user=user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "user_bookings_forbidden",
+                "message": "You are not allowed to view this user's bookings.",
             },
         )
 
