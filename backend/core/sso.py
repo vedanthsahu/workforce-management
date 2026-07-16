@@ -422,7 +422,7 @@ def fetch_graph_users_with_department(access_token: str) -> dict[str, str | None
         for user in users:
             if not isinstance(user, dict):
                 continue
-            object_id = str(user.get("id") or "").strip()
+            object_id = str(user.get("id") or "").strip().lower()
             if object_id:
                 departments[object_id] = str(user.get("department") or "").strip() or None
         next_link = str(payload.get("@odata.nextLink") or "").strip()
