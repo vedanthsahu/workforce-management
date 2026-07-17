@@ -199,3 +199,50 @@ class BookingEligibilityResponse(BaseModel):
     message: str
 
 
+AdminBookingType = Literal["EMPLOYEE", "GUEST"]
+AdminBookingStatus = Literal[
+    "CONFIRMED",
+    "CANCELLED",
+    "MODIFIED",
+    "COMPLETED",
+    "NO_SHOW",
+]
+
+
+class AdminBookingListQuery(BaseModel):
+    """Validated filters for the admin booking management listing."""
+
+    start_date: date | None = None
+    end_date: date | None = None
+
+    site_id: int | None = Field(default=None, gt=0)
+    building_id: int | None = Field(default=None, gt=0)
+    floor_id: int | None = Field(default=None, gt=0)
+
+    booking_type: AdminBookingType | None = None
+    booking_status: AdminBookingStatus | None = None
+
+    search: str | None = Field(default=None, min_length=1)
+    seat_code: str | None = Field(default=None, min_length=1)
+    booked_by_user_id: int | None = Field(default=None, gt=0)
+
+
+class AdminBookingSummary(BaseModel):
+    """Aggregate counts over the filtered (not paginated) admin booking dataset."""
+
+    total_bookings: int = 0
+    confirmed_bookings: int = 0
+    cancelled_bookings: int = 0
+    modified_bookings: int = 0
+    completed_bookings: int = 0
+    no_show_bookings: int = 0
+    employee_bookings: int = 0
+    guest_bookings: int = 0
+    checked_in_bookings: int = 0
+    checked_out_bookings: int = 0
+
+
+class AdminBookingListResponse(BaseModel):
+    items: list[BookingResponse]
+    summary: AdminBookingSummary
+    pagination: PaginationMetadata
