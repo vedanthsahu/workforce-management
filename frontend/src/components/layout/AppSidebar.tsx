@@ -149,6 +149,7 @@ const PERSONAL_NAV: NavItem[] = [
 
 const ADMIN_DASHBOARD: NavItem[] = [
   { id: "admin_dashboard", label: "Dashboard", icon: LayoutDashboard },
+  // { id: "team",       label: "Book for someone",  icon: Monitor,       badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
 ];
 
 const ADMIN_MANAGE_NAV: NavItem[] = [

@@ -322,9 +322,10 @@ export function EmployeeSearch({ placeholder, selectedEmployee, onSelect, onClea
 interface BookingTypeSelectorProps {
   selected: BookingType;
   onChange: (type: BookingType) => void;
+  disabledType?: BookingType;
 }
 
-export function BookingTypeSelector({ selected, onChange }: BookingTypeSelectorProps) {
+export function BookingTypeSelector({ selected, onChange, disabledType }: BookingTypeSelectorProps) {
   const { can } = usePermissions();
 
   const options = [
@@ -342,31 +343,35 @@ export function BookingTypeSelector({ selected, onChange }: BookingTypeSelectorP
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
         {options.map(({ type, label, sub, Icon }) => {
           const active = selected === type;
+          const disabled = disabledType === type;
           return (
             <button
               key={type}
               type="button"
-              onClick={() => onChange(type)}
+              onClick={() => !disabled && onChange(type)}
               aria-pressed={active}
+              aria-disabled={disabled}
+              disabled={disabled}
               style={{
                 display: "flex",
                 alignItems: "flex-start",
                 gap: "0.75rem",
                 padding: "1rem",
-                border: `1.5px solid ${active ? "#4f46e5" : "#e5e7eb"}`,
+                border: `1.5px solid ${disabled ? "#e5e7eb" : active ? "#4f46e5" : "#e5e7eb"}`,
                 borderRadius: 10,
-                background: active ? "#eef2ff" : "#fff",
+                background: disabled ? "#f9fafb" : active ? "#eef2ff" : "#fff",
                 textAlign: "left",
-                cursor: "pointer",
+                cursor: disabled ? "not-allowed" : "pointer",
+                opacity: disabled ? 0.55 : 1,
                 transition: "border-color 0.15s, background 0.15s",
                 width: "100%",
               }}
             >
-              <span style={{ color: active ? "#4f46e5" : "#9ca3af", marginTop: 1, flexShrink: 0 }}>
+              <span style={{ color: disabled ? "#9ca3af" : active ? "#4f46e5" : "#9ca3af", marginTop: 1, flexShrink: 0 }}>
                 <Icon />
               </span>
               <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
-                <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#111827" }}>{label}</span>
+                <span style={{ fontSize: "0.875rem", fontWeight: 600, color: disabled ? "#9ca3af" : "#111827" }}>{label}</span>
                 <span style={{ fontSize: "0.75rem", color: "#6b7280", lineHeight: 1.4 }}>{sub}</span>
               </span>
               <span style={{ flexShrink: 0, marginTop: 2 }}>
@@ -375,8 +380,8 @@ export function BookingTypeSelector({ selected, onChange }: BookingTypeSelectorP
                   width: 16,
                   height: 16,
                   borderRadius: "50%",
-                  border: `2px solid ${active ? "#4f46e5" : "#d1d5db"}`,
-                  background: active ? "radial-gradient(circle, #4f46e5 45%, transparent 46%)" : "transparent",
+                  border: `2px solid ${disabled ? "#d1d5db" : active ? "#4f46e5" : "#d1d5db"}`,
+                  background: !disabled && active ? "radial-gradient(circle, #4f46e5 45%, transparent 46%)" : "transparent",
                 }} />
               </span>
             </button>
