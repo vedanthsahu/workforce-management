@@ -116,7 +116,7 @@ from backend.services.notification_service import (
 
 logger = logging.getLogger(f"{LOGGER_NAME}.guests")
 
-GUEST_OPERATION_ROLES = {"FACILITATOR", "TENANT_ADMIN", "SECURITY"}
+GUEST_OPERATION_ROLES = {"FACILITATOR", "TENANT_ADMIN", "FRONT_OFFICE"}
 BOOKING_STATUSES = {
     "CONFIRMED",
     "CANCELLED",
@@ -139,7 +139,7 @@ def _require_guest_operator(current_user: dict[str, Any]) -> None:
                 "code": "guest_operation_not_allowed",
                 "message": (
                     "Guest operations require the FACILITATOR, TENANT_ADMIN, "
-                    "or SECURITY role."
+                    "or FRONT_OFFICE role."
                 ),
             },
         )
@@ -1417,32 +1417,32 @@ def _first_text(*values: Any) -> str:
     return ""
 
 
-def _restrict_visit_scope_for_security_role(
+def _restrict_visit_scope_for_front_office_role(
     current_user: dict[str, Any],
     *,
     visit_scope: str,
     site_id: str | None,
 ) -> str | None:
-    """SECURITY users may only see today's visits at their own home site.
+    """FRONT_OFFICE users may only see today's visits at their own home site.
 
-    Business rule (not a general permission grant): confining SECURITY to
+    Business rule (not a general permission grant): confining FRONT_OFFICE to
     CURRENT-scope, home-site visits. Kept as a role check rather than a
     permission because it restricts *scope*, not just access.
     """
-    if _user_role(current_user) != "SECURITY":
+    if _user_role(current_user) != "FRONT_OFFICE":
         return site_id
 
     home_site_id = current_user.get("home_site_id")
     if not home_site_id:
         raise HTTPException(
             status_code=403,
-            detail="Security user does not have a home site configured.",
+            detail="Front Office user does not have a home site configured.",
         )
 
     if visit_scope != "CURRENT":
         raise HTTPException(
             status_code=403,
-            detail="Security can only access current visits.",
+            detail="Front Office can only access current visits.",
         )
 
     return str(home_site_id)
@@ -1464,7 +1464,7 @@ def list_guest_visits(
 
     tenant_id = str(current_user["tenant_id"])
 
-    site_id = _restrict_visit_scope_for_security_role(
+    site_id = _restrict_visit_scope_for_front_office_role(
         current_user,
         visit_scope=visit_scope,
         site_id=site_id,

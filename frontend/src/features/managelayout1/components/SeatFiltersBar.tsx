@@ -5,6 +5,7 @@ import React from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { SeatFilters } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 
 /** Call this to get a fresh "no filters applied" object */
 export function defaultFilters(): SeatFilters {
@@ -33,7 +34,7 @@ function FilterSelect({
 }: {
   label: string;
   value: string;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; dotColor?: string }[];
   onChange: (v: string) => void;
 }) {
   return (
@@ -52,8 +53,8 @@ function FilterSelect({
         }}
       >
         {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
+          <option key={o.value} value={o.value} style={o.dotColor ? { color: o.dotColor } : undefined}>
+            {o.dotColor ? `● ${o.label}` : o.label}
           </option>
         ))}
       </select>
@@ -81,6 +82,7 @@ export default function SeatFiltersBar({
     ...preferences.map((p) => ({
       value: p.preference_id,
       label: p.preference_name,
+      dotColor: getAmenityColor(p.preference_name, p.preference_type).hex,
     })),
   ];
 

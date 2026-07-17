@@ -22,7 +22,7 @@ export const ROLE_BADGE_STYLES: Record<string, string> = {
   EMPLOYEE: "bg-blue-50 text-blue-600 ring-blue-200",
   FACILITATOR: "bg-purple-50 text-purple-600 ring-purple-200",
   FACILITATOR_GUEST_COORDINATOR: "bg-cyan-50 text-cyan-600 ring-cyan-200",
-  SECURITY: "bg-amber-50 text-amber-600 ring-amber-200",
+  FRONT_OFFICE: "bg-amber-50 text-amber-600 ring-amber-200",
   TENANT_ADMIN: "bg-emerald-50 text-emerald-600 ring-emerald-200",
   MANAGER: "bg-violet-50 text-violet-600 ring-violet-200",
 };

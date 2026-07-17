@@ -76,7 +76,7 @@ export type AppRole =
   | "MANAGER"
   | "EMPLOYEE"
   | "FACILITATOR"
-  | "SECURITY"
+  | "FRONT_OFFICE"
   | "FACILITIES"
   | string;
 
@@ -120,12 +120,12 @@ const ROUTE_MAP: Record<string, string> = {
   audit:           "/admin/audit",
   settings:        "/admin/settings",
 
-  security_dashboard: "/dashboard",
-  today_visitors:     "/security/today-visitors",
-  checked_in:          "/security/checked-in",
-  visitor_search:      "/security/visitor-search",
-  past_visits:         "/security/past-visits",
-  invite_guest:        "/security/invite-guest",
+  front_office_dashboard: "/dashboard",
+  today_visitors:     "/front_office/today-visitors",
+  checked_in:          "/front_office/checked-in",
+  visitor_search:      "/front_office/visitor-search",
+  past_visits:         "/front_office/past-visits",
+  invite_guest:        "/front_office/invite-guest",
 };
 
 // ─── Nav configs ──────────────────────────────────────────────────────────────
@@ -149,6 +149,7 @@ const PERSONAL_NAV: NavItem[] = [
 
 const ADMIN_DASHBOARD: NavItem[] = [
   { id: "admin_dashboard", label: "Dashboard", icon: LayoutDashboard },
+  // { id: "team",       label: "Book for someone",  icon: Monitor,       badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
 ];
 
 const ADMIN_MANAGE_NAV: NavItem[] = [
@@ -178,18 +179,18 @@ const ADMIN_SETTINGS_NAV: NavItem[] = [
   { id: "settings", label: "Settings", icon: Settings },
 ];
 //--------security nav config----------------------------------------------------
-const SECURITY_DASHBOARD: NavItem[] = [
-  { id: "security_dashboard", label: "Dashboard", icon: LayoutDashboard },
+const FRONT_OFFICE_DASHBOARD: NavItem[] = [
+  { id: "front_office_dashboard", label: "Dashboard", icon: LayoutDashboard },
 ];
 
-const SECURITY_VISITOR_NAV: NavItem[] = [
+const FRONT_OFFICE_VISITOR_NAV: NavItem[] = [
   { id: "today_visitors", label: "Today's Visitors",   icon: CalendarCheck },
   { id: "checked_in",     label: "Checked-in Visitors", icon: UserCheck     },
   { id: "visitor_search", label: "Visitor Search",      icon: CalendarSearch },
   { id: "past_visits",    label: "Past Visits",         icon: History       },
 ];
 
-const SECURITY_ACTIONS_NAV: NavItem[] = [
+const FRONT_OFFICE_ACTIONS_NAV: NavItem[] = [
   { id: "invite_guest", label: "Invite Guest", icon: UserPlus },
 ];
 
@@ -200,7 +201,7 @@ const ROLE_LABELS: Record<string, string> = {
   MANAGER:      "Manager",
   EMPLOYEE:     "Employee",
   FACILITATOR:  "Facilitator",
-  SECURITY:     "Security",
+  FRONT_OFFICE: "Front Office",
   FACILITIES:   "Facilities",
 };
 
@@ -209,7 +210,7 @@ const ROLE_BADGE_STYLES: Record<string, string> = {
   MANAGER:      "bg-violet-50 text-violet-600 ring-violet-200",
   EMPLOYEE:     "bg-blue-50 text-blue-600 ring-blue-200",
   FACILITATOR:  "bg-teal-50 text-teal-600 ring-teal-200",
-  SECURITY: "bg-amber-50 text-amber-600 ring-amber-200",
+  FRONT_OFFICE: "bg-amber-50 text-amber-600 ring-amber-200",
   FACILITIES:   "bg-orange-50 text-orange-600 ring-orange-200",
 };
 
@@ -319,7 +320,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
   const role: AppRole = user?.role ?? "EMPLOYEE";
   const isAdmin = role === "TENANT_ADMIN";
-  const isSecurity = role === "SECURITY";
+  const isSecurity = role === "FRONT_OFFICE";
 
   const relevantItems = isAdmin
     ? [...ADMIN_DASHBOARD, ...ADMIN_MANAGE_NAV, ...ADMIN_OPERATIONS_NAV, ...ADMIN_REPORTS_NAV, ...ADMIN_SETTINGS_NAV]
@@ -429,19 +430,19 @@ export function AppSidebar({ user }: AppSidebarProps) {
               <SidebarGroup>
                 <SidebarGroupLabel>Overview</SidebarGroupLabel>
                 <SidebarMenu>
-                  <NavSection items={SECURITY_DASHBOARD}   activeItem={activeItem} onNavigate={handleNav} />
+                  <NavSection items={FRONT_OFFICE_DASHBOARD}   activeItem={activeItem} onNavigate={handleNav} />
                 </SidebarMenu>
               </SidebarGroup>
               <SidebarGroup>
                 <SidebarGroupLabel>Visitor Management</SidebarGroupLabel>
                 <SidebarMenu>
-                  <NavSection items={SECURITY_VISITOR_NAV} activeItem={activeItem} onNavigate={handleNav} />
+                  <NavSection items={FRONT_OFFICE_VISITOR_NAV} activeItem={activeItem} onNavigate={handleNav} />
                 </SidebarMenu>
               </SidebarGroup>
               <SidebarGroup>
                 <SidebarGroupLabel>Actions</SidebarGroupLabel>
                 <SidebarMenu>
-                  <NavSection items={SECURITY_ACTIONS_NAV} activeItem={activeItem} onNavigate={handleNav} />
+                  <NavSection items={FRONT_OFFICE_ACTIONS_NAV} activeItem={activeItem} onNavigate={handleNav} />
                 </SidebarMenu>
               </SidebarGroup>
             </>

@@ -78,7 +78,7 @@ logger = logging.getLogger(f"{LOGGER_NAME}.bookings")
 GUEST_OPERATION_ROLES = {
     "TENANT_ADMIN",
     "FACILITATOR",
-    "SECURITY",
+    "FRONT_OFFICE",
 }
 
 def _can_book_guest(current_user: dict[str, Any]) -> bool:

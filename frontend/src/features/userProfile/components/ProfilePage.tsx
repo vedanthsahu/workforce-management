@@ -4,7 +4,7 @@ import {
   Mail, Phone, MapPin, Briefcase,
   Building2, UserCheck, BadgeCheck,
   Camera, Loader2, TriangleAlert, RefreshCw,
-  Layers, Zap, CalendarCheck2, CalendarClock, History,
+  Layers, CalendarCheck2, CalendarClock, History,
   ChevronRight, CalendarDays,
   Building, Armchair, Check, Pencil, Save, X, ChevronDown,
 } from "lucide-react";
@@ -31,6 +31,7 @@ import type {
   SeatPreferences, ApiBooking, ApiAmenity,
   ApiSite, ApiBuilding, ApiFloor,
 } from "../types/profile.types";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ const ROLE_BADGE: Record<string, string> = {
   MANAGER:      "bg-violet-50 text-violet-600 ring-violet-200",
   EMPLOYEE:     "bg-blue-50 text-blue-600 ring-blue-200",
   FACILITATOR:  "bg-teal-50 text-teal-600 ring-teal-200",
-  SECURITY:     "bg-amber-50 text-amber-600 ring-amber-200",
+  FRONT_OFFICE: "bg-amber-50 text-amber-600 ring-amber-200",
   FACILITIES:   "bg-orange-50 text-orange-600 ring-orange-200",
 };
 
@@ -208,6 +209,7 @@ function AmenitiesCheckboxGroup({
           <div className="grid grid-cols-2 gap-1.5">
             {items.map((a) => {
               const on = selected.includes(a.id);
+              const color = getAmenityColor(a.name, a.category);
               return (
                 <button
                   key={a.id}
@@ -224,6 +226,7 @@ function AmenitiesCheckboxGroup({
                   }`}>
                     {on && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                   </span>
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${color.dot}`} />
                   <span className="truncate">{a.name}</span>
                 </button>
               );
@@ -672,10 +675,12 @@ function PrefDisplayRow({
 
 // ─── Amenity chip ─────────────────────────────────────────────────────────────
 
-function AmenityChip({ name }: { name: string }) {
+function AmenityChip({ name, category }: { name: string; category?: string }) {
+  const color = getAmenityColor(name, category);
+  const Icon = color.icon;
   return (
-    <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 text-[11.5px] font-medium ring-1 ring-amber-100">
-      <Zap className="w-3 h-3 mr-1.5 text-amber-400" />
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11.5px] font-medium ring-1 ${color.bg} ${color.text} ${color.border.replace("border-", "ring-")}`}>
+      <Icon className="w-3 h-3 mr-1.5" />
       {name}
     </span>
   );
@@ -974,7 +979,7 @@ export default function ProfilePage() {
                 {preferences.preferredAmenities.length > 0 ? (
                   <div className="flex flex-wrap gap-1.5">
                     {preferences.preferredAmenities.map((a) => (
-                      <AmenityChip key={a.id} name={a.name} />
+                      <AmenityChip key={a.id} name={a.name} category={a.category} />
                     ))}
                   </div>
                 ) : (
