@@ -16,6 +16,8 @@ export interface RawTeammateBooking {
   site_name: string | null;
   check_in_at: string | null;
   checked_out_at: string | null;
+  start_time: string | null;
+  end_time: string | null;
   // Optional enriched fields
   source_channel?: string | null;
   desk_type?: string | null;

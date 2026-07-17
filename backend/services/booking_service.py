@@ -17,8 +17,10 @@ BookingEligibilityRequest,
 BookingEligibilityResponse,
 )
 
+from backend.repositories.guest_repository import fetch_guest_by_id
 from backend.repositories.guest_visit_repository import (
     fetch_cancelled_guest_visits,
+    insert_guest_visit,
 )
 from backend.core.app_logging import LOGGER_NAME
 from backend.repositories.booking_repository import (
@@ -38,6 +40,7 @@ from backend.repositories.booking_repository import (
     fetch_seat_for_booking,
     has_active_booking_conflict,
     insert_booking,
+    insert_guest_booking,
     cancel_booking,
     fetch_booking_by_id_for_update,
     fetch_booking_by_id,

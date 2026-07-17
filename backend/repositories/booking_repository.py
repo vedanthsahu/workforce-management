@@ -72,10 +72,12 @@ BOOKING_SELECT_FIELDS = """
     gv.visit_status,
     gv.purpose_of_visit,
 
-    gv.start_time,
-    gv.end_time,
+    COALESCE(gv.start_time, '09:00:00'::time) AS start_time,
+    COALESCE(gv.end_time,   '18:00:00'::time) AS end_time,
     gv.notes,
     gv.requires_seat,
+
+    s.seat_type AS desk_type,
 
     host.id::text AS host_user_id,
     host.full_name AS host_name,
