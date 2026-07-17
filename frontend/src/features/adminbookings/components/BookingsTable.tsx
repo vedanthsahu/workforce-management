@@ -39,7 +39,7 @@ function PersonCell({ booking }: { booking: AdminBooking }) {
         {isGuest ? "GV" : initialsOf(booking.person_name)}
       </div>
       <div className="min-w-0">
-        <p className="text-xs font-medium text-gray-900 truncate">{booking.person_name}</p>
+        <p className="text-xs font-medium text-gray-900 line-clamp-2 wrap-break-word">{booking.person_name}</p>
         <p className="text-[11px] text-gray-400 truncate">{booking.person_type}</p>
       </div>
     </div>
@@ -59,11 +59,11 @@ export default function BookingsTable({ data, selectedBookingId, onView }: Props
             <th className="pl-14 pr-2 py-3 text-left font-bold max-w-45">Employee / Guest</th>
             <th className="pl-8 pr-3 py-3 text-left font-bold">Seat</th>
             <th className="pl-2 pr-3 py-3 text-left font-bold">Office</th>
-            <th className="pl-3 pr-1 py-3 text-left font-bold">Building</th>
-            <th className="pl-4 pr-1 py-3 text-left font-bold">Floor</th>
-            <th className="pl-6 px-3 py-3 text-left font-bold">Date</th>
-            <th className="pl-8 px-3 py-3 text-left font-bold">Status</th>
-            <th className="px-3 py-3 text-left font-bold">Booked By</th>
+            <th className="pl-2 pr-1 py-3 text-left font-bold">Building</th>
+            <th className="pl-5 pr-1 py-3 text-left font-bold">Floor</th>
+            <th className="pl-8 px-3 py-3 text-left font-bold">Date</th>
+            <th className="pl-10 px-3 py-3 text-left font-bold">Status</th>
+            <th className="pl-12 px-3 py-3 text-left font-bold">Booked By</th>
             <th className="px-3 py-3 text-center font-bold">Actions</th>
           </tr>
         </thead>
@@ -86,20 +86,22 @@ export default function BookingsTable({ data, selectedBookingId, onView }: Props
                   )}
                 </td>
                 <td className="pr-3 py-3 text-gray-700 max-w-[80px] break-words">{booking.site_name}</td>
-                <td className="pr-1 py-3 text-gray-700 max-w-[80px] break-words">{booking.building_name}</td>
-                <td className="pl-1 pr-1 py-3 text-gray-700">{booking.floor_name}</td>
-                <td className="pl-1 pr-3 py-3">
+                <td className="pl-3 pr-1 py-3 text-gray-700 max-w-20">
+                  <p className="line-clamp-2 wrap-break-word">{booking.building_name}</p>
+                </td>
+                <td className="pl-3 pr-1 py-3 text-gray-700">{booking.floor_name}</td>
+                <td className="pl-4 pr-3 py-3">
                   <p className="text-gray-900">{booking.date_label}</p>
                   <p className="text-[11px] text-gray-400">{booking.date_relative}</p>
                 </td>
-                <td className="px-3 py-3 text-center">
+                <td className="pl-5 pr-3 py-3 text-center">
                   <span
                     className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap ${STATUS_STYLES[booking.status]}`}
                   >
                     {booking.status}
                   </span>
                 </td>
-                <td className="pl-8 px-3 py-3 text-gray-700">{booking.booked_by}</td>
+                <td className="pl-10 px-3 py-3 text-gray-700">{booking.booked_by}</td>
                 <td className="px-3 py-3">
                   <div className="flex items-center justify-center gap-1.5">
                     {/* Eye opens the Booking Details panel; the "…" button is inert for now */}

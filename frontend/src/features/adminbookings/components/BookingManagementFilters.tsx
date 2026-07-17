@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { adminActivitiesService } from "../services/adminActivities.service";
-import { CalendarDays, ChevronDown, RotateCcw, Search, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { adminBookingsService } from "../services/adminBookings.service";
+import { mapAdminBookingRawToUiBooking } from "../utils/mapAdminBooking";
+import { Building2, CalendarDays, ChevronDown, Layers, RotateCcw, Search, ShieldCheck, User, Users, X } from "lucide-react";
 import {
   AdminBooking,
   AdminBookingFilters,
@@ -23,8 +24,6 @@ type Props = {
   onSiteChange: (siteId: string) => void;
   /** Called with "All" or a real building_id. */
   onBuildingChange: (buildingId: string) => void;
-  /** All loaded bookings, used to compute the live Employee/Guest & Seat suggestion dropdowns. */
-  bookings: AdminBooking[];
 };
 
 function initialsOf(name: string) {
@@ -90,6 +89,10 @@ function DateRangeField({
               value={draftFrom}
               max={draftTo || undefined}
               onChange={(e) => setDraftFrom(e.target.value)}
+              onKeyDown={(e) => {
+                if (!["Tab", "Escape", "Shift"].includes(e.key)) e.preventDefault();
+              }}
+              onPaste={(e) => e.preventDefault()}
               className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
             />
           </div>
@@ -100,6 +103,10 @@ function DateRangeField({
               value={draftTo}
               min={draftFrom || undefined}
               onChange={(e) => setDraftTo(e.target.value)}
+              onKeyDown={(e) => {
+                if (!["Tab", "Escape", "Shift"].includes(e.key)) e.preventDefault();
+              }}
+              onPaste={(e) => e.preventDefault()}
               className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
             />
           </div>
@@ -148,7 +155,7 @@ function Field({
   return (
     <div
       className="flex flex-col gap-1.5"
-      style={{ minWidth, maxWidth: "100%", flex: width ? `1 1 ${width}` : "1 1 auto" }}
+      style={{ minWidth, maxWidth: "100%", flex: width ? `1 1 ${width}` : "0 1 auto" }}
     >
       {label && <label className="text-xs font-medium text-gray-600">{label}</label>}
       {children}
@@ -156,8 +163,8 @@ function Field({
   );
 }
 
-const selectClass =
-  "h-10 px-3 pr-8 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors cursor-pointer w-full";
+const selectBaseClass =
+  "h-10 pr-8 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors cursor-pointer w-full";
 
 const selectArrowStyle: React.CSSProperties = {
   backgroundImage:
@@ -172,6 +179,7 @@ function NativeSelect({
   options,
   disabled,
   placeholder,
+  icon,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -179,26 +187,37 @@ function NativeSelect({
   disabled?: boolean;
   /** Shown as an unselectable placeholder when value is "" — not a real option, just a prompt. */
   placeholder?: string;
+  /** Optional leading icon rendered inside the field, left of the text. */
+  icon?: React.ReactNode;
 }) {
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-      className={`${selectClass} disabled:opacity-50 disabled:cursor-not-allowed`}
-      style={selectArrowStyle}
-    >
-      {placeholder && (
-        <option value="" disabled hidden>
-          {placeholder}
-        </option>
+    <div className="relative">
+      {icon && (
+        <span
+          className={`absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${disabled ? "text-gray-300" : "text-gray-400"}`}
+        >
+          {icon}
+        </span>
       )}
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className={`${selectBaseClass} ${icon ? "pl-8" : "pl-3"} disabled:opacity-50 disabled:cursor-not-allowed`}
+        style={selectArrowStyle}
+      >
+        {placeholder && (
+          <option value="" disabled hidden>
+            {placeholder}
+          </option>
+        )}
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
@@ -212,7 +231,6 @@ export default function BookingManagementFilters({
   floors,
   onSiteChange,
   onBuildingChange,
-  bookings,
 }: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [seatOpen, setSeatOpen] = useState(false);
@@ -228,91 +246,90 @@ export default function BookingManagementFilters({
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  // Load a full activities snapshot to drive suggestions so suggestions
-  // remain independent of the other active filters applied to the table.
-  const [allActivities, setAllActivities] = useState<AdminBooking[] | null>(null);
+  // Employee/Guest & Seat suggestion dropdowns hit the backend's own
+  // search/seatCode filters directly (debounced) instead of pre-loading
+  // everything and matching client-side.
+  const [employeeSuggestions, setEmployeeSuggestions] = useState<AdminBooking[]>([]);
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const resp = await adminActivitiesService.list({});
-        if (!mounted) return;
-        const mapped: AdminBooking[] = (resp.items ?? []).map((it) => ({
-          booking_id: it.bookingId ?? it.guestVisitId ?? "",
-          person_name: it.bookedFor?.name ?? it.bookedBy?.name ?? "",
-          person_type: (it.bookedFor?.entityType === "GUEST" || it.bookedBy?.entityType === "GUEST") ? "Guest" : "Employee",
-          person_email: it.bookedFor?.email ?? it.bookedBy?.email ?? "",
-          avatar_url: undefined,
-          seat_code: it.seat?.seatCode ?? "",
-          seat_type: it.seat?.seatType ?? "",
-          site_name: it.site?.siteName ?? "",
-          building_name: it.building?.buildingName ?? "",
-          floor_name: it.floor?.floorName ?? "",
-          activity_date: it.activityDate ?? "",
-          date_label: it.activityDate ?? "",
-          date_relative: "",
-          time_range: "",
-          status: (it.activityStatus as any) ?? "Scheduled",
-          booked_by: "Self",
-          booked_on: it.createdAt ?? "",
-          check_in_time: it.checkInAt,
-          amenities: [],
-        }));
-        setAllActivities(mapped);
-      } catch {
-        setAllActivities([]);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
-
-  const activitySource = allActivities ?? bookings;
-
-  const employeeSuggestions = useMemo(() => {
-    const q = filters.search.trim().toLowerCase();
-    if (!q) return [];
-    const seen = new Set<string>();
-    const matches: AdminBooking[] = [];
-    for (const b of activitySource) {
-      // Only respect bookingType toggle; ignore other filters (site/building/floor/date/status)
-      if (filters.bookingType === "Employee" && b.person_type !== "Employee") continue;
-      if (filters.bookingType === "Guest" && b.person_type !== "Guest") continue;
-      if (!b.person_name.toLowerCase().includes(q) && !b.person_email.toLowerCase().includes(q)) continue;
-      const key = `${b.person_name}|${b.person_email}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      matches.push(b);
-      if (matches.length >= 8) break;
+    const q = filters.search.trim();
+    if (!q) {
+      setEmployeeSuggestions([]);
+      return;
     }
-    return matches;
-  }, [activitySource, filters.search, filters.bookingType]);
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      adminBookingsService
+        .list({
+          search: q,
+          bookingType: filters.bookingType === "Employee" ? "EMPLOYEE" : filters.bookingType === "Guest" ? "GUEST" : undefined,
+          page: 1,
+          limit: 8,
+        })
+        .then((res) => {
+          if (cancelled) return;
+          const seen = new Set<string>();
+          const matches: AdminBooking[] = [];
+          for (const raw of res.items) {
+            const b = mapAdminBookingRawToUiBooking(raw);
+            const key = `${b.person_name}|${b.person_email}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            matches.push(b);
+          }
+          setEmployeeSuggestions(matches);
+        })
+        .catch(() => {
+          if (!cancelled) setEmployeeSuggestions([]);
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [filters.search, filters.bookingType]);
 
-  const searchPlaceholder = filters.bookingType === "Employee"
+  const searchPlaceholder = filters.bookingType
     ? "Search by name or email"
-    : filters.bookingType === "Guest"
-      ? "Search by name or email"
-      : "Select Employee or Guest first";
+    : "Select Employee or Guest first";
 
-  const seatSuggestions = useMemo(() => {
-    const q = filters.seatNumber.trim().toLowerCase();
-    if (!q) return [];
-    const seen = new Set<string>();
-    const matches: AdminBooking[] = [];
-    for (const b of activitySource) {
-      if (!b.seat_code || !b.seat_code.toLowerCase().includes(q)) continue;
-      if (seen.has(b.seat_code)) continue;
-      seen.add(b.seat_code);
-      matches.push(b);
-      if (matches.length >= 8) break;
+  const [seatSuggestions, setSeatSuggestions] = useState<AdminBooking[]>([]);
+  useEffect(() => {
+    const q = filters.seatNumber.trim();
+    if (!q) {
+      setSeatSuggestions([]);
+      return;
     }
-    return matches;
-  }, [activitySource, filters.seatNumber]);
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      adminBookingsService
+        .list({ seatCode: q, page: 1, limit: 8 })
+        .then((res) => {
+          if (cancelled) return;
+          const seen = new Set<string>();
+          const matches: AdminBooking[] = [];
+          for (const raw of res.items) {
+            const b = mapAdminBookingRawToUiBooking(raw);
+            if (!b.seat_code || seen.has(b.seat_code)) continue;
+            seen.add(b.seat_code);
+            matches.push(b);
+          }
+          setSeatSuggestions(matches);
+        })
+        .catch(() => {
+          if (!cancelled) setSeatSuggestions([]);
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [filters.seatNumber]);
 
   return (
     <div className="flex flex-col gap-4">
       {/* Row 1 */}
       <div className="flex items-end gap-3 flex-wrap">
-        <Field label="Date Range" width="235px">
+        <Field label="Date Range" width="230px">
           <DateRangeField
             dateFrom={filters.dateFrom}
             dateTo={filters.dateTo}
@@ -323,11 +340,12 @@ export default function BookingManagementFilters({
           />
         </Field>
 
-        <Field label="Office" width="185px">
+        <Field label="Office" width="180px">
           <NativeSelect
             value={filters.site}
             onChange={onSiteChange}
             placeholder="Select Office"
+            icon={<Building2 size={14} />}
             options={[
               { value: "All", label: "All Office" },
               ...sites.map((s) => ({ value: s.site_id, label: s.site_name })),
@@ -335,12 +353,13 @@ export default function BookingManagementFilters({
           />
         </Field>
 
-        <Field label="Building" width="185px">
+        <Field label="Building" width="180px">
           <NativeSelect
             value={filters.building}
             onChange={onBuildingChange}
             disabled={!filters.site || filters.site === "All"}
             placeholder="Select Building"
+            icon={<Building2 size={14} />}
             options={[
               { value: "All", label: "All Building" },
               ...buildings.map((b) => ({ value: b.building_id, label: b.building_name })),
@@ -348,12 +367,13 @@ export default function BookingManagementFilters({
           />
         </Field>
 
-        <Field label="Floor" width="185px">
+        <Field label="Floor" width="180px">
           <NativeSelect
             value={filters.floor}
             onChange={(v) => onUpdate("floor", v)}
             disabled={!filters.building || filters.building === "All"}
             placeholder="Select Floor"
+            icon={<Layers size={14} />}
             options={[
               { value: "All", label: "All Floor" },
               ...floors.map((f) => ({ value: f.floor_id, label: f.floor_name })),
@@ -365,6 +385,7 @@ export default function BookingManagementFilters({
           <NativeSelect
             value={filters.status}
             onChange={(v) => onUpdate("status", v)}
+            icon={<ShieldCheck size={14} />}
             options={[
               { value: "All", label: "All Status" },
               { value: "Scheduled", label: "Scheduled" },
@@ -381,34 +402,29 @@ export default function BookingManagementFilters({
       </div>
 
       {/* Row 2 */}
-      <div className="flex items-end gap-3 flex-wrap" >
-        <Field>
-          <div ref={searchRef} className="relative w-full sm:w-64">
-              <div className="mb-2">
-                <div className="inline-flex items-center bg-gray-100 p-1 rounded-full space-x-1">
-                  {(["Employee", "|", "Guest"] as const).map((opt) => {
-                    if (opt === "|") {
-                      return (
-                        <span key={opt} className="px-0.5 text-[12px] text-gray-900 select-none">
-                          |
-                        </span>
-                      );
-                    }
-                    const active = filters.bookingType === opt;
-                    return (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => onUpdate("bookingType", opt)}
-                        className={`px-3 py-1 text-[12px] leading-none rounded-full transition-colors duration-150 focus:outline-none ${active ? "bg-indigo-600 text-white shadow-sm" : "text-gray-600 hover:bg-white/60"}`}
-                      >
-                        {opt}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+      <div className="flex items-end gap-2 flex-wrap" >
+        <Field label="Search By" minWidth="100px">
+          <div className="h-10 inline-flex items-center bg-gray-200 border border-gray-200 p-1 rounded-lg gap-1">
+            {(["Employee", "Guest"] as const).map((opt) => {
+              const active = filters.bookingType === opt;
+              const Icon = opt === "Employee" ? User : Users;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => onUpdate("bookingType", opt)}
+                  className={`inline-flex items-center justify-center gap-1 w-21 h-full px-2 text-[12px] font-medium rounded-md transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 ${active ? "bg-indigo-700 text-white shadow-sm" : "bg-white text-gray-700 shadow-sm hover:bg-gray-50"}`}
+                >
+                  <Icon size={13} />
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
 
+        <Field label={filters.bookingType === "Guest" ? "Search Guest" : "Search Employee"}>
+          <div ref={searchRef} className="relative w-full sm:w-60">
               {/* input wrapper is positioned relative so icon centers within input only */}
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -417,6 +433,7 @@ export default function BookingManagementFilters({
                   placeholder={searchPlaceholder}
                   value={filters.search}
                   disabled={!filters.bookingType}
+                  title={!filters.bookingType ? "Select Employee or Guest before Search" : undefined}
                   onChange={(e) => {
                     onUpdate("search", e.target.value);
                     setSearchOpen(true);
@@ -482,7 +499,7 @@ export default function BookingManagementFilters({
         </Field>
 
         <Field label="Seat Number">
-          <div ref={seatRef} className="relative w-full sm:w-56">
+          <div ref={seatRef} className="relative w-full sm:w-60">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
@@ -542,18 +559,6 @@ export default function BookingManagementFilters({
           </div>
         </Field>
 
-        <Field label="Booked By"  width="187px">
-          <NativeSelect
-            value={filters.bookedBy}
-            onChange={(v) => onUpdate("bookedBy", v)}
-            options={[
-              { value: "All", label: "All Booked By" },
-              { value: "Self", label: "Self" },
-              { value: "Admin", label: "Admin" },
-            ]}
-          />
-        </Field>
-
         <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto justify-end">
           <button
             type="button"
@@ -566,7 +571,7 @@ export default function BookingManagementFilters({
           <button
             type="button"
             onClick={onSearch}
-            className="h-10 px-5 flex items-center gap-1.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm"
+            className="h-10 px-5 flex items-center gap-1.5 text-sm font-medium text-white bg-indigo-700 hover:bg-indigo-800 rounded-lg transition-colors shadow-sm"
           >
             <Search size={14} />
             Search

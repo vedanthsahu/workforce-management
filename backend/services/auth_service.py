@@ -38,6 +38,7 @@ from backend.repositories.token_repository import (
     revoke_user_session,
     rotate_refresh_token,
 )
+from backend.repositories.user_repository import normalize_role_name
 from backend.repositories.user_repository import fetch_tenant_name_by_id, fetch_user_by_id
 from backend.repositories.user_repository import (
     fetch_active_tenant_ids,
