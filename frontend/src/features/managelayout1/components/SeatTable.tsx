@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { Pencil, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from "lucide-react";
 import { Seat } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 
 interface Props {
   seats: Seat[];
@@ -89,7 +90,7 @@ export default function SeatTable({
   const [sortKey, setSortKey] = useState<SortKey>("seat_code");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
 
-  const prefMap = Object.fromEntries(preferences.map((p) => [p.preference_id, p.preference_name]));
+  const prefMap = Object.fromEntries(preferences.map((p) => [p.preference_id, p]));
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -266,14 +267,19 @@ export default function SeatTable({
                         <Dash />
                       ) : (
                         <div className="flex flex-wrap gap-1">
-                          {seat.amenity_ids.slice(0, 2).map((id) => (
-                            <span
-                              key={id}
-                              className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-medium border border-gray-200"
-                            >
-                              {prefMap[id] ?? id}
-                            </span>
-                          ))}
+                          {seat.amenity_ids.slice(0, 2).map((id) => {
+                            const pref = prefMap[id];
+                            const name = pref?.preference_name ?? id;
+                            const color = getAmenityColor(name, pref?.preference_type);
+                            return (
+                              <span
+                                key={id}
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-medium border ${color.bg} ${color.text} ${color.border}`}
+                              >
+                                {name}
+                              </span>
+                            );
+                          })}
                           {seat.amenity_ids.length > 2 && (
                             <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-medium border border-gray-200">
                               +{seat.amenity_ids.length - 2}

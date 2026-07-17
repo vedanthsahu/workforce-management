@@ -19,24 +19,24 @@ function buildResult(member: ApiTeamMember, teamName: string): TeammateResult {
   const s = member.seat;
   const booking: RawTeammateBooking | null = s
     ? {
-        booking_id: null,
-        booking_date: null,
-        booking_status: null,
-        seat_id: s.seat_id,
-        seat_code: s.seat_code,
-        floor_id: s.floor_id,
-        floor_name: s.floor_name,
-        building_id: s.building_id,
-        building_name: s.building_name,
-        site_name: null,
-        check_in_at: null,
-        checked_out_at: null,
-        start_time: "09:00:00",
-        end_time: "18:00:00",
-        source_channel: s.source_channel,
-        desk_type: s.seat_type,
-        amenities: s.amenities.map((a) => a.name),
-      }
+      booking_id: null,
+      booking_date: null,
+      booking_status: null,
+      seat_id: s.seat_id,
+      seat_code: s.seat_code,
+      floor_id: s.floor_id,
+      floor_name: s.floor_name,
+      building_id: s.building_id,
+      building_name: s.building_name,
+      site_name: null,
+      check_in_at: null,
+      checked_out_at: null,
+      start_time: "09:00:00",
+      end_time: "18:00:00",
+      source_channel: s.source_channel,
+      desk_type: s.seat_type,
+      amenities: s.amenities.map((a) => a.name),
+    }
     : null;
   return {
     userId: member.user_id,

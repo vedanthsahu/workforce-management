@@ -9,12 +9,6 @@ import type {
   ModifyVisitPayload,
 } from "../types/security.types";
 
-// ── Dummy sites (backend /sites endpoint not ready yet) ──────────────────────
-const DUMMY_SITES: ApiSite[] = [
-  { site_id: "5", site_name: "Hyderabad Begumpet Office" },
-  { site_id: "6", site_name: "Tech Park Annex" },
-];
-
 function delay<T>(value: T, ms = 500): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), ms));
 }
@@ -60,9 +54,10 @@ export const securityService = {
     return data;
   },
 
-  // ── SITES (dummy — swap for a real /sites call once the backend has one) ──
+  // ── SITES (real API) ────────────────────────────────────────────────────
   async getSites(): Promise<ApiSite[]> {
-    return delay(DUMMY_SITES, 150);
+    const { data } = await axiosInstance.get<ApiSite[]>("/sites");
+    return data;
   },
 
   // ── CANCEL VISIT ─────────────────────────────────────────────────────────

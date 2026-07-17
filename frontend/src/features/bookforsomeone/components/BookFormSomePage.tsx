@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { useBookingForm, useSiteBuildingOptions } from "../hooks/useBooking";
+import type { BookingType } from "../types/booking";
 import { checkGuestBookingEligibility } from "../services/booking.service";
 import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
 import { BookingTypeSelector, FormFooter, InternalEmployeeForm } from "./BookForSomeone";
@@ -96,12 +97,22 @@ const currentUserId = data?.user.user_id;
     }));
   }, [editVisitId]);
 
+  // Admin's "Booking Management" page links here with ?entry=employee or
+  // ?entry=guest depending on which button was clicked — lock the wizard to
+  // that type and disable the other card. Absent for every other entry point
+  // (e.g. the facilitator sidebar), so their flow is unaffected.
+  const entry = searchParams.get("entry");
+  const disabledType: BookingType | undefined =
+    entry === "employee" ? "visitor" : entry === "guest" ? "internal" : undefined;
+
   // Auto-select when only one type is permitted — no need to show the selector
   useEffect(() => {
     if (editVisitId) return;
+    if (entry === "employee") { setBookingType("internal"); return; }
+    if (entry === "guest") { setBookingType("visitor"); return; }
     if (canBookEmployee && !canBookGuest) setBookingType("internal");
     if (canBookGuest && !canBookEmployee) setBookingType("visitor");
-  }, [canBookEmployee, canBookGuest]);
+  }, [canBookEmployee, canBookGuest, entry]);
 
   const showTypeSelector = canBookEmployee && canBookGuest;
 
@@ -397,7 +408,7 @@ const currentUserId = data?.user.user_id;
 
               {step === 1 && showTypeSelector && (
                 <>
-                  <BookingTypeSelector selected={bookingType} onChange={setBookingType} />
+                  <BookingTypeSelector selected={bookingType} onChange={setBookingType} disabledType={disabledType} />
                   <div className="border-t border-[#EBEBF5] my-4 sm:my-5" />
                 </>
               )}

@@ -13,6 +13,7 @@ import {
   Users,
   X,
   Pencil,
+  Star,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,8 @@ import { cn } from "@/lib/utils";
 
 import { useBookingForm } from "../hooks/Usebookingform";
 import { SvgFloorMapPage, SeatWithSvgId } from "./SvgFloorMapPage";
-import { fmtDate, getPreferenceIcon } from "../utils/bookingFormHelpers";
+import { fmtDate } from "../utils/bookingFormHelpers";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 import { BookaSeatSkeleton } from "./BookaSeatSkeleton";
 
 // ── Step indicator ────────────────────────────────────────────────────────────
@@ -395,8 +397,9 @@ const BookASeatPage: React.FC = () => {
                 {loadingPreferences ? (
                   <p className="text-[12.5px] text-gray-400">Loading preferences…</p>
                 ) : (
-                  availablePreferences.map(({ key, name }) => {
+                  availablePreferences.map(({ key, name, category }) => {
                     const checked = form.preferences.includes(key);
+                    const color = getAmenityColor(name, category);
                     return (
                       <button
                         key={key}
@@ -409,8 +412,8 @@ const BookASeatPage: React.FC = () => {
                             : "border-[#EBEBF5] bg-white hover:border-gray-300 hover:bg-gray-50"
                         )}
                       >
-                        {getPreferenceIcon(key)}
-                        <span className="text-[11.5px] sm:text-[12.5px] font-medium text-[#1A1A2E] text-center">{name}</span>
+                        <Star size={20} className={color.text} />
+                        <span className={`text-[11.5px] sm:text-[12.5px] font-medium text-center ${color.text}`}>{name}</span>
                         <Checkbox checked={checked} onCheckedChange={() => togglePreference(key)} className="pointer-events-none" />
                       </button>
                     );
@@ -471,6 +474,7 @@ const BookASeatPage: React.FC = () => {
               siteName={selectedSite?.name}
               buildingName={selectedBuilding?.name}
               floorName={selectedFloor?.name}
+              preferences={availablePreferences}
             />
 
             <div className="flex justify-between pt-1 border-t border-[#EBEBF5]">

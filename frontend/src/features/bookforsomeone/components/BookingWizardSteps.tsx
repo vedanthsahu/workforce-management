@@ -766,7 +766,7 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
         <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
-          <FieldLabel htmlFor="visitSite" required>Site</FieldLabel>
+          <FieldLabel htmlFor="visitSite" required>Office</FieldLabel>
           <div style={{ position: "relative" }}>
             <select
               id="visitSite"
@@ -775,7 +775,7 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               onChange={(e) => onChange({ siteId: e.target.value, buildingId: "", floorId: "" })}
               disabled={readOnlyLocation}
             >
-              <option value="" disabled hidden>Select a site</option>
+              <option value="" disabled hidden>Select a Office</option>
               {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
@@ -794,7 +794,7 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               disabled={readOnlyLocation || !visitDetails.siteId}
             >
               <option value="" disabled hidden>
-                {!visitDetails.siteId ? "Select a site first" : isLoadingBuildings ? "Loading…" : "Select a building"}
+                {!visitDetails.siteId ? "Select a office first" : isLoadingBuildings ? "Loading…" : "Select a building"}
               </option>
               {buildings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>

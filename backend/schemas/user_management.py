@@ -15,7 +15,7 @@ AdminDirectoryRole = Literal[
     "EMPLOYEE",
     "MANAGER",
     "FACILITATOR",
-    "SECURITY",
+    "FRONT_OFFICE",
     "TENANT_ADMIN",
     "FACILITATOR_GUEST_COORDINATOR",
 ]
@@ -39,7 +39,7 @@ class AdminUserAccessUpdateRequest(BaseModel):
         "EMPLOYEE",
         "MANAGER",
         "FACILITATOR",
-        "SECURITY",
+        "FRONT_OFFICE",
     ] | None = None
 
     status: Literal[

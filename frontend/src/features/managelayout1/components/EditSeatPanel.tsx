@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Seat, SeatStatus, SeatType, SeatUpdatePayload } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 
 interface Props {
   seat: Seat | null;
@@ -177,6 +178,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
             <div className="space-y-1.5">
               {preferences.map((p) => {
                 const on = amenityIds.includes(p.preference_id);
+                const color = getAmenityColor(p.preference_name, p.preference_type);
                 return (
                   <label
                     key={p.preference_id}
@@ -199,6 +201,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
                       checked={on}
                       onChange={() => toggleAmenity(p.preference_id)}
                     />
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${color.dot}`} />
                     <span className={`text-xs font-medium flex-1 ${on ? "text-indigo-700" : "text-gray-700"}`}>
                       {p.preference_name}
                     </span>

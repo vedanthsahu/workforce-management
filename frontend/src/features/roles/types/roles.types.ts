@@ -2,7 +2,7 @@ export type RoleKey =
   | "EMPLOYEE"
   | "FACILITATOR"
   | "FACILITATOR_GUEST_COORDINATOR"
-  | "SECURITY"
+  | "FRONT_OFFICE"
   | "TENANT_ADMIN"
   | "MANAGER"
   | string;
