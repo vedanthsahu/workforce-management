@@ -7,10 +7,21 @@ import BookingStatCards from "@/features/adminbookings/components/BookingStatCar
 import BookingsTable from "@/features/adminbookings/components/BookingsTable";
 import BookingDetailsPanel from "@/features/adminbookings/components/BookingDetailsPanel";
 import AmenitiesPagination from "@/features/amenities/components/AmenitiesPagination";
-import { AdminBooking, AdminActivityItem, defaultAdminBookingFilters } from "@/features/adminbookings/types/adminBooking.types";
+import { AdminBooking, AdminBookingApiStatus, AdminBookingListResponse, defaultAdminBookingFilters } from "@/features/adminbookings/types/adminBooking.types";
 import { useAdminBookingLocations } from "@/features/adminbookings/hooks/useAdminBookingLocations";
-import { adminActivitiesService } from "@/features/adminbookings/services/adminActivities.service";
-import { mapActivityToAdminBooking } from "@/features/adminbookings/utils/mapAdminActivity";
+import { adminBookingsService } from "@/features/adminbookings/services/adminBookings.service";
+import { mapAdminBookingRawToUiBooking } from "@/features/adminbookings/utils/mapAdminBooking";
+
+// The backend's bookingStatus filter only recognizes these five values —
+// Scheduled/Checked In/Checked Out are derived client-side from timestamps,
+// not stored as their own booking_status, so they can't be sent as a filter.
+const BOOKING_STATUS_PARAM: Record<string, AdminBookingApiStatus> = {
+  Confirmed: "CONFIRMED",
+  Cancelled: "CANCELLED",
+  Modified: "MODIFIED",
+  Completed: "COMPLETED",
+  "No Show": "NO_SHOW",
+};
 
 const PAGE_SIZES = [10, 25, 50, 75, 100];
 
@@ -36,20 +47,15 @@ export default function AdminBookingsPage() {
   const { sites, buildings, floors, loadBuildings, loadFloors, setBuildings, setFloors } =
     useAdminBookingLocations();
 
-  // GET /admin/activities only supports a single exact `date`, not a range —
-  // when the picked range collapses to one day we can push it server-side,
-  // otherwise we fetch unfiltered by date and apply the range client-side.
-  const exactDate =
-    appliedFilters.dateFrom && appliedFilters.dateFrom === appliedFilters.dateTo
-      ? appliedFilters.dateFrom
-      : undefined;
-
-  const [activities, setActivities] = useState<AdminActivityItem[]>([]);
+  // The backend now owns every filter (date range, hierarchy, type, status,
+  // search, seat code) plus pagination and the summary counts — this page
+  // just forwards appliedFilters as query params and renders what comes back.
+  const [bookingsResponse, setBookingsResponse] = useState<AdminBookingListResponse | null>(null);
   const [activitiesLoading, setActivitiesLoading] = useState(true);
 
   useEffect(() => {
     if (!hasApplied) {
-      setActivities([]);
+      setBookingsResponse(null);
       setActivitiesLoading(false);
       return;
     }
@@ -57,19 +63,31 @@ export default function AdminBookingsPage() {
     let cancelled = false;
     setActivitiesLoading(true);
 
-    adminActivitiesService
+    adminBookingsService
       .list({
+        startDate: appliedFilters.dateFrom || undefined,
+        endDate: appliedFilters.dateTo || undefined,
         siteId: appliedFilters.site && appliedFilters.site !== "All" ? appliedFilters.site : undefined,
         buildingId: appliedFilters.building && appliedFilters.building !== "All" ? appliedFilters.building : undefined,
         floorId: appliedFilters.floor && appliedFilters.floor !== "All" ? appliedFilters.floor : undefined,
-        date: exactDate,
+        bookingType:
+          appliedFilters.bookingType === "Employee"
+            ? "EMPLOYEE"
+            : appliedFilters.bookingType === "Guest"
+              ? "GUEST"
+              : undefined,
+        bookingStatus: BOOKING_STATUS_PARAM[appliedFilters.status],
+        search: appliedFilters.search.trim() || undefined,
+        seatCode: appliedFilters.seatNumber.trim() || undefined,
+        page: currentPage,
+        limit: itemsPerPage,
       })
       .then((res) => {
-        if (!cancelled) setActivities(res.items);
+        if (!cancelled) setBookingsResponse(res);
       })
       .catch((error) => {
         console.error(error);
-        if (!cancelled) setActivities([]);
+        if (!cancelled) setBookingsResponse(null);
       })
       .finally(() => {
         if (!cancelled) setActivitiesLoading(false);
@@ -78,64 +96,41 @@ export default function AdminBookingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [hasApplied, appliedFilters.site, appliedFilters.building, appliedFilters.floor, exactDate]);
-
-  const mappedBookings = useMemo(() => activities.map(mapActivityToAdminBooking), [activities]);
-
-  const stats = useMemo(() => {
-    const todayIso = new Date().toISOString().slice(0, 10);
-    return {
-      todays_bookings: mappedBookings.filter((b) => b.activity_date === todayIso).length,
-      checked_in: mappedBookings.filter((b) => b.status === "Checked In").length,
-      not_checked_in: mappedBookings.filter((b) => b.status === "Confirmed").length,
-      cancelled: mappedBookings.filter((b) => b.status === "Cancelled").length,
-      guests: mappedBookings.filter((b) => b.person_type === "Guest").length,
-    };
-  }, [mappedBookings]);
-
-  const bookings = useMemo(() => {
-    const search = appliedFilters.search.trim().toLowerCase();
-    const seatNumber = appliedFilters.seatNumber.trim().toLowerCase();
-    // Only apply the range client-side when it wasn't already pushed server-side as `exactDate`.
-    const from = !exactDate && appliedFilters.dateFrom ? new Date(`${appliedFilters.dateFrom}T00:00:00`) : null;
-    const to = !exactDate && appliedFilters.dateTo ? new Date(`${appliedFilters.dateTo}T23:59:59`) : null;
-
-    return mappedBookings.filter((b) => {
-      if (
-        appliedFilters.bookingType &&
-        appliedFilters.bookingType !== "All" &&
-        b.person_type !== appliedFilters.bookingType
-      ) {
-        return false;
-      }
-      if (appliedFilters.status !== "All" && b.status !== appliedFilters.status) return false;
-      if (appliedFilters.bookedBy !== "All" && b.booked_by !== appliedFilters.bookedBy) return false;
-      if (seatNumber && !b.seat_code.toLowerCase().includes(seatNumber)) return false;
-      if (search && !b.person_name.toLowerCase().includes(search) && !b.person_email.toLowerCase().includes(search)) {
-        return false;
-      }
-      if (from || to) {
-        const activityDate = new Date(`${b.activity_date}T00:00:00`);
-        if (from && activityDate < from) return false;
-        if (to && activityDate > to) return false;
-      }
-      return true;
-    });
   }, [
-    mappedBookings,
-    appliedFilters.bookingType,
-    appliedFilters.status,
-    appliedFilters.bookedBy,
+    hasApplied,
+    appliedFilters.site,
+    appliedFilters.building,
+    appliedFilters.floor,
     appliedFilters.dateFrom,
     appliedFilters.dateTo,
-    exactDate,
+    appliedFilters.bookingType,
+    appliedFilters.status,
     appliedFilters.search,
     appliedFilters.seatNumber,
+    currentPage,
+    itemsPerPage,
   ]);
 
-  const totalPages = Math.max(1, Math.ceil(bookings.length / itemsPerPage));
+  const mappedBookings = useMemo(
+    () => (bookingsResponse?.items ?? []).map(mapAdminBookingRawToUiBooking),
+    [bookingsResponse],
+  );
+
+  const stats = useMemo(() => {
+    const summary = bookingsResponse?.summary;
+    return {
+      todays_bookings: summary?.total_bookings ?? 0,
+      checked_in: summary?.checked_in_bookings ?? 0,
+      not_checked_in: summary?.confirmed_bookings ?? 0,
+      cancelled: summary?.cancelled_bookings ?? 0,
+      guests: summary?.guest_bookings ?? 0,
+    };
+  }, [bookingsResponse]);
+
+  const pagination = bookingsResponse?.pagination;
+  const totalBookings = pagination?.total ?? 0;
+  const totalPages = Math.max(1, pagination?.total_pages ?? 1);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedBookings = bookings.slice(startIndex, startIndex + itemsPerPage);
 
   const handleUpdateFilter = <K extends keyof typeof filters>(key: K, value: (typeof filters)[K]) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -153,13 +148,17 @@ export default function AdminBookingsPage() {
   const handleSearch = () => {
     // Office/Building/Floor start on an unselected placeholder ("") — picking
     // any of them (even explicitly choosing "All Office") counts as a filter,
-    // same as Employee/Guest or Seat Number. Block only when nothing at all is set.
+    // same as Employee/Guest, Seat Number, Date Range or a non-default Status.
+    // Block only when nothing at all is set.
     const hasAnyFilter =
       filters.bookingType ||
       filters.seatNumber.trim() ||
       filters.site ||
       filters.building ||
-      filters.floor;
+      filters.floor ||
+      filters.dateFrom ||
+      filters.dateTo ||
+      (filters.status && filters.status !== "All");
     if (!hasAnyFilter) {
       setSearchError(true);
       return;
@@ -202,7 +201,7 @@ export default function AdminBookingsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button className="inline-flex items-center gap-2 h-9 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium shadow-sm">
+          <button className="inline-flex items-center gap-2 h-9 px-4 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-sm font-medium shadow-sm">
             <Plus size={15} />
             Book for Employee
           </button>
@@ -232,7 +231,6 @@ export default function AdminBookingsPage() {
           floors={floors}
           onSiteChange={handleSiteChange}
           onBuildingChange={handleBuildingChange}
-          bookings={mappedBookings}
         />
       </div>
 
@@ -252,7 +250,7 @@ export default function AdminBookingsPage() {
             <div className="flex-1 min-w-0 w-full bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
               {/* TABLE HEADER */}
               <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b shrink-0">
-                <h2 className="text-sm sm:text-base font-semibold text-gray-800">Bookings ({bookings.length})</h2>
+                <h2 className="text-sm sm:text-base font-semibold text-gray-800">Bookings ({totalBookings})</h2>
                 <button className="inline-flex items-center gap-1.5 h-8 px-3 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50">
                   <Settings2 size={13} />
                   Columns
@@ -264,7 +262,7 @@ export default function AdminBookingsPage() {
                 <p className="px-6 py-12 text-center text-gray-400 text-sm">Loading bookings…</p>
               ) : (
                 <BookingsTable
-                  data={paginatedBookings}
+                  data={mappedBookings}
                   selectedBookingId={selectedBooking?.booking_id}
                   onView={setSelectedBooking}
                 />
@@ -273,15 +271,18 @@ export default function AdminBookingsPage() {
               {/* FOOTER */}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
                 <span>
-                  {bookings.length > 0 &&
-                    `Showing ${startIndex + 1} to ${Math.min(startIndex + itemsPerPage, bookings.length)} of ${bookings.length} entries`}
+                  {totalBookings > 0 &&
+                    `Showing ${startIndex + 1} to ${Math.min(startIndex + itemsPerPage, totalBookings)} of ${totalBookings} entries`}
                 </span>
                 <div className="flex items-center gap-3 self-center sm:self-auto">
                   <div className="flex items-center gap-2 text-xs text-gray-500">
                     <span>Rows</span>
                     <select
                       value={itemsPerPage}
-                      onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                      onChange={(e) => {
+                        setItemsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
                       className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
                     >
                       {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}

@@ -8,7 +8,8 @@ export type BookingStatus =
   | "Modified"
   | "No Show";
 
-export type BookedByType = "Self" | "Admin";
+/** "Self" when the booker booked for themself, otherwise the actual booker's name. */
+export type BookedByType = string;
 export type GuestOrEmployee = "Employee" | "Guest";
 
 export interface AdminBookingAmenity {
@@ -54,7 +55,6 @@ export interface AdminBookingFilters {
   bookingType: string;
   status: string;
   seatNumber: string;
-  bookedBy: string;
   /** ISO yyyy-mm-dd, "" means unset */
   dateFrom: string;
   /** ISO yyyy-mm-dd, "" means unset */
@@ -84,90 +84,113 @@ export function defaultAdminBookingFilters(): AdminBookingFilters {
     site: "",
     building: "",
     floor: "",
-    bookingType: "",
+    bookingType: "Employee",
     status: "All",
     seatNumber: "",
-    bookedBy: "All",
     dateFrom: "",
     dateTo: "",
   };
 }
 
-// ─── Raw GET /admin/activities response shape ──────────────────────────────
+// ─── Raw GET /admin/bookings response shape ────────────────────────────────
 
-export type AdminActivityType = "EMPLOYEE_BOOKING" | "GUEST_VISIT" | "GUEST_BOOKING";
-
-export type AdminActivityStatus =
+/** Query-param-level values accepted by GET /admin/bookings's bookingStatus filter. */
+export type AdminBookingApiStatus =
   | "CONFIRMED"
-  | "CHECKED_IN"
-  | "CHECKED_OUT"
-  | "COMPLETED"
   | "CANCELLED"
   | "MODIFIED"
-  | "NO_SHOW"
-  | "SCHEDULED";
+  | "COMPLETED"
+  | "NO_SHOW";
 
-export interface AdminActivityPerson {
-  entityType: "EMPLOYEE" | "GUEST";
-  id: string;
-  name: string;
-  email: string;
-  role?: string;
-  department?: string;
-  jobTitle?: string;
-  guestType?: string;
+export type AdminBookingApiType = "EMPLOYEE" | "GUEST";
+
+/** One row of the backend's BookingResponse DTO — already snake_case, no mapping needed. */
+export interface AdminBookingRaw {
+  activity_source: string | null;
+  booking_id: string | null;
+  tenant_id: string | null;
+
+  booked_for_user_id: string | null;
+  booked_for_guest_id: string | null;
+  booked_by_user_id: string | null;
+
+  booked_by_name: string | null;
+  booked_by_email: string | null;
+
+  booked_for_name: string | null;
+  booked_for_email: string | null;
+  booked_for_phone: string | null;
+  booked_for_organization: string | null;
+
+  guest_visit_id: string | null;
+  booking_type: AdminBookingApiType;
+
+  seat_id: string | null;
+  site_id: string | null;
+  building_id: string | null;
+  floor_id: string | null;
+
+  seat_code: string | null;
+  site_name: string | null;
+  building_name: string | null;
+  floor_name: string | null;
+
+  booking_date: string | null;
+  booking_status: AdminBookingApiStatus | null;
+  source_channel: string | null;
+
+  check_in_at: string | null;
+  checked_out_at: string | null;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+
+  created_at: string | null;
+  updated_at: string | null;
+
+  guest_name: string | null;
+  guest_email: string | null;
+  guest_phone: string | null;
+  guest_organization: string | null;
+
+  guest_type: string | null;
+  purpose_of_visit: string | null;
+  visit_status: string | null;
+
+  host_user_id: string | null;
+  host_name: string | null;
+  host_email: string | null;
+
+  start_time: string | null;
+  end_time: string | null;
+  notes: string | null;
+  requires_seat: boolean | null;
+
+  amenities: unknown[];
 }
 
-export interface AdminActivitySeat {
-  seatId: string;
-  seatCode: string;
-  seatType: string;
-  seatNeighborhood?: string;
+/** Aggregate counts over the filtered (not paginated) dataset, computed server-side. */
+export interface AdminBookingSummary {
+  total_bookings: number;
+  confirmed_bookings: number;
+  cancelled_bookings: number;
+  modified_bookings: number;
+  completed_bookings: number;
+  no_show_bookings: number;
+  employee_bookings: number;
+  guest_bookings: number;
+  checked_in_bookings: number;
+  checked_out_bookings: number;
 }
 
-export interface AdminActivitySite {
-  siteId: string;
-  siteCode: string;
-  siteName: string;
+export interface AdminBookingPagination {
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
 }
 
-export interface AdminActivityBuilding {
-  buildingId: string;
-  buildingCode: string;
-  buildingName: string;
-}
-
-export interface AdminActivityFloor {
-  floorId: string;
-  floorCode: string;
-  floorName: string;
-}
-
-export interface AdminActivityItem {
-  activityId: string;
-  activityType: AdminActivityType;
-  hasBooking: boolean;
-  activityStatus: AdminActivityStatus;
-  activityDate: string;
-  bookingId?: string;
-  guestVisitId?: string;
-  bookedBy: AdminActivityPerson;
-  bookedFor: AdminActivityPerson;
-  seat?: AdminActivitySeat;
-  site: AdminActivitySite;
-  building: AdminActivityBuilding;
-  floor?: AdminActivityFloor;
-  checkInAt?: string;
-  checkedOutAt?: string;
-  createdAt?: string;
-}
-
-export interface AdminActivityListResponse {
-  items: AdminActivityItem[];
-  pagination?: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages?: number;
-  } | null;
+export interface AdminBookingListResponse {
+  items: AdminBookingRaw[];
+  summary: AdminBookingSummary;
+  pagination: AdminBookingPagination;
 }

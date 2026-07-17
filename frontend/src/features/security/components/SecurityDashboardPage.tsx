@@ -29,6 +29,7 @@ function StatCardsSkeleton() {
 export default function SecurityDashboardPage() {
   const {
     summary,
+    sites,
     selectedSiteId,
     setSelectedSiteId,
     expectedVisitors,
@@ -55,7 +56,7 @@ export default function SecurityDashboardPage() {
           <p className="text-[12px] text-gray-400">Overview of today&apos;s visitor activity</p>
         </div>
 
-        <SiteSelector selectedSiteId={selectedSiteId} onChange={setSelectedSiteId} />
+        <SiteSelector sites={sites} selectedSiteId={selectedSiteId} onChange={setSelectedSiteId} />
       </div>
 
       {/* ── Error banner ─────────────────────────────────────────── */}
