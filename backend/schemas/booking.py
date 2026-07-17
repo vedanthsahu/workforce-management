@@ -27,6 +27,8 @@ class CreateBookingRequest(BaseModel):
     booked_for_user_id: int | None = Field(default=None, gt=0)
     booked_for_user_id: int | None = Field(default=None, gt=0)
     booking_date: date
+    start_time: time = time(9, 0)
+    end_time: time = time(18, 0)
 
 
 
@@ -108,6 +110,8 @@ class BookingResponse(BaseModel):
 
     start_time: time | None = None
     end_time: time | None = None
+
+    desk_type: str | None = None
 
     notes: str | None = None
     requires_seat: bool | None = None
@@ -193,3 +197,5 @@ class BookingEligibilityRequest(BaseModel):
 class BookingEligibilityResponse(BaseModel):
     eligible: bool
     message: str
+
+

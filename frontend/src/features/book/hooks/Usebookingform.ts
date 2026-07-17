@@ -261,7 +261,10 @@ export function useBookingForm() {
 
   useEffect(() => {
     if (myPreferencesApplied) return;
-    if (isModifyMode || isGuestBooking) { setUserPrefsSettled(true); return; }
+    // Guest bookings have no work preferences to fetch; skip entirely.
+    // Modify mode is allowed through so the user's current profile amenities
+    // are prefilled (location fields are protected by the hasAnyParam guard below).
+    if (isGuestBooking) { setUserPrefsSettled(true); return; }
     if (availablePreferences.length === 0) return;
 
     setMyPreferencesApplied(true);
@@ -284,18 +287,16 @@ export function useBookingForm() {
 
         setForm((f) => ({
           ...f,
-          // Only overwrite location on a fresh load — when URL params are already
-          // present (e.g. coming from the dashboard browse flow), preserve them.
+          // Modify mode always has URL params (modifyBookingId etc.), so
+          // hasAnyParam=true — location fields are never touched here.
           ...(!hasAnyParam && {
             siteId:     prefs.siteId     ?? f.siteId,
             buildingId: prefs.buildingId ?? f.buildingId,
             floorId:    prefs.floorId    ?? f.floorId,
           }),
-          // Apply saved amenities only when the form has no preferences yet
-          // (prevents overwriting URL-specified or user-toggled preferences).
-          preferences: f.preferences.length === 0 && preferenceKeys.length > 0
-            ? preferenceKeys
-            : f.preferences,
+          // Always apply current profile amenities; they reflect what the user
+          // has set now, which is exactly what should show when modifying.
+          preferences: preferenceKeys.length > 0 ? preferenceKeys : f.preferences,
         }));
       })
       .catch(() => {})
