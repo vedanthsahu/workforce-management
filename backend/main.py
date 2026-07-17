@@ -43,9 +43,10 @@ from backend.repositories.token_repository import (
     purge_expired_refresh_tokens,
     purge_expired_sessions,
 )
-from backend.services.auth_service import sync_graph_managed_roles
+from backend.services.auth_service import sync_department_teams, sync_graph_managed_roles
 from backend.api.routes import teams
 from backend.api.routes.preferences import router as preferences_router
+from backend.api.routes.admin_bookings import router as admin_bookings_router
 from backend.api.routes.admin_dashboard import router as admin_dashboard_router
 from backend.api.routes.floor_layouts import router as floor_layout_router
 from backend.api.routes.user_management import router as user_management_router
@@ -60,6 +61,10 @@ request_logger = logging.getLogger(f"{LOGGER_NAME}.requests")
 graph_role_sync_logger = logging.getLogger(f"{LOGGER_NAME}.graph_role_sync")
 _graph_role_sync_stop = threading.Event()
 _graph_role_sync_thread: threading.Thread | None = None
+
+graph_team_sync_logger = logging.getLogger(f"{LOGGER_NAME}.graph_team_sync")
+_graph_team_sync_stop = threading.Event()
+_graph_team_sync_thread: threading.Thread | None = None
 
 # The application exposes a single frontend origin and composes feature routers
 # from the authentication, SSO, booking, and location modules.
@@ -81,6 +86,7 @@ app.include_router(locations_router)
 app.include_router(teams.router)
 app.include_router(dashboard_router)
 app.include_router(admin_dashboard_router)
+app.include_router(admin_bookings_router)
 app.include_router(preferences_router)
 app.include_router(floor_layout_router)
 app.include_router(user_management_router)
@@ -210,12 +216,14 @@ def startup() -> None:
         purge_expired_sessions(conn, settings.session_ttl)
         conn.commit()
     _start_graph_role_sync_scheduler()
+    _start_graph_team_sync_scheduler()
 
 
 @app.on_event("shutdown")
 def shutdown() -> None:
     """Stop optional background workers before process shutdown."""
     _stop_graph_role_sync_scheduler()
+    _stop_graph_team_sync_scheduler()
 
 
 @app.get("/")
@@ -441,6 +449,47 @@ def _graph_role_sync_loop() -> None:
             graph_role_sync_logger.exception("graph_role_sync.failed")
 
         if _graph_role_sync_stop.wait(interval_seconds):
+            break
+
+
+def _start_graph_team_sync_scheduler() -> None:
+    global _graph_team_sync_thread
+    if not settings.graph_team_sync_enabled:
+        return
+    if _graph_team_sync_thread and _graph_team_sync_thread.is_alive():
+        return
+
+    _graph_team_sync_stop.clear()
+    _graph_team_sync_thread = threading.Thread(
+        target=_graph_team_sync_loop,
+        name="graph-team-sync",
+        daemon=True,
+    )
+    _graph_team_sync_thread.start()
+
+
+def _stop_graph_team_sync_scheduler() -> None:
+    if _graph_team_sync_thread is None:
+        return
+    _graph_team_sync_stop.set()
+    _graph_team_sync_thread.join(timeout=5)
+
+
+def _graph_team_sync_loop() -> None:
+    interval_seconds = settings.graph_team_sync_interval_minutes * 60
+    while not _graph_team_sync_stop.is_set():
+        try:
+            with get_db_connection() as conn:
+                result = sync_department_teams(conn)
+            graph_team_sync_logger.info(
+                "graph_team_sync.complete scanned=%s changed=%s",
+                result.scanned_users,
+                result.changed_users,
+            )
+        except Exception:
+            graph_team_sync_logger.exception("graph_team_sync.failed")
+
+        if _graph_team_sync_stop.wait(interval_seconds):
             break
 
 

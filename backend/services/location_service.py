@@ -21,8 +21,6 @@ from backend.repositories.location_repository import (
     fetch_seat_configuration,
     fetch_layout_seat_mapping_by_id,
     update_layout_seat_mapping_configuration,
-    upsert_operational_seat,
-    replace_seat_amenities,
     fetch_seat_amenity_ids,
     fetch_site_by_id,
     fetch_site_duplicates,
@@ -297,28 +295,9 @@ def update_layout_seat_configuration(
                 updated_by=str(current_user["user_id"]),
             )
 
-        seat = upsert_operational_seat(
-            conn,
-            tenant_id=tenant_id,
-            layout_id=str(mapping["layout_id"]),
-            site_id=str(mapping["site_id"]),
-            building_id=str(mapping["building_id"]),
-            floor_id=str(mapping["floor_id"]),
-            seat_code=str(mapping["seat_code"]),
-            seat_type=updated_mapping["seat_type"],
-            status=updated_mapping["status"],
-            is_bookable=updated_mapping["is_bookable"],
-            svg_element_id=str(mapping["svg_element_id"]),
-        )
-
-        replace_seat_amenities(
-            conn,
-            tenant_id=tenant_id,
-            seat_id=str(seat["seat_id"]),
-            amenity_ids=amenity_ids,
-            assigned_by_user_id=str(current_user["user_id"]),
-        )
-
+        # Draft isolation: editing a mapping must only ever touch
+        # layout_seat_mappings. The `seats` table is a published projection
+        # that is rebuilt exclusively by the layout activate/publish flow.
         conn.commit()
 
         return LayoutSeatConfigurationResponse(
