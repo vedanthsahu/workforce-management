@@ -163,6 +163,7 @@ def fetch_team_member_counts(
     return {row["team_id"]: dict(row) for row in rows}
 
 
+
 def search_team_members(
     conn: PGConnection,
     *,
@@ -183,56 +184,74 @@ def search_team_members(
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
-            SELECT DISTINCT
-                u.id::text AS user_id,
-                u.tenant_id::text AS tenant_id,
-                u.full_name,
-                u.email,
-                u.role_name,
-                u.status,
-                u.employee_id,
-                u.department
+            SELECT
+                user_id,
+                tenant_id,
+                full_name,
+                email,
+                role_name,
+                status,
+                employee_id,
+                department
+            FROM (
+                SELECT DISTINCT ON (u.id)
+                    u.id::text AS user_id,
+                    u.tenant_id::text AS tenant_id,
+                    u.full_name,
+                    u.email,
+                    u.role_name,
+                    u.status,
+                    u.employee_id,
+                    u.department,
+                    COALESCE(mp.match_position, 999) AS match_position
 
-            FROM team_members tm_target
+                FROM team_members tm_target
 
-            JOIN team_members tm
-                ON tm.team_id = tm_target.team_id
-            AND tm.tenant_id = tm_target.tenant_id
+                JOIN team_members tm
+                    ON tm.team_id = tm_target.team_id
+                AND tm.tenant_id = tm_target.tenant_id
 
-            JOIN app_users u
-                ON u.id = tm.user_id
-            AND u.tenant_id = tm.tenant_id
+                JOIN app_users u
+                    ON u.id = tm.user_id
+                AND u.tenant_id = tm.tenant_id
 
-            WHERE tm_target.user_id = %s
-            AND tm_target.tenant_id = %s
-            {status_clause}
-            AND (
-                    EXISTS (
-                        SELECT 1
-                        FROM unnest(
-                            regexp_split_to_array(
-                                lower(coalesce(u.full_name, '')),
-                                '\\s+'
-                            )
-                        ) AS name_part
-                        WHERE name_part LIKE %s || '%%'
-                    )
-                OR lower(coalesce(u.employee_id, ''))
-                        LIKE %s || '%%'
-                OR lower(coalesce(u.email, ''))
-                        LIKE %s || '%%'
-            )
+                LEFT JOIN LATERAL (
+                    SELECT MIN(pos) AS match_position
+                    FROM unnest(
+                        regexp_split_to_array(
+                            lower(coalesce(u.full_name, '')),
+                            '\\s+'
+                        )
+                    ) WITH ORDINALITY AS t(word, pos)
+                    WHERE word LIKE %s || '%%'
+                ) mp ON TRUE
+
+                WHERE tm_target.user_id = %s
+                AND tm_target.tenant_id = %s
+                {status_clause}
+                AND (
+                        mp.match_position IS NOT NULL
+                        OR lower(coalesce(u.employee_id, '')) LIKE %s || '%%'
+                        OR lower(coalesce(u.email, '')) LIKE %s || '%%'
+                )
+
+                ORDER BY
+                    u.id,
+                    COALESCE(mp.match_position, 999),
+                    u.full_name
+            ) ranked
 
             ORDER BY
-                u.full_name,
-                u.id::text
+                match_position,
+                full_name,
+                user_id
 
             LIMIT %s
             """,
             (
+                search_text,
                 user_id,
                 tenant_id,
-                search_text,
                 search_text,
                 search_text,
                 limit,
@@ -242,3 +261,4 @@ def search_team_members(
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
+ 

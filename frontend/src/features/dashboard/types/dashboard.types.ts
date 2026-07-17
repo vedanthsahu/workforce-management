@@ -39,9 +39,13 @@ export interface ApiBooking {
 export interface ApiTeamMemberSeat {
   seat_id: string;
   seat_code: string;
+  seat_type: string | null;
   floor_id: string;
-  floor_name?: string | null;
+  floor_name: string | null;
   building_id: string;
+  building_name: string | null;
+  source_channel: string | null;
+  amenities: { id: string; name: string }[];
 }
 
 export interface ApiTeamMember {
