@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, UserPlus, Download, MoreHorizontal, Settings2 } from "lucide-react";
 import BookingManagementFilters from "@/features/adminbookings/components/BookingManagementFilters";
 import BookingStatCards from "@/features/adminbookings/components/BookingStatCards";
@@ -26,6 +27,8 @@ const BOOKING_STATUS_PARAM: Record<string, AdminBookingApiStatus> = {
 const PAGE_SIZES = [10, 25, 50, 75, 100];
 
 export default function AdminBookingsPage() {
+  const router = useRouter();
+
   // `filters` is the draft state the filter form is bound to — editing it
   // (typing, picking a dropdown) never fetches or refilters anything.
   // `appliedFilters` is only replaced on an explicit Search click (or Clear),
@@ -201,11 +204,17 @@ export default function AdminBookingsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button className="inline-flex items-center gap-2 h-9 px-4 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-sm font-medium shadow-sm">
+          <button
+            onClick={() => router.push("/book-for-someone?entry=employee")}
+            className="inline-flex items-center gap-2 h-9 px-4 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-sm font-medium shadow-sm"
+          >
             <Plus size={15} />
             Book for Employee
           </button>
-          <button className="inline-flex items-center gap-2 h-9 px-4 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 rounded-xl text-sm font-medium">
+          <button
+            onClick={() => router.push("/book-for-someone?entry=guest")}
+            className="inline-flex items-center gap-2 h-9 px-4 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 rounded-xl text-sm font-medium"
+          >
             <UserPlus size={15} />
             Book Guest
           </button>
