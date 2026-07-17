@@ -1996,3 +1996,183 @@ def count_guest_bookings(
         cur.execute(query, params)
         row = cur.fetchone()
     return int(row[0]) if row else 0
+
+
+def _build_admin_booking_filters(
+    *,
+    tenant_id: str,
+    start_date: date | None,
+    end_date: date | None,
+    site_id: str | None,
+    building_id: str | None,
+    floor_id: str | None,
+    booking_type: str | None,
+    booking_status: str | None,
+    search: str | None,
+    seat_code: str | None,
+    booked_by_user_id: str | None,
+) -> tuple[str, list[Any]]:
+    """Build one dynamic WHERE clause shared by the admin booking list and
+    its summary counts, so both always see the same filtered dataset."""
+    conditions = ["b.tenant_id = %s"]
+    params: list[Any] = [tenant_id]
+
+    if start_date is not None:
+        conditions.append("b.booking_date >= %s")
+        params.append(start_date)
+    if end_date is not None:
+        conditions.append("b.booking_date <= %s")
+        params.append(end_date)
+    if site_id is not None:
+        conditions.append("b.site_id = %s")
+        params.append(site_id)
+    if building_id is not None:
+        conditions.append("b.building_id = %s")
+        params.append(building_id)
+    if floor_id is not None:
+        conditions.append("b.floor_id = %s")
+        params.append(floor_id)
+    if booking_type is not None:
+        conditions.append("b.booking_type = %s")
+        params.append(booking_type)
+    if booking_status is not None:
+        conditions.append("b.booking_status = %s")
+        params.append(booking_status)
+    if seat_code is not None:
+        conditions.append("s.seat_code ILIKE %s")
+        params.append(f"%{seat_code}%")
+    if booked_by_user_id is not None:
+        conditions.append("b.booked_by_user_id = %s")
+        params.append(booked_by_user_id)
+    if search is not None:
+        conditions.append(
+            "(COALESCE(booked_for_user.full_name, g.full_name) ILIKE %s"
+            " OR COALESCE(booked_for_user.email, g.email) ILIKE %s)"
+        )
+        like_search = f"%{search}%"
+        params.append(like_search)
+        params.append(like_search)
+
+    return " AND ".join(conditions), params
+
+
+def fetch_admin_bookings(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    site_id: str | None = None,
+    building_id: str | None = None,
+    floor_id: str | None = None,
+    booking_type: str | None = None,
+    booking_status: str | None = None,
+    search: str | None = None,
+    seat_code: str | None = None,
+    booked_by_user_id: str | None = None,
+    limit: int,
+    offset: int,
+) -> list[dict[str, Any]]:
+    """Tenant-wide employee + guest booking search for the admin bookings screen.
+
+    Reuses the same BOOKING_SELECT_FIELDS/BOOKING_SELECT_FROM join shape as
+    the delegated booking queries so the response is the same unified model,
+    just filtered dynamically instead of scoped to one delegator.
+    """
+    where_clause, params = _build_admin_booking_filters(
+        tenant_id=tenant_id,
+        start_date=start_date,
+        end_date=end_date,
+        site_id=site_id,
+        building_id=building_id,
+        floor_id=floor_id,
+        booking_type=booking_type,
+        booking_status=booking_status,
+        search=search,
+        seat_code=seat_code,
+        booked_by_user_id=booked_by_user_id,
+    )
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {BOOKING_SELECT_FIELDS}
+            {BOOKING_SELECT_FROM}
+
+            WHERE {where_clause}
+
+            ORDER BY b.booking_date DESC, b.created_at DESC
+            LIMIT %s OFFSET %s
+            """,
+            (*params, limit, offset),
+        )
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def fetch_admin_bookings_summary(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    site_id: str | None = None,
+    building_id: str | None = None,
+    floor_id: str | None = None,
+    booking_type: str | None = None,
+    booking_status: str | None = None,
+    search: str | None = None,
+    seat_code: str | None = None,
+    booked_by_user_id: str | None = None,
+) -> dict[str, int]:
+    """Aggregate counts over the same filtered dataset `fetch_admin_bookings`
+    would page through (no LIMIT/OFFSET), for the admin summary cards."""
+    where_clause, params = _build_admin_booking_filters(
+        tenant_id=tenant_id,
+        start_date=start_date,
+        end_date=end_date,
+        site_id=site_id,
+        building_id=building_id,
+        floor_id=floor_id,
+        booking_type=booking_type,
+        booking_status=booking_status,
+        search=search,
+        seat_code=seat_code,
+        booked_by_user_id=booked_by_user_id,
+    )
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT
+                COUNT(*)::integer AS total_bookings,
+                COUNT(*) FILTER (WHERE b.booking_status = 'CONFIRMED')::integer AS confirmed_bookings,
+                COUNT(*) FILTER (WHERE b.booking_status = 'CANCELLED')::integer AS cancelled_bookings,
+                COUNT(*) FILTER (WHERE b.booking_status = 'MODIFIED')::integer AS modified_bookings,
+                COUNT(*) FILTER (WHERE b.booking_status = 'COMPLETED')::integer AS completed_bookings,
+                COUNT(*) FILTER (WHERE b.booking_status = 'NO_SHOW')::integer AS no_show_bookings,
+                COUNT(*) FILTER (WHERE b.booking_type = 'EMPLOYEE')::integer AS employee_bookings,
+                COUNT(*) FILTER (WHERE b.booking_type = 'GUEST')::integer AS guest_bookings,
+                COUNT(*) FILTER (WHERE b.check_in_at IS NOT NULL)::integer AS checked_in_bookings,
+                COUNT(*) FILTER (WHERE b.checked_out_at IS NOT NULL)::integer AS checked_out_bookings
+            {BOOKING_SELECT_FROM}
+
+            WHERE {where_clause}
+            """,
+            params,
+        )
+        row = cur.fetchone()
+
+    return dict(row) if row else {
+        "total_bookings": 0,
+        "confirmed_bookings": 0,
+        "cancelled_bookings": 0,
+        "modified_bookings": 0,
+        "completed_bookings": 0,
+        "no_show_bookings": 0,
+        "employee_bookings": 0,
+        "guest_bookings": 0,
+        "checked_in_bookings": 0,
+        "checked_out_bookings": 0,
+    }

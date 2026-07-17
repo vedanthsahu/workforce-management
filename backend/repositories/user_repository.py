@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from psycopg2.extras import Json, RealDictCursor
@@ -649,29 +650,70 @@ def upsert_user_graph_profile(
         )
 
 
-def sync_graph_groups_for_user(
+UNASSIGNED_TEAM_KEY = "UNASSIGNED"
+UNASSIGNED_TEAM_NAME = "Unassigned"
+
+_TEAM_KEY_SEPARATOR_RE = re.compile(r"[^A-Z0-9]+")
+
+
+def _generate_team_key(department: str) -> str:
+    """Deterministically derive a team_key from a Graph department string.
+
+    Uppercases the department and collapses every run of non-alphanumeric
+    characters (spaces, hyphens, '&', etc.) into a single underscore, so the
+    same department string always maps to the same key without random IDs.
+    """
+    key = _TEAM_KEY_SEPARATOR_RE.sub("_", department.upper()).strip("_")
+    return key or UNASSIGNED_TEAM_KEY
+
+
+def _resolve_department_team(department: str | None) -> tuple[str, str]:
+    """Resolve the (team_key, team_name) pair a Graph department maps to.
+
+    Missing/blank departments fall back to a shared UNASSIGNED team instead
+    of failing login.
+    """
+    normalized = _normalize_text(department, max_length=150)
+    if normalized is None:
+        return UNASSIGNED_TEAM_KEY, UNASSIGNED_TEAM_NAME
+    return _generate_team_key(normalized), normalized
+
+
+def sync_department_team_for_user(
     conn: PGConnection,
     *,
     tenant_id: str,
     user_id: str,
-    graph_groups: dict[str, Any],
-) -> None:
-    """Map Microsoft Graph groups to teams and team_members idempotently."""
-    groups = graph_groups.get("value", [])
-    if not isinstance(groups, list):
-        raise ValueError("Graph groups payload must contain a list in 'value'.")
+    department: str | None,
+) -> dict[str, Any]:
+    """Map a Graph user's department to a team and ensure sole membership.
 
-    for group in groups:
-        if not isinstance(group, dict):
-            continue
-        odata_type = str(group.get("@odata.type") or "").strip()
-        if odata_type and odata_type != "#microsoft.graph.group":
-            continue
+    Department is treated as the single source of truth for team assignment
+    regardless of how a matching team was originally created: a team whose
+    team_name already equals the (normalized) department is reused as-is —
+    whatever its team_key/source — since it still represents the same Graph
+    department. Only when no team is named after the department yet is a new
+    one minted, keyed deterministically from the department text. Either way,
+    any other team the user currently belongs to in this tenant is dropped so
+    a department change moves the user instead of accumulating memberships.
+    """
+    team_key, team_name = _resolve_department_team(department)
 
-        team_key = _required_text(str(group.get("id") or ""), field_name="team_key", max_length=100)
-        team_name = _normalize_text(group.get("displayName"), max_length=200) or team_key
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT id::text AS team_id, team_key, team_name
+            FROM teams
+            WHERE tenant_id = %s
+              AND LOWER(TRIM(team_name)) = LOWER(TRIM(%s))
+            ORDER BY id
+            LIMIT 1
+            """,
+            (tenant_id, team_name),
+        )
+        team = cur.fetchone()
 
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        if team is None:
             cur.execute(
                 """
                 INSERT INTO teams (
@@ -683,29 +725,66 @@ def sync_graph_groups_for_user(
                 VALUES (%s, %s, %s, 'GRAPH')
                 ON CONFLICT (tenant_id, team_key) DO UPDATE
                 SET team_name = EXCLUDED.team_name,
-                    source = EXCLUDED.source,
                     updated_at = NOW()
-                RETURNING id::text AS team_id
+                RETURNING id::text AS team_id, team_key, team_name
                 """,
                 (tenant_id, team_key, team_name),
             )
             team = cur.fetchone()
             if team is None:
-                raise LookupError(f"Graph team '{team_key}' could not be resolved.")
+                raise LookupError(f"Department team '{team_key}' could not be resolved.")
 
-            cur.execute(
-                """
-                INSERT INTO team_members (
-                    tenant_id,
-                    team_id,
-                    user_id,
-                    member_role
-                )
-                VALUES (%s, %s, %s, 'MEMBER')
-                ON CONFLICT (tenant_id, team_id, user_id) DO NOTHING
-                """,
-                (tenant_id, team["team_id"], user_id),
+        team_id = team["team_id"]
+        team_key = team["team_key"]
+        team_name = team["team_name"]
+
+        cur.execute(
+            """
+            DELETE FROM team_members
+            WHERE tenant_id = %s
+              AND user_id = %s
+              AND team_id <> %s
+            """,
+            (tenant_id, user_id, team_id),
+        )
+
+        cur.execute(
+            """
+            INSERT INTO team_members (
+                tenant_id,
+                team_id,
+                user_id,
+                member_role
             )
+            VALUES (%s, %s, %s, 'MEMBER')
+            ON CONFLICT (tenant_id, team_id, user_id) DO NOTHING
+            """,
+            (tenant_id, team_id, user_id),
+        )
+
+    return {"team_id": team_id, "team_key": team_key, "team_name": team_name}
+
+
+def update_user_department(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    department: str | None,
+) -> None:
+    """Refresh the Graph-sourced department field driving team assignment."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE app_users
+            SET department = %s,
+                graph_last_synced_at = NOW(),
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            """,
+            (_normalize_text(department, max_length=150), tenant_id, user_id),
+        )
 
 
 def update_user_profile(
@@ -811,6 +890,28 @@ def fetch_graph_managed_role_users(
                 tenant_id,
                 list(GRAPH_MANAGED_ROLE_NAMES),
             ),
+        )
+        rows = cur.fetchall()
+    return [dict(row) for row in rows]
+
+
+def fetch_graph_linked_users(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+) -> list[dict[str, Any]]:
+    """Fetch every user with a Microsoft Graph identity, for department resync."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {USER_SELECT_FIELDS}
+            {USER_SELECT_FROM}
+            WHERE au.tenant_id = %s
+              AND au.microsoft_object_id IS NOT NULL
+              AND au.microsoft_object_id <> ''
+            ORDER BY au.id
+            """,
+            (tenant_id,),
         )
         rows = cur.fetchall()
     return [dict(row) for row in rows]

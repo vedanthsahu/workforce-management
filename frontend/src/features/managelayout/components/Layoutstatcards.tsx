@@ -49,6 +49,16 @@ function LockIcon() {
   );
 }
 
+function PowerOffIcon() {
+  return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18.36 6.64A9 9 0 1 1 5.64 5.64" />
+      <line x1="12" y1="2" x2="12" y2="12" />
+    </svg>
+  );
+}
+
 function pct(part: number, total: number): string {
   if (!total) return "0%";
   return `(${Math.round((part / total) * 100)}%)`;
@@ -57,9 +67,8 @@ function pct(part: number, total: number): string {
 export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps) {
   if (loading || !stats) {
     return (
-      // FIX: 2-col on mobile, 4-col on md+
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        {[0, 1, 2, 3].map((i) => (
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+        {[0, 1, 2, 3, 4].map((i) => (
           <div key={i} className={`bg-white rounded-xl border border-gray-100 p-3 sm:p-4 h-[76px] sm:h-[84px] ${loading ? "animate-pulse" : ""}`}>
             <div className="h-2.5 w-20 bg-gray-100 rounded mb-3" />
             <div className="h-6 w-10 bg-gray-100 rounded" />
@@ -69,7 +78,7 @@ export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps
     );
   }
 
-  const { total_seats, configured_seats, unconfigured_seats, non_bookable_seats } = stats;
+  const { total_seats, configured_seats, unconfigured_seats, non_bookable_seats, inactive_seats } = stats;
 
   const cards = [
     {
@@ -104,11 +113,18 @@ export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps
       iconBg:     "bg-red-50 text-red-400",
       valueColor: "text-red-500",
     },
+    {
+      label:      "Inactive",
+      value:      inactive_seats ?? 0,
+      sub:        pct(inactive_seats ?? 0, total_seats),
+      icon:       <PowerOffIcon />,
+      iconBg:     "bg-gray-100 text-gray-500",
+      valueColor: "text-gray-600",
+    },
   ];
 
   return (
-    // FIX: 2-col on mobile, 4-col on md+. Tighter gap + padding on mobile.
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
       {cards.map((card) => (
         <div
           key={card.label}
