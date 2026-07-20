@@ -245,6 +245,7 @@ def get_floor_layout_seats(
             conn,
             tenant_id=tenant_id,
             layout_id=layout_id,
+            include_deleted=True,
         )
 
         if layout is None:

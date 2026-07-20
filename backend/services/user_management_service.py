@@ -41,6 +41,14 @@ ASSIGNABLE_ROLE_NAMES = {
     "FRONT_OFFICE",
 }
 
+# Targets holding one of these roles cannot have their role/status changed via
+# admin_update_user_access_service, regardless of who the caller is — otherwise
+# any TENANT_ADMIN could silently demote or deactivate another admin.
+PROTECTED_TARGET_ROLE_NAMES = {
+    "TENANT_ADMIN",
+    "PRODUCT_ADMIN",
+}
+
 ADMIN_DIRECTORY_ROLES = {
     "EMPLOYEE",
     "MANAGER",
@@ -143,6 +151,15 @@ def admin_update_user_access_service(
             detail={
                 "code": "user_not_found",
                 "message": "Target user not found.",
+            },
+        )
+
+    if _user_role(target_user) in PROTECTED_TARGET_ROLE_NAMES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "protected_target_role",
+                "message": "This user's access cannot be changed through this endpoint.",
             },
         )
 

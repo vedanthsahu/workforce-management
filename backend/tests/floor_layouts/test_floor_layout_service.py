@@ -211,14 +211,14 @@ class DeletedLayoutVisibilityServiceTests(unittest.TestCase):
             "floor_layout_not_found",
         )
 
-    def test_get_seats_for_deleted_layout_returns_404(self) -> None:
+    def test_get_seats_for_nonexistent_layout_returns_404(self) -> None:
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
 
         with patch(
             "backend.services.floor_layout_service.fetch_floor_layout_by_id",
             return_value=None,
-        ), patch(
+        ) as mock_fetch_layout, patch(
             "backend.services.floor_layout_service.fetch_layout_seats_by_layout_id",
         ) as mock_fetch_seats:
             with self.assertRaises(HTTPException) as context:
@@ -230,6 +230,35 @@ class DeletedLayoutVisibilityServiceTests(unittest.TestCase):
 
         self.assertEqual(context.exception.status_code, 404)
         mock_fetch_seats.assert_not_called()
+        mock_fetch_layout.assert_called_once_with(
+            conn, tenant_id="1", layout_id="10", include_deleted=True,
+        )
+
+    def test_get_seats_for_deleted_layout_succeeds_as_view_only_entry(self) -> None:
+        """Viewing a deleted layout's seats is allowed — the UI shows it as a
+        read-only historical entry. Only actions (configure, activate) are
+        blocked for a deleted layout, not viewing."""
+        conn = FakeConnection()
+        current_user = {"tenant_id": "1", "user_id": "5"}
+
+        with patch(
+            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+            return_value=_layout_row(status="DELETED"),
+        ) as mock_fetch_layout, patch(
+            "backend.services.floor_layout_service.fetch_layout_seats_by_layout_id",
+            return_value=[],
+        ) as mock_fetch_seats:
+            response = get_floor_layout_seats(
+                conn,
+                current_user=current_user,
+                layout_id="10",
+            )
+
+        mock_fetch_seats.assert_called_once()
+        mock_fetch_layout.assert_called_once_with(
+            conn, tenant_id="1", layout_id="10", include_deleted=True,
+        )
+        self.assertEqual(response.total_seats, 0)
 
     def test_get_seats_for_existing_layout_succeeds(self) -> None:
         conn = FakeConnection()

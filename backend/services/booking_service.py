@@ -110,10 +110,6 @@ def _can_book_for_user(
         role == "MANAGER"
         and str(booking_user.get("manager_user_id") or "") == current_user_id
     )
-    return (
-        role == "MANAGER"
-        and str(booking_user.get("manager_user_id") or "") == current_user_id
-    )
 
 
 def _can_manage_booking(
@@ -352,6 +348,15 @@ def book_seat(
     background_tasks: BackgroundTasks | None = None,
 ) -> BookingResponse:
     """Create one tenant-scoped booking and handle DB constraint failures."""
+    if payload.booking_date < date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "booking_date_in_past",
+                "message": "Bookings cannot be created for a past date.",
+            },
+        )
+
     tenant_id = str(current_user["tenant_id"])
     booked_by_user_id = _current_user_id(current_user)
     effective_booked_for_user_id = (
