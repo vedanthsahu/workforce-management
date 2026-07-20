@@ -127,6 +127,7 @@ const DateInput: React.FC<{
         min={min}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => e.preventDefault()}
         className={cn(
           "w-full h-9 sm:h-10 pl-8 pr-2 sm:pr-3 rounded-lg border border-[#EBEBF5] bg-white",
           "text-[12px] sm:text-[13px] text-[#1A1A2E] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent",

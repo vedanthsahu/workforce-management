@@ -835,6 +835,7 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
             value={visitDetails.visitDate}
             min={new Date().toISOString().split("T")[0]}
             disabled={readOnlyLocation}
+            onKeyDown={(e) => e.preventDefault()}
             onChange={(e) => {
               const val = e.target.value;
               const updates: Partial<VisitDetails> = { visitDate: val };
@@ -852,6 +853,7 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
             value={visitDetails.endDate}
             min={visitDetails.visitDate || new Date().toISOString().split("T")[0]}
             disabled={readOnlyLocation}
+            onKeyDown={(e) => e.preventDefault()}
             onChange={(e) => onChange({ endDate: e.target.value })}
           />
         </LockedTooltip>
