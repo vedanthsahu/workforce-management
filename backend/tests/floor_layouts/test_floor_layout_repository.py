@@ -53,7 +53,10 @@ class FakeConnection:
 
 
 class FloorLayoutRepositoryFilterTests(unittest.TestCase):
-    def test_fetch_layouts_by_floor_excludes_deleted(self) -> None:
+    def test_fetch_layouts_by_floor_includes_deleted_as_view_only_entries(self) -> None:
+        """Deleted layouts still appear in the floor's layout list — the UI
+        shows them as a historical entry and blocks every action other than
+        viewing (no configure, no activate/recover)."""
         cursor = FakeCursor(fetchall_values=[[]])
         conn = FakeConnection(cursor)
 
@@ -62,7 +65,10 @@ class FloorLayoutRepositoryFilterTests(unittest.TestCase):
         sql, params = cursor.executions[0]
         self.assertIn("fl.status = ANY(%s)", sql)
         self.assertNotIn("!=", sql)
-        self.assertEqual(params, ("1", "2", ["DRAFT", "ARCHIVED", "PUBLISHED"]))
+        self.assertEqual(
+            params,
+            ("1", "2", ["DRAFT", "PUBLISHED", "ARCHIVED", "DELETED"]),
+        )
 
     def test_fetch_layout_by_id_excludes_deleted(self) -> None:
         cursor = FakeCursor(fetchone_values=[None])

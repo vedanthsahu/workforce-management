@@ -16,8 +16,14 @@ NON_DELETED_LAYOUT_STATUSES: tuple[str, ...] = (
     LayoutStatus.DRAFT.value,
     LayoutStatus.ARCHIVED.value,
     LayoutStatus.PUBLISHED.value,
-    LayoutStatus.DELETED.value,
 )
+
+# Every status, including DELETED. Used only by read/list surfaces that show
+# a deleted layout as a view-only historical entry — never by anything that
+# resolves "the" active layout for a floor or that can act on a layout
+# (configure, activate, delete), which must keep using
+# NON_DELETED_LAYOUT_STATUSES so a deleted layout behaves as gone.
+ALL_LAYOUT_STATUSES: tuple[str, ...] = tuple(status.value for status in LayoutStatus)
 
 
 class SeatAvailabilityStatus(str, Enum):
