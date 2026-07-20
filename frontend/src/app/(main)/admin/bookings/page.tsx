@@ -260,10 +260,10 @@ export default function AdminBookingsPage() {
               {/* TABLE HEADER */}
               <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b shrink-0">
                 <h2 className="text-sm sm:text-base font-semibold text-gray-800">Bookings ({totalBookings})</h2>
-                <button className="inline-flex items-center gap-1.5 h-8 px-3 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50">
+                {/* <button className="inline-flex items-center gap-1.5 h-8 px-3 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50">
                   <Settings2 size={13} />
                   Columns
-                </button>
+                </button> */}
               </div>
 
               {/* TABLE BODY */}
