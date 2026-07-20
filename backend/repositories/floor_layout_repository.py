@@ -9,7 +9,7 @@ from typing import Any
 from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
 
-from backend.core.enums import LayoutStatus, NON_DELETED_LAYOUT_STATUSES
+from backend.core.enums import ALL_LAYOUT_STATUSES, LayoutStatus, NON_DELETED_LAYOUT_STATUSES
 from backend.repositories.location_repository import (
     upsert_operational_seat,
     replace_seat_amenities,
@@ -176,10 +176,12 @@ def fetch_floor_layouts_by_floor(
     floor_id: str,
 ) -> list[dict[str, Any]]:
     """
-    Fetch all non-deleted layouts for a tenant-scoped floor.
+    Fetch all layouts for a tenant-scoped floor, including deleted ones.
 
-    Ordered PUBLISHED, then DRAFT, then ARCHIVED, then DELETED; within each
-    group, most recently updated first.
+    Deleted layouts are included as view-only historical entries — the UI
+    shows them but blocks every action (configure, activate/recover) other
+    than viewing. Ordered PUBLISHED, then DRAFT, then ARCHIVED, then DELETED;
+    within each group, most recently updated first.
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -206,7 +208,7 @@ def fetch_floor_layouts_by_floor(
             (
                 tenant_id,
                 floor_id,
-                list(NON_DELETED_LAYOUT_STATUSES),
+                list(ALL_LAYOUT_STATUSES),
             ),
         )
 
@@ -252,16 +254,20 @@ def fetch_floor_layout_by_id(
     *,
     tenant_id: str,
     layout_id: str,
+    include_deleted: bool = False,
 ) -> dict[str, Any] | None:
-    """Fetch one non-deleted layout by id within a tenant.
+    """Fetch one layout by id within a tenant.
 
-    Deleted layouts must behave as if they do not exist, so this is the
-    single place every consumer (activate, seats, delete) goes through.
+    By default a deleted layout behaves as if it does not exist — used by
+    every action consumer (activate, configure, delete). Callers backing a
+    view-only surface (e.g. viewing a deleted layout's seats as a historical
+    entry) should pass include_deleted=True.
     """
     return _fetch_floor_layout_row(
         conn,
         tenant_id=tenant_id,
         layout_id=layout_id,
+        include_deleted=include_deleted,
     )
 
 
