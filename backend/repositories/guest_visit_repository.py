@@ -13,11 +13,6 @@ ACTIVE_GUEST_BOOKING_STATUSES = (
     "CHECKED_IN",
     "COMPLETED",
 )
-ACTIVE_GUEST_BOOKING_STATUSES = (
-    "CONFIRMED",
-    "CHECKED_IN",
-    "COMPLETED",
-)
 
 GUEST_VISIT_LIST_SELECT = """
     gv.id::text AS guest_visit_id,

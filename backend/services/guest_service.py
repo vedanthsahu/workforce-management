@@ -116,7 +116,6 @@ from backend.services.notification_service import (
 
 logger = logging.getLogger(f"{LOGGER_NAME}.guests")
 
-GUEST_OPERATION_ROLES = {"FACILITATOR", "TENANT_ADMIN", "FRONT_OFFICE"}
 BOOKING_STATUSES = {
     "CONFIRMED",
     "CANCELLED",
@@ -731,6 +730,14 @@ def create_guest_visit(
     background_tasks: BackgroundTasks | None = None,
 ) -> GuestVisitResponse:
     _require_guest_operator(current_user)
+    if payload.visit_date < date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "visit_date_in_past",
+                "message": "Guest visits cannot be created for a past date.",
+            },
+        )
     tenant_id = str(current_user["tenant_id"])
     floor_id = str(payload.floor_id) if payload.floor_id is not None else None
 
@@ -815,6 +822,14 @@ def create_guest_booking(
     background_tasks: BackgroundTasks | None = None,
 ) -> BookingResponse:
     _require_guest_operator(current_user)
+    if payload.visit_date < date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "visit_date_in_past",
+                "message": "Guest bookings cannot be created for a past date.",
+            },
+        )
     tenant_id = str(current_user["tenant_id"])
     guest_id = str(payload.guest_id)
 
@@ -1526,6 +1541,27 @@ def get_guest_visit_details(
         guest_visit_id=guest_visit_id,
     )
 
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Guest visit not found.",
+        )
+
+    # Mirror the list endpoint's scope restriction so a FRONT_OFFICE user
+    # cannot bypass the home-site/today-only limit by fetching a visit
+    # directly by id.
+    if _user_role(current_user) == "FRONT_OFFICE":
+        home_site_id = current_user.get("home_site_id")
+        if not home_site_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Front Office user does not have a home site configured.",
+            )
+        if str(row.get("site_id")) != str(home_site_id) or row.get("visit_date") != date.today():
+            raise HTTPException(
+                status_code=403,
+                detail="Front Office can only access current visits at their home site.",
+            )
 
     return GuestVisitListItem(**row)
 
