@@ -158,7 +158,7 @@ class GuestWorkflowTests(unittest.TestCase):
                 guest_visit_id="60",
                 payload=_payload(
                     GuestWorkflowAction.MODIFY_VISIT_ONLY,
-                    modification_reason="Visit details changed",
+                    modification_reason="OTHER",
                 ),
             )
 
@@ -166,7 +166,7 @@ class GuestWorkflowTests(unittest.TestCase):
             conn,
             tenant_id="1",
             guest_visit_id="60",
-            modification_reason="Visit details changed",
+            modification_reason="OTHER",
         )
         self.assertEqual(insert_visit.call_args.kwargs["guest_id"], "50")
         self.assertEqual(insert_visit.call_args.kwargs["site_id"], "5")
@@ -272,14 +272,14 @@ class GuestWorkflowTests(unittest.TestCase):
                 guest_visit_id="60",
                 payload=_payload(
                     GuestWorkflowAction.MODIFY_VISIT_AND_BOOKING,
-                    modification_reason="Visit and seat changed",
+                    modification_reason="OTHER",
                 ),
             )
 
         self.assertEqual(mark_booking.call_args.kwargs["booking_id"], "200")
         self.assertEqual(
             mark_booking.call_args.kwargs["modification_reason"],
-            "Visit and seat changed",
+            "OTHER",
         )
         self.assertEqual(insert_booking.call_args.kwargs["modified_from_booking_id"], "200")
         self.assertNotIn("modification_reason", insert_booking.call_args.kwargs)
@@ -288,7 +288,7 @@ class GuestWorkflowTests(unittest.TestCase):
             conn,
             tenant_id="1",
             guest_visit_id="60",
-            modification_reason="Visit and seat changed",
+            modification_reason="OTHER",
         )
         self.assertNotIn("modification_reason", insert_visit.call_args.kwargs)
         self.assertEqual(insert_visit.call_args.kwargs["guest_id"], "50")
@@ -334,7 +334,7 @@ class GuestWorkflowTests(unittest.TestCase):
             visit_date=_future_date(20),
             guest_type=GuestType.VENDOR,
             purpose_of_visit=VisitPurpose.VENDOR_VISIT,
-            modification_reason="Visit moved",
+            modification_reason="LOCATION_CHANGED",
         )
         with patch.object(
             guest_service,
@@ -385,14 +385,17 @@ class GuestWorkflowTests(unittest.TestCase):
 
         self.assertEqual(mark_booking.call_args.kwargs["booking_id"], "200")
         self.assertEqual(
+            # LOCATION_CHANGED is valid for guest_visits.modification_reason
+            # but not bookings.modification_reason (chk_booking_modification_reason),
+            # so the booking side falls back to OTHER.
             mark_booking.call_args.kwargs["modification_reason"],
-            "Visit moved",
+            "OTHER",
         )
         mark_visit.assert_called_once_with(
             conn,
             tenant_id="1",
             guest_visit_id="60",
-            modification_reason="Visit moved",
+            modification_reason="LOCATION_CHANGED",
         )
         self.assertEqual(insert_visit.call_args.kwargs["modified_from_guest_visit_id"], "60")
         self.assertNotIn("modification_reason", insert_visit.call_args.kwargs)

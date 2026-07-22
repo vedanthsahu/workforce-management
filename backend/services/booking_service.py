@@ -316,12 +316,32 @@ def _user_email_list(user: dict[str, Any]) -> list[str]:
     return [email] if email else []
 
 
+def _apply_modified_display_status(
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """UI-only: a row that superseded an earlier booking/guest visit
+    (linked via modified_from_booking_id / modified_from_guest_visit_id)
+    displays booking_status as MODIFIED in list views, even though its real
+    DB status is still CONFIRMED/SCHEDULED/etc. Never call this for a
+    direct/search fetch (fetch_booking_by_id and friends) -- those must keep
+    showing the real database status.
+    """
+    for row in rows:
+        if (
+            row.get("modified_from_booking_id") is not None
+            or row.get("modified_from_guest_visit_id") is not None
+        ):
+            row["booking_status"] = "MODIFIED"
+    return rows
+
+
 def _booking_list_response(
     rows: list[dict[str, Any]],
     *,
     page: int | None = None,
     limit: int | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
+    rows = _apply_modified_display_status(rows)
     if page is None and limit is None:
         return [BookingResponse(**row) for row in rows]
 
@@ -559,6 +579,7 @@ def get_user_current_bookings(
             },
         ) from exc
 
+    bookings = _apply_modified_display_status(bookings)
     return [BookingResponse(**booking) for booking in bookings]
 
 def get_user_cancelled_bookings(
@@ -1003,7 +1024,11 @@ def modify_booking(
             conn,
             tenant_id=tenant_id,
             booking_id=booking_id,
-            modification_reason="USER_REQUEST",
+            modification_reason=(
+                payload.modification_reason.value
+                if payload.modification_reason is not None
+                else "USER_REQUEST"
+            ),
         )
 
         new_booking = insert_booking(
@@ -1653,6 +1678,7 @@ def get_delegated_current_bookings(
         reverse=True,
     )
 
+    combined = _apply_modified_display_status(combined)
     return [
         BookingResponse(**row)
         for row in combined
@@ -1815,7 +1841,7 @@ def get_admin_bookings(
 
     total = len(combined)
     offset = (page - 1) * limit
-    paged_rows = combined[offset : offset + limit]
+    paged_rows = _apply_modified_display_status(combined[offset : offset + limit])
 
     summary_payload = dict(summary)
     summary_payload["total_bookings"] = total
