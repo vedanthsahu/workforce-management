@@ -323,10 +323,17 @@ export function AppSidebar({ user }: AppSidebarProps) {
   const isAdmin = role === "TENANT_ADMIN";
   const isSecurity = role === "FRONT_OFFICE";
 
-  const activeItem =
-    Object.entries(ROUTE_MAP)
-      .sort(([, a], [, b]) => b.length - a.length)
-      .find(([, path]) => pathname.startsWith(path))?.[0] ?? "dashboard";
+  const relevantItems = isAdmin
+    ? [...ADMIN_DASHBOARD, ...ADMIN_MANAGE_NAV, ...ADMIN_OPERATIONS_NAV, ...ADMIN_REPORTS_NAV, ...ADMIN_SETTINGS_NAV]
+    : isSecurity
+    ? [...FRONT_OFFICE_DASHBOARD, ...FRONT_OFFICE_VISITOR_NAV, ...FRONT_OFFICE_ACTIONS_NAV]
+    : [...MAIN_NAV, ...OFFICE_NAV, ...PERSONAL_NAV];
+
+  const activeItem = relevantItems
+    .map((item) => ({ id: item.id, path: ROUTE_MAP[item.id] ?? "" }))
+    .filter(({ path }) => path)
+    .sort((a, b) => b.path.length - a.path.length)
+    .find(({ path }) => pathname.startsWith(path))?.id ?? "";
 
   const handleNav = (id: string) => {
     const path = ROUTE_MAP[id];

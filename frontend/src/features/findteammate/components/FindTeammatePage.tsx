@@ -253,6 +253,14 @@ function StatusCard({ inOffice, booking }: { inOffice: boolean; booking: RawTeam
   );
 }
 
+function formatTime(t: string | null): string {
+  if (!t) return "—";
+  const [h, m] = t.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 === 0 ? 12 : h % 12;
+  return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
 function SeatDetailsGrid({ booking }: { booking: RawTeammateBooking }) {
   const [categoryByName, setCategoryByName] = useState<Map<string, string | null>>(new Map());
 
@@ -269,9 +277,9 @@ function SeatDetailsGrid({ booking }: { booking: RawTeammateBooking }) {
     { label: "Floor", value: booking.floor_name ?? "—" },
     { label: "Seat Number", value: booking.seat_code ?? "—" },
     { label: "Booking Source", value: booking.source_channel ?? "—" },
-    { label: "Start Time", value: "11:00 AM" },
-    { label: "End Time", value: "20:00 PM" },
-    { label: "Desk Type", value: booking.desk_type ?? "Standard Desk" },
+    { label: "Start Time", value: formatTime(booking.start_time) },
+    { label: "End Time", value: formatTime(booking.end_time) },
+    { label: "Desk Type", value: booking.desk_type ?? "—" },
     {
       label: "Amenities",
       value: booking.amenities?.length ? (

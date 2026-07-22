@@ -5,7 +5,7 @@ from typing import Any, Annotated
 from fastapi import APIRouter, Depends, Path, Query, status
 from psycopg2.extensions import connection as PGConnection
 
-from backend.api.deps import get_current_user
+from backend.api.deps import get_current_user, require_any_permission
 from backend.db.connection import get_db
 from backend.schemas.preferences import (
     AdminAmenityResponse,
@@ -135,7 +135,7 @@ def amenity_category(
 )
 def create_amenity_category_route(
     payload: CreateAmenityCategoryRequest,
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AmenityCategoryResponse:
     return create_amenity_category(
@@ -152,7 +152,7 @@ def create_amenity_category_route(
 def update_amenity_category_route(
     category_id: Annotated[int, Path(gt=0)],
     payload: UpdateAmenityCategoryRequest,
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AmenityCategoryResponse:
     return update_amenity_category_metadata(
@@ -170,7 +170,7 @@ def update_amenity_category_route(
 )
 def create_amenity_route(
     payload: CreateAmenityRequest,
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AdminAmenityResponse:
     return create_amenity(
@@ -197,7 +197,7 @@ def amenity_detail(
 def update_amenity_route(
     amenity_id: Annotated[int, Path(gt=0)],
     payload: UpdateAmenityRequest,
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AdminAmenityResponse:
     return update_amenity_metadata(

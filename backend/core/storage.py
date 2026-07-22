@@ -31,6 +31,25 @@ def get_s3_client() -> BaseClient:
     )
 
 
+
+# SVG is rendered inline by the frontend viewer, so any of these constructs
+# would execute in the context of an authenticated user's session (stored
+# XSS). A legitimate floor-plan export from a design tool never needs them.
+_DISALLOWED_SVG_PATTERNS: tuple[bytes, ...] = (
+    b"<script",
+    b"javascript:",
+    b"<foreignobject",
+    b"<iframe",
+    b"<embed",
+    b"<object",
+    b"onload=",
+    b"onerror=",
+    b"onclick=",
+    b"onmouseover=",
+    b"onfocus=",
+)
+
+
 def validate_svg_file(file: UploadFile) -> None:
     filename = (file.filename or "").lower()
 
@@ -52,6 +71,20 @@ def validate_svg_file(file: UploadFile) -> None:
             detail={
                 "code": "invalid_content_type",
                 "message": "Invalid SVG content type.",
+            },
+        )
+
+    file.file.seek(0)
+    content = file.file.read()
+    file.file.seek(0)
+
+    lowered = content.lower()
+    if any(pattern in lowered for pattern in _DISALLOWED_SVG_PATTERNS):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "unsafe_svg_content",
+                "message": "The uploaded SVG contains disallowed executable content.",
             },
         )
 

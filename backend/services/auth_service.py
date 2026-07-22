@@ -60,12 +60,6 @@ class AuthTokens:
 
 
 GRAPH_MANAGED_ROLES = {"EMPLOYEE", "FACILITATOR"}
-GRAPH_PROTECTED_ROLES = {
-    "FRONT_OFFICE",
-    "MANAGER",
-    "TENANT_ADMIN",
-    "PRODUCT_ADMIN",
-}
 
 
 @dataclass(frozen=True)

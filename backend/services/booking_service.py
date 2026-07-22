@@ -17,8 +17,10 @@ BookingEligibilityRequest,
 BookingEligibilityResponse,
 )
 
+from backend.repositories.guest_repository import fetch_guest_by_id
 from backend.repositories.guest_visit_repository import (
     fetch_cancelled_guest_visits,
+    insert_guest_visit,
 )
 from backend.core.app_logging import LOGGER_NAME
 from backend.repositories.booking_repository import (
@@ -26,6 +28,7 @@ from backend.repositories.booking_repository import (
     fetch_available_seats_by_range,
     fetch_admin_bookings,
     fetch_admin_bookings_summary,
+    fetch_admin_guest_visits_without_booking,
     fetch_past_bookings_for_user,
     fetch_current_bookings_for_user,
     fetch_past_delegated_bookings,
@@ -40,7 +43,9 @@ from backend.repositories.booking_repository import (
     fetch_seat_for_booking,
     has_active_booking_conflict,
     insert_booking,
+    insert_guest_booking,
     cancel_booking,
+    mark_booking_modified,
     fetch_booking_by_id_for_update,
     fetch_booking_by_id,
     user_has_active_booking_in_range,
@@ -103,10 +108,6 @@ def _can_book_for_user(
     if role in {"TENANT_ADMIN", "FACILITATOR"}:
         return True
 
-    return (
-        role == "MANAGER"
-        and str(booking_user.get("manager_user_id") or "") == current_user_id
-    )
     return (
         role == "MANAGER"
         and str(booking_user.get("manager_user_id") or "") == current_user_id
@@ -349,6 +350,15 @@ def book_seat(
     background_tasks: BackgroundTasks | None = None,
 ) -> BookingResponse:
     """Create one tenant-scoped booking and handle DB constraint failures."""
+    if payload.booking_date < date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "booking_date_in_past",
+                "message": "Bookings cannot be created for a past date.",
+            },
+        )
+
     tenant_id = str(current_user["tenant_id"])
     booked_by_user_id = _current_user_id(current_user)
     effective_booked_for_user_id = (
@@ -989,15 +999,13 @@ def modify_booking(
                 },
             )
  
-        cancel_booking(
+        mark_booking_modified(
             conn,
             tenant_id=tenant_id,
             booking_id=booking_id,
-            cancellation_reason="Booking ID : " + booking_id + ". Is being modified",
-            booking_status="MODIFIED",
-
+            modification_reason="USER_REQUEST",
         )
- 
+
         new_booking = insert_booking(
             conn,
             tenant_id=tenant_id,
@@ -1005,6 +1013,7 @@ def modify_booking(
             booked_by_user_id=_current_user_id(current_user),
             seat=target_seat,
             booking_date=payload.booking_date,
+            modified_from_booking_id=booking_id,
         )
  
         conn.commit()
@@ -1727,8 +1736,11 @@ def get_admin_bookings(
     """Tenant-wide employee + guest booking search for the admin bookings screen.
 
     Reuses the same BOOKING_SELECT_FIELDS/BOOKING_SELECT_FROM join shape (and
-    the BookingResponse DTO) as the delegated booking endpoints, just filtered
-    dynamically across the whole tenant instead of scoped to one delegator.
+    the BookingResponse DTO) as the delegated booking endpoints. Guest visits
+    without an active seat booking are merged in the same way
+    get_delegated_past_bookings merges them: fetch both sources in full,
+    combine, sort, and paginate the combined list in Python -- so a page can
+    contain both employee/guest bookings and booking-less guest visits.
     """
     if (
         query.start_date is not None
@@ -1763,11 +1775,26 @@ def get_admin_bookings(
         ),
     }
 
-    offset = (page - 1) * limit
-
     try:
-        rows = fetch_admin_bookings(conn, limit=limit, offset=offset, **filters)
+        bookings = fetch_admin_bookings(conn, **filters)
         summary = fetch_admin_bookings_summary(conn, **filters)
+
+        guest_visits: list[dict[str, Any]] = []
+        # A guest visit without a booking can never have a seat_code, and is
+        # never an EMPLOYEE booking_type, so skip the query for those filters.
+        if filters["booking_type"] != "EMPLOYEE" and filters["seat_code"] is None:
+            guest_visits = fetch_admin_guest_visits_without_booking(
+                conn,
+                tenant_id=tenant_id,
+                start_date=filters["start_date"],
+                end_date=filters["end_date"],
+                site_id=filters["site_id"],
+                building_id=filters["building_id"],
+                floor_id=filters["floor_id"],
+                booking_status=filters["booking_status"],
+                search=filters["search"],
+                booked_by_user_id=filters["booked_by_user_id"],
+            )
     except psycopg2.Error as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1777,11 +1804,25 @@ def get_admin_bookings(
             },
         ) from exc
 
-    total = summary["total_bookings"]
+    combined = bookings + guest_visits
+    combined.sort(
+        key=lambda row: (
+            row.get("booking_date") or date.min,
+            row.get("created_at") or datetime.min,
+        ),
+        reverse=True,
+    )
+
+    total = len(combined)
+    offset = (page - 1) * limit
+    paged_rows = combined[offset : offset + limit]
+
+    summary_payload = dict(summary)
+    summary_payload["total_bookings"] = total
 
     return AdminBookingListResponse(
-        items=[BookingResponse(**row) for row in rows],
-        summary=AdminBookingSummary(**summary),
+        items=[BookingResponse(**row) for row in paged_rows],
+        summary=AdminBookingSummary(**summary_payload),
         pagination=PaginationMetadata(
             total=total,
             page=page,

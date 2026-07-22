@@ -13,11 +13,6 @@ ACTIVE_GUEST_BOOKING_STATUSES = (
     "CHECKED_IN",
     "COMPLETED",
 )
-ACTIVE_GUEST_BOOKING_STATUSES = (
-    "CONFIRMED",
-    "CHECKED_IN",
-    "COMPLETED",
-)
 
 GUEST_VISIT_LIST_SELECT = """
     gv.id::text AS guest_visit_id,
@@ -36,6 +31,9 @@ GUEST_VISIT_LIST_SELECT = """
 
     gv.checked_in_at,
     gv.checked_out_at,
+
+    gv.modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
+    gv.modification_reason,
 
     g.id::text AS guest_id,
     g.full_name AS guest_name,
@@ -129,6 +127,8 @@ GUEST_VISIT_RETURNING_FIELDS = """
     visit_status,
     notes,
     created_by_user_id::text AS created_by_user_id,
+    modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
+    modification_reason,
     created_at,
     updated_at
 """
@@ -151,6 +151,7 @@ def insert_guest_visit(
     notes: str | None,
     requires_seat: bool,
     created_by_user_id: str,
+    modified_from_guest_visit_id: str | None = None,
 ) -> dict[str, Any]:
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -170,11 +171,12 @@ def insert_guest_visit(
                 notes,
                 requires_seat,
                 visit_status,
-                created_by_user_id
+                created_by_user_id,
+                modified_from_guest_visit_id
             )
             VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                'SCHEDULED', %s
+                'SCHEDULED', %s, %s
             )
             RETURNING {GUEST_VISIT_RETURNING_FIELDS}
             """,
@@ -193,6 +195,7 @@ def insert_guest_visit(
                 notes,
                 requires_seat,
                 created_by_user_id,
+                modified_from_guest_visit_id,
             ),
         )
         row = cur.fetchone()
@@ -907,6 +910,7 @@ def mark_guest_visit_modified(
     *,
     tenant_id: str,
     guest_visit_id: str,
+    modification_reason: str | None,
 ) -> None:
     """Retain a replaced guest visit as history without cancelling it."""
     with conn.cursor() as cur:
@@ -915,11 +919,19 @@ def mark_guest_visit_modified(
             UPDATE guest_visits
             SET
                 visit_status = 'MODIFIED',
+                cancelled_at = NOW(),
+                cancellation_reason = %s,
+                modification_reason = %s,
                 updated_at = NOW()
             WHERE id = %s
               AND tenant_id = %s
             """,
-            (guest_visit_id, tenant_id),
+            (
+                modification_reason,
+                modification_reason,
+                guest_visit_id,
+                tenant_id,
+            ),
         )
         if cur.rowcount != 1:
             raise LookupError("Guest visit not found.")
