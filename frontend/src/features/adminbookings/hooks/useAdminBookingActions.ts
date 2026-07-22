@@ -8,6 +8,7 @@ import {
   guestVisitWorkflow,
 } from "@/features/bookings/services/bookings.service";
 import type { AdminBooking } from "../types/adminBooking.types";
+import { ADMIN_BOOKINGS_EXPECT_RETURN_KEY } from "../utils/constants";
 
 type CancelMode = "booking" | "visit";
 
@@ -94,6 +95,7 @@ export function useAdminBookingActions({ onCancelled }: UseAdminBookingActionsPa
       params.set("bookedForUserId", booking.booked_for_user_id);
     }
 
+    sessionStorage.setItem(ADMIN_BOOKINGS_EXPECT_RETURN_KEY, "1");
     router.push(`/book?${params.toString()}`);
   };
 
@@ -129,6 +131,7 @@ export function useAdminBookingActions({ onCancelled }: UseAdminBookingActionsPa
       params.set("modifyBookingId", booking.booking_id);
     }
 
+    sessionStorage.setItem(ADMIN_BOOKINGS_EXPECT_RETURN_KEY, "1");
     router.push(`/book-for-someone?${params.toString()}`);
   };
 

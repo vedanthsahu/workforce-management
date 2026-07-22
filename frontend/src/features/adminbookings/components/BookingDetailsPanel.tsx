@@ -151,6 +151,10 @@ export default function BookingDetailsPanel({
   // "seat" side that can be modified/cancelled independently; a plain seat
   // booking (employee, or a guest with no linked visit) only has the seat.
   const hasVisit = isGuest && !!booking.guest_visit_id;
+  // GET /admin/bookings also unions in visit-only guest rows — a guest
+  // visit with no linked seat booking at all (booking_id/seat_id both null)
+  // — which have nothing to "modify/cancel seat" on.
+  const hasBooking = !!booking.booking_id;
   // Only future, still-active bookings can be modified/cancelled — the
   // backend rejects today/past dates for both /modify and /cancel, and a
   // booking that's already Cancelled has nothing left to modify or cancel.
@@ -235,7 +239,7 @@ export default function BookingDetailsPanel({
            longer be modified or cancelled. */}
         {canMutate && (
           <div className="flex items-center gap-2.5 px-5 py-4 border-t bg-gray-50 shrink-0">
-            {hasVisit ? (
+            {hasVisit && hasBooking ? (
               <>
                 <ActionMenuButton
                   label="Modify"
@@ -255,6 +259,21 @@ export default function BookingDetailsPanel({
                     { label: "Cancel Seat", icon: X, onClick: () => onCancelSeat(booking) },
                   ]}
                 />
+              </>
+            ) : hasVisit ? (
+              <>
+                <button
+                  onClick={() => onModifyVisit(booking)}
+                  className="flex-1 h-9 text-xs font-semibold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
+                >
+                  Edit Visit
+                </button>
+                <button
+                  onClick={() => onCancelVisit(booking)}
+                  className="flex-1 h-9 text-xs font-semibold text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                >
+                  Cancel Visit
+                </button>
               </>
             ) : (
               <>

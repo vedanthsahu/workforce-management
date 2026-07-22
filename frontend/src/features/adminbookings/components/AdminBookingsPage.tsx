@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Download, MoreHorizontal } from "lucide-react";
 import BookingManagementFilters from "./BookingManagementFilters";
@@ -13,8 +13,21 @@ import { AdminBooking, AdminBookingListResponse, defaultAdminBookingFilters } fr
 import { useAdminBookingLocations } from "../hooks/useAdminBookingLocations";
 import { useAdminBookingActions } from "../hooks/useAdminBookingActions";
 import { adminBookingsService } from "../services/adminBookings.service";
-import { mapAdminBookingRawToUiBooking, mapAdminBookingToDialogBooking } from "../utils/mapAdminBooking";
-import { BOOKING_STATUS_PARAM, BOOKING_PAGE_SIZES } from "../utils/constants";
+import { getBookingRowKey, mapAdminBookingRawToUiBooking, mapAdminBookingToDialogBooking } from "../utils/mapAdminBooking";
+import {
+  BOOKING_STATUS_PARAM,
+  BOOKING_PAGE_SIZES,
+  ADMIN_BOOKINGS_SEARCH_STATE_KEY,
+  ADMIN_BOOKINGS_EXPECT_RETURN_KEY,
+} from "../utils/constants";
+
+type PersistedSearchState = {
+  filters: ReturnType<typeof defaultAdminBookingFilters>;
+  appliedFilters: ReturnType<typeof defaultAdminBookingFilters>;
+  currentPage: number;
+  itemsPerPage: number;
+  hasApplied: boolean;
+};
 
 export default function AdminBookingsPage() {
   const router = useRouter();
@@ -40,6 +53,52 @@ export default function AdminBookingsPage() {
 
   const { sites, buildings, floors, loadBuildings, loadFloors, setBuildings, setFloors } =
     useAdminBookingLocations();
+
+  // Restore the previous search on a browser Back from the Modify flow — but
+  // not on a fresh nav-bar visit or an actual page reload, both of which
+  // should start clean. Next.js App Router doesn't create a new Performance
+  // "navigation" entry for client-side back/forward, so that API can't tell
+  // a Back from a fresh visit here; instead, useAdminBookingActions.ts's
+  // modifySeat/modifyVisit set ADMIN_BOOKINGS_EXPECT_RETURN_KEY right before
+  // navigating away, and this is the one-shot consumer of that flag. Runs
+  // before paint, so there's no flash of the empty/default state first.
+  useLayoutEffect(() => {
+    const expectingReturn = sessionStorage.getItem(ADMIN_BOOKINGS_EXPECT_RETURN_KEY);
+    sessionStorage.removeItem(ADMIN_BOOKINGS_EXPECT_RETURN_KEY);
+
+    if (!expectingReturn) {
+      sessionStorage.removeItem(ADMIN_BOOKINGS_SEARCH_STATE_KEY);
+      return;
+    }
+
+    const raw = sessionStorage.getItem(ADMIN_BOOKINGS_SEARCH_STATE_KEY);
+    if (!raw) return;
+
+    try {
+      const saved: PersistedSearchState = JSON.parse(raw);
+      setFilters(saved.filters);
+      setAppliedFilters(saved.appliedFilters);
+      setCurrentPage(saved.currentPage);
+      setItemsPerPage(saved.itemsPerPage);
+      setHasApplied(saved.hasApplied);
+
+      // Re-populate the Building/Floor option lists the restored filters
+      // depend on — they're loaded on demand (see handleSiteChange/
+      // handleBuildingChange) and wouldn't otherwise exist on a fresh mount.
+      if (saved.filters.site && saved.filters.site !== "All") loadBuildings(saved.filters.site);
+      if (saved.filters.building && saved.filters.building !== "All") loadFloors(saved.filters.building);
+    } catch {
+      sessionStorage.removeItem(ADMIN_BOOKINGS_SEARCH_STATE_KEY);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep the persisted snapshot in sync so it's there if the user navigates
+  // away (e.g. Modify) and comes back via browser Back.
+  useEffect(() => {
+    const state: PersistedSearchState = { filters, appliedFilters, currentPage, itemsPerPage, hasApplied };
+    sessionStorage.setItem(ADMIN_BOOKINGS_SEARCH_STATE_KEY, JSON.stringify(state));
+  }, [filters, appliedFilters, currentPage, itemsPerPage, hasApplied]);
 
   // The backend now owns every filter (date range, hierarchy, type, status,
   // search, seat code) plus pagination and the summary counts — this page
@@ -274,7 +333,7 @@ export default function AdminBookingsPage() {
             ) : (
               <BookingsTable
                 data={mappedBookings}
-                selectedBookingId={selectedBooking?.booking_id}
+                selectedRowKey={selectedBooking ? getBookingRowKey(selectedBooking) : undefined}
                 onView={setSelectedBooking}
               />
             )}
