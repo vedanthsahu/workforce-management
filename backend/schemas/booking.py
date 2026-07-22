@@ -229,6 +229,14 @@ AdminBookingStatus = Literal[
     "COMPLETED",
     "NO_SHOW",
 ]
+AdminVisitStatus = Literal[
+    "SCHEDULED",
+    "CHECKED_IN",
+    "CHECKED_OUT",
+    "CANCELLED",
+    "NO_SHOW",
+    "MODIFIED",
+]
 
 
 class AdminBookingListQuery(BaseModel):
@@ -242,7 +250,11 @@ class AdminBookingListQuery(BaseModel):
     floor_id: int | None = Field(default=None, gt=0)
 
     booking_type: AdminBookingType | None = None
+    # Employee (and guest-with-seat) rows: filters bookings.booking_status.
     booking_status: AdminBookingStatus | None = None
+    # Guest rows: filters guest_visits.visit_status -- the guest's own
+    # lifecycle, independent of whether they have an active seat booking.
+    visit_status: AdminVisitStatus | None = None
 
     search: str | None = Field(default=None, min_length=1)
     seat_code: str | None = Field(default=None, min_length=1)
