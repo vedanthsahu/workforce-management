@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any, Literal
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic import BaseModel, Field
 
 from backend.core.enums import (
@@ -43,7 +43,7 @@ class ModifyBookingRequest(BaseModel):
     floor_id: int = Field(gt=0)
     seat_id: int = Field(gt=0)
     booking_date: date
-    booking_date: date
+    modification_reason: str | None = None
 
 
 
@@ -92,6 +92,10 @@ class BookingResponse(BaseModel):
 
     cancellation_reason: str | None = None
 
+    modified_from_booking_id: str | None = None
+    modification_reason: str | None = None
+    is_modified: bool = False
+
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -117,6 +121,18 @@ class BookingResponse(BaseModel):
     requires_seat: bool | None = None
 
     amenities: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _derive_is_modified(cls, data: Any) -> Any:
+        """Default is_modified from modified_from_booking_id when the
+        caller (a raw DB row) doesn't set it explicitly."""
+        if isinstance(data, dict) and "is_modified" not in data:
+            data = {
+                **data,
+                "is_modified": data.get("modified_from_booking_id") is not None,
+            }
+        return data
 
 
 class PaginatedBookingResponse(BaseModel):
