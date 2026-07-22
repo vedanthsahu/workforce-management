@@ -13,7 +13,6 @@ import {
   Users,
   X,
   Pencil,
-  Star,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -412,8 +411,8 @@ const BookASeatPage: React.FC = () => {
                             : "border-[#EBEBF5] bg-white hover:border-gray-300 hover:bg-gray-50"
                         )}
                       >
-                        <Star size={20} className={color.text} />
-                        <span className={`text-[11.5px] sm:text-[12.5px] font-medium text-center ${color.text}`}>{name}</span>
+                        <color.icon size={20} className={color.text} />
+                        <span className="text-[11.5px] sm:text-[12.5px] font-medium text-center text-black">{name}</span>
                         <Checkbox checked={checked} onCheckedChange={() => togglePreference(key)} className="pointer-events-none" />
                       </button>
                     );
