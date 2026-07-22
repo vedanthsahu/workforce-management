@@ -209,7 +209,7 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
             floor_id=4,
             seat_id=31,
             booking_date=_future_date(11),
-            modification_reason="Seat changed",
+            modification_reason="OTHER",
         )
         with patch.object(
             booking_service,
@@ -264,7 +264,7 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
         self.assertEqual(mark_modified.call_args.kwargs["booking_id"], "100")
         self.assertEqual(
             mark_modified.call_args.kwargs["modification_reason"],
-            "Seat changed",
+            "OTHER",
         )
         self.assertEqual(
             insert_booking.call_args.kwargs["modified_from_booking_id"], "100"
@@ -584,7 +584,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
             floor_id=4,
             seat_id=31,
             booking_date=_future_date(11),
-            modification_reason="Guest seat changed",
+            modification_reason="OTHER",
         )
         with patch.object(
             guest_service,
@@ -647,7 +647,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
         self.assertEqual(mark_modified.call_args.kwargs["booking_id"], "200")
         self.assertEqual(
             mark_modified.call_args.kwargs["modification_reason"],
-            "Guest seat changed",
+            "OTHER",
         )
         self.assertEqual(insert_booking.call_args.kwargs["guest_visit_id"], "60")
         self.assertEqual(

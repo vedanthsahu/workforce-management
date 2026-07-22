@@ -33,6 +33,7 @@ from backend.schemas.guest import (
     GuestVisitStatusUpdateResponse,
 )
 from backend.core.app_logging import LOGGER_NAME
+from backend.core.enums import BookingModificationReason
 from backend.repositories.booking_repository import (
     cancel_booking,
     mark_booking_modified,
@@ -100,6 +101,7 @@ from backend.schemas.guest import (
 )
 from backend.services.booking_service import (
     GUEST_OPERATION_ROLES,
+    _apply_modified_display_status,
     _display_cancellation_reason,
     _normalize_cancellation_reason,
     _user_role,
@@ -145,6 +147,21 @@ def _require_guest_operator(current_user: dict[str, Any]) -> None:
 
 def _enum_value(value: Any) -> Any:
     return value.value if isinstance(value, Enum) else value
+
+
+def _booking_modification_reason(reason: Any) -> str | None:
+    """Guest visit modification reasons (GuestVisitModificationReason) and
+    booking modification reasons (BookingModificationReason) are validated
+    against different DB CHECK constraints (chk_guest_visit_modification_reason
+    vs chk_booking_modification_reason) that don't fully overlap. When a
+    guest-visit-originated reason is also written to bookings.modification_reason,
+    fall back to OTHER for any value the booking constraint doesn't accept."""
+    value = _enum_value(reason)
+    if value is None:
+        return None
+    if value in BookingModificationReason.__members__:
+        return value
+    return BookingModificationReason.OTHER.value
 
 
 def _clean_optional(value: str | None) -> str | None:
@@ -955,6 +972,7 @@ def list_guest_bookings(
         limit=limit,
         offset=offset,
     )
+    rows = _apply_modified_display_status(rows)
     if page is None:
         return [BookingResponse(**row) for row in rows]
 
@@ -1152,7 +1170,11 @@ def modify_guest_booking(
             conn,
             tenant_id=tenant_id,
             booking_id=booking_id,
-            modification_reason="USER_REQUEST",
+            modification_reason=(
+                payload.modification_reason.value
+                if payload.modification_reason is not None
+                else "USER_REQUEST"
+            ),
         )
         new_booking = insert_guest_booking(
             conn,
@@ -1429,6 +1451,21 @@ def _first_text(*values: Any) -> str:
     return ""
 
 
+def _apply_modified_display_visit_status(
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """UI-only: a guest visit that superseded an earlier one (linked via
+    modified_from_guest_visit_id) displays visit_status as MODIFIED in list
+    views, even though its real DB status is still SCHEDULED/CHECKED_IN/etc.
+    Never call this for a direct fetch (fetch_guest_visit_by_id and
+    friends) -- those must keep showing the real database status.
+    """
+    for row in rows:
+        if row.get("modified_from_guest_visit_id") is not None:
+            row["visit_status"] = "MODIFIED"
+    return rows
+
+
 def list_guest_visits(
     conn: PGConnection,
     *,
@@ -1467,6 +1504,7 @@ def list_guest_visits(
         limit=limit,
         offset=effective_offset,
     )
+    rows = _apply_modified_display_visit_status(rows)
 
     pagination = None
     if page is not None:
@@ -1871,14 +1909,16 @@ def modify_guest_visit(
                 conn,
                 tenant_id=tenant_id,
                 booking_id=str(active_booking["booking_id"]),
-                modification_reason=payload.modification_reason,
+                modification_reason=_booking_modification_reason(
+                    payload.modification_reason
+                ),
             )
 
         mark_guest_visit_modified(
             conn,
             tenant_id=tenant_id,
             guest_visit_id=guest_visit_id,
-            modification_reason=payload.modification_reason,
+            modification_reason=_enum_value(payload.modification_reason),
         )
 
         new_visit = insert_guest_visit(
@@ -2196,7 +2236,7 @@ def execute_guest_visit_workflow(
                 conn,
                 tenant_id=tenant_id,
                 guest_visit_id=guest_visit_id,
-                modification_reason=payload.modification_reason,
+                modification_reason=_enum_value(payload.modification_reason),
             )
             new_visit = insert_guest_visit(
                 conn,
@@ -2301,13 +2341,15 @@ def execute_guest_visit_workflow(
                 conn,
                 tenant_id=tenant_id,
                 booking_id=old_booking_id,
-                modification_reason=payload.modification_reason,
+                modification_reason=_booking_modification_reason(
+                    payload.modification_reason
+                ),
             )
             mark_guest_visit_modified(
                 conn,
                 tenant_id=tenant_id,
                 guest_visit_id=guest_visit_id,
-                modification_reason=payload.modification_reason,
+                modification_reason=_enum_value(payload.modification_reason),
             )
 
             new_visit = insert_guest_visit(

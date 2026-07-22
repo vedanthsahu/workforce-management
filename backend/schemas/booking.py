@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic import BaseModel, Field
 
 from backend.core.enums import (
+    BookingModificationReason,
     DayAvailabilityStatus,
     GuestType,
     PreferenceMatchStatus,
@@ -43,7 +44,7 @@ class ModifyBookingRequest(BaseModel):
     floor_id: int = Field(gt=0)
     seat_id: int = Field(gt=0)
     booking_date: date
-    modification_reason: str | None = None
+    modification_reason: BookingModificationReason | None = None
 
 
 
@@ -126,11 +127,16 @@ class BookingResponse(BaseModel):
     @classmethod
     def _derive_is_modified(cls, data: Any) -> Any:
         """Default is_modified from modified_from_booking_id when the
-        caller (a raw DB row) doesn't set it explicitly."""
+        caller (a raw DB row) doesn't set it explicitly. Guest visits merged
+        into the booking list without an active booking carry the link as
+        modified_from_guest_visit_id instead, so check both."""
         if isinstance(data, dict) and "is_modified" not in data:
             data = {
                 **data,
-                "is_modified": data.get("modified_from_booking_id") is not None,
+                "is_modified": (
+                    data.get("modified_from_booking_id") is not None
+                    or data.get("modified_from_guest_visit_id") is not None
+                ),
             }
         return data
 

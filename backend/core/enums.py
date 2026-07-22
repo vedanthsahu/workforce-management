@@ -74,3 +74,34 @@ class VisitPurpose(str, Enum):
     VENDOR_VISIT = "VENDOR_VISIT"
     CUSTOMER_VISIT = "CUSTOMER_VISIT"
     OTHER = "OTHER"
+
+
+class BookingModificationReason(str, Enum):
+    """Mirrors chk_booking_modification_reason -- the only values
+    bookings.modification_reason accepts besides NULL."""
+    USER_REQUEST = "USER_REQUEST"
+    ADMIN_MODIFIED = "ADMIN_MODIFIED"
+    FACILITATOR_MODIFIED = "FACILITATOR_MODIFIED"
+    SEAT_UNAVAILABLE = "SEAT_UNAVAILABLE"
+    GUEST_DETAILS_UPDATED = "GUEST_DETAILS_UPDATED"
+    DATE_CHANGED = "DATE_CHANGED"
+    SYSTEM_REALLOCATION = "SYSTEM_REALLOCATION"
+    POLICY_CHANGE = "POLICY_CHANGE"
+    OTHER = "OTHER"
+
+
+class GuestVisitModificationReason(str, Enum):
+    """Mirrors chk_guest_visit_modification_reason -- the only values
+    guest_visits.modification_reason accepts besides NULL."""
+    USER_REQUEST = "USER_REQUEST"
+    HOST_CHANGED = "HOST_CHANGED"
+    DATE_CHANGED = "DATE_CHANGED"
+    TIME_CHANGED = "TIME_CHANGED"
+    LOCATION_CHANGED = "LOCATION_CHANGED"
+    PURPOSE_CHANGED = "PURPOSE_CHANGED"
+    SEAT_REQUIREMENT_CHANGED = "SEAT_REQUIREMENT_CHANGED"
+    GUEST_DETAILS_UPDATED = "GUEST_DETAILS_UPDATED"
+    ADMIN_MODIFIED = "ADMIN_MODIFIED"
+    FACILITATOR_MODIFIED = "FACILITATOR_MODIFIED"
+    SYSTEM_UPDATE = "SYSTEM_UPDATE"
+    OTHER = "OTHER"
