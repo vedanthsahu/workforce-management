@@ -105,6 +105,17 @@ export function mapAdminBookingRawToUiBooking(raw: AdminBookingRaw): AdminBookin
 }
 
 /**
+ * A stable, unique identifier for a table row / selection-match — NOT the
+ * same as `booking.booking_id`. GET /admin/bookings now also unions in
+ * visit-only guest rows (a guest visit with no linked seat booking), which
+ * have `booking_id: null` — several of those would otherwise collide on the
+ * same "" key. `guest_visit_id` is unique per visit, so it's a safe fallback.
+ */
+export function getBookingRowKey(booking: AdminBooking): string {
+  return booking.booking_id || `visit-${booking.guest_visit_id}`;
+}
+
+/**
  * Adapts an AdminBooking into the minimal Booking shape that
  * `bookings/components/CancelBookingDialog.tsx` reads (title/reason-list
  * branch on `bookingType`, message reads location/floor/seat/date) — this is

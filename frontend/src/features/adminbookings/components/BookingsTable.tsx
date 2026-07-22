@@ -3,10 +3,11 @@
 import { Eye, MoreVertical } from "lucide-react";
 import { AdminBooking } from "../types/adminBooking.types";
 import { BOOKING_STATUS_STYLES } from "../utils/constants";
+import { getBookingRowKey } from "../utils/mapAdminBooking";
 
 type Props = {
   data: AdminBooking[];
-  selectedBookingId?: string | null;
+  selectedRowKey?: string | null;
   onView: (booking: AdminBooking) => void;
 };
 
@@ -36,7 +37,7 @@ function PersonCell({ booking }: { booking: AdminBooking }) {
   );
 }
 
-export default function BookingsTable({ data, selectedBookingId, onView }: Props) {
+export default function BookingsTable({ data, selectedRowKey, onView }: Props) {
   if (data.length === 0) {
     return <p className="px-6 py-12 text-center text-gray-400 text-sm">No bookings found.</p>;
   }
@@ -59,9 +60,10 @@ export default function BookingsTable({ data, selectedBookingId, onView }: Props
         </thead>
         <tbody className="divide-y divide-gray-100">
           {data.map((booking) => {
-            const isSelected = booking.booking_id === selectedBookingId;
+            const rowKey = getBookingRowKey(booking);
+            const isSelected = rowKey === selectedRowKey;
             return (
-              <tr key={booking.booking_id} className={isSelected ? "bg-indigo-50/60" : "hover:bg-gray-50"}>
+              <tr key={rowKey} className={isSelected ? "bg-indigo-50/60" : "hover:bg-gray-50"}>
                 <td className="pl-5 pr-3 py-3 max-w-46">
                   <PersonCell booking={booking} />
                 </td>
@@ -72,7 +74,7 @@ export default function BookingsTable({ data, selectedBookingId, onView }: Props
                       <p className="text-[11px] text-gray-400">{booking.seat_type}</p>
                     </>
                   ) : (
-                    <p className="text-gray-400 italic">Visit only</p>
+                    <p className="pl-4 pr-1 py-3 text-gray-400 italic">Visit only</p>
                   )}
                 </td>
                 <td className="pr-3 py-3 text-gray-700 max-w-[80px] break-words">{booking.site_name}</td>
