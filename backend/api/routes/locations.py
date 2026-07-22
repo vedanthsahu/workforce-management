@@ -16,7 +16,7 @@ from fastapi import (
 
 from psycopg2.extensions import connection as PGConnection
 
-from backend.api.deps import get_current_user
+from backend.api.deps import get_current_user, require_any_permission
 from backend.db.connection import get_db
 
 from backend.schemas.booking import AvailableSeatListResponse
@@ -96,7 +96,7 @@ def create_site_route(
     payload: CreateSiteRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(get_current_user),
+        Depends(require_any_permission(["location:manage"])),
     ],
     conn: Annotated[
         PGConnection,
@@ -133,7 +133,7 @@ def update_site_route(
     payload: UpdateSiteRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(get_current_user),
+        Depends(require_any_permission(["location:manage"])),
     ],
     conn: Annotated[
         PGConnection,
@@ -184,7 +184,7 @@ def create_building_route(
     payload: CreateBuildingRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(get_current_user),
+        Depends(require_any_permission(["location:manage"])),
     ],
     conn: Annotated[
         PGConnection,
@@ -204,7 +204,7 @@ def update_building_route(
     payload: UpdateBuildingRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(get_current_user),
+        Depends(require_any_permission(["location:manage"])),
     ],
     conn: Annotated[
         PGConnection,
@@ -295,7 +295,7 @@ def create_floor_route(
     payload: CreateFloorRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(get_current_user),
+        Depends(require_any_permission(["location:manage"])),
     ],
     conn: Annotated[
         PGConnection,
@@ -315,7 +315,7 @@ def update_floor_route(
     payload: UpdateFloorRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(get_current_user),
+        Depends(require_any_permission(["location:manage"])),
     ],
     conn: Annotated[
         PGConnection,
@@ -339,7 +339,7 @@ def update_seat_configuration_route(
     payload: SeatConfigurationUpdateRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(get_current_user),
+        Depends(require_any_permission(["location:manage", "layout:upload"])),
     ],
     conn: Annotated[
         PGConnection,
@@ -472,7 +472,7 @@ def update_layout_seat_configuration_route(
 
     current_user: Annotated[
         dict[str, Any],
-        Depends(get_current_user),
+        Depends(require_any_permission(["location:manage", "layout:upload"])),
     ],
 
     conn: Annotated[

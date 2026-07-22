@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { fetchAllTeamGroups, fetchUserTodayBooking } from "../services/findteammate.service";
-import type { ApiTeamGroup, ApiTeamMember, SearchPhase, TeammateResult } from "../types/findteammate.types";
+import { fetchAllTeamGroups, searchTeamMembers, fetchTeamMemberById } from "../services/findteammate.service";
+import type { ApiTeamGroup, ApiTeamMember, RawTeammateBooking, SearchPhase, TeammateResult } from "../types/findteammate.types";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 
 // In-office members first; within each group (in-office / remote), sort alphabetically by name
@@ -13,6 +13,40 @@ function sortMembers(members: ApiTeamMember[]): ApiTeamMember[] {
     }
     return a.full_name.localeCompare(b.full_name, undefined, { sensitivity: "base" });
   });
+}
+
+function buildResult(member: ApiTeamMember, teamName: string): TeammateResult {
+  const s = member.seat;
+  const booking: RawTeammateBooking | null = s
+    ? {
+      booking_id: null,
+      booking_date: null,
+      booking_status: null,
+      seat_id: s.seat_id,
+      seat_code: s.seat_code,
+      floor_id: s.floor_id,
+      floor_name: s.floor_name,
+      building_id: s.building_id,
+      building_name: s.building_name,
+      site_name: null,
+      check_in_at: null,
+      checked_out_at: null,
+      start_time: "09:00:00",
+      end_time: "18:00:00",
+      source_channel: s.source_channel,
+      desk_type: s.seat_type,
+      amenities: s.amenities.map((a) => a.name),
+    }
+    : null;
+  return {
+    userId: member.user_id,
+    name: member.full_name,
+    email: member.email,
+    teamName,
+    inOfficeToday: member.has_booking_today,
+    seatCode: s?.seat_code ?? null,
+    booking,
+  };
 }
 
 export function useFindTeammate() {
@@ -47,78 +81,68 @@ export function useFindTeammate() {
     });
   }, [teamGroups, user?.user_id]);
 
-  // Shared logic: fetch booking for a member and build a TeammateResult
-  const resolveTeammate = useCallback(
-    async (member: ApiTeamMember, teamName: string): Promise<TeammateResult> => {
-      const booking = member.has_booking_today
-        ? await fetchUserTodayBooking(member.user_id)
-        : null;
-      return {
-        userId: member.user_id,
-        name: member.full_name,
-        email: member.email,
-        teamName,
-        inOfficeToday: member.has_booking_today,
-        seatCode: member.seat?.seat_code ?? booking?.seat_code ?? null,
-        booking,
-      };
-    },
-    []
-  );
-
-  // Triggered by clicking Search button or pressing Enter
+  // Triggered by clicking Search button or pressing Enter — uses the search API
   const handleSearch = useCallback(async () => {
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
     if (!q) return;
 
     setPhase({ status: "searching" });
 
-    let found: { member: ApiTeamMember; teamName: string } | null = null;
-    for (const group of visibleTeamGroups) {
-      for (const member of group.members) {
-        if (
-          member.full_name.toLowerCase().includes(q) ||
-          member.email.toLowerCase().includes(q)
-        ) {
-          found = { member, teamName: group.team_name };
-          break;
+    try {
+      const results = await searchTeamMembers(q);
+
+      if (!results.length) {
+        setPhase({ status: "not_found", query });
+        return;
+      }
+
+      const { user_id } = results[0];
+
+      // Try to find the full member (with seat data) in already-loaded groups
+      let member: ApiTeamMember | undefined;
+      let teamName = "";
+      for (const g of visibleTeamGroups) {
+        const m = g.members.find((mem) => mem.user_id === user_id);
+        if (m) { member = m; teamName = g.team_name; break; }
+      }
+
+      // Not in current page — fetch directly from teams API
+      if (!member) {
+        const groups = await fetchTeamMemberById(user_id);
+        if (groups.length && groups[0].members.length) {
+          member = groups[0].members[0];
+          teamName = groups[0].team_name;
         }
       }
-      if (found) break;
-    }
 
-    if (!found) {
-      setPhase({ status: "not_found", query });
-      return;
-    }
+      if (!member) {
+        setPhase({ status: "not_found", query });
+        return;
+      }
 
-    try {
-      const result = await resolveTeammate(found.member, found.teamName);
-      setPhase({ status: "done", result, searchedAt: new Date() });
+      setPhase({ status: "done", result: buildResult(member, teamName), searchedAt: new Date() });
     } catch {
       setPhase({ status: "error", message: "Failed to load seat details. Please try again." });
     }
-  }, [query, visibleTeamGroups, resolveTeammate]);
+  }, [query, visibleTeamGroups]);
 
-  // Triggered by clicking a member row in the team overview
-  const selectMember = useCallback(
-    async (member: ApiTeamMember, teamName: string) => {
-      setQuery(member.full_name);
-      setPhase({ status: "searching" });
-      try {
-        const result = await resolveTeammate(member, teamName);
-        setPhase({ status: "done", result, searchedAt: new Date() });
-      } catch {
-        setPhase({ status: "error", message: "Failed to load seat details. Please try again." });
-      }
-    },
-    [resolveTeammate]
-  );
+  // Triggered by clicking a member row — all data already available, no API call needed
+  const selectMember = useCallback((member: ApiTeamMember, teamName: string) => {
+    setQuery(member.full_name);
+    setPhase({ status: "done", result: buildResult(member, teamName), searchedAt: new Date() });
+  }, []);
+
+  const handleQueryChange = useCallback((q: string) => {
+    setQuery(q);
+    setPhase((prev) =>
+      prev.status === "idle" || prev.status === "not_found" ? prev : { status: "idle" }
+    );
+  }, []);
 
   const handleClear = useCallback(() => {
     setQuery("");
     setPhase({ status: "idle" });
   }, []);
 
-  return { query, setQuery, phase, handleSearch, handleClear, selectMember, teamGroups: visibleTeamGroups, teamsLoading };
+  return { query, setQuery: handleQueryChange, phase, handleSearch, handleClear, selectMember, teamGroups: visibleTeamGroups, teamsLoading };
 }

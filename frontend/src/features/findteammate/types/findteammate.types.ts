@@ -2,6 +2,18 @@ import type { ApiTeamGroup, ApiTeamMember } from "@/features/dashboard/types/das
 
 export type { ApiTeamGroup, ApiTeamMember };
 
+// Matches UserSearchResponse from GET /teams/members/search
+export interface TeammateSearchResult {
+  user_id: string;
+  tenant_id: string;
+  full_name: string;
+  email: string;
+  role_name?: string | null;
+  status?: string | null;
+  employee_id?: string | null;
+  department?: string | null;
+}
+
 // Matches BookingResponse (BaseModel — snake_case fields) inside UserBookingHistoryResponse
 export interface RawTeammateBooking {
   booking_id: string | null;
@@ -16,17 +28,12 @@ export interface RawTeammateBooking {
   site_name: string | null;
   check_in_at: string | null;
   checked_out_at: string | null;
+  start_time: string | null;
+  end_time: string | null;
   // Optional enriched fields
   source_channel?: string | null;
   desk_type?: string | null;
   amenities?: string[] | null;
-}
-
-// Matches UserBookingHistoryResponse (CamelModel — camelCase wrapper fields)
-export interface UserBookingHistoryApiResponse {
-  hasTodayBooking: boolean;
-  todayBooking: RawTeammateBooking | null;
-  bookings: { items: RawTeammateBooking[] };
 }
 
 // Frontend display shape for a resolved teammate
