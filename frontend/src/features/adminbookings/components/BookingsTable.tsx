@@ -1,23 +1,13 @@
 "use client";
 
 import { Eye, MoreVertical } from "lucide-react";
-import { AdminBooking, BookingStatus } from "../types/adminBooking.types";
+import { AdminBooking } from "../types/adminBooking.types";
+import { BOOKING_STATUS_STYLES } from "../utils/constants";
 
 type Props = {
   data: AdminBooking[];
   selectedBookingId?: string | null;
   onView: (booking: AdminBooking) => void;
-};
-
-const STATUS_STYLES: Record<BookingStatus, string> = {
-  Scheduled: "bg-indigo-100 text-indigo-700",
-  Confirmed: "bg-blue-100 text-blue-700",
-  "Checked In": "bg-green-100 text-green-700",
-  "Checked Out": "bg-teal-100 text-teal-700",
-  Completed: "bg-gray-100 text-gray-600",
-  Cancelled: "bg-red-100 text-red-700",
-  Modified: "bg-amber-100 text-amber-700",
-  "No Show": "bg-orange-100 text-orange-700",
 };
 
 function initialsOf(name: string) {
@@ -56,14 +46,14 @@ export default function BookingsTable({ data, selectedBookingId, onView }: Props
       <table className="w-full text-xs" style={{ minWidth: "980px" }}>
         <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
           <tr>
-            <th className="pl-14 pr-2 py-3 text-left font-bold max-w-45">Employee / Guest</th>
+            <th className="pl-10 pr-2 py-3 text-left font-bold max-w-45">Employee / Guest</th>
             <th className="pl-8 pr-3 py-3 text-left font-bold">Seat</th>
-            <th className="pl-2 pr-3 py-3 text-left font-bold">Office</th>
-            <th className="pl-2 pr-1 py-3 text-left font-bold">Building</th>
+            <th className="pl-3 pr-3 py-3 text-left font-bold">Office</th>
+            <th className="pl-3 pr-1 py-3 text-left font-bold">Building</th>
             <th className="pl-5 pr-1 py-3 text-left font-bold">Floor</th>
             <th className="pl-8 px-3 py-3 text-left font-bold">Date</th>
             <th className="pl-10 px-3 py-3 text-left font-bold">Status</th>
-            <th className="pl-12 px-3 py-3 text-left font-bold">Booked By</th>
+            <th className="px-3 py-3 text-center font-bold">Booked By</th>
             <th className="px-3 py-3 text-center font-bold">Actions</th>
           </tr>
         </thead>
@@ -96,12 +86,12 @@ export default function BookingsTable({ data, selectedBookingId, onView }: Props
                 </td>
                 <td className="pl-5 pr-3 py-3 text-center">
                   <span
-                    className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap ${STATUS_STYLES[booking.status]}`}
+                    className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap ${BOOKING_STATUS_STYLES[booking.status]}`}
                   >
                     {booking.status}
                   </span>
                 </td>
-                <td className="pl-10 px-3 py-3 text-gray-700">{booking.booked_by}</td>
+                <td className="px-3 py-3 text-gray-700 text-center">{booking.booked_by}</td>
                 <td className="px-3 py-3">
                   <div className="flex items-center justify-center gap-1.5">
                     {/* Eye opens the Booking Details panel; the "…" button is inert for now */}

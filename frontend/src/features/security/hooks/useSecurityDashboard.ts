@@ -101,13 +101,6 @@ export const useSecurityDashboard = () => {
     [visitors, page]
   );
 
-  // ── Optimistic local patch — used by the dummy cancel/modify flows (and
-  // available for check-in/out too) so the table reflects a change without
-  // needing a backend round trip. ────────────────────────────────────────
-  const patchVisitor = useCallback((id: string, patch: Partial<Visitor>) => {
-    setVisitors((prev) => prev.map((v) => (v.id === id ? { ...v, ...patch } : v)));
-  }, []);
-
   return {
     summary,
     sites,
@@ -125,6 +118,5 @@ export const useSecurityDashboard = () => {
     loading,
     error,
     refetch: fetchGuestVisits,
-    patchVisitor,
   };
 };

@@ -1423,21 +1423,16 @@ def _restrict_visit_scope_for_front_office_role(
     visit_scope: str,
     site_id: str | None,
 ) -> str | None:
-    """FRONT_OFFICE users may only see today's visits at their own home site.
+    """FRONT_OFFICE users may only see today's (CURRENT-scope) visits — but,
+    same as every other role, they can pick which site to view via site_id
+    (e.g. switching sites from the dashboard's office dropdown).
 
     Business rule (not a general permission grant): confining FRONT_OFFICE to
-    CURRENT-scope, home-site visits. Kept as a role check rather than a
-    permission because it restricts *scope*, not just access.
+    CURRENT-scope. Kept as a role check rather than a permission because it
+    restricts *scope*, not just access.
     """
     if _user_role(current_user) != "FRONT_OFFICE":
         return site_id
-
-    home_site_id = current_user.get("home_site_id")
-    if not home_site_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Front Office user does not have a home site configured.",
-        )
 
     if visit_scope != "CURRENT":
         raise HTTPException(
@@ -1445,7 +1440,7 @@ def _restrict_visit_scope_for_front_office_role(
             detail="Front Office can only access current visits.",
         )
 
-    return str(home_site_id)
+    return site_id
 
 
 def list_guest_visits(

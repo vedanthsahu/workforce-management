@@ -43,5 +43,8 @@ export function CheckInButton({ visitor, isLoading, onCheckIn, onCheckOut }: Pro
     );
   }
 
-  return <span className="inline-block w-[80px] h-8" />;
+  // No check-in/out action for this status (e.g. Checked Out) — render
+  // nothing so the eye button stays centered in the Actions column instead
+  // of being pushed off-center by an invisible placeholder.
+  return null;
 }

@@ -23,23 +23,11 @@ export function SiteSelector({ sites, selectedSiteId, onChange }: Props) {
           focus:outline-none focus:ring-2 focus:ring-gray-200 focus:ring-offset-1
           rounded-lg shadow-sm transition-colors"
       >
-        {options.map((o) => {
-          // Front Office/Security only ever operates on their own assigned
-          // site — every other option stays visible but locked, with a
-          // tooltip explaining why, rather than being hidden outright.
-          const isLocked = !!selectedSiteId && o.siteId !== selectedSiteId;
-          return (
-            <option
-              key={o.key}
-              value={o.key}
-              disabled={isLocked}
-              title={isLocked ? "You only have access to your assigned office" : undefined}
-              className="text-sm text-gray-700"
-            >
-              {o.label}
-            </option>
-          );
-        })}
+        {options.map((o) => (
+          <option key={o.key} value={o.key} className="text-sm text-gray-700">
+            {o.label}
+          </option>
+        ))}
       </select>
     </div>
   );

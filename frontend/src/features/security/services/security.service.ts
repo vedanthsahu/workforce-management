@@ -3,15 +3,9 @@ import type {
   ApiCheckInOutResponse,
   ApiGuestVisitsResponse,
   ApiSite,
-  CancelVisitPayload,
   GuestVisitsQueryParams,
   InviteGuestPayload,
-  ModifyVisitPayload,
 } from "../types/security.types";
-
-function delay<T>(value: T, ms = 500): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -58,30 +52,6 @@ export const securityService = {
   async getSites(): Promise<ApiSite[]> {
     const { data } = await axiosInstance.get<ApiSite[]>("/sites");
     return data;
-  },
-
-  // ── CANCEL VISIT ─────────────────────────────────────────────────────────
-  // 🚧 DUMMY — intentionally NOT calling the backend yet (per request: cancel
-  // is low priority right now). This just simulates a network round trip.
-  // Flip the comments below once the endpoint is ready to wire up for real:
-  //
-  //   await axiosInstance.post(`/guest-visits/${guestVisitId}/cancel`, payload);
-  //
-  async cancelVisit(guestVisitId: string, payload: CancelVisitPayload): Promise<void> {
-    console.log("[DUMMY cancelVisit] guestVisitId:", guestVisitId, "payload:", payload);
-    await delay(undefined, 700);
-  },
-
-  // ── MODIFY VISIT ─────────────────────────────────────────────────────────
-  // 🚧 DUMMY — intentionally NOT calling the backend yet (per request: modify
-  // is low priority right now). This just simulates a network round trip.
-  // Flip the comments below once the endpoint is ready to wire up for real:
-  //
-  //   await axiosInstance.patch(`/guest-visits/${guestVisitId}`, payload);
-  //
-  async modifyVisit(guestVisitId: string, payload: ModifyVisitPayload): Promise<void> {
-    console.log("[DUMMY modifyVisit] guestVisitId:", guestVisitId, "payload:", payload);
-    await delay(undefined, 700);
   },
 
   // ── INVITE GUEST (unchanged — outside this pass's scope) ───────────────────

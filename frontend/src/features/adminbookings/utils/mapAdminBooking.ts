@@ -1,3 +1,4 @@
+import type { Booking } from "@/features/bookings/types/bookings.types";
 import {
   AdminBooking,
   AdminBookingRaw,
@@ -85,5 +86,51 @@ export function mapAdminBookingRawToUiBooking(raw: AdminBookingRaw): AdminBookin
     check_in_time: raw.check_in_at ? formatTimeOnly(raw.check_in_at) : undefined,
     amenities: [],
     notes: raw.notes ?? undefined,
+
+    site_id: raw.site_id,
+    building_id: raw.building_id,
+    floor_id: raw.floor_id,
+    seat_id: raw.seat_id,
+    booked_for_user_id: raw.booked_for_user_id,
+    booked_for_guest_id: raw.booked_for_guest_id,
+
+    guest_visit_id: raw.guest_visit_id,
+    host_user_id: raw.host_user_id,
+    host_name: raw.host_name,
+    guest_type: raw.guest_type,
+    purpose_of_visit: raw.purpose_of_visit,
+    start_time: raw.start_time,
+    end_time: raw.end_time,
+  };
+}
+
+/**
+ * Adapts an AdminBooking into the minimal Booking shape that
+ * `bookings/components/CancelBookingDialog.tsx` reads (title/reason-list
+ * branch on `bookingType`, message reads location/floor/seat/date) — this is
+ * the same dialog "My Bookings" and "Book for Someone" already use, so
+ * cancelling from admin gets identical copy and the same
+ * POST /bookings/{id}/cancel + /guest-bookings/{id}/cancel routes.
+ */
+export function mapAdminBookingToDialogBooking(booking: AdminBooking): Booking {
+  const isGuest = booking.person_type === "Guest";
+  return {
+    id: booking.booking_id,
+    location: booking.site_name,
+    building: booking.building_name,
+    floor: booking.floor_name,
+    seat: booking.seat_code,
+    date: booking.activity_date,
+    fromDate: booking.activity_date,
+    toDate: booking.activity_date,
+    startTime: "",
+    endTime: "",
+    isFullDay: true,
+    status: "confirmed",
+    bookedOn: booking.booked_on,
+    tags: [],
+    bookingType: isGuest ? "guest" : "employee",
+    guestName: isGuest ? booking.person_name : undefined,
+    bookedForName: isGuest ? undefined : booking.person_name,
   };
 }

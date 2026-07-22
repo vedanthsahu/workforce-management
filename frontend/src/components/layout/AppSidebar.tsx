@@ -149,7 +149,7 @@ const PERSONAL_NAV: NavItem[] = [
 
 const ADMIN_DASHBOARD: NavItem[] = [
   { id: "admin_dashboard", label: "Dashboard", icon: LayoutDashboard },
-  // { id: "team",       label: "Book for someone",  icon: Monitor,       badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
+ 
 ];
 
 const ADMIN_MANAGE_NAV: NavItem[] = [
@@ -164,6 +164,7 @@ const ADMIN_MANAGE_NAV: NavItem[] = [
 
 const ADMIN_OPERATIONS_NAV: NavItem[] = [
   { id: "bookings",      label: "Bookings",      icon: CalendarDays },
+   { id: "team",       label: "Book for someone",  icon: Monitor,       badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
   { id: "users",         label: "Users",         icon: Users        },
   { id: "roles",         label: "Role Management",  icon: ShieldCheck  },
   { id: "notifications", label: "Notifications", icon: Bell         },
