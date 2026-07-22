@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
-from backend.core.enums import GuestType, VisitPurpose
+from backend.core.enums import GuestType, GuestVisitModificationReason, VisitPurpose
 from backend.schemas.booking import BookingResponse
 from backend.schemas.pagination import PaginationMetadata
 
@@ -264,7 +264,7 @@ class GuestWorkflowRequest(BaseModel):
     seat_id: int | None = Field(default=None, gt=0)
 
     cancellation_reason: str | None = None
-    modification_reason: str | None = None
+    modification_reason: GuestVisitModificationReason | None = None
 
 
 class GuestWorkflowResponse(BaseModel):
@@ -295,7 +295,7 @@ class ModifyGuestVisitRequest(BaseModel):
     end_time: time | None = None
 
     notes: str | None = None
-    modification_reason: str | None = None
+    modification_reason: GuestVisitModificationReason | None = None
 
 
 
