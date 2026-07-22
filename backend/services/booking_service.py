@@ -319,19 +319,16 @@ def _user_email_list(user: dict[str, Any]) -> list[str]:
 def _apply_modified_display_status(
     rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """UI-only: a row that superseded an earlier booking/guest visit
-    (linked via modified_from_booking_id / modified_from_guest_visit_id)
-    displays booking_status as MODIFIED in list views, even though its real
-    DB status is still CONFIRMED/SCHEDULED/etc. Never call this for a
-    direct/search fetch (fetch_booking_by_id and friends) -- those must keep
-    showing the real database status.
-    """
     for row in rows:
         if (
-            row.get("modified_from_booking_id") is not None
-            or row.get("modified_from_guest_visit_id") is not None
+            (
+                row.get("modified_from_booking_id") is not None
+                or row.get("modified_from_guest_visit_id") is not None
+            )
+            and row.get("booking_status") == "CONFIRMED"
         ):
             row["booking_status"] = "MODIFIED"
+
     return rows
 
 
@@ -1792,6 +1789,7 @@ def get_admin_bookings(
         "floor_id": str(query.floor_id) if query.floor_id is not None else None,
         "booking_type": query.booking_type,
         "booking_status": query.booking_status,
+        "visit_status": query.visit_status,
         "search": query.search.strip() if query.search else None,
         "seat_code": query.seat_code.strip() if query.seat_code else None,
         "booked_by_user_id": (
@@ -1806,9 +1804,14 @@ def get_admin_bookings(
         summary = fetch_admin_bookings_summary(conn, **filters)
 
         guest_visits: list[dict[str, Any]] = []
-        # A guest visit without a booking can never have a seat_code, and is
-        # never an EMPLOYEE booking_type, so skip the query for those filters.
-        if filters["booking_type"] != "EMPLOYEE" and filters["seat_code"] is None:
+        # A guest visit without a booking can never have a seat_code, a
+        # booking_status (it has no bookings row at all), and is never an
+        # EMPLOYEE booking_type, so skip the query for those filters.
+        if (
+            filters["booking_type"] != "EMPLOYEE"
+            and filters["seat_code"] is None
+            and filters["booking_status"] is None
+        ):
             guest_visits = fetch_admin_guest_visits_without_booking(
                 conn,
                 tenant_id=tenant_id,
@@ -1817,7 +1820,7 @@ def get_admin_bookings(
                 site_id=filters["site_id"],
                 building_id=filters["building_id"],
                 floor_id=filters["floor_id"],
-                booking_status=filters["booking_status"],
+                visit_status=filters["visit_status"],
                 search=filters["search"],
                 booked_by_user_id=filters["booked_by_user_id"],
             )
