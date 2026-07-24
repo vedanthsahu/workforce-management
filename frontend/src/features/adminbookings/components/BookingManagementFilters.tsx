@@ -11,6 +11,7 @@ import {
   AdminBookingBuildingOption,
   AdminBookingFloorOption,
 } from "../types/adminBooking.types";
+import { BOOKING_STATUS_OPTIONS } from "../utils/constants";
 
 type Props = {
   filters: AdminBookingFilters;
@@ -180,6 +181,8 @@ function NativeSelect({
   disabled,
   placeholder,
   icon,
+  clearable,
+  defaultValue = "All",
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -189,7 +192,12 @@ function NativeSelect({
   placeholder?: string;
   /** Optional leading icon rendered inside the field, left of the text. */
   icon?: React.ReactNode;
+  /** Shows an inline "X" once value differs from `defaultValue`; clicking it resets back to `defaultValue`. */
+  clearable?: boolean;
+  defaultValue?: string;
 }) {
+  const showClear = !!clearable && !!value && value !== defaultValue;
+
   return (
     <div className="relative">
       {icon && (
@@ -204,7 +212,7 @@ function NativeSelect({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         className={`${selectBaseClass} ${icon ? "pl-8" : "pl-3"} disabled:opacity-50 disabled:cursor-not-allowed`}
-        style={selectArrowStyle}
+        style={showClear ? { backgroundImage: "none" } : selectArrowStyle}
       >
         {placeholder && (
           <option value="" disabled hidden>
@@ -217,6 +225,15 @@ function NativeSelect({
           </option>
         ))}
       </select>
+      {showClear && (
+        <button
+          type="button"
+          onClick={() => onChange(defaultValue)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <X size={14} />
+        </button>
+      )}
     </div>
   );
 }
@@ -325,6 +342,24 @@ export default function BookingManagementFilters({
     };
   }, [filters.seatNumber]);
 
+  // Keep the status selection valid when bookingType changes. If the
+  // currently selected status is not present in the new options, reset
+  // it back to "All" so the UI and backend filters stay consistent.
+  useEffect(() => {
+    const employeeStatusValues = ["All", "Confirmed", "Cancelled", "Modified"];
+    const allStatusValues = BOOKING_STATUS_OPTIONS.map((o) => o.value);
+    const guestStatusValues = allStatusValues.filter((v) => v !== "No Show");
+
+    const allowed =
+      filters.bookingType === "Employee"
+        ? employeeStatusValues
+        : filters.bookingType === "Guest"
+        ? guestStatusValues
+        : allStatusValues;
+
+    if (!allowed.includes(filters.status)) onUpdate("status", "All");
+  }, [filters.bookingType, filters.status, onUpdate]);
+
   return (
     <div className="flex flex-col gap-4">
       {/* Row 1 */}
@@ -382,22 +417,31 @@ export default function BookingManagementFilters({
         </Field>
 
         <Field label="Status" width="170px">
-          <NativeSelect
-            value={filters.status}
-            onChange={(v) => onUpdate("status", v)}
-            icon={<ShieldCheck size={14} />}
-            options={[
-              { value: "All", label: "All Status" },
-              { value: "Scheduled", label: "Scheduled" },
-              { value: "Confirmed", label: "Confirmed" },
-              { value: "Checked In", label: "Checked In" },
-              { value: "Checked Out", label: "Checked Out" },
-              { value: "Completed", label: "Completed" },
-              { value: "Cancelled", label: "Cancelled" },
-              { value: "Modified", label: "Modified" },
-              { value: "No Show", label: "No Show" },
-            ]}
-          />
+          {(() => {
+            let statusOptions: { value: string; label: string }[];
+            if (filters.bookingType === "Employee") {
+              statusOptions = [
+                { value: "All", label: "All Status" },
+                { value: "Confirmed", label: "Confirmed" },
+                { value: "Cancelled", label: "Cancelled" },
+                { value: "Modified", label: "Modified" },
+              ];
+            } else if (filters.bookingType === "Guest") {
+              statusOptions = BOOKING_STATUS_OPTIONS.filter((o) => o.value !== "No Show");
+            } else {
+              statusOptions = BOOKING_STATUS_OPTIONS;
+            }
+
+            return (
+              <NativeSelect
+                value={filters.status}
+                onChange={(v) => onUpdate("status", v)}
+                icon={<ShieldCheck size={14} />}
+                options={statusOptions}
+                clearable
+              />
+            );
+          })()}
         </Field>
       </div>
 

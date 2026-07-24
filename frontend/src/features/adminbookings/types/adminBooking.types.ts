@@ -42,6 +42,28 @@ export interface AdminBooking {
   amenities: AdminBookingAmenity[];
   /** Not available from GET /admin/activities. */
   notes?: string;
+
+  // IDs needed to modify/cancel the booking (same POST /bookings/{id}/modify
+  // and /cancel routes the employee "My Bookings" and facilitator "Book for
+  // Someone" flows already use) — not shown in the UI, only forwarded.
+  site_id: string | null;
+  building_id: string | null;
+  floor_id: string | null;
+  seat_id: string | null;
+  booked_for_user_id: string | null;
+  booked_for_guest_id: string | null;
+
+  // Present only when this guest booking is linked to a guest-visit invite
+  // (LEFT JOIN guest_visits — a plain guest seat booking has none). When set,
+  // the booking has both a "visit" and a "seat" side that can be modified or
+  // cancelled independently via POST /guest-visits/{id}/workflow.
+  guest_visit_id: string | null;
+  host_user_id: string | null;
+  host_name: string | null;
+  guest_type: string | null;
+  purpose_of_visit: string | null;
+  start_time: string | null;
+  end_time: string | null;
 }
 
 export interface AdminBookingFilters {
@@ -79,6 +101,9 @@ export interface AdminBookingFloorOption {
 }
 
 export function defaultAdminBookingFilters(): AdminBookingFilters {
+  // Date Range defaults to today so the page loads showing today's bookings
+  // without the admin needing to pick a date and click Search first.
+  const todayIso = new Date().toISOString().slice(0, 10);
   return {
     search: "",
     site: "",
@@ -87,8 +112,8 @@ export function defaultAdminBookingFilters(): AdminBookingFilters {
     bookingType: "Employee",
     status: "All",
     seatNumber: "",
-    dateFrom: "",
-    dateTo: "",
+    dateFrom: todayIso,
+    dateTo: todayIso,
   };
 }
 
@@ -143,6 +168,13 @@ export interface AdminBookingRaw {
   checked_out_at: string | null;
   cancelled_at: string | null;
   cancellation_reason: string | null;
+
+  // Server-derived (modified_from_booking_id is not null) — the authoritative
+  // signal for whether this row is a modification, independent of whatever
+  // literal string booking_status happens to carry.
+  modified_from_booking_id?: string | null;
+  modification_reason?: string | null;
+  is_modified?: boolean;
 
   created_at: string | null;
   updated_at: string | null;

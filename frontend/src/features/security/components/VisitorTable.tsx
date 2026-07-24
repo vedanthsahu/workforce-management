@@ -7,26 +7,12 @@ import { VisitorSearchBar } from "./VisitorSearchBar";
 import VisitorPagination from "./VisitorPagination";
 import { CheckInButton } from "./CheckInButton";
 import { GuestBookingDetailsModal } from "@/features/security/components/Guestbookingdetailsmodal";
-import { CancelBookingModal } from "@/features/security/components/Cancelbookingmodal";
-import { ModifyBookingModal } from "@/features/security/components/Modifybookingmodal";
 import { useCheckIn } from "../hooks/useCheckIn";
 import { getStatusBadgeClass, getStatusLabel } from "../utils/security.utils";
+import { VISITOR_TABLE_HEADERS, VISITOR_TABLE_MIN_HEIGHT } from "../utils/constants";
 import type { Visitor } from "../types/security.types";
 
-const TABLE_HEADERS = [
-  "Guest Name",
-  "Host",
-  "Visit Time",
-  "Location",
-  "Seat Booked",
-  "Status",
-  "Actions",
-];
-
-// ~57px per row × 4 rows + 40px header = 268px minimum
-const MIN_TABLE_HEIGHT = "min-h-[268px]";
-
-type ModalType = "details" | "cancel" | "modify" | null;
+type ModalType = "details" | null;
 
 type Props = {
   title: string;
@@ -36,7 +22,6 @@ type Props = {
   search: string;
   onSearchChange: (value: string) => void;
   onRefresh?: () => void;
-  onPatchVisitor: (id: string, patch: Partial<Visitor>) => void;
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -54,7 +39,6 @@ export function VisitorTable({
   search,
   onSearchChange,
   onRefresh,
-  onPatchVisitor,
   page,
   totalPages,
   onPageChange,
@@ -98,11 +82,11 @@ export function VisitorTable({
 
         <div>
           {/* ── Desktop table ──────────────────────────────────────── */}
-          <div className={cn("hidden md:block overflow-x-auto overflow-y-auto max-h-[480px]", MIN_TABLE_HEIGHT)}>
+          <div className={cn("hidden md:block overflow-x-auto overflow-y-auto max-h-[480px]", VISITOR_TABLE_MIN_HEIGHT)}>
             <table className="w-full text-left text-xs">
               <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
                 <tr>
-                  {TABLE_HEADERS.map((h) => (
+                  {VISITOR_TABLE_HEADERS.map((h) => (
                     <th
                       key={h}
                       className={cn(
@@ -120,7 +104,7 @@ export function VisitorTable({
               <tbody className="divide-y divide-gray-100">
                 {loading && (
                   <tr>
-                    <td colSpan={TABLE_HEADERS.length} className="py-8 text-center text-sm text-gray-400">
+                    <td colSpan={VISITOR_TABLE_HEADERS.length} className="py-8 text-center text-sm text-gray-400">
                       Loading visitors…
                     </td>
                   </tr>
@@ -128,7 +112,7 @@ export function VisitorTable({
 
                 {!loading && visitors.length === 0 && (
                   <tr>
-                    <td colSpan={TABLE_HEADERS.length} className="py-8 text-center text-sm text-gray-400">
+                    <td colSpan={VISITOR_TABLE_HEADERS.length} className="py-8 text-center text-sm text-gray-400">
                       No visitors found.
                     </td>
                   </tr>
@@ -310,29 +294,12 @@ export function VisitorTable({
         </div>
       </div>
 
-      {/* ── Modals ─────────────────────────────────────────────────── */}
+      {/* ── Modal ──────────────────────────────────────────────────── */}
       {/* Details reads straight off the already-fetched table data —
          no extra API call, just the row's Visitor object. */}
       <GuestBookingDetailsModal
         visitor={activeModal === "details" ? selectedVisitor : null}
         onClose={closeModal}
-      />
-
-      {/* Cancel + Modify are dummy for now (see hooks/useCancelVisit.ts and
-         hooks/useModifyVisitForm.ts) — they don't call onRefresh, since a
-         refetch would just overwrite the optimistic patch with stale real
-         data. They only call onPatchVisitor to update the row locally. */}
-      <CancelBookingModal
-        visitor={activeModal === "cancel" ? selectedVisitor : null}
-        onClose={closeModal}
-        onSuccess={closeModal}
-        onPatchVisitor={onPatchVisitor}
-      />
-      <ModifyBookingModal
-        visitor={activeModal === "modify" ? selectedVisitor : null}
-        onClose={closeModal}
-        onSuccess={closeModal}
-        onPatchVisitor={onPatchVisitor}
       />
     </>
   );

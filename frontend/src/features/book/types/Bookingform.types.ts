@@ -148,6 +148,9 @@ export interface CreateBookingResponse {
   cancelled_at: string | null;
   cancellation_reason: string | null;
   created_at: string | null;
+  modified_from_booking_id?: string | null;
+  modification_reason?: string | null;
+  is_modified?: boolean;
 }
 
 export type BookingStep = 1 | 2 | 3;

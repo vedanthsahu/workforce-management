@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from enum import Enum
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from backend.core.enums import GuestType, VisitPurpose
+from backend.core.enums import GuestType, GuestVisitModificationReason, VisitPurpose
 from backend.schemas.booking import BookingResponse
 from backend.schemas.pagination import PaginationMetadata
 
@@ -96,10 +97,25 @@ class GuestVisitResponse(BaseModel):
     requires_seat: bool
     visit_status: GuestVisitStatus
     created_by_user_id: str | None = None
+
+    modified_from_guest_visit_id: str | None = None
+    modification_reason: str | None = None
+    is_modified: bool = False
+
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
-
+    @model_validator(mode="before")
+    @classmethod
+    def _derive_is_modified(cls, data: Any) -> Any:
+        """Default is_modified from modified_from_guest_visit_id when the
+        caller (a raw DB row) doesn't set it explicitly."""
+        if isinstance(data, dict) and "is_modified" not in data:
+            data = {
+                **data,
+                "is_modified": data.get("modified_from_guest_visit_id") is not None,
+            }
+        return data
 
 
 class GuestVisitListItem(BaseModel):
@@ -118,6 +134,10 @@ class GuestVisitListItem(BaseModel):
 
     checked_in_at: datetime | None = None
     checked_out_at: datetime | None = None
+
+    modified_from_guest_visit_id: str | None = None
+    modification_reason: str | None = None
+    is_modified: bool = False
 
     guest_id: str
     guest_name: str
@@ -164,6 +184,18 @@ class GuestVisitListItem(BaseModel):
     floor_name: str | None = None
 
     seat_code: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _derive_is_modified(cls, data: Any) -> Any:
+        """Default is_modified from modified_from_guest_visit_id when the
+        caller (a raw DB row) doesn't set it explicitly."""
+        if isinstance(data, dict) and "is_modified" not in data:
+            data = {
+                **data,
+                "is_modified": data.get("modified_from_guest_visit_id") is not None,
+            }
+        return data
 
 class GuestVisitSummary(BaseModel):
     total: int = 0
@@ -232,6 +264,7 @@ class GuestWorkflowRequest(BaseModel):
     seat_id: int | None = Field(default=None, gt=0)
 
     cancellation_reason: str | None = None
+    modification_reason: GuestVisitModificationReason | None = None
 
 
 class GuestWorkflowResponse(BaseModel):
@@ -262,6 +295,7 @@ class ModifyGuestVisitRequest(BaseModel):
     end_time: time | None = None
 
     notes: str | None = None
+    modification_reason: GuestVisitModificationReason | None = None
 
 
 

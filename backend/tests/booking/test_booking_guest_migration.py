@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+import inspect
 from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
@@ -17,6 +18,7 @@ from backend.schemas.guest import (
     CreateGuestBookingRequest,
     CreateGuestVisitRequest,
 )
+from backend.repositories import booking_repository, guest_visit_repository
 from backend.services import booking_service, guest_service
 
 
@@ -30,6 +32,29 @@ class FakeConnection:
 
     def rollback(self) -> None:
         self.rollbacks += 1
+
+
+class RecordingCursor:
+    def __init__(self, conn: "RecordingConnection") -> None:
+        self.conn = conn
+        self.rowcount = 1
+
+    def __enter__(self) -> "RecordingCursor":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def execute(self, sql, params=None) -> None:
+        self.conn.executed.append((sql, params))
+
+
+class RecordingConnection:
+    def __init__(self) -> None:
+        self.executed = []
+
+    def cursor(self, *args, **kwargs) -> RecordingCursor:
+        return RecordingCursor(self)
 
 
 def _future_date(days: int = 10) -> date:
@@ -184,6 +209,7 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
             floor_id=4,
             seat_id=31,
             booking_date=_future_date(11),
+            modification_reason="OTHER",
         )
         with patch.object(
             booking_service,
@@ -218,12 +244,12 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
             return_value=False,
         ), patch.object(
             booking_service,
-            "cancel_booking",
-        ) as cancel, patch.object(
+            "mark_booking_modified",
+        ) as mark_modified, patch.object(
             booking_service,
             "insert_booking",
             return_value=new_booking,
-        ):
+        ) as insert_booking:
             response = booking_service.modify_booking(
                 conn,
                 current_user={
@@ -235,7 +261,15 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
                 payload=payload,
             )
 
-        self.assertEqual(cancel.call_args.kwargs["booking_status"], "MODIFIED")
+        self.assertEqual(mark_modified.call_args.kwargs["booking_id"], "100")
+        self.assertEqual(
+            mark_modified.call_args.kwargs["modification_reason"],
+            "OTHER",
+        )
+        self.assertEqual(
+            insert_booking.call_args.kwargs["modified_from_booking_id"], "100"
+        )
+        self.assertNotIn("modification_reason", insert_booking.call_args.kwargs)
         self.assertEqual(response.booking_id, "101")
         self.assertEqual(conn.commits, 1)
 
@@ -330,6 +364,10 @@ class GuestBookingMigrationTests(unittest.TestCase):
             return_value=visit,
         ) as insert_visit, patch.object(
             guest_service,
+            "fetch_guest_visit_by_id",
+            return_value=visit,
+        ), patch.object(
+            guest_service,
             "insert_guest_booking",
         ) as insert_booking:
             response = guest_service.create_guest_visit(
@@ -360,7 +398,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
             return_value={"guest_visit_id": "60"},
         ) as insert_visit, patch.object(
             guest_service,
-            "update_guest_visit_requires_seat",
+            "recalculate_guest_visit_requires_seat",
         ), patch.object(
             guest_service,
             "insert_guest_booking",
@@ -515,7 +553,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
             "cancel_booking",
         ), patch.object(
             guest_service,
-            "update_guest_visit_requires_seat",
+            "recalculate_guest_visit_requires_seat",
         ), patch.object(
             guest_service,
             "fetch_booking_by_id",
@@ -546,6 +584,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
             floor_id=4,
             seat_id=31,
             booking_date=_future_date(11),
+            modification_reason="OTHER",
         )
         with patch.object(
             guest_service,
@@ -588,12 +627,15 @@ class GuestBookingMigrationTests(unittest.TestCase):
             "update_guest_visit_booking_details",
         ) as update_visit, patch.object(
             guest_service,
-            "cancel_booking",
-        ) as cancel, patch.object(
+            "mark_booking_modified",
+        ) as mark_modified, patch.object(
             guest_service,
             "insert_guest_booking",
             return_value=new_booking,
-        ) as insert_booking:
+        ) as insert_booking, patch.object(
+            guest_service,
+            "recalculate_guest_visit_requires_seat",
+        ):
             response = guest_service.modify_guest_booking(
                 conn,
                 current_user=self.current_user,
@@ -602,10 +644,68 @@ class GuestBookingMigrationTests(unittest.TestCase):
             )
 
         self.assertEqual(update_visit.call_args.kwargs["guest_visit_id"], "60")
-        self.assertEqual(cancel.call_args.kwargs["booking_status"], "MODIFIED")
+        self.assertEqual(mark_modified.call_args.kwargs["booking_id"], "200")
+        self.assertEqual(
+            mark_modified.call_args.kwargs["modification_reason"],
+            "OTHER",
+        )
         self.assertEqual(insert_booking.call_args.kwargs["guest_visit_id"], "60")
+        self.assertEqual(
+            insert_booking.call_args.kwargs["modified_from_booking_id"], "200"
+        )
+        self.assertNotIn("modification_reason", insert_booking.call_args.kwargs)
         self.assertEqual(response.booking_id, "201")
         self.assertEqual(conn.commits, 1)
+
+
+class ModificationAuditRepositoryTests(unittest.TestCase):
+    def test_booking_mark_modified_writes_reason_on_old_row(self) -> None:
+        conn = RecordingConnection()
+
+        booking_repository.mark_booking_modified(
+            conn,
+            tenant_id="1",
+            booking_id="100",
+            modification_reason="Seat changed",
+        )
+
+        sql, params = conn.executed[-1]
+        self.assertIn("booking_status = 'MODIFIED'", sql)
+        self.assertIn("cancelled_at = NOW()", sql)
+        self.assertIn("cancellation_reason = %s", sql)
+        self.assertIn("modification_reason = %s", sql)
+        self.assertEqual(params, ("Seat changed", "Seat changed", "100", "1"))
+
+    def test_guest_visit_mark_modified_writes_reason_on_old_row(self) -> None:
+        conn = RecordingConnection()
+
+        guest_visit_repository.mark_guest_visit_modified(
+            conn,
+            tenant_id="1",
+            guest_visit_id="60",
+            modification_reason="Visit moved",
+        )
+
+        sql, params = conn.executed[-1]
+        self.assertIn("visit_status = 'MODIFIED'", sql)
+        self.assertIn("cancelled_at = NOW()", sql)
+        self.assertIn("cancellation_reason = %s", sql)
+        self.assertIn("modification_reason = %s", sql)
+        self.assertEqual(params, ("Visit moved", "Visit moved", "60", "1"))
+
+    def test_successor_insert_helpers_do_not_accept_modification_reason(self) -> None:
+        self.assertNotIn(
+            "modification_reason",
+            inspect.signature(booking_repository.insert_booking).parameters,
+        )
+        self.assertNotIn(
+            "modification_reason",
+            inspect.signature(booking_repository.insert_guest_booking).parameters,
+        )
+        self.assertNotIn(
+            "modification_reason",
+            inspect.signature(guest_visit_repository.insert_guest_visit).parameters,
+        )
 
 
 if __name__ == "__main__":
