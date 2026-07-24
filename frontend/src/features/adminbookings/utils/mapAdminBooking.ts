@@ -38,29 +38,37 @@ function formatTimeOnly(iso: string): string {
   return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
-/** booking_status only ever holds CONFIRMED/CANCELLED/MODIFIED/COMPLETED/NO_SHOW server-side;
- * checked-in/out are separate check_in_at/checked_out_at timestamps layered on top of that.
+/** booking_status only ever holds CONFIRMED/CANCELLED/MODIFIED/COMPLETED/NO_SHOW
+ * for employee/guest-with-seat rows; for a guest visit with no seat it's
+ * aliased from guest_visits.visit_status instead, whose "current" literal
+ * value is SCHEDULED (falls to the default branch below), not CONFIRMED.
+ * checked-in/out are separate check_in_at/checked_out_at timestamps layered
+ * on top of either source.
  *
- * Confirmed vs Modified is decided by the is_modified flag (server-derived from
- * modified_from_booking_id), not the booking_status string — applies the same
- * way to employee and guest rows, and stays correct even if a query's
- * bookingStatus filter returns a mixed CONFIRMED/MODIFIED set. */
-function resolveStatus(raw: AdminBookingRaw): BookingStatus {
+ * Confirmed/Scheduled vs Modified is decided by the is_modified flag
+ * (server-derived from modified_from_booking_id/modified_from_guest_visit_id),
+ * not the literal status string — is_modified must be checked regardless of
+ * which literal the row currently carries, so a modified guest visit (still
+ * literally SCHEDULED) is relabeled "Modified" the same way a modified
+ * booking (still literally CONFIRMED) already was. Employee rows never carry
+ * a non-enumerated literal, so this only changes guest-row behavior. */
+export function resolveStatus(raw: AdminBookingRaw): BookingStatus {
   if (raw.checked_out_at) return "Checked Out";
   if (raw.check_in_at) return "Checked In";
 
   switch (raw.booking_status) {
-    case "CONFIRMED":
-    case "MODIFIED":
-      return raw.is_modified ? "Modified" : "Confirmed";
     case "CANCELLED":
       return "Cancelled";
     case "COMPLETED":
       return "Completed";
     case "NO_SHOW":
       return "No Show";
+    case "MODIFIED":
+      return "Modified";
+    case "CONFIRMED":
+      return raw.is_modified ? "Modified" : "Confirmed";
     default:
-      return "Scheduled";
+      return raw.is_modified ? "Modified" : "Scheduled";
   }
 }
 
