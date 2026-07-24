@@ -80,6 +80,7 @@ from backend.repositories.guest_visit_repository import (
     fetch_guest_visit_history,
     fetch_guest_visit_history_summary,
     cancel_future_guest_visits_for_guest,
+    sync_booking_from_guest_visit,
 )
 from backend.repositories.booking_repository import (
     cancel_future_guest_bookings_for_guest,
@@ -2068,7 +2069,6 @@ def cancel_guest_visit_record(
                     or
                     "Guest visit cancelled."
                 ),
-                booking_status="CANCELLED",
             )
 
         recalculate_guest_visit_requires_seat(
