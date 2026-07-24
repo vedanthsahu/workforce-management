@@ -1,18 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  X,
-  Armchair,
-  MapPin,
-  Building2,
-  Layers,
-  CalendarDays,
-  CalendarPlus,
-  ChevronDown,
-  Pencil,
-  FileEdit,
-} from "lucide-react";
+import { X, Armchair, MapPin, Building2, Layers, CalendarDays, CalendarPlus, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AdminBooking } from "../types/adminBooking.types";
 import { BOOKING_STATUS_STYLES } from "../utils/constants";
@@ -66,77 +55,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-// A single Modify/Cancel action button that expands into "…Visit" / "…Seat"
-// choices — used only for a guest booking linked to a guest-visit invite,
-// where the visit and the seat can be modified/cancelled independently.
-function ActionMenuButton({
-  label,
-  icon: TriggerIcon,
-  variant,
-  options,
-}: {
-  label: string;
-  icon: React.ElementType;
-  variant: "indigo" | "red";
-  options: { label: string; icon: React.ElementType; onClick: () => void }[];
-}) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onClickOutside = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [open]);
-
-  const colorClass =
-    variant === "indigo"
-      ? "text-indigo-600 border-indigo-200 hover:bg-indigo-50"
-      : "text-red-600 border-red-200 hover:bg-red-50";
-  const itemColorClass = variant === "indigo" ? "text-gray-700" : "text-red-600";
-
-  return (
-    <div ref={rootRef} className="relative flex-1">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "w-full h-9 flex items-center justify-center gap-1.5 text-xs font-semibold bg-white border rounded-lg transition-colors",
-          colorClass
-        )}
-      >
-        <TriggerIcon size={13} />
-        {label}
-        <ChevronDown size={13} className={cn("transition-transform", open && "rotate-180")} />
-      </button>
-
-      {open && (
-        <div className="absolute bottom-full left-0 right-0 mb-1.5 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-10">
-          {options.map((o) => (
-            <button
-              key={o.label}
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                o.onClick();
-              }}
-              className={cn(
-                "flex items-center justify-center gap-2 w-full px-3 py-2 text-center text-xs font-medium hover:bg-gray-50 transition-colors",
-                itemColorClass
-              )}
-            >
-              <o.icon size={14} />
-              {o.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+// Modify/Cancel actions moved into the row "…" menu. The details panel
+// no longer renders Modify/Cancel buttons — they're handled from the
+// row menu for consistent UX.
 
 export default function BookingDetailsPanel({
   booking,
@@ -235,64 +156,8 @@ export default function BookingDetailsPanel({
           </Section>
         </div>
 
-        {/* Footer actions — hidden for today/past bookings, which can no
-           longer be modified or cancelled. */}
-        {canMutate && (
-          <div className="flex items-center gap-2.5 px-5 py-4 border-t bg-gray-50 shrink-0">
-            {hasVisit && hasBooking ? (
-              <>
-                <ActionMenuButton
-                  label="Modify"
-                  icon={Pencil}
-                  variant="indigo"
-                  options={[
-                    { label: "Edit Visit", icon: FileEdit, onClick: () => onModifyVisit(booking) },
-                    { label: "Edit Seat", icon: Pencil, onClick: () => onModifySeat(booking) },
-                  ]}
-                />
-                <ActionMenuButton
-                  label="Cancel"
-                  icon={X}
-                  variant="red"
-                  options={[
-                    { label: "Cancel Visit", icon: X, onClick: () => onCancelVisit(booking) },
-                    { label: "Cancel Seat", icon: X, onClick: () => onCancelSeat(booking) },
-                  ]}
-                />
-              </>
-            ) : hasVisit ? (
-              <>
-                <button
-                  onClick={() => onModifyVisit(booking)}
-                  className="flex-1 h-9 text-xs font-semibold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
-                >
-                  Edit Visit
-                </button>
-                <button
-                  onClick={() => onCancelVisit(booking)}
-                  className="flex-1 h-9 text-xs font-semibold text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
-                >
-                  Cancel Visit
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => onModifySeat(booking)}
-                  className="flex-1 h-9 text-xs font-semibold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
-                >
-                  Modify Booking
-                </button>
-                <button
-                  onClick={() => onCancelSeat(booking)}
-                  className="flex-1 h-9 text-xs font-semibold text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
-                >
-                  Cancel Booking
-                </button>
-              </>
-            )}
-          </div>
-        )}
+        {/* Footer actions removed — modify/cancel are available from the
+           row "…" menu. */}
       </div>
     </div>
   );

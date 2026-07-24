@@ -1210,7 +1210,13 @@ export function ConfirmInviteStep({ guest, visitDetails, sites, buildings, seatL
 
 // ─── SuccessStep ──────────────────────────────────────────────────────────────
 
-export function SuccessStep({ onBookAnother }: { onBookAnother: () => void }) {
+export function SuccessStep({
+  onBookAnother,
+  isAdminFlow,
+}: {
+  onBookAnother: () => void;
+  isAdminFlow?: boolean;
+}) {
   return (
     <div style={{ textAlign: "center", padding: "2rem 1rem" }}>
       <span
@@ -1234,27 +1240,9 @@ export function SuccessStep({ onBookAnother }: { onBookAnother: () => void }) {
       <p style={{ fontSize: "0.8125rem", color: "#6b7280", maxWidth: 360, margin: "0 auto 1.5rem" }}>
         The guest and host employee will receive an email with the visit details. No workspace has been reserved.
       </p>
-      <div style={{ display: "flex", justifyContent: "center", gap: "0.75rem" }}>
-        <button
-          type="button"
-          onClick={onBookAnother}
-          style={{
-            height: 40,
-            padding: "0 1.25rem",
-            borderRadius: 8,
-            border: "1.5px solid #e5e7eb",
-            background: "#fff",
-            fontSize: "0.875rem",
-            fontWeight: 600,
-            color: "#111827",
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          Book Another
-        </button>
+      {isAdminFlow ? (
         <Link
-          href="/mybookings?tab=bookedForSomeone"
+          href="/admin/bookings"
           style={{
             height: 40,
             padding: "0 1.25rem",
@@ -1266,13 +1254,55 @@ export function SuccessStep({ onBookAnother }: { onBookAnother: () => void }) {
             color: "#fff",
             display: "inline-flex",
             alignItems: "center",
+            justifyContent: "center",
+            gap: "0.5rem",
             textDecoration: "none",
             fontFamily: "inherit",
           }}
         >
-          Go to My Bookings
+          ← Back to Bookings
         </Link>
-      </div>
+      ) : (
+        <div style={{ display: "flex", justifyContent: "center", gap: "0.75rem" }}>
+          <button
+            type="button"
+            onClick={onBookAnother}
+            style={{
+              height: 40,
+              padding: "0 1.25rem",
+              borderRadius: 8,
+              border: "1.5px solid #e5e7eb",
+              background: "#fff",
+              fontSize: "0.875rem",
+              fontWeight: 600,
+              color: "#111827",
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            Book Another
+          </button>
+          <Link
+            href="/mybookings?tab=bookedForSomeone"
+            style={{
+              height: 40,
+              padding: "0 1.25rem",
+              borderRadius: 8,
+              border: "1.5px solid #4f46e5",
+              background: "#4f46e5",
+              fontSize: "0.875rem",
+              fontWeight: 600,
+              color: "#fff",
+              display: "inline-flex",
+              alignItems: "center",
+              textDecoration: "none",
+              fontFamily: "inherit",
+            }}
+          >
+            Go to My Bookings
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

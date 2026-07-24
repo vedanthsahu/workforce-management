@@ -68,10 +68,12 @@ function buildUrl(
   bookingForName?: string | null,
   visitId?: string | null,
   isGuestModify?: boolean,
+  isAdminFlow?: boolean,
 ): string {
   const params = new URLSearchParams();
   params.set("step", String(step));
   if (modifyBookingId)             params.set("modifyBookingId", modifyBookingId);
+  if (isAdminFlow)                 params.set("adminFlow",       "true");
   if (bookedForUserId)             params.set("bookedForUserId", bookedForUserId);
   if (bookingForName)              params.set("bookingForName",  bookingForName);
   if (visitId)                     params.set("visitId",         visitId);
@@ -103,6 +105,10 @@ export function useBookingForm() {
 
   const modifyBookingId = searchParams.get("modifyBookingId");
   const isModifyMode    = Boolean(modifyBookingId);
+  // Set only by AdminBookingsPage's row-menu "Modify" action (useAdminBookingActions.modifySeat)
+  // so the confirmation screen can show admin-specific copy/navigation without affecting
+  // the employee "My Bookings" or facilitator "Book for Someone" modify flows, which share this route.
+  const isAdminFlow = searchParams.get("adminFlow") === "true";
 
   const prefillLocationName = searchParams.get("locationName") ?? null;
   const prefillBuildingName = searchParams.get("buildingName") ?? null;
@@ -313,7 +319,7 @@ export function useBookingForm() {
   const navigateTo = useCallback(
     (nextStep: BookingStep, nextForm: BookingFormState) => {
       setStepState(nextStep);
-      router.push(buildUrl(nextStep, nextForm, modifyBookingId, bookedForUserId, guestUrlParams, bookingForName, visitId, isGuestModify));
+      router.push(buildUrl(nextStep, nextForm, modifyBookingId, bookedForUserId, guestUrlParams, bookingForName, visitId, isGuestModify, isAdminFlow));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [router, modifyBookingId, bookedForUserId, isGuestBooking, visitId, isGuestModify],
@@ -738,6 +744,7 @@ export function useBookingForm() {
     dayCount,
     step1Valid,
     isModifyMode,
+    isAdminFlow,
     isBookingForSomeone,
     isGuestBooking,
     bookingForName,

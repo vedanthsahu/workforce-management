@@ -2506,7 +2506,6 @@ def execute_guest_visit_workflow(
                 cancellation_reason=_normalize_cancellation_reason(
                     payload.cancellation_reason,
                 ),
-                booking_status="CANCELLED",
             )
             recalculate_guest_visit_requires_seat(
                 conn,
@@ -2545,7 +2544,6 @@ def execute_guest_visit_workflow(
                     cancellation_reason=(
                         cancellation_reason or "Guest visit cancelled."
                     ),
-                    booking_status="CANCELLED",
                 )
             cancel_guest_visit(
                 conn,

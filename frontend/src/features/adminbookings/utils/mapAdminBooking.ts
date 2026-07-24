@@ -39,18 +39,22 @@ function formatTimeOnly(iso: string): string {
 }
 
 /** booking_status only ever holds CONFIRMED/CANCELLED/MODIFIED/COMPLETED/NO_SHOW server-side;
- * checked-in/out are separate check_in_at/checked_out_at timestamps layered on top of that. */
+ * checked-in/out are separate check_in_at/checked_out_at timestamps layered on top of that.
+ *
+ * Confirmed vs Modified is decided by the is_modified flag (server-derived from
+ * modified_from_booking_id), not the booking_status string — applies the same
+ * way to employee and guest rows, and stays correct even if a query's
+ * bookingStatus filter returns a mixed CONFIRMED/MODIFIED set. */
 function resolveStatus(raw: AdminBookingRaw): BookingStatus {
   if (raw.checked_out_at) return "Checked Out";
   if (raw.check_in_at) return "Checked In";
 
   switch (raw.booking_status) {
     case "CONFIRMED":
-      return "Confirmed";
+    case "MODIFIED":
+      return raw.is_modified ? "Modified" : "Confirmed";
     case "CANCELLED":
       return "Cancelled";
-    case "MODIFIED":
-      return "Modified";
     case "COMPLETED":
       return "Completed";
     case "NO_SHOW":

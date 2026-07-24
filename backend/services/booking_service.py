@@ -319,20 +319,18 @@ def _user_email_list(user: dict[str, Any]) -> list[str]:
 def _apply_modified_display_status(
     rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """UI-only: a row that superseded an earlier booking/guest visit
-    (linked via modified_from_booking_id / modified_from_guest_visit_id)
-    displays booking_status as MODIFIED in list views, even though its real
-    DB status is still CONFIRMED/SCHEDULED/etc. Never call this for a
-    direct/search fetch (fetch_booking_by_id and friends) -- those must keep
-    showing the real database status.
-    """
     for row in rows:
         if (
-            row.get("modified_from_booking_id") is not None
-            or row.get("modified_from_guest_visit_id") is not None
+            (
+                row.get("modified_from_booking_id") is not None
+                or row.get("modified_from_guest_visit_id") is not None
+            )
+            and row.get("booking_status") == "CONFIRMED"
         ):
             row["booking_status"] = "MODIFIED"
+
     return rows
+ 
 
 
 def _booking_list_response(

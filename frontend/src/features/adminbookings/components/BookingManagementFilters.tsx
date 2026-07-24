@@ -342,6 +342,24 @@ export default function BookingManagementFilters({
     };
   }, [filters.seatNumber]);
 
+  // Keep the status selection valid when bookingType changes. If the
+  // currently selected status is not present in the new options, reset
+  // it back to "All" so the UI and backend filters stay consistent.
+  useEffect(() => {
+    const employeeStatusValues = ["All", "Confirmed", "Cancelled", "Modified"];
+    const allStatusValues = BOOKING_STATUS_OPTIONS.map((o) => o.value);
+    const guestStatusValues = allStatusValues.filter((v) => v !== "No Show");
+
+    const allowed =
+      filters.bookingType === "Employee"
+        ? employeeStatusValues
+        : filters.bookingType === "Guest"
+        ? guestStatusValues
+        : allStatusValues;
+
+    if (!allowed.includes(filters.status)) onUpdate("status", "All");
+  }, [filters.bookingType, filters.status, onUpdate]);
+
   return (
     <div className="flex flex-col gap-4">
       {/* Row 1 */}
@@ -399,13 +417,31 @@ export default function BookingManagementFilters({
         </Field>
 
         <Field label="Status" width="170px">
-          <NativeSelect
-            value={filters.status}
-            onChange={(v) => onUpdate("status", v)}
-            icon={<ShieldCheck size={14} />}
-            options={BOOKING_STATUS_OPTIONS}
-            clearable
-          />
+          {(() => {
+            let statusOptions: { value: string; label: string }[];
+            if (filters.bookingType === "Employee") {
+              statusOptions = [
+                { value: "All", label: "All Status" },
+                { value: "Confirmed", label: "Confirmed" },
+                { value: "Cancelled", label: "Cancelled" },
+                { value: "Modified", label: "Modified" },
+              ];
+            } else if (filters.bookingType === "Guest") {
+              statusOptions = BOOKING_STATUS_OPTIONS.filter((o) => o.value !== "No Show");
+            } else {
+              statusOptions = BOOKING_STATUS_OPTIONS;
+            }
+
+            return (
+              <NativeSelect
+                value={filters.status}
+                onChange={(v) => onUpdate("status", v)}
+                icon={<ShieldCheck size={14} />}
+                options={statusOptions}
+                clearable
+              />
+            );
+          })()}
         </Field>
       </div>
 
