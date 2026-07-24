@@ -13,9 +13,11 @@ from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from psycopg2.extensions import connection as PGConnection
 
+from backend.core.audit_actions import FLOOR_LAYOUT_DELETED, FLOOR_LAYOUT_PUBLISHED
 from backend.core.config import get_settings
 from backend.core.enums import LayoutStatus
 from backend.core.app_logging import LOGGER_NAME
+from backend.repositories.audit_repository import safe_write_audit_log
 from backend.core.storage import upload_svg_to_s3
 from backend.repositories.floor_layout_repository import (
     activate_floor_layout as activate_floor_layout_record,
@@ -357,6 +359,18 @@ def activate_floor_layout(
 
         conn.commit()
 
+        safe_write_audit_log(
+            conn,
+            action=FLOOR_LAYOUT_PUBLISHED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="floor_layout",
+            resource_id=layout_id,
+            old_values={"layout_name": layout["layout_name"], "floor_id": str(layout["floor_id"]), "status": layout["status"]},
+            new_values={"layout_name": activated_layout["layout_name"], "floor_id": str(activated_layout["floor_id"]), "status": activated_layout["status"]},
+            changed_fields=["status"],
+        )
+
         _queue_floor_layout_uploaded_email(
             background_tasks,
             conn=conn,
@@ -364,13 +378,27 @@ def activate_floor_layout(
             layout=activated_layout,
         )
 
-    except HTTPException:
+    except HTTPException as he:
         conn.rollback()
+        _d = he.detail if isinstance(he.detail, dict) else {}
+        safe_write_audit_log(
+            conn, action=FLOOR_LAYOUT_PUBLISHED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
+            event_status="FAILURE",
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
+        )
         raise
 
     except psycopg2.Error as exc:
         conn.rollback()
-
+        safe_write_audit_log(
+            conn, action=FLOOR_LAYOUT_PUBLISHED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
+            event_status="FAILURE",
+            failure_code="floor_layout_activate_failed",
+            failure_reason="Failed to activate floor layout.",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -437,13 +465,39 @@ def delete_floor_layout(
 
         conn.commit()
 
-    except HTTPException:
+        safe_write_audit_log(
+            conn,
+            action=FLOOR_LAYOUT_DELETED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="floor_layout",
+            resource_id=layout_id,
+            old_values={"layout_name": layout["layout_name"], "status": layout["status"]},
+            new_values={"layout_name": deleted_layout["layout_name"], "status": deleted_layout["status"]},
+            changed_fields=["status"],
+        )
+
+    except HTTPException as he:
         conn.rollback()
+        _d = he.detail if isinstance(he.detail, dict) else {}
+        safe_write_audit_log(
+            conn, action=FLOOR_LAYOUT_DELETED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
+            event_status="FAILURE",
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
+        )
         raise
 
     except psycopg2.Error as exc:
         conn.rollback()
-
+        safe_write_audit_log(
+            conn, action=FLOOR_LAYOUT_DELETED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
+            event_status="FAILURE",
+            failure_code="floor_layout_delete_failed",
+            failure_reason="Failed to delete floor layout.",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={

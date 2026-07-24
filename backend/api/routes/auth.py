@@ -30,7 +30,12 @@ def logout(
     refresh_token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
 
     if refresh_token:
-        logout_user_session(conn, refresh_token)
+        logout_user_session(
+            conn,
+            refresh_token,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
 
     _clear_auth_cookies(response)
 

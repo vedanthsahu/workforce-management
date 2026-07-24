@@ -23,6 +23,8 @@ from backend.repositories.user_repository import (
     update_user_profile,
     search_users,
 )
+from backend.core.audit_actions import USER_ACCESS_UPDATED, USER_PROFILE_UPDATED
+from backend.repositories.audit_repository import safe_write_audit_log
 from backend.schemas.auth import UserResponse
 from backend.schemas.booking import BookingResponse
 from backend.schemas.user_management import (
@@ -109,6 +111,17 @@ def update_my_profile(
     )
 
     if updated_user is None:
+        safe_write_audit_log(
+            conn,
+            action=USER_PROFILE_UPDATED,
+            tenant_id=str(current_user["tenant_id"]),
+            current_user=current_user,
+            resource_type="user",
+            resource_id=str(current_user["user_id"]),
+            event_status="FAILURE",
+            failure_code="user_not_found",
+            failure_reason="User not found.",
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
@@ -118,6 +131,20 @@ def update_my_profile(
         )
 
     conn.commit()
+
+    sent = payload.model_dump(exclude_unset=True)
+    actually_changed = [k for k in sent if current_user.get(k) != sent[k]]
+    safe_write_audit_log(
+        conn,
+        action=USER_PROFILE_UPDATED,
+        tenant_id=str(current_user["tenant_id"]),
+        current_user=current_user,
+        resource_type="user",
+        resource_id=str(current_user["user_id"]),
+        old_values={k: current_user.get(k) for k in sent},
+        new_values=sent,
+        changed_fields=actually_changed or None,
+    )
 
     return UserResponse(**updated_user)
 
@@ -130,7 +157,16 @@ def admin_update_user_access_service(
     payload,
 ) -> UserResponse:
 
+    tenant_id = str(current_user["tenant_id"])
+
     if str(current_user["user_id"]) == str(target_user_id):
+        safe_write_audit_log(
+            conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+            event_status="DENIED",
+            failure_code="self_modification_not_allowed",
+            failure_reason="Users cannot modify their own access.",
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -141,11 +177,18 @@ def admin_update_user_access_service(
 
     target_user = fetch_user_by_id(
         conn,
-        tenant_id=str(current_user["tenant_id"]),
+        tenant_id=tenant_id,
         user_id=target_user_id,
     )
 
     if target_user is None:
+        safe_write_audit_log(
+            conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+            event_status="FAILURE",
+            failure_code="user_not_found",
+            failure_reason="Target user not found.",
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
@@ -155,6 +198,13 @@ def admin_update_user_access_service(
         )
 
     if _user_role(target_user) in PROTECTED_TARGET_ROLE_NAMES:
+        safe_write_audit_log(
+            conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+            event_status="DENIED",
+            failure_code="protected_target_role",
+            failure_reason="This user's access cannot be changed through this endpoint.",
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -164,6 +214,13 @@ def admin_update_user_access_service(
         )
 
     if payload.role_name and payload.role_name not in ASSIGNABLE_ROLE_NAMES:
+        safe_write_audit_log(
+            conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+            event_status="DENIED",
+            failure_code="protected_role",
+            failure_reason="Requested role cannot be assigned.",
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -174,7 +231,7 @@ def admin_update_user_access_service(
 
     updated_user = admin_update_user_access(
         conn,
-        tenant_id=str(current_user["tenant_id"]),
+        tenant_id=tenant_id,
         user_id=target_user_id,
         role_name=payload.role_name,
         status=payload.status,
@@ -182,20 +239,51 @@ def admin_update_user_access_service(
 
     revoke_all_user_sessions(
         conn,
-        tenant_id=str(current_user["tenant_id"]),
+        tenant_id=tenant_id,
         user_id=target_user_id,
     )
 
     record_auth_event(
         conn,
-        tenant_id=str(current_user["tenant_id"]),
+        tenant_id=tenant_id,
         user_id=target_user_id,
         event_type="ACCESS_CHANGED",
     )
 
     conn.commit()
 
-    return UserResponse(**updated_user)
+    _old = {
+        "role_name": _user_role(target_user),
+        "status": target_user.get("status"),
+    }
+    _new_data = {k: v for k, v in {
+        "role_name": payload.role_name,
+        "status": payload.status,
+    }.items() if v is not None}
+    _actually_changed = [k for k in _new_data if _old.get(k) != _new_data[k]]
+
+    safe_write_audit_log(
+        conn,
+        action=USER_ACCESS_UPDATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="user",
+        resource_id=str(target_user_id),
+        old_values=_old,
+        new_values={
+            **_new_data,
+            "target_user_id": str(target_user_id),
+            "target_email": target_user.get("email"),
+        },
+        changed_fields=_actually_changed if _actually_changed else None,
+        # metadata={
+        #     "operation": "admin_update_user_access",
+        #     "done_by_email": current_user.get("email"),
+        #     "done_by_name": current_user.get("full_name"),
+        # },
+    )
+
+    return UserResponse(**(updated_user or {}))
 
 
 def search_user_profiles(

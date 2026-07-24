@@ -23,6 +23,18 @@ from backend.repositories.guest_visit_repository import (
     insert_guest_visit,
 )
 from backend.core.app_logging import LOGGER_NAME
+from backend.core.audit_actions import (
+    BOOKING_CANCELLED,
+    BOOKING_CREATED,
+    BOOKING_MODIFIED,
+    GUEST_BOOKING_CREATED,
+    GUEST_VISIT_CREATED,
+)
+from backend.repositories.audit_repository import (
+    actor_from_user,
+    safe_write_audit_log,
+    write_audit_log,
+)
 from backend.repositories.booking_repository import (
     fetch_available_seats,
     fetch_available_seats_by_range,
@@ -73,6 +85,7 @@ from backend.services.notification_service import (
 )
 
 logger = logging.getLogger(f"{LOGGER_NAME}.bookings")
+
 
 # Shared with guest_service.py so the guest-operator role set is defined once.
 GUEST_OPERATION_ROLES = {
@@ -348,7 +361,15 @@ def book_seat(
     background_tasks: BackgroundTasks | None = None,
 ) -> BookingResponse:
     """Create one tenant-scoped booking and handle DB constraint failures."""
+    tenant_id = str(current_user["tenant_id"])
     if payload.booking_date < date.today():
+        safe_write_audit_log(
+            conn, action=BOOKING_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=None,
+            event_status="FAILURE",
+            failure_code="booking_date_in_past",
+            failure_reason="Bookings cannot be created for a past date.",
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -356,8 +377,6 @@ def book_seat(
                 "message": "Bookings cannot be created for a past date.",
             },
         )
-
-    tenant_id = str(current_user["tenant_id"])
     booked_by_user_id = _current_user_id(current_user)
     effective_booked_for_user_id = (
             payload.booked_for_user_id
@@ -445,59 +464,112 @@ def book_seat(
             seat=seat,
             booking_date=payload.booking_date,
         )
+        write_audit_log(
+            conn,
+            action=BOOKING_CREATED,
+            tenant_id=tenant_id,
+            **actor_from_user(current_user),
+            resource_type="booking",
+            resource_id=str(booking.get("booking_id")),
+            new_values={
+                "booking_date": str(booking.get("booking_date")),
+                "seat_code": booking.get("seat_code"),
+                "floor_name": booking.get("floor_name"),
+                "building_name": booking.get("building_name"),
+                "booked_for_user_id": str(booked_for_user_id),
+                "booked_for_email": booked_for_user.get("email"),
+            },
+            metadata={
+                "operation": "book_for_user",
+                "done_by_email": current_user.get("email"),
+                "done_by_name": current_user.get("full_name"),
+                "done_by_role": _user_role(current_user),
+            },
+        )
         conn.commit()
-    except HTTPException:
+    except HTTPException as he:
         conn.rollback()
+        _d = he.detail if isinstance(he.detail, dict) else {}
+        safe_write_audit_log(
+            conn, action=BOOKING_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=None,
+            event_status="DENIED" if he.status_code == 403 else "FAILURE",
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
+        )
         raise
     except ValueError as exc:
         conn.rollback()
+        safe_write_audit_log(
+            conn, action=BOOKING_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=None,
+            event_status="FAILURE",
+            failure_code="invalid_booking_value",
+            failure_reason=str(exc),
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "invalid_booking_value",
-                "message": str(exc),
-            },
+            detail={"code": "invalid_booking_value", "message": str(exc)},
         ) from exc
     except LookupError as exc:
         conn.rollback()
+        safe_write_audit_log(
+            conn, action=BOOKING_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=None,
+            event_status="FAILURE",
+            failure_code="booking_create_failed",
+            failure_reason=str(exc),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "booking_create_failed",
-                "message": str(exc),
-            },
+            detail={"code": "booking_create_failed", "message": str(exc)},
         ) from exc
     except psycopg2.Error as exc:
         conn.rollback()
         if exc.pgcode in {errorcodes.UNIQUE_VIOLATION, errorcodes.EXCLUSION_VIOLATION}:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=_booking_conflict_detail(
-                    getattr(exc.diag, "constraint_name", None),
-                ),
-            ) from exc
+            _detail = _booking_conflict_detail(getattr(exc.diag, "constraint_name", None))
+            safe_write_audit_log(
+                conn, action=BOOKING_CREATED, tenant_id=tenant_id,
+                current_user=current_user, resource_type="booking", resource_id=None,
+                event_status="FAILURE",
+                failure_code=_detail.get("code"),
+                failure_reason=_detail.get("message"),
+            )
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_detail) from exc
         if exc.pgcode == errorcodes.FOREIGN_KEY_VIOLATION:
+            safe_write_audit_log(
+                conn, action=BOOKING_CREATED, tenant_id=tenant_id,
+                current_user=current_user, resource_type="booking", resource_id=None,
+                event_status="FAILURE",
+                failure_code="booking_reference_not_found",
+                failure_reason="Seat or user reference was not found for this tenant.",
+            )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "code": "booking_reference_not_found",
-                    "message": "Seat or user reference was not found for this tenant.",
-                },
+                detail={"code": "booking_reference_not_found", "message": "Seat or user reference was not found for this tenant."},
             ) from exc
         if exc.pgcode == errorcodes.CHECK_VIOLATION:
+            safe_write_audit_log(
+                conn, action=BOOKING_CREATED, tenant_id=tenant_id,
+                current_user=current_user, resource_type="booking", resource_id=None,
+                event_status="FAILURE",
+                failure_code="invalid_booking_target",
+                failure_reason="Booking status or source channel violates the schema checks.",
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "code": "invalid_booking_target",
-                    "message": "Booking status or source channel violates the schema checks.",
-                },
+                detail={"code": "invalid_booking_target", "message": "Booking status or source channel violates the schema checks."},
             ) from exc
+        safe_write_audit_log(
+            conn, action=BOOKING_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=None,
+            event_status="FAILURE",
+            failure_code="booking_create_failed",
+            failure_reason="Failed to create booking.",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "booking_create_failed",
-                "message": "Failed to create booking.",
-            },
+            detail={"code": "booking_create_failed", "message": "Failed to create booking."},
         ) from exc
 
     _queue_booking_created_email(
@@ -790,6 +862,37 @@ def cancel_booking_by_id(
                 },
             )
 
+        _cancel_old = {
+            "booking_date": str(booking.get("booking_date")),
+            "seat_code": booking.get("seat_code"),
+            "booking_status": booking.get("booking_status"),
+            "cancellation_reason": booking.get("cancellation_reason"),
+        }
+        _cancel_new = {
+            "booking_date": str(booking.get("booking_date")),
+            "seat_code": booking.get("seat_code"),
+            "booking_status": "CANCELLED",
+            "cancellation_reason": updated_booking.get("cancellation_reason"),
+            "booked_for_user_id": str(booked_for_user_id),
+            "booked_for_email": booking_user.get("email"),
+        }
+        safe_write_audit_log(
+            conn,
+            action=BOOKING_CANCELLED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="booking",
+            resource_id=booking_id,
+            old_values=_cancel_old,
+            new_values=_cancel_new,
+            changed_fields=[k for k in _cancel_old if _cancel_old.get(k) != _cancel_new.get(k)] or None,
+            # metadata={
+            #     "operation": "cancel_booking",
+            #     "done_by_email": current_user.get("email"),
+            #     "done_by_name": current_user.get("full_name"),
+            # },
+        )
+
         _queue_booking_cancelled_email(
             background_tasks,
             booking=updated_booking,
@@ -798,30 +901,45 @@ def cancel_booking_by_id(
 
         return BookingResponse(**updated_booking)
 
-    except HTTPException:
+    except HTTPException as he:
         conn.rollback()
+        _d = he.detail if isinstance(he.detail, dict) else {}
+        safe_write_audit_log(
+            conn, action=BOOKING_CANCELLED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=booking_id,
+            event_status="DENIED" if he.status_code == 403 else "FAILURE",
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
+        )
         raise
 
     except psycopg2.Error as exc:
         conn.rollback()
-
+        safe_write_audit_log(
+            conn, action=BOOKING_CANCELLED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=booking_id,
+            event_status="FAILURE",
+            failure_code="booking_cancel_failed",
+            failure_reason="Failed to cancel booking.",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "booking_cancel_failed",
-                "message": "Failed to cancel booking.",
-            },
+            detail={"code": "booking_cancel_failed", "message": "Failed to cancel booking."},
         ) from exc
     except LookupError as exc:
         conn.rollback()
+        safe_write_audit_log(
+            conn, action=BOOKING_CANCELLED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=booking_id,
+            event_status="FAILURE",
+            failure_code="booking_not_found",
+            failure_reason=str(exc),
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "booking_not_found",
-                "message": str(exc),
-            },
+            detail={"code": "booking_not_found", "message": str(exc)},
         ) from exc
-    
+
 
 def modify_booking(
     conn: PGConnection,
@@ -1014,8 +1132,42 @@ def modify_booking(
             seat=target_seat,
             booking_date=payload.booking_date,
         )
- 
+
         conn.commit()
+
+        _old_vals = {
+            "booking_date": str(old_booking_for_email.get("booking_date")),
+            "seat_code": old_booking_for_email.get("seat_code"),
+            "floor_name": old_booking_for_email.get("floor_name"),
+            "building_name": old_booking_for_email.get("building_name"),
+        }
+        _new_vals = {
+            "booking_date": str(new_booking.get("booking_date")),
+            "seat_code": new_booking.get("seat_code"),
+            "floor_name": new_booking.get("floor_name"),
+            "building_name": new_booking.get("building_name"),
+        }
+        _actually_changed = [k for k in _new_vals if _old_vals.get(k) != _new_vals[k]]
+        safe_write_audit_log(
+            conn,
+            action=BOOKING_MODIFIED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="booking",
+            resource_id=str(new_booking.get("booking_id")),
+            old_values=_old_vals,
+            new_values={
+                **_new_vals,
+                "booked_for_user_id": str(booked_for_user_id),
+                "booked_for_email": booking_user.get("email"),
+            },
+            changed_fields=_actually_changed or None,
+            # metadata={
+            #     "operation": "modify_booking",
+            #     "done_by_email": current_user.get("email"),
+            #     "done_by_name": current_user.get("full_name"),
+            # },
+        )
 
         _queue_booking_modified_email(
             background_tasks,
@@ -1026,49 +1178,68 @@ def modify_booking(
 
         return BookingResponse(**new_booking)
  
-    except HTTPException:
+    except HTTPException as he:
         conn.rollback()
+        _d = he.detail if isinstance(he.detail, dict) else {}
+        safe_write_audit_log(
+            conn, action=BOOKING_MODIFIED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=booking_id,
+            event_status="DENIED" if he.status_code == 403 else "FAILURE",
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
+        )
         raise
- 
+
     except ValueError as exc:
         conn.rollback()
+        safe_write_audit_log(
+            conn, action=BOOKING_MODIFIED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=booking_id,
+            event_status="FAILURE",
+            failure_code="invalid_booking_value",
+            failure_reason=str(exc),
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "invalid_booking_value",
-                "message": str(exc),
-            },
+            detail={"code": "invalid_booking_value", "message": str(exc)},
         ) from exc
- 
+
     except LookupError as exc:
         conn.rollback()
+        safe_write_audit_log(
+            conn, action=BOOKING_MODIFIED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=booking_id,
+            event_status="FAILURE",
+            failure_code="booking_modify_failed",
+            failure_reason=str(exc),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "booking_modify_failed",
-                "message": str(exc),
-            },
+            detail={"code": "booking_modify_failed", "message": str(exc)},
         ) from exc
- 
+
     except psycopg2.Error as exc:
         conn.rollback()
-        if exc.pgcode in {
-            errorcodes.UNIQUE_VIOLATION,
-            errorcodes.EXCLUSION_VIOLATION,
-        }:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=_booking_conflict_detail(
-                    getattr(exc.diag, "constraint_name", None),
-                ),
-            ) from exc
- 
+        if exc.pgcode in {errorcodes.UNIQUE_VIOLATION, errorcodes.EXCLUSION_VIOLATION}:
+            _detail = _booking_conflict_detail(getattr(exc.diag, "constraint_name", None))
+            safe_write_audit_log(
+                conn, action=BOOKING_MODIFIED, tenant_id=tenant_id,
+                current_user=current_user, resource_type="booking", resource_id=booking_id,
+                event_status="FAILURE",
+                failure_code=_detail.get("code"),
+                failure_reason=_detail.get("message"),
+            )
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_detail) from exc
+        safe_write_audit_log(
+            conn, action=BOOKING_MODIFIED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=booking_id,
+            event_status="FAILURE",
+            failure_code="booking_modify_failed",
+            failure_reason="Failed to modify booking.",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "booking_modify_failed",
-                "message": "Failed to modify booking.",
-            },
+            detail={"code": "booking_modify_failed", "message": "Failed to modify booking."},
         ) from exc
 
 def get_available_seats_by_range(
@@ -1183,8 +1354,25 @@ def get_available_seats_by_range(
                 exclude_booking_id=exclude_booking_id,
             )
 
-    except psycopg2.Error as exc:
+    except HTTPException as he:
+        _d = he.detail if isinstance(he.detail, dict) else {}
+        safe_write_audit_log(
+            conn, action=BOOKING_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=None,
+            event_status="DENIED" if he.status_code == 403 else "FAILURE",
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
+        )
+        raise
 
+    except psycopg2.Error as exc:
+        safe_write_audit_log(
+            conn, action=BOOKING_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=None,
+            event_status="FAILURE",
+            failure_code="available_seats_lookup_failed",
+            failure_reason="Failed to fetch available seats.",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -1370,43 +1558,70 @@ def book_guest_seat(
 
         conn.commit()
 
+        safe_write_audit_log(
+            conn,
+            action=GUEST_BOOKING_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_booking",
+            resource_id=str(booking.get("booking_id")),
+            new_values={
+                "guest_id": str(payload.guest_id),
+                "visit_date": str(payload.visit_date),
+                "seat_code": booking.get("seat_code"),
+                "floor_name": booking.get("floor_name"),
+                "building_name": booking.get("building_name"),
+                "guest_visit_id": str(visit["guest_visit_id"]),
+            },
+        )
+
         return BookingResponse(**booking)
 
-    except HTTPException:
+    except HTTPException as he:
         conn.rollback()
+        _d = he.detail if isinstance(he.detail, dict) else {}
+        safe_write_audit_log(
+            conn, action=GUEST_BOOKING_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="guest_booking", resource_id=None,
+            event_status="DENIED" if he.status_code == 403 else "FAILURE",
+            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+        )
         raise
 
     except ValueError as exc:
         conn.rollback()
-
+        safe_write_audit_log(
+            conn, action=GUEST_BOOKING_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="guest_booking", resource_id=None,
+            event_status="FAILURE", failure_code="invalid_guest_booking", failure_reason=str(exc),
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "invalid_guest_booking",
-                "message": str(exc),
-            },
+            detail={"code": "invalid_guest_booking", "message": str(exc)},
         ) from exc
 
     except LookupError as exc:
         conn.rollback()
-
+        safe_write_audit_log(
+            conn, action=GUEST_BOOKING_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="guest_booking", resource_id=None,
+            event_status="FAILURE", failure_code="guest_booking_failed", failure_reason=str(exc),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "guest_booking_failed",
-                "message": str(exc),
-            },
+            detail={"code": "guest_booking_failed", "message": str(exc)},
         ) from exc
 
     except psycopg2.Error as exc:
         conn.rollback()
-
+        safe_write_audit_log(
+            conn, action=GUEST_BOOKING_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="guest_booking", resource_id=None,
+            event_status="FAILURE", failure_code="guest_booking_failed", failure_reason="Failed to create guest booking.",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "guest_booking_failed",
-                "message": "Failed to create guest booking.",
-            },
+            detail={"code": "guest_booking_failed", "message": "Failed to create guest booking."},
         ) from exc
 def create_guest_visit(
     conn: PGConnection,
@@ -1489,21 +1704,45 @@ def create_guest_visit(
 
         conn.commit()
 
+        safe_write_audit_log(
+            conn,
+            action=GUEST_VISIT_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=str(visit.get("guest_visit_id")),
+            new_values={
+                "guest_id": str(payload.guest_id),
+                "host_user_id": str(payload.host_user_id),
+                "visit_date": str(payload.visit_date),
+                "guest_type": str(payload.guest_type),
+                "purpose_of_visit": str(payload.purpose_of_visit or ""),
+            },
+        )
+
         return visit
 
-    except HTTPException:
+    except HTTPException as he:
         conn.rollback()
+        _d = he.detail if isinstance(he.detail, dict) else {}
+        safe_write_audit_log(
+            conn, action=GUEST_VISIT_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="guest_visit", resource_id=None,
+            event_status="DENIED" if he.status_code == 403 else "FAILURE",
+            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+        )
         raise
 
     except psycopg2.Error as exc:
         conn.rollback()
-
+        safe_write_audit_log(
+            conn, action=GUEST_VISIT_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="guest_visit", resource_id=None,
+            event_status="FAILURE", failure_code="guest_visit_create_failed", failure_reason="Failed to create guest visit.",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "guest_visit_create_failed",
-                "message": "Failed to create guest visit.",
-            },
+            detail={"code": "guest_visit_create_failed", "message": "Failed to create guest visit."},
         ) from exc
 
 def check_booking_eligibility(

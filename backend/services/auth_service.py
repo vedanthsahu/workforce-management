@@ -29,6 +29,8 @@ from backend.core.sso import (
     fetch_graph_group_member_ids,
     fetch_graph_users_with_department,
 )
+from backend.core.audit_actions import USER_LOGIN, USER_LOGOUT
+from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.permission_repository import fetch_permissions_for_role
 from backend.repositories.token_repository import (
     create_user_session,
@@ -421,6 +423,18 @@ def issue_tokens_for_user(
         access_token = _build_access_token_for_user(user, session_id=session_id)
         if commit:
             conn.commit()
+            safe_write_audit_log(
+                conn,
+                action=USER_LOGIN,
+                tenant_id=str(user["tenant_id"]),
+                actor_user_id=user.get("user_id"),
+                actor_email=user.get("email"),
+                actor_role=str(user.get("role_name") or "").upper() or None,
+                resource_type="session",
+                resource_id=session_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
         return AuthTokens(
             access_token=access_token,
             refresh_token=refresh_data["token"],
@@ -607,6 +621,8 @@ def logout_user_session(
     refresh_token: str,
     *,
     commit: bool = True,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
 ) -> None:
     try:
         refresh_scope = parse_refresh_token(refresh_token)
@@ -631,6 +647,25 @@ def logout_user_session(
 
         if commit:
             conn.commit()
+
+        if revoked:
+            user = fetch_user_by_id(
+                conn,
+                tenant_id=str(refresh_scope["tenant_id"]),
+                user_id=str(refresh_scope["user_id"]),
+            )
+            safe_write_audit_log(
+                conn,
+                action=USER_LOGOUT,
+                tenant_id=refresh_scope["tenant_id"],
+                actor_user_id=refresh_scope["user_id"],
+                actor_email=user.get("email") if user else None,
+                actor_role=str(user.get("role_name") or "").upper() or None if user else None,
+                resource_type="session",
+                resource_id=refresh_scope["session_id"],
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
     except TokenError:
         if commit:

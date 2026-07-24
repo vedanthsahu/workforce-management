@@ -44,6 +44,8 @@ from backend.repositories.user_repository import (
     upsert_user_graph_profile,
 )
 from backend.services.auth_service import AuthTokens, determine_graph_onboarding_role, issue_tokens_for_user
+from backend.core.audit_actions import USER_LOGIN
+from backend.repositories.audit_repository import safe_write_audit_log
 import logging
 
 router = APIRouter(tags=["SSO"])
@@ -221,6 +223,17 @@ def auth_callback(
         debug("Tokens issued OK, committing...")
         conn.commit()
         debug("Commit OK")
+        safe_write_audit_log(
+            conn,
+            action=USER_LOGIN,
+            tenant_id=str(user["tenant_id"]),
+            actor_user_id=user.get("user_id"),
+            actor_email=user.get("email"),
+            actor_role=str(user.get("role_name") or "").upper() or None,
+            resource_type="session",
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
 
     except PermissionError as exc:
         conn.rollback()
