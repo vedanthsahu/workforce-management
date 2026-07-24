@@ -146,6 +146,28 @@ class AdminBookingsRepositoryFilterTests(unittest.TestCase):
                 sql, _ = cursor.executions[0]
                 self.assertIn(expected_fragment, sql)
 
+    def test_visit_status_filters_the_joined_guest_visit_not_booking_status(self) -> None:
+        """A GUEST-type row's own booking_status (bookings table) and its
+        guest visit's visit_status (guest_visits table, joined as gv in
+        BOOKING_SELECT_FROM) are independent filters -- both can be applied
+        at once, and neither requires the other."""
+        cursor = FakeCursor(fetchall_result=[])
+        conn = FakeConnection(cursor)
+
+        fetch_admin_bookings(
+            conn,
+            tenant_id="3",
+            booking_type="GUEST",
+            booking_status="CONFIRMED",
+            visit_status="CHECKED_IN",
+        )
+
+        sql, params = cursor.executions[0]
+        self.assertIn("b.booking_status = %s", sql)
+        self.assertIn("gv.visit_status = %s", sql)
+        self.assertIn("CONFIRMED", params)
+        self.assertIn("CHECKED_IN", params)
+
     def test_summary_uses_same_filters_without_pagination(self) -> None:
         cursor = FakeCursor(
             fetchone_result={
@@ -200,7 +222,7 @@ class AdminGuestVisitsWithoutBookingRepositoryTests(unittest.TestCase):
             site_id="5",
             building_id="7",
             floor_id="18",
-            booking_status="CANCELLED",
+            visit_status="CANCELLED",
             search="vedanth",
             booked_by_user_id="50",
         )
@@ -252,8 +274,11 @@ class AdminBookingsServiceTests(unittest.TestCase):
 
     def test_merges_bookings_and_guest_visits_then_paginates_combined_list(self) -> None:
         """Mirrors get_delegated_past_bookings: fetch both sources in full,
-        merge, sort by (booking_date, created_at) desc, then paginate."""
-        query = AdminBookingListQuery(booking_status="CONFIRMED")
+        merge, sort by (booking_date, created_at) desc, then paginate.
+        Uses visit_status (not booking_status) since a guest visit without
+        a booking has no bookings.booking_status to filter on -- see
+        test_skips_guest_visit_lookup_for_filters_a_booking_less_visit_cant_match."""
+        query = AdminBookingListQuery(visit_status="SCHEDULED")
 
         booking_rows = [
             {
@@ -310,10 +335,15 @@ class AdminBookingsServiceTests(unittest.TestCase):
         self.assertEqual(response.items[0].activity_source, "GUEST_VISIT")
         self.assertTrue(response.items[0].guest_visit_id)
 
-    def test_skips_guest_visit_lookup_for_employee_type_or_seat_code_filter(self) -> None:
-        """A booking-less guest visit can never be EMPLOYEE type or have a
-        seat_code, so those filters should short-circuit the extra query."""
-        for kwargs in ({"booking_type": "EMPLOYEE"}, {"seat_code": "A1"}):
+    def test_skips_guest_visit_lookup_for_filters_a_booking_less_visit_cant_match(self) -> None:
+        """A booking-less guest visit can never be EMPLOYEE type, have a
+        seat_code, or have a bookings.booking_status (it has no bookings
+        row at all), so those filters should short-circuit the extra query."""
+        for kwargs in (
+            {"booking_type": "EMPLOYEE"},
+            {"seat_code": "A1"},
+            {"booking_status": "CONFIRMED"},
+        ):
             with self.subTest(kwargs=kwargs):
                 query = AdminBookingListQuery(**kwargs)
                 with patch(
