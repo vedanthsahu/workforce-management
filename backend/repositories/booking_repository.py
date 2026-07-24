@@ -518,7 +518,7 @@ def fetch_admin_guest_visits_without_booking(
     site_id: str | None = None,
     building_id: str | None = None,
     floor_id: str | None = None,
-    booking_status: str | None = None,
+    visit_status: str | None = None,
     search: str | None = None,
     booked_by_user_id: str | None = None,
 ) -> list[dict[str, Any]]:
@@ -526,7 +526,10 @@ def fetch_admin_guest_visits_without_booking(
     BOOKING_SELECT_FIELDS so they can be merged into the admin bookings list
     the same way the delegated endpoints merge them (see
     fetch_past_delegated_guest_visits_without_booking). MODIFIED visits are
-    excluded; superseded history is not part of this listing."""
+    excluded; superseded history is not part of this listing.
+
+    These rows have no bookings row at all, so they are filtered by
+    guest_visits.visit_status, never by bookings.booking_status."""
 
     conditions = [
         "gv.tenant_id = %s",
@@ -550,9 +553,9 @@ def fetch_admin_guest_visits_without_booking(
     if floor_id is not None:
         conditions.append("gv.floor_id = %s")
         params.append(floor_id)
-    if booking_status is not None:
+    if visit_status is not None:
         conditions.append("gv.visit_status = %s")
-        params.append(booking_status)
+        params.append(visit_status)
     if booked_by_user_id is not None:
         conditions.append("gv.created_by_user_id = %s")
         params.append(booked_by_user_id)
@@ -2238,12 +2241,19 @@ def _build_admin_booking_filters(
     floor_id: str | None,
     booking_type: str | None,
     booking_status: str | None,
+    visit_status: str | None,
     search: str | None,
     seat_code: str | None,
     booked_by_user_id: str | None,
 ) -> tuple[str, list[Any]]:
     """Build one dynamic WHERE clause shared by the admin booking list and
-    its summary counts, so both always see the same filtered dataset."""
+    its summary counts, so both always see the same filtered dataset.
+
+    booking_status filters bookings.booking_status (employee + guest rows
+    that have a seat booking); visit_status filters the joined guest_visits
+    row's own visit_status (see BOOKING_SELECT_FROM's gv join). Since only
+    GUEST-type rows have a guest_visit at all, a visit_status filter
+    naturally excludes EMPLOYEE rows (gv is NULL for those)."""
     conditions = ["b.tenant_id = %s"]
     params: list[Any] = [tenant_id]
 
@@ -2268,6 +2278,9 @@ def _build_admin_booking_filters(
     if booking_status is not None:
         conditions.append("b.booking_status = %s")
         params.append(booking_status)
+    if visit_status is not None:
+        conditions.append("gv.visit_status = %s")
+        params.append(visit_status)
     if seat_code is not None:
         conditions.append("s.seat_code ILIKE %s")
         params.append(f"%{seat_code}%")
@@ -2297,6 +2310,7 @@ def fetch_admin_bookings(
     floor_id: str | None = None,
     booking_type: str | None = None,
     booking_status: str | None = None,
+    visit_status: str | None = None,
     search: str | None = None,
     seat_code: str | None = None,
     booked_by_user_id: str | None = None,
@@ -2321,6 +2335,7 @@ def fetch_admin_bookings(
         floor_id=floor_id,
         booking_type=booking_type,
         booking_status=booking_status,
+        visit_status=visit_status,
         search=search,
         seat_code=seat_code,
         booked_by_user_id=booked_by_user_id,
@@ -2355,6 +2370,7 @@ def fetch_admin_bookings_summary(
     floor_id: str | None = None,
     booking_type: str | None = None,
     booking_status: str | None = None,
+    visit_status: str | None = None,
     search: str | None = None,
     seat_code: str | None = None,
     booked_by_user_id: str | None = None,
@@ -2370,6 +2386,7 @@ def fetch_admin_bookings_summary(
         floor_id=floor_id,
         booking_type=booking_type,
         booking_status=booking_status,
+        visit_status=visit_status,
         search=search,
         seat_code=seat_code,
         booked_by_user_id=booked_by_user_id,

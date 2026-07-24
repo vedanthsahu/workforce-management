@@ -15,6 +15,7 @@ from backend.schemas.booking import (
     AdminBookingListResponse,
     AdminBookingStatus,
     AdminBookingType,
+    AdminVisitStatus,
 )
 from backend.services.booking_service import get_admin_bookings
 
@@ -30,6 +31,8 @@ router = APIRouter(prefix="/admin", tags=["admin-bookings"])
         "the whole tenant with optional date range, site/building/floor, "
         "booking type, name/email search, seat code, booked-by, and status "
         "filters, plus a summary of counts over the filtered dataset. "
+        "booking_status filters bookings.booking_status; visit_status "
+        "filters guest_visits.visit_status for guest records. "
         "Requires booking:view_all or admin_dashboard:view."
     ),
 )
@@ -56,7 +59,11 @@ def admin_bookings(
     ] = None,
     booking_status: Annotated[
         AdminBookingStatus | None,
-        Query(alias="bookingStatus"),
+        Query(alias="bookingStatus", description="Filters bookings.booking_status (employee + guest-with-seat rows)."),
+    ] = None,
+    visit_status: Annotated[
+        AdminVisitStatus | None,
+        Query(alias="visitStatus", description="Filters guest_visits.visit_status (guest rows only)."),
     ] = None,
     search: Annotated[
         str | None,
@@ -84,6 +91,7 @@ def admin_bookings(
         floor_id=floor_id,
         booking_type=booking_type,
         booking_status=booking_status,
+        visit_status=visit_status,
         search=search,
         seat_code=seat_code,
         booked_by_user_id=booked_by_user_id,

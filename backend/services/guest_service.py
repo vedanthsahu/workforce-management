@@ -1454,15 +1454,13 @@ def _first_text(*values: Any) -> str:
 def _apply_modified_display_visit_status(
     rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """UI-only: a guest visit that superseded an earlier one (linked via
-    modified_from_guest_visit_id) displays visit_status as MODIFIED in list
-    views, even though its real DB status is still SCHEDULED/CHECKED_IN/etc.
-    Never call this for a direct fetch (fetch_guest_visit_by_id and
-    friends) -- those must keep showing the real database status.
-    """
     for row in rows:
-        if row.get("modified_from_guest_visit_id") is not None:
+        if (
+            row.get("modified_from_guest_visit_id") is not None
+            and row.get("visit_status") == "SCHEDULED"
+        ):
             row["visit_status"] = "MODIFIED"
+
     return rows
 
 
