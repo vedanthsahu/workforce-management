@@ -33,6 +33,8 @@ from backend.repositories.preferences_repository import (
     update_amenity_category,
     upsert_user_work_preferences,
 )
+from backend.core.audit_actions import USER_PREFERENCES_UPDATED
+from backend.repositories.audit_repository import safe_write_audit_log
 from backend.schemas.preferences import (
     AdminAmenityResponse,
     AmenityCategoryListResponse,
@@ -169,6 +171,12 @@ def update_my_preferences(
             amenity_ids=amenity_ids,
         )
 
+        old_preferences = get_my_preferences(
+            conn,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+
         upsert_user_work_preferences(
             conn,
             tenant_id=tenant_id,
@@ -203,6 +211,44 @@ def update_my_preferences(
                 "message": "Failed to update preferences.",
             },
         ) from exc
+
+    old_amenity_ids = sorted(amenity.id for amenity in old_preferences.amenities)
+    new_amenity_ids = sorted(str(amenity_id) for amenity_id in payload.amenity_ids)
+
+    old_values = {
+        "site_id": old_preferences.site_id,
+        "building_id": old_preferences.building_id,
+        "floor_id": old_preferences.floor_id,
+        "seat_type": old_preferences.seat_type,
+        "amenity_ids": old_amenity_ids,
+    }
+    new_values = {
+        "site_id": payload.site_id,
+        "building_id": payload.building_id,
+        "floor_id": payload.floor_id,
+        "seat_type": payload.seat_type,
+        "amenity_ids": payload.amenity_ids,
+    }
+    changed_fields = [
+        field
+        for field in ("site_id", "building_id", "floor_id", "seat_type")
+        if (str(old_values[field]) if old_values[field] is not None else None)
+        != (str(new_values[field]) if new_values[field] is not None else None)
+    ]
+    if old_amenity_ids != new_amenity_ids:
+        changed_fields.append("amenity_ids")
+
+    safe_write_audit_log(
+        conn,
+        action=USER_PREFERENCES_UPDATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="user_preferences",
+        resource_id=user_id,
+        old_values=old_values,
+        new_values=new_values,
+        changed_fields=changed_fields or None,
+    )
 
     return response
 

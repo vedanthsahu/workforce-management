@@ -29,7 +29,6 @@ from backend.schemas.location import (
     FloorResponse,
     SeatConfigurationResponse,
     SeatConfigurationUpdateRequest,
-    SeatResponse,
     SiteDetailsResponse,
     SiteResponse,
     UpdateBuildingRequest,
@@ -103,11 +102,7 @@ def create_site_route(
         Depends(get_db),
     ],
 ) -> SiteResponse:
-    return create_site(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        payload=payload,
-    )
+    return create_site(conn, tenant_id=str(current_user["tenant_id"]), payload=payload, current_user=current_user)
 @router.get("/sites/{site_id}", response_model=SiteDetailsResponse)
 def site_details(
     site_id: Annotated[int, Path(gt=0)],
@@ -140,12 +135,7 @@ def update_site_route(
         Depends(get_db),
     ],
 ) -> SiteResponse:
-    return update_site_metadata(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        site_id=str(site_id),
-        payload=payload,
-    )
+    return update_site_metadata(conn, tenant_id=str(current_user["tenant_id"]), site_id=str(site_id), payload=payload, current_user=current_user)
 
 
 @router.get("/buildings", response_model=list[BuildingResponse])
@@ -191,11 +181,7 @@ def create_building_route(
         Depends(get_db),
     ],
 ) -> BuildingResponse:
-    return create_building(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        payload=payload,
-    )
+    return create_building(conn, tenant_id=str(current_user["tenant_id"]), payload=payload, current_user=current_user)
 
 
 @router.patch("/buildings/{building_id}", response_model=BuildingResponse)
@@ -211,12 +197,7 @@ def update_building_route(
         Depends(get_db),
     ],
 ) -> BuildingResponse:
-    return update_building_metadata(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        building_id=str(building_id),
-        payload=payload,
-    )
+    return update_building_metadata(conn, tenant_id=str(current_user["tenant_id"]), building_id=str(building_id), payload=payload, current_user=current_user)
 
 
 @router.get(
@@ -302,11 +283,7 @@ def create_floor_route(
         Depends(get_db),
     ],
 ) -> FloorResponse:
-    return create_floor(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        payload=payload,
-    )
+    return create_floor(conn, tenant_id=str(current_user["tenant_id"]), payload=payload, current_user=current_user)
 
 
 @router.patch("/floors/{floor_id}", response_model=FloorResponse)
@@ -322,12 +299,7 @@ def update_floor_route(
         Depends(get_db),
     ],
 ) -> FloorResponse:
-    return update_floor_metadata(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        floor_id=str(floor_id),
-        payload=payload,
-    )
+    return update_floor_metadata(conn, tenant_id=str(current_user["tenant_id"]), floor_id=str(floor_id), payload=payload, current_user=current_user)
 
 
 @router.patch(
@@ -345,13 +317,8 @@ def update_seat_configuration_route(
         PGConnection,
         Depends(get_db),
     ],
-) -> SeatConfigurationResponse:  
-    return update_seat_configuration_metadata(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        seat_id=str(seat_id),
-        payload=payload,
-    )
+) -> SeatConfigurationResponse:
+    return update_seat_configuration_metadata(conn, tenant_id=str(current_user["tenant_id"]), seat_id=str(seat_id), payload=payload, current_user=current_user)
 
 
 @router.get(
