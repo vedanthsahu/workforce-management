@@ -136,22 +136,109 @@ export default function AdminBookingsPage() {
     let cancelled = false;
     setActivitiesLoading(true);
 
+    const baseParams = {
+      startDate: appliedFilters.dateFrom || undefined,
+      endDate: appliedFilters.dateTo || undefined,
+      siteId: appliedFilters.site && appliedFilters.site !== "All" ? appliedFilters.site : undefined,
+      buildingId: appliedFilters.building && appliedFilters.building !== "All" ? appliedFilters.building : undefined,
+      floorId: appliedFilters.floor && appliedFilters.floor !== "All" ? appliedFilters.floor : undefined,
+      bookingType:
+        appliedFilters.bookingType === "Employee"
+          ? ("EMPLOYEE" as const)
+          : appliedFilters.bookingType === "Guest"
+            ? ("GUEST" as const)
+            : undefined,
+      search: appliedFilters.search.trim() || undefined,
+      seatCode: appliedFilters.seatNumber.trim() || undefined,
+    };
+
+    if (appliedFilters.status === "Modified") {
+      // The backend's bookingStatus=MODIFIED filter always returns zero rows —
+      // literal booking_status='MODIFIED' rows are superseded history the
+      // query unconditionally excludes. The bookings that should display as
+      // "Modified" are actually stored as booking_status='CONFIRMED' (the
+      // successor booking, flagged via is_modified). So pull every CONFIRMED
+      // row (across all backend pages — its own pagination/summary counts
+      // can't be trusted for this status), filter to the genuinely-modified
+      // ones here, then paginate that filtered set ourselves so the counts
+      // shown on screen always match the rows actually rendered. Works the
+      // same for employee and guest bookings since both share this field.
+      const FETCH_LIMIT = 100;
+      (async () => {
+        try {
+          const first = await adminBookingsService.list({
+            ...baseParams,
+            bookingStatus: "CONFIRMED",
+            page: 1,
+            limit: FETCH_LIMIT,
+          });
+          if (cancelled) return;
+
+          let allItems = first.items;
+          const totalPages = first.pagination.total_pages;
+          for (let p = 2; p <= totalPages; p += 1) {
+            if (cancelled) return;
+            const next = await adminBookingsService.list({
+              ...baseParams,
+              bookingStatus: "CONFIRMED",
+              page: p,
+              limit: FETCH_LIMIT,
+            });
+            if (cancelled) return;
+            allItems = allItems.concat(next.items);
+          }
+
+          const modifiedItems = allItems.filter((item) => item.is_modified);
+          const total = modifiedItems.length;
+          const start = (currentPage - 1) * itemsPerPage;
+          const pageItems = modifiedItems.slice(start, start + itemsPerPage);
+
+          // Derive every stat card number from the filtered set itself —
+          // first.summary was computed over *all* CONFIRMED rows, which
+          // would misreport Checked In/Not Checked In/Guests once we've
+          // narrowed down to just the modified ones.
+          const checkedInCount = modifiedItems.filter((item) => !!item.check_in_at).length;
+          const checkedOutCount = modifiedItems.filter((item) => !!item.checked_out_at).length;
+          const guestCount = modifiedItems.filter((item) => item.booking_type === "GUEST").length;
+
+          setBookingsResponse({
+            items: pageItems,
+            summary: {
+              total_bookings: total,
+              confirmed_bookings: total - checkedInCount,
+              cancelled_bookings: 0,
+              modified_bookings: total,
+              completed_bookings: 0,
+              no_show_bookings: 0,
+              employee_bookings: total - guestCount,
+              guest_bookings: guestCount,
+              checked_in_bookings: checkedInCount,
+              checked_out_bookings: checkedOutCount,
+            },
+            pagination: {
+              total,
+              page: currentPage,
+              limit: itemsPerPage,
+              total_pages: total ? Math.ceil(total / itemsPerPage) : 0,
+            },
+          });
+        } catch (error) {
+          console.error(error);
+          if (!cancelled) setBookingsResponse(null);
+        } finally {
+          if (!cancelled) setActivitiesLoading(false);
+        }
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
     adminBookingsService
       .list({
-        startDate: appliedFilters.dateFrom || undefined,
-        endDate: appliedFilters.dateTo || undefined,
-        siteId: appliedFilters.site && appliedFilters.site !== "All" ? appliedFilters.site : undefined,
-        buildingId: appliedFilters.building && appliedFilters.building !== "All" ? appliedFilters.building : undefined,
-        floorId: appliedFilters.floor && appliedFilters.floor !== "All" ? appliedFilters.floor : undefined,
-        bookingType:
-          appliedFilters.bookingType === "Employee"
-            ? "EMPLOYEE"
-            : appliedFilters.bookingType === "Guest"
-              ? "GUEST"
-              : undefined,
+        ...baseParams,
         bookingStatus: BOOKING_STATUS_PARAM[appliedFilters.status],
-        search: appliedFilters.search.trim() || undefined,
-        seatCode: appliedFilters.seatNumber.trim() || undefined,
         page: currentPage,
         limit: itemsPerPage,
       })
@@ -332,10 +419,14 @@ export default function AdminBookingsPage() {
               <p className="px-6 py-12 text-center text-gray-400 text-sm">Loading bookings…</p>
             ) : (
               <BookingsTable
-                data={mappedBookings}
-                selectedRowKey={selectedBooking ? getBookingRowKey(selectedBooking) : undefined}
-                onView={setSelectedBooking}
-              />
+                  data={mappedBookings}
+                  selectedRowKey={selectedBooking ? getBookingRowKey(selectedBooking) : undefined}
+                  onView={setSelectedBooking}
+                  onModifySeat={modifySeat}
+                  onModifyVisit={modifyVisit}
+                  onCancelSeat={(b) => openCancelSeat(b)}
+                  onCancelVisit={(b) => openCancelVisit(b)}
+                />
             )}
 
             {/* FOOTER */}

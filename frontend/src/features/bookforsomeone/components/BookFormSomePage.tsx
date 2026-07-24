@@ -53,6 +53,9 @@ const currentUserId = data?.user.user_id;
 
   // ── Prefill from URL when editing a visit ──
   const editVisitId = searchParams.get("editVisitId");
+  // Set only by AdminBookingsPage's row-menu "Modify" action so the success
+  // screen can navigate back to Admin Bookings instead of My Bookings.
+  const isAdminFlow = searchParams.get("adminFlow") === "true";
   const prefillApplied = useRef(false);
 
   useEffect(() => {
@@ -351,7 +354,7 @@ const currentUserId = data?.user.user_id;
         />
       );
     } else {
-      stepContent = <SuccessStep onBookAnother={resetWizard} />;
+      stepContent = <SuccessStep onBookAnother={resetWizard} isAdminFlow={isAdminFlow} />;
     }
   }
 

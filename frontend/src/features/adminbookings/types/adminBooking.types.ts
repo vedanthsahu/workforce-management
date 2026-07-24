@@ -169,6 +169,13 @@ export interface AdminBookingRaw {
   cancelled_at: string | null;
   cancellation_reason: string | null;
 
+  // Server-derived (modified_from_booking_id is not null) — the authoritative
+  // signal for whether this row is a modification, independent of whatever
+  // literal string booking_status happens to carry.
+  modified_from_booking_id?: string | null;
+  modification_reason?: string | null;
+  is_modified?: boolean;
+
   created_at: string | null;
   updated_at: string | null;
 

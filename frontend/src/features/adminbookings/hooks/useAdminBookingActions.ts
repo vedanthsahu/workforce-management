@@ -84,6 +84,7 @@ export function useAdminBookingActions({ onCancelled }: UseAdminBookingActionsPa
       floorName: booking.floor_name,
       seatLabel: booking.seat_code,
       seatId: booking.seat_id ?? "",
+      adminFlow: "true",
     });
 
     if (booking.person_name) params.set("bookingForName", booking.person_name);
@@ -106,7 +107,7 @@ export function useAdminBookingActions({ onCancelled }: UseAdminBookingActionsPa
     const hasSeat = !!booking.seat_id;
     const action = hasSeat ? "MODIFY_VISIT_AND_BOOKING" : "MODIFY_VISIT_ONLY";
 
-    const params = new URLSearchParams({ editVisitId: visitId, action });
+    const params = new URLSearchParams({ editVisitId: visitId, action, adminFlow: "true" });
 
     if (booking.person_name) params.set("guestName", booking.person_name);
     if (booking.person_email) params.set("guestEmail", booking.person_email);

@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import {
+  ArrowLeft,
   Building2,
   CalendarDays,
   CheckCircle2,
@@ -160,6 +161,7 @@ const BookASeatPage: React.FC = () => {
     dayCount,
     step1Valid,
     isModifyMode,
+    isAdminFlow,
     isBookingForSomeone,
     isGuestBooking,
     bookingForName,
@@ -652,28 +654,51 @@ const BookASeatPage: React.FC = () => {
                   </div>
                   <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50">
                     <span className="text-[12.5px] text-gray-500">Status</span>
-                    <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      {confirmation.booking_status}
-                    </span>
+                    {(() => {
+                      // is_modified/booking_status both come straight from the API (BookingResponse) —
+                      // is_modified is derived server-side from modified_from_booking_id, never guessed here.
+                      const rawLabel = isAdminFlow && confirmation.is_modified ? "Modified" : confirmation.booking_status;
+                      const statusLabel = rawLabel.toUpperCase();
+                      const isModifiedStatus = statusLabel === "MODIFIED";
+                      return (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 text-[12px] font-semibold",
+                            isModifiedStatus ? "text-amber-700" : "text-emerald-700"
+                          )}
+                        >
+                          <span className={cn("w-1.5 h-1.5 rounded-full", isModifiedStatus ? "bg-amber-500" : "bg-emerald-500")} />
+                          {statusLabel}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
 
                 {/* CTA */}
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <Link href={isBookingForSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings"} className="flex-1">
-                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-semibold w-full h-11">
-                      View My Bookings
+                {isAdminFlow ? (
+                  <Link href="/admin/bookings" className="w-full">
+                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-semibold w-full h-11 gap-2">
+                      <ArrowLeft size={15} />
+                      Back to Bookings
                     </Button>
                   </Link>
-                  <Button
-                    variant="outline"
-                    onClick={resetForm}
-                    className="flex-1 h-11 text-[13px] font-semibold text-gray-600"
-                  >
-                    Book Another Seat
-                  </Button>
-                </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Link href={isBookingForSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings"} className="flex-1">
+                      <Button className="bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-semibold w-full h-11">
+                        View My Bookings
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="outline"
+                      onClick={resetForm}
+                      className="flex-1 h-11 text-[13px] font-semibold text-gray-600"
+                    >
+                      Book Another Seat
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
