@@ -1,33 +1,18 @@
 "use client";
 
-import {
-  X,
-  Armchair,
-  MapPin,
-  Building2,
-  Layers,
-  CalendarDays,
-  UserRound,
-  CalendarPlus,
-} from "lucide-react";
-import { AdminBooking, BookingStatus } from "../types/adminBooking.types";
+import { useEffect, useRef, useState } from "react";
+import { X, Armchair, MapPin, Building2, Layers, CalendarDays, CalendarPlus, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { AdminBooking } from "../types/adminBooking.types";
+import { BOOKING_STATUS_STYLES } from "../utils/constants";
 
 type Props = {
   booking: AdminBooking;
   onClose: () => void;
-  onModify: (booking: AdminBooking) => void;
-  onCancel: (booking: AdminBooking) => void;
-};
-
-const STATUS_STYLES: Record<BookingStatus, string> = {
-  Scheduled: "bg-indigo-100 text-indigo-700",
-  Confirmed: "bg-blue-100 text-blue-700",
-  "Checked In": "bg-green-100 text-green-700",
-  "Checked Out": "bg-teal-100 text-teal-700",
-  Completed: "bg-gray-100 text-gray-600",
-  Cancelled: "bg-red-100 text-red-700",
-  Modified: "bg-amber-100 text-amber-700",
-  "No Show": "bg-orange-100 text-orange-700",
+  onModifySeat: (booking: AdminBooking) => void;
+  onModifyVisit: (booking: AdminBooking) => void;
+  onCancelSeat: (booking: AdminBooking) => void;
+  onCancelVisit: (booking: AdminBooking) => void;
 };
 
 function initialsOf(name: string) {
@@ -37,85 +22,142 @@ function initialsOf(name: string) {
   return (first + last).toUpperCase();
 }
 
-function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
+function InfoRow({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: React.ReactNode;
+}) {
   return (
-    <div className="flex items-start gap-2.5 py-2">
-      <div className="text-gray-400 mt-0.5 shrink-0">{icon}</div>
-      <div className="min-w-0 flex-1">
-        <p className="text-[11px] text-gray-400">{label}</p>
-        <div className="text-xs text-gray-900 font-medium truncate">{value}</div>
+    <div className="flex items-start gap-3">
+      <div className="mt-0.5 w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+        <Icon className="w-3.5 h-3.5 text-gray-500" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{label}</p>
+        <p className="text-sm text-gray-800 font-medium mt-0.5 break-words">{value || "—"}</p>
       </div>
     </div>
   );
 }
 
-export default function BookingDetailsPanel({ booking, onClose, onModify, onCancel }: Props) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-3">
+      <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b pb-1.5">
+        {title}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+// Modify/Cancel actions moved into the row "…" menu. The details panel
+// no longer renders Modify/Cancel buttons — they're handled from the
+// row menu for consistent UX.
+
+export default function BookingDetailsPanel({
+  booking,
+  onClose,
+  onModifySeat,
+  onModifyVisit,
+  onCancelSeat,
+  onCancelVisit,
+}: Props) {
   const isGuest = booking.person_type === "Guest";
+  // A guest booking linked to a guest-visit invite has both a "visit" and a
+  // "seat" side that can be modified/cancelled independently; a plain seat
+  // booking (employee, or a guest with no linked visit) only has the seat.
+  const hasVisit = isGuest && !!booking.guest_visit_id;
+  // GET /admin/bookings also unions in visit-only guest rows — a guest
+  // visit with no linked seat booking at all (booking_id/seat_id both null)
+  // — which have nothing to "modify/cancel seat" on.
+  const hasBooking = !!booking.booking_id;
+  // Only future, still-active bookings can be modified/cancelled — the
+  // backend rejects today/past dates for both /modify and /cancel, and a
+  // booking that's already Cancelled has nothing left to modify or cancel.
+  const canMutate =
+    booking.status !== "Cancelled" &&
+    booking.activity_date > new Date().toISOString().slice(0, 10);
+
+  // The parenthetical now shows who the seat was booked for ("Self" or the
+  // actual booker's name) instead of the seat type, per the standalone
+  // "Booked By" row being removed.
+  const seatValue = booking.seat_code ? `${booking.seat_code} ( by - ${booking.booked_by} )` : "Visit only";
 
   return (
-    <div className="w-full lg:w-80 shrink-0 bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-4 border-b shrink-0">
-        <h2 className="text-sm font-semibold text-gray-800">Booking Details</h2>
-        <button onClick={onClose} className="p-1 rounded-md hover:bg-gray-100 transition">
-          <X size={16} className="text-gray-400" />
-        </button>
-      </div>
-
-      <div className="px-4 py-4 flex-1 overflow-y-auto">
-        <span className={`inline-flex px-2 py-0.5 text-[11px] rounded-full font-medium ${STATUS_STYLES[booking.status]}`}>
-          {booking.status}
-        </span>
-
-        {/* Person */}
-        <div className="flex items-center gap-3 mt-3 pb-3 border-b">
-          <div
-            className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${
-              isGuest ? "bg-violet-100 text-violet-700" : "bg-indigo-100 text-indigo-700"
-            }`}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b bg-gradient-to-r from-indigo-50 to-white shrink-0">
+          <h2 className="text-base font-semibold text-gray-900">Booking Details</h2>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 transition text-gray-500"
           >
-            {isGuest ? "GV" : initialsOf(booking.person_name)}
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-gray-900 truncate">{booking.person_name}</p>
-            <p className="text-[11px] text-gray-400 truncate">{booking.person_type}</p>
-          </div>
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Details */}
-        <div className="divide-y divide-gray-50">
-          <DetailRow
-            icon={<Armchair size={14} />}
-            label="Seat"
-            value={booking.seat_code ? `${booking.seat_code} (${booking.seat_type})` : "Visit only"}
-          />
-          <DetailRow icon={<MapPin size={14} />} label="Site" value={booking.site_name} />
-          <DetailRow icon={<Building2 size={14} />} label="Building" value={booking.building_name} />
-          <DetailRow icon={<Layers size={14} />} label="Floor" value={booking.floor_name || "--"} />
-          <DetailRow
-            icon={<CalendarDays size={14} />}
-            label="Date"
-            value={`${booking.date_label} (${booking.date_relative})`}
-          />
-          <DetailRow icon={<UserRound size={14} />} label="Booked By" value={booking.booked_by} />
-          <DetailRow icon={<CalendarPlus size={14} />} label="Booked On" value={booking.booked_on} />
-        </div>
-      </div>
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 px-5 py-5 space-y-5">
+          {/* Person */}
+          <div className="flex items-center gap-3">
+            <div
+              className={cn(
+                "w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold shrink-0",
+                isGuest ? "bg-violet-100 text-violet-700" : "bg-indigo-100 text-indigo-700"
+              )}
+            >
+              {isGuest ? "GV" : initialsOf(booking.person_name)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-gray-900 truncate">{booking.person_name}</p>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <span className="text-[11px] text-gray-400">{booking.person_type}</span>
+                <span
+                  className={cn(
+                    "inline-flex px-2 py-0.5 text-[10px] rounded-full font-semibold",
+                    BOOKING_STATUS_STYLES[booking.status]
+                  )}
+                >
+                  {booking.status}
+                </span>
+              </div>
+            </div>
+          </div>
 
-      {/* Footer actions */}
-      <div className="flex items-center gap-2 px-4 py-4 border-t shrink-0">
-        <button
-          onClick={() => onModify(booking)}
-          className="flex-1 h-9 text-xs font-medium text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
-        >
-          Modify Booking
-        </button>
-        <button
-          onClick={() => onCancel(booking)}
-          className="flex-1 h-9 text-xs font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
-        >
-          Cancel Booking
-        </button>
+          {/* Booking info */}
+          <Section title="Booking Info">
+            <div className="space-y-3">
+              <InfoRow icon={Armchair} label="Seat" value={seatValue} />
+              <InfoRow icon={CalendarPlus} label="Booked On" value={booking.booked_on} />
+            </div>
+          </Section>
+
+          {/* Location */}
+          <Section title="Location">
+            <div className="grid grid-cols-2 gap-3">
+              <InfoRow icon={MapPin} label="Site" value={booking.site_name} />
+              <InfoRow icon={Building2} label="Building" value={booking.building_name} />
+              <InfoRow icon={Layers} label="Floor" value={booking.floor_name || "--"} />
+              <InfoRow
+                icon={CalendarDays}
+                label="Date"
+                value={booking.date_label ? `${booking.date_label} (${booking.date_relative})` : "--"}
+              />
+            </div>
+          </Section>
+        </div>
+
+        {/* Footer actions removed — modify/cancel are available from the
+           row "…" menu. */}
       </div>
     </div>
   );

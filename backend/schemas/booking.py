@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any, Literal
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic import BaseModel, Field
 
 from backend.core.enums import (
+    BookingModificationReason,
     DayAvailabilityStatus,
     GuestType,
     PreferenceMatchStatus,
@@ -43,7 +44,7 @@ class ModifyBookingRequest(BaseModel):
     floor_id: int = Field(gt=0)
     seat_id: int = Field(gt=0)
     booking_date: date
-    booking_date: date
+    modification_reason: BookingModificationReason | None = None
 
 
 
@@ -92,6 +93,10 @@ class BookingResponse(BaseModel):
 
     cancellation_reason: str | None = None
 
+    modified_from_booking_id: str | None = None
+    modification_reason: str | None = None
+    is_modified: bool = False
+
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -117,6 +122,23 @@ class BookingResponse(BaseModel):
     requires_seat: bool | None = None
 
     amenities: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _derive_is_modified(cls, data: Any) -> Any:
+        """Default is_modified from modified_from_booking_id when the
+        caller (a raw DB row) doesn't set it explicitly. Guest visits merged
+        into the booking list without an active booking carry the link as
+        modified_from_guest_visit_id instead, so check both."""
+        if isinstance(data, dict) and "is_modified" not in data:
+            data = {
+                **data,
+                "is_modified": (
+                    data.get("modified_from_booking_id") is not None
+                    or data.get("modified_from_guest_visit_id") is not None
+                ),
+            }
+        return data
 
 
 class PaginatedBookingResponse(BaseModel):
@@ -207,6 +229,14 @@ AdminBookingStatus = Literal[
     "COMPLETED",
     "NO_SHOW",
 ]
+AdminVisitStatus = Literal[
+    "SCHEDULED",
+    "CHECKED_IN",
+    "CHECKED_OUT",
+    "CANCELLED",
+    "NO_SHOW",
+    "MODIFIED",
+]
 
 
 class AdminBookingListQuery(BaseModel):
@@ -220,7 +250,11 @@ class AdminBookingListQuery(BaseModel):
     floor_id: int | None = Field(default=None, gt=0)
 
     booking_type: AdminBookingType | None = None
+    # Employee (and guest-with-seat) rows: filters bookings.booking_status.
     booking_status: AdminBookingStatus | None = None
+    # Guest rows: filters guest_visits.visit_status -- the guest's own
+    # lifecycle, independent of whether they have an active seat booking.
+    visit_status: AdminVisitStatus | None = None
 
     search: str | None = Field(default=None, min_length=1)
     seat_code: str | None = Field(default=None, min_length=1)

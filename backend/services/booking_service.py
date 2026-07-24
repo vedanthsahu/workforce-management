@@ -40,6 +40,7 @@ from backend.repositories.booking_repository import (
     fetch_available_seats_by_range,
     fetch_admin_bookings,
     fetch_admin_bookings_summary,
+    fetch_admin_guest_visits_without_booking,
     fetch_past_bookings_for_user,
     fetch_current_bookings_for_user,
     fetch_past_delegated_bookings,
@@ -56,6 +57,7 @@ from backend.repositories.booking_repository import (
     insert_booking,
     insert_guest_booking,
     cancel_booking,
+    mark_booking_modified,
     fetch_booking_by_id_for_update,
     fetch_booking_by_id,
     user_has_active_booking_in_range,
@@ -327,12 +329,30 @@ def _user_email_list(user: dict[str, Any]) -> list[str]:
     return [email] if email else []
 
 
+def _apply_modified_display_status(
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    for row in rows:
+        if (
+            (
+                row.get("modified_from_booking_id") is not None
+                or row.get("modified_from_guest_visit_id") is not None
+            )
+            and row.get("booking_status") == "CONFIRMED"
+        ):
+            row["booking_status"] = "MODIFIED"
+
+    return rows
+ 
+
+
 def _booking_list_response(
     rows: list[dict[str, Any]],
     *,
     page: int | None = None,
     limit: int | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
+    rows = _apply_modified_display_status(rows)
     if page is None and limit is None:
         return [BookingResponse(**row) for row in rows]
 
@@ -629,6 +649,7 @@ def get_user_current_bookings(
             },
         ) from exc
 
+    bookings = _apply_modified_display_status(bookings)
     return [BookingResponse(**booking) for booking in bookings]
 
 def get_user_cancelled_bookings(
@@ -1115,15 +1136,17 @@ def modify_booking(
                 },
             )
  
-        cancel_booking(
+        mark_booking_modified(
             conn,
             tenant_id=tenant_id,
             booking_id=booking_id,
-            cancellation_reason="Booking ID : " + booking_id + ". Is being modified",
-            booking_status="MODIFIED",
-
+            modification_reason=(
+                payload.modification_reason.value
+                if payload.modification_reason is not None
+                else "USER_REQUEST"
+            ),
         )
- 
+
         new_booking = insert_booking(
             conn,
             tenant_id=tenant_id,
@@ -1131,6 +1154,7 @@ def modify_booking(
             booked_by_user_id=_current_user_id(current_user),
             seat=target_seat,
             booking_date=payload.booking_date,
+            modified_from_booking_id=booking_id,
         )
 
         conn.commit()
@@ -1891,6 +1915,7 @@ def get_delegated_current_bookings(
         reverse=True,
     )
 
+    combined = _apply_modified_display_status(combined)
     return [
         BookingResponse(**row)
         for row in combined
@@ -1974,8 +1999,11 @@ def get_admin_bookings(
     """Tenant-wide employee + guest booking search for the admin bookings screen.
 
     Reuses the same BOOKING_SELECT_FIELDS/BOOKING_SELECT_FROM join shape (and
-    the BookingResponse DTO) as the delegated booking endpoints, just filtered
-    dynamically across the whole tenant instead of scoped to one delegator.
+    the BookingResponse DTO) as the delegated booking endpoints. Guest visits
+    without an active seat booking are merged in the same way
+    get_delegated_past_bookings merges them: fetch both sources in full,
+    combine, sort, and paginate the combined list in Python -- so a page can
+    contain both employee/guest bookings and booking-less guest visits.
     """
     if (
         query.start_date is not None
@@ -2001,6 +2029,7 @@ def get_admin_bookings(
         "floor_id": str(query.floor_id) if query.floor_id is not None else None,
         "booking_type": query.booking_type,
         "booking_status": query.booking_status,
+        "visit_status": query.visit_status,
         "search": query.search.strip() if query.search else None,
         "seat_code": query.seat_code.strip() if query.seat_code else None,
         "booked_by_user_id": (
@@ -2010,11 +2039,31 @@ def get_admin_bookings(
         ),
     }
 
-    offset = (page - 1) * limit
-
     try:
-        rows = fetch_admin_bookings(conn, limit=limit, offset=offset, **filters)
+        bookings = fetch_admin_bookings(conn, **filters)
         summary = fetch_admin_bookings_summary(conn, **filters)
+
+        guest_visits: list[dict[str, Any]] = []
+        # A guest visit without a booking can never have a seat_code, a
+        # booking_status (it has no bookings row at all), and is never an
+        # EMPLOYEE booking_type, so skip the query for those filters.
+        if (
+            filters["booking_type"] != "EMPLOYEE"
+            and filters["seat_code"] is None
+            and filters["booking_status"] is None
+        ):
+            guest_visits = fetch_admin_guest_visits_without_booking(
+                conn,
+                tenant_id=tenant_id,
+                start_date=filters["start_date"],
+                end_date=filters["end_date"],
+                site_id=filters["site_id"],
+                building_id=filters["building_id"],
+                floor_id=filters["floor_id"],
+                visit_status=filters["visit_status"],
+                search=filters["search"],
+                booked_by_user_id=filters["booked_by_user_id"],
+            )
     except psycopg2.Error as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -2024,11 +2073,25 @@ def get_admin_bookings(
             },
         ) from exc
 
-    total = summary["total_bookings"]
+    combined = bookings + guest_visits
+    combined.sort(
+        key=lambda row: (
+            row.get("booking_date") or date.min,
+            row.get("created_at") or datetime.min,
+        ),
+        reverse=True,
+    )
+
+    total = len(combined)
+    offset = (page - 1) * limit
+    paged_rows = _apply_modified_display_status(combined[offset : offset + limit])
+
+    summary_payload = dict(summary)
+    summary_payload["total_bookings"] = total
 
     return AdminBookingListResponse(
-        items=[BookingResponse(**row) for row in rows],
-        summary=AdminBookingSummary(**summary),
+        items=[BookingResponse(**row) for row in paged_rows],
+        summary=AdminBookingSummary(**summary_payload),
         pagination=PaginationMetadata(
             total=total,
             page=page,

@@ -57,17 +57,38 @@ def _visit_row(*, site_id: str = "5", visit_date: date = TODAY) -> dict:
 
 
 class GuestVisitDetailScopeTests(unittest.TestCase):
-    """Regression coverage: GET /guest-visits/{id} previously had no scope
-    check at all, letting a FRONT_OFFICE user (restricted to today's visits
-    at their own home site on the list endpoint) fetch any tenant-wide guest
-    visit by id -- a direct-object-reference privilege escalation."""
+    """FRONT_OFFICE's home-site/today-only restriction was deliberately
+    removed (guest:view_visits already grants tenant-wide access via
+    role_permissions) -- any guest-operator role can now view any visit
+    regardless of site or date. These tests confirm that decision and that
+    a missing visit still 404s cleanly."""
 
-    def test_front_office_can_view_todays_visit_at_home_site(self) -> None:
+    def test_front_office_can_view_any_visit_regardless_of_site_or_date(self) -> None:
         current_user = {
             "tenant_id": "3",
             "user_id": "9",
             "role_name": "FRONT_OFFICE",
             "home_site_id": "5",
+        }
+
+        with patch(
+            "backend.services.guest_service.fetch_guest_visit_by_id",
+            return_value=_visit_row(site_id="99", visit_date=YESTERDAY),
+        ):
+            response = get_guest_visit_details(
+                conn=object(),
+                current_user=current_user,
+                guest_visit_id="60",
+            )
+
+        self.assertEqual(response.guest_visit_id, "60")
+
+    def test_front_office_without_home_site_is_still_allowed(self) -> None:
+        current_user = {
+            "tenant_id": "3",
+            "user_id": "9",
+            "role_name": "FRONT_OFFICE",
+            "home_site_id": None,
         }
 
         with patch(
@@ -82,74 +103,9 @@ class GuestVisitDetailScopeTests(unittest.TestCase):
 
         self.assertEqual(response.guest_visit_id, "60")
 
-    def test_front_office_cannot_view_visit_at_another_site(self) -> None:
-        current_user = {
-            "tenant_id": "3",
-            "user_id": "9",
-            "role_name": "FRONT_OFFICE",
-            "home_site_id": "5",
-        }
-
-        with patch(
-            "backend.services.guest_service.fetch_guest_visit_by_id",
-            return_value=_visit_row(site_id="99", visit_date=TODAY),
-        ):
-            with self.assertRaises(HTTPException) as context:
-                get_guest_visit_details(
-                    conn=object(),
-                    current_user=current_user,
-                    guest_visit_id="60",
-                )
-
-        self.assertEqual(context.exception.status_code, 403)
-
-    def test_front_office_cannot_view_a_non_today_visit(self) -> None:
-        current_user = {
-            "tenant_id": "3",
-            "user_id": "9",
-            "role_name": "FRONT_OFFICE",
-            "home_site_id": "5",
-        }
-
-        with patch(
-            "backend.services.guest_service.fetch_guest_visit_by_id",
-            return_value=_visit_row(site_id="5", visit_date=YESTERDAY),
-        ):
-            with self.assertRaises(HTTPException) as context:
-                get_guest_visit_details(
-                    conn=object(),
-                    current_user=current_user,
-                    guest_visit_id="60",
-                )
-
-        self.assertEqual(context.exception.status_code, 403)
-
-    def test_front_office_without_home_site_is_rejected(self) -> None:
-        current_user = {
-            "tenant_id": "3",
-            "user_id": "9",
-            "role_name": "FRONT_OFFICE",
-            "home_site_id": None,
-        }
-
-        with patch(
-            "backend.services.guest_service.fetch_guest_visit_by_id",
-            return_value=_visit_row(site_id="5", visit_date=TODAY),
-        ):
-            with self.assertRaises(HTTPException) as context:
-                get_guest_visit_details(
-                    conn=object(),
-                    current_user=current_user,
-                    guest_visit_id="60",
-                )
-
-        self.assertEqual(context.exception.status_code, 403)
-
     def test_facilitator_can_view_any_tenant_visit_regardless_of_site_or_date(
         self,
     ) -> None:
-        """The FRONT_OFFICE scope restriction is role-specific -- other
-        guest-operator roles are unaffected."""
         current_user = {
             "tenant_id": "3",
             "user_id": "2",

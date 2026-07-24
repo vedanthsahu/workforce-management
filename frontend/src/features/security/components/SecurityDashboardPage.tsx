@@ -44,7 +44,6 @@ export default function SecurityDashboardPage() {
     loading,
     error,
     refetch,
-    patchVisitor,
   } = useSecurityDashboard();
 
   return (
@@ -78,7 +77,6 @@ export default function SecurityDashboardPage() {
         search={search}
         onSearchChange={setSearch}
         onRefresh={refetch}
-        onPatchVisitor={patchVisitor}
         page={page}
         totalPages={totalPages}
         onPageChange={setPage}

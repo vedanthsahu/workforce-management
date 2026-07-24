@@ -19,8 +19,6 @@ from backend.repositories.guest_visit_repository import (
     check_in_guest_visit,
     check_out_guest_visit,
     fetch_cancelled_guest_visits,
-    update_guest_visit,
-    sync_booking_from_guest_visit,
     recalculate_guest_visit_requires_seat,
     fetch_guest_visit_integrity_findings,
 )
@@ -35,6 +33,7 @@ from backend.schemas.guest import (
     GuestVisitStatusUpdateResponse,
 )
 from backend.core.app_logging import LOGGER_NAME
+from backend.core.enums import BookingModificationReason
 from backend.core.audit_actions import (
     GUEST_BOOKING_CANCELLED, GUEST_BOOKING_CREATED, GUEST_BOOKING_MODIFIED,
     GUEST_CREATED, GUEST_STATUS_UPDATED, GUEST_UPDATED,
@@ -45,6 +44,7 @@ from backend.core.audit_actions import (
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.booking_repository import (
     cancel_booking,
+    mark_booking_modified,
     count_guest_bookings,
     fetch_booking_by_id,
     fetch_booking_by_id_for_update,
@@ -109,6 +109,7 @@ from backend.schemas.guest import (
 )
 from backend.services.booking_service import (
     GUEST_OPERATION_ROLES,
+    _apply_modified_display_status,
     _display_cancellation_reason,
     _normalize_cancellation_reason,
     _user_role,
@@ -154,6 +155,21 @@ def _require_guest_operator(current_user: dict[str, Any]) -> None:
 
 def _enum_value(value: Any) -> Any:
     return value.value if isinstance(value, Enum) else value
+
+
+def _booking_modification_reason(reason: Any) -> str | None:
+    """Guest visit modification reasons (GuestVisitModificationReason) and
+    booking modification reasons (BookingModificationReason) are validated
+    against different DB CHECK constraints (chk_guest_visit_modification_reason
+    vs chk_booking_modification_reason) that don't fully overlap. When a
+    guest-visit-originated reason is also written to bookings.modification_reason,
+    fall back to OTHER for any value the booking constraint doesn't accept."""
+    value = _enum_value(reason)
+    if value is None:
+        return None
+    if value in BookingModificationReason.__members__:
+        return value
+    return BookingModificationReason.OTHER.value
 
 
 def _clean_optional(value: str | None) -> str | None:
@@ -1096,6 +1112,7 @@ def list_guest_bookings(
         limit=limit,
         offset=offset,
     )
+    rows = _apply_modified_display_status(rows)
     if page is None:
         return [BookingResponse(**row) for row in rows]
 
@@ -1323,14 +1340,15 @@ def modify_guest_booking(
             floor_id=str(payload.floor_id),
             visit_date=payload.booking_date,
         )
-        cancel_booking(
+        mark_booking_modified(
             conn,
             tenant_id=tenant_id,
             booking_id=booking_id,
-            cancellation_reason=(
-                f"Booking ID: {booking_id}. Replaced by guest booking modification."
+            modification_reason=(
+                payload.modification_reason.value
+                if payload.modification_reason is not None
+                else "USER_REQUEST"
             ),
-            booking_status="MODIFIED",
         )
         new_booking = insert_guest_booking(
             conn,
@@ -1340,6 +1358,7 @@ def modify_guest_booking(
             booked_by_user_id=_current_user_id(current_user),
             seat=target_seat,
             booking_date=payload.booking_date,
+            modified_from_booking_id=booking_id,
         )
         recalculate_guest_visit_requires_seat(
             conn,
@@ -1648,35 +1667,17 @@ def _first_text(*values: Any) -> str:
     return ""
 
 
-def _restrict_visit_scope_for_front_office_role(
-    current_user: dict[str, Any],
-    *,
-    visit_scope: str,
-    site_id: str | None,
-) -> str | None:
-    """FRONT_OFFICE users may only see today's visits at their own home site.
+def _apply_modified_display_visit_status(
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    for row in rows:
+        if (
+            row.get("modified_from_guest_visit_id") is not None
+            and row.get("visit_status") == "SCHEDULED"
+        ):
+            row["visit_status"] = "MODIFIED"
 
-    Business rule (not a general permission grant): confining FRONT_OFFICE to
-    CURRENT-scope, home-site visits. Kept as a role check rather than a
-    permission because it restricts *scope*, not just access.
-    """
-    if _user_role(current_user) != "FRONT_OFFICE":
-        return site_id
-
-    home_site_id = current_user.get("home_site_id")
-    if not home_site_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Front Office user does not have a home site configured.",
-        )
-
-    if visit_scope != "CURRENT":
-        raise HTTPException(
-            status_code=403,
-            detail="Front Office can only access current visits.",
-        )
-
-    return str(home_site_id)
+    return rows
 
 
 def list_guest_visits(
@@ -1694,12 +1695,6 @@ def list_guest_visits(
 ) -> GuestVisitListResponse:
 
     tenant_id = str(current_user["tenant_id"])
-
-    site_id = _restrict_visit_scope_for_front_office_role(
-        current_user,
-        visit_scope=visit_scope,
-        site_id=site_id,
-    )
 
     summary = fetch_guest_visit_summary(
         conn,
@@ -1723,6 +1718,7 @@ def list_guest_visits(
         limit=limit,
         offset=effective_offset,
     )
+    rows = _apply_modified_display_visit_status(rows)
 
     pagination = None
     if page is not None:
@@ -1762,22 +1758,6 @@ def get_guest_visit_details(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Guest visit not found.",
         )
-
-    # Mirror the list endpoint's scope restriction so a FRONT_OFFICE user
-    # cannot bypass the home-site/today-only limit by fetching a visit
-    # directly by id.
-    if _user_role(current_user) == "FRONT_OFFICE":
-        home_site_id = current_user.get("home_site_id")
-        if not home_site_id:
-            raise HTTPException(
-                status_code=403,
-                detail="Front Office user does not have a home site configured.",
-            )
-        if str(row.get("site_id")) != str(home_site_id) or row.get("visit_date") != date.today():
-            raise HTTPException(
-                status_code=403,
-                detail="Front Office can only access current visits at their home site.",
-            )
 
     return GuestVisitListItem(**row)
 
@@ -1964,7 +1944,7 @@ def create_booking_for_existing_guest_visit(
 
     try:
 
-        visit = fetch_guest_visit_by_id(
+        visit = fetch_guest_visit_by_id_for_update(
             conn,
             tenant_id=tenant_id,
             guest_visit_id=guest_visit_id,
@@ -2228,10 +2208,34 @@ def modify_guest_visit(
             floor_id=floor_id,
         )
 
-        update_guest_visit(
+        active_booking = fetch_active_booking_for_guest_visit(
             conn,
             tenant_id=tenant_id,
             guest_visit_id=guest_visit_id,
+        )
+
+        if active_booking is not None:
+            _validate_mutable_guest_booking(active_booking, action="modify")
+            mark_booking_modified(
+                conn,
+                tenant_id=tenant_id,
+                booking_id=str(active_booking["booking_id"]),
+                modification_reason=_booking_modification_reason(
+                    payload.modification_reason
+                ),
+            )
+
+        mark_guest_visit_modified(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+            modification_reason=_enum_value(payload.modification_reason),
+        )
+
+        new_visit = insert_guest_visit(
+            conn,
+            tenant_id=tenant_id,
+            guest_id=str(visit["guest_id"]),
             host_user_id=str(payload.host_user_id),
             site_id=str(payload.site_id),
             building_id=str(payload.building_id),
@@ -2244,6 +2248,9 @@ def modify_guest_visit(
             start_time=payload.start_time,
             end_time=payload.end_time,
             notes=_clean_optional(payload.notes),
+            requires_seat=bool(visit["requires_seat"]),
+            created_by_user_id=_current_user_id(current_user),
+            modified_from_guest_visit_id=guest_visit_id,
         )
 
         sync_booking_from_guest_visit(
@@ -2282,8 +2289,10 @@ def modify_guest_visit(
         updated = fetch_guest_visit_by_id(
             conn,
             tenant_id=tenant_id,
-            guest_visit_id=guest_visit_id,
-        )
+            guest_visit_id=str(new_visit["guest_visit_id"]),
+        ) or new_visit
+
+        conn.commit()
 
         if updated is not None:
             _queue_guest_visit_notification_fanout(
@@ -2576,6 +2585,7 @@ def execute_guest_visit_workflow(
                 conn,
                 tenant_id=tenant_id,
                 guest_visit_id=guest_visit_id,
+                modification_reason=_enum_value(payload.modification_reason),
             )
             new_visit = insert_guest_visit(
                 conn,
@@ -2593,6 +2603,7 @@ def execute_guest_visit_workflow(
                 notes=_clean_optional(payload.notes),
                 requires_seat=bool(visit["requires_seat"]),
                 created_by_user_id=_current_user_id(current_user),
+                modified_from_guest_visit_id=guest_visit_id,
             )
             result = _build_guest_workflow_response(
                 conn,
@@ -2699,23 +2710,22 @@ def execute_guest_visit_workflow(
             ):
                 _raise_seat_booking_conflict()
 
-            cancel_booking(
+            old_booking_id = str(booking["booking_id"])
+            mark_booking_modified(
                 conn,
                 tenant_id=tenant_id,
-                booking_id=str(booking["booking_id"]),
-                cancellation_reason=(
-                    f"Booking ID: {booking['booking_id']}. "
-                    "Replaced by guest workflow modification."
+                booking_id=old_booking_id,
+                modification_reason=_booking_modification_reason(
+                    payload.modification_reason
                 ),
-                booking_status="MODIFIED",
             )
             mark_guest_visit_modified(
                 conn,
                 tenant_id=tenant_id,
                 guest_visit_id=guest_visit_id,
+                modification_reason=_enum_value(payload.modification_reason),
             )
 
-            # Future lineage columns can connect these historical and replacement rows.
             new_visit = insert_guest_visit(
                 conn,
                 tenant_id=tenant_id,
@@ -2732,6 +2742,7 @@ def execute_guest_visit_workflow(
                 notes=_clean_optional(payload.notes),
                 requires_seat=True,
                 created_by_user_id=_current_user_id(current_user),
+                modified_from_guest_visit_id=guest_visit_id,
             )
             new_visit_id = str(new_visit["guest_visit_id"])
             new_booking = insert_guest_booking(
@@ -2742,6 +2753,7 @@ def execute_guest_visit_workflow(
                 booked_by_user_id=_current_user_id(current_user),
                 seat=seat,
                 booking_date=payload.visit_date,
+                modified_from_booking_id=old_booking_id,
             )
             recalculate_guest_visit_requires_seat(
                 conn,
@@ -2905,7 +2917,6 @@ def execute_guest_visit_workflow(
                 cancellation_reason=_normalize_cancellation_reason(
                     payload.cancellation_reason,
                 ),
-                booking_status="CANCELLED",
             )
             recalculate_guest_visit_requires_seat(
                 conn,
@@ -2957,7 +2968,6 @@ def execute_guest_visit_workflow(
                     cancellation_reason=(
                         cancellation_reason or "Guest visit cancelled."
                     ),
-                    booking_status="CANCELLED",
                 )
             cancel_guest_visit(
                 conn,
