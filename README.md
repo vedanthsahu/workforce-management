@@ -11,11 +11,11 @@ Enterprise seat booking and workspace management system: book seats, manage book
 
 ```
 .
-├── backend/        # FastAPI application
-├── frontend/       # Next.js application
-├── pyproject.toml  # Backend Python project config
-├── uv.lock         # Backend dependency lockfile
-└── requirements.txt
+├── backend/                  # FastAPI application
+│   └── requirements.txt      # Lambda production dependencies
+├── frontend/                 # Next.js application
+├── pyproject.toml            # Backend Python project config
+└── uv.lock                   # Backend dependency lockfile
 ```
 
 ## Getting Started
@@ -23,7 +23,7 @@ Enterprise seat booking and workspace management system: book seats, manage book
 ### Backend
 
 ```bash
-uv sync                 # install dependencies (or: pip install -r requirements.txt)
+uv sync                 # install dependencies (or: pip install -r backend/requirements.txt)
 uvicorn backend.main:app --reload
 ```
 
