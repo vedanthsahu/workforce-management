@@ -98,17 +98,59 @@ returns the new ID (or `null`/`false` on failure) so the calling component can n
 - `"use client"` directive at the top for any component using hooks/state/router.
 - Prefetch the list route on mount and on hover for back/cancel buttons:
   `useEffect(() => { router.prefetch("/admin/<feature>"); }, [router]);`
-- Tailwind utility classes inline; define repeated class strings as local `const xClass = "..."`
-  at the top of the component (see `AmenityForm.tsx` for `inputClass`/`selectClass`/`labelClass`).
+- Tailwind utility classes inline. A one-off class string used only inside this single component
+  (e.g. `inputClass`/`selectClass`/`labelClass` on a form) may stay as a local `const xClass = "..."`
+  at the top of the component (see `AmenityForm.tsx`). Anything else — see the constants rule below.
 - Section comments in JSX (`{/* HEADER */}`, `{/* FORM CARD */}`) to mark visual blocks.
 - Reuse `components/ui/*` (shadcn primitives) and theme tokens (`bg-sidebar`, etc.) per AGENTS.md
   — don't hardcode colors for theme-related elements.
 - Error display: a red banner block (`bg-red-50 border border-red-200 text-red-700 ...`).
 
+### `features/<feature>/utils/constants.ts`
+All constants for a feature live here — never inline/hardcoded inside a component. This includes:
+- Status/enum → style maps (e.g. a `Record<Status, string>` of badge classes).
+- Status/enum → label maps (e.g. `GUEST_TYPE_LABELS`).
+- Dropdown/select option lists (e.g. `STATUS_OPTIONS`, `GUEST_TYPE_OPTIONS`).
+- Table header arrays, stat-card config arrays (icon + label + color groupings), and similar
+  static config objects, even when they hold references to icon components (`lucide-react` icon
+  refs are just object references, not JSX, so they're fine in a plain `.ts` file).
+
+Rules:
+- One canonical definition per constant — if two components in the same feature need the same
+  status→style map, it belongs in `utils/constants.ts`, imported by both. Never redefine/copy the
+  same map into multiple components (this was a real bug source: `BookingDetailsPanel.tsx` and
+  `BookingsTable.tsx` used to each keep their own copy of the same status-style map and would
+  silently drift out of sync).
+- If the feature already has a single established utils file (e.g. `<feature>.utils.ts`) instead
+  of a dedicated `constants.ts`, add constants there rather than creating a second utils file —
+  see `frontend/src/features/security/utils/security.utils.ts` for that pattern, or
+  `frontend/src/features/bookings/utils/constants.ts` for the dedicated-file pattern.
+- Derive option lists from label maps instead of hand-duplicating them (e.g. build
+  `GUEST_TYPE_OPTIONS` from `Object.entries(GUEST_TYPE_LABELS)`), so the two can't drift apart.
+- The exception is a Tailwind class string that is purely local render styling, used only inside
+  one component, and not derived from domain/status data — that may stay a local `const` per the
+  component rule above.
+
 ## Pages (`src/app/`)
 - New routes go under the relevant route group: `(main)` for authenticated pages, `(auth)` for
   login/SSO. Reuse `app/(main)/layout.tsx` — don't create a new layout.
-- A page component should be thin: import the feature component(s) and render them.
+- A page component must be thin — never put page logic/state/JSX directly in `src/app/`. Instead:
+  1. Build the whole page as a component in `features/<feature>/components/<Feature>Page.tsx`
+     (default export, `"use client"` if it uses hooks/state/router), owning all of that page's
+     `useState`/`useEffect`/data-fetching and JSX.
+  2. The route file at `app/.../page.tsx` only imports it and renders it — nothing else:
+     ```tsx
+     import <Feature>Page from "@/features/<feature>/components/<Feature>Page";
+
+     export default function Page() {
+       return <<Feature>Page />;
+     }
+     ```
+  See `app/(main)/security/dashboard/page.tsx` → `SecurityDashboardPage` and
+  `app/(main)/admin/bookings/page.tsx` → `AdminBookingsPage` as the reference pattern.
+- Any constant defined at the page level (status→param maps, page-size lists, etc.) follows the
+  same rule as component constants — it belongs in `features/<feature>/utils/constants.ts`, not
+  declared inline in the page component.
 - Wrap any `useSearchParams()` usage in `<Suspense>`.
 
 ## State

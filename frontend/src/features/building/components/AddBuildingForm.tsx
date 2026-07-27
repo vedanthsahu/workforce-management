@@ -44,10 +44,10 @@ export default function AddBuildingForm() {
   };
 
   const inputClass =
-    "w-full h-9 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-150";
+    "w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-150";
 
   const selectClass =
-    "w-full h-9 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-150 cursor-pointer";
+    "w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-150 cursor-pointer";
 
   const labelClass =
     "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
@@ -55,13 +55,13 @@ export default function AddBuildingForm() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc]">
 
-      <Link
+      {/* <Link
         href="/admin/building"
         className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 mb-5 transition-colors"
       >
         <ArrowLeft size={14} />
         Back to Buildings
-      </Link>
+      </Link> */}
 
       {/* ERROR BANNER */}
       {errorMessage && (
@@ -74,7 +74,7 @@ export default function AddBuildingForm() {
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900 leading-tight">Add Building</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Add Building</h1>
           <p className="text-xs text-gray-500 mt-0.5">Fill in the details to create a new building.</p>
         </div>
 
@@ -89,11 +89,10 @@ export default function AddBuildingForm() {
             onClick={handleSave}
             onMouseEnter={() => router.prefetch("/admin/building")}
             disabled={!isFormValid || loading}
-            className={`h-9 px-4 text-sm font-medium rounded-lg text-white transition-all ${
-              isFormValid && !loading
-                ? "bg-blue-600 hover:bg-blue-700 shadow-sm shadow-blue-200"
-                : "bg-gray-300 cursor-not-allowed"
-            }`}
+            className={`h-9 px-4 text-sm font-medium rounded-lg text-white transition-all ${isFormValid && !loading
+              ? "bg-blue-600 hover:bg-blue-700 shadow-sm shadow-blue-200"
+              : "bg-gray-300 cursor-not-allowed"
+              }`}
           >
             {loading ? "Saving..." : "Save Building"}
           </button>
@@ -110,7 +109,7 @@ export default function AddBuildingForm() {
 
           <div>
             <label className={labelClass}>
-              Site Name <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
+              Office Name <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
             </label>
             <select
               value={formData.site_id || ""}
@@ -120,7 +119,7 @@ export default function AddBuildingForm() {
               }}
               className={selectClass}
             >
-              <option value="">Select Site</option>
+              <option value="" disabled hidden>Select Office</option>
               {sites.map((site) => (
                 <option key={site.site_id} value={site.site_id}>{site.site_name}</option>
               ))}

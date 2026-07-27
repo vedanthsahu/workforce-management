@@ -5,13 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import Json, RealDictCursor
 from psycopg2.extensions import connection as PGConnection
-
-
-def ensure_revoked_tokens_table(conn: PGConnection) -> None:
-    """Legacy compatibility no-op."""
-    del conn
 
 
 def ensure_refresh_tokens_table(conn: PGConnection) -> None:
@@ -23,27 +18,6 @@ def ensure_sessions_table(conn: PGConnection) -> None:
     """Legacy compatibility no-op for the provided schema."""
     del conn
 
-
-def is_token_revoked(conn: PGConnection, jti: str) -> bool:
-    """Access-token revocation is not persisted in the provided schema."""
-    del conn, jti
-    return False
-
-
-def revoke_token(
-    conn: PGConnection,
-    *,
-    jti: str,
-    user_id: str,
-    expires_at: datetime,
-) -> None:
-    """Access-token revocation is not persisted in the provided schema."""
-    del conn, jti, user_id, expires_at
-
-
-def purge_expired_revoked_tokens(conn: PGConnection) -> None:
-    """Legacy compatibility no-op."""
-    del conn
 
 def revoke_all_user_sessions(
     conn: PGConnection,
@@ -289,10 +263,11 @@ def record_auth_event(
     *,
     tenant_id: str,
     user_id: str,
-    session_id: str,
+    session_id: str | None = None,
     event_type: str,
     user_agent: str | None = None,
     ip_address: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     """Insert an auth lifecycle event."""
     with conn.cursor() as cur:
@@ -304,11 +279,20 @@ def record_auth_event(
                 session_id,
                 event_type,
                 user_agent,
-                ip_address
+                ip_address,
+                metadata
             )
-            VALUES (%s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            (tenant_id, user_id, session_id, event_type, user_agent, ip_address),
+            (
+                tenant_id,
+                user_id,
+                session_id,
+                event_type,
+                user_agent,
+                ip_address,
+                Json(metadata) if metadata is not None else None,
+            ),
         )
 
 

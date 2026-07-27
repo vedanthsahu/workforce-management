@@ -167,8 +167,9 @@ export async function fetchAvailability(params: {
   bookedForUserId?: string | null;
   isGuestBooking?: boolean;
   bookedForGuestId?: string | null;
+  calendarMode?: boolean;
 }): Promise<AvailableSeatResponse[]> {
-  const { data } = await axiosInstance.get<AvailableSeatResponse[]>(
+  const { data } = await axiosInstance.get<any>(
     `/floors/${params.floorId}/seats`,
     {
       params: {
@@ -189,6 +190,9 @@ export async function fetchAvailability(params: {
         ...(params.bookedForGuestId
           ? { booked_for_guest_id: Number(params.bookedForGuestId) }
           : {}),
+        ...(params.calendarMode
+          ? { calendar_mode: true }
+          : {}),
       },
       paramsSerializer: (p) => {
         const parts: string[] = [];
@@ -205,7 +209,8 @@ export async function fetchAvailability(params: {
       },
     }
   );
-  return data;
+  console.log("[fetchAvailability] API response shape:", typeof data, Array.isArray(data), JSON.stringify(Object.keys(data ?? {})));
+  return Array.isArray(data) ? data : data?.items ?? [];
 }
 
 // ── Seats + Availability ──────────────────────────────────────────────────────
@@ -377,4 +382,66 @@ export async function fetchPreferences(): Promise<Preference[]> {
     description: a.description ?? null,
     icon: a.icon ?? null,
   }));
+}
+
+// ── Saved location/amenity preferences — GET /dashboard/me ──────────────────
+// Used to auto-fill the booking form for the logged-in user's own booking.
+// Returns null when the user has never saved a preference (site_id unset),
+// so the caller can leave the form untouched in that case.
+
+interface RawWorkPreferences {
+  site_id?: string | null;
+  site_name?: string | null;
+  building_id?: string | null;
+  building_name?: string | null;
+  floor_id?: string | null;
+  floor_name?: string | null;
+  amenities?: { id: string }[];
+}
+
+interface RawDashboardMe {
+  work_preferences?: RawWorkPreferences | null;
+}
+
+export interface MyWorkPreferences {
+  siteId: string | null;
+  siteName: string | null;
+  buildingId: string | null;
+  buildingName: string | null;
+  floorId: string | null;
+  floorName: string | null;
+  amenityIds: string[];
+}
+
+function parseWorkPreferences(data: RawDashboardMe): MyWorkPreferences | null {
+  const wp = data.work_preferences;
+  if (!wp?.site_id) return null;
+
+  return {
+    siteId: wp.site_id,
+    siteName: wp.site_name ?? null,
+    buildingId: wp.building_id ?? null,
+    buildingName: wp.building_name ?? null,
+    floorId: wp.floor_id ?? null,
+    floorName: wp.floor_name ?? null,
+    amenityIds: (wp.amenities ?? []).map((a) => a.id),
+  };
+}
+
+export async function fetchMyWorkPreferences(): Promise<MyWorkPreferences | null> {
+  const { data } = await axiosInstance.get<RawDashboardMe>("/dashboard/me");
+  return parseWorkPreferences(data);
+}
+
+// ── Saved location/amenity preferences for a specific employee ──────────────
+// GET /dashboard/employee/{userId} — same shape as /dashboard/me, used when a
+// facilitator/admin/manager books a seat on behalf of that employee.
+
+export async function fetchEmployeeWorkPreferences(
+  userId: string
+): Promise<MyWorkPreferences | null> {
+  const { data } = await axiosInstance.get<RawDashboardMe>(
+    `/dashboard/employee/${userId}`
+  );
+  return parseWorkPreferences(data);
 }

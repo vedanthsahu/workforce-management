@@ -13,6 +13,7 @@ import EditFloorModal from "@/features/floor/components/EditFloorModal";
 
 import { useFloors } from "@/features/floor/hooks/useFloors";
 import { Floor } from "@/features/floor/types/floor.types";
+import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
 
 function FloorsPage() {
   const {
@@ -94,16 +95,16 @@ function FloorsPage() {
       )}
 
       {/* HEADER */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Manage Floors</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Manage Floors</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">
             View, add, edit and manage all floors.
           </p>
         </div>
         <Link
           href="/admin/floors/add"
-          className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm"
+          className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm self-start sm:self-auto"
         >
           <Plus size={16} />
           Add Floor
@@ -111,73 +112,35 @@ function FloorsPage() {
       </div>
 
       {/* CARDS */}
-      <FloorCards stats={stats} />
-
-      {/* SITE + BUILDING FILTER */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-          {/* SITE */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Site</label>
-            <select
-              value={selectedSite}
-              onChange={(e) => handleSiteChange(e.target.value)}
-              className="w-full border rounded-xl px-4 py-3"
-            >
-              <option value="">Select Site</option>
-              {sites.map((site) => (
-                <option key={site.site_id} value={site.site_id}>
-                  {site.site_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* BUILDING */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Building</label>
-            <select
-              value={selectedBuilding}
-              disabled={!selectedSite}
-              onChange={(e) => handleBuildingChange(e.target.value)}
-              className="w-full border rounded-xl px-4 py-3"
-            >
-              <option value="">Select Building</option>
-              {buildings.map((building) => (
-                <option key={building.building_id} value={building.building_id}>
-                  {building.building_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-        </div>
-      </div>
+      {loading ? <StatCardsSkeleton /> : <FloorCards stats={stats} />}
 
       {/* TABLE CARD */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
 
         {/* TABLE HEADER */}
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center px-6 py-4 border-b">
-          <h2 className="text-base font-semibold text-gray-800">Floors List</h2>
-          <FloorFilters search={search} setSearch={setSearch} />
+          <h2 className="text-sm sm:text-base font-semibold text-gray-800">Floors List</h2>
+          <FloorFilters
+            sites={sites}
+            buildings={buildings}
+            selectedSite={selectedSite}
+            selectedBuilding={selectedBuilding}
+            onSiteChange={handleSiteChange}
+            onBuildingChange={handleBuildingChange}
+            search={search}
+            setSearch={setSearch}
+          />
         </div>
 
         {/* TABLE BODY */}
-        <div
-          className="w-full overflow-x-auto overflow-y-auto"
-          style={{ maxHeight: "calc(100vh - 420px)", minHeight: "200px" }}
-        >
+        <div className="w-full overflow-x-auto">
           {loading ? (
-            <div className="p-6 text-sm text-gray-500 text-center">
-              Select a site and building
-            </div>
+            <TableBodySkeleton columns={5} rows={4} />
           ) : error ? (
             <div className="p-6 text-sm text-red-500">{error}</div>
           ) : !selectedBuilding ? (
             <div className="p-10 text-center text-gray-500">
-              Select a Site and Building to view floors.
+              
             </div>
           ) : (
             <FloorTable
@@ -209,11 +172,13 @@ function FloorsPage() {
         )}
 
         {/* FOOTER */}
-        <div className="flex justify-between items-center px-6 py-4 border-t shrink-0 text-sm text-gray-500">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
           <span>
-            Showing {filteredFloors.length === 0 ? 0 : startIndex + 1} to{" "}
-            {Math.min(startIndex + itemsPerPage, filteredFloors.length)} of{" "}
-            {filteredFloors.length} entries
+            {filteredFloors.length > 0 &&
+              `Showing ${startIndex + 1} to ${Math.min(
+                startIndex + itemsPerPage,
+                filteredFloors.length
+              )} of ${filteredFloors.length} entries`}
           </span>
           <FloorPagination
             currentPage={currentPage}
@@ -230,7 +195,7 @@ function FloorsPage() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-gray-500">Loading...</div>}>
+    <Suspense fallback={<div className="p-6"><TableSkeleton columns={5} rows={4} /></div>}>
       <FloorsPage />
     </Suspense>
   );

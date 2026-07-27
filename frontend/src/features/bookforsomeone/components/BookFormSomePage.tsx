@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { useBookingForm, useSiteBuildingOptions } from "../hooks/useBooking";
+import type { BookingType } from "../types/booking";
 import { checkGuestBookingEligibility } from "../services/booking.service";
+import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
 import { BookingTypeSelector, FormFooter, InternalEmployeeForm } from "./BookForSomeone";
 import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 import {
@@ -16,6 +18,7 @@ import {
   VisitDetailsStep,
 } from "./BookingWizardSteps";
 import { useDashboard } from "@/features/dashboard/hooks/useDashboard";
+import { useBookForSomeoneStore } from "@/store/useBookForSomeoneStore";
 
 export default function BookForSomeonePage() {
   const router = useRouter();
@@ -38,6 +41,9 @@ const currentUserId = data?.user.user_id;
     submitGuestVisit,
   } = useBookingForm();
 
+  const searchParams = useSearchParams();
+  const setFormState = useBookForSomeoneStore((s) => s.setFormState);
+
   const { step, bookingType, selectedEmployee, selectedGuest, visitDetails, seatRequired } = formState;
   const { sites, buildings, floors, isLoadingBuildings, isLoadingFloors } = useSiteBuildingOptions(visitDetails.siteId, visitDetails.buildingId);
 
@@ -45,11 +51,71 @@ const currentUserId = data?.user.user_id;
   const canBookEmployee = can("booking:book_for_employee");
   const canBookGuest    = can("booking:book_for_guest");
 
+  // ── Prefill from URL when editing a visit ──
+  const editVisitId = searchParams.get("editVisitId");
+  // Set only by AdminBookingsPage's row-menu "Modify" action so the success
+  // screen can navigate back to Admin Bookings instead of My Bookings.
+  const isAdminFlow = searchParams.get("adminFlow") === "true";
+  const prefillApplied = useRef(false);
+
+  useEffect(() => {
+    if (!editVisitId || prefillApplied.current) return;
+    prefillApplied.current = true;
+
+    const guestName      = searchParams.get("guestName") ?? "";
+    const guestEmail     = searchParams.get("guestEmail") ?? "";
+    const guestType      = searchParams.get("guestType") ?? "";
+    const purposeOfVisit = searchParams.get("purposeOfVisit") ?? "";
+    const visitDate      = searchParams.get("visitDate") ?? "";
+    const endDate        = searchParams.get("endDate") ?? "";
+    const rawStart       = searchParams.get("startTime") ?? "";
+    const rawEnd         = searchParams.get("endTime") ?? "";
+    const startTime      = rawStart.slice(0, 5);
+    const endTime        = rawEnd.slice(0, 5);
+    const hostName       = searchParams.get("hostName") ?? "";
+    const hostUserId     = searchParams.get("hostUserId") ?? "";
+    const siteId         = searchParams.get("siteId") ?? "";
+    const buildingId     = searchParams.get("buildingId") ?? "";
+    const floorId        = searchParams.get("floorId") ?? "";
+
+    setFormState(() => ({
+      step: 2,
+      bookingType: "visitor",
+      selectedEmployee: null,
+      selectedGuest: guestName ? { id: "", fullName: guestName, email: guestEmail } : null,
+      seatRequired: null,
+      visitDetails: {
+        guestType: (guestType || "INTERVIEW_CANDIDATE") as any,
+        purposeOfVisit: (purposeOfVisit || "INTERVIEW") as any,
+        hostEmployee: hostName ? { id: hostUserId, name: hostName, email: "", role: "", status: "ACTIVE" } : null,
+        siteId,
+        buildingId,
+        floorId,
+        visitDate,
+        endDate,
+        startTime,
+        endTime,
+        additionalNotes: "",
+      },
+    }));
+  }, [editVisitId]);
+
+  // Admin's "Booking Management" page links here with ?entry=employee or
+  // ?entry=guest depending on which button was clicked — lock the wizard to
+  // that type and disable the other card. Absent for every other entry point
+  // (e.g. the facilitator sidebar), so their flow is unaffected.
+  const entry = searchParams.get("entry");
+  const disabledType: BookingType | undefined =
+    entry === "employee" ? "visitor" : entry === "guest" ? "internal" : undefined;
+
   // Auto-select when only one type is permitted — no need to show the selector
   useEffect(() => {
+    if (editVisitId) return;
+    if (entry === "employee") { setBookingType("internal"); return; }
+    if (entry === "guest") { setBookingType("visitor"); return; }
     if (canBookEmployee && !canBookGuest) setBookingType("internal");
     if (canBookGuest && !canBookEmployee) setBookingType("visitor");
-  }, [canBookEmployee, canBookGuest]);
+  }, [canBookEmployee, canBookGuest, entry]);
 
   const showTypeSelector = canBookEmployee && canBookGuest;
 
@@ -58,11 +124,13 @@ const currentUserId = data?.user.user_id;
     scrollAreaRef.current?.scrollTo({ top: 0, behavior: "instant" });
   }, [step]);
 
-  const [guestView, setGuestView] = useState<"list" | "create">("list");
+  const [guestView, setGuestView] = useState<"list" | "create" | "edit">("list");
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
   const [checkingEligibility, setCheckingEligibility] = useState(false);
   const errorBannerRef = useRef<HTMLDivElement>(null);
-  const isCreatingGuest = bookingType === "visitor" && step === 1 && guestView === "create";
+  const isCreatingGuest = bookingType === "visitor" && step === 1 && guestView !== "list";
 
   useEffect(() => {
     setEligibilityError(null);
@@ -129,20 +197,23 @@ const currentUserId = data?.user.user_id;
       canContinue =
         !!visitDetails.hostEmployee && !!visitDetails.visitDate && !!visitDetails.endDate && !!visitDetails.siteId && !!visitDetails.buildingId && !!visitDetails.floorId && !checkingEligibility;
     if (step === 3) canContinue = seatRequired !== null;
-    if (step === 4) canContinue = !isSubmitting;
+    if (step === 4) canContinue = !(isSubmitting || editSubmitting);
   }
 
   const submitLabel = (() => {
     if (bookingType === "internal" && step === 1) return "Book a Seat";
     if (bookingType === "visitor" && step === 3) return seatRequired === "no" ? "Continue" : "Book a Seat";
-    if (bookingType === "visitor" && step === 4) return isSubmitting ? "Sending…" : "Confirm Invite";
+    if (bookingType === "visitor" && step === 4) {
+      if (editVisitId) return editSubmitting ? "Saving…" : "Confirm Changes";
+      return isSubmitting ? "Sending…" : "Confirm Invite";
+    }
     return "Continue";
   })();
 
   const infoText =
     (bookingType === "internal" && step === 1) || (bookingType === "visitor" && step === 3 && seatRequired === "yes")
       ? `After clicking "${submitLabel}", you will continue in the existing booking flow to select workspace, date, preferences and choose a seat.`
-      : submitError;
+      : editError ?? submitError;
 
   const handlePrimaryAction = async () => {
     if (bookingType === "internal" && step === 1) {
@@ -150,7 +221,7 @@ const currentUserId = data?.user.user_id;
       return;
     }
 
-    if (bookingType === "visitor" && step === 2 && selectedGuest) {
+    if (bookingType === "visitor" && step === 2 && selectedGuest && !editVisitId) {
       setEligibilityError(null);
       setCheckingEligibility(true);
       try {
@@ -176,13 +247,59 @@ const currentUserId = data?.user.user_id;
       setCheckingEligibility(false);
     }
 
+    if (editVisitId && bookingType === "visitor" && step === 2) {
+      setFormState((prev) => ({ ...prev, step: 4 }));
+      return;
+    }
+
     if (bookingType === "visitor" && step === 3 && seatRequired === "yes") {
       redirectToBookSeat();
       return;
     }
     if (bookingType === "visitor" && step === 4) {
-      const success = await submitGuestVisit();
-      if (!success) return;
+      if (editVisitId) {
+        setEditSubmitting(true);
+        setEditError(null);
+        try {
+          const fmtTime = (t: string) => {
+            if (!t) return undefined;
+            const parts = t.replace(/\s*(AM|PM)\s*/i, "").split(":");
+            if (parts.length >= 2) return `${parts[0].padStart(2, "0")}:${parts[1]}:00`;
+            return `${t}:00`;
+          };
+
+          const action = searchParams.get("action") ?? "MODIFY_VISIT_ONLY";
+          const seatId = searchParams.get("seatId");
+
+          const workflowPayload: Record<string, unknown> = {
+            host_user_id: visitDetails.hostEmployee?.id ? Number(visitDetails.hostEmployee.id) : undefined,
+            site_id: visitDetails.siteId ? Number(visitDetails.siteId) : undefined,
+            building_id: visitDetails.buildingId ? Number(visitDetails.buildingId) : undefined,
+            floor_id: visitDetails.floorId ? Number(visitDetails.floorId) : undefined,
+            visit_date: visitDetails.visitDate || undefined,
+            guest_type: visitDetails.guestType,
+            purpose_of_visit: visitDetails.purposeOfVisit || undefined,
+            start_time: visitDetails.startTime ? fmtTime(visitDetails.startTime) : undefined,
+            end_time: visitDetails.endTime ? fmtTime(visitDetails.endTime) : undefined,
+            notes: visitDetails.additionalNotes || undefined,
+          };
+          if (action === "MODIFY_VISIT_AND_BOOKING" && seatId) {
+            workflowPayload.seat_id = Number(seatId);
+          }
+          console.log("[ModifyVisit] Action:", action, "Payload:", JSON.stringify(workflowPayload));
+          await guestVisitWorkflow(editVisitId, action as any, workflowPayload);
+        } catch (err: unknown) {
+          const detail = axios.isAxiosError(err) ? JSON.stringify(err.response?.data) : String(err);
+          console.error("[ModifyVisit] Workflow error:", detail);
+          setEditError("Failed to modify visit. Please try again.");
+          setEditSubmitting(false);
+          return;
+        }
+        setEditSubmitting(false);
+      } else {
+        const success = await submitGuestVisit();
+        if (!success) return;
+      }
     }
     goNext();
   };
@@ -209,6 +326,7 @@ const currentUserId = data?.user.user_id;
         />
       );
     } else if (step === 2) {
+      const hasLinkedBooking = editVisitId && searchParams.get("action") === "MODIFY_VISIT_AND_BOOKING";
       stepContent = (
         <VisitDetailsStep
           guest={selectedGuest}
@@ -219,16 +337,24 @@ const currentUserId = data?.user.user_id;
           floors={floors}
           isLoadingBuildings={isLoadingBuildings}
           isLoadingFloors={isLoadingFloors}
+          readOnlyLocation={!!hasLinkedBooking}
         />
       );
     } else if (step === 3) {
       stepContent = <SeatRequiredStep value={seatRequired} onChange={setSeatRequired} />;
     } else if (step === 4) {
       stepContent = (
-        <ConfirmInviteStep guest={selectedGuest} visitDetails={visitDetails} sites={sites} buildings={buildings} />
+        <ConfirmInviteStep
+          guest={selectedGuest}
+          visitDetails={visitDetails}
+          sites={sites}
+          buildings={buildings}
+          seatLabel={searchParams.get("seatLabel")}
+          floorName={searchParams.get("floorName")}
+        />
       );
     } else {
-      stepContent = <SuccessStep onBookAnother={resetWizard} />;
+      stepContent = <SuccessStep onBookAnother={resetWizard} isAdminFlow={isAdminFlow} />;
     }
   }
 
@@ -285,7 +411,7 @@ const currentUserId = data?.user.user_id;
 
               {step === 1 && showTypeSelector && (
                 <>
-                  <BookingTypeSelector selected={bookingType} onChange={setBookingType} />
+                  <BookingTypeSelector selected={bookingType} onChange={setBookingType} disabledType={disabledType} />
                   <div className="border-t border-[#EBEBF5] my-4 sm:my-5" />
                 </>
               )}
@@ -300,7 +426,15 @@ const currentUserId = data?.user.user_id;
                   <FormFooter
                     onCancel={handleCancel}
                     onSubmit={handlePrimaryAction}
-                    onBack={step > 1 ? goBack : undefined}
+                    onBack={
+                      editVisitId
+                        ? (step === 4
+                            ? () => setFormState((prev) => ({ ...prev, step: 2 }))
+                            : () => router.push("/mybookings?tab=bookedForSomeone"))
+                        : step > 1
+                          ? goBack
+                          : undefined
+                    }
                     submitLabel={checkingEligibility ? "Checking…" : submitLabel}
                     submitDisabled={!canContinue}
                     infoText={infoText ?? undefined}

@@ -9,7 +9,7 @@ from typing import Any
 from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
 
-from backend.core.enums import LayoutStatus
+from backend.core.enums import ALL_LAYOUT_STATUSES, LayoutStatus, NON_DELETED_LAYOUT_STATUSES
 from backend.repositories.location_repository import (
     upsert_operational_seat,
     replace_seat_amenities,
@@ -37,7 +37,18 @@ FLOOR_LAYOUT_SELECT_FIELDS = """
     au.role_name AS uploaded_by_role,
     au.department AS uploaded_by_department,
     au.job_title AS uploaded_by_job_title,
+    fl.uploaded_by_user_id::text AS updated_by_user_id,
+    au.full_name AS updated_by_name,
+    au.email AS updated_by_email,
+    au.role_name AS updated_by_role,
+    au.department AS updated_by_department,
+    au.job_title AS updated_by_job_title,
     fl.published_by_user_id::text AS published_by_user_id,
+    pub.full_name AS published_by_name,
+    pub.email AS published_by_email,
+    pub.role_name AS published_by_role,
+    pub.department AS published_by_department,
+    pub.job_title AS published_by_job_title,
     fl.published_at,
     fl.status,
     fl.created_at,
@@ -45,10 +56,13 @@ FLOOR_LAYOUT_SELECT_FIELDS = """
 """
 
 
-FLOOR_LAYOUT_UPLOADER_JOIN = """
+FLOOR_LAYOUT_USER_JOINS = """
     LEFT JOIN app_users AS au
         ON au.id = fl.uploaded_by_user_id
        AND au.tenant_id = fl.tenant_id
+    LEFT JOIN app_users AS pub
+        ON pub.id = fl.published_by_user_id
+       AND pub.tenant_id = fl.tenant_id
 """
 
 
@@ -98,19 +112,6 @@ def fetch_floor_for_layout(
         row = cur.fetchone()
 
     return dict(row) if row else None
-
-
-def archive_existing_published_layout(
-    conn: PGConnection,
-    *,
-    tenant_id: str,
-    floor_id: str,
-) -> None:
-    archive_existing_published_layouts(
-        conn,
-        tenant_id=tenant_id,
-        floor_id=floor_id,
-    )
 
 
 def archive_existing_published_layouts(
@@ -174,22 +175,40 @@ def fetch_floor_layouts_by_floor(
     tenant_id: str,
     floor_id: str,
 ) -> list[dict[str, Any]]:
-    """Fetch all layouts for a tenant-scoped floor, newest version first."""
+    """
+    Fetch all layouts for a tenant-scoped floor, including deleted ones.
+
+    Deleted layouts are included as view-only historical entries — the UI
+    shows them but blocks every action (configure, activate/recover) other
+    than viewing. Ordered PUBLISHED, then DRAFT, then ARCHIVED, then DELETED;
+    within each group, most recently updated first.
+    """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
             SELECT
                 {FLOOR_LAYOUT_SELECT_FIELDS}
             FROM floor_layouts AS fl
-            {FLOOR_LAYOUT_UPLOADER_JOIN}
+            {FLOOR_LAYOUT_USER_JOINS}
             {FLOOR_LAYOUT_LOCATION_JOINS}
             WHERE fl.tenant_id = %s
               AND fl.floor_id = %s
-            ORDER BY fl.version_no DESC, fl.created_at DESC, fl.id DESC
+              AND fl.status = ANY(%s)
+            ORDER BY
+                CASE fl.status
+                    WHEN 'PUBLISHED' THEN 0
+                    WHEN 'DRAFT' THEN 1
+                    WHEN 'ARCHIVED' THEN 2
+                    WHEN 'DELETED' THEN 3
+                    ELSE 4
+                END,
+                fl.updated_at DESC,
+                fl.id DESC
             """,
             (
                 tenant_id,
                 floor_id,
+                list(ALL_LAYOUT_STATUSES),
             ),
         )
 
@@ -198,33 +217,58 @@ def fetch_floor_layouts_by_floor(
     return [dict(row) for row in rows]
 
 
-def fetch_floor_layout_by_id(
+def _fetch_floor_layout_row(
     conn: PGConnection,
     *,
     tenant_id: str,
     layout_id: str,
+    include_deleted: bool = False,
 ) -> dict[str, Any] | None:
-    """Fetch one layout by id within a tenant."""
+    status_filter = "" if include_deleted else "AND fl.status = ANY(%s)"
+    params: tuple[Any, ...] = (tenant_id, layout_id)
+    if not include_deleted:
+        params += (list(NON_DELETED_LAYOUT_STATUSES),)
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
             SELECT
                 {FLOOR_LAYOUT_SELECT_FIELDS}
             FROM floor_layouts AS fl
-            {FLOOR_LAYOUT_UPLOADER_JOIN}
+            {FLOOR_LAYOUT_USER_JOINS}
             {FLOOR_LAYOUT_LOCATION_JOINS}
             WHERE fl.tenant_id = %s
               AND fl.id = %s
+              {status_filter}
             """,
-            (
-                tenant_id,
-                layout_id,
-            ),
+            params,
         )
 
         row = cur.fetchone()
 
     return dict(row) if row else None
+
+
+def fetch_floor_layout_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    include_deleted: bool = False,
+) -> dict[str, Any] | None:
+    """Fetch one layout by id within a tenant.
+
+    By default a deleted layout behaves as if it does not exist — used by
+    every action consumer (activate, configure, delete). Callers backing a
+    view-only surface (e.g. viewing a deleted layout's seats as a historical
+    entry) should pass include_deleted=True.
+    """
+    return _fetch_floor_layout_row(
+        conn,
+        tenant_id=tenant_id,
+        layout_id=layout_id,
+        include_deleted=include_deleted,
+    )
 
 
 def activate_floor_layout(
@@ -267,6 +311,51 @@ def activate_floor_layout(
         conn,
         tenant_id=tenant_id,
         layout_id=str(row["layout_id"]),
+    )
+
+
+def soft_delete_floor_layout(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+) -> dict[str, Any] | None:
+    """Soft delete one tenant-scoped DRAFT/ARCHIVED layout.
+
+    Rows are never removed; PUBLISHED and already-DELETED layouts are
+    excluded here so an out-of-band transition can never sneak through.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            UPDATE floor_layouts
+            SET
+                status = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+              AND status = ANY(%s)
+            RETURNING
+                id::text AS layout_id
+            """,
+            (
+                LayoutStatus.DELETED.value,
+                tenant_id,
+                layout_id,
+                [LayoutStatus.DRAFT.value, LayoutStatus.ARCHIVED.value],
+            ),
+        )
+
+        row = cur.fetchone()
+
+    if row is None:
+        return None
+
+    return _fetch_floor_layout_row(
+        conn,
+        tenant_id=tenant_id,
+        layout_id=str(row["layout_id"]),
+        include_deleted=True,
     )
 
 
@@ -443,33 +532,88 @@ def fetch_layout_seats_by_layout_id(
         for row in rows
     ]
 
-def sync_published_layout_seats(
+def reconcile_published_layout_seats(
     conn: PGConnection,
     *,
     tenant_id: str,
     floor_id: str,
     layout_id: str,
 ) -> None:
+    """Make `seats` an exact projection of this layout's configured mappings.
 
-    with conn.cursor() as cur:
-
+    Seat codes that are no longer part of the published layout are removed
+    outright when nothing references them; seats with booking/block history
+    are retired in place (INACTIVE, unbookable, timestamped) instead of being
+    deleted, so historical booking integrity is never broken.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
-            UPDATE seats
-            SET
-                status = 'INACTIVE',
-                updated_at = NOW()
-            WHERE tenant_id = %s
-              AND floor_id = %s
-              AND layout_id IS NOT NULL
-              AND layout_id <> %s
+            SELECT
+                s.id::text AS seat_id,
+                (
+                    EXISTS (SELECT 1 FROM bookings b WHERE b.seat_id = s.id)
+                    OR EXISTS (SELECT 1 FROM blocked_seats bl WHERE bl.seat_id = s.id)
+                ) AS has_history
+            FROM seats AS s
+            WHERE s.tenant_id = %s
+              AND s.floor_id = %s
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM layout_seat_mappings AS lsm
+                  WHERE lsm.tenant_id = s.tenant_id
+                    AND lsm.layout_id = %s
+                    AND lsm.is_configured = TRUE
+                    AND lsm.seat_code = s.seat_code
+              )
             """,
-            (
-                tenant_id,
-                floor_id,
-                layout_id,
-            ),
+            (tenant_id, floor_id, layout_id),
         )
+        stale_seats = cur.fetchall()
+
+    if not stale_seats:
+        return
+
+    stale_ids = [row["seat_id"] for row in stale_seats]
+    deletable_ids = [row["seat_id"] for row in stale_seats if not row["has_history"]]
+    retire_ids = [row["seat_id"] for row in stale_seats if row["has_history"]]
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            DELETE FROM seat_amenities
+            WHERE tenant_id = %s
+              AND seat_id = ANY(%s::bigint[])
+            """,
+            (tenant_id, stale_ids),
+        )
+
+        if deletable_ids:
+            cur.execute(
+                """
+                DELETE FROM seats
+                WHERE tenant_id = %s
+                  AND id = ANY(%s::bigint[])
+                """,
+                (tenant_id, deletable_ids),
+            )
+
+        if retire_ids:
+            cur.execute(
+                """
+                UPDATE seats
+                SET
+                    status = 'INACTIVE',
+                    is_bookable = FALSE,
+                    is_reserved = FALSE,
+                    live_until = NOW(),
+                    retired_reason = 'LAYOUT_REPUBLISHED',
+                    updated_at = NOW()
+                WHERE tenant_id = %s
+                  AND id = ANY(%s::bigint[])
+                """,
+                (tenant_id, retire_ids),
+            )
 
 def publish_layout_seat_configurations(
     conn: PGConnection,
@@ -508,10 +652,13 @@ def publish_layout_seat_configurations(
             building_id=str(mapping["building_id"]),
             floor_id=str(mapping["floor_id"]),
             seat_code=str(mapping["seat_code"]),
+            seat_name=mapping.get("seat_name"),
             seat_type=mapping["seat_type"],
             status=mapping["status"],
             is_bookable=mapping["is_bookable"],
+            is_reserved=mapping.get("is_reserved"),
             svg_element_id=str(mapping["svg_element_id"]),
+            source_layout_mapping_id=str(mapping["id"]),
         )
 
         replace_seat_amenities(

@@ -81,7 +81,7 @@ export default function DashboardPage() {
 
         {canBookSelf && (
           <div className="w-full lg:w-[258px] lg:shrink-0 space-y-4">
-            <FavouriteSeatCard seat={data.favouriteSeat} canBookSelf={canBookSelf} />
+            <FavouriteSeatCard seat={data.favouriteSeat} secondFavSeat={data.secondFavouriteSeat} canBookSelf={canBookSelf} />
           </div>
         )}
       </div>

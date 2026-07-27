@@ -9,6 +9,21 @@ class LayoutStatus(str, Enum):
     DRAFT = "DRAFT"
     PUBLISHED = "PUBLISHED"
     ARCHIVED = "ARCHIVED"
+    DELETED = "DELETED"
+
+
+NON_DELETED_LAYOUT_STATUSES: tuple[str, ...] = (
+    LayoutStatus.DRAFT.value,
+    LayoutStatus.ARCHIVED.value,
+    LayoutStatus.PUBLISHED.value,
+)
+
+# Every status, including DELETED. Used only by read/list surfaces that show
+# a deleted layout as a view-only historical entry — never by anything that
+# resolves "the" active layout for a floor or that can act on a layout
+# (configure, activate, delete), which must keep using
+# NON_DELETED_LAYOUT_STATUSES so a deleted layout behaves as gone.
+ALL_LAYOUT_STATUSES: tuple[str, ...] = tuple(status.value for status in LayoutStatus)
 
 
 class SeatAvailabilityStatus(str, Enum):
@@ -58,4 +73,35 @@ class VisitPurpose(str, Enum):
     WORKSHOP = "WORKSHOP"
     VENDOR_VISIT = "VENDOR_VISIT"
     CUSTOMER_VISIT = "CUSTOMER_VISIT"
+    OTHER = "OTHER"
+
+
+class BookingModificationReason(str, Enum):
+    """Mirrors chk_booking_modification_reason -- the only values
+    bookings.modification_reason accepts besides NULL."""
+    USER_REQUEST = "USER_REQUEST"
+    ADMIN_MODIFIED = "ADMIN_MODIFIED"
+    FACILITATOR_MODIFIED = "FACILITATOR_MODIFIED"
+    SEAT_UNAVAILABLE = "SEAT_UNAVAILABLE"
+    GUEST_DETAILS_UPDATED = "GUEST_DETAILS_UPDATED"
+    DATE_CHANGED = "DATE_CHANGED"
+    SYSTEM_REALLOCATION = "SYSTEM_REALLOCATION"
+    POLICY_CHANGE = "POLICY_CHANGE"
+    OTHER = "OTHER"
+
+
+class GuestVisitModificationReason(str, Enum):
+    """Mirrors chk_guest_visit_modification_reason -- the only values
+    guest_visits.modification_reason accepts besides NULL."""
+    USER_REQUEST = "USER_REQUEST"
+    HOST_CHANGED = "HOST_CHANGED"
+    DATE_CHANGED = "DATE_CHANGED"
+    TIME_CHANGED = "TIME_CHANGED"
+    LOCATION_CHANGED = "LOCATION_CHANGED"
+    PURPOSE_CHANGED = "PURPOSE_CHANGED"
+    SEAT_REQUIREMENT_CHANGED = "SEAT_REQUIREMENT_CHANGED"
+    GUEST_DETAILS_UPDATED = "GUEST_DETAILS_UPDATED"
+    ADMIN_MODIFIED = "ADMIN_MODIFIED"
+    FACILITATOR_MODIFIED = "FACILITATOR_MODIFIED"
+    SYSTEM_UPDATE = "SYSTEM_UPDATE"
     OTHER = "OTHER"

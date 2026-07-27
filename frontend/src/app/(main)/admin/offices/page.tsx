@@ -10,6 +10,7 @@ import { Suspense, useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { CheckCircle2, XCircle, X, Plus } from "lucide-react";
 import { Office } from "@/features/offices/types/office.types";
+import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
 
 type BannerState = {
   type: "success" | "error";
@@ -120,7 +121,7 @@ function OfficesPage() {
       )}
 
       {/* STATS CARDS */}
-      <OfficeStats stats={stats} />
+      {loading ? <StatCardsSkeleton /> : <OfficeStats stats={stats} />}
 
       {/* TABLE CARD */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
@@ -142,7 +143,7 @@ function OfficesPage() {
         {/* TABLE BODY */}
         <div className="w-full overflow-x-auto">
           {loading ? (
-            <div className="p-6 text-sm text-gray-500">Loading...</div>
+            <TableBodySkeleton columns={5} rows={4} />
           ) : error ? (
             <div className="p-6 text-sm text-red-500">{error}</div>
           ) : (
@@ -167,9 +168,11 @@ function OfficesPage() {
         {/* FOOTER */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
           <span>
-            Showing {filteredOffices.length === 0 ? 0 : startIndex + 1} to{" "}
-            {Math.min(startIndex + itemsPerPage, filteredOffices.length)} of{" "}
-            {filteredOffices.length} entries
+            {filteredOffices.length > 0 &&
+              `Showing ${startIndex + 1} to ${Math.min(
+                startIndex + itemsPerPage,
+                filteredOffices.length
+              )} of ${filteredOffices.length} entries`}
           </span>
           <div className="self-center sm:self-auto">
             <Pagination
@@ -187,7 +190,7 @@ function OfficesPage() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-gray-500">Loading...</div>}>
+    <Suspense fallback={<div className="p-6"><TableSkeleton columns={5} rows={4} /></div>}>
       <OfficesPage />
     </Suspense>
   );

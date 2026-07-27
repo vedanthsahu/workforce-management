@@ -13,6 +13,7 @@ from backend.repositories.location_repository import (
     fetch_sites,
 )
 from backend.repositories.preferences_repository import fetch_amenities
+from backend.repositories.user_repository import fetch_admin_user_directory
 
 
 class FakeCursor:
@@ -119,9 +120,15 @@ class AdminManagementRepositoryTests(unittest.TestCase):
         sql, params = cursor.executions[0]
         self.assertIn("layout_count", sql)
         self.assertIn("published_layout_exists", sql)
+        self.assertIn("flc.status = ANY(%s)", sql)
+        self.assertIn("fl.status = ANY(%s)", sql)
         self.assertIn("f.status = %s", sql)
         self.assertIn("f.floor_name ILIKE %s", sql)
-        self.assertEqual(params[:2], ["3", "1"])
+        self.assertEqual(
+            params[:2],
+            [["DRAFT", "ARCHIVED", "PUBLISHED"], ["DRAFT", "ARCHIVED", "PUBLISHED"]],
+        )
+        self.assertEqual(params[2:4], ["3", "1"])
 
     def test_amenity_listing_returns_metrics_and_assignment_counts(self) -> None:
         cursor = FakeCursor(
@@ -160,6 +167,45 @@ class AdminManagementRepositoryTests(unittest.TestCase):
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["active_amenities"], 1)
         self.assertEqual(result["items"][0]["assigned_seat_count"], 3)
+
+    def test_admin_user_directory_filters_and_sorts_in_sql(self) -> None:
+        cursor = FakeCursor(
+            fetchone_values=[
+                {
+                    "total_users": 10,
+                    "filtered_users": 4,
+                    "active_users": 3,
+                    "inactive_users": 1,
+                }
+            ],
+            fetchall_values=[
+                [
+                    {
+                        "id": "42",
+                        "full_name": "Employee One",
+                        "role_name": "EMPLOYEE",
+                        "status": "ACTIVE",
+                    }
+                ]
+            ],
+        )
+        conn = FakeConnection(cursor)
+
+        result = fetch_admin_user_directory(
+            conn,
+            tenant_id="1",
+            role_name="EMPLOYEE",
+            status="ACTIVE",
+        )
+
+        combined_sql = " ".join(sql for sql, _ in cursor.executions)
+        self.assertIn("au.tenant_id = %(tenant_id)s", combined_sql)
+        self.assertIn("au.role_name = %(role_name)s", combined_sql)
+        self.assertIn("au.status = %(status)s", combined_sql)
+        self.assertIn("au.full_name ASC NULLS LAST", combined_sql)
+        self.assertEqual(cursor.executions[0][1]["tenant_id"], "1")
+        self.assertEqual(result["summary"]["filtered_users"], 4)
+        self.assertEqual(result["items"][0]["id"], "42")
 
 
 if __name__ == "__main__":

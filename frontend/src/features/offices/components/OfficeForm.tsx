@@ -7,18 +7,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxItem,
+} from "@/components/ui/combobox";
 import useCreateSite from "../hooks/useCreateSite";
+import { Country } from "country-state-city";
 
 const TIMEZONES = [
   "Asia/Kolkata",
   ...Intl.supportedValuesOf("timeZone"),
 ].filter((value, index, self) => self.indexOf(value) === index).sort();
+
+const COUNTRIES = Country.getAllCountries()
+  .map((c) => c.name)
+  .sort();
 
 export default function OfficeForm() {
   const router = useRouter();
@@ -82,14 +86,6 @@ export default function OfficeForm() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 bg-[#f7f8fa]">
 
-      {/* BACK BUTTON */}
-      <button
-        onClick={() => router.push("/admin/offices")}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 mb-5 transition-colors"
-      >
-        <ArrowLeft size={14} />
-        Back to Offices
-      </button>
 
       {/* ERROR BANNER */}
       {errorMessage && (
@@ -102,7 +98,7 @@ export default function OfficeForm() {
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900 leading-tight">Add Office</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Add Office</h1>
           <p className="text-xs text-gray-500 mt-0.5">
             Fill in the details to create a new office location.
           </p>
@@ -178,35 +174,46 @@ export default function OfficeForm() {
             <Label>
               Country <span className="text-red-400 font-normal">*</span>
             </Label>
-            <Input
-              name="country"
-              value={formData.country}
-              onChange={handleChange}
-              placeholder="e.g. India"
-            />
+            <Combobox
+              items={COUNTRIES}
+              value={formData.country || null}
+              onValueChange={(value) => {
+                setErrorMessage("");
+                setFormData((prev) => ({ ...prev, country: value ?? "" }));
+              }}
+            >
+              <ComboboxInput placeholder="Select a country…" />
+              <ComboboxContent>
+                {(country: string) => (
+                  <ComboboxItem key={country} value={country}>
+                    {country}
+                  </ComboboxItem>
+                )}
+              </ComboboxContent>
+            </Combobox>
           </div>
 
           <div className="sm:col-span-2 space-y-1.5">
             <Label>
               Timezone <span className="text-red-400 font-normal">*</span>
             </Label>
-            <Select
-              value={formData.timezone}
+            <Combobox
+              items={TIMEZONES}
+              value={formData.timezone || null}
               onValueChange={(value) => {
-                if (!value) return;
                 setErrorMessage("");
-                setFormData((prev) => ({ ...prev, timezone: value }));
+                setFormData((prev) => ({ ...prev, timezone: value ?? "" }));
               }}
             >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a timezone…" />
-              </SelectTrigger>
-              <SelectContent>
-                {TIMEZONES.map((tz) => (
-                  <SelectItem key={tz} value={tz}>{tz}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <ComboboxInput placeholder="Select a timezone…" />
+              <ComboboxContent>
+                {(tz: string) => (
+                  <ComboboxItem key={tz} value={tz}>
+                    {tz}
+                  </ComboboxItem>
+                )}
+              </ComboboxContent>
+            </Combobox>
           </div>
 
         </div>

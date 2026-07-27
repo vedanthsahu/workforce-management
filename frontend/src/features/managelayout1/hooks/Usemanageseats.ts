@@ -50,11 +50,11 @@ export function useManageSeats() {
 
   // ── Layout ─────────────────────────────────────────────────────────────
   const [layout,        setLayout]        = useState<Layout | null>(null);
-  const [layoutLoading, setLayoutLoading] = useState(false);
+  const [layoutLoading, setLayoutLoading] = useState(true);
   const [layoutError,   setLayoutError]   = useState(false);
 
   useEffect(() => {
-    if (!floorId || !layoutId) { setLayout(null); return; }
+    if (!floorId || !layoutId) { setLayout(null); setLayoutLoading(false); return; }
     setLayoutLoading(true);
     setLayoutError(false);
     setLayout(null);
@@ -99,7 +99,7 @@ export function useManageSeats() {
   const filteredSeats = useMemo(() => {
     const query = filters.search.trim().toLowerCase();
     return seats.filter((s) => {
-      if (query && s.seat_code.toLowerCase() !== query)                                                          return false;
+      if (query && !s.seat_code.toLowerCase().includes(query))                                                    return false;
       if (filters.seat_type !== "All" && (s.seat_type ?? "").toUpperCase() !== filters.seat_type.toUpperCase()) return false;
       if (filters.status    !== "All" && (s.status    ?? "").toUpperCase() !== filters.status.toUpperCase())    return false;
       if (filters.bookable  !== "All" && s.is_bookable !== (filters.bookable === "Yes"))                        return false;
@@ -122,10 +122,11 @@ export function useManageSeats() {
     });
   }, []);
 
-  const selectAll      = useCallback(() => setSelected(new Set(filteredSeats.map((s) => s.seat_svg_id))), [filteredSeats]);
+  const selectAll      = useCallback(() => setSelected(new Set(filteredSeats.filter((s) => !s.is_configured).map((s) => s.seat_svg_id))), [filteredSeats]);
   const clearSelection = useCallback(() => setSelected(new Set()), []);
 
-  const isAllSelected   = filteredSeats.length > 0 && filteredSeats.every((s) => selected.has(s.seat_svg_id));
+  const unconfiguredSeats = filteredSeats.filter((s) => !s.is_configured);
+  const isAllSelected   = unconfiguredSeats.length > 0 && unconfiguredSeats.every((s) => selected.has(s.seat_svg_id));
   const isIndeterminate = selected.size > 0 && !isAllSelected;
 
   // ── Edit panel ─────────────────────────────────────────────────────────
@@ -161,6 +162,11 @@ export function useManageSeats() {
     updateSeat(updated);
     markDirty();
     setEditingSeat(null);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.delete(payload.seat_svg_id);
+      return next;
+    });
 
     return updated;
   }, [seats, updateSeat, markDirty]);

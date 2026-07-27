@@ -4,14 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { X, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 
 type Props = {
-  title:    string;
+  title:      string;
   svgContent?: string | null;   // already-loaded SVG markup
-  svgUrl?:    string | null;    // URL to fetch SVG from
-  badge?:     React.ReactNode;
-  onClose:  () => void;
+  svgUrl?:     string | null;   // URL to fetch SVG from
+  badge?:      React.ReactNode;
+  legend?:     React.ReactNode; // optional legend strip in footer
+  onClose:    () => void;
 };
 
-export default function SVGPreviewModal({ title, svgContent, svgUrl, badge, onClose }: Props) {
+export default function SVGPreviewModal({ title, svgContent, svgUrl, badge, legend, onClose }: Props) {
   const overlayRef           = useRef<HTMLDivElement>(null);
   const [svg,    setSvg]     = useState<string | null>(svgContent ?? null);
   const [error,  setError]   = useState<string | null>(null);
@@ -148,7 +149,8 @@ export default function SVGPreviewModal({ title, svgContent, svgUrl, badge, onCl
         </div>
 
         {/* ── Footer ── */}
-        <div className="px-5 py-3 border-t shrink-0 flex justify-end">
+        <div className="px-5 py-3 border-t shrink-0 flex items-center justify-between gap-4">
+          <div>{legend}</div>
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm rounded-md border hover:bg-gray-50 text-gray-600 transition-colors"

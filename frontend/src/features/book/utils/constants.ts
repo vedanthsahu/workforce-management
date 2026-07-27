@@ -43,10 +43,10 @@ export const SEAT_PALETTES: Record<string, SeatPalette> = {
     opacity: "1",
   },
   selected: {
-    body: "#dbeafe", bodyStroke: "#3b82f6",
-    armrest: "#bfdbfe",
-    back: "#1d4ed8", backStroke: "#1e40af",
-    curve: "#3b82f6", arc: "#93c5fd",
+    body: "#c7d2fe", bodyStroke: "#6366f1",
+    armrest: "#a5b4fc",
+    back: "#4338ca", backStroke: "#3730a3",
+    curve: "#6366f1", arc: "#818cf8",
     opacity: "1",
   },
   booked: {

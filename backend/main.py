@@ -13,9 +13,13 @@ expectations of the API layer.
 """
 
 import logging
+import threading
 from time import perf_counter
 from typing import Any
 from uuid import uuid4
+
+import structlog
+from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,9 +34,9 @@ from backend.api.routes.guests import router as guests_router
 from backend.api.routes.locations import router as locations_router
 from backend.api.routes.sso import router as sso_router
 from backend.core.config import get_settings
-from backend.core.logging import (
+from backend.core.app_logging import (
     LOGGER_NAME,
-    configure_console_logging,
+    configure_logging,
     enable_backend_function_trace,
 )
 from backend.db.connection import get_db_connection
@@ -42,19 +46,28 @@ from backend.repositories.token_repository import (
     purge_expired_refresh_tokens,
     purge_expired_sessions,
 )
+from backend.services.auth_service import sync_department_teams, sync_graph_managed_roles
 from backend.api.routes import teams
 from backend.api.routes.preferences import router as preferences_router
+from backend.api.routes.admin_bookings import router as admin_bookings_router
 from backend.api.routes.admin_dashboard import router as admin_dashboard_router
 from backend.api.routes.floor_layouts import router as floor_layout_router
 from backend.api.routes.user_management import router as user_management_router
 settings = get_settings()
-configure_console_logging(
+configure_logging(
     "DEBUG" if settings.app_trace_functions else settings.app_log_level,
 )
 if settings.app_trace_functions:
     enable_backend_function_trace()
 
-request_logger = logging.getLogger(f"{LOGGER_NAME}.requests")
+_req_log = structlog.get_logger("requests")
+graph_role_sync_logger = logging.getLogger(f"{LOGGER_NAME}.graph_role_sync")
+_graph_role_sync_stop = threading.Event()
+_graph_role_sync_thread: threading.Thread | None = None
+
+graph_team_sync_logger = logging.getLogger(f"{LOGGER_NAME}.graph_team_sync")
+_graph_team_sync_stop = threading.Event()
+_graph_team_sync_thread: threading.Thread | None = None
 
 # The application exposes a single frontend origin and composes feature routers
 # from the authentication, SSO, booking, and location modules.
@@ -76,6 +89,7 @@ app.include_router(locations_router)
 app.include_router(teams.router)
 app.include_router(dashboard_router)
 app.include_router(admin_dashboard_router)
+app.include_router(admin_bookings_router)
 app.include_router(preferences_router)
 app.include_router(floor_layout_router)
 app.include_router(user_management_router)
@@ -83,92 +97,85 @@ app.include_router(user_management_router)
 
 @app.middleware("http")
 async def log_http_requests(request: Request, call_next):
-    """Log every HTTP request to the command window."""
+    # Bind request_id to structlog context — every log emitted anywhere
+    # during this request automatically carries it, with zero per-call effort.
+    clear_contextvars()
     request_id = uuid4().hex[:8]
-    started_at = perf_counter()
     method = request.method
     path = request.url.path
-    query = _safe_query_string(request)
-    client = request.client.host if request.client else "-"
-
-    request_logger.info(
-        "request.start id=%s method=%s path=%s query=%s client=%s",
-        request_id,
-        method,
-        path,
-        query,
-        client,
+    client_ip = request.client.host if request.client else None
+    correlation_id = (
+        request.headers.get("x-correlation-id")
+        or request.headers.get("x-request-id")
+        or None
     )
+    user_agent = request.headers.get("user-agent")
+    bind_contextvars(
+        request_id=request_id,
+        request_method=method,
+        request_path=path,
+        source_channel=_detect_source_channel(request),
+        correlation_id=correlation_id,
+        ip_address=client_ip,
+        user_agent=user_agent,
+    )
+
+    started_at = perf_counter()
 
     try:
         response = await call_next(request)
     except Exception:
-        duration_ms = (perf_counter() - started_at) * 1000
-        request_logger.exception(
-            "request.error id=%s method=%s path=%s endpoint=%s duration_ms=%.2f",
-            request_id,
-            method,
-            path,
-            _endpoint_name(request),
-            duration_ms,
+        duration_ms = round((perf_counter() - started_at) * 1000, 2)
+        _req_log.error(
+            "request.error",
+            method=method,
+            path=path,
+            duration_ms=duration_ms,
+            client=client_ip,
+            exc_info=True,
         )
         raise
 
-    duration_ms = (perf_counter() - started_at) * 1000
+    duration_ms = round((perf_counter() - started_at) * 1000, 2)
     tenant_id, user_id = _request_identity(request)
-    request_logger.info(
-        (
-            "request.end id=%s method=%s path=%s endpoint=%s "
-            "status=%s duration_ms=%.2f tenant_id=%s user_id=%s"
-        ),
-        request_id,
-        method,
-        path,
-        _endpoint_name(request),
-        response.status_code,
-        duration_ms,
-        tenant_id,
-        user_id,
+    status_code = response.status_code
+
+    log_fields: dict[str, Any] = dict(
+        method=method,
+        path=path,
+        query=_safe_query_string(request),
+        status=status_code,
+        duration_ms=duration_ms,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        client=client_ip,
     )
+
+    if status_code >= 500:
+        _req_log.error("request.complete", **log_fields)
+    elif status_code == 403:
+        _req_log.warning("request.complete", **log_fields)
+    else:
+        _req_log.info("request.complete", **log_fields)
+
     return response
 
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    """Convert FastAPI HTTP exceptions into a consistent error envelope.
-
-    Args:
-        _: Incoming request object provided by FastAPI. The handler does not
-            inspect the request because the response depends only on the raised
-            exception.
-        exc: The ``HTTPException`` raised by route handlers or dependencies.
-            Its ``status_code``, optional headers, and ``detail`` payload are
-            preserved and normalized for clients.
-
-    Returns:
-        JSONResponse: A response whose body follows the service-wide
-        ``{"error": ...}`` structure expected by frontend and API consumers.
-
-    Side Effects:
-        None beyond generating the outgoing HTTP response.
-
-    Failure Modes:
-        Any unexpected failure would come from response serialization or from
-        invalid exception detail values that cannot be coerced to strings.
-    """
+    """Convert FastAPI HTTP exceptions into a consistent error envelope."""
     payload = _normalize_http_error(exc.detail)
     error = payload.get("error", {})
-    request_logger.warning(
-        (
-            "request.http_exception method=%s path=%s endpoint=%s "
-            "status=%s code=%s message=%s"
-        ),
-        request.method,
-        request.url.path,
-        _endpoint_name(request),
-        exc.status_code,
-        error.get("code", "-") if isinstance(error, dict) else "-",
-        error.get("message", "-") if isinstance(error, dict) else "-",
+
+    # request_id is already in structlog context from the middleware above,
+    # so it appears in this log entry automatically.
+    _req_log.warning(
+        "request.http_exception",
+        method=request.method,
+        path=request.url.path,
+        status=exc.status_code,
+        error_code=error.get("code") if isinstance(error, dict) else None,
+        error_message=error.get("message") if isinstance(error, dict) else None,
     )
 
     return JSONResponse(
@@ -204,6 +211,15 @@ def startup() -> None:
         purge_expired_refresh_tokens(conn)
         purge_expired_sessions(conn, settings.session_ttl)
         conn.commit()
+    _start_graph_role_sync_scheduler()
+    _start_graph_team_sync_scheduler()
+
+
+@app.on_event("shutdown")
+def shutdown() -> None:
+    """Stop optional background workers before process shutdown."""
+    _stop_graph_role_sync_scheduler()
+    _stop_graph_team_sync_scheduler()
 
 
 @app.get("/")
@@ -277,6 +293,25 @@ def health() -> dict[str, str]:
         None expected because no external dependencies are consulted here.
     """
     return {"status": "ok"}
+
+
+def _detect_source_channel(request: Request) -> str:
+    explicit = request.headers.get("x-source-channel", "").strip().upper()
+    if explicit in {"WEB", "MOBILE", "API", "SYSTEM", "IMPORT"}:
+        return explicit
+
+    ua = (request.headers.get("user-agent") or "").lower()
+
+    if not ua:
+        return "API"
+
+    if any(token in ua for token in ("okhttp", "dart", "cfnetwork", "nsurlsession")):
+        return "MOBILE"
+
+    if any(token in ua for token in ("mozilla", "webkit", "gecko", "opera")):
+        return "WEB"
+
+    return "API"
 
 
 def _normalize_http_error(detail: Any) -> dict[str, Any]:
@@ -384,6 +419,93 @@ def _safe_query_string(request: Request) -> str:
     if len(query_string) > 500:
         return f"{query_string[:500]}..."
     return query_string
+
+
+def _start_graph_role_sync_scheduler() -> None:
+    global _graph_role_sync_thread
+    if not settings.graph_role_sync_enabled:
+        return
+    if _graph_role_sync_thread and _graph_role_sync_thread.is_alive():
+        return
+
+    _graph_role_sync_stop.clear()
+    _graph_role_sync_thread = threading.Thread(
+        target=_graph_role_sync_loop,
+        name="graph-role-sync",
+        daemon=True,
+    )
+    _graph_role_sync_thread.start()
+
+
+def _stop_graph_role_sync_scheduler() -> None:
+    if _graph_role_sync_thread is None:
+        return
+    _graph_role_sync_stop.set()
+    _graph_role_sync_thread.join(timeout=5)
+
+
+def _graph_role_sync_loop() -> None:
+    interval_seconds = settings.graph_role_sync_interval_minutes * 60
+    while not _graph_role_sync_stop.is_set():
+        try:
+            with get_db_connection() as conn:
+                result = sync_graph_managed_roles(conn)
+            graph_role_sync_logger.info(
+                (
+                    "graph_role_sync.complete scanned=%s changed=%s "
+                    "promoted=%s demoted=%s"
+                ),
+                result.scanned_users,
+                result.changed_users,
+                result.promoted_users,
+                result.demoted_users,
+            )
+        except Exception:
+            graph_role_sync_logger.exception("graph_role_sync.failed")
+
+        if _graph_role_sync_stop.wait(interval_seconds):
+            break
+
+
+def _start_graph_team_sync_scheduler() -> None:
+    global _graph_team_sync_thread
+    if not settings.graph_team_sync_enabled:
+        return
+    if _graph_team_sync_thread and _graph_team_sync_thread.is_alive():
+        return
+
+    _graph_team_sync_stop.clear()
+    _graph_team_sync_thread = threading.Thread(
+        target=_graph_team_sync_loop,
+        name="graph-team-sync",
+        daemon=True,
+    )
+    _graph_team_sync_thread.start()
+
+
+def _stop_graph_team_sync_scheduler() -> None:
+    if _graph_team_sync_thread is None:
+        return
+    _graph_team_sync_stop.set()
+    _graph_team_sync_thread.join(timeout=5)
+
+
+def _graph_team_sync_loop() -> None:
+    interval_seconds = settings.graph_team_sync_interval_minutes * 60
+    while not _graph_team_sync_stop.is_set():
+        try:
+            with get_db_connection() as conn:
+                result = sync_department_teams(conn)
+            graph_team_sync_logger.info(
+                "graph_team_sync.complete scanned=%s changed=%s",
+                result.scanned_users,
+                result.changed_users,
+            )
+        except Exception:
+            graph_team_sync_logger.exception("graph_team_sync.failed")
+
+        if _graph_team_sync_stop.wait(interval_seconds):
+            break
 
 
 if __name__ == "__main__":

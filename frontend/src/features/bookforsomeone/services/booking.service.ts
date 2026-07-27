@@ -3,16 +3,13 @@ import {
   Building,
   CreateGuestInput,
   CreateGuestVisitInput,
+  EligibilityResponse,
   Employee,
   Floor,
   Guest,
   GuestVisitResponse,
-  GuestType,
-  PurposeOfVisit,
   Site,
 } from "../types/booking";
-
-export type { CreateGuestInput, CreateGuestVisitInput, GuestVisitResponse };
 
 // ── Users (employee search) ───────────────────────────────────────────────────
 
@@ -89,6 +86,19 @@ export async function createGuest(input: CreateGuestInput): Promise<Guest> {
   return mapGuest(data);
 }
 
+export async function updateGuest(
+  guestId: string,
+  input: { fullName?: string; email?: string; phone?: string; organization?: string },
+): Promise<Guest> {
+  const { data } = await axiosInstance.patch<RawGuest>(`/guests/${guestId}`, {
+    full_name: input.fullName,
+    email: input.email || undefined,
+    phone: input.phone || undefined,
+    organization: input.organization || undefined,
+  });
+  return mapGuest(data);
+}
+
 // ── Sites & Buildings ────────────────────────────────────────────────────────
 
 interface RawSite {
@@ -145,6 +155,7 @@ export async function createGuestVisit(input: CreateGuestVisitInput): Promise<Gu
     host_user_id: Number(input.hostUserId),
     site_id: Number(input.siteId),
     building_id: Number(input.buildingId),
+    floor_id: input.floorId ? Number(input.floorId) : undefined,
     visit_date: input.visitDate,
     guest_type: input.guestType,
     purpose_of_visit: input.purposeOfVisit || undefined,
@@ -156,11 +167,6 @@ export async function createGuestVisit(input: CreateGuestVisitInput): Promise<Gu
 }
 
 // ── Booking Eligibility ─────────────────────────────────────────────────────
-
-interface EligibilityResponse {
-  eligible: boolean;
-  message: string;
-}
 
 export async function checkGuestBookingEligibility(
   guestId: string,

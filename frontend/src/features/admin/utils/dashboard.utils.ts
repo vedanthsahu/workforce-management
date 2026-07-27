@@ -1,6 +1,6 @@
 
 import type {
-  AdminBookingItem,
+  AdminActivityItem,
   OccupancyHierarchyItem,
   OccupancyRangeItem,
   OccupancyTrendPoint,
@@ -33,6 +33,12 @@ export function getWeekRange(
   };
 }
 
+// Occupancy percentages always round up to the next whole number
+// (e.g. 0.2 -> 1, 1.1 -> 2) rather than rounding to nearest.
+export function ceilPercentage(value: number): number {
+  return Math.ceil(value);
+}
+
 export function mapOccupancyRangeToTrend(
   items: OccupancyRangeItem[],
   targetDate: Date
@@ -53,7 +59,8 @@ export function mapOccupancyRangeToTrend(
         month: "short",
         year: "numeric",
       }),
-      occupancy: found?.occupancyRate ?? 0,
+      occupancy: ceilPercentage(found?.occupancyRate ?? 0),
+      bookedSeats: found?.bookedSeats ?? 0,
     });
   }
 
@@ -62,21 +69,58 @@ export function mapOccupancyRangeToTrend(
 
 export function mapHierarchyToTopOffices(items: OccupancyHierarchyItem[]): TopOffice[] {
   return items
-    .map((item) => ({ name: item.siteName, value: item.occupancyRate }))
+    .map((item) => ({
+      name: item.siteName,
+      value: ceilPercentage(item.occupancyRate),
+      bookedSeats: item.bookedSeats,
+      totalSeats: item.totalSeats,
+    }))
     .sort((a, b) => b.value - a.value);
 }
 
-export function mapBookingsToRecent(items: AdminBookingItem[]): RecentBooking[] {
-  return items.map((item) => ({
-    name: item.user?.fullName ?? "",
-    email: item.user?.email ?? "",
-    office: item.site?.siteName ?? "",
-    seat: item.seat?.seatCode ?? "",
-    date: new Date(item.bookingDate).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }),
-    status: item.bookingStatus === "CANCELLED" ? "Cancelled" : "Booked",
-  }));
+// ── Activities → Recent Bookings row ────────────────────────────────────────
+// bookedFor.id is a guest ID for guest activities and an employee ID otherwise —
+// those are different ID spaces, so only compare them for employee activities.
+function isSelfBooking(item: AdminActivityItem): boolean {
+  return (
+    item.bookedFor.entityType === "EMPLOYEE" &&
+    item.bookedBy.id === item.bookedFor.id
+  );
+}
+
+function getActivityKind(item: AdminActivityItem): RecentBooking["type"] {
+  if (item.bookedFor.entityType === "GUEST") return "Guest";
+  return isSelfBooking(item) ? "Self" : "Employee";
+}
+
+const STATUS_LABELS: Record<AdminActivityItem["activityStatus"], RecentBooking["status"]> = {
+  CONFIRMED: "Booked",
+  SCHEDULED: "Booked",
+  CHECKED_IN: "Checked In",
+  CHECKED_OUT: "Completed",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+  NO_SHOW: "No Show",
+  MODIFIED: "Modified",
+};
+
+export function mapActivitiesToRecent(items: AdminActivityItem[]): RecentBooking[] {
+  return items.map((item) => {
+    const isSelf = isSelfBooking(item);
+
+    return {
+      name: item.bookedFor.name,
+      email: item.bookedFor.email,
+      office: item.site?.siteName ?? "",
+      seat: item.hasBooking ? item.seat?.seatCode ?? "—" : "Only Visit",
+      date: new Date(item.activityDate).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+      status: STATUS_LABELS[item.activityStatus] ?? "Booked",
+      type: getActivityKind(item),
+      bookedByName: isSelf ? undefined : item.bookedBy.name,
+    };
+  });
 }

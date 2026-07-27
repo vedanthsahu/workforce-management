@@ -26,3 +26,7 @@ export const getLayoutsByFloor = async (
   );
   return res.data;
 };
+
+export const deleteLayout = async (layoutId: string): Promise<void> => {
+  await axiosInstance.delete(`/admin/floor-layouts/${layoutId}`);
+};

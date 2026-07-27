@@ -9,6 +9,8 @@ from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
 from psycopg2.extras import Json
 
+from backend.core.enums import NON_DELETED_LAYOUT_STATUSES
+
 def fetch_sites(
     conn: PGConnection,
     *,
@@ -180,7 +182,9 @@ def fetch_floors_by_building(
             fl.layout_file_url,
             fl.status AS layout_status,
             fl.is_published AS layout_is_published,
-            fl.version_no AS layout_version_no
+            fl.version_no AS layout_version_no,
+            fl.updated_at AS layout_last_updated,
+            pub.full_name AS published_by_name
         FROM floors AS f
         JOIN buildings AS b
             ON f.building_id = b.id
@@ -208,6 +212,7 @@ def fetch_floors_by_building(
             FROM floor_layouts AS flc
             WHERE flc.tenant_id = f.tenant_id
               AND flc.floor_id = f.id
+              AND flc.status = ANY(%s)
         ) AS layout_counts ON TRUE
         LEFT JOIN LATERAL (
             SELECT
@@ -217,12 +222,15 @@ def fetch_floors_by_building(
                 fl.status,
                 fl.is_published,
                 fl.version_no,
-                fl.created_at
+                fl.created_at,
+                fl.updated_at,
+                fl.published_by_user_id
             FROM floor_layouts AS fl
             WHERE fl.tenant_id = f.tenant_id
               AND fl.site_id = f.site_id
               AND fl.building_id = f.building_id
               AND fl.floor_id = f.id
+              AND fl.status = ANY(%s)
             ORDER BY
                 CASE
                     WHEN fl.is_published = TRUE
@@ -235,10 +243,18 @@ def fetch_floors_by_building(
                 fl.id DESC
             LIMIT 1
         ) AS fl ON TRUE
+        LEFT JOIN app_users AS pub
+            ON pub.id = fl.published_by_user_id
+           AND pub.tenant_id = f.tenant_id
         WHERE b.id = %s
           AND f.tenant_id = %s
     """
-    params: list[Any] = [building_id, tenant_id]
+    params: list[Any] = [
+        list(NON_DELETED_LAYOUT_STATUSES),
+        list(NON_DELETED_LAYOUT_STATUSES),
+        building_id,
+        tenant_id,
+    ]
     query, params = _apply_status_filter(query, params, "f.status", status_filter)
     query, params = _apply_search_filter(
         query,
@@ -669,6 +685,7 @@ def fetch_floor_by_id(
                 FROM floor_layouts AS flc
                 WHERE flc.tenant_id = f.tenant_id
                   AND flc.floor_id = f.id
+                  AND flc.status = ANY(%s)
             ) AS layout_counts ON TRUE
             LEFT JOIN LATERAL (
                 SELECT
@@ -682,6 +699,7 @@ def fetch_floor_by_id(
                 FROM floor_layouts AS fl
                 WHERE fl.tenant_id = f.tenant_id
                   AND fl.floor_id = f.id
+                  AND fl.status = ANY(%s)
                 ORDER BY
                     CASE
                         WHEN fl.is_published = TRUE
@@ -697,7 +715,12 @@ def fetch_floor_by_id(
             WHERE f.tenant_id = %s
               AND f.id = %s
             """,
-            (tenant_id, floor_id),
+            (
+                list(NON_DELETED_LAYOUT_STATUSES),
+                list(NON_DELETED_LAYOUT_STATUSES),
+                tenant_id,
+                floor_id,
+            ),
         )
         row = cur.fetchone()
     return dict(row) if row else None
@@ -752,14 +775,19 @@ def fetch_layout_seat_mapping_by_id(
         cur.execute(
             """
             SELECT
-                *
-            FROM layout_seat_mappings
-            WHERE tenant_id = %s
-              AND id = %s
+                lsm.*
+            FROM layout_seat_mappings AS lsm
+            JOIN floor_layouts AS fl
+                ON fl.id = lsm.layout_id
+               AND fl.tenant_id = lsm.tenant_id
+            WHERE lsm.tenant_id = %s
+              AND lsm.id = %s
+              AND fl.status = ANY(%s)
             """,
             (
                 tenant_id,
                 layout_seat_mapping_id,
+                list(NON_DELETED_LAYOUT_STATUSES),
             ),
         )
 
@@ -838,10 +866,13 @@ def upsert_operational_seat(
     building_id: str,
     floor_id: str,
     seat_code: str,
+    seat_name: str | None = None,
     seat_type: str | None,
     status: str | None,
     is_bookable: bool | None,
+    is_reserved: bool | None = None,
     svg_element_id: str,
+    source_layout_mapping_id: str | None = None,
 ) -> dict[str, Any]:
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -855,10 +886,14 @@ def upsert_operational_seat(
                 building_id,
                 floor_id,
                 seat_code,
+                seat_name,
                 seat_type,
                 is_bookable,
+                is_reserved,
                 status,
-                svg_element_id
+                svg_element_id,
+                source_layout_mapping_id,
+                live_from
             )
             VALUES (
                 %s,
@@ -870,7 +905,11 @@ def upsert_operational_seat(
                 %s,
                 %s,
                 %s,
-                %s
+                %s,
+                %s,
+                %s,
+                %s,
+                NOW()
             )
 
             ON CONFLICT (
@@ -880,10 +919,16 @@ def upsert_operational_seat(
 
             DO UPDATE SET
                 layout_id = EXCLUDED.layout_id,
+                seat_name = EXCLUDED.seat_name,
                 seat_type = EXCLUDED.seat_type,
                 is_bookable = EXCLUDED.is_bookable,
+                is_reserved = EXCLUDED.is_reserved,
                 status = EXCLUDED.status,
                 svg_element_id = EXCLUDED.svg_element_id,
+                source_layout_mapping_id = EXCLUDED.source_layout_mapping_id,
+                live_from = COALESCE(seats.live_from, NOW()),
+                live_until = NULL,
+                retired_reason = NULL,
                 updated_at = NOW()
 
             RETURNING
@@ -896,10 +941,13 @@ def upsert_operational_seat(
                 building_id,
                 floor_id,
                 seat_code,
+                seat_name,
                 seat_type,
                 is_bookable,
+                is_reserved,
                 status,
                 svg_element_id,
+                source_layout_mapping_id,
             ),
         )
 
@@ -984,6 +1032,31 @@ def fetch_seat_amenity_ids(
         rows = cur.fetchall()
 
     return [int(row[0]) for row in rows]
+
+
+def fetch_seat_amenity_names(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seat_id: str,
+) -> list[str]:
+    """Return amenity display names for a single seat, ordered alphabetically."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT a.amenity_name
+            FROM seat_amenities sa
+            INNER JOIN amenities a
+                ON a.id = sa.amenity_id
+               AND a.tenant_id = sa.tenant_id
+            WHERE sa.tenant_id = %s
+              AND sa.seat_id = %s
+            ORDER BY a.amenity_name
+            """,
+            (tenant_id, seat_id),
+        )
+        rows = cur.fetchall()
+    return [row[0] for row in rows]
 
 
 

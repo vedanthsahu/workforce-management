@@ -47,7 +47,7 @@ export const useAmenityForm = () => {
       return created?.amenity_id ?? null;
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? error.response?.data?.error?.code
+        ? error.response?.data?.error?.message ?? error.response?.data?.message
         : undefined;
       setErrorMessage(message || "Failed to create amenity");
       return null;

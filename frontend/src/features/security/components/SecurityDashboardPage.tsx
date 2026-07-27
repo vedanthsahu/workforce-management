@@ -1,9 +1,30 @@
 "use client";
 
+import { Skeleton } from "@/components/ui/skeleton";
 import { useSecurityDashboard } from "../hooks/useSecurityDashboard";
 import { StatCards } from "./StatCards";
 import { SiteSelector } from "./SiteSelector";
 import { VisitorTable } from "./VisitorTable";
+
+function StatCardsSkeleton() {
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          <Skeleton className="h-1 w-full" />
+          <div className="p-4 flex items-start justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-7 w-10" />
+              <Skeleton className="h-2.5 w-20" />
+            </div>
+            <Skeleton className="w-10 h-10 rounded-lg" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function SecurityDashboardPage() {
   const {
@@ -23,7 +44,6 @@ export default function SecurityDashboardPage() {
     loading,
     error,
     refetch,
-    patchVisitor,
   } = useSecurityDashboard();
 
   return (
@@ -35,7 +55,7 @@ export default function SecurityDashboardPage() {
           <p className="text-[12px] text-gray-400">Overview of today&apos;s visitor activity</p>
         </div>
 
-        <SiteSelector selectedSiteId={selectedSiteId} onChange={setSelectedSiteId} />
+        <SiteSelector sites={sites} selectedSiteId={selectedSiteId} onChange={setSelectedSiteId} />
       </div>
 
       {/* ── Error banner ─────────────────────────────────────────── */}
@@ -46,7 +66,7 @@ export default function SecurityDashboardPage() {
       )}
 
       {/* ── Stat cards ───────────────────────────────────────────── */}
-      {summary && <StatCards summary={summary} />}
+      {loading && !summary ? <StatCardsSkeleton /> : summary && <StatCards summary={summary} />}
 
       {/* ── Today's expected visitors table ─────────────────────── */}
       <VisitorTable
@@ -57,7 +77,6 @@ export default function SecurityDashboardPage() {
         search={search}
         onSearchChange={setSearch}
         onRefresh={refetch}
-        onPatchVisitor={patchVisitor}
         page={page}
         totalPages={totalPages}
         onPageChange={setPage}

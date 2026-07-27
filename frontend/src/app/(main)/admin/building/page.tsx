@@ -11,6 +11,7 @@ import BuildingPagination from "@/features/building/components/BuildingPaginatio
 import EditBuildingModal from "@/features/building/components/EditBuildingModal";
 import { useBuildings } from "@/features/building/hooks/useBuildings";
 import { Building } from "@/features/building/types/building.types";
+import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
 
 type BannerState = { type: "success" | "error"; message: string } | null;
 
@@ -124,7 +125,7 @@ function BuildingsPage() {
       )}
 
       {/* STATS */}
-      <BuildingCards stats={stats} />
+      {loading ? <StatCardsSkeleton /> : <BuildingCards stats={stats} />}
 
       {/* TABLE CARD */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
@@ -149,7 +150,7 @@ function BuildingsPage() {
         {/* TABLE BODY */}
         <div className="w-full overflow-x-auto">
           {loading ? (
-            <div className="p-6 text-sm text-gray-500">Loading...</div>
+            <TableBodySkeleton columns={6} rows={4} />
           ) : error ? (
             <div className="p-6 text-sm text-red-500">{error}</div>
           ) : (
@@ -164,9 +165,11 @@ function BuildingsPage() {
         {/* FOOTER */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
           <span>
-            Showing {filteredBuildings.length === 0 ? 0 : startIndex + 1} to{" "}
-            {Math.min(startIndex + itemsPerPage, filteredBuildings.length)} of{" "}
-            {filteredBuildings.length} entries
+            {filteredBuildings.length > 0 &&
+              `Showing ${startIndex + 1} to ${Math.min(
+                startIndex + itemsPerPage,
+                filteredBuildings.length
+              )} of ${filteredBuildings.length} entries`}
           </span>
           <div className="self-center sm:self-auto">
             <BuildingPagination
@@ -194,7 +197,7 @@ function BuildingsPage() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-gray-500">Loading...</div>}>
+    <Suspense fallback={<div className="p-6"><TableSkeleton columns={6} rows={4} /></div>}>
       <BuildingsPage />
     </Suspense>
   );

@@ -1,63 +1,98 @@
 
-// ─── Raw API response types (mirrors future backend schema) ─────────────────
-import type { RoleKey } from "@/features/roles/types/roles.types";
+import type { RoleKey, ApiPermission } from "@/features/roles/types/roles.types";
 
 export type { RoleKey };
 
-export type ApiUserStatus = "active" | "inactive";
+export type ApiUserStatus = "ACTIVE" | "INACTIVE";
+export type UserStatus = "active" | "inactive";
 
-export interface ApiPermission {
-  permission_key: string;
-  permission_label: string;
+export interface RoleCount {
+  roleName: string;
+  count: number;
 }
 
-export interface ApiUser {
-  user_id: string;
-  full_name: string;
-  email: string;
-  department: string;
-  employee_id: string;
-  status: ApiUserStatus;
-  joined_on: string;
-  current_role: RoleKey;
-  role_assigned_on: string;
+// Matches the real top-level `roles` array in the API payload
+export interface ApiRoleSummaryItem {
+  roleId: number;
+  roleName: RoleKey;
+  roleDescription: string;
+  userCount: number;
+  permissionCount: number;
   permissions: ApiPermission[];
 }
 
-export interface ApiUsersResponse {
-  items: ApiUser[];
-  total: number;
+export interface UsersSummary {
+  totalUsers: number;
+  filteredUsers: number;
+  activeUsers: number;
+  inactiveUsers: number;
+  roles: RoleCount[]; // derived on the frontend, not sent as-is by the API
 }
 
-// ─── Frontend display types ──────────────────────────────────────────────
+export interface ApiUser {
+  id: string;
+  employeeId: string | null;
+  fullName: string;
+  roleName: RoleKey;
+  department: string;
+  jobTitle: string;
+  mobilePhone: string;
+  status: ApiUserStatus;
+  email: string;
+}
+
+export interface ApiUsersPagination {
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
+}
+
+// Matches the actual raw API shape
+export interface ApiUsersResponse {
+  summary: {
+    totalUsers: number;
+    filteredUsers: number;
+    activeUsers: number;
+    inactiveUsers: number;
+  };
+  roles: ApiRoleSummaryItem[];
+  pagination: unknown | null;
+  items: ApiUser[];
+}
+
 export interface User {
   id: string;
   fullName: string;
   email: string;
   department: string;
-  employeeId: string;
-  status: ApiUserStatus;
-  joinedOn: string;
+  employeeId: string | null;
+  jobTitle: string;
+  mobilePhone: string;
+  status: UserStatus;
   currentRole: RoleKey;
-  roleAssignedOn: string;
-  permissions: string[];
 }
 
-// ─── Payloads ─────────────────────────────────────────────────────────────
-export interface UpdateUserRolePayload {
-  role: RoleKey;
+export interface GetUsersParams {
+  role?: RoleKey;
+  roles?: RoleKey[];
+  status?: ApiUserStatus;
+  page?: number;
+  limit?: number;
 }
 
-export interface RoleChangeResult {
-  user_id: string;
-  previous_role: RoleKey;
-  new_role: RoleKey;
-  updated_permissions: ApiPermission[];
-  sessions_invalidated: boolean;
-  changed_at: string;
+export interface UpdateUserAccessPayload {
+  role_name: RoleKey;
+  status: ApiUserStatus;
 }
 
-// "+ Add User" form
+export interface UserAccessResult {
+  id: string;
+  roleName: RoleKey;
+  status: ApiUserStatus;
+}
+
 export interface UserFormData {
   full_name: string;
   email: string;
@@ -72,4 +107,15 @@ export interface CreateUserPayload {
   department: string;
   employee_id: string;
   role: RoleKey;
+}
+
+export interface ApiUserSearchResult {
+  user_id: string;
+  tenant_id: string;
+  full_name: string;
+  email: string;
+  role_name: RoleKey;
+  status: ApiUserStatus;
+  employee_id: string | null;
+  department: string | null;
 }

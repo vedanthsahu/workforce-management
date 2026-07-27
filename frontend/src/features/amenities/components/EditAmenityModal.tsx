@@ -12,13 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 import { Amenity } from "../types/amenities.types";
 import { useEditAmenity } from "../hooks/useEditAmenity";
@@ -67,23 +60,18 @@ export default function EditAmenityModal({
 
             <div className="space-y-1.5">
               <Label>Category</Label>
-              <Select
+              <select
                 value={String(formData.category_id)}
-                onValueChange={(value) => {
-                  if (value) handleChange("category_id", value);
-                }}
+                onChange={(e) => handleChange("category_id", e.target.value)}
+                className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category.category_id} value={String(category.category_id)}>
-                      {category.category_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <option value="" disabled hidden>Select category</option>
+                {categories.map((category) => (
+                  <option key={category.category_id} value={String(category.category_id)}>
+                    {category.category_name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -99,20 +87,14 @@ export default function EditAmenityModal({
 
           <div className="space-y-1.5">
             <Label>Status</Label>
-            <Select
+            <select
               value={formData.is_active ? "ACTIVE" : "INACTIVE"}
-              onValueChange={(value) => {
-                if (value) handleChange("is_active", value === "ACTIVE");
-              }}
+              onChange={(e) => handleChange("is_active", e.target.value === "ACTIVE")}
+              className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-                <SelectItem value="INACTIVE">INACTIVE</SelectItem>
-              </SelectContent>
-            </Select>
+              <option value="ACTIVE">ACTIVE</option>
+              <option value="INACTIVE">INACTIVE</option>
+            </select>
           </div>
         </div>
 

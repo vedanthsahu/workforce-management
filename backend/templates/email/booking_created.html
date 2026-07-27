@@ -1,31 +1,17 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <title>Seat Booking Confirmed</title>
-</head>
-<body style="font-family: Arial, sans-serif; color: #222; line-height: 1.5;">
-    <h2 style="margin-bottom: 16px;">Booking confirmed</h2>
-
-    <p>Hello {{ user_name }},</p>
-
-    <p>Your seat booking has been confirmed.</p>
-
-    <table cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
-        <tr>
-            <td><strong>Seat</strong></td>
-            <td>{{ seat_name }}</td>
-        </tr>
-        <tr>
-            <td><strong>Date</strong></td>
-            <td>{{ booking_date }}</td>
-        </tr>
-        <tr>
-            <td><strong>Location</strong></td>
-            <td>{{ location }}</td>
-        </tr>
-    </table>
-
-    <p>Thank you,<br />Seat Management Team</p>
-</body>
-</html>
+{% extends "_base.html" %}
+{% from "_macros.html" import heading, lead, details_open, details_close, row %}
+{% block title %}Booking confirmed{% endblock %}
+{% block preheader %}Your seat {{ seat }} is booked for {{ booking_date }}.{% endblock %}
+{% block content %}
+{{ heading("Your seat is booked") }}
+{{ lead("Hello " ~ user_name ~ ", your seat booking is confirmed. We look forward to seeing you in the office.") }}
+{{ details_open() }}
+{{ row("Date", booking_date) }}
+{{ row("Seat", seat) }}
+{{ row("Floor", floor) }}
+{{ row("Building", building) }}
+{{ row("Site", site) }}
+{% if booked_by and booked_by != booked_for %}{{ row("Booked by", booked_by) }}{% endif %}
+{{ row("Host", host_name) }}
+{{ details_close() }}
+{% endblock %}

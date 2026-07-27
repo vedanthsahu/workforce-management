@@ -7,13 +7,6 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { UploadCloud, FileCheck2, X } from "lucide-react";
 import { layoutService } from "../services/layout.service";
 import SVGPreviewModal from "./Svgpreviewmodal";
@@ -27,10 +20,11 @@ interface LayoutFormProps {
  
 function extractSeatIds(svgText: string): string[] {
   const ids: string[] = [];
+  const seatIdPattern = /^\d+$|^[A-Z]+-.*-\d+$/;
   const regex = /<g\s+id="([^"]+)"/g;
   let match;
   while ((match = regex.exec(svgText)) !== null) {
-    if (/^\d+$/.test(match[1])) ids.push(match[1]);
+    if (seatIdPattern.test(match[1])) ids.push(match[1]);
   }
   return ids;
 }
@@ -67,7 +61,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
   useEffect(() => {
     if (!sites.length || !formData.site || formData.site.name) return;
     const siteId = formData.site.id;
-    const match = sites.find((s) => s.site_id === siteId);
+    const match = sites.find((s) => String(s.site_id) === String(siteId));
     if (match) {
       setFormData((prev) => ({
         ...prev,
@@ -90,7 +84,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
   useEffect(() => {
     if (!buildings.length || !formData.building || formData.building.name) return;
     const buildingId = formData.building.id;
-    const match = buildings.find((b) => b.building_id === buildingId);
+    const match = buildings.find((b) => String(b.building_id) === String(buildingId));
     if (match) {
       setFormData((prev) => ({
         ...prev,
@@ -112,7 +106,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
   useEffect(() => {
     if (!floors.length || !formData.floor || formData.floor.name) return;
     const floorId = formData.floor.id;
-    const match = floors.find((f) => f.floor_id === floorId);
+    const match = floors.find((f) => String(f.floor_id) === String(floorId));
     if (match) {
       setFormData((prev) => ({
         ...prev,
@@ -122,6 +116,17 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
           code: match.floor_code ?? "",
         },
       }));
+      onFloorLayoutInfo?.({
+        layoutId: match.layout_id,
+        layoutName: match.layout_name,
+        layoutStatus: match.layout_status,
+        layoutIsPublished: match.layout_is_published,
+        layoutVersionNo: match.layout_version_no,
+        layoutFileUrl: match.layout_file_url,
+        layoutCount: match.layout_count,
+        publishedByName: match.published_by_name,
+        layoutLastUpdated: match.layout_last_updated,
+      });
     }
   }, [floors]);
  
@@ -162,7 +167,14 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
     };
  
     generate();
-  }, [formData.site?.id, formData.building?.id, formData.floor?.id]);
+  }, [
+    formData.site?.id,
+    formData.building?.id,
+    formData.floor?.id,
+    formData.site?.code,
+    formData.building?.code,
+    formData.floor?.code,
+  ]);
 
   const noSeatsDetected = !!formData.file && !countingSeats && seatIds.length === 0;
 
@@ -237,20 +249,22 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       if (!layoutId) {
         console.error("layout_id not returned from createLayout response", res);
         resetForm();
+        setIsSubmitting(false);
         return;
       }
- 
+
       const params = new URLSearchParams({
         layoutId: String(layoutId),
         floorId: String(formData.floor.id),
         buildingId: String(formData.building.id),
         siteId: String(formData.site.id),
       });
+      // Keep isSubmitting=true so the button stays disabled while navigation
+      // completes — the component will unmount once the new page loads.
       router.push(`/admin/layouts/manage-layout?${params.toString()}`);
     } catch (err: any) {
       console.error("[LayoutForm] Upload error:", err?.response?.data || err.message);
       setSubmitError(err?.response?.data?.message || "Failed to save layout. Please try again.");
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -267,12 +281,12 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>
-                Site <span className="text-red-500">*</span>
+                Office <span className="text-red-500">*</span>
               </Label>
-              <Select
-                items={Object.fromEntries(sites.map((s) => [String(s.site_id), s.site_name]))}
+              <select
                 value={formData.site ? String(formData.site.id) : ""}
-                onValueChange={(value) => {
+                onChange={(e) => {
+                  const value = e.target.value;
                   if (!value) return;
                   const site = sites.find((s) => String(s.site_id) === value);
                   if (!site) return;
@@ -285,28 +299,25 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                   }));
                   onFloorLayoutInfo?.(null);
                 }}
+                className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select Site" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sites.map((s) => (
-                    <SelectItem key={s.site_id} value={String(s.site_id)}>
-                      {s.site_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <option value="" disabled hidden>Select a site</option>
+                {sites.map((s) => (
+                  <option key={s.site_id} value={String(s.site_id)}>
+                    {s.site_name}
+                  </option>
+                ))}
+              </select>
             </div>
  
             <div className="space-y-1.5">
               <Label>
                 Building <span className="text-red-500">*</span>
               </Label>
-              <Select
-                items={Object.fromEntries(buildings.map((b) => [String(b.building_id), b.building_name]))}
+              <select
                 value={formData.building ? String(formData.building.id) : ""}
-                onValueChange={(value) => {
+                onChange={(e) => {
+                  const value = e.target.value;
                   if (!value) return;
                   const building = buildings.find((b) => String(b.building_id) === value);
                   if (!building) return;
@@ -322,18 +333,15 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                   }));
                   onFloorLayoutInfo?.(null);
                 }}
+                className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select Building" />
-                </SelectTrigger>
-                <SelectContent>
-                  {buildings.map((b) => (
-                    <SelectItem key={b.building_id} value={String(b.building_id)}>
-                      {b.building_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <option value="" disabled hidden>Select a building</option>
+                {buildings.map((b) => (
+                  <option key={b.building_id} value={String(b.building_id)}>
+                    {b.building_name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
  
@@ -343,12 +351,10 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
               <Label>
                 Floor <span className="text-red-500">*</span>
               </Label>
-              <Select
-                items={Object.fromEntries(
-                  floors.map((f) => [String(f.floor_id), f.floor_name || f.floor_code || ""])
-                )}
+              <select
                 value={formData.floor ? String(formData.floor.id) : ""}
-                onValueChange={(value) => {
+                onChange={(e) => {
+                  const value = e.target.value;
                   if (!value) return;
                   const floor = floors.find((f) => String(f.floor_id) === value);
                   if (!floor) return;
@@ -381,18 +387,15 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                     layoutLastUpdated: floor.layout_last_updated,
                   });
                 }}
+                className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select Floor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {floors.map((f) => (
-                    <SelectItem key={f.floor_id} value={String(f.floor_id)}>
-                      {f.floor_name || f.floor_code}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <option value="" disabled hidden>Select a floor</option>
+                {floors.map((f) => (
+                  <option key={f.floor_id} value={String(f.floor_id)}>
+                    {f.floor_name || f.floor_code}
+                  </option>
+                ))}
+              </select>
             </div>
  
             <div className="space-y-1.5">

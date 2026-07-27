@@ -7,6 +7,7 @@ API calls used by the backend's SSO flow.
 
 from __future__ import annotations
 
+import logging
 import secrets
 from dataclasses import dataclass
 from typing import Any
@@ -15,9 +16,13 @@ from urllib.parse import urlencode
 import requests
 from jose import ExpiredSignatureError, JWTError, jwt
 
+from backend.core.app_logging import LOGGER_NAME
 from backend.core.config import get_settings
 
+logger = logging.getLogger(f"{LOGGER_NAME}.sso")
+
 MICROSOFT_GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
+MICROSOFT_TOKEN_BASE_URL = "https://login.microsoftonline.com"
 STATE_TTL_SECONDS = 600
 MICROSOFT_SCOPES = (
     "openid",
@@ -112,7 +117,7 @@ def exchange_code_for_token(code: str) -> dict[str, str]:
             message="Microsoft callback did not include an authorization code.",
         )
 
-    print("TOKEN URL:", settings.token_url)
+    logger.debug("sso.token_exchange.request url=%s", settings.token_url)
 
     try:
         response = requests.post(
@@ -128,24 +133,22 @@ def exchange_code_for_token(code: str) -> dict[str, str]:
             timeout=20,
         )
 
-        print("TOKEN STATUS:", response.status_code)
+        logger.debug("sso.token_exchange.response status=%s", response.status_code)
 
-    except Exception as exc:
-        import traceback
-
-        print("TOKEN EXCEPTION TYPE:", type(exc).__name__)
-        print("TOKEN EXCEPTION:", repr(exc))
-
-        traceback.print_exc()
-
+    except Exception:
+        logger.exception("sso.token_exchange.request_failed")
         raise
 
     payload = _safe_json(response)
 
-    print("TOKEN PAYLOAD KEYS:", list(payload.keys()))
+    logger.debug("sso.token_exchange.payload_keys keys=%s", sorted(payload.keys()))
 
     if response.status_code != 200:
-        print("TOKEN ERROR PAYLOAD:", payload)
+        logger.warning(
+            "sso.token_exchange.failed status=%s error=%s",
+            response.status_code,
+            _provider_error_details(payload),
+        )
 
         raise SSOError(
             status_code=400,
@@ -177,6 +180,47 @@ def exchange_code_for_token(code: str) -> dict[str, str]:
         "access_token": str(access_token),
         "id_token": str(id_token),
     }
+
+
+def exchange_client_credentials_for_graph_token() -> str:
+    """Fetch an app-only Microsoft Graph token for background role sync."""
+    settings = get_settings()
+    try:
+        response = requests.post(
+            f"{MICROSOFT_TOKEN_BASE_URL}/{settings.tenant_id}/oauth2/v2.0/token",
+            data={
+                "client_id": settings.client_id,
+                "client_secret": settings.client_secret,
+                "grant_type": "client_credentials",
+                "scope": "https://graph.microsoft.com/.default",
+            },
+            timeout=20,
+        )
+    except requests.RequestException as exc:
+        raise GraphAPIError(
+            status_code=502,
+            code="graph_token_request_failed",
+            message="Microsoft Graph app token request failed.",
+        ) from exc
+
+    payload = _safe_json(response)
+    if response.status_code != 200:
+        raise GraphAPIError(
+            status_code=502 if response.status_code >= 500 else response.status_code,
+            code="graph_token_exchange_failed",
+            message="Microsoft Graph app token exchange failed.",
+            details=_provider_error_details(payload),
+        )
+
+    access_token = str(payload.get("access_token") or "").strip()
+    if not access_token:
+        raise GraphAPIError(
+            status_code=502,
+            code="missing_graph_app_token",
+            message="Microsoft Graph app token response did not include an access_token.",
+            details=_provider_error_details(payload),
+        )
+    return access_token
 
 def verify_id_token(id_token: str) -> dict[str, Any]:
     """Validate a Microsoft ID token against tenant signing keys.
@@ -288,6 +332,105 @@ def fetch_graph_groups(access_token: str) -> dict[str, Any]:
     )
 
 
+def check_graph_group_membership(
+    access_token: str,
+    *,
+    group_id: str,
+    microsoft_object_id: str,
+) -> bool:
+    """Return whether the current Microsoft user object belongs to a group."""
+    group_id = str(group_id or "").strip()
+    microsoft_object_id = str(microsoft_object_id or "").strip()
+    if not group_id:
+        raise GraphAPIError(
+            status_code=500,
+            code="missing_graph_group_id",
+            message="GRAPH_FACILITATOR_GROUP_ID is required for Graph role lookup.",
+        )
+    if not microsoft_object_id:
+        raise GraphAPIError(
+            status_code=400,
+            code="missing_microsoft_object_id",
+            message="Microsoft object id is required for Graph role lookup.",
+        )
+
+    try:
+        _graph_get(
+            access_token,
+            f"/groups/{group_id}/members/{microsoft_object_id}/$ref",
+        )
+    except GraphAPIError as exc:
+        if exc.status_code == 404:
+            return False
+        raise
+    return True
+
+
+def fetch_graph_group_member_ids(access_token: str, *, group_id: str) -> set[str]:
+    """Fetch all direct Graph member object IDs for a group."""
+    group_id = str(group_id or "").strip()
+    if not group_id:
+        raise GraphAPIError(
+            status_code=500,
+            code="missing_graph_group_id",
+            message="GRAPH_FACILITATOR_GROUP_ID is required for Graph role sync.",
+        )
+
+    member_ids: set[str] = set()
+    url_or_path: str | None = f"/groups/{group_id}/members"
+    params: dict[str, str] | None = {"$select": "id", "$top": "999"}
+    while url_or_path:
+        payload = _graph_get(access_token, url_or_path, params=params)
+        members = payload.get("value", [])
+        if not isinstance(members, list):
+            raise GraphAPIError(
+                status_code=502,
+                code="invalid_graph_group_members_payload",
+                message="Microsoft Graph group members response was invalid.",
+            )
+        for member in members:
+            if not isinstance(member, dict):
+                continue
+            object_id = str(member.get("id") or "").strip()
+            if object_id:
+                member_ids.add(object_id)
+        next_link = str(payload.get("@odata.nextLink") or "").strip()
+        url_or_path = next_link or None
+        params = None
+    return member_ids
+
+
+def fetch_graph_users_with_department(access_token: str) -> dict[str, str | None]:
+    """Fetch {graph_object_id: department} for every user in the tenant directory.
+
+    Used by the background department/team sync so drift can be detected for
+    users who haven't logged in recently, mirroring the app-only, paginated
+    listing pattern used for Graph group membership.
+    """
+    departments: dict[str, str | None] = {}
+    url_or_path: str | None = "/users"
+    params: dict[str, str] | None = {"$select": "id,department", "$top": "999"}
+    while url_or_path:
+        payload = _graph_get(access_token, url_or_path, params=params)
+        users = payload.get("value", [])
+        if not isinstance(users, list):
+            raise GraphAPIError(
+                status_code=502,
+                code="invalid_graph_users_payload",
+                message="Microsoft Graph users response was invalid.",
+            )
+        for user in users:
+            if not isinstance(user, dict):
+                continue
+            object_id = str(user.get("id") or "").strip().lower()
+            if object_id:
+                departments[object_id] = str(user.get("department") or "").strip() or None
+        next_link = str(payload.get("@odata.nextLink") or "").strip()
+        url_or_path = next_link or None
+        params = None
+    return departments
+
+
 def fetch_graph_manager(access_token: str) -> dict[str, Any]:
     """Fetch the signed-in user's manager relationship from Microsoft Graph.
 
@@ -310,7 +453,7 @@ def fetch_graph_manager(access_token: str) -> dict[str, Any]:
 def _fetch_jwks():
     settings = get_settings()
 
-    print("JWKS URL:", settings.jwks_url)
+    logger.debug("sso.jwks.request url=%s", settings.jwks_url)
 
     try:
         response = requests.get(
@@ -318,23 +461,17 @@ def _fetch_jwks():
             timeout=20,
         )
 
-        print("STATUS:", response.status_code)
+        logger.debug("sso.jwks.response status=%s", response.status_code)
 
         response.raise_for_status()
 
-    except Exception as exc:
-        import traceback
-
-        print("EXCEPTION TYPE:", type(exc).__name__)
-        print("EXCEPTION:", repr(exc))
-
-        traceback.print_exc()
-
+    except Exception:
+        logger.exception("sso.jwks.fetch_failed")
         raise
 
     payload = _safe_json(response)
 
-    print("JWKS KEYS:", len(payload.get("keys", [])))
+    logger.debug("sso.jwks.keys_loaded count=%s", len(payload.get("keys", [])))
 
     return payload
 
@@ -384,7 +521,7 @@ def _graph_get(
     params: dict[str, str] | None = None,
 ) -> dict[str, Any]:
 
-    print(f"GRAPH START {path}")
+    logger.debug("sso.graph.request path=%s", path)
 
     if not access_token:
         raise GraphAPIError(
@@ -394,18 +531,23 @@ def _graph_get(
         )
 
     try:
+        url = path if path.startswith("https://") else f"{MICROSOFT_GRAPH_BASE_URL}{path}"
         response = requests.get(
-            f"{MICROSOFT_GRAPH_BASE_URL}{path}",
+            url,
             headers={"Authorization": f"Bearer {access_token}"},
             params=params,
             timeout=20,
         )
 
-        print(f"GRAPH STATUS {path}: {response.status_code}")
+        logger.debug("sso.graph.response path=%s status=%s", path, response.status_code)
 
-    except Exception as exc:
-        print(f"GRAPH EXCEPTION {path}: {type(exc).__name__}: {exc}")
-        raise
+    except requests.RequestException:
+        logger.exception("sso.graph.request_failed path=%s", path)
+        raise GraphAPIError(
+            status_code=502,
+            code="graph_request_unavailable",
+            message="Microsoft Graph request could not be completed.",
+        ) from exc
 
     payload = _safe_json(response)
 
@@ -433,7 +575,7 @@ def _graph_get(
             details=_provider_error_details(payload),
         )
 
-    print(f"GRAPH OK {path}")
+    logger.debug("sso.graph.success path=%s", path)
 
     return payload
 

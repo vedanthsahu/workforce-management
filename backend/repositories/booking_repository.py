@@ -60,6 +60,9 @@ BOOKING_SELECT_FIELDS = """
 
     b.cancellation_reason,
 
+    b.modified_from_booking_id::text AS modified_from_booking_id,
+    b.modification_reason,
+
     b.created_at,
     b.updated_at,
 
@@ -72,13 +75,16 @@ BOOKING_SELECT_FIELDS = """
     gv.visit_status,
     gv.purpose_of_visit,
 
-    gv.start_time,
-    gv.end_time,
+    COALESCE(gv.start_time, '09:00:00'::time) AS start_time,
+    COALESCE(gv.end_time,   '18:00:00'::time) AS end_time,
     gv.notes,
     gv.requires_seat,
 
+    s.seat_type AS desk_type,
+
     host.id::text AS host_user_id,
-    host.full_name AS host_name
+    host.full_name AS host_name,
+    host.email AS host_email
 """
 
 
@@ -177,6 +183,9 @@ def fetch_future_delegated_guest_visits_without_booking(
                 gv.cancelled_at,
                 gv.cancellation_reason,
 
+                gv.modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
+                gv.modification_reason,
+
                 gv.created_at,
                 gv.updated_at,
 
@@ -201,37 +210,39 @@ def fetch_future_delegated_guest_visits_without_booking(
 
             INNER JOIN guests g
                 ON g.id = gv.guest_id
-               AND g.tenant_id = gv.tenant_id
+            AND g.tenant_id = gv.tenant_id
 
             LEFT JOIN bookings b
                 ON b.guest_visit_id = gv.id
-               AND b.booking_type = 'GUEST'
-               AND b.tenant_id = gv.tenant_id
+            AND b.booking_type = 'GUEST'
+            AND b.tenant_id = gv.tenant_id
+            AND b.booking_status = 'CONFIRMED'
 
             LEFT JOIN app_users creator
                 ON creator.id = gv.created_by_user_id
-               AND creator.tenant_id = gv.tenant_id
+            AND creator.tenant_id = gv.tenant_id
 
             LEFT JOIN app_users host
                 ON host.id = gv.host_user_id
-               AND host.tenant_id = gv.tenant_id
+            AND host.tenant_id = gv.tenant_id
 
             LEFT JOIN sites si
                 ON si.id = gv.site_id
-               AND si.tenant_id = gv.tenant_id
+            AND si.tenant_id = gv.tenant_id
 
             LEFT JOIN buildings bu
                 ON bu.id = gv.building_id
-               AND bu.tenant_id = gv.tenant_id
+            AND bu.tenant_id = gv.tenant_id
 
             LEFT JOIN floors f
                 ON f.id = gv.floor_id
-               AND f.tenant_id = gv.tenant_id
+            AND f.tenant_id = gv.tenant_id
 
             WHERE gv.tenant_id = %s
-              AND gv.created_by_user_id = %s
-              AND b.id IS NULL
-              AND gv.visit_date > CURRENT_DATE
+            AND gv.created_by_user_id = %s
+            AND gv.visit_status = 'SCHEDULED'
+            AND b.id IS NULL
+            AND gv.visit_date > CURRENT_DATE
 
             ORDER BY gv.updated_at DESC
             """,
@@ -298,6 +309,9 @@ def fetch_current_delegated_guest_visits_without_booking(
                 gv.cancelled_at,
                 gv.cancellation_reason,
 
+                gv.modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
+                gv.modification_reason,
+
                 gv.created_at,
                 gv.updated_at,
 
@@ -350,10 +364,13 @@ def fetch_current_delegated_guest_visits_without_booking(
                AND f.tenant_id = gv.tenant_id
 
             WHERE gv.tenant_id = %s
-              AND gv.created_by_user_id = %s
-              AND b.id IS NULL
-              AND gv.visit_date = CURRENT_DATE
-
+            AND gv.created_by_user_id = %s
+            AND gv.visit_status IN (
+                    'SCHEDULED',
+                    'CHECKED_IN'
+                )
+            AND b.id IS NULL
+            AND gv.visit_date = CURRENT_DATE
             ORDER BY gv.updated_at DESC
             """,
             (tenant_id, user_id),
@@ -419,6 +436,9 @@ def fetch_past_delegated_guest_visits_without_booking(
                 gv.cancelled_at,
                 gv.cancellation_reason,
 
+                gv.modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
+                gv.modification_reason,
+
                 gv.created_at,
                 gv.updated_at,
 
@@ -471,10 +491,14 @@ def fetch_past_delegated_guest_visits_without_booking(
                AND f.tenant_id = gv.tenant_id
 
             WHERE gv.tenant_id = %s
-              AND gv.created_by_user_id = %s
-              AND b.id IS NULL
-              AND gv.visit_date < CURRENT_DATE
-
+            AND gv.created_by_user_id = %s
+            AND gv.visit_status IN (
+                    'CHECKED_OUT',
+                    'NO_SHOW',
+                    'SCHEDULED'
+                )
+            AND b.id IS NULL
+            AND gv.visit_date < CURRENT_DATE
             ORDER BY gv.updated_at DESC
             """,
             (tenant_id, user_id),
@@ -485,6 +509,176 @@ def fetch_past_delegated_guest_visits_without_booking(
     return [dict(row) for row in rows]
 
 
+def fetch_admin_guest_visits_without_booking(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    site_id: str | None = None,
+    building_id: str | None = None,
+    floor_id: str | None = None,
+    visit_status: str | None = None,
+    search: str | None = None,
+    booked_by_user_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Tenant-wide guest visits with no active seat booking, shaped like
+    BOOKING_SELECT_FIELDS so they can be merged into the admin bookings list
+    the same way the delegated endpoints merge them (see
+    fetch_past_delegated_guest_visits_without_booking). MODIFIED visits are
+    excluded; superseded history is not part of this listing.
+
+    These rows have no bookings row at all, so they are filtered by
+    guest_visits.visit_status, never by bookings.booking_status."""
+
+    conditions = [
+        "gv.tenant_id = %s",
+        "b.id IS NULL",
+        "gv.visit_status <> 'MODIFIED'",
+    ]
+    params: list[Any] = [tenant_id]
+
+    if start_date is not None:
+        conditions.append("gv.visit_date >= %s")
+        params.append(start_date)
+    if end_date is not None:
+        conditions.append("gv.visit_date <= %s")
+        params.append(end_date)
+    if site_id is not None:
+        conditions.append("gv.site_id = %s")
+        params.append(site_id)
+    if building_id is not None:
+        conditions.append("gv.building_id = %s")
+        params.append(building_id)
+    if floor_id is not None:
+        conditions.append("gv.floor_id = %s")
+        params.append(floor_id)
+    if visit_status is not None:
+        conditions.append("gv.visit_status = %s")
+        params.append(visit_status)
+    if booked_by_user_id is not None:
+        conditions.append("gv.created_by_user_id = %s")
+        params.append(booked_by_user_id)
+    if search is not None:
+        conditions.append("(g.full_name ILIKE %s OR g.email ILIKE %s)")
+        like_search = f"%{search}%"
+        params.append(like_search)
+        params.append(like_search)
+
+    where_clause = " AND ".join(conditions)
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT
+                NULL::text AS booking_id,
+                'GUEST_VISIT' AS activity_source,
+                gv.tenant_id::text AS tenant_id,
+
+                NULL::text AS booked_for_user_id,
+                gv.guest_id::text AS booked_for_guest_id,
+
+                gv.created_by_user_id::text AS booked_by_user_id,
+
+                creator.full_name AS booked_by_name,
+                creator.email AS booked_by_email,
+
+                g.full_name AS booked_for_name,
+                g.email AS booked_for_email,
+                g.phone AS booked_for_phone,
+                g.organization AS booked_for_organization,
+
+                gv.id::text AS guest_visit_id,
+
+                'GUEST' AS booking_type,
+
+                NULL::text AS seat_id,
+
+                gv.site_id::text AS site_id,
+                gv.building_id::text AS building_id,
+                gv.floor_id::text AS floor_id,
+
+                NULL::text AS seat_code,
+
+                si.site_name,
+                bu.building_name,
+                f.floor_name,
+
+                gv.visit_date AS booking_date,
+                gv.visit_status AS booking_status,
+
+                NULL AS source_channel,
+
+                gv.checked_in_at AS check_in_at,
+                gv.checked_out_at,
+
+                gv.cancelled_at,
+                gv.cancellation_reason,
+
+                gv.modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
+                gv.modification_reason,
+
+                gv.created_at,
+                gv.updated_at,
+
+                g.full_name AS guest_name,
+                g.email AS guest_email,
+                g.phone AS guest_phone,
+                g.organization AS guest_organization,
+
+                gv.guest_type,
+                gv.visit_status,
+                gv.purpose_of_visit,
+
+                gv.start_time,
+                gv.end_time,
+                gv.notes,
+                gv.requires_seat,
+
+                host.id::text AS host_user_id,
+                host.full_name AS host_name
+
+            FROM guest_visits gv
+
+            INNER JOIN guests g
+                ON g.id = gv.guest_id
+               AND g.tenant_id = gv.tenant_id
+
+            LEFT JOIN bookings b
+                ON b.guest_visit_id = gv.id
+               AND b.booking_type = 'GUEST'
+               AND b.tenant_id = gv.tenant_id
+               AND b.booking_status = 'CONFIRMED'
+
+            LEFT JOIN app_users creator
+                ON creator.id = gv.created_by_user_id
+               AND creator.tenant_id = gv.tenant_id
+
+            LEFT JOIN app_users host
+                ON host.id = gv.host_user_id
+               AND host.tenant_id = gv.tenant_id
+
+            LEFT JOIN sites si
+                ON si.id = gv.site_id
+               AND si.tenant_id = gv.tenant_id
+
+            LEFT JOIN buildings bu
+                ON bu.id = gv.building_id
+               AND bu.tenant_id = gv.tenant_id
+
+            LEFT JOIN floors f
+                ON f.id = gv.floor_id
+               AND f.tenant_id = gv.tenant_id
+
+            WHERE {where_clause}
+            ORDER BY gv.visit_date DESC, gv.created_at DESC
+            """,
+            params,
+        )
+
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
 
 
 def fetch_seat_for_booking(
@@ -772,6 +966,7 @@ def insert_booking(
     seat: dict[str, Any],
     booking_date: date,
     source_channel: str = "WEB",
+    modified_from_booking_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Insert an EMPLOYEE booking using hierarchy values
@@ -806,7 +1001,9 @@ def insert_booking(
 
                 booking_status,
 
-                source_channel
+                source_channel,
+
+                modified_from_booking_id
             )
             VALUES (
                 %s,
@@ -824,6 +1021,8 @@ def insert_booking(
                 'EMPLOYEE',
 
                 'CONFIRMED',
+
+                %s,
 
                 %s
             )
@@ -843,6 +1042,8 @@ def insert_booking(
                 booking_date,
 
                 normalized_source,
+
+                modified_from_booking_id,
             ),
         )
 
@@ -914,8 +1115,6 @@ def cancel_booking(
     tenant_id: str,
     booking_id: str,
     cancellation_reason: str,
-    booking_status: str = "CANCELLED",
-
 ) -> None:
     """Soft-cancel one booking."""
     with conn.cursor() as cur:
@@ -923,7 +1122,7 @@ def cancel_booking(
             """
             UPDATE bookings
             SET
-                booking_status = %s,
+                booking_status = 'CANCELLED',
                 cancelled_at = NOW(),
                 cancellation_reason = %s,
                 updated_at = NOW()
@@ -931,7 +1130,6 @@ def cancel_booking(
               AND tenant_id = %s
             """,
             (
-                booking_status,
                 cancellation_reason,
                 booking_id,
                 tenant_id,
@@ -939,6 +1137,70 @@ def cancel_booking(
         )
         if cur.rowcount != 1:
             raise LookupError("Booking was not found for cancellation.")
+
+
+def mark_booking_modified(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    booking_id: str,
+    modification_reason: str | None,
+) -> None:
+    """Retain a replaced booking as history without cancelling it.
+
+    The superseded row owns the modification reason; the successor row only
+    carries the forward link through modified_from_booking_id.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE bookings
+            SET
+                booking_status = 'MODIFIED',
+                cancelled_at = NOW(),
+                cancellation_reason = %s,
+                modification_reason = %s,
+                updated_at = NOW()
+            WHERE id = %s
+              AND tenant_id = %s
+            """,
+            (
+                modification_reason,
+                modification_reason,
+                booking_id,
+                tenant_id,
+            ),
+        )
+        if cur.rowcount != 1:
+            raise LookupError("Booking was not found for modification.")
+
+
+def cancel_future_guest_bookings_for_guest(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_id: str,
+    cancellation_reason: str = "Guest deactivated",
+) -> int:
+    """Cancel one guest's future CONFIRMED bookings. Does not touch active/past bookings."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE bookings
+            SET
+                booking_status = 'CANCELLED',
+                cancelled_at = NOW(),
+                cancellation_reason = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND booking_type = 'GUEST'
+              AND booked_for_guest_id = %s
+              AND booking_date >= CURRENT_DATE
+              AND booking_status = 'CONFIRMED'
+            """,
+            (cancellation_reason, tenant_id, guest_id),
+        )
+        return cur.rowcount
 
 
 def fetch_past_bookings_for_user(
@@ -963,6 +1225,30 @@ def fetch_past_bookings_for_user(
         )
         rows = cur.fetchall()
     return [dict(row) for row in rows]
+
+def fetch_all_confirmed_bookings_for_user(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+) -> list[dict[str, Any]]:
+    """Fetch every confirmed employee booking for one user, newest first."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {BOOKING_SELECT_FIELDS}
+            {BOOKING_SELECT_FROM}
+            WHERE b.booked_for_user_id = %s
+              AND b.tenant_id = %s
+              AND b.booking_type = 'EMPLOYEE'
+              AND b.booking_status = 'CONFIRMED'
+            ORDER BY b.booking_date DESC, b.id DESC
+            """,
+            (user_id, tenant_id),
+        )
+        rows = cur.fetchall()
+    return [dict(row) for row in rows]
+
 
 def fetch_current_bookings_for_user(
     conn: PGConnection,
@@ -1009,6 +1295,7 @@ def fetch_current_delegated_bookings(
                   )
 
               AND b.booking_date = CURRENT_DATE
+              AND b.booking_status = 'CONFIRMED'
 
             ORDER BY b.updated_at DESC
             """,
@@ -1041,6 +1328,7 @@ def fetch_future_delegated_bookings(
                   )
 
               AND b.booking_date > CURRENT_DATE
+              AND b.booking_status = 'CONFIRMED'
 
             ORDER BY b.updated_at DESC
             """,
@@ -1073,6 +1361,7 @@ def fetch_past_delegated_bookings(
                   )
 
               AND b.booking_date < CURRENT_DATE
+              AND b.booking_status = 'CONFIRMED'
 
             ORDER BY b.updated_at DESC
             """,
@@ -1083,6 +1372,88 @@ def fetch_past_delegated_bookings(
 
     return [dict(row) for row in rows]
 
+def fetch_cancelled_delegated_bookings(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+):
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT
+                b.id::text AS booking_id,
+                'BOOKING' AS activity_source,
+
+                b.booked_for_user_id::text,
+                NULL::text AS booked_for_guest_id,
+
+                b.booked_by_user_id::text,
+
+                creator.full_name AS booked_by_name,
+                creator.email AS booked_by_email,
+
+                employee.full_name AS booked_for_name,
+                employee.email AS booked_for_email,
+
+                NULL::text AS guest_visit_id,
+
+                b.booking_type,
+
+                b.seat_id::text,
+                b.site_id::text,
+                b.building_id::text,
+                b.floor_id::text,
+
+                s.seat_code,
+                si.site_name,
+                bu.building_name,
+                f.floor_name,
+
+                b.booking_date,
+                b.booking_status,
+
+                b.cancelled_at,
+                b.cancellation_reason,
+
+                b.created_at,
+                b.updated_at
+
+            FROM bookings b
+
+            INNER JOIN app_users employee
+                ON employee.id = b.booked_for_user_id
+            AND employee.tenant_id = b.tenant_id
+
+            LEFT JOIN app_users creator
+                ON creator.id = b.booked_by_user_id
+            AND creator.tenant_id = b.tenant_id
+
+            LEFT JOIN seats s
+                ON s.id = b.seat_id
+
+            LEFT JOIN sites si
+                ON si.id = b.site_id
+
+            LEFT JOIN buildings bu
+                ON bu.id = b.building_id
+
+            LEFT JOIN floors f
+                ON f.id = b.floor_id
+
+            WHERE b.tenant_id = %s
+            AND b.booked_by_user_id = %s
+            AND b.booked_for_user_id <> b.booked_by_user_id
+            AND b.booking_status = 'CANCELLED'
+
+            ORDER BY b.updated_at DESC
+            """,
+     (tenant_id, user_id),
+        )
+
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
 
 
 def fetch_cancelled_bookings_for_user(
@@ -1675,6 +2046,7 @@ def insert_guest_booking(
     seat: dict[str, Any],
     booking_date: date,
     source_channel: str = "WEB",
+    modified_from_booking_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Insert a GUEST booking linked to a guest visit.
@@ -1711,7 +2083,9 @@ def insert_guest_booking(
 
                 booking_status,
 
-                source_channel
+                source_channel,
+
+                modified_from_booking_id
 
             )
             VALUES (
@@ -1734,6 +2108,8 @@ def insert_guest_booking(
 
                 'CONFIRMED',
 
+                %s,
+
                 %s
             )
             RETURNING id::text AS booking_id
@@ -1754,6 +2130,8 @@ def insert_guest_booking(
                 booking_date,
 
                 normalized_source,
+
+                modified_from_booking_id,
             ),
         )
 
@@ -1786,6 +2164,7 @@ def fetch_guest_bookings(
     booking_date: date | None = None,
     booking_status: str | None = None,
     limit: int = 100,
+    offset: int | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch administrative guest booking records for one tenant."""
     query = f"""
@@ -1793,6 +2172,7 @@ def fetch_guest_bookings(
         {BOOKING_SELECT_FROM}
         WHERE b.tenant_id = %s
           AND b.booking_type = 'GUEST'
+          AND b.booking_status <> 'MODIFIED'
     """
     params: list[Any] = [tenant_id]
 
@@ -1808,8 +2188,241 @@ def fetch_guest_bookings(
 
     query += " ORDER BY b.booking_date DESC, b.created_at DESC, b.id DESC LIMIT %s"
     params.append(limit)
+    if offset is not None:
+        query += " OFFSET %s"
+        params.append(offset)
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(query, params)
         rows = cur.fetchall()
     return [dict(row) for row in rows]
+
+
+def count_guest_bookings(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_id: str | None = None,
+    booking_date: date | None = None,
+    booking_status: str | None = None,
+) -> int:
+    query = """
+        SELECT COUNT(*)::integer
+        FROM bookings b
+        WHERE b.tenant_id = %s
+          AND b.booking_type = 'GUEST'
+          AND b.booking_status <> 'MODIFIED'
+    """
+    params: list[Any] = [tenant_id]
+
+    if guest_id is not None:
+        query += " AND b.booked_for_guest_id = %s"
+        params.append(guest_id)
+    if booking_date is not None:
+        query += " AND b.booking_date = %s"
+        params.append(booking_date)
+    if booking_status is not None:
+        query += " AND b.booking_status = %s"
+        params.append(booking_status)
+
+    with conn.cursor() as cur:
+        cur.execute(query, params)
+        row = cur.fetchone()
+    return int(row[0]) if row else 0
+
+
+def _build_admin_booking_filters(
+    *,
+    tenant_id: str,
+    start_date: date | None,
+    end_date: date | None,
+    site_id: str | None,
+    building_id: str | None,
+    floor_id: str | None,
+    booking_type: str | None,
+    booking_status: str | None,
+    visit_status: str | None,
+    search: str | None,
+    seat_code: str | None,
+    booked_by_user_id: str | None,
+) -> tuple[str, list[Any]]:
+    """Build one dynamic WHERE clause shared by the admin booking list and
+    its summary counts, so both always see the same filtered dataset.
+
+    booking_status filters bookings.booking_status (employee + guest rows
+    that have a seat booking); visit_status filters the joined guest_visits
+    row's own visit_status (see BOOKING_SELECT_FROM's gv join). Since only
+    GUEST-type rows have a guest_visit at all, a visit_status filter
+    naturally excludes EMPLOYEE rows (gv is NULL for those)."""
+    conditions = ["b.tenant_id = %s"]
+    params: list[Any] = [tenant_id]
+
+    if start_date is not None:
+        conditions.append("b.booking_date >= %s")
+        params.append(start_date)
+    if end_date is not None:
+        conditions.append("b.booking_date <= %s")
+        params.append(end_date)
+    if site_id is not None:
+        conditions.append("b.site_id = %s")
+        params.append(site_id)
+    if building_id is not None:
+        conditions.append("b.building_id = %s")
+        params.append(building_id)
+    if floor_id is not None:
+        conditions.append("b.floor_id = %s")
+        params.append(floor_id)
+    if booking_type is not None:
+        conditions.append("b.booking_type = %s")
+        params.append(booking_type)
+    if booking_status is not None:
+        conditions.append("b.booking_status = %s")
+        params.append(booking_status)
+    if visit_status is not None:
+        conditions.append("gv.visit_status = %s")
+        params.append(visit_status)
+    if seat_code is not None:
+        conditions.append("s.seat_code ILIKE %s")
+        params.append(f"%{seat_code}%")
+    if booked_by_user_id is not None:
+        conditions.append("b.booked_by_user_id = %s")
+        params.append(booked_by_user_id)
+    if search is not None:
+        conditions.append(
+            "(COALESCE(booked_for_user.full_name, g.full_name) ILIKE %s"
+            " OR COALESCE(booked_for_user.email, g.email) ILIKE %s)"
+        )
+        like_search = f"%{search}%"
+        params.append(like_search)
+        params.append(like_search)
+
+    return " AND ".join(conditions), params
+
+
+def fetch_admin_bookings(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    site_id: str | None = None,
+    building_id: str | None = None,
+    floor_id: str | None = None,
+    booking_type: str | None = None,
+    booking_status: str | None = None,
+    visit_status: str | None = None,
+    search: str | None = None,
+    seat_code: str | None = None,
+    booked_by_user_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Tenant-wide employee + guest booking search for the admin bookings screen.
+
+    Reuses the same BOOKING_SELECT_FIELDS/BOOKING_SELECT_FROM join shape as
+    the delegated booking queries so the response is the same unified model,
+    just filtered dynamically instead of scoped to one delegator.
+
+    Returns the full filtered set (no LIMIT/OFFSET): the service layer merges
+    this with fetch_admin_guest_visits_without_booking and paginates the
+    combined list, the same way the delegated endpoints do. MODIFIED rows are
+    always excluded -- they're superseded history, not the current state.
+    """
+    where_clause, params = _build_admin_booking_filters(
+        tenant_id=tenant_id,
+        start_date=start_date,
+        end_date=end_date,
+        site_id=site_id,
+        building_id=building_id,
+        floor_id=floor_id,
+        booking_type=booking_type,
+        booking_status=booking_status,
+        visit_status=visit_status,
+        search=search,
+        seat_code=seat_code,
+        booked_by_user_id=booked_by_user_id,
+    )
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {BOOKING_SELECT_FIELDS}
+            {BOOKING_SELECT_FROM}
+
+            WHERE {where_clause}
+              AND b.booking_status <> 'MODIFIED'
+
+            ORDER BY b.booking_date DESC, b.created_at DESC
+            """,
+            params,
+        )
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def fetch_admin_bookings_summary(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    site_id: str | None = None,
+    building_id: str | None = None,
+    floor_id: str | None = None,
+    booking_type: str | None = None,
+    booking_status: str | None = None,
+    visit_status: str | None = None,
+    search: str | None = None,
+    seat_code: str | None = None,
+    booked_by_user_id: str | None = None,
+) -> dict[str, int]:
+    """Aggregate counts over the same filtered dataset `fetch_admin_bookings`
+    would page through (no LIMIT/OFFSET), for the admin summary cards."""
+    where_clause, params = _build_admin_booking_filters(
+        tenant_id=tenant_id,
+        start_date=start_date,
+        end_date=end_date,
+        site_id=site_id,
+        building_id=building_id,
+        floor_id=floor_id,
+        booking_type=booking_type,
+        booking_status=booking_status,
+        visit_status=visit_status,
+        search=search,
+        seat_code=seat_code,
+        booked_by_user_id=booked_by_user_id,
+    )
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT
+                COUNT(*)::integer AS total_bookings,
+                COUNT(*) FILTER (WHERE b.booking_status = 'CONFIRMED')::integer AS confirmed_bookings,
+                COUNT(*) FILTER (WHERE b.booking_status = 'CANCELLED')::integer AS cancelled_bookings,
+                COUNT(*) FILTER (WHERE b.booking_status = 'MODIFIED')::integer AS modified_bookings,
+                COUNT(*) FILTER (WHERE b.booking_status = 'COMPLETED')::integer AS completed_bookings,
+                COUNT(*) FILTER (WHERE b.booking_status = 'NO_SHOW')::integer AS no_show_bookings,
+                COUNT(*) FILTER (WHERE b.booking_type = 'EMPLOYEE')::integer AS employee_bookings,
+                COUNT(*) FILTER (WHERE b.booking_type = 'GUEST')::integer AS guest_bookings,
+                COUNT(*) FILTER (WHERE b.check_in_at IS NOT NULL)::integer AS checked_in_bookings,
+                COUNT(*) FILTER (WHERE b.checked_out_at IS NOT NULL)::integer AS checked_out_bookings
+            {BOOKING_SELECT_FROM}
+
+            WHERE {where_clause}
+            """,
+            params,
+        )
+        row = cur.fetchone()
+
+    return dict(row) if row else {
+        "total_bookings": 0,
+        "confirmed_bookings": 0,
+        "cancelled_bookings": 0,
+        "modified_bookings": 0,
+        "completed_bookings": 0,
+        "no_show_bookings": 0,
+        "employee_bookings": 0,
+        "guest_bookings": 0,
+        "checked_in_bookings": 0,
+        "checked_out_bookings": 0,
+    }

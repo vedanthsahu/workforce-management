@@ -50,7 +50,9 @@ function extractPreferenceKeys(raw: RawBooking): string[] {
 // ── Mapper ────────────────────────────────────────────────────────────────────
 
 function deriveBookingType(raw: RawBooking, currentUserId: string): Booking["bookingType"] {
-  if (raw.activity_source === "GUEST_VISIT") return "visit";
+  if (raw.activity_source === "GUEST_VISIT") {
+    return (raw.booking_id && raw.seat_id) ? "guest" : "visit";
+  }
   if (raw.booking_type === "GUEST") return "guest";
   const bookedForId = raw.booked_for_user_id ?? raw.user_id;
   const bookedById  = raw.booked_by_user_id;
@@ -111,8 +113,10 @@ function mapRawBooking(raw: RawBooking, currentUserId: string): Booking {
     isRecurring:      raw.is_recurring      ?? false,
     recurringPattern: raw.recurring_pattern,
     preferences:      extractPreferenceKeys(raw),
-    floorId:          raw.floor_id ? String(raw.floor_id) : undefined,
-    seatId:           raw.seat_id  ? String(raw.seat_id)  : undefined,
+    siteId:           raw.site_id     ? String(raw.site_id)     : undefined,
+    buildingId:       raw.building_id ? String(raw.building_id) : undefined,
+    floorId:          raw.floor_id    ? String(raw.floor_id)    : undefined,
+    seatId:           raw.seat_id     ? String(raw.seat_id)     : undefined,
     bookingType,
     bookedByUserId:   raw.booked_by_user_id,
     bookedByName:     raw.booked_by_name ?? undefined,
@@ -122,7 +126,11 @@ function mapRawBooking(raw: RawBooking, currentUserId: string): Booking {
     bookedForGuestId: raw.booked_for_guest_id ?? undefined,
     guestName:        raw.guest_name ?? undefined,
     guestEmail:       raw.guest_email ?? undefined,
+    guestType:        raw.guest_type ?? undefined,
+    purposeOfVisit:   raw.purpose_of_visit ?? undefined,
     hostName:         raw.host_name ?? undefined,
+    hostUserId:       raw.host_user_id ? String(raw.host_user_id) : undefined,
+    guestVisitId:     raw.guest_visit_id ?? undefined,
     activitySource:   (raw.activity_source as Booking["activitySource"]) ?? "BOOKING",
     createdAt:        raw.created_at ?? raw.booking_date,
   };
@@ -183,6 +191,32 @@ export async function cancelGuestBooking(
   await axiosInstance.post(`/guest-bookings/${bookingId}/cancel`, {
     cancellation_reason: cancellationReason?.trim() || null,
   });
+}
+
+// ── Delegated cancelled bookings ─────────────────────────────────────────────
+
+export async function fetchDelegatedCancelledBookings(currentUserId: string): Promise<Booking[]> {
+  const { data } = await axiosInstance.get<RawBooking[]>(`${BASE}/delegated/cancelled`);
+  return data.map((raw) => mapRawBooking(raw, currentUserId));
+}
+
+export type GuestWorkflowAction =
+  | "MODIFY_VISIT_ONLY"
+  | "MODIFY_VISIT_AND_BOOKING"
+  | "ADD_BOOKING"
+  | "CANCEL_BOOKING"
+  | "CANCEL_VISIT";
+
+export async function guestVisitWorkflow(
+  guestVisitId: string,
+  action: GuestWorkflowAction,
+  payload?: Record<string, unknown>,
+): Promise<unknown> {
+  const { data } = await axiosInstance.post(
+    `/guest-visits/${guestVisitId}/workflow`,
+    { action, ...payload },
+  );
+  return data;
 }
 
 // ── Team / user ───────────────────────────────────────────────────────────────
@@ -273,7 +307,7 @@ export async function fetchSeatAmenities(
     const allAmenityIds = allPrefs.map((p) => p.id);
 
     // Step 2: fetch seats passing all amenity ids so the backend populates matched_amenities
-    const { data } = await axiosInstance.get<SeatAmenityMatch[]>(
+    const { data: resp } = await axiosInstance.get<any>(
       `/floors/${floorId}/seats`,
       {
         params: {
@@ -296,7 +330,8 @@ export async function fetchSeatAmenities(
     );
 
     // Step 3: find our specific seat
-    const match = data.find((s) => String(s.seat_id) === String(seatId));
+    const items: SeatAmenityMatch[] = Array.isArray(resp) ? resp : resp.items ?? [];
+    const match = items.find((s) => String(s.seat_id) === String(seatId));
     if (!match) return [];
 
     // Step 4: map display names → keys using the preferences list (no hardcoding)

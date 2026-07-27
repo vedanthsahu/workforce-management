@@ -4,7 +4,7 @@ import {
   Mail, Phone, MapPin, Briefcase,
   Building2, UserCheck, BadgeCheck,
   Camera, Loader2, TriangleAlert, RefreshCw,
-  Layers, Zap, CalendarCheck2, CalendarClock, History,
+  Layers, CalendarCheck2, CalendarClock, History,
   ChevronRight, CalendarDays,
   Building, Armchair, Check, Pencil, Save, X, ChevronDown,
 } from "lucide-react";
@@ -19,7 +19,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 
-import { useProfile }            from "../hooks/useProfile";
+import { useProfile } from "../hooks/useProfile";
 import {
   getAvailableAmenities,
   getSites,
@@ -31,6 +31,7 @@ import type {
   SeatPreferences, ApiBooking, ApiAmenity,
   ApiSite, ApiBuilding, ApiFloor,
 } from "../types/profile.types";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -42,8 +43,8 @@ const ROLE_BADGE: Record<string, string> = {
   TENANT_ADMIN: "bg-rose-50 text-rose-600 ring-rose-200",
   MANAGER:      "bg-violet-50 text-violet-600 ring-violet-200",
   EMPLOYEE:     "bg-blue-50 text-blue-600 ring-blue-200",
-  TALENT:       "bg-teal-50 text-teal-600 ring-teal-200",
-  SECURITY:     "bg-amber-50 text-amber-600 ring-amber-200",
+  FACILITATOR:  "bg-teal-50 text-teal-600 ring-teal-200",
+  FRONT_OFFICE: "bg-amber-50 text-amber-600 ring-amber-200",
   FACILITIES:   "bg-orange-50 text-orange-600 ring-orange-200",
 };
 
@@ -133,15 +134,15 @@ function SkillTag({ label }: { label: string }) {
 // ─── Cascade Select ───────────────────────────────────────────────────────────
 
 function CascadeSelect({
-  label, value, onChange, options, placeholder, disabled, loading,
+  label, value, onChange, options, disabled, loading, placeholder,
 }: {
   label:        string;
   value:        string;
   onChange:     (val: string) => void;
   options:      { value: string; label: string }[];
-  placeholder?: string;
   disabled?:    boolean;
   loading?:     boolean;
+  placeholder?: string;
 }) {
   return (
     <div className="space-y-1.5">
@@ -153,7 +154,7 @@ function CascadeSelect({
           disabled={disabled || loading}
           className="w-full h-9 rounded-md border border-gray-200 bg-white pl-3 pr-8 text-[13px] text-gray-800 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <option value="">{loading ? "Loading…" : (placeholder ?? "Select…")}</option>
+          {!value && <option value="" disabled hidden>{placeholder ?? ""}</option>}
           {options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
@@ -208,6 +209,7 @@ function AmenitiesCheckboxGroup({
           <div className="grid grid-cols-2 gap-1.5">
             {items.map((a) => {
               const on = selected.includes(a.id);
+              const color = getAmenityColor(a.name, a.category);
               return (
                 <button
                   key={a.id}
@@ -224,6 +226,7 @@ function AmenitiesCheckboxGroup({
                   }`}>
                     {on && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                   </span>
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${color.dot}`} />
                   <span className="truncate">{a.name}</span>
                 </button>
               );
@@ -494,25 +497,33 @@ function EditPreferencesDialog({
       .finally(() => setLoadingAmenities(false));
   }, [open]);
 
-  // When site changes → load buildings, reset downstream
+  // Fetch the building list for the selected site. Selection resets are
+  // handled explicitly by handleSiteChange (user-driven only) — this effect
+  // must never touch selectedBuildingId/selectedFloorId, otherwise it races
+  // with the [open] hydration effect above and clobbers the restored value.
   useEffect(() => {
-    if (!selectedSiteId) { setBuildings([]); setFloors([]); setSelectedBuildingId(""); setSelectedFloorId(""); return; }
+    if (!selectedSiteId) { setBuildings([]); return; }
     setLoadingBuildings(true);
-    setBuildings([]);
-    setFloors([]);
-    setSelectedBuildingId("");
-    setSelectedFloorId("");
     getBuildingsBySite(selectedSiteId).then((data) => { setBuildings(data); setLoadingBuildings(false); });
   }, [selectedSiteId]);
 
-  // When building changes → load floors, reset floor
+  // Fetch the floor list for the selected building — same rule: no selection resets here.
   useEffect(() => {
-    if (!selectedBuildingId) { setFloors([]); setSelectedFloorId(""); return; }
+    if (!selectedBuildingId) { setFloors([]); return; }
     setLoadingFloors(true);
-    setFloors([]);
-    setSelectedFloorId("");
     getFloorsByBuilding(selectedBuildingId).then((data) => { setFloors(data); setLoadingFloors(false); });
   }, [selectedBuildingId]);
+
+  const handleSiteChange = (id: string) => {
+    setSelectedSiteId(id);
+    setSelectedBuildingId("");
+    setSelectedFloorId("");
+  };
+
+  const handleBuildingChange = (id: string) => {
+    setSelectedBuildingId(id);
+    setSelectedFloorId("");
+  };
 
   const handleSubmit = async () => {
     setError("");
@@ -545,21 +556,21 @@ function EditPreferencesDialog({
           <CascadeSelect
             label="Select Office"
             value={selectedSiteId}
-            onChange={setSelectedSiteId}
+            onChange={handleSiteChange}
             options={siteOptions}
-            placeholder="Select an office"
             loading={loadingSites}
+            placeholder="Select office"
           />
 
           {/* Building */}
           <CascadeSelect
             label="Select Building"
             value={selectedBuildingId}
-            onChange={setSelectedBuildingId}
+            onChange={handleBuildingChange}
             options={buildingOptions}
-            placeholder={selectedSiteId ? "Select a building" : "Select an office first"}
             disabled={!selectedSiteId}
             loading={loadingBuildings}
+            placeholder="Select building"
           />
 
           {/* Floor */}
@@ -568,9 +579,9 @@ function EditPreferencesDialog({
             value={selectedFloorId}
             onChange={setSelectedFloorId}
             options={floorOptions}
-            placeholder={selectedBuildingId ? "Select a floor" : "Select a building first"}
             disabled={!selectedBuildingId}
             loading={loadingFloors}
+            placeholder="Select floor"
           />
 
           {/* Amenities */}
@@ -664,10 +675,12 @@ function PrefDisplayRow({
 
 // ─── Amenity chip ─────────────────────────────────────────────────────────────
 
-function AmenityChip({ name }: { name: string }) {
+function AmenityChip({ name, category }: { name: string; category?: string }) {
+  const color = getAmenityColor(name, category);
+  const Icon = color.icon;
   return (
-    <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 text-[11.5px] font-medium ring-1 ring-amber-100">
-      <Zap className="w-3 h-3 mr-1.5 text-amber-400" />
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11.5px] font-medium ring-1 ${color.bg} ${color.text} ${color.border.replace("border-", "ring-")}`}>
+      <Icon className="w-3 h-3 mr-1.5" />
       {name}
     </span>
   );
@@ -750,6 +763,7 @@ export default function ProfilePage() {
         }}
       />
 
+      <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
 
         {/* Page header */}
@@ -965,7 +979,7 @@ export default function ProfilePage() {
                 {preferences.preferredAmenities.length > 0 ? (
                   <div className="flex flex-wrap gap-1.5">
                     {preferences.preferredAmenities.map((a) => (
-                      <AmenityChip key={a.id} name={a.name} />
+                      <AmenityChip key={a.id} name={a.name} category={a.category} />
                     ))}
                   </div>
                 ) : (
@@ -976,6 +990,7 @@ export default function ProfilePage() {
 
           </div>
         </div>
+      </div>
       </div>
     </>
   );

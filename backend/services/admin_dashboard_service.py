@@ -13,7 +13,7 @@ from fastapi import HTTPException, status
 from psycopg2.extensions import connection as PGConnection
 
 from backend.repositories.dashboard_repository import (
-    fetch_admin_booking_list,
+    fetch_admin_activity_list,
     fetch_admin_dashboard_summary,
     fetch_building_scope,
     fetch_date_range_occupancy,
@@ -22,25 +22,16 @@ from backend.repositories.dashboard_repository import (
     fetch_site_scope,
 )
 from backend.schemas.admin_dashboard import (
-    AdminBookingListItemResponse,
-    AdminBookingListResponse,
-    AdminBookingStatus,
-    AdminBookingUserResponse,
+    AdminActivityListItemResponse,
+    AdminActivityListResponse,
+    AdminActivityPersonResponse,
     AdminDateOccupancyResponse,
     AdminDashboardSummaryResponse,
     AdminHierarchyOccupancyResponse,
 )
+from backend.schemas.pagination import PaginationMetadata
 
 HierarchyGroupLevel = Literal["site", "building", "floor"]
-
-ADMIN_BOOKING_STATUSES = {
-    "CONFIRMED",
-    "CHECKED_IN",
-    "COMPLETED",
-    "CANCELLED",
-    "MODIFIED",
-    "NO_SHOW",
-}
 
 MAX_OCCUPANCY_RANGE_DAYS = 90
 
@@ -78,30 +69,20 @@ def get_admin_dashboard_summary(
     return AdminDashboardSummaryResponse(**summary)
 
 
-def get_booking_list(
+def get_admin_activity_list(
     conn: PGConnection,
     *,
     tenant_id: str,
-    selected_date: date,
+    selected_date: date | None = None,
     site_id: str | None = None,
     building_id: str | None = None,
     floor_id: str | None = None,
-    booking_status: AdminBookingStatus | None = None,
-    page: int = 1,
-    limit: int = 50,
-) -> AdminBookingListResponse:
+    page: int | None = None,
+    limit: int | None = None,
+) -> AdminActivityListResponse:
     """
-    Return paginated admin booking rows for one tenant and booking date.
+    Return recent admin dashboard activity rows for one tenant.
     """
-
-    if booking_status is not None and booking_status not in ADMIN_BOOKING_STATUSES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "invalid_booking_status",
-                "message": "bookingStatus is not supported.",
-            },
-        )
 
     try:
         _validate_hierarchy_filters(
@@ -112,16 +93,13 @@ def get_booking_list(
             floor_id=floor_id,
             active_only=False,
         )
-        result = fetch_admin_booking_list(
+        rows = fetch_admin_activity_list(
             conn,
             tenant_id=tenant_id,
-            booking_date=selected_date,
+            activity_date=selected_date,
             site_id=site_id,
             building_id=building_id,
             floor_id=floor_id,
-            booking_status=booking_status,
-            page=page,
-            limit=limit,
         )
     except HTTPException:
         raise
@@ -129,24 +107,32 @@ def get_booking_list(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
-                "code": "admin_booking_list_failed",
-                "message": "Failed to fetch admin booking list.",
+                "code": "admin_activity_list_failed",
+                "message": "Failed to fetch admin activity list.",
             },
         ) from exc
 
-    total = int(result.get("total") or 0)
-    total_pages = math.ceil(total / limit) if total else 0
     items = [
-        _build_booking_item(row)
-        for row in result.get("items", [])
+        _build_activity_item(row)
+        for row in rows
     ]
+    pagination = None
+    if page is not None or limit is not None:
+        effective_page = page or 1
+        effective_limit = limit or 100
+        total = len(items)
+        start = (effective_page - 1) * effective_limit
+        items = items[start:start + effective_limit]
+        pagination = PaginationMetadata(
+            total=total,
+            page=effective_page,
+            limit=effective_limit,
+            total_pages=math.ceil(total / effective_limit) if total else 0,
+        )
 
-    return AdminBookingListResponse(
+    return AdminActivityListResponse(
         items=items,
-        page=page,
-        limit=limit,
-        total=total,
-        total_pages=total_pages,
+        pagination=pagination,
     )
 
 
@@ -368,58 +354,100 @@ def _raise_invalid_hierarchy(message: str) -> None:
     )
 
 
-def _build_booking_item(row: dict[str, Any]) -> AdminBookingListItemResponse:
-    return AdminBookingListItemResponse(
-        booking_id=str(row["booking_id"]),
-        booking_date=row["booking_date"],
-        booking_status=row["booking_status"],
-        source_channel=row.get("source_channel"),
-        user=_build_user(row, prefix="user"),
-        booked_for_user=_build_user(row, prefix="booked_for_user"),
-        seat={
-            "seat_id": str(row["seat_id"]),
-            "seat_code": row.get("seat_code"),
-            "seat_type": row.get("seat_type"),
-            "seat_neighborhood": row.get("seat_neighborhood"),
-        },
+def _build_activity_item(row: dict[str, Any]) -> AdminActivityListItemResponse:
+    activity_type = str(row["activity_type"])
+    booked_for_entity = (
+        "GUEST"
+        if activity_type in {"GUEST_VISIT", "GUEST_BOOKING"}
+        else "EMPLOYEE"
+    )
+
+    return AdminActivityListItemResponse(
+        activity_id=str(row["activity_id"]),
+        activity_type=activity_type,
+        has_booking=bool(row["has_booking"]),
+        activity_status=row["activity_status"],
+        activity_date=row["activity_date"],
+        booking_id=_optional_row_str(row, "booking_id"),
+        guest_visit_id=_optional_row_str(row, "guest_visit_id"),
+        booked_by=_build_activity_person(
+            row,
+            prefix="booked_by",
+            entity_type="EMPLOYEE",
+        ),
+        booked_for=_build_activity_person(
+            row,
+            prefix="booked_for",
+            entity_type=booked_for_entity,
+        ),
+        seat=_build_seat(row),
         site={
-            "site_id": str(row["site_id"]),
+            "site_id": _optional_row_str(row, "site_id"),
             "site_code": row.get("site_code"),
             "site_name": row.get("site_name"),
         },
         building={
-            "building_id": str(row["building_id"]),
+            "building_id": _optional_row_str(row, "building_id"),
             "building_code": row.get("building_code"),
             "building_name": row.get("building_name"),
         },
-        floor={
-            "floor_id": str(row["floor_id"]),
-            "floor_code": row.get("floor_code"),
-            "floor_name": row.get("floor_name"),
-        },
+        floor=_build_floor(row),
         check_in_at=row.get("check_in_at"),
         checked_out_at=row.get("checked_out_at"),
         created_at=row.get("created_at"),
     )
 
 
-def _build_user(
+def _build_activity_person(
     row: dict[str, Any],
     *,
     prefix: str,
-) -> AdminBookingUserResponse | None:
+    entity_type: str,
+) -> AdminActivityPersonResponse:
     user_id = row.get(f"{prefix}_id")
-    if user_id is None:
-        return None
 
-    return AdminBookingUserResponse(
-        user_id=str(user_id),
+    return AdminActivityPersonResponse(
+        entity_type=entity_type,
+        id=str(user_id) if user_id is not None else None,
+        name=row.get(f"{prefix}_name"),
         email=row.get(f"{prefix}_email"),
-        full_name=row.get(f"{prefix}_full_name"),
-        role_name=row.get(f"{prefix}_role_name"),
+        role=row.get(f"{prefix}_role"),
         department=row.get(f"{prefix}_department"),
         job_title=row.get(f"{prefix}_job_title"),
+        guest_type=(
+            row.get("booked_for_guest_type")
+            if prefix == "booked_for"
+            else None
+        ),
     )
+
+
+def _build_seat(row: dict[str, Any]) -> dict[str, Any] | None:
+    if row.get("seat_id") is None:
+        return None
+
+    return {
+        "seat_id": str(row["seat_id"]),
+        "seat_code": row.get("seat_code"),
+        "seat_type": row.get("seat_type"),
+        "seat_neighborhood": row.get("seat_neighborhood"),
+    }
+
+
+def _build_floor(row: dict[str, Any]) -> dict[str, Any] | None:
+    if row.get("floor_id") is None:
+        return None
+
+    return {
+        "floor_id": str(row["floor_id"]),
+        "floor_code": row.get("floor_code"),
+        "floor_name": row.get("floor_name"),
+    }
+
+
+def _optional_row_str(row: dict[str, Any], key: str) -> str | None:
+    value = row.get(key)
+    return str(value) if value is not None else None
 
 
 def _build_hierarchy_row(

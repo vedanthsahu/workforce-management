@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -225,6 +226,8 @@ class FloorResponse(BaseModel):
     layout_status: str | None = None
     layout_is_published: bool | None = None
     layout_version_no: int | None = None
+    published_by_name: str | None = None
+    layout_last_updated: datetime | None = None
     active_layout: FloorLayoutInfo | None = None
 
 
