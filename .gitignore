@@ -133,3 +133,8 @@ node_modules/
 
 package.json
 package-lock.json
+
+# Local AWS SAM artifacts and environment configuration
+.aws-sam/
+events/env.json
+samconfig.toml
