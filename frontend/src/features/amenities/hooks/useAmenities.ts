@@ -6,7 +6,7 @@ export const useAmenities = () => {
   const [data, setData] =
     useState<AmenitiesResponse | null>(null);
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
 

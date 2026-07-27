@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
-import { Seat } from "../types/Bookingform.types";
+import { Seat, Preference } from "../types/Bookingform.types";
 import {
   SVG_W,
   SVG_H,
@@ -15,6 +15,7 @@ import {
   SEAT_STATUS_CONFIG,
   PREFERENCE_MATCH_CONFIG,
 } from "../utils/constants";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface SeatWithSvgId extends Seat {
@@ -35,9 +36,12 @@ export interface SeatWithSvgId extends Seat {
 
 function extractSeatIds(svgText: string): string[] {
   const ids: string[] = [];
+  const seatIdPattern = /^\d+$|^[A-Z]+-.*-\d+$/;
   const regex = /<g\s+id="([^"]+)"/g;
   let match;
-  while ((match = regex.exec(svgText)) !== null) ids.push(match[1]);
+  while ((match = regex.exec(svgText)) !== null) {
+    if (seatIdPattern.test(match[1])) ids.push(match[1]);
+  }
   return ids;
 }
 
@@ -67,12 +71,21 @@ function recolorSeat(svg: string, svgId: string, paletteKey: string): string {
   block = block.replace(/stroke="#707070"/g, `stroke="${p.curve}"`);
   block = block.replace(/stroke="#A0A0A0"/g, `stroke="${p.arc}"`);
   const isClickable = ["available", "best_match", "partial_match", "yours", "selected"].includes(paletteKey);
+  const isSelected  = paletteKey === "selected";
   block = block.replace(
     `<g id="${svgId}">`,
-    `<g id="${svgId}" style="opacity:${p.opacity};cursor:${isClickable ? "pointer" : "default"}">`
+    `<g id="${svgId}"${isSelected ? ` class="_sel-pulse"` : ""} style="opacity:${p.opacity};cursor:${isClickable ? "pointer" : "default"}">`
   );
   return before + block + after;
 }
+
+const SELECTED_PULSE_STYLE = `<style>
+@keyframes _selGlow{
+  0%,100%{filter:drop-shadow(0 0 4px #6366f1) drop-shadow(0 0 8px #818cf8);}
+  50%{filter:drop-shadow(0 0 12px #6366f1) drop-shadow(0 0 24px #818cf8) brightness(1.12);}
+}
+._sel-pulse{animation:_selGlow 1.6s ease-in-out infinite;}
+</style>`;
 
 // svgSeatIds: dynamically extracted from the fetched SVG, not hardcoded
 function buildColoredSvg(
@@ -89,6 +102,11 @@ function buildColoredSvg(
     const key = !seat ? "unloaded" : getPaletteKey(seat, seat.id === selectedSeatId);
     svg = recolorSeat(svg, svgId, key);
   });
+  // Inject pulse keyframes when a seat is selected
+  if (selectedSeatId) {
+    const firstClose = svg.indexOf('>');
+    if (firstClose !== -1) svg = svg.slice(0, firstClose + 1) + SELECTED_PULSE_STYLE + svg.slice(firstClose + 1);
+  }
   return svg;
 }
 
@@ -206,7 +224,8 @@ interface TooltipState {
 const SeatTooltip: React.FC<{
   tooltip: TooltipState;
   containerRect: DOMRect | null;
-}> = ({ tooltip, containerRect }) => {
+  categoryByName: Map<string, string | null | undefined>;
+}> = ({ tooltip, containerRect, categoryByName }) => {
   if (!tooltip.visible || !tooltip.seat || !containerRect) return null;
 
   const seat = tooltip.seat;
@@ -298,23 +317,27 @@ const SeatTooltip: React.FC<{
           </>
         )}
 
-        {/* Matched amenities */}
-        {(seat.matchedAmenityNames ?? []).length > 0 && (
+        {/* Seat type — for available seats with no preference match */}
+        {(seat.status === "available" || seat.status === "yours") &&
+          seat.preferenceMatchStatus !== "FULL_MATCH" &&
+          seat.preferenceMatchStatus !== "PARTIAL_MATCH" &&
+          seat.amenities.length > 0 && (
           <>
             <div style={{ borderTop: "1px solid #f3f4f6" }} />
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
-                Matched Amenities
+                Seat Type
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                {(seat.matchedAmenityNames ?? []).map((name) => (
-                  <span key={name} style={{
-                    fontSize: 10, fontWeight: 600,
-                    color: "#047857", background: "#d1fae5",
-                    borderRadius: 5, padding: "2px 8px",
-                    display: "flex", alignItems: "center", gap: 3,
+                {seat.amenities.map((a) => (
+                  <span key={a} style={{
+                    fontSize: 10, fontWeight: 500,
+                    color: "#374151", background: "#f3f4f6",
+                    borderRadius: 5, padding: "2px 8px", textTransform: "capitalize",
+                    display: "inline-flex", alignItems: "center", gap: 4,
                   }}>
-                    <span style={{ fontSize: 9 }}>✓</span> {name}
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: getAmenityColor(a, categoryByName.get(a.toLowerCase())).hex, flexShrink: 0 }} />
+                    {a}
                   </span>
                 ))}
               </div>
@@ -322,42 +345,142 @@ const SeatTooltip: React.FC<{
           </>
         )}
 
-        {/* All seat amenities */}
-        {seat.amenities.length > 0 &&
-          JSON.stringify(seat.amenities) !== JSON.stringify(seat.matchedAmenityNames ?? []) && (
+        {/* Amenities — only for partial/full match */}
+        {(seat.preferenceMatchStatus === "FULL_MATCH" || seat.preferenceMatchStatus === "PARTIAL_MATCH") && (
+          <>
+            {(seat.matchedAmenityNames ?? []).length > 0 && (
+              <>
+                <div style={{ borderTop: "1px solid #f3f4f6" }} />
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
+                    Matched Amenities
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {(seat.matchedAmenityNames ?? []).map((name) => {
+                      const color = getAmenityColor(name, categoryByName.get(name.toLowerCase()));
+                      return (
+                        <span key={name} style={{
+                          fontSize: 10, fontWeight: 600,
+                          color: color.hex, background: color.bgHex,
+                          borderRadius: 5, padding: "2px 8px",
+                          display: "flex", alignItems: "center", gap: 3,
+                        }}>
+                          <span style={{ fontSize: 9 }}>✓</span>
+                          {name}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+            {seat.amenities.length > 0 &&
+              JSON.stringify(seat.amenities) !== JSON.stringify(seat.matchedAmenityNames ?? []) && (
+              <>
+                <div style={{ borderTop: "1px solid #f3f4f6" }} />
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
+                    Amenities
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {seat.amenities.map((a) => {
+                      const isMatched = (seat.matchedAmenityNames ?? [])
+                        .map((n) => n.toLowerCase())
+                        .some((n) => n.includes(a.toLowerCase()) || a.toLowerCase().includes(n));
+                      const color = getAmenityColor(a, categoryByName.get(a.toLowerCase()));
+                      return (
+                        <span key={a} style={{
+                          fontSize: 10, fontWeight: 500,
+                          color: color.hex, background: color.bgHex,
+                          borderRadius: 5, padding: "2px 8px", textTransform: "capitalize",
+                          display: "inline-flex", alignItems: "center", gap: 4,
+                        }}>
+                          {isMatched && <span style={{ fontSize: 9 }}>✓</span>}
+                          {a}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* Seat type for unavailable seats */}
+        {(seat.status === "unavailable" || seat.status === "booked") && seat.amenities.length > 0 && (
           <>
             <div style={{ borderTop: "1px solid #f3f4f6" }} />
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
-                Amenities
+                Seat Type
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                {seat.amenities.map((a) => {
-                  const isMatched = (seat.matchedAmenityNames ?? [])
-                    .map((n) => n.toLowerCase())
-                    .some((n) => n.includes(a.toLowerCase()) || a.toLowerCase().includes(n));
-                  return (
-                    <span key={a} style={{
-                      fontSize: 10, fontWeight: 500,
-                      color: isMatched ? "#047857" : "#374151",
-                      background: isMatched ? "#d1fae5" : "#f3f4f6",
-                      borderRadius: 5, padding: "2px 8px", textTransform: "capitalize",
-                    }}>
-                      {a}
-                    </span>
-                  );
-                })}
+                {seat.amenities.map((a) => (
+                  <span key={a} style={{
+                    fontSize: 10, fontWeight: 500,
+                    color: "#374151", background: "#f3f4f6",
+                    borderRadius: 5, padding: "2px 8px", textTransform: "capitalize",
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                  }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: getAmenityColor(a, categoryByName.get(a.toLowerCase())).hex, flexShrink: 0 }} />
+                    {a}
+                  </span>
+                ))}
               </div>
             </div>
           </>
         )}
 
-        {/* No amenity fallback */}
-        {(seat.amenities.length === 0 && (seat.matchedAmenityNames ?? []).length === 0) && (
+        {/* Unavailable seat details */}
+        {(seat.status === "unavailable" || seat.status === "booked") && avail && (
           <>
             <div style={{ borderTop: "1px solid #f3f4f6" }} />
-            <div style={{ fontSize: 10, color: "#9ca3af", textAlign: "center", fontStyle: "italic" }}>
-              No amenity information available
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {(avail.booked_dates ?? []).length > 0 && (
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
+                    Booked Dates
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                    {avail.booked_dates.slice(0, 5).map((d) => (
+                      <span key={d} style={{ fontSize: 10, fontWeight: 500, color: "#b45309", background: "#fef3c7", borderRadius: 5, padding: "2px 7px" }}>
+                        {new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                    ))}
+                    {avail.booked_dates.length > 5 && (
+                      <span style={{ fontSize: 10, color: "#9ca3af", padding: "2px 4px" }}>+{avail.booked_dates.length - 5} more</span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {(avail.blocked_dates ?? []).length > 0 && (
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
+                    Blocked Dates
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                    {avail.blocked_dates.slice(0, 5).map((d) => (
+                      <span key={d} style={{ fontSize: 10, fontWeight: 500, color: "#6b7280", background: "#f3f4f6", borderRadius: 5, padding: "2px 7px" }}>
+                        {new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                    ))}
+                    {avail.blocked_dates.length > 5 && (
+                      <span style={{ fontSize: 10, color: "#9ca3af", padding: "2px 4px" }}>+{avail.blocked_dates.length - 5} more</span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {(avail.available_dates ?? []).length > 0 && (
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
+                    Next Available
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "#047857", background: "#d1fae5", borderRadius: 5, padding: "2px 8px" }}>
+                    {new Date(avail.available_dates[0] + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </span>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -386,6 +509,7 @@ interface SvgFloorMapPageProps {
   siteName?: string;
   buildingName?: string;
   floorName?: string;
+  preferences?: Preference[];
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -395,7 +519,13 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
   onSeatSelect,
   loading = false,
   svgUrl,
+  preferences = [],
 }) => {
+  const categoryByName = React.useMemo(
+    () => new Map(preferences.map((p) => [p.name.toLowerCase(), p.category])),
+    [preferences]
+  );
+
   const wrapperRef   = useRef<HTMLDivElement>(null);
   const transformRef = useRef<HTMLDivElement>(null);
 
@@ -566,7 +696,6 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     (svgId: string, x: number, y: number) => {
       const seat = seats.find((s) => s.svgId === svgId);
       if (!seat) return;
-      if (seat.status === "booked" || seat.status === "unavailable") return;
       if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
       setTooltip({ visible: true, x, y, seat });
     },
@@ -638,6 +767,7 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
   const showNoLayout = !svgUrl && !loading;
 
   return (
+    <>
     <div
       className="relative bg-[#F7F8FC] border border-[#EBEBF5] rounded-xl overflow-hidden"
       style={{ width: "100%", height: 520 }}
@@ -668,46 +798,6 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
       {mapReady && (
         <div className="absolute top-3 left-3 z-20 text-[10px] font-semibold text-gray-400 bg-white/80 px-2 py-1 rounded-md border border-[#EBEBF5] select-none tabular-nums">
           {zoomDisplay}%
-        </div>
-      )}
-
-      {/* Legend */}
-      {mapReady && (
-        <div className="absolute bottom-8 left-3 z-20 flex items-center gap-3 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-lg border border-[#EBEBF5] shadow-sm select-none flex-wrap max-w-[calc(100%-1.5rem)]">
-          {hasPreferences && (
-            <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
-              <span className="w-2.5 h-2.5 rounded-full inline-block bg-amber-400 ring-1 ring-amber-500" />
-              Best Match
-            </span>
-          )}
-          <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
-            <span className="w-2.5 h-2.5 rounded-full inline-block bg-emerald-500" />
-            Available
-          </span>
-          {hasPreferences && partialMatchCount > 0 && (
-            <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
-              <span className="relative w-2.5 h-2.5 inline-block">
-                <span className="absolute inset-0 rounded-full bg-emerald-500" />
-                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 border border-white" />
-              </span>
-              Partial Match
-            </span>
-          )}
-          <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
-            <span className="w-2.5 h-2.5 rounded-full inline-block bg-gray-400" />
-            Unavailable
-          </span>
-          <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
-            <span className="w-2.5 h-2.5 rounded-full inline-block bg-blue-500" />
-            Selected
-          </span>
-        </div>
-      )}
-
-      {/* Hint */}
-      {mapReady && (
-        <div className="absolute bottom-2 left-3 z-20 text-[10px] text-gray-400 bg-white/80 px-2 py-1 rounded-md border border-[#EBEBF5] select-none">
-          Scroll to zoom · Drag to pan · Click a seat to select
         </div>
       )}
 
@@ -771,10 +861,49 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
         )}
 
         {tooltip.visible && tooltip.seat && containerRectRef.current && (
-          <SeatTooltip tooltip={tooltip} containerRect={containerRectRef.current} />
+          <SeatTooltip tooltip={tooltip} containerRect={containerRectRef.current} categoryByName={categoryByName} />
         )}
       </div>
     </div>
+
+    {/* Legend + hint — below the map, never overlapping */}
+      {mapReady && (
+        <div className="flex items-center justify-between flex-wrap gap-2 px-1">
+          <div className="flex items-center gap-3 flex-wrap">
+            {hasPreferences && (
+              <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
+                <span className="w-2.5 h-2.5 rounded-full inline-block bg-amber-400 ring-1 ring-amber-500" />
+                Best Match
+              </span>
+            )}
+            <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
+              <span className="w-2.5 h-2.5 rounded-full inline-block bg-emerald-500" />
+              Available
+            </span>
+            {hasPreferences && partialMatchCount > 0 && (
+              <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
+                <span className="relative w-2.5 h-2.5 inline-block">
+                  <span className="absolute inset-0 rounded-full bg-emerald-500" />
+                  <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 border border-white" />
+                </span>
+                Partial Match
+              </span>
+            )}
+            <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
+              <span className="w-2.5 h-2.5 rounded-full inline-block bg-gray-400" />
+              Unavailable
+            </span>
+            <span className="flex items-center gap-1.5 text-[10px] text-gray-600 font-medium">
+              <span className="w-2.5 h-2.5 rounded-full inline-block bg-blue-500" />
+              Selected
+            </span>
+          </div>
+          <span className="text-[10px] text-gray-400 select-none">
+            Scroll to zoom · Drag to pan · Click a seat to select
+          </span>
+        </div>
+      )}
+    </>
   );
 };
 

@@ -40,8 +40,8 @@ export type AppRole =
   | "ADMIN"
   | "MANAGER"
   | "EMPLOYEE"
-  | "TALENT"
-  | "SECURITY"
+  | "FACILITATOR"
+  | "FRONT_OFFICE"
   | "FACILITIES"
   | string;
 

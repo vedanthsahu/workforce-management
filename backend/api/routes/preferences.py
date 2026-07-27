@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from typing import Any, Annotated
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from psycopg2.extensions import connection as PGConnection
 
-from backend.api.deps import get_current_user
+from backend.api.deps import get_current_user, require_any_permission
+from backend.core.audit_actions import (
+    AMENITY_CATEGORY_CREATED, AMENITY_CATEGORY_UPDATED,
+    AMENITY_CREATED, AMENITY_UPDATED,
+)
+from backend.repositories.audit_repository import safe_write_audit_log
 from backend.db.connection import get_db
 from backend.schemas.preferences import (
     AdminAmenityResponse,
@@ -14,9 +19,11 @@ from backend.schemas.preferences import (
     AmenityListResponse,
     CreateAmenityCategoryRequest,
     CreateAmenityRequest,
+    MyPreferencesResponse,
     PreferencesResponse,
     UpdateAmenityCategoryRequest,
     UpdateAmenityRequest,
+    UpdateMyPreferencesRequest,
 )
 from backend.services.preferences_service import (
     create_amenity,
@@ -25,9 +32,11 @@ from backend.services.preferences_service import (
     get_amenity,
     get_amenity_categories,
     get_amenity_category,
+    get_my_preferences,
     get_preferences,
     update_amenity_category_metadata,
     update_amenity_metadata,
+    update_my_preferences,
 )
 
 router = APIRouter(tags=["preferences"])
@@ -48,6 +57,23 @@ def preferences(
     )
 
     return PreferencesResponse(**payload)
+
+
+@router.post(
+    "/preferences/me",
+    response_model=MyPreferencesResponse,
+)
+def update_my_preferences_route(
+    payload: UpdateMyPreferencesRequest,
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> MyPreferencesResponse:
+
+    return update_my_preferences(
+        conn,
+        current_user=current_user,
+        payload=payload,
+    )
 
 
 @router.get("/amenities", response_model=AmenityListResponse)
@@ -114,14 +140,27 @@ def amenity_category(
 )
 def create_amenity_category_route(
     payload: CreateAmenityCategoryRequest,
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AmenityCategoryResponse:
-    return create_amenity_category(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        payload=payload,
+    tenant_id = str(current_user["tenant_id"])
+    try:
+        result = create_amenity_category(conn, tenant_id=tenant_id, payload=payload)
+    except HTTPException as he:
+        _d = he.detail if isinstance(he.detail, dict) else {}
+        safe_write_audit_log(
+            conn, action=AMENITY_CATEGORY_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="amenity_category", resource_id=None,
+            event_status="DENIED" if he.status_code == 403 else "FAILURE",
+            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+        )
+        raise
+    safe_write_audit_log(
+        conn, action=AMENITY_CATEGORY_CREATED, tenant_id=tenant_id,
+        current_user=current_user, resource_type="amenity_category", resource_id=str(result.category_id),
+        new_values={"category_name": result.category_name},
     )
+    return result
 
 
 @router.patch(
@@ -131,15 +170,22 @@ def create_amenity_category_route(
 def update_amenity_category_route(
     category_id: Annotated[int, Path(gt=0)],
     payload: UpdateAmenityCategoryRequest,
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AmenityCategoryResponse:
-    return update_amenity_category_metadata(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        category_id=str(category_id),
-        payload=payload,
+    sent = payload.model_dump(exclude_unset=True)
+    tenant_id = str(current_user["tenant_id"])
+    old = get_amenity_category(conn, tenant_id=tenant_id, category_id=str(category_id))
+    result = update_amenity_category_metadata(conn, tenant_id=tenant_id, category_id=str(category_id), payload=payload)
+    actually_changed = [k for k in sent if getattr(old, k, None) != sent[k]] if old else list(sent.keys())
+    safe_write_audit_log(
+        conn, action=AMENITY_CATEGORY_UPDATED, tenant_id=tenant_id,
+        current_user=current_user, resource_type="amenity_category", resource_id=str(category_id),
+        old_values={k: getattr(old, k, None) for k in sent} if old else None,
+        new_values=sent,
+        changed_fields=actually_changed or None,
     )
+    return result
 
 
 @router.post(
@@ -149,14 +195,27 @@ def update_amenity_category_route(
 )
 def create_amenity_route(
     payload: CreateAmenityRequest,
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AdminAmenityResponse:
-    return create_amenity(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        payload=payload,
+    tenant_id = str(current_user["tenant_id"])
+    try:
+        result = create_amenity(conn, tenant_id=tenant_id, payload=payload)
+    except HTTPException as he:
+        _d = he.detail if isinstance(he.detail, dict) else {}
+        safe_write_audit_log(
+            conn, action=AMENITY_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="amenity", resource_id=None,
+            event_status="DENIED" if he.status_code == 403 else "FAILURE",
+            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+        )
+        raise
+    safe_write_audit_log(
+        conn, action=AMENITY_CREATED, tenant_id=tenant_id,
+        current_user=current_user, resource_type="amenity", resource_id=str(result.amenity_id),
+        new_values={"amenity_name": result.amenity_name, "category_id": str(result.category_id)},
     )
+    return result
 
 
 @router.get("/amenities/{amenity_id}", response_model=AdminAmenityResponse)
@@ -176,12 +235,19 @@ def amenity_detail(
 def update_amenity_route(
     amenity_id: Annotated[int, Path(gt=0)],
     payload: UpdateAmenityRequest,
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AdminAmenityResponse:
-    return update_amenity_metadata(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        amenity_id=str(amenity_id),
-        payload=payload,
+    sent = payload.model_dump(exclude_unset=True)
+    tenant_id = str(current_user["tenant_id"])
+    old = get_amenity(conn, tenant_id=tenant_id, amenity_id=str(amenity_id))
+    result = update_amenity_metadata(conn, tenant_id=tenant_id, amenity_id=str(amenity_id), payload=payload)
+    actually_changed = [k for k in sent if getattr(old, k, None) != sent[k]] if old else list(sent.keys())
+    safe_write_audit_log(
+        conn, action=AMENITY_UPDATED, tenant_id=tenant_id,
+        current_user=current_user, resource_type="amenity", resource_id=str(amenity_id),
+        old_values={k: getattr(old, k, None) for k in sent} if old else None,
+        new_values=sent,
+        changed_fields=actually_changed or None,
     )
+    return result

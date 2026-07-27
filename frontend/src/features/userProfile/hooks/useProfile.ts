@@ -79,11 +79,14 @@ export function useProfile(): UseProfileReturn {
   const handleUpdatePreferences = useCallback(async (form: EditPreferencesForm) => {
     setState((s) => ({ ...s, isSavingPreferences: true }));
     try {
+      // POST /preferences/me replaces the whole saved row, so every field
+      // must be resent — carry forward seat_type since there's no UI for it yet.
       const updated = await updatePreferences({
-        preferred_office:    form.preferredOfficeId   || undefined,
-        preferred_building:  form.preferredBuildingId || undefined,
-        preferred_floor:     form.preferredFloorId    || undefined,
-        preferred_amenities: form.preferredAmenityIds,
+        site_id:     form.preferredOfficeId   ? Number(form.preferredOfficeId)   : null,
+        building_id: form.preferredBuildingId ? Number(form.preferredBuildingId) : null,
+        floor_id:    form.preferredFloorId    ? Number(form.preferredFloorId)    : null,
+        seat_type:   state.data?.preferences.preferredSeatType ?? null,
+        amenity_ids: form.preferredAmenityIds.map(Number),
       });
       setState((s) => ({
         ...s,
@@ -94,7 +97,7 @@ export function useProfile(): UseProfileReturn {
       setState((s) => ({ ...s, isSavingPreferences: false }));
       throw new Error("Failed to update preferences. Please try again.");
     }
-  }, []);
+  }, [state.data]);
 
   const handleUploadAvatar = useCallback(async (file: File) => {
     setState((s) => ({ ...s, isUploadingAvatar: true }));

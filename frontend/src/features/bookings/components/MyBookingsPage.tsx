@@ -5,7 +5,7 @@ import {
   RefreshCw, Plus, Calendar, CheckCircle2, Users, UserCheck,
   Search,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useBookings } from "../hooks/useBookings";
@@ -13,6 +13,7 @@ import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 import { useBookingActions } from "../hooks/useBookingActions";
 import { BookingCard } from "./BookingCard";
 import { CancelBookingDialog } from "./CancelBookingDialog";
+import { MyBookingsSkeleton, MyBookingsStatsSkeleton } from "./MyBookingsSkeleton";
 import { TABS } from "../utils/constants";
 import { isUpcoming, isToday, sortByDate } from "../utils/bookingHelpers";
 import type { Booking, BookingSummary, BookingTab } from "../types/bookings.types";
@@ -337,20 +338,33 @@ export default function MyBookingsPage() {
   const {
     displayedBookings,
     delegatedBookings,
+    cancelledDelegatedBookings,
     summary,
     activeTab,
     isLoading,
     error,
     setActiveTab,
     handleCancelBooking,
+    handleCancelDelegatedBooking,
     refreshBookings,
   } = useBookings();
 
-  const { cancelTarget, setCancelTarget, handleConfirmCancel, handleModify } =
-    useBookingActions({ handleCancelBooking });
+  const {
+    cancelTarget, setCancelTarget, clearCancelTarget, cancelMode,
+    handleConfirmCancel, handleModify,
+    handleModifyVisit, handleAddBooking,
+    handleCancelVisit, handleCancelBookingOnly,
+  } = useBookingActions({ handleCancelBooking, handleCancelDelegatedBooking });
 
   const router = useRouter();
-  const [topTab, setTopTab]       = useState<"myBookings" | "bookedForSomeone">("myBookings");
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab") === "bookedForSomeone" ? "bookedForSomeone" : "myBookings";
+  const [topTab, setTopTabState]  = useState<"myBookings" | "bookedForSomeone">(initialTab);
+  const setTopTab = (tab: "myBookings" | "bookedForSomeone") => {
+    setTopTabState(tab);
+    const url = tab === "bookedForSomeone" ? "/mybookings?tab=bookedForSomeone" : "/mybookings";
+    router.replace(url);
+  };
   const [bfsSubTab, setBfsSubTab] = useState<"upcoming" | "past" | "cancelled">("upcoming");
 
   // My Bookings filters
@@ -377,14 +391,22 @@ export default function MyBookingsPage() {
     activeTab !== "past" && activeTab !== "cancelled",
   );
 
-  const bfsBaseFiltered = delegatedBookings.filter((b) => {
-    if (bfsSubTab === "upcoming")  return isUpcoming(b.date) && b.status !== "cancelled";
-    if (bfsSubTab === "past")      return !isUpcoming(b.date) && b.status !== "cancelled";
-    if (bfsSubTab === "cancelled") return b.status === "cancelled";
-    return true;
-  });
+  const bfsBaseFiltered = bfsSubTab === "cancelled"
+    ? cancelledDelegatedBookings
+    : delegatedBookings.filter((b) => {
+        if (bfsSubTab === "upcoming") return isUpcoming(b.date) && b.status !== "cancelled";
+        if (bfsSubTab === "past")     return !isUpcoming(b.date) && b.status !== "cancelled";
+        return true;
+      });
   const filteredDelegated = applyBfsFilters(bfsBaseFiltered, bfsSearch, bfsBookingType)
-    .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+    .sort((a, b) => {
+      if (bfsSubTab === "past" || bfsSubTab === "cancelled") {
+        // Most recent date first for past/cancelled
+        return new Date(b.fromDate).getTime() - new Date(a.fromDate).getTime();
+      }
+      // Upcoming and all: soonest date first (today at top)
+      return new Date(a.fromDate).getTime() - new Date(b.fromDate).getTime();
+    });
 
   return (
     <>
@@ -424,7 +446,7 @@ export default function MyBookingsPage() {
           </div>
 
           {/* Stats */}
-          <BookingStatsCards summary={summary} delegatedCount={delegatedBookings.length} showOnBehalf={canBookForSomeone} />
+          {isLoading ? <MyBookingsStatsSkeleton /> : <BookingStatsCards summary={summary} delegatedCount={delegatedBookings.length} showOnBehalf={canBookForSomeone} />}
 
           {/* Top-level tabs — "Booked For Someone" only visible with permission */}
           <div className="flex border-b border-[#EBEBF5] overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -461,9 +483,7 @@ export default function MyBookingsPage() {
               />
 
               <div className="flex flex-col gap-3.5">
-                {isLoading && (
-                  <div className="text-center py-12 text-gray-400 text-[13.5px]">Loading bookings…</div>
-                )}
+                {isLoading && <MyBookingsSkeleton />}
                 {error && (
                   <div className="bg-red-50 border border-red-200 rounded-xl px-4 sm:px-5 py-4 text-red-500 text-[13px]">{error}</div>
                 )}
@@ -477,6 +497,11 @@ export default function MyBookingsPage() {
                           booking={booking}
                           onCancelClick={setCancelTarget}
                           onModifyClick={handleModify}
+                          onModifyVisit={handleModifyVisit}
+
+                          onAddBooking={handleAddBooking}
+                          onCancelVisit={handleCancelVisit}
+                          onCancelBooking={handleCancelBookingOnly}
                           showActions={!isToday(booking.date)}
                         />
                       ))
@@ -537,7 +562,7 @@ export default function MyBookingsPage() {
 
               <div className="flex flex-col gap-3.5">
                 {isLoading ? (
-                  <div className="text-center py-12 text-gray-400 text-[13.5px]">Loading bookings…</div>
+                  <MyBookingsSkeleton />
                 ) : filteredDelegated.length === 0 ? (
                   <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
                     No {bfsSubTab} delegated bookings found.
@@ -549,6 +574,10 @@ export default function MyBookingsPage() {
                       booking={booking}
                       onCancelClick={setCancelTarget}
                       onModifyClick={handleModify}
+                      onModifyVisit={handleModifyVisit}
+                      onAddBooking={handleAddBooking}
+                      onCancelBooking={handleCancelBookingOnly}
+                      onCancelVisit={handleCancelVisit}
                       showActions={bfsSubTab === "upcoming" && !isToday(booking.date)}
                       variant="delegated"
                     />
@@ -578,8 +607,9 @@ export default function MyBookingsPage() {
       <CancelBookingDialog
         open={cancelTarget !== null}
         booking={cancelTarget}
+        cancelMode={cancelMode}
         onConfirm={handleConfirmCancel}
-        onClose={() => setCancelTarget(null)}
+        onClose={clearCancelTarget}
       />
     </>
   );

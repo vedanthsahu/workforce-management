@@ -90,6 +90,7 @@ export interface CreateGuestVisitInput {
   hostUserId: string;
   siteId: string;
   buildingId: string;
+  floorId?: string;
   visitDate: string;
   guestType: GuestType;
   purposeOfVisit?: PurposeOfVisit | null;
@@ -101,4 +102,9 @@ export interface CreateGuestVisitInput {
 export interface GuestVisitResponse {
   guest_visit_id: string;
   visit_status: string;
+}
+
+export interface EligibilityResponse {
+  eligible: boolean;
+  message: string;
 }

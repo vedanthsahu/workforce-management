@@ -10,6 +10,7 @@ import EditAmenityModal    from "@/features/amenities/components/EditAmenityModa
 import AmenitiesPagination from "@/features/amenities/components/AmenitiesPagination";
 import { useAmenities } from "@/features/amenities/hooks/useAmenities";
 import { Amenity } from "@/features/amenities/types/amenities.types";
+import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
 
 const PIN_DURATION = 4000;
 
@@ -126,18 +127,20 @@ function AmenitiesPage() {
       </div>
 
       {/* STATS CARDS */}
-      <AmenitiesCards
-        stats={
-          data
-            ? {
-                total_amenities:    data.total_amenities,
-                active_amenities:   data.active_amenities,
-                inactive_amenities: data.inactive_amenities,
-                assigned_amenities: data.assigned_amenities,
-              }
-            : null
-        }
-      />
+      {loading ? <StatCardsSkeleton /> : (
+        <AmenitiesCards
+          stats={
+            data
+              ? {
+                  total_amenities:    data.total_amenities,
+                  active_amenities:   data.active_amenities,
+                  inactive_amenities: data.inactive_amenities,
+                  assigned_amenities: data.assigned_amenities,
+                }
+              : null
+          }
+        />
+      )}
 
       {/* TABLE CARD */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
@@ -162,7 +165,7 @@ function AmenitiesPage() {
         {/* ✅ CHANGED: removed overflow-y-auto and maxHeight/minHeight style — no more inner scroll */}
         <div className="w-full overflow-x-auto">
           {loading ? (
-            <div className="p-6 text-sm text-gray-500">Loading...</div>
+            <TableBodySkeleton columns={4} rows={4} />
           ) : (
             <AmenitiesTable
               data={paginatedAmenities}
@@ -175,9 +178,11 @@ function AmenitiesPage() {
         {/* FOOTER */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
           <span>
-            Showing {filteredAmenities.length === 0 ? 0 : startIndex + 1} to{" "}
-            {Math.min(startIndex + itemsPerPage, filteredAmenities.length)} of{" "}
-            {filteredAmenities.length} entries
+            {filteredAmenities.length > 0 &&
+              `Showing ${startIndex + 1} to ${Math.min(
+                startIndex + itemsPerPage,
+                filteredAmenities.length
+              )} of ${filteredAmenities.length} entries`}
           </span>
           <div className="self-center sm:self-auto">
             <AmenitiesPagination
@@ -209,7 +214,7 @@ function AmenitiesPage() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-gray-500">Loading...</div>}>
+    <Suspense fallback={<div className="p-6"><TableSkeleton columns={4} rows={4} /></div>}>
       <AmenitiesPage />
     </Suspense>
   );

@@ -1,29 +1,51 @@
-import type { ApiUser, User } from "../types/users.types";
 
-// Re-exported here so users components can `import { getRoleBadgeClass } from
-// "../utils/users.utils"` without needing to know it actually lives in the
-// roles feature — keeps role colors identical to Role Management everywhere.
+
+import type { ApiUser, ApiUserSearchResult, User } from "../types/users.types";
+
 export { getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
 
 export function mapApiUserToUser(item: ApiUser): User {
   return {
-    id: item.user_id,
-    fullName: item.full_name,
+    id: item.id,
+    fullName: item.fullName,
     email: item.email,
     department: item.department,
-    employeeId: item.employee_id,
-    status: item.status,
-    joinedOn: item.joined_on,
-    currentRole: item.current_role,
-    roleAssignedOn: item.role_assigned_on,
-    permissions: item.permissions.map((p) => p.permission_label),
+    employeeId: item.employeeId,
+    jobTitle: item.jobTitle,
+    mobilePhone: item.mobilePhone,
+    status: item.status === "ACTIVE" ? "active" : "inactive",
+    currentRole: item.roleName,
   };
 }
 
+export function mapSearchResultToUser(item: ApiUserSearchResult): User {
+  return {
+    id: item.user_id,
+    fullName: item.full_name,
+    email: item.email,
+    department: item.department ?? "",
+    employeeId: item.employee_id,
+    jobTitle: "",
+    mobilePhone: "",
+    status: item.status === "ACTIVE" ? "active" : "inactive",
+    currentRole: item.role_name,
+  };
+}
+
+export function toApiStatus(status: import("../types/users.types").UserStatus): "ACTIVE" | "INACTIVE" {
+  return status === "active" ? "ACTIVE" : "INACTIVE";
+}
+
 export function formatDate(iso: string): string {
+  if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
+}
+
+export function normalizeRoleKey(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.trim().toUpperCase().replace(/[\s_-]+/g, "_");
 }

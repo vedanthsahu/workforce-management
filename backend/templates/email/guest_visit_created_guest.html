@@ -1,0 +1,20 @@
+{% extends "_base.html" %}
+{% from "_macros.html" import heading, lead, details_open, details_close, row %}
+{% block title %}Your visit is scheduled{% endblock %}
+{% block preheader %}Your visit to {{ site }} on {{ visit_date }} is confirmed.{% endblock %}
+{% block content %}
+{% set time_window = (start_time ~ " – " ~ end_time) if (start_time and end_time) else (start_time or end_time) %}
+{% set purpose = purpose_of_visit.replace("_", " ")|title if purpose_of_visit else "" %}
+{{ heading("Your visit is scheduled") }}
+{{ lead("Hello " ~ recipient_name ~ ", your visit has been confirmed. Please carry a valid photo ID and check in at reception when you arrive.") }}
+{{ details_open() }}
+{{ row("Date", visit_date) }}
+{{ row("Time", time_window) }}
+{{ row("Host", host_name) }}
+{{ row("Purpose", purpose) }}
+{{ row("Floor", floor) }}
+{{ row("Building", building) }}
+{{ row("Site", site) }}
+{{ details_close() }}
+{% if host_name %}<p style="margin:14px 0 0 0;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#6a7377;">{{ host_name }} will be notified when you check in.</p>{% endif %}
+{% endblock %}

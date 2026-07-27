@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Layout } from "../types/layout.types";
 import { Preference, Seat, SeatStatus, SeatType, SeatUpdatePayload } from "@/features/managelayout1";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 
 interface LayoutPreviewProps {
   layout: Layout | null;
@@ -28,9 +29,12 @@ function resolveUrl(url: string): string {
 
 function extractSeatIds(svgText: string): string[] {
   const ids: string[] = [];
+  const seatIdPattern = /^\d+$|^[A-Z]+-.*-\d+$/;
   const regex = /<g\s+id="([^"]+)"/g;
   let match;
-  while ((match = regex.exec(svgText)) !== null) ids.push(match[1]);
+  while ((match = regex.exec(svgText)) !== null) {
+    if (seatIdPattern.test(match[1])) ids.push(match[1]);
+  }
   return ids;
 }
 
@@ -67,7 +71,7 @@ function colorSeats(svgText: string, seats: Seat[], filteredIds?: Set<string>): 
   seats.forEach((seat) => {
     const id = seat.seat_svg_id;
     const fill = hasFilter && filteredIds!.has(id)
-      ? "#FEF9C3"          // Highlight matching seats — light yellow
+      ? "#FACC15"          // Highlight matching seats — vivid yellow
       : resolveSeatFill(seat);
 
     const groupRegex = new RegExp(
@@ -261,6 +265,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
               <div className="grid grid-cols-2 gap-1.5">
                 {preferences.map((p) => {
                   const on = amenityIds.includes(p.preference_id);
+                  const color = getAmenityColor(p.preference_name, p.preference_type);
                   return (
                     <button
                       key={p.preference_id}
@@ -278,6 +283,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
                           </svg>
                         )}
                       </div>
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${color.dot}`} />
                       {p.preference_name}
                     </button>
                   );
@@ -390,6 +396,10 @@ export default function LayoutPreview({
 
   const [dialogOpen,  setDialogOpen]  = useState(false);
   const [clickedSeat, setClickedSeat] = useState<Seat | null>(null);
+
+  // ── Hover tooltip (only in configure mode) ────────────────────────────
+  const [tooltip, setTooltip] = useState<{ seat: Seat; x: number; y: number } | null>(null);
+  const lastHoveredIdRef = useRef<string | null>(null);
 
   // ── Load SVG ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -511,6 +521,37 @@ export default function LayoutPreview({
   };
 
   const onMouseMove = (e: React.MouseEvent) => {
+    // Hover tooltip (only in configure mode, not while dragging)
+    if (onSeatSave && !didDrag.current) {
+      const svgId = getSeatIdFromClick(e.target, seatIdsRef.current);
+      if (svgId !== lastHoveredIdRef.current) {
+        lastHoveredIdRef.current = svgId;
+        if (svgId) {
+          const hovered = seats.find((s) => s.seat_svg_id === svgId) ?? null;
+          if (hovered) {
+            const rect = wrapperRef.current?.getBoundingClientRect();
+            if (rect) {
+              const relX = e.clientX - rect.left;
+              const relY = e.clientY - rect.top;
+              // Flip above cursor when within 170px of the bottom to avoid clipping
+              const nearBottom = relY > rect.height - 170;
+              const nearRight  = relX > rect.width  - 170;
+              setTooltip({
+                seat: hovered,
+                x: nearRight  ? relX - 160 : relX + 14,
+                y: nearBottom ? relY - 155 : relY - 10,
+              });
+            }
+          } else {
+            setTooltip(null);
+          }
+        } else {
+          setTooltip(null);
+        }
+      }
+    }
+
+    // Pan logic
     if (!isPanning.current) return;
     const dx = e.clientX - mouseDownPos.current.x;
     const dy = e.clientY - mouseDownPos.current.y;
@@ -524,11 +565,14 @@ export default function LayoutPreview({
   const onMouseUp = (e: React.MouseEvent) => {
     isPanning.current = false;
     (e.currentTarget as HTMLElement).style.cursor = "grab";
+    if (didDrag.current) { setTooltip(null); lastHoveredIdRef.current = null; }
   };
 
   const onMouseLeave = () => {
     isPanning.current = false;
     if (wrapperRef.current) wrapperRef.current.style.cursor = "grab";
+    setTooltip(null);
+    lastHoveredIdRef.current = null;
   };
 
   // ── FIX: Touch pan + pinch-to-zoom handlers ────────────────────────────
@@ -664,9 +708,9 @@ export default function LayoutPreview({
           className={`relative bg-[#F7F8FC] border border-[#EBEBF5] rounded-xl overflow-hidden
             ${fillHeight
               ? "flex-1 min-h-0"
-              : "h-[320px] sm:h-[400px] md:h-[460px]"
+              : !canvasHeight ? "h-[320px] sm:h-[400px] md:h-[460px]" : ""
             }`}
-          style={{ width: "100%" }}
+          style={{ width: "100%", ...(!fillHeight && canvasHeight ? { height: canvasHeight } : {}) }}
         >
           {/* Fit-to-view button (top-right corner) */}
           {mapReady && (
@@ -729,6 +773,44 @@ export default function LayoutPreview({
                 dangerouslySetInnerHTML={{ __html: displaySvg }}
               />
             )}
+
+            {/* Seat hover tooltip */}
+            {tooltip && (() => {
+              const prefMap = Object.fromEntries(preferences.map((p) => [p.preference_id, p.preference_name]));
+              const amenityNames = tooltip.seat.amenity_ids.map((id) => prefMap[id]).filter(Boolean);
+              return (
+                <div
+                  className="absolute z-30 pointer-events-none bg-white border border-gray-200 rounded-lg shadow-md px-2.5 py-2 min-w-[140px] max-w-[200px]"
+                  style={{ left: tooltip.x, top: tooltip.y }}
+                >
+                  <p className="text-[11px] font-semibold text-gray-800">{tooltip.seat.seat_code}</p>
+                  {tooltip.seat.is_configured ? (
+                    <div className="mt-1 space-y-0.5">
+                      <p className="text-[10px] text-gray-500 flex items-center gap-1">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${tooltip.seat.status === "ACTIVE" ? "bg-emerald-500" : "bg-red-400"}`} />
+                        {tooltip.seat.status ?? "ACTIVE"}
+                      </p>
+                      <p className="text-[10px] text-gray-500">Bookable: {tooltip.seat.is_bookable ? "Yes" : "No"}</p>
+                      {tooltip.seat.seat_type && (
+                        <p className="text-[10px] text-gray-400">{tooltip.seat.seat_type}</p>
+                      )}
+                      {amenityNames.length > 0 && (
+                        <div className="mt-1 pt-1 border-t border-gray-100">
+                          <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Amenities</p>
+                          <div className="flex flex-wrap gap-0.5">
+                            {amenityNames.map((name) => (
+                              <span key={name} className="text-[9px] bg-indigo-50 text-indigo-600 border border-indigo-100 rounded px-1 py-0.5">{name}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-amber-600 mt-0.5">Not configured</p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 

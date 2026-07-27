@@ -12,13 +12,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Office, UpdateOfficePayload } from "../types/office.types";
 import { officeService } from "../services/office.service";
 import { X } from "lucide-react";
@@ -107,21 +100,16 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
 
           <div className="space-y-1.5">
             <Label>Status</Label>
-            <Select
+            <select
               value={formData.status || "ACTIVE"}
-              onValueChange={(value) => {
-                if (!value) return;
-                setFormData({ ...formData, status: value as "ACTIVE" | "INACTIVE" });
-              }}
+              onChange={(e) =>
+                setFormData({ ...formData, status: e.target.value as "ACTIVE" | "INACTIVE" })
+              }
+              className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-                <SelectItem value="INACTIVE">INACTIVE</SelectItem>
-              </SelectContent>
-            </Select>
+              <option value="ACTIVE">ACTIVE</option>
+              <option value="INACTIVE">INACTIVE</option>
+            </select>
           </div>
         </div>
 

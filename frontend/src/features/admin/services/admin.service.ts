@@ -1,6 +1,6 @@
 import { axiosInstance } from "@/lib/http/axios";
 import type {
-  AdminBookingsResponse,
+  AdminActivitiesResponse,
   DashboardFilters,
   DashboardSummary,
   OccupancyHierarchyItem,
@@ -39,17 +39,14 @@ export const adminService = {
     return data;
   },
 
-  async getAdminBookings(params?: {
+  async getAdminActivities(params?: {
     date?: string;
     siteId?: number;
     buildingId?: number;
     floorId?: number;
-    bookingStatus?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<AdminBookingsResponse> {
-    const { data } = await axiosInstance.get<AdminBookingsResponse>(
-      "/admin/bookings",
+  }): Promise<AdminActivitiesResponse> {
+    const { data } = await axiosInstance.get<AdminActivitiesResponse>(
+      "/admin/activities",
       { params }
     );
 

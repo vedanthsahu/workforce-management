@@ -5,7 +5,7 @@ import LayoutTable from "@/features/adminlayouts1/components/LayoutTable";
 import { useLayoutSelection, LayoutSelection } from "@/features/adminlayouts1/hooks/useLayoutSelection";
 import { useLayoutsStore }    from "@/store/useLayoutsStore";
 import Link        from "next/link";
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { toast }   from "sonner";
 import { useSearchParams, useRouter } from "next/navigation";
 
@@ -13,14 +13,6 @@ const DEFAULT_SELECTION: LayoutSelection = {
   siteId: "", buildingId: "", floorId: "",
   siteName: "", buildingName: "", floorName: "",
 };
-
-function readSavedSelection(): LayoutSelection | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const saved = localStorage.getItem("selectedLayoutFloor");
-    return saved ? JSON.parse(saved) : null;
-  } catch { return null; }
-}
 
 export default function FloorLayoutsPage() {
   const router       = useRouter();
@@ -35,10 +27,26 @@ export default function FloorLayoutsPage() {
     if (floorIdParam) {
       return { ...DEFAULT_SELECTION, siteId: siteIdParam, buildingId: buildingIdParam, floorId: floorIdParam };
     }
-    return readSavedSelection() ?? DEFAULT_SELECTION;
+    return DEFAULT_SELECTION;
   });
 
   const { fetchLayouts, invalidateFloor, invalidateAll } = useLayoutsStore();
+
+  // Restore selection from localStorage after hydration (client-only)
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current || floorIdParam) return;
+    restoredRef.current = true;
+    try {
+      const saved = localStorage.getItem("selectedLayoutFloor");
+      if (saved) {
+        const parsed: LayoutSelection = JSON.parse(saved);
+        setSelection(parsed);
+        if (parsed.floorId) fetchLayouts(parsed.floorId);
+      }
+    } catch { /* ignore corrupted data */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Persist selection to localStorage whenever it changes
   useEffect(() => {
@@ -51,14 +59,6 @@ export default function FloorLayoutsPage() {
   useEffect(() => {
     router.prefetch("/admin/layouts/upload");
   }, [router]);
-
-  // Pre-warm cache on mount if we already know the floor
-  useEffect(() => {
-    if (selection.floorId) {
-      fetchLayouts(selection.floorId);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // When returning from publish, floorIdParam will be present in the URL.
   // Invalidate that floor's cache and force a fresh fetch so the status

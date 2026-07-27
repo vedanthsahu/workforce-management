@@ -1,15 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useCallback, ReactNode } from "react";
+import { useEffect, useCallback, useState, ReactNode } from "react";
 import { Layout } from "../types/layout.types";
 
 interface LayoutSidebarProps {
   layout: Layout | null;
   selectedLayoutId: string;
-  selectedFloorId?:    string;
+  selectedFloorId?: string;
   selectedBuildingId?: string;
-  selectedSiteId?:     string;
+  selectedSiteId?: string;
 }
 
 // ── icons ─────────────────────────────────────────────────────────────────────
@@ -134,19 +134,46 @@ const STATIC_PREFETCH_ROUTES = [
 export default function LayoutSidebar({
   layout,
   selectedLayoutId,
-  selectedFloorId    = "",
+  selectedFloorId = "",
   selectedBuildingId = "",
-  selectedSiteId     = "",
+  selectedSiteId = "",
 }: LayoutSidebarProps) {
   const router = useRouter();
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownloadSvg = useCallback(async () => {
+    if (!layout?.layout_file_url) return;
+    setDownloading(true);
+    try {
+      const svgRes = await fetch(layout.layout_file_url);
+      if (!svgRes.ok) throw new Error(`HTTP ${svgRes.status}`);
+      const raw   = await svgRes.text();
+      const fluid = raw
+        .replace(/\bwidth="[^"]*"/,  'width="100%"')
+        .replace(/\bheight="[^"]*"/, 'height="100%"');
+      const blob    = new Blob([fluid], { type: "image/svg+xml" });
+      const blobUrl = URL.createObjectURL(blob);
+      const link    = document.createElement("a");
+      link.href     = blobUrl;
+      link.download = `${layout.layout_name ?? fileName(layout.layout_file_url)}.svg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Download failed", err);
+    } finally {
+      setDownloading(false);
+    }
+  }, [layout]);
 
   // Build query string once — reused by both prefetch and push
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams();
-    if (selectedLayoutId)   params.set("layoutId",   selectedLayoutId);
-    if (selectedFloorId)    params.set("floorId",    selectedFloorId);
+    if (selectedLayoutId) params.set("layoutId", selectedLayoutId);
+    if (selectedFloorId) params.set("floorId", selectedFloorId);
     if (selectedBuildingId) params.set("buildingId", selectedBuildingId);
-    if (selectedSiteId)     params.set("siteId",     selectedSiteId);
+    if (selectedSiteId) params.set("siteId", selectedSiteId);
     return params.toString() ? `?${params.toString()}` : "";
   }, [selectedLayoutId, selectedFloorId, selectedBuildingId, selectedSiteId]);
 
@@ -159,18 +186,18 @@ export default function LayoutSidebar({
 
   const quickActions = [
     {
-      icon:  <SeatIcon />,
+      icon: <SeatIcon />,
       label: "Manage Seats",
-      sub:   "Configure seat details and settings",
+      sub: "Configure seat details and settings",
       color: "text-indigo-600 bg-indigo-50",
       // Static base path — query added at click time
       basePath: "/admin/layouts/manage-seats",
       href: `/admin/layouts/manage-seats${buildQuery()}`,
     },
     {
-      icon:  <AmenityIcon />,
+      icon: <AmenityIcon />,
       label: "Manage Amenities",
-      sub:   "Manage amenities master data",
+      sub: "Manage amenities master data",
       color: "text-violet-600 bg-violet-50",
       basePath: "/admin/amenities",
       href: `/admin/amenities`,
@@ -189,7 +216,7 @@ export default function LayoutSidebar({
     );
   }
 
-  const isDraft    = !layout.is_published && layout.status !== "ARCHIVED";
+  const isDraft = !layout.is_published && layout.status !== "ARCHIVED";
   const isArchived = layout.status === "ARCHIVED";
 
   return (
@@ -221,19 +248,21 @@ export default function LayoutSidebar({
                 <FileIcon />
                 <span
                   className="truncate text-indigo-600 max-w-[150px]"
-                  title={fileName(layout.layout_file_url)}
+                  title={`${layout.layout_name ?? fileName(layout.layout_file_url)}.svg`}
                 >
-                  {fileName(layout.layout_file_url)}
+                  {layout.layout_name ? `${layout.layout_name}.svg` : fileName(layout.layout_file_url)}
                 </span>
-                <a
-                  href={layout.layout_file_url}
-                  download
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex-shrink-0 text-indigo-500 hover:text-indigo-700"
+                <button
+                  onClick={handleDownloadSvg}
+                  disabled={downloading}
+                  className="flex-shrink-0 text-indigo-500 hover:text-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Download file"
                 >
-                  <DownloadIcon />
-                </a>
+                  {downloading
+                    ? <span className="w-3.5 h-3.5 block border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
+                    : <DownloadIcon />
+                  }
+                </button>
               </span>
             </InfoRow>
           )}
@@ -268,7 +297,7 @@ export default function LayoutSidebar({
       </div>
 
       {/* ── Draft warning ──────────────────────────────────────────────── */}
-      {isDraft && (
+      {/* {isDraft && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex gap-2.5">
           <AlertIcon />
           <div>
@@ -278,7 +307,7 @@ export default function LayoutSidebar({
             </p>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* ── Archived warning ───────────────────────────────────────────── */}
       {isArchived && (

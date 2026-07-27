@@ -1,0 +1,23 @@
+{% extends "_base.html" %}
+{% from "_macros.html" import heading, lead, details_open, details_close, row %}
+{% block title %}You're hosting a guest{% endblock %}
+{% block preheader %}{{ guest_name }} is visiting you on {{ visit_date }}.{% endblock %}
+{% block content %}
+{% set time_window = (start_time ~ " – " ~ end_time) if (start_time and end_time) else (start_time or end_time) %}
+{% set purpose = purpose_of_visit.replace("_", " ")|title if purpose_of_visit else "" %}
+{% set guest_display = (guest_name ~ (" (" ~ guest_organization ~ ")" if guest_organization else "")) if guest_name else guest_organization %}
+{{ heading("You're hosting a guest") }}
+{{ lead("Hello " ~ recipient_name ~ ", a guest visit has been scheduled with you as the host.") }}
+{{ details_open() }}
+{{ row("Guest", guest_display) }}
+{{ row("Guest email", guest_email) }}
+{{ row("Guest phone", guest_phone) }}
+{{ row("Date", visit_date) }}
+{{ row("Time", time_window) }}
+{{ row("Purpose", purpose) }}
+{{ row("Floor", floor) }}
+{{ row("Building", building) }}
+{{ row("Site", site) }}
+{{ row("Notes", notes) }}
+{{ details_close() }}
+{% endblock %}

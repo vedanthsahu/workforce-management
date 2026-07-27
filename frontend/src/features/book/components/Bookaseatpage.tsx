@@ -3,23 +3,19 @@
 import React from "react";
 import Link from "next/link";
 import {
+  ArrowLeft,
   Building2,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
+  ClipboardCheck,
   RefreshCw,
   Settings2,
+  Users,
   X,
   Pencil,
 } from "lucide-react";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
@@ -27,7 +23,9 @@ import { cn } from "@/lib/utils";
 
 import { useBookingForm } from "../hooks/Usebookingform";
 import { SvgFloorMapPage, SeatWithSvgId } from "./SvgFloorMapPage";
-import { fmtDate, getPreferenceIcon } from "../utils/bookingFormHelpers";
+import { fmtDate } from "../utils/bookingFormHelpers";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
+import { BookaSeatSkeleton } from "./BookaSeatSkeleton";
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 
@@ -89,6 +87,24 @@ const SummaryRow: React.FC<{ label: string; value: string }> = ({ label, value }
   </div>
 );
 
+// ── Review section header ─────────────────────────────────────────────────────
+
+const ReviewSectionHeader: React.FC<{ icon: React.ReactNode; title: string; subtitle: string }> = ({
+  icon,
+  title,
+  subtitle,
+}) => (
+  <div className="flex items-center gap-2.5 mb-4">
+    <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0 text-indigo-600">
+      {icon}
+    </div>
+    <div>
+      <p className="text-[13px] font-semibold text-[#1A1A2E] leading-tight">{title}</p>
+      <p className="text-[11.5px] text-gray-400">{subtitle}</p>
+    </div>
+  </div>
+);
+
 // ── Date input ────────────────────────────────────────────────────────────────
 
 const DateInput: React.FC<{
@@ -111,6 +127,7 @@ const DateInput: React.FC<{
         min={min}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => e.preventDefault()}
         className={cn(
           "w-full h-9 sm:h-10 pl-8 pr-2 sm:pr-3 rounded-lg border border-[#EBEBF5] bg-white",
           "text-[12px] sm:text-[13px] text-[#1A1A2E] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent",
@@ -145,9 +162,11 @@ const BookASeatPage: React.FC = () => {
     dayCount,
     step1Valid,
     isModifyMode,
+    isAdminFlow,
     isBookingForSomeone,
     isGuestBooking,
     bookingForName,
+    prefillSeatLabel,
     floorLayoutUrl,
     setSiteId,
     setBuildingId,
@@ -168,8 +187,6 @@ const BookASeatPage: React.FC = () => {
 
   const errorBannerRef = React.useRef<HTMLDivElement>(null);
 
-  // Scroll up to the error banner whenever a new error comes in, so it's
-  // visible even if the user is scrolled further down the page.
   React.useEffect(() => {
     if (error) {
       errorBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -178,36 +195,32 @@ const BookASeatPage: React.FC = () => {
 
   const todayIso = new Date().toISOString().slice(0, 10);
 
-  const selectedSiteLabel = React.useMemo(() => {
-    if (!form.siteId) return undefined;
-    return sites.find((x) => x.id === form.siteId)?.name ?? form.siteId;
-  }, [form.siteId, sites]);
-
-  const selectedBuildingLabel = React.useMemo(() => {
-    if (!form.buildingId) return undefined;
-    return buildings.find((x) => x.id === form.buildingId)?.name ?? form.buildingId;
-  }, [form.buildingId, buildings]);
-
-  const selectedFloorLabel = React.useMemo(() => {
-    if (!form.floorId) return undefined;
-    return floors.find((x) => x.id === form.floorId)?.name ?? form.floorId;
-  }, [form.floorId, floors]);
-
   const seatsWithSvgId = seats as unknown as SeatWithSvgId[];
 
   const showHeaderAction = step !== 3;
 
+  if (loadingSites && sites.length === 0) {
+    return (
+      <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#F7F8FC]">
+        <div className="px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-2 flex flex-col gap-4 sm:gap-5">
+          <BookaSeatSkeleton />
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#F7F8FC]">
 
-      {/* ── Sticky header: title + modify banner only ── */}
+      {/* ── Sticky header ── */}
       <div className="sticky top-0 z-10 shrink-0 bg-[#F7F8FC] px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-2 flex flex-col gap-4 sm:gap-5">
 
-        {/* ── Header ── */}
         <div className="flex justify-between items-start sm:items-center gap-3">
           <div>
             <h1 className="text-[17px] sm:text-[20px] font-bold text-[#1A1A2E] leading-tight">
-              {isModifyMode ? "Modify Booking" : isBookingForSomeone ? `Book a Seat for ${bookingForName}` : "Book a Seat"}
+              {isModifyMode
+                ? (isBookingForSomeone && bookingForName ? `Modify Booking for ${bookingForName}` : "Modify Booking")
+                : isBookingForSomeone ? `Book a Seat for ${bookingForName}` : "Book a Seat"}
             </h1>
             <p className="text-[11.5px] sm:text-[12.5px] text-gray-400 mt-0.5">
               {isModifyMode
@@ -236,53 +249,20 @@ const BookASeatPage: React.FC = () => {
           )}
         </div>
 
-        {/* ── Modify mode banner ── */}
-        {isModifyMode && (
-          <div className="flex items-start sm:items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 sm:px-5 py-3">
-            <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
-              <Pencil size={13} className="text-amber-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[12.5px] sm:text-[13px] font-semibold text-amber-800">Modifying existing booking</p>
-              <p className="text-[11.5px] sm:text-[12px] text-amber-600 mt-0.5">
-                Your original booking will be cancelled once you confirm a new seat.
-                The date is pre-filled from your original booking.
-              </p>
-            </div>
-          </div>
-        )}
 
-      </div>{/* end sticky header */}
+      </div>
 
-      {/* ── Scrollable content ── */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex flex-col gap-4 sm:gap-5">
+      {/* ── Page content ── */}
+      <div className="flex-1 overflow-y-auto px-4 sm:px-5 lg:px-6 py-3 sm:py-4 flex flex-col gap-3 sm:gap-4">
 
-        {/* ── Step indicator — only shown while selecting workspace, dates & preferences ── */}
+        {/* ── Step indicator ── */}
         {step === 1 && (
           <div className="flex items-center justify-between sm:justify-start sm:gap-3 bg-white border border-[#EBEBF5] rounded-xl px-4 sm:px-6 py-3 sm:py-4">
-            <StepDot
-              number={1}
-              label="Workspace & Preferences"
-              sublabel="Select your workspace, dates and preferences"
-              active={step === 1}
-              done={false}
-            />
+            <StepDot number={1} label="Workspace & Preferences" sublabel="Select your workspace, dates and preferences" active={step === 1} done={false} />
             <StepArrow />
-            <StepDot
-              number={2}
-              label="Select a Seat"
-              sublabel="Choose your preferred seat on the floor map"
-              active={false}
-              done={false}
-            />
+            <StepDot number={2} label="Select a Seat" sublabel="Choose your preferred seat on the floor map" active={false} done={false} />
             <StepArrow />
-            <StepDot
-              number={3}
-              label="Review & Confirm"
-              sublabel="Review your booking and confirm"
-              active={false}
-              done={false}
-            />
+            <StepDot number={3} label="Review & Confirm" sublabel="Review your booking and confirm" active={false} done={false} />
           </div>
         )}
 
@@ -293,7 +273,7 @@ const BookASeatPage: React.FC = () => {
             className="bg-red-50 border border-red-200 rounded-xl px-4 sm:px-5 py-3 text-red-500 text-[12.5px] sm:text-[13px] flex items-center justify-between gap-3"
           >
             <span>{error}</span>
-            <button onClick={() => {}} className="text-red-400 hover:text-red-600 shrink-0">
+            <button onClick={() => { }} className="text-red-400 hover:text-red-600 shrink-0">
               <X size={14} />
             </button>
           </div>
@@ -305,7 +285,6 @@ const BookASeatPage: React.FC = () => {
         {step === 1 && (
           <div className="bg-white border border-[#EBEBF5] rounded-xl p-4 sm:p-6 flex flex-col gap-5 sm:gap-7">
 
-            {/* Section title */}
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
                 <Building2 size={18} className="text-indigo-600" />
@@ -320,70 +299,52 @@ const BookASeatPage: React.FC = () => {
 
             {/* 1. Select Workspace */}
             <section>
-              <SectionHeader
-                icon={<Building2 size={14} />}
-                title="1. Select Workspace"
-                subtitle="Choose your office location, building and floor"
-              />
+              <SectionHeader icon={<Building2 size={14} />} title="1. Select Workspace" subtitle="Choose your office location, building and floor" />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
 
-                {/* Site */}
                 <div>
                   <p className="text-[11px] font-medium text-gray-500 mb-1.5">Site (Office Location)</p>
-                  <Select value={form.siteId} onValueChange={setSiteId} disabled={loadingSites}>
-                    <SelectTrigger className="h-9 sm:h-10 text-[12.5px] sm:text-[13px] border-[#EBEBF5] w-full">
-                      <SelectValue placeholder={loadingSites ? "Loading…" : "Select site"}>
-                        {selectedSiteLabel}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sites.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <select
+                    value={form.siteId ?? ""}
+                    onChange={(e) => setSiteId(e.target.value || null)}
+                    disabled={loadingSites}
+                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <option value="" disabled hidden>{loadingSites ? "Loading…" : "Select site"}</option>
+                    {sites.map((s) => (
+                      <option key={s.id} value={s.id} style={{ color: '#111827' }}>{s.name}</option>
+                    ))}
+                  </select>
                 </div>
 
-                {/* Building */}
                 <div>
                   <p className="text-[11px] font-medium text-gray-500 mb-1.5">Building</p>
-                  <Select
-                    value={form.buildingId}
-                    onValueChange={setBuildingId}
+                  <select
+                    value={form.buildingId ?? ""}
+                    onChange={(e) => setBuildingId(e.target.value || null)}
                     disabled={!form.siteId || loadingBuildings}
+                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <SelectTrigger className="h-9 sm:h-10 text-[12.5px] sm:text-[13px] border-[#EBEBF5] w-full">
-                      <SelectValue placeholder={loadingBuildings ? "Loading…" : "Select building"}>
-                        {selectedBuildingLabel}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {buildings.map((b) => (
-                        <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <option value="" disabled hidden>{loadingBuildings ? "Loading…" : "Select building"}</option>
+                    {buildings.map((b) => (
+                      <option key={b.id} value={b.id} style={{ color: '#111827' }}>{b.name}</option>
+                    ))}
+                  </select>
                 </div>
 
-                {/* Floor */}
                 <div className="sm:col-span-2 lg:col-span-1">
                   <p className="text-[11px] font-medium text-gray-500 mb-1.5">Floor</p>
-                  <Select
-                    value={form.floorId}
-                    onValueChange={setFloorId}
+                  <select
+                    value={form.floorId ?? ""}
+                    onChange={(e) => setFloorId(e.target.value || null)}
                     disabled={!form.buildingId || loadingFloors}
+                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <SelectTrigger className="h-9 sm:h-10 text-[12.5px] sm:text-[13px] border-[#EBEBF5] w-full">
-                      <SelectValue placeholder={loadingFloors ? "Loading…" : "Select floor"}>
-                        {selectedFloorLabel}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {floors.map((f) => (
-                        <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <option value="" disabled hidden>{loadingFloors ? "Loading…" : "Select floor"}</option>
+                    {floors.map((f) => (
+                      <option key={f.id} value={f.id} style={{ color: '#111827' }}>{f.name}</option>
+                    ))}
+                  </select>
                 </div>
 
               </div>
@@ -402,32 +363,18 @@ const BookASeatPage: React.FC = () => {
               />
               <div className="flex flex-col md:flex-row gap-3 md:gap-4 md:items-end">
 
-                {/* Date pickers row */}
                 <div className="flex gap-2 sm:gap-3 flex-1 items-center">
-                  <DateInput
-                    label="From"
-                    value={form.fromDate}
-                    min={todayIso}
-                    onChange={setFromDate}
-                  />
+                  <DateInput label="From" value={form.fromDate} min={todayIso} onChange={setFromDate} />
                   <ChevronRight size={14} className="text-gray-300 shrink-0 mt-5" />
-                  <DateInput
-                    label="To"
-                    value={form.toDate}
-                    min={form.fromDate}
-                    onChange={setToDate}
-                  />
+                  <DateInput label="To" value={form.toDate} min={form.fromDate} onChange={setToDate} />
                 </div>
 
-                {/* Day count summary */}
                 {dayCount > 0 && (
                   <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 sm:px-5 py-3 md:min-w-[200px] lg:min-w-[220px]">
                     <div className="flex items-center gap-2 mb-1">
                       <CalendarDays size={13} className="text-indigo-500" />
                       <span className="text-[12.5px] sm:text-[13px] font-semibold text-indigo-700">
-                        {isModifyMode
-                          ? fmtDate(form.fromDate)
-                          : `${dayCount} ${dayCount === 1 ? "day" : "days"} selected`}
+                        {isModifyMode ? fmtDate(form.fromDate) : `${dayCount} ${dayCount === 1 ? "day" : "days"} selected`}
                       </span>
                     </div>
                     {!isModifyMode && (
@@ -447,17 +394,14 @@ const BookASeatPage: React.FC = () => {
 
             {/* 3. Preferences */}
             <section>
-              <SectionHeader
-                icon={<Settings2 size={14} />}
-                title="3. Preferences"
-                subtitle="Choose features that are important to you"
-              />
+              <SectionHeader icon={<Settings2 size={14} />} title="3. Preferences" subtitle="Choose features that are important to you" />
               <div className="flex gap-2 sm:gap-3 flex-wrap">
                 {loadingPreferences ? (
                   <p className="text-[12.5px] text-gray-400">Loading preferences…</p>
                 ) : (
-                  availablePreferences.map(({ key, name }) => {
+                  availablePreferences.map(({ key, name, category }) => {
                     const checked = form.preferences.includes(key);
+                    const color = getAmenityColor(name, category);
                     return (
                       <button
                         key={key}
@@ -470,19 +414,14 @@ const BookASeatPage: React.FC = () => {
                             : "border-[#EBEBF5] bg-white hover:border-gray-300 hover:bg-gray-50"
                         )}
                       >
-                        {getPreferenceIcon(key)}
-                        <span className="text-[11.5px] sm:text-[12.5px] font-medium text-[#1A1A2E] text-center">{name}</span>
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={() => togglePreference(key)}
-                          className="pointer-events-none"
-                        />
+                        <color.icon size={20} className={color.text} />
+                        <span className="text-[11.5px] sm:text-[12.5px] font-medium text-center text-black">{name}</span>
+                        <Checkbox checked={checked} onCheckedChange={() => togglePreference(key)} className="pointer-events-none" />
                       </button>
                     );
                   })
                 )}
 
-                {/* Tip card */}
                 <div className="flex-1 min-w-[160px] bg-amber-50 border border-amber-100 rounded-xl px-3 sm:px-4 py-3 flex flex-col gap-1">
                   <div className="flex items-center gap-1.5">
                     <span className="text-base">💡</span>
@@ -507,7 +446,6 @@ const BookASeatPage: React.FC = () => {
               </Button>
             </div>
 
-            {/* What happens next */}
             <div className="bg-[#F7F8FC] border border-[#EBEBF5] rounded-xl px-4 sm:px-5 py-3 flex items-start gap-3">
               <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 mt-0.5">
                 <span className="text-indigo-600 text-[10px] font-bold">i</span>
@@ -538,6 +476,7 @@ const BookASeatPage: React.FC = () => {
               siteName={selectedSite?.name}
               buildingName={selectedBuilding?.name}
               floorName={selectedFloor?.name}
+              preferences={availablePreferences}
             />
 
             <div className="flex justify-between pt-1 border-t border-[#EBEBF5]">
@@ -560,48 +499,98 @@ const BookASeatPage: React.FC = () => {
         ════════════════════════════════════════════════════ */}
         {step === 3 && !confirmation && (
           <div className="flex justify-center">
-            <div className="bg-white border border-[#EBEBF5] rounded-xl p-4 sm:p-6 flex flex-col gap-4 sm:gap-5 w-full max-w-2xl">
-              <div>
-                <p className="text-[14px] sm:text-[15px] font-bold text-[#1A1A2E]">Review & Confirm</p>
-                <p className="text-[11.5px] sm:text-[12px] text-gray-400 mt-0.5">
-                  {isModifyMode
-                    ? "Confirming will cancel your original booking and create this new one"
-                    : "Please review your booking details before confirming"}
-                </p>
-              </div>
+            <div className="bg-white border border-[#EBEBF5] rounded-2xl overflow-hidden w-full max-w-3xl shadow-sm">
 
-              <Separator />
-
-              <div>
+              {/* Header strip */}
+              <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-5 text-white">
+                <div className="flex items-center gap-3">
+                  <ClipboardCheck size={22} />
+                  <div>
+                    <p className="text-[16px] font-bold">Review & Confirm</p>
+                    <p className="text-[12px] text-indigo-100 mt-0.5">
+                      {isModifyMode
+                        ? "Confirm to replace your original booking"
+                        : "Please review your booking details"}
+                    </p>
+                  </div>
+                </div>
                 {isBookingForSomeone && bookingForName && (
-                  <SummaryRow label="Booking For" value={`${bookingForName} (${isGuestBooking ? "Guest" : "Employee"})`} />
-                )}
-                <SummaryRow label="Location"   value={selectedSite?.name ?? "—"} />
-                <SummaryRow label="Building"   value={selectedBuilding?.name ?? "—"} />
-                <SummaryRow label="Floor"      value={selectedFloor?.name ?? "—"} />
-                <SummaryRow label="Seat"       value={`Seat ${selectedSeat?.label ?? "—"}`} />
-                <SummaryRow label="Date"       value={fmtDate(form.fromDate)} />
-                {!isModifyMode && (
-                  <>
-                    <SummaryRow label="To"       value={fmtDate(form.toDate)} />
-                    <SummaryRow label="Duration" value={`${dayCount} ${dayCount === 1 ? "day" : "days"}`} />
-                  </>
+                  <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-white/15 text-white">
+                    <Users size={11} />
+                    Booking for {bookingForName}
+                  </div>
                 )}
               </div>
 
-              <div className="flex justify-between pt-1 border-t border-[#EBEBF5]">
-                <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px]">
-                  ← Back
-                </Button>
-                <Button
-                  onClick={confirmBooking}
-                  disabled={submitting}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-6 text-[12.5px] sm:text-[13px] font-semibold"
-                >
-                  {submitting
-                    ? isModifyMode ? "Modifying…" : "Confirming…"
-                    : isModifyMode ? "Confirm Modification" : "Confirm Booking"}
-                </Button>
+              <div className="p-4 sm:p-5 flex flex-col gap-3">
+                {/* Summary rows — single clean list */}
+                <div className="rounded-xl border border-gray-100 overflow-hidden">
+                  {isBookingForSomeone && bookingForName && (
+                    <div className="flex justify-between items-center px-4 py-3 bg-indigo-50/50 border-b border-gray-100">
+                      <span className="text-[12.5px] text-gray-500">Booking For</span>
+                      <span className="text-[12.5px] font-semibold text-indigo-700">{bookingForName} ({isGuestBooking ? "Guest" : "Employee"})</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-white border-b border-gray-50">
+                    <span className="text-[12.5px] text-gray-500">Location</span>
+                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedSite?.name ?? "—"}</span>
+                  </div>
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-slate-50/50 border-b border-gray-50">
+                    <span className="text-[12.5px] text-gray-500">Building</span>
+                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedBuilding?.name ?? "—"}</span>
+                  </div>
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-white border-b border-gray-50">
+                    <span className="text-[12.5px] text-gray-500">Floor</span>
+                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedFloor?.name ?? "—"}</span>
+                  </div>
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-slate-50/50 border-b border-gray-50">
+                    <span className="text-[12.5px] text-gray-500">Seat</span>
+                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedSeat?.label ?? prefillSeatLabel ?? "—"}</span>
+                  </div>
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-white border-b border-gray-50">
+                    <span className="text-[12.5px] text-gray-500">Date</span>
+                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{fmtDate(form.fromDate)}</span>
+                  </div>
+                  {!isModifyMode && (
+                    <>
+                      <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50 border-b border-gray-50">
+                        <span className="text-[12.5px] text-gray-500">To</span>
+                        <span className="text-[12.5px] font-semibold text-[#0f172a]">{fmtDate(form.toDate)}</span>
+                      </div>
+                      <div className="flex justify-between items-center px-4 py-3 bg-white">
+                        <span className="text-[12.5px] text-gray-500">Duration</span>
+                        <span className="text-[12.5px] font-semibold text-[#0f172a]">{dayCount} {dayCount === 1 ? "day" : "days"}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Info note */}
+                <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 flex items-start gap-2.5">
+                  <span className="text-blue-500 text-[11px] mt-0.5">ℹ️</span>
+                  <p className="text-[12px] text-blue-600 leading-relaxed">
+                    {isModifyMode
+                      ? "This will cancel your original booking and create a new one."
+                      : "A confirmation email will be sent. You can manage this booking from My Bookings."}
+                  </p>
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-between items-center">
+                  <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px] h-10 px-5">
+                    ← Back
+                  </Button>
+                  <Button
+                    onClick={confirmBooking}
+                    disabled={submitting}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 sm:px-8 gap-2 text-[13px] font-semibold h-10"
+                  >
+                    {submitting
+                      ? isModifyMode ? "Modifying…" : "Confirming…"
+                      : isModifyMode ? "Confirm Modification" : "Confirm Booking"}
+                    {!submitting && <ChevronRight size={14} />}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -612,48 +601,111 @@ const BookASeatPage: React.FC = () => {
         ════════════════════════════════════════════════════ */}
         {confirmation && (
           <div className="flex justify-center">
-            <div className="bg-white border border-[#EBEBF5] rounded-xl p-6 sm:p-8 flex flex-col items-center gap-4 w-full max-w-2xl text-center">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-emerald-50 flex items-center justify-center">
-                <CheckCircle2 size={26} className="text-emerald-500" />
-              </div>
-              <div>
-                <p className="text-[16px] sm:text-[18px] font-bold text-[#1A1A2E]">
+            <div className="bg-white border border-[#EBEBF5] rounded-2xl overflow-hidden w-full max-w-3xl shadow-sm">
+
+              {/* Success header strip */}
+              <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-6 text-white text-center">
+                <div className="w-13 h-13 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
+                  <CheckCircle2 size={26} className="text-white" />
+                </div>
+                <p className="text-[18px] sm:text-[20px] font-bold">
                   {isModifyMode ? "Booking Modified!" : "Booking Confirmed!"}
                 </p>
-                <p className="text-[12px] sm:text-[12.5px] text-gray-400 mt-1">
+                <p className="text-[12px] text-indigo-100 mt-1">
                   {isModifyMode
                     ? "Your booking has been updated successfully."
                     : isBookingForSomeone && bookingForName
                       ? `A seat has been reserved for ${bookingForName}.`
                       : "Your seat has been reserved successfully."}
                 </p>
-              </div>
-              <div className="bg-[#F7F8FC] border border-[#EBEBF5] rounded-xl px-4 sm:px-6 py-4 w-full text-left">
-                <p className="text-[10.5px] sm:text-[11px] font-semibold tracking-widest uppercase text-gray-400 mb-3">
-                  Booking Details
-                </p>
-                {isBookingForSomeone && bookingForName && (
-                  <SummaryRow label="Booked For" value={`${bookingForName} (${isGuestBooking ? "Guest" : "Employee"})`} />
-                )}
-                <SummaryRow label="Booking ID" value={confirmation.booking_id} />
-                <SummaryRow label="Location"   value={confirmation.site_name ?? "—"} />
-                <SummaryRow label="Building"   value={confirmation.building_name ?? "—"} />
-                <SummaryRow label="Floor"      value={confirmation.floor_name ?? "—"} />
-                <SummaryRow label="Seat"       value={confirmation.seat_code ?? "—"} />
-                <SummaryRow label="Date"       value={fmtDate(confirmation.booking_date)} />
-                <SummaryRow label="Status"     value={confirmation.booking_status} />
+                <div className="inline-flex items-center gap-2 bg-white/15 rounded-full px-4 py-1.5 mt-3 text-[12px]">
+                  <span className="text-indigo-100 font-medium">Booking ID</span>
+                  <span className="font-bold font-mono">{confirmation.booking_id}</span>
+                </div>
               </div>
 
-              <Link href="/mybookings" className="w-full">
-                <Button className="bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-medium w-full">
-                  View My Bookings
-                </Button>
-              </Link>
+              <div className="p-4 sm:p-5 flex flex-col gap-4">
+                {/* Summary rows */}
+                <div className="rounded-xl border border-gray-100 overflow-hidden">
+                  {isBookingForSomeone && bookingForName && (
+                    <div className="flex justify-between items-center px-4 py-2.5 bg-indigo-50/50 border-b border-gray-100">
+                      <span className="text-[12.5px] text-gray-500">Booked For</span>
+                      <span className="text-[12.5px] font-semibold text-indigo-700">{bookingForName} ({isGuestBooking ? "Guest" : "Employee"})</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-white border-b border-gray-50">
+                    <span className="text-[12.5px] text-gray-500">Location</span>
+                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{confirmation.site_name ?? "—"}</span>
+                  </div>
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-slate-50/50 border-b border-gray-50">
+                    <span className="text-[12.5px] text-gray-500">Building</span>
+                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{confirmation.building_name ?? "—"}</span>
+                  </div>
+                  <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-50">
+                    <span className="text-[12.5px] text-gray-500">Floor</span>
+                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{confirmation.floor_name ?? "—"}</span>
+                  </div>
+                  <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50 border-b border-gray-50">
+                    <span className="text-[12.5px] text-gray-500">Seat</span>
+                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{confirmation.seat_code ?? "—"}</span>
+                  </div>
+                  <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-50">
+                    <span className="text-[12.5px] text-gray-500">Date</span>
+                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{fmtDate(confirmation.booking_date)}</span>
+                  </div>
+                  <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50">
+                    <span className="text-[12.5px] text-gray-500">Status</span>
+                    {(() => {
+                      // is_modified/booking_status both come straight from the API (BookingResponse) —
+                      // is_modified is derived server-side from modified_from_booking_id, never guessed here.
+                      const rawLabel = isAdminFlow && confirmation.is_modified ? "Modified" : confirmation.booking_status;
+                      const statusLabel = rawLabel.toUpperCase();
+                      const isModifiedStatus = statusLabel === "MODIFIED";
+                      return (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 text-[12px] font-semibold",
+                            isModifiedStatus ? "text-amber-700" : "text-emerald-700"
+                          )}
+                        >
+                          <span className={cn("w-1.5 h-1.5 rounded-full", isModifiedStatus ? "bg-amber-500" : "bg-emerald-500")} />
+                          {statusLabel}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* CTA */}
+                {isAdminFlow ? (
+                  <Link href="/admin/bookings" className="w-full">
+                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-semibold w-full h-11 gap-2">
+                      <ArrowLeft size={15} />
+                      Back to Bookings
+                    </Button>
+                  </Link>
+                ) : (
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Link href={isBookingForSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings"} className="flex-1">
+                      <Button className="bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-semibold w-full h-11">
+                        View My Bookings
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="outline"
+                      onClick={resetForm}
+                      className="flex-1 h-11 text-[13px] font-semibold text-gray-600"
+                    >
+                      Book Another Seat
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
 
-      </div>{/* end scrollable content */}
+      </div>
 
     </main>
   );

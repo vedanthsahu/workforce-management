@@ -2,20 +2,34 @@
 
 import { useEffect, useState } from "react";
 import { adminService } from "../services/admin.service";
-import { mapBookingsToRecent } from "../utils/dashboard.utils";
+import { mapActivitiesToRecent } from "../utils/dashboard.utils";
 import type { RecentBooking } from "../types/admin.types";
 
-const RECENT_BOOKINGS_LIMIT = 5;
+const RECENT_BOOKINGS_LIMIT = 20;
 
-export function useRecentBookings(date?: string) {
+export function useRecentBookings() {
   const [recentBookings, setRecentBookings] = useState<RecentBooking[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    adminService
-      .getAdminBookings({ date, page: 1, limit: RECENT_BOOKINGS_LIMIT })
-      .then((res) => setRecentBookings(mapBookingsToRecent(res.items)))
-      .catch((err) => console.error(err));
-  }, [date]);
+    let cancelled = false;
+    setLoading(true);
 
-  return { recentBookings };
+    adminService
+      .getAdminActivities()
+      .then((res) => {
+        if (cancelled) return;
+        setRecentBookings(mapActivitiesToRecent(res.items).slice(0, RECENT_BOOKINGS_LIMIT));
+      })
+      .catch((err) => console.error(err))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { recentBookings, loading };
 }
