@@ -109,7 +109,7 @@ def search_guests(
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            f"""
+            fr"""
             SELECT {GUEST_SELECT_FIELDS}
             FROM guests AS g
             WHERE g.tenant_id = %s

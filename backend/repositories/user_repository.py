@@ -1242,7 +1242,7 @@ def search_users(
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            f"""
+            fr"""
             SELECT {USER_SELECT_FIELDS}
             {USER_SELECT_FROM}
             WHERE au.tenant_id = %s
