@@ -1,12 +1,13 @@
 """Runtime configuration loading for the backend service."""
 
 from __future__ import annotations
-
+import os
 from functools import lru_cache
 from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from backend.core.runtime_secrets import RuntimeSecretError, get_json_secret
 
 
 DEFAULT_JWT_ALLOWED_CLAIMS = (
@@ -75,15 +76,11 @@ class Settings(BaseSettings):
     frontend_url: str
     session_ttl: int = 3600
 
-    aws_access_key_id: str
-    aws_secret_access_key: str
     aws_region: str
     aws_s3_bucket_name: str
     aws_s3_public_base_url: str
     aws_s3_max_retries: int = 3
 
-    aws_ses_access_key_id: str
-    aws_ses_secret_access_key: str
     aws_ses_sender_email: str
     aws_ses_max_retries: int = 3
     aws_retry_initial_delay_seconds: float = 1.0
@@ -216,7 +213,77 @@ def _parse_optional_csv(value: str | tuple[str, ...] | list[str]) -> tuple[str, 
     return _parse_csv(value, field_name="notification_admin_emails")
 
 
+def _required_secret_value(
+    payload: dict[str, object],
+    key: str,
+    *,
+    secret_name: str,
+) -> str:
+    value = str(payload.get(key) or "").strip()
+    if not value:
+        raise RuntimeSecretError(
+            f"{secret_name} is missing the required '{key}' value."
+        )
+    return value
+
+
+def _runtime_secret_settings() -> dict[str, object]:
+    database_secret_arn = os.getenv("DATABASE_SECRET_ARN", "").strip()
+    application_secret_arn = os.getenv("APPLICATION_SECRET_ARN", "").strip()
+
+    if not database_secret_arn and not application_secret_arn:
+        return {}
+
+    if not database_secret_arn or not application_secret_arn:
+        raise RuntimeSecretError(
+            "DATABASE_SECRET_ARN and APPLICATION_SECRET_ARN must both be configured."
+        )
+
+    database_secret = get_json_secret(database_secret_arn)
+    application_secret = get_json_secret(application_secret_arn)
+
+    try:
+        database_port = int(database_secret.get("port", 5432))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeSecretError(
+            "The database secret contains an invalid 'port' value."
+        ) from exc
+
+    if not 1 <= database_port <= 65535:
+        raise RuntimeSecretError(
+            "The database secret 'port' must be between 1 and 65535."
+        )
+
+    return {
+        "db_host": _required_secret_value(
+            database_secret,
+            "host",
+            secret_name="Database secret",
+        ),
+        "db_user": _required_secret_value(
+            database_secret,
+            "username",
+            secret_name="Database secret",
+        ),
+        "db_password": _required_secret_value(
+            database_secret,
+            "password",
+            secret_name="Database secret",
+        ),
+        "db_port": database_port,
+        "jwt_secret": _required_secret_value(
+            application_secret,
+            "jwt_secret",
+            secret_name="Application secret",
+        ),
+        "client_secret": _required_secret_value(
+            application_secret,
+            "microsoft_client_secret",
+            secret_name="Application secret",
+        ),
+    }
+
 @lru_cache
 def get_settings() -> Settings:
     """Build and cache the backend settings object."""
-    return Settings()
+    return Settings(**_runtime_secret_settings())
