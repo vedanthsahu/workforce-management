@@ -238,11 +238,9 @@ class NotificationService:
 
     def _build_ses_client(self) -> BaseClient:
         return boto3.client(
-            "ses",
-            region_name=self._settings.aws_region,
-            aws_access_key_id=self._settings.aws_ses_access_key_id,
-            aws_secret_access_key=self._settings.aws_ses_secret_access_key,
-        )
+        "ses",
+        region_name=self._settings.aws_region,
+    )
 
     def _build_template_environment(self) -> Environment:
         template_dir = _resolve_template_dir(self._settings.email_template_dir)

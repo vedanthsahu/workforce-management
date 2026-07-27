@@ -1,0 +1,303 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Production-ready Workforce Management serverless backend
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Deployment environment
+    AllowedValues:
+      - dev
+      - qa
+      - prod
+
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Existing private subnet IDs for the Lambda function
+
+  LambdaSecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: Existing security group IDs for the Lambda function
+
+  DatabaseSecretArn:
+    Type: String
+    Description: ARN of the existing RDS credentials secret
+    AllowedPattern: "^arn:[^:]+:secretsmanager:[^:]+:[0-9]{12}:secret:.+$"
+
+  ApplicationSecretArn:
+    Type: String
+    Description: ARN of the existing JWT and Microsoft client-secret secret
+    AllowedPattern: "^arn:[^:]+:secretsmanager:[^:]+:[0-9]{12}:secret:.+$"
+
+  DbName:
+    Type: String
+    Description: Environment-specific PostgreSQL database name
+    MinLength: 1
+
+  MicrosoftClientId:
+    Type: String
+    Description: Microsoft Entra application client ID
+    MinLength: 1
+
+  MicrosoftTenantId:
+    Type: String
+    Description: Microsoft Entra tenant ID
+    MinLength: 1
+
+  RedirectUri:
+    Type: String
+    Description: HTTPS Microsoft SSO callback URL for this environment
+    AllowedPattern: "^https://.+$"
+
+  FrontendUrl:
+    Type: String
+    Description: HTTPS frontend origin for this environment
+    AllowedPattern: "^https://.+$"
+
+  S3BucketName:
+    Type: String
+    Description: Existing private floor-layout bucket
+    MinLength: 3
+
+  S3PublicBaseUrl:
+    Type: String
+    Description: Current floor-layout base URL; replace with private delivery
+    MinLength: 1
+
+  SesSenderEmail:
+    Type: String
+    Description: Existing verified Amazon SES sender identity
+    MinLength: 3
+
+  NotificationAdminEmails:
+    Type: String
+    Description: Optional comma-separated notification recipients
+    Default: ""
+
+  GraphFacilitatorGroupId:
+    Type: String
+    Description: Optional Microsoft Graph group ID for managed role mapping
+    Default: ""
+
+  LogRetentionDays:
+    Type: Number
+    Description: CloudWatch log retention period
+    Default: 30
+    AllowedValues:
+      - 14
+      - 30
+      - 60
+      - 90
+      - 120
+      - 180
+      - 365
+
+  ReservedConcurrentExecutions:
+    Type: Number
+    Description: Concurrency limit protecting the PostgreSQL connection pool
+    Default: 10
+    MinValue: 1
+    MaxValue: 100
+
+Globals:
+  Function:
+    Runtime: python3.14
+    Architectures:
+      - x86_64
+    MemorySize: 1024
+    Timeout: 30
+    Tracing: PassThrough
+    Tags:
+      Application: workforce-management
+      ManagedBy: aws-sam
+
+Resources:
+  WorkforceHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref EnvironmentName
+      Description: !Sub "Workforce Management ${EnvironmentName} HTTP API"
+      DefinitionBody:
+        openapi: 3.0.1
+        info:
+          title: !Sub "workforce-api-${EnvironmentName}"
+          version: "1.0"
+        paths: {}
+      CorsConfiguration:
+        AllowCredentials: true
+        AllowOrigins:
+          - !Ref FrontendUrl
+        AllowHeaders:
+          - authorization
+          - content-type
+          - x-correlation-id
+          - x-request-id
+          - x-source-channel
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        MaxAge: 600
+      AccessLogSettings:
+        DestinationArn: !GetAtt ApiAccessLogGroup.Arn
+        Format: '{"requestId":"$context.requestId","httpMethod":"$context.httpMethod","routeKey":"$context.routeKey","status":"$context.status","responseLength":"$context.responseLength","integrationError":"$context.integrationErrorMessage"}'
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 100
+        ThrottlingRateLimit: 50
+      Tags:
+        Application: workforce-management
+        Environment: !Ref EnvironmentName
+        ManagedBy: aws-sam
+
+  WorkforceApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "workforce-api-${EnvironmentName}"
+      Description: !Sub "Workforce Management ${EnvironmentName} FastAPI backend"
+      CodeUri: .
+      Handler: backend.lambda_entrypoint.handler
+      ReservedConcurrentExecutions: !Ref ReservedConcurrentExecutions
+      VpcConfig:
+        SubnetIds: !Ref PrivateSubnetIds
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+        SystemLogLevel: INFO
+      Environment:
+        Variables:
+          ENVIRONMENT_NAME: !Ref EnvironmentName
+
+          DATABASE_SECRET_ARN: !Ref DatabaseSecretArn
+          APPLICATION_SECRET_ARN: !Ref ApplicationSecretArn
+
+          DB_NAME: !Ref DbName
+          DB_SSLMODE: require
+          DB_CONNECT_TIMEOUT: "10"
+
+          JWT_ALGORITHM: HS256
+          JWT_ACCESS_TOKEN_TTL: "900"
+          JWT_REFRESH_TOKEN_TTL: "2592000"
+          JWT_ALLOWED_CLAIMS: user_id,sub,email,role,tenant_id,session_id,iat,exp
+
+          AUTH_COOKIE_SECURE: "true"
+          AUTH_COOKIE_SAMESITE: lax
+
+          CLIENT_ID: !Ref MicrosoftClientId
+          TENANT_ID: !Ref MicrosoftTenantId
+          REDIRECT_URI: !Ref RedirectUri
+          FRONTEND_URL: !Ref FrontendUrl
+          SESSION_TTL: "3600"
+
+          AWS_S3_BUCKET_NAME: !Ref S3BucketName
+          AWS_S3_PUBLIC_BASE_URL: !Ref S3PublicBaseUrl
+          AWS_S3_MAX_RETRIES: "3"
+
+          AWS_SES_SENDER_EMAIL: !Ref SesSenderEmail
+          AWS_SES_MAX_RETRIES: "3"
+          AWS_RETRY_INITIAL_DELAY_SECONDS: "1.0"
+          AWS_RETRY_MAX_DELAY_SECONDS: "10.0"
+
+          EMAIL_TEMPLATE_DIR: templates/email
+          NOTIFICATION_ADMIN_EMAILS: !Ref NotificationAdminEmails
+
+          GRAPH_FACILITATOR_GROUP_ID: !Ref GraphFacilitatorGroupId
+          GRAPH_ROLE_LOOKUP_RETRIES: "2"
+          GRAPH_ROLE_LOOKUP_BACKOFF_SECONDS: "0.5"
+          GRAPH_ROLE_SYNC_ENABLED: "false"
+          GRAPH_ROLE_SYNC_INTERVAL_MINUTES: "60"
+          GRAPH_TEAM_SYNC_ENABLED: "false"
+          GRAPH_TEAM_SYNC_INTERVAL_MINUTES: "60"
+
+          APP_LOG_LEVEL: INFO
+          APP_TRACE_FUNCTIONS: "false"
+
+      Policies:
+        - VPCAccessPolicy: {}
+        - Statement:
+            - Sid: ReadRuntimeSecrets
+              Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource:
+                - !Ref DatabaseSecretArn
+                - !Ref ApplicationSecretArn
+            - Sid: UploadFloorLayouts
+              Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource:
+                - !Sub "arn:${AWS::Partition}:s3:::${S3BucketName}/tenant_*/*"
+            - Sid: SendApplicationEmail
+              Effect: Allow
+              Action:
+                - ses:SendEmail
+              Resource:
+                - !Sub "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${SesSenderEmail}"
+
+      Events:
+        RootApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WorkforceHttpApi
+            Path: /
+            Method: ANY
+            PayloadFormatVersion: "2.0"
+
+        ProxyApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WorkforceHttpApi
+            Path: /{proxy+}
+            Method: ANY
+            PayloadFormatVersion: "2.0"
+
+  WorkforceApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/workforce-api-${EnvironmentName}"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Application
+          Value: workforce-management
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: aws-sam
+
+  ApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/apigateway/workforce-api-${EnvironmentName}"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Application
+          Value: workforce-management
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: aws-sam
+
+Outputs:
+  HttpApiId:
+    Description: API Gateway HTTP API ID
+    Value: !Ref WorkforceHttpApi
+
+  HttpApiUrl:
+    Description: Environment-specific API base URL
+    Value: !Sub "https://${WorkforceHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${EnvironmentName}"
+
+  LambdaFunctionName:
+    Description: Lambda function name
+    Value: !Ref WorkforceApiFunction
+
+  LambdaLogGroupName:
+    Description: Lambda CloudWatch log group
+    Value: !Ref WorkforceApiLogGroup
+
+  ApiAccessLogGroupName:
+    Description: API Gateway access-log group
+    Value: !Ref ApiAccessLogGroup
