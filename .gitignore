@@ -137,4 +137,5 @@ package-lock.json
 # Local AWS SAM artifacts and environment configuration
 .aws-sam/
 events/env.json
+events/container-env.json
 samconfig.toml

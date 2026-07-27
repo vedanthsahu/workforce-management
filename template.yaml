@@ -154,10 +154,12 @@ Resources:
 
   WorkforceApiFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
     Properties:
       FunctionName: !Sub "workforce-api-${EnvironmentName}"
       Description: !Sub "Workforce Management ${EnvironmentName} FastAPI backend"
-      CodeUri: .
+      CodeUri: backend/
       Handler: backend.lambda_entrypoint.handler
       ReservedConcurrentExecutions: !Ref ReservedConcurrentExecutions
       VpcConfig:
