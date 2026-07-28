@@ -117,7 +117,11 @@ export function useManageSeats() {
   const toggleSelect = useCallback((svgId: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(svgId) ? next.delete(svgId) : next.add(svgId);
+      if (next.has(svgId)) {
+        next.delete(svgId);
+      } else {
+        next.add(svgId);
+      }
       return next;
     });
   }, []);

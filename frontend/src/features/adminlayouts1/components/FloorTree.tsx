@@ -189,7 +189,11 @@ const FloorTree = memo(function FloorTree({
   const toggleOffice = useCallback((siteId: string) => {
     setExpandedOffices((prev) => {
       const next = new Set(prev);
-      prev.has(siteId) ? next.delete(siteId) : next.add(siteId);
+      if (prev.has(siteId)) {
+        next.delete(siteId);
+      } else {
+        next.add(siteId);
+      }
       return next;
     });
   }, []);
@@ -197,7 +201,11 @@ const FloorTree = memo(function FloorTree({
   const toggleTower = useCallback((buildingId: string) => {
     setExpandedTowers((prev) => {
       const next = new Set(prev);
-      prev.has(buildingId) ? next.delete(buildingId) : next.add(buildingId);
+      if (prev.has(buildingId)) {
+        next.delete(buildingId);
+      } else {
+        next.add(buildingId);
+      }
       return next;
     });
   }, []);
