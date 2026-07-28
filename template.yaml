@@ -186,7 +186,7 @@ Resources:
           JWT_ALLOWED_CLAIMS: user_id,sub,email,role,tenant_id,session_id,iat,exp
 
           AUTH_COOKIE_SECURE: "true"
-          AUTH_COOKIE_SAMESITE: lax
+          AUTH_COOKIE_SAMESITE: none
 
           CLIENT_ID: !Ref MicrosoftClientId
           TENANT_ID: !Ref MicrosoftTenantId
