@@ -302,14 +302,14 @@ const BookASeatPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
 
                 <div>
-                  <p className="text-[11px] font-medium text-gray-500 mb-1.5">Site (Office Location)</p>
+                  <p className="text-[11px] font-medium text-gray-500 mb-1.5">Office</p>
                   <select
                     value={form.siteId ?? ""}
                     onChange={(e) => setSiteId(e.target.value || null)}
                     disabled={loadingSites}
                     className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <option value="" disabled hidden>{loadingSites ? "Loading…" : "Select site"}</option>
+                    <option value="" disabled hidden>{loadingSites ? "Loading…" : "Select office"}</option>
                     {sites.map((s) => (
                       <option key={s.id} value={s.id} style={{ color: '#111827' }}>{s.name}</option>
                     ))}
@@ -676,29 +676,24 @@ const BookASeatPage: React.FC = () => {
                 </div>
 
                 {/* CTA */}
-                {isAdminFlow ? (
-                  <Link href="/admin/bookings" className="w-full">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Link
+                    href={isAdminFlow ? "/admin/bookings" : isBookingForSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings"}
+                    className="flex-1"
+                  >
                     <Button className="bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-semibold w-full h-11 gap-2">
-                      <ArrowLeft size={15} />
-                      Back to Bookings
+                      {isAdminFlow && <ArrowLeft size={15} />}
+                      {isAdminFlow ? "Back to Bookings" : "View My Bookings"}
                     </Button>
                   </Link>
-                ) : (
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <Link href={isBookingForSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings"} className="flex-1">
-                      <Button className="bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-semibold w-full h-11">
-                        View My Bookings
-                      </Button>
-                    </Link>
-                    <Button
-                      variant="outline"
-                      onClick={resetForm}
-                      className="flex-1 h-11 text-[13px] font-semibold text-gray-600"
-                    >
-                      Book Another Seat
-                    </Button>
-                  </div>
-                )}
+                  <Button
+                    variant="outline"
+                    onClick={resetForm}
+                    className="flex-1 h-11 text-[13px] font-semibold text-gray-600"
+                  >
+                    Book Another Seat
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

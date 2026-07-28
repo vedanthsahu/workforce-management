@@ -6,6 +6,7 @@ import axios from "axios";
 import { useBookingForm, useSiteBuildingOptions } from "../hooks/useBooking";
 import type { BookingType } from "../types/booking";
 import { checkGuestBookingEligibility } from "../services/booking.service";
+import { fetchEmployeeWorkPreferences } from "@/features/book/services/Bookingform.service";
 import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
 import { BookingTypeSelector, FormFooter, InternalEmployeeForm } from "./BookForSomeone";
 import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
@@ -47,16 +48,33 @@ const currentUserId = data?.user.user_id;
   const { step, bookingType, selectedEmployee, selectedGuest, visitDetails, seatRequired } = formState;
   const { sites, buildings, floors, isLoadingBuildings, isLoadingFloors } = useSiteBuildingOptions(visitDetails.siteId, visitDetails.buildingId);
 
-  const { can } = usePermissions();
+  const { can, hasRole } = usePermissions();
   const canBookEmployee = can("booking:book_for_employee");
   const canBookGuest    = can("booking:book_for_guest");
 
   // ── Prefill from URL when editing a visit ──
   const editVisitId = searchParams.get("editVisitId");
-  // Set only by AdminBookingsPage's row-menu "Modify" action so the success
-  // screen can navigate back to Admin Bookings instead of My Bookings.
-  const isAdminFlow = searchParams.get("adminFlow") === "true";
+  // True when reached via AdminBookingsPage's row-menu "Modify" action
+  // (?adminFlow=true), OR whenever a TENANT_ADMIN uses Book for Someone —
+  // both cases should send the success screen back to Admin Bookings
+  // instead of My Bookings. Facilitators (non-admin roles with the same
+  // booking:book_for_* permissions) still land on My Bookings as before.
+  const isAdminFlow = searchParams.get("adminFlow") === "true" || hasRole("TENANT_ADMIN");
   const prefillApplied = useRef(false);
+
+  // The wizard's formState lives in a module-level Zustand store so browser
+  // Back can restore it mid-flow — but that also means a stale step/selection
+  // (e.g. left on the success screen, or on Guest from a previous visit)
+  // would otherwise still be there the next time this page is opened fresh.
+  // Reset once per mount so every fresh entry (button, sidebar link) starts
+  // clean at the type selector; skip it for an editVisitId deep link, which
+  // needs its own prefilled state instead.
+  const resetOnMountApplied = useRef(false);
+  useEffect(() => {
+    if (resetOnMountApplied.current) return;
+    resetOnMountApplied.current = true;
+    if (!editVisitId) resetWizard();
+  }, [editVisitId, resetWizard]);
 
   useEffect(() => {
     if (!editVisitId || prefillApplied.current) return;
@@ -99,6 +117,35 @@ const currentUserId = data?.user.user_id;
       },
     }));
   }, [editVisitId]);
+
+  // Auto-populate Office/Building/Floor from the selected host employee's
+  // saved work preferences (GET /dashboard/employee/{id} — same endpoint the
+  // seat-booking flow already uses to prefill an employee's own booking).
+  // A guest has no preferences of its own, so the host's location stands in
+  // for it — this covers the Guest path for both Admin and Facilitator,
+  // since they share this same wizard. Only fills in when the fields are
+  // still blank, so it never clobbers a location already chosen (manually,
+  // or via editVisitId's own prefill above); re-fetches if a different host
+  // is picked while the fields are still blank.
+  const hostPrefsAppliedForId = useRef<string | null>(null);
+  useEffect(() => {
+    const hostId = visitDetails.hostEmployee?.id;
+    if (bookingType !== "visitor" || editVisitId || !hostId) return;
+    if (hostPrefsAppliedForId.current === hostId) return;
+    if (visitDetails.siteId || visitDetails.buildingId || visitDetails.floorId) return;
+
+    hostPrefsAppliedForId.current = hostId;
+    fetchEmployeeWorkPreferences(hostId)
+      .then((prefs) => {
+        if (!prefs?.siteId) return;
+        updateVisitDetails({
+          siteId: prefs.siteId,
+          buildingId: prefs.buildingId ?? "",
+          floorId: prefs.floorId ?? "",
+        });
+      })
+      .catch(() => {});
+  }, [visitDetails.hostEmployee?.id, bookingType, editVisitId, visitDetails.siteId, visitDetails.buildingId, visitDetails.floorId, updateVisitDetails]);
 
   // Admin's "Booking Management" page links here with ?entry=employee or
   // ?entry=guest depending on which button was clicked — lock the wizard to

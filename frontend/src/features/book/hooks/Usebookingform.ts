@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { useRouter, useSearchParams } from "next/navigation";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 import {
   BookingFormState,
   BookingStep,
@@ -100,15 +101,19 @@ function buildUrl(
 export function useBookingForm() {
   const router       = useRouter();
   const searchParams = useSearchParams();
+  const { hasRole }  = usePermissions();
 
   // ── Read params once up-front ─────────────────────────────────────────────
 
   const modifyBookingId = searchParams.get("modifyBookingId");
   const isModifyMode    = Boolean(modifyBookingId);
-  // Set only by AdminBookingsPage's row-menu "Modify" action (useAdminBookingActions.modifySeat)
-  // so the confirmation screen can show admin-specific copy/navigation without affecting
-  // the employee "My Bookings" or facilitator "Book for Someone" modify flows, which share this route.
-  const isAdminFlow = searchParams.get("adminFlow") === "true";
+  // True when reached via AdminBookingsPage's row-menu "Modify" action
+  // (useAdminBookingActions.modifySeat sets ?adminFlow=true), OR when a
+  // TENANT_ADMIN is booking a seat *for someone else* (isBookingForSomeone,
+  // below) via Book for Someone — either way the confirmation screen should
+  // route back to Admin Bookings instead of My Bookings. An admin booking a
+  // seat for themself (no bookedForUserId/guestId) is unaffected.
+  const adminFlowParam = searchParams.get("adminFlow") === "true";
 
   const prefillLocationName = searchParams.get("locationName") ?? null;
   const prefillBuildingName = searchParams.get("buildingName") ?? null;
@@ -134,6 +139,7 @@ export function useBookingForm() {
   const isGuestBooking = Boolean(guestId);
   const isAddBookingToVisit = Boolean(visitId);
   const isBookingForSomeone = Boolean(bookedForUserId || guestId);
+  const isAdminFlow = adminFlowParam || (isBookingForSomeone && hasRole("TENANT_ADMIN"));
 
   const prefillPreferencesParam = searchParams.get("preferences") ?? null;
   const prefillPreferences: string[] = prefillPreferencesParam
@@ -369,39 +375,44 @@ export function useBookingForm() {
   // own pagination/status filters) from the one that returned the saved
   // site/building/floor id in the first place (GET /dashboard/me). If a
   // saved id isn't present in its fetched list for any reason, inject a
-  // synthetic option (labeled from the name /dashboard/me already gave us)
-  // rather than silently showing a blank select for a value that's actually
-  // set.
+  // synthetic option labeled from the name /dashboard/me already gave us.
+  // Only do this once a real name is available — never fall back to a
+  // "Site 4"/"Building 12"/"Floor 7" placeholder built from the raw id.
+  // Guest bookings (and any flow that skips the preferences fetch) simply
+  // wait for the real fetched list to resolve the name instead.
 
   useEffect(() => {
-    if (loadingSites || !form.siteId) return;
+    if (loadingSites || !form.siteId || !savedPreferenceNames.siteName) return;
+    const siteName = savedPreferenceNames.siteName;
     setSites((prev) => {
       if (prev.some((s) => s.id === form.siteId)) return prev;
       return [
         ...prev,
-        { id: form.siteId, name: savedPreferenceNames.siteName ?? `Site ${form.siteId}`, city: "", country: "", timezone: "" },
+        { id: form.siteId, name: siteName, city: "", country: "", timezone: "" },
       ];
     });
   }, [sites, loadingSites, form.siteId, savedPreferenceNames.siteName]);
 
   useEffect(() => {
-    if (loadingBuildings || !form.buildingId) return;
+    if (loadingBuildings || !form.buildingId || !savedPreferenceNames.buildingName) return;
+    const buildingName = savedPreferenceNames.buildingName;
     setBuildings((prev) => {
       if (prev.some((b) => b.id === form.buildingId)) return prev;
       return [
         ...prev,
-        { id: form.buildingId, siteId: form.siteId, name: savedPreferenceNames.buildingName ?? `Building ${form.buildingId}` },
+        { id: form.buildingId, siteId: form.siteId, name: buildingName },
       ];
     });
   }, [buildings, loadingBuildings, form.buildingId, form.siteId, savedPreferenceNames.buildingName]);
 
   useEffect(() => {
-    if (loadingFloors || !form.floorId) return;
+    if (loadingFloors || !form.floorId || !savedPreferenceNames.floorName) return;
+    const floorName = savedPreferenceNames.floorName;
     setFloors((prev) => {
       if (prev.some((f) => f.id === form.floorId)) return prev;
       return [
         ...prev,
-        { id: form.floorId, buildingId: form.buildingId, name: savedPreferenceNames.floorName ?? `Floor ${form.floorId}`, number: 0 },
+        { id: form.floorId, buildingId: form.buildingId, name: floorName, number: 0 },
       ];
     });
   }, [floors, loadingFloors, form.floorId, form.buildingId, savedPreferenceNames.floorName]);
