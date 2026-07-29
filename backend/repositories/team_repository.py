@@ -189,7 +189,7 @@ def search_team_members(
                 tenant_id,
                 full_name,
                 email,
-                role_name,
+                UPPER(REPLACE(role_name, ' ', '_')) AS role_name,
                 status,
                 employee_id,
                 department

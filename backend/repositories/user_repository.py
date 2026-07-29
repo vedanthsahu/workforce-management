@@ -24,8 +24,8 @@ USER_SELECT_FIELDS = """
     au.microsoft_object_id,
     au.user_principal_name,
     au.manager_user_id::text AS manager_user_id,
-    au.role_name AS role,
-    au.role_name AS role_name,
+    UPPER(REPLACE(au.role_name, ' ', '_')) AS role,
+    UPPER(REPLACE(au.role_name, ' ', '_')) AS role_name,
     au.status,
     au.home_site_id::text AS home_site_id,
     au.graph_last_synced_at,
@@ -53,8 +53,8 @@ USER_RETURNING_FIELDS = """
     microsoft_object_id,
     user_principal_name,
     manager_user_id::text AS manager_user_id,
-    role_name AS role,
-    role_name,
+    UPPER(REPLACE(role_name, ' ', '_')) AS role,
+    UPPER(REPLACE(role_name, ' ', '_')) AS role_name,
     status,
     home_site_id::text AS home_site_id,
     graph_last_synced_at,
@@ -81,6 +81,15 @@ def normalize_role_name(value: str | None) -> str:
     plain `==` checks against the canonical constants.
     """
     return str(value or "").strip().upper().replace(" ", "_")
+
+
+def _role_name_for_storage(role_name: str) -> str:
+    """Inverse of normalize_role_name for the one role chk_app_users_role still
+    spells with a space ("FRONT OFFICE") instead of the canonical underscore
+    form every other role, and every other layer of the app, uses."""
+    if role_name == "FRONT_OFFICE":
+        return "FRONT OFFICE"
+    return role_name
 
 USER_STATUSES = {"ACTIVE", "INACTIVE", "LOCKED"}
 
@@ -297,7 +306,7 @@ def fetch_user_profile_context(
                 manager.email AS manager_email,
                 manager.full_name AS manager_full_name,
                 manager.display_name AS manager_display_name,
-                au.role_name,
+                UPPER(REPLACE(au.role_name, ' ', '_')) AS role_name,
                 au.status,
                 au.home_site_id::text AS home_site_id,
                 site.site_code AS home_site_code,
@@ -432,6 +441,7 @@ def create_app_user_from_graph(
         raise ValueError("Default role_name is not allowed by chk_app_users_role.")
     if normalized_status not in USER_STATUSES:
         raise ValueError("Default status is not allowed by chk_app_users_status.")
+    normalized_role = _role_name_for_storage(normalized_role)
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -844,6 +854,8 @@ def admin_update_user_access(
     if status is not None and status not in USER_STATUSES:
         raise ValueError("Invalid status.")
 
+    storage_role_name = _role_name_for_storage(role_name) if role_name is not None else None
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
@@ -857,7 +869,7 @@ def admin_update_user_access(
             RETURNING {USER_RETURNING_FIELDS}
             """,
             (
-                role_name,
+                storage_role_name,
                 status,
                 tenant_id,
                 user_id,
@@ -940,7 +952,7 @@ def update_user_role(
             RETURNING {USER_RETURNING_FIELDS}
             """,
             (
-                normalized_role,
+                _role_name_for_storage(normalized_role),
                 tenant_id,
                 user_id,
             ),
@@ -990,7 +1002,7 @@ def sync_app_user_from_graph(
                 _required_text(_normalize_email(email), field_name="email", max_length=200),
                 _required_text(full_name, field_name="full_name", max_length=200),
                 _normalize_text(display_name, max_length=200),
-                normalized_role,
+                _role_name_for_storage(normalized_role),
                 _required_text(microsoft_object_id, field_name="microsoft_object_id", max_length=150),
                 _normalize_text(user_principal_name, max_length=200),
                 _normalize_text(mobile_phone, max_length=50),
@@ -1359,7 +1371,7 @@ def fetch_admin_user_directory(
         WHERE au.tenant_id = %(tenant_id)s
           AND (
                 %(role_names)s IS NULL
-                OR au.role_name = ANY(
+                OR UPPER(REPLACE(au.role_name, ' ', '_')) = ANY(
                     %(role_names)s::text[]
                 )
           )
@@ -1440,7 +1452,7 @@ def fetch_admin_user_directory(
                 au.id::text AS id,
                 au.employee_id,
                 au.full_name,
-                au.role_name,
+                UPPER(REPLACE(au.role_name, ' ', '_')) AS role_name,
                 au.department,
                 au.job_title,
                 au.mobile_phone,
@@ -1507,7 +1519,7 @@ def fetch_user_details_by_id(
             au.email,
             au.full_name,
             au.display_name,
-            au.role_name,
+            UPPER(REPLACE(au.role_name, ' ', '_')) AS role_name,
             au.status,
             au.employee_id,
             au.mobile_phone,
@@ -1542,7 +1554,7 @@ def fetch_admin_role_metadata(
             """
             SELECT
                 r.id AS role_id,
-                r.role_name,
+                UPPER(REPLACE(r.role_name, ' ', '_')) AS role_name,
                 r.description AS role_description,
 
                 COUNT(DISTINCT au.id)::integer AS user_count,
