@@ -442,14 +442,14 @@ def _fetch_employee_activity_rows(
                 booked_by.id::text AS booked_by_id,
                 booked_by.full_name AS booked_by_name,
                 booked_by.email AS booked_by_email,
-                booked_by.role_name AS booked_by_role,
+                UPPER(REPLACE(booked_by.role_name, ' ', '_')) AS booked_by_role,
                 booked_by.department AS booked_by_department,
                 booked_by.job_title AS booked_by_job_title,
 
                 booked_for.id::text AS booked_for_id,
                 booked_for.full_name AS booked_for_name,
                 booked_for.email AS booked_for_email,
-                booked_for.role_name AS booked_for_role,
+                UPPER(REPLACE(booked_for.role_name, ' ', '_')) AS booked_for_role,
                 booked_for.department AS booked_for_department,
                 booked_for.job_title AS booked_for_job_title,
 
@@ -602,7 +602,7 @@ def _fetch_guest_activity_rows(
                 booked_by.id::text AS booked_by_id,
                 booked_by.full_name AS booked_by_name,
                 booked_by.email AS booked_by_email,
-                booked_by.role_name AS booked_by_role,
+                UPPER(REPLACE(booked_by.role_name, ' ', '_')) AS booked_by_role,
                 booked_by.department AS booked_by_department,
                 booked_by.job_title AS booked_by_job_title,
 
@@ -624,7 +624,7 @@ def _fetch_guest_activity_rows(
                 booked_by.id::text AS booked_by_id,
                 booked_by.full_name AS booked_by_name,
                 booked_by.email AS booked_by_email,
-                booked_by.role_name AS booked_by_role,
+                UPPER(REPLACE(booked_by.role_name, ' ', '_')) AS booked_by_role,
                 booked_by.department AS booked_by_department,
                 booked_by.job_title AS booked_by_job_title,
 
