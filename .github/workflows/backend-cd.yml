@@ -1,0 +1,79 @@
+name: Backend CD (Deploy to Dev)
+
+on:
+  push:
+    branches: [ "dev" ]
+    paths:
+      - 'backend/**'
+      - 'template.yaml'
+      - 'pyproject.toml'
+      - 'uv.lock'
+
+# Ensure permissions are configured for AWS OIDC authentication
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    environment: dev
+    concurrency: dev
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials from OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.14'
+
+    - name: Setup AWS SAM CLI
+      uses: aws-actions/setup-sam@v2
+      with:
+        use-installer: true
+
+    - name: SAM Build
+      run: sam build --use-container
+
+    - name: SAM Deploy
+      run: >
+        sam deploy 
+        --stack-name workforce-api-dev 
+        --resolve-s3 
+        --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND 
+        --no-confirm-changeset 
+        --no-fail-on-empty-changeset 
+        --parameter-overrides 
+        EnvironmentName=dev 
+        DatabaseSecretArn=${{ secrets.DATABASE_SECRET_ARN }} 
+        ApplicationSecretArn=${{ secrets.APPLICATION_SECRET_ARN }} 
+        DbName=${{ secrets.DB_NAME || 'workforce_dev' }} 
+        MicrosoftClientId=${{ secrets.MICROSOFT_CLIENT_ID }} 
+        MicrosoftTenantId=${{ secrets.MICROSOFT_TENANT_ID }} 
+        RedirectUri=${{ secrets.REDIRECT_URI || 'https://localhost:3000/api/auth/callback' }} 
+        FrontendUrl=${{ secrets.FRONTEND_URL || 'https://localhost:3000' }} 
+        S3BucketName=${{ secrets.S3_BUCKET_NAME || 'workforce-floor-layouts-dev' }} 
+        S3PublicBaseUrl=${{ secrets.S3_PUBLIC_BASE_URL || 'https://example.com' }} 
+        SesSenderEmail=${{ secrets.SES_SENDER_EMAIL || 'no-reply@example.com' }} 
+        PrivateSubnetIds=${{ secrets.PRIVATE_SUBNET_IDS }} 
+        LambdaSecurityGroupIds=${{ secrets.LAMBDA_SECURITY_GROUP_IDS }}
+
+    - name: Post-Deployment Health Check
+      run: |
+        API_URL=$(aws cloudformation describe-stacks \
+          --stack-name workforce-api-dev \
+          --query "Stacks[0].Outputs[?OutputKey=='HttpApiUrl'].OutputValue" \
+          --output text)
+        
+        echo "Testing API at: $API_URL/health"
+        curl -f -s -o /dev/null -w "%{http_code}" $API_URL/health || (echo "Health check failed!" && exit 1)
+        echo "Health check passed!"
