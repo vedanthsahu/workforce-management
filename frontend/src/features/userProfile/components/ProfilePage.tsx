@@ -7,6 +7,7 @@ import {
   Layers, CalendarCheck2, CalendarClock, History,
   ChevronRight, CalendarDays,
   Building, Armchair, Check, Pencil, Save, X, ChevronDown,
+  Sparkles, IdCard, BarChart3, SlidersHorizontal,
 } from "lucide-react";
 
 import { Button }    from "@/components/ui/button";
@@ -103,17 +104,38 @@ function groupBookingsByMonth(bookings: ApiBooking[]) {
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`bg-white rounded-xl border border-gray-100 shadow-sm ${className}`}>
+    <div className={`bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-200 ${className}`}>
       {children}
     </div>
   );
 }
 
-function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+function SectionHeading({ icon: Icon, title, color = "bg-indigo-100 text-indigo-600" }: { icon: React.ElementType; title: string; color?: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${color}`}>
+        <Icon className="w-3.5 h-3.5" />
+      </div>
+      <h3 className="text-[13.5px] font-semibold text-gray-800">{title}</h3>
+    </div>
+  );
+}
+
+const INFO_ROW_COLORS = [
+  { bg: "bg-violet-50",  icon: "text-violet-500"  },
+  { bg: "bg-blue-50",    icon: "text-blue-500"    },
+  { bg: "bg-rose-50",    icon: "text-rose-500"    },
+  { bg: "bg-emerald-50", icon: "text-emerald-500" },
+  { bg: "bg-amber-50",   icon: "text-amber-500"   },
+  { bg: "bg-teal-50",    icon: "text-teal-500"    },
+];
+
+function InfoRow({ icon: Icon, label, value, colorIndex = 0 }: { icon: React.ElementType; label: string; value: string; colorIndex?: number }) {
+  const { bg, icon } = INFO_ROW_COLORS[colorIndex % INFO_ROW_COLORS.length];
   return (
     <div className="flex items-start gap-3 py-2.5">
-      <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center shrink-0 mt-0.5">
-        <Icon className="w-3.5 h-3.5 text-gray-400" />
+      <div className={`w-8 h-8 rounded-lg ${bg} flex items-center justify-center shrink-0 mt-0.5`}>
+        <Icon className={`w-3.5 h-3.5 ${icon}`} />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[11px] text-gray-400 font-medium leading-none mb-1">{label}</p>
@@ -763,7 +785,7 @@ export default function ProfilePage() {
         }}
       />
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto bg-gradient-to-b from-indigo-50/40 via-white to-white">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
 
         {/* Page header */}
@@ -773,56 +795,64 @@ export default function ProfilePage() {
         </div>
 
         {/* ── Identity card ─────────────────────────────────────────────── */}
-        <Card className="p-4 sm:p-6">
-          <div className="flex flex-col items-center sm:flex-row sm:items-center gap-5 sm:gap-7">
-            {/* Avatar */}
-            <div className="relative shrink-0 ml-0 sm:ml-2">
-              {profile.avatarUrl ? (
-                <img
-                  src={profile.avatarUrl}
-                  alt={profile.displayName}
-                  className="w-[80px] h-[80px] rounded-full object-cover ring-2 ring-gray-100"
-                />
-              ) : (
-                <div className="w-[80px] h-[80px] rounded-full bg-indigo-100 flex items-center justify-center text-[22px] font-bold text-indigo-700 ring-2 ring-gray-100 select-none">
-                  {initials}
-                </div>
-              )}
-              <button
-                onClick={() => avatarInputRef.current?.click()}
-                disabled={isUploadingAvatar}
-                className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all"
-              >
-                {isUploadingAvatar
-                  ? <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
-                  : <Camera className="w-3 h-3 text-gray-500" />}
-              </button>
-            </div>
+        <Card className="overflow-hidden p-0!">
+          {/* Gradient cover banner */}
+          <div className="h-20 sm:h-24 bg-gradient-to-br from-indigo-600 via-indigo-600 to-indigo-700 relative overflow-hidden">
+            <div className="absolute w-40 h-40 rounded-full bg-white/[0.06] -top-16 -right-8 pointer-events-none" />
+            <div className="absolute w-24 h-24 rounded-full bg-white/[0.05] top-2 right-28 pointer-events-none" />
+          </div>
 
-            {/* Info */}
-            <div className="flex-1 min-w-0 text-center sm:text-left">
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-1">
-                <h2 className="text-[18px] font-bold text-gray-900 leading-tight">{profile.displayName}</h2>
-                <RolePill role={profile.role} />
+          <div className="px-4 sm:px-6 pb-5 sm:pb-6">
+            <div className="flex flex-col items-center sm:flex-row sm:items-start gap-4 sm:gap-6">
+              {/* Avatar — pulled up to overlap the banner; info block's top stays anchored below it */}
+              <div className="relative shrink-0 -mt-10 sm:-mt-11">
+                {profile.avatarUrl ? (
+                  <img
+                    src={profile.avatarUrl}
+                    alt={profile.displayName}
+                    className="w-[84px] h-[84px] rounded-full object-cover ring-4 ring-white shadow-md"
+                  />
+                ) : (
+                  <div className="w-[84px] h-[84px] rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-[22px] font-bold text-white ring-4 ring-white shadow-md select-none">
+                    {initials}
+                  </div>
+                )}
+                <button
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={isUploadingAvatar}
+                  className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all"
+                >
+                  {isUploadingAvatar
+                    ? <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
+                    : <Camera className="w-3 h-3 text-gray-500" />}
+                </button>
               </div>
-              <p className="text-[12.5px] text-gray-400 mb-2.5">
-                {profile.jobTitle}
-                {profile.department !== "—" && <> &nbsp;·&nbsp; {profile.department}</>}
-              </p>
-              <div className="flex flex-col sm:flex-row sm:flex-wrap items-center sm:items-center gap-y-1.5 gap-x-5">
-                <div className="flex items-center gap-1.5 text-[12.5px] text-gray-600">
-                  <Mail className="w-3.5 h-3.5 text-gray-400 shrink-0" />{profile.email}
+
+              {/* Info */}
+              <div className="flex-1 min-w-0 text-center sm:text-left pt-1 sm:pt-3">
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-1">
+                  <h2 className="text-[18px] font-bold text-gray-900 leading-tight">{profile.displayName}</h2>
+                  <RolePill role={profile.role} />
                 </div>
-                {profile.phone !== "—" && (
+                <p className="text-[12.5px] text-gray-400 mb-2.5">
+                  {profile.jobTitle}
+                  {profile.department !== "—" && <> &nbsp;·&nbsp; {profile.department}</>}
+                </p>
+                <div className="flex flex-col sm:flex-row sm:flex-wrap items-center sm:items-center gap-y-1.5 gap-x-5">
                   <div className="flex items-center gap-1.5 text-[12.5px] text-gray-600">
-                    <Phone className="w-3.5 h-3.5 text-gray-400 shrink-0" />{profile.phone}
+                    <Mail className="w-3.5 h-3.5 text-indigo-400 shrink-0" />{profile.email}
                   </div>
-                )}
-                {profile.workLocation !== "—" && (
-                  <div className="flex items-center gap-1.5 text-[12.5px] text-gray-600">
-                    <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />{profile.workLocation}
-                  </div>
-                )}
+                  {profile.phone !== "—" && (
+                    <div className="flex items-center gap-1.5 text-[12.5px] text-gray-600">
+                      <Phone className="w-3.5 h-3.5 text-violet-400 shrink-0" />{profile.phone}
+                    </div>
+                  )}
+                  {profile.workLocation !== "—" && (
+                    <div className="flex items-center gap-1.5 text-[12.5px] text-gray-600">
+                      <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0" />{profile.workLocation}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -837,7 +867,7 @@ export default function ProfilePage() {
              {/* About Me */}
             <Card className="p-4 sm:p-5">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[13.5px] font-semibold text-gray-800">About Me</h3>
+                <SectionHeading icon={Sparkles} title="About Me" color="bg-indigo-100 text-indigo-600" />
                 <Button
                   variant="ghost"
                   size="sm"
@@ -866,32 +896,32 @@ export default function ProfilePage() {
             {/* Personal Information */}
             <Card>
               <div className="flex items-center justify-between px-4 sm:px-5 pt-4 pb-3">
-                <h3 className="text-[13.5px] font-semibold text-gray-800">Personal Information</h3>
+                <SectionHeading icon={IdCard} title="Personal Information" color="bg-blue-100 text-blue-600" />
               </div>
               <Separator />
               <div className="px-4 sm:px-5 py-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6">
-                <InfoRow icon={BadgeCheck}  label="Employee ID"       value={profile.employeeId} />
-                <InfoRow icon={UserCheck}   label="Reporting Manager" value={profile.reportingManager} />
-                <InfoRow icon={MapPin}      label="Work Location"     value={profile.workLocation} />
-                <InfoRow icon={Building2}   label="Department"        value={profile.department} />
-                <InfoRow icon={Briefcase}   label="Designation"       value={profile.jobTitle} />
-                <InfoRow icon={Phone}       label="Mobile Number"     value={profile.phone} />
+                <InfoRow icon={BadgeCheck}  label="Employee ID"       value={profile.employeeId}       colorIndex={0} />
+                <InfoRow icon={UserCheck}   label="Reporting Manager" value={profile.reportingManager} colorIndex={1} />
+                <InfoRow icon={MapPin}      label="Work Location"     value={profile.workLocation}     colorIndex={2} />
+                <InfoRow icon={Building2}   label="Department"        value={profile.department}       colorIndex={3} />
+                <InfoRow icon={Briefcase}   label="Designation"       value={profile.jobTitle}         colorIndex={4} />
+                <InfoRow icon={Phone}       label="Mobile Number"     value={profile.phone}             colorIndex={5} />
               </div>
             </Card>
 
-           
-
             {/* Activity Summary — moved to left column */}
             <Card className="p-4 sm:p-5">
-              <h3 className="text-[13.5px] font-semibold text-gray-800 mb-4">Activity Summary</h3>
+              <div className="mb-4">
+                <SectionHeading icon={BarChart3} title="Activity Summary" color="bg-amber-100 text-amber-600" />
+              </div>
               <div className="grid grid-cols-3 gap-3 mb-4">
                 {[
-                  { icon: CalendarCheck2, value: activitySummary.totalBookings,    label: "Total Bookings",    bg: "bg-indigo-50", iconBg: "bg-indigo-100", num: "text-indigo-700", sub: "text-indigo-500", iconCls: "text-indigo-600" },
-                  { icon: CalendarClock,  value: activitySummary.upcomingBookings, label: "Upcoming Bookings", bg: "bg-amber-50",  iconBg: "bg-amber-100",  num: "text-amber-700",  sub: "text-amber-500",  iconCls: "text-amber-600" },
-                  { icon: History,        value: activitySummary.pastBookings,     label: "Past Bookings",     bg: "bg-gray-50",   iconBg: "bg-gray-100",   num: "text-gray-700",   sub: "text-gray-400",   iconCls: "text-gray-500" },
+                  { icon: CalendarCheck2, value: activitySummary.totalBookings,    label: "Total Bookings",    bg: "bg-gradient-to-br from-indigo-50 to-indigo-100/70", iconBg: "bg-indigo-500", num: "text-indigo-700", sub: "text-indigo-500", iconCls: "text-white" },
+                  { icon: CalendarClock,  value: activitySummary.upcomingBookings, label: "Upcoming Bookings", bg: "bg-gradient-to-br from-amber-50 to-amber-100/70",  iconBg: "bg-amber-500",  num: "text-amber-700",  sub: "text-amber-500",  iconCls: "text-white" },
+                  { icon: History,        value: activitySummary.pastBookings,     label: "Past Bookings",     bg: "bg-gradient-to-br from-violet-50 to-violet-100/70", iconBg: "bg-violet-500", num: "text-violet-700", sub: "text-violet-500", iconCls: "text-white" },
                 ].map(({ icon: Icon, value, label, bg, iconBg, num, sub, iconCls }) => (
-                  <div key={label} className={`flex flex-col items-center justify-center p-3 rounded-xl ${bg} text-center`}>
-                    <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center mb-2`}>
+                  <div key={label} className={`flex flex-col items-center justify-center p-3 rounded-xl ${bg} text-center hover:shadow-sm hover:-translate-y-0.5 transition-all duration-200`}>
+                    <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center mb-2 shadow-sm`}>
                       <Icon className={`w-4 h-4 ${iconCls}`} />
                     </div>
                     <p className={`text-[22px] font-bold ${num} leading-none`}>{value}</p>
@@ -901,10 +931,13 @@ export default function ProfilePage() {
               </div>
               <button
                 onClick={() => setHistoryOpen(true)}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors group"
+                className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-200 shadow-sm group"
               >
-                <span className="block text-center text-[12.5px] font-medium text-indigo-600">View Booking History</span>
-                <ChevronRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-0.5 transition-transform" />
+                <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
+                  <History className="w-4 h-4 text-white" />
+                </div>
+                <span className="flex-1 text-left text-[12.5px] font-semibold text-white">View Booking History</span>
+                <ChevronRight className="w-4 h-4 text-white/80 group-hover:translate-x-0.5 group-hover:text-white transition-all shrink-0" />
               </button>
             </Card>
           </div>
@@ -914,7 +947,9 @@ export default function ProfilePage() {
 
             {/* Work Details */}
             <Card className="p-4 sm:p-5">
-              <h3 className="text-[13.5px] font-semibold text-gray-800 mb-4">Work Details</h3>
+              <div className="mb-4">
+                <SectionHeading icon={Briefcase} title="Work Details" color="bg-emerald-100 text-emerald-600" />
+              </div>
               <div className="space-y-3">
                 {[
                   // { label: "Employee ID",   value: profile.employeeId },
@@ -934,7 +969,7 @@ export default function ProfilePage() {
             {/* Preferences — moved to right column */}
             <Card>
               <div className="flex items-center justify-between px-4 sm:px-5 pt-4 pb-3">
-                <h3 className="text-[13.5px] font-semibold text-gray-800">Preferences</h3>
+                <SectionHeading icon={SlidersHorizontal} title="Preferences" color="bg-violet-100 text-violet-600" />
                 {prefErr ? (
                   <span className="text-[11px] text-amber-500 flex items-center gap-1">
                     <TriangleAlert className="w-3 h-3" />{prefErr.message}
