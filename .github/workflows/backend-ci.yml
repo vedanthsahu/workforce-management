@@ -1,0 +1,57 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches: [ "dev" ]
+    paths:
+      - 'backend/**'
+      - 'template.yaml'
+      - 'pyproject.toml'
+      - 'uv.lock'
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'backend/**'
+      - 'template.yaml'
+      - 'pyproject.toml'
+      - 'uv.lock'
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.14'
+
+    - name: Install uv
+      run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+    - name: Install dependencies
+      run: uv sync
+
+    - name: Run Linter (Ruff)
+      run: uv run ruff check backend/
+
+    - name: Run Runtime Security Tests
+      run: uv run bandit -r backend/
+
+    - name: Run Tests (Pytest)
+      run: uv run pytest backend/
+
+    - name: Setup AWS SAM CLI
+      uses: aws-actions/setup-sam@v2
+      with:
+        use-installer: true
+
+    - name: SAM Lint
+      run: sam validate --lint
+
+    - name: SAM Container Build Test
+      run: sam build --use-container
