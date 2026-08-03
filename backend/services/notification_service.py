@@ -12,10 +12,16 @@ import boto3
 from botocore.client import BaseClient
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import BackgroundTasks
-from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateError, select_autoescape
+from jinja2 import (
+    Environment,
+    FileSystemLoader,
+    StrictUndefined,
+    TemplateError,
+    select_autoescape,
+)
 
-from backend.core.config import Settings, get_settings
 from backend.core.app_logging import LOGGER_NAME
+from backend.core.config import Settings, get_settings
 from backend.core.retry import aws_retry
 
 logger = logging.getLogger(f"{LOGGER_NAME}.notifications")

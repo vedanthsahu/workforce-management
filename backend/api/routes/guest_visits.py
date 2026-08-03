@@ -7,39 +7,35 @@ from typing import Annotated, Any
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from psycopg2.extensions import connection as PGConnection
 
-from backend.api.deps import get_current_user
-from backend.db.connection import get_db
-from backend.schemas.guest import CreateGuestVisitRequest, GuestVisitListItem, GuestVisitResponse, AttachSeatToGuestVisitRequest , CancelGuestVisitRequest
-from backend.services.guest_service import create_guest_visit
-
 from backend.api.deps import (
     get_current_user,
     require_permission,
 )
-
-from backend.services.guest_service import (
-    list_guest_visits,
-    guest_visit_check_in,
-    attach_seat_to_guest_visit,
-    get_guest_visit_details,    
-    guest_visit_check_out,
-    cancel_guest_visit_record,
-    modify_guest_visit,
-    create_booking_for_existing_guest_visit,
-    execute_guest_visit_workflow,
-)
-
+from backend.db.connection import get_db
 from backend.schemas.booking import BookingResponse
-
 from backend.schemas.guest import (
-    GuestVisitListResponse,
-    GuestVisitStatusUpdateResponse,
     AttachSeatToGuestVisitRequest,
-    ModifyGuestVisitRequest,
+    CancelGuestVisitRequest,
+    CreateGuestVisitRequest,
+    GuestVisitListItem,
+    GuestVisitListResponse,
+    GuestVisitResponse,
+    GuestVisitStatusUpdateResponse,
     GuestWorkflowRequest,
     GuestWorkflowResponse,
+    ModifyGuestVisitRequest,
 )
-
+from backend.services.guest_service import (
+    cancel_guest_visit_record,
+    create_booking_for_existing_guest_visit,
+    create_guest_visit,
+    execute_guest_visit_workflow,
+    get_guest_visit_details,
+    guest_visit_check_in,
+    guest_visit_check_out,
+    list_guest_visits,
+    modify_guest_visit,
+)
 
 router = APIRouter(prefix="/guest-visits", tags=["guest-visits"])
 

@@ -638,16 +638,15 @@ class GuestWorkflowTests(unittest.TestCase):
             guest_service,
             "insert_guest_booking",
             side_effect=psycopg2.DatabaseError("insert failed"),
-        ):
-            with self.assertRaises(HTTPException):
-                guest_service.execute_guest_visit_workflow(
-                    conn,
-                    current_user=self.current_user,
-                    guest_visit_id="60",
-                    payload=_payload(
-                        GuestWorkflowAction.MODIFY_VISIT_AND_BOOKING,
-                    ),
-                )
+        ), self.assertRaises(HTTPException):
+            guest_service.execute_guest_visit_workflow(
+                conn,
+                current_user=self.current_user,
+                guest_visit_id="60",
+                payload=_payload(
+                    GuestWorkflowAction.MODIFY_VISIT_AND_BOOKING,
+                ),
+            )
 
         self.assertEqual(conn.commits, 0)
         self.assertEqual(conn.rollbacks, 1)

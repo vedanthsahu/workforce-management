@@ -1,14 +1,15 @@
 """Runtime configuration loading for the backend service."""
 
 from __future__ import annotations
+
 import os
 from functools import lru_cache
 from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from backend.core.runtime_secrets import RuntimeSecretError, get_json_secret
 
+from backend.core.runtime_secrets import RuntimeSecretError, get_json_secret
 
 DEFAULT_JWT_ALLOWED_CLAIMS = (
     "user_id",
@@ -28,9 +29,7 @@ def _is_https_url(url: str) -> bool:
 
 
 def _parse_csv(value: str | tuple[str, ...] | list[str], *, field_name: str) -> tuple[str, ...]:
-    if isinstance(value, tuple):
-        values = tuple(str(item).strip() for item in value if str(item).strip())
-    elif isinstance(value, list):
+    if isinstance(value, tuple) or isinstance(value, list):
         values = tuple(str(item).strip() for item in value if str(item).strip())
     else:
         values = tuple(part.strip() for part in value.split(",") if part.strip())
@@ -115,7 +114,7 @@ class Settings(BaseSettings):
         return normalized
 
     @model_validator(mode="after")
-    def _apply_derived_defaults(self) -> "Settings":
+    def _apply_derived_defaults(self) -> Settings:
         access_token_ttl = self.jwt_access_token_ttl
         if access_token_ttl is None:
             access_token_ttl = (

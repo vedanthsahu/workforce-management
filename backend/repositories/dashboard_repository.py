@@ -7,8 +7,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Literal
 
-from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
+from psycopg2.extras import RealDictCursor
 
 HierarchyGroupLevel = Literal["site", "building", "floor"]
 

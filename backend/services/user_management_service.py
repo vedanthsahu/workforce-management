@@ -7,6 +7,8 @@ import psycopg2
 from fastapi import HTTPException, status
 from psycopg2.extensions import connection as PGConnection
 
+from backend.core.audit_actions import USER_ACCESS_UPDATED, USER_PROFILE_UPDATED
+from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.booking_repository import (
     fetch_all_confirmed_bookings_for_user,
 )
@@ -20,20 +22,18 @@ from backend.repositories.user_repository import (
     fetch_admin_user_directory,
     fetch_user_by_id,
     fetch_user_details_by_id,
-    update_user_profile,
     search_users,
+    update_user_profile,
 )
-from backend.core.audit_actions import USER_ACCESS_UPDATED, USER_PROFILE_UPDATED
-from backend.repositories.audit_repository import safe_write_audit_log
 from backend.schemas.auth import UserResponse
 from backend.schemas.booking import BookingResponse
 from backend.schemas.user_management import (
     AdminDirectoryRole,
-    UserDetailsResponse,
     AdminDirectoryStatus,
     AdminUserDirectoryResponse,
     UserBookingHistoryResponse,
     UserBookingsSummary,
+    UserDetailsResponse,
 )
 
 ASSIGNABLE_ROLE_NAMES = {

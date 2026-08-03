@@ -22,7 +22,7 @@ class FakeCursor:
         self.executions: list[tuple[str, Any]] = []
         self._fetchall_result = fetchall_result or []
 
-    def __enter__(self) -> "FakeCursor":
+    def __enter__(self) -> FakeCursor:
         return self
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
@@ -152,13 +152,12 @@ class TeamOverviewSeatDetailTests(unittest.TestCase):
         with patch(
             "backend.services.team_service.fetch_team_members_with_today_booking",
             return_value=[],
-        ):
-            with self.assertRaises(HTTPException) as ctx:
-                get_my_team_overview(
-                    conn=object(),
-                    current_user={"tenant_id": "3", "user_id": "36"},
-                    member_user_id="999",
-                )
+        ), self.assertRaises(HTTPException) as ctx:
+            get_my_team_overview(
+                conn=object(),
+                current_user={"tenant_id": "3", "user_id": "36"},
+                member_user_id="999",
+            )
 
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(ctx.exception.detail["code"], "teammate_not_found")

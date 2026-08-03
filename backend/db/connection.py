@@ -5,8 +5,8 @@ the backend and the FastAPI dependency wrapper that yields one connection per
 request scope.
 """
 
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
-from typing import Generator, Iterator
 
 import psycopg2
 from psycopg2.extensions import connection as PGConnection
@@ -36,7 +36,7 @@ def get_db_connection() -> Iterator[PGConnection]:
         conn.close()
 
 
-def get_db() -> Generator[PGConnection, None, None]:
+def get_db() -> Generator[PGConnection]:
     """Yield a database connection for FastAPI dependency injection.
 
     Returns:

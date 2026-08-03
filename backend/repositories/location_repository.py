@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
-from psycopg2.extras import Json
+from psycopg2.extras import Json, RealDictCursor
 
 from backend.core.enums import NON_DELETED_LAYOUT_STATUSES
+
 
 def fetch_sites(
     conn: PGConnection,

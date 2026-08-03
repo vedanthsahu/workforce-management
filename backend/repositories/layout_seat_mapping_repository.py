@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
+from psycopg2.extras import RealDictCursor
 
 
 def bulk_insert_layout_seat_mappings(

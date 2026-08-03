@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from psycopg2.extras import Json, RealDictCursor
 from psycopg2.extensions import connection as PGConnection
+from psycopg2.extras import Json, RealDictCursor
 
 USER_SELECT_FIELDS = """
     au.id::text AS user_id,
@@ -1501,7 +1501,7 @@ def fetch_user_details_by_id(
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            f"""
+            """
             SELECT
             au.id::text AS id,
             au.email,

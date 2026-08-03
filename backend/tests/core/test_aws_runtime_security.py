@@ -128,9 +128,8 @@ class AwsRuntimeSecurityTests(unittest.TestCase):
             os.environ,
             {"DATABASE_SECRET_ARN": "database-arn"},
             clear=True,
-        ):
-            with self.assertRaises(RuntimeSecretError) as context:
-                config._runtime_secret_settings()
+        ), self.assertRaises(RuntimeSecretError) as context:
+            config._runtime_secret_settings()
 
         self.assertIn(
             "must both be configured",
