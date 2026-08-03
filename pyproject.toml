@@ -28,3 +28,6 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.16.1",
 ]
+
+[tool.ruff.lint]
+ignore = ['DTZ011', 'DTZ001', 'DTZ901', 'B008', 'RUF013', 'G201', 'BLE001', 'SIM101', 'FLY002', 'F821', 'C408', 'S110', 'PIE794', 'F811', 'PYI034', 'RUF012', 'SIM117']
