@@ -2,7 +2,7 @@ name: Backend CD (Deploy to Dev)
 
 on:
   push:
-    branches: [ "dev" ]
+    branches: [ "feature/cicd-pipeline-setup" ]
     paths:
       - 'backend/**'
       - 'template.yaml'
