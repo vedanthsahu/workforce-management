@@ -11,6 +11,10 @@ on:
   push:
     branches:
       - '**'
+
+ # ...
+  workflow_dispatch: # <-- Add this at the same indentation level as push/pull_request
+
     paths:
       - 'backend/**'
       - 'template.yaml'
