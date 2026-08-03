@@ -60,11 +60,14 @@ from backend.repositories.booking_repository import (
     mark_booking_modified,
     fetch_booking_by_id_for_update,
     fetch_booking_by_id,
+    seat_has_active_block_in_range,
+    seat_has_active_booking_in_range,
     user_has_active_booking_in_range,
     user_has_active_booking_on_date,
     guest_has_active_booking_in_range,
     guest_has_active_visit_in_range,
 )
+from backend.repositories.location_repository import fetch_seat_configuration
 from backend.repositories.user_repository import fetch_user_by_id
 from backend.schemas.booking import (
     AdminBookingListQuery,
@@ -184,6 +187,19 @@ def _resolve_booked_for_user(
         )
 
     return target_user
+
+
+def _is_no_op_booking_modification(
+    booking: dict[str, Any],
+    payload: ModifyBookingRequest,
+) -> bool:
+    """True when the modification payload would not change any booking
+    business field (seat or date). Metadata such as modification_reason is
+    intentionally excluded from this comparison."""
+    return (
+        str(booking["seat_id"]) == str(payload.seat_id)
+        and booking["booking_date"] == payload.booking_date
+    )
 
 
 def _raise_user_booking_conflict(
@@ -483,6 +499,7 @@ def book_seat(
             booked_by_user_id=booked_by_user_id,
             seat=seat,
             booking_date=payload.booking_date,
+            source_channel=payload.source_channel or "WEB",
         )
         write_audit_log(
             conn,
@@ -608,6 +625,8 @@ def get_user_past_bookings(
     current_user: dict[str, Any],
     page: int | None = None,
     limit: int | None = None,
+    seat_id: str | None = None,
+    booking_date: date | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
     """List bookings visible to the authenticated user."""
     try:
@@ -615,6 +634,8 @@ def get_user_past_bookings(
             conn,
             tenant_id=str(current_user["tenant_id"]),
             user_id=str(current_user["user_id"]),
+            seat_id=seat_id,
+            booking_date=booking_date,
         )
     except psycopg2.Error as exc:
         raise HTTPException(
@@ -632,6 +653,8 @@ def get_user_current_bookings(
     conn: PGConnection,
     *,
     current_user: dict[str, Any],
+    seat_id: str | None = None,
+    booking_date: date | None = None,
 ) -> list[BookingResponse]:
     """List bookings visible to the authenticated user."""
     try:
@@ -639,6 +662,8 @@ def get_user_current_bookings(
             conn,
             tenant_id=str(current_user["tenant_id"]),
             user_id=str(current_user["user_id"]),
+            seat_id=seat_id,
+            booking_date=booking_date,
         )
     except psycopg2.Error as exc:
         raise HTTPException(
@@ -658,6 +683,8 @@ def get_user_cancelled_bookings(
     current_user: dict[str, Any],
     page: int | None = None,
     limit: int | None = None,
+    seat_id: str | None = None,
+    booking_date: date | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
     """List bookings visible to the authenticated user."""
     try:
@@ -665,6 +692,8 @@ def get_user_cancelled_bookings(
             conn,
             tenant_id=str(current_user["tenant_id"]),
             user_id=str(current_user["user_id"]),
+            seat_id=seat_id,
+            booking_date=booking_date,
         )
     except psycopg2.Error as exc:
         raise HTTPException(
@@ -684,6 +713,8 @@ def get_user_future_bookings(
     current_user: dict[str, Any],
     page: int | None = None,
     limit: int | None = None,
+    seat_id: str | None = None,
+    booking_date: date | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
     """List bookings visible to the authenticated user."""
     try:
@@ -691,6 +722,8 @@ def get_user_future_bookings(
             conn,
             tenant_id=str(current_user["tenant_id"]),
             user_id=str(current_user["user_id"]),
+            seat_id=seat_id,
+            booking_date=booking_date,
         )
     except psycopg2.Error as exc:
         raise HTTPException(
@@ -1059,17 +1092,11 @@ def modify_booking(
                 },
             )
  
-        if (
-            str(booking["seat_id"]) == str(payload.seat_id)
-            and booking["booking_date"] == payload.booking_date
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "code": "booking_no_effect",
-                    "message": "Modification request does not change booking details.",
-                },
-            )
+        if _is_no_op_booking_modification(booking, payload):
+            # Nothing to change: release the row lock and return the
+            # booking as-is without writing, re-auditing, or re-notifying.
+            conn.rollback()
+            return BookingResponse(**booking)
 
         old_booking_for_email = fetch_booking_by_id(
             conn,
@@ -1845,6 +1872,66 @@ payload: BookingEligibilityRequest,
                 "The booking owner already has an active booking in the requested date range.",
             )
 
+    if payload.seat_id is not None:
+        seat = fetch_seat_configuration(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+        )
+        if seat is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "seat_not_found",
+                    "message": "Seat does not exist.",
+                },
+            )
+        if seat.get("status") != "ACTIVE":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "booking_seat_inactive",
+                    "message": "Bookings can only be created for ACTIVE seats.",
+                },
+            )
+        if seat.get("is_bookable") is not True:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "booking_seat_not_bookable",
+                    "message": "The requested seat is not bookable.",
+                },
+            )
+        if seat_has_active_block_in_range(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "booking_seat_blocked",
+                    "message": "The requested seat is blocked during the requested date range.",
+                },
+            )
+        if seat_has_active_booking_in_range(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            exclude_booking_id=payload.exclude_booking_id,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "booking_conflict",
+                    "message": "The requested seat already has an active booking in the requested date range.",
+                },
+            )
+
     return BookingEligibilityResponse(
         eligible=True,
         message="Eligible for booking.",
@@ -1857,20 +1944,28 @@ def get_delegated_future_bookings(
     current_user: dict[str, Any],
     page: int | None = None,
     limit: int | None = None,
+    seat_id: str | None = None,
+    booking_date: date | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
 
     bookings = fetch_future_delegated_bookings(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         user_id=str(current_user["user_id"]),
+        seat_id=seat_id,
+        booking_date=booking_date,
     )
 
+    # Guest visits without a seat booking can never match a seat_id filter.
     guest_visits = (
         fetch_future_delegated_guest_visits_without_booking(
             conn,
             tenant_id=str(current_user["tenant_id"]),
             user_id=str(current_user["user_id"]),
+            booking_date=booking_date,
         )
+        if seat_id is None
+        else []
     )
 
     combined = bookings + guest_visits
@@ -1889,12 +1984,18 @@ def get_delegated_current_bookings(
     conn: PGConnection,
     *,
     current_user: dict[str, Any],
-) -> list[BookingResponse]:
+    page: int | None = None,
+    limit: int | None = None,
+    seat_id: str | None = None,
+    booking_date: date | None = None,
+) -> list[BookingResponse] | PaginatedBookingResponse:
 
     bookings = fetch_current_delegated_bookings(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         user_id=str(current_user["user_id"]),
+        seat_id=seat_id,
+        booking_date=booking_date,
     )
 
     guest_visits = (
@@ -1902,7 +2003,10 @@ def get_delegated_current_bookings(
             conn,
             tenant_id=str(current_user["tenant_id"]),
             user_id=str(current_user["user_id"]),
+            booking_date=booking_date,
         )
+        if seat_id is None
+        else []
     )
 
     combined = bookings + guest_visits
@@ -1916,10 +2020,7 @@ def get_delegated_current_bookings(
     )
 
     combined = _apply_modified_display_status(combined)
-    return [
-        BookingResponse(**row)
-        for row in combined
-    ]
+    return _booking_list_response(combined, page=page, limit=limit)
 
 def get_delegated_past_bookings(
     conn: PGConnection,
@@ -1927,12 +2028,16 @@ def get_delegated_past_bookings(
     current_user: dict[str, Any],
     page: int | None = None,
     limit: int | None = None,
+    seat_id: str | None = None,
+    booking_date: date | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
 
     bookings = fetch_past_delegated_bookings(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         user_id=str(current_user["user_id"]),
+        seat_id=seat_id,
+        booking_date=booking_date,
     )
 
     guest_visits = (
@@ -1940,7 +2045,10 @@ def get_delegated_past_bookings(
             conn,
             tenant_id=str(current_user["tenant_id"]),
             user_id=str(current_user["user_id"]),
+            booking_date=booking_date,
         )
+        if seat_id is None
+        else []
     )
 
     combined = bookings + guest_visits
@@ -1961,18 +2069,27 @@ def get_delegated_cancelled_bookings(
     current_user: dict[str, Any],
     page: int | None = None,
     limit: int | None = None,
+    seat_id: str | None = None,
+    booking_date: date | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
 
     bookings = fetch_cancelled_delegated_bookings(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         user_id=str(current_user["user_id"]),
+        seat_id=seat_id,
+        booking_date=booking_date,
     )
 
-    guest_visits = fetch_cancelled_guest_visits(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        created_by_user_id=str(current_user["user_id"]),
+    guest_visits = (
+        fetch_cancelled_guest_visits(
+            conn,
+            tenant_id=str(current_user["tenant_id"]),
+            created_by_user_id=str(current_user["user_id"]),
+            booking_date=booking_date,
+        )
+        if seat_id is None
+        else []
     )
 
     combined = bookings + guest_visits
