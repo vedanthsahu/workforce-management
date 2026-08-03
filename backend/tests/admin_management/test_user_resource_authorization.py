@@ -14,7 +14,6 @@ from backend.services.user_management_service import (
     get_user_by_id_service,
 )
 
-
 TARGET_USER = {
     "id": "15",
     "email": "employeeb@example.com",
@@ -43,13 +42,12 @@ class UserResourceAuthorizationTests(unittest.TestCase):
         with patch(
             "backend.services.user_management_service.fetch_user_details_by_id",
             return_value=TARGET_USER,
-        ):
-            with self.assertRaises(HTTPException) as context:
-                get_user_by_id_service(
-                    conn=object(),
-                    current_user=current_user,
-                    user_id="15",
-                )
+        ), self.assertRaises(HTTPException) as context:
+            get_user_by_id_service(
+                conn=object(),
+                current_user=current_user,
+                user_id="15",
+            )
 
         self.assertEqual(context.exception.status_code, 403)
         self.assertEqual(context.exception.detail["code"], "user_view_forbidden")
@@ -90,13 +88,12 @@ class UserResourceAuthorizationTests(unittest.TestCase):
         with patch(
             "backend.services.user_management_service.fetch_user_details_by_id",
             return_value=TARGET_USER,
-        ):
-            with self.assertRaises(HTTPException) as context:
-                get_user_by_id_service(
-                    conn=object(),
-                    current_user=current_user,
-                    user_id="15",
-                )
+        ), self.assertRaises(HTTPException) as context:
+            get_user_by_id_service(
+                conn=object(),
+                current_user=current_user,
+                user_id="15",
+            )
 
         self.assertEqual(context.exception.status_code, 403)
 

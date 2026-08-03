@@ -7,7 +7,6 @@ from typing import Any
 from psycopg2.extensions import connection as PGConnection
 from psycopg2.extras import RealDictCursor
 
-
 GUEST_SELECT_FIELDS = """
     g.id::text AS guest_id,
     g.tenant_id::text AS tenant_id,
@@ -33,7 +32,7 @@ def create_guest(
 ) -> dict[str, Any]:
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            f"""
+            """
             INSERT INTO guests (
                 tenant_id,
                 full_name,

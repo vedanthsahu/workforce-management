@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
+from psycopg2.extras import RealDictCursor
 
 SOURCE_CHANNELS = {"WEB", "MOBILE", "ADMIN", "API"}
 
@@ -1380,7 +1380,7 @@ def fetch_cancelled_delegated_bookings(
 ):
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            f"""
+            """
             SELECT
                 b.id::text AS booking_id,
                 'BOOKING' AS activity_source,

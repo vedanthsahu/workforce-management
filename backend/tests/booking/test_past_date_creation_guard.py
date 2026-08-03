@@ -55,13 +55,12 @@ class BookSeatPastDateGuardTests(unittest.TestCase):
     def test_rejects_a_past_booking_date(self) -> None:
         with patch(
             "backend.services.booking_service._resolve_booked_for_user",
-        ) as mock_resolve:
-            with self.assertRaises(HTTPException) as context:
-                book_seat(
-                    conn=object(),
-                    current_user=EMPLOYEE_CALLER,
-                    payload=self._payload(YESTERDAY),
-                )
+        ) as mock_resolve, self.assertRaises(HTTPException) as context:
+            book_seat(
+                conn=object(),
+                current_user=EMPLOYEE_CALLER,
+                payload=self._payload(YESTERDAY),
+            )
 
         self.assertEqual(context.exception.status_code, 400)
         self.assertEqual(
@@ -76,13 +75,12 @@ class BookSeatPastDateGuardTests(unittest.TestCase):
         with patch(
             "backend.services.booking_service._resolve_booked_for_user",
             side_effect=HTTPException(status_code=418, detail="reached"),
-        ):
-            with self.assertRaises(HTTPException) as context:
-                book_seat(
-                    conn=FakeConnection(),
-                    current_user=EMPLOYEE_CALLER,
-                    payload=self._payload(TODAY),
-                )
+        ), self.assertRaises(HTTPException) as context:
+            book_seat(
+                conn=FakeConnection(),
+                current_user=EMPLOYEE_CALLER,
+                payload=self._payload(TODAY),
+            )
 
         self.assertEqual(context.exception.status_code, 418)
 
@@ -90,13 +88,12 @@ class BookSeatPastDateGuardTests(unittest.TestCase):
         with patch(
             "backend.services.booking_service._resolve_booked_for_user",
             side_effect=HTTPException(status_code=418, detail="reached"),
-        ):
-            with self.assertRaises(HTTPException) as context:
-                book_seat(
-                    conn=FakeConnection(),
-                    current_user=EMPLOYEE_CALLER,
-                    payload=self._payload(TOMORROW),
-                )
+        ), self.assertRaises(HTTPException) as context:
+            book_seat(
+                conn=FakeConnection(),
+                current_user=EMPLOYEE_CALLER,
+                payload=self._payload(TOMORROW),
+            )
 
         self.assertEqual(context.exception.status_code, 418)
 
@@ -115,13 +112,12 @@ class GuestVisitPastDateGuardTests(unittest.TestCase):
     def test_rejects_a_past_visit_date(self) -> None:
         with patch(
             "backend.services.guest_service._resolve_guest",
-        ) as mock_resolve_guest:
-            with self.assertRaises(HTTPException) as context:
-                create_guest_visit(
-                    conn=object(),
-                    current_user=GUEST_OPERATOR_CALLER,
-                    payload=self._payload(YESTERDAY),
-                )
+        ) as mock_resolve_guest, self.assertRaises(HTTPException) as context:
+            create_guest_visit(
+                conn=object(),
+                current_user=GUEST_OPERATOR_CALLER,
+                payload=self._payload(YESTERDAY),
+            )
 
         self.assertEqual(context.exception.status_code, 400)
         self.assertEqual(context.exception.detail["code"], "visit_date_in_past")
@@ -144,13 +140,12 @@ class GuestVisitPastDateGuardTests(unittest.TestCase):
         with patch(
             "backend.services.guest_service._resolve_guest",
             side_effect=HTTPException(status_code=418, detail="reached"),
-        ):
-            with self.assertRaises(HTTPException) as context:
-                create_guest_visit(
-                    conn=FakeConnection(),
-                    current_user=GUEST_OPERATOR_CALLER,
-                    payload=self._payload(TOMORROW),
-                )
+        ), self.assertRaises(HTTPException) as context:
+            create_guest_visit(
+                conn=FakeConnection(),
+                current_user=GUEST_OPERATOR_CALLER,
+                payload=self._payload(TOMORROW),
+            )
 
         self.assertEqual(context.exception.status_code, 418)
 
@@ -171,13 +166,12 @@ class GuestBookingPastDateGuardTests(unittest.TestCase):
     def test_rejects_a_past_visit_date(self) -> None:
         with patch(
             "backend.services.guest_service._resolve_guest",
-        ) as mock_resolve_guest:
-            with self.assertRaises(HTTPException) as context:
-                create_guest_booking(
-                    conn=object(),
-                    current_user=GUEST_OPERATOR_CALLER,
-                    payload=self._payload(YESTERDAY),
-                )
+        ) as mock_resolve_guest, self.assertRaises(HTTPException) as context:
+            create_guest_booking(
+                conn=object(),
+                current_user=GUEST_OPERATOR_CALLER,
+                payload=self._payload(YESTERDAY),
+            )
 
         self.assertEqual(context.exception.status_code, 400)
         self.assertEqual(context.exception.detail["code"], "visit_date_in_past")
@@ -187,13 +181,12 @@ class GuestBookingPastDateGuardTests(unittest.TestCase):
         with patch(
             "backend.services.guest_service._resolve_guest",
             side_effect=HTTPException(status_code=418, detail="reached"),
-        ):
-            with self.assertRaises(HTTPException) as context:
-                create_guest_booking(
-                    conn=FakeConnection(),
-                    current_user=GUEST_OPERATOR_CALLER,
-                    payload=self._payload(TOMORROW),
-                )
+        ), self.assertRaises(HTTPException) as context:
+            create_guest_booking(
+                conn=FakeConnection(),
+                current_user=GUEST_OPERATOR_CALLER,
+                payload=self._payload(TOMORROW),
+            )
 
         self.assertEqual(context.exception.status_code, 418)
 
