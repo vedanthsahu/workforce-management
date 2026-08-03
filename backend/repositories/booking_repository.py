@@ -11,6 +11,27 @@ from psycopg2.extensions import connection as PGConnection
 SOURCE_CHANNELS = {"WEB", "MOBILE", "ADMIN", "API"}
 
 
+def _apply_seat_and_date_filters(
+    query: str,
+    params: list[Any],
+    *,
+    seat_id: str | None,
+    booking_date: date | None,
+    seat_column: str = "b.seat_id",
+    date_column: str = "b.booking_date",
+) -> tuple[str, list[Any]]:
+    """Append optional seat_id / booking_date equality filters to a WHERE
+    clause already ending in a bookings/guest_visits predicate. Must be
+    called before any ORDER BY is appended to the query."""
+    if seat_id is not None:
+        query += f" AND {seat_column} = %s"
+        params.append(seat_id)
+    if booking_date is not None:
+        query += f" AND {date_column} = %s"
+        params.append(booking_date)
+    return query, params
+
+
 BOOKING_SELECT_FIELDS = """
     'BOOKING' AS activity_source,
     b.id::text AS booking_id,
@@ -133,11 +154,17 @@ def fetch_future_delegated_guest_visits_without_booking(
     *,
     tenant_id: str,
     user_id: str,
+    booking_date: date | None = None,
 ) -> list[dict[str, Any]]:
+
+    date_filter_sql = " AND gv.visit_date = %s" if booking_date is not None else ""
+    params: list[Any] = [tenant_id, user_id]
+    if booking_date is not None:
+        params.append(booking_date)
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
+            f"""
             SELECT
                 NULL::text AS booking_id,
                 'GUEST_VISIT' AS activity_source,
@@ -243,10 +270,11 @@ def fetch_future_delegated_guest_visits_without_booking(
             AND gv.visit_status = 'SCHEDULED'
             AND b.id IS NULL
             AND gv.visit_date > CURRENT_DATE
+            {date_filter_sql}
 
             ORDER BY gv.updated_at DESC
             """,
-            (tenant_id, user_id),
+            params,
         )
 
         rows = cur.fetchall()
@@ -259,11 +287,17 @@ def fetch_current_delegated_guest_visits_without_booking(
     *,
     tenant_id: str,
     user_id: str,
+    booking_date: date | None = None,
 ) -> list[dict[str, Any]]:
+
+    date_filter_sql = " AND gv.visit_date = %s" if booking_date is not None else ""
+    params: list[Any] = [tenant_id, user_id]
+    if booking_date is not None:
+        params.append(booking_date)
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
+            f"""
             SELECT
                 NULL::text AS booking_id,
                 'GUEST_VISIT' AS activity_source,
@@ -371,9 +405,10 @@ def fetch_current_delegated_guest_visits_without_booking(
                 )
             AND b.id IS NULL
             AND gv.visit_date = CURRENT_DATE
+            {date_filter_sql}
             ORDER BY gv.updated_at DESC
             """,
-            (tenant_id, user_id),
+            params,
         )
 
         rows = cur.fetchall()
@@ -386,11 +421,17 @@ def fetch_past_delegated_guest_visits_without_booking(
     *,
     tenant_id: str,
     user_id: str,
+    booking_date: date | None = None,
 ) -> list[dict[str, Any]]:
+
+    date_filter_sql = " AND gv.visit_date = %s" if booking_date is not None else ""
+    params: list[Any] = [tenant_id, user_id]
+    if booking_date is not None:
+        params.append(booking_date)
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
+            f"""
             SELECT
                 NULL::text AS booking_id,
                 'GUEST_VISIT' AS activity_source,
@@ -499,9 +540,10 @@ def fetch_past_delegated_guest_visits_without_booking(
                 )
             AND b.id IS NULL
             AND gv.visit_date < CURRENT_DATE
+            {date_filter_sql}
             ORDER BY gv.updated_at DESC
             """,
-            (tenant_id, user_id),
+            params,
         )
 
         rows = cur.fetchall()
@@ -957,6 +999,67 @@ def guest_has_active_booking_in_range(
         return cur.fetchone() is not None
 
 
+def seat_has_active_booking_in_range(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seat_id: str,
+    start_date: date,
+    end_date: date,
+    exclude_booking_id: str | None = None,
+) -> bool:
+    """Return whether a seat has an active booking overlapping a date range.
+
+    Pass exclude_booking_id when checking eligibility for a booking
+    modification so the booking being modified is not treated as a
+    conflict with itself.
+    """
+    query = """
+        SELECT 1
+        FROM bookings
+        WHERE tenant_id = %s
+          AND seat_id = %s
+          AND booking_date BETWEEN %s AND %s
+          AND booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
+    """
+    params: list[Any] = [tenant_id, seat_id, start_date, end_date]
+
+    if exclude_booking_id is not None:
+        query += " AND id::text <> %s"
+        params.append(exclude_booking_id)
+
+    query += " LIMIT 1"
+
+    with conn.cursor() as cur:
+        cur.execute(query, params)
+        return cur.fetchone() is not None
+
+
+def seat_has_active_block_in_range(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seat_id: str,
+    start_date: date,
+    end_date: date,
+) -> bool:
+    """Return whether a seat has an ACTIVE block overlapping a date range."""
+    query = """
+        SELECT 1
+        FROM blocked_seats
+        WHERE tenant_id = %s
+          AND seat_id = %s
+          AND status = 'ACTIVE'
+          AND blocked_from <= %s
+          AND blocked_to >= %s
+        LIMIT 1
+    """
+
+    with conn.cursor() as cur:
+        cur.execute(query, (tenant_id, seat_id, end_date, start_date))
+        return cur.fetchone() is not None
+
+
 def insert_booking(
     conn: PGConnection,
     *,
@@ -1208,21 +1311,26 @@ def fetch_past_bookings_for_user(
     *,
     tenant_id: str,
     user_id: str,
+    seat_id: str | None = None,
+    booking_date: date | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch bookings for one user within one tenant."""
+    query = f"""
+        SELECT {BOOKING_SELECT_FIELDS}
+        {BOOKING_SELECT_FROM}
+        WHERE b.booked_for_user_id = %s
+          AND b.tenant_id = %s
+          AND b.booking_status = 'CONFIRMED'
+          AND b.booking_date < CURRENT_DATE
+    """
+    params: list[Any] = [user_id, tenant_id]
+    query, params = _apply_seat_and_date_filters(
+        query, params, seat_id=seat_id, booking_date=booking_date,
+    )
+    query += " ORDER BY b.booking_date DESC"
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            f"""
-            SELECT {BOOKING_SELECT_FIELDS}
-            {BOOKING_SELECT_FROM}
-            WHERE b.booked_for_user_id = %s
-              AND b.tenant_id = %s
-              AND b.booking_status = 'CONFIRMED'
-              AND b.booking_date < CURRENT_DATE
-            ORDER BY b.booking_date DESC
-            """,
-            (user_id, tenant_id),
-        )
+        cur.execute(query, params)
         rows = cur.fetchall()
     return [dict(row) for row in rows]
 
@@ -1255,21 +1363,26 @@ def fetch_current_bookings_for_user(
     *,
     tenant_id: str,
     user_id: str,
+    seat_id: str | None = None,
+    booking_date: date | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch bookings for one user within one tenant."""
+    query = f"""
+        SELECT {BOOKING_SELECT_FIELDS}
+        {BOOKING_SELECT_FROM}
+        WHERE b.booked_for_user_id = %s
+          AND b.tenant_id = %s
+          AND b.booking_status = 'CONFIRMED'
+          AND b.booking_date = CURRENT_DATE
+    """
+    params: list[Any] = [user_id, tenant_id]
+    query, params = _apply_seat_and_date_filters(
+        query, params, seat_id=seat_id, booking_date=booking_date,
+    )
+    query += " ORDER BY b.booking_date DESC"
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            f"""
-            SELECT {BOOKING_SELECT_FIELDS}
-            {BOOKING_SELECT_FROM}
-            WHERE b.booked_for_user_id = %s
-              AND b.tenant_id = %s
-              AND b.booking_status = 'CONFIRMED'
-              AND b.booking_date = CURRENT_DATE
-            ORDER BY b.booking_date DESC
-            """,
-            (user_id, tenant_id),
-        )
+        cur.execute(query, params)
         rows = cur.fetchall()
     return [dict(row) for row in rows]
 
@@ -1278,30 +1391,33 @@ def fetch_current_delegated_bookings(
     *,
     tenant_id: str,
     user_id: str,
+    seat_id: str | None = None,
+    booking_date: date | None = None,
 ) -> list[dict[str, Any]]:
 
+    query = f"""
+        SELECT {BOOKING_SELECT_FIELDS}
+        {BOOKING_SELECT_FROM}
+
+        WHERE b.tenant_id = %s
+          AND b.booked_by_user_id = %s
+
+          AND (
+                b.booked_for_guest_id IS NOT NULL
+                OR b.booked_for_user_id <> b.booked_by_user_id
+              )
+
+          AND b.booking_date = CURRENT_DATE
+          AND b.booking_status = 'CONFIRMED'
+    """
+    params: list[Any] = [tenant_id, user_id]
+    query, params = _apply_seat_and_date_filters(
+        query, params, seat_id=seat_id, booking_date=booking_date,
+    )
+    query += " ORDER BY b.updated_at DESC"
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            f"""
-            SELECT {BOOKING_SELECT_FIELDS}
-            {BOOKING_SELECT_FROM}
-
-            WHERE b.tenant_id = %s
-              AND b.booked_by_user_id = %s
-
-              AND (
-                    b.booked_for_guest_id IS NOT NULL
-                    OR b.booked_for_user_id <> b.booked_by_user_id
-                  )
-
-              AND b.booking_date = CURRENT_DATE
-              AND b.booking_status = 'CONFIRMED'
-
-            ORDER BY b.updated_at DESC
-            """,
-            (tenant_id, user_id),
-        )
-
+        cur.execute(query, params)
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
@@ -1311,30 +1427,33 @@ def fetch_future_delegated_bookings(
     *,
     tenant_id: str,
     user_id: str,
+    seat_id: str | None = None,
+    booking_date: date | None = None,
 ) -> list[dict[str, Any]]:
 
+    query = f"""
+        SELECT {BOOKING_SELECT_FIELDS}
+        {BOOKING_SELECT_FROM}
+
+        WHERE b.tenant_id = %s
+          AND b.booked_by_user_id = %s
+
+          AND (
+                b.booked_for_guest_id IS NOT NULL
+                OR b.booked_for_user_id <> b.booked_by_user_id
+              )
+
+          AND b.booking_date > CURRENT_DATE
+          AND b.booking_status = 'CONFIRMED'
+    """
+    params: list[Any] = [tenant_id, user_id]
+    query, params = _apply_seat_and_date_filters(
+        query, params, seat_id=seat_id, booking_date=booking_date,
+    )
+    query += " ORDER BY b.updated_at DESC"
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            f"""
-            SELECT {BOOKING_SELECT_FIELDS}
-            {BOOKING_SELECT_FROM}
-
-            WHERE b.tenant_id = %s
-              AND b.booked_by_user_id = %s
-
-              AND (
-                    b.booked_for_guest_id IS NOT NULL
-                    OR b.booked_for_user_id <> b.booked_by_user_id
-                  )
-
-              AND b.booking_date > CURRENT_DATE
-              AND b.booking_status = 'CONFIRMED'
-
-            ORDER BY b.updated_at DESC
-            """,
-            (tenant_id, user_id),
-        )
-
+        cur.execute(query, params)
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
@@ -1344,30 +1463,33 @@ def fetch_past_delegated_bookings(
     *,
     tenant_id: str,
     user_id: str,
+    seat_id: str | None = None,
+    booking_date: date | None = None,
 ) -> list[dict[str, Any]]:
 
+    query = f"""
+        SELECT {BOOKING_SELECT_FIELDS}
+        {BOOKING_SELECT_FROM}
+
+        WHERE b.tenant_id = %s
+          AND b.booked_by_user_id = %s
+
+          AND (
+                b.booked_for_guest_id IS NOT NULL
+                OR b.booked_for_user_id <> b.booked_by_user_id
+              )
+
+          AND b.booking_date < CURRENT_DATE
+          AND b.booking_status = 'CONFIRMED'
+    """
+    params: list[Any] = [tenant_id, user_id]
+    query, params = _apply_seat_and_date_filters(
+        query, params, seat_id=seat_id, booking_date=booking_date,
+    )
+    query += " ORDER BY b.updated_at DESC"
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            f"""
-            SELECT {BOOKING_SELECT_FIELDS}
-            {BOOKING_SELECT_FROM}
-
-            WHERE b.tenant_id = %s
-              AND b.booked_by_user_id = %s
-
-              AND (
-                    b.booked_for_guest_id IS NOT NULL
-                    OR b.booked_for_user_id <> b.booked_by_user_id
-                  )
-
-              AND b.booking_date < CURRENT_DATE
-              AND b.booking_status = 'CONFIRMED'
-
-            ORDER BY b.updated_at DESC
-            """,
-            (tenant_id, user_id),
-        )
-
+        cur.execute(query, params)
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
@@ -1377,80 +1499,83 @@ def fetch_cancelled_delegated_bookings(
     *,
     tenant_id: str,
     user_id: str,
+    seat_id: str | None = None,
+    booking_date: date | None = None,
 ):
+    query = """
+        SELECT
+            b.id::text AS booking_id,
+            'BOOKING' AS activity_source,
+
+            b.booked_for_user_id::text,
+            NULL::text AS booked_for_guest_id,
+
+            b.booked_by_user_id::text,
+
+            creator.full_name AS booked_by_name,
+            creator.email AS booked_by_email,
+
+            employee.full_name AS booked_for_name,
+            employee.email AS booked_for_email,
+
+            NULL::text AS guest_visit_id,
+
+            b.booking_type,
+
+            b.seat_id::text,
+            b.site_id::text,
+            b.building_id::text,
+            b.floor_id::text,
+
+            s.seat_code,
+            si.site_name,
+            bu.building_name,
+            f.floor_name,
+
+            b.booking_date,
+            b.booking_status,
+
+            b.cancelled_at,
+            b.cancellation_reason,
+
+            b.created_at,
+            b.updated_at
+
+        FROM bookings b
+
+        INNER JOIN app_users employee
+            ON employee.id = b.booked_for_user_id
+        AND employee.tenant_id = b.tenant_id
+
+        LEFT JOIN app_users creator
+            ON creator.id = b.booked_by_user_id
+        AND creator.tenant_id = b.tenant_id
+
+        LEFT JOIN seats s
+            ON s.id = b.seat_id
+
+        LEFT JOIN sites si
+            ON si.id = b.site_id
+
+        LEFT JOIN buildings bu
+            ON bu.id = b.building_id
+
+        LEFT JOIN floors f
+            ON f.id = b.floor_id
+
+        WHERE b.tenant_id = %s
+        AND b.booked_by_user_id = %s
+        AND b.booked_for_user_id <> b.booked_by_user_id
+        AND b.booking_status = 'CANCELLED'
+    """
+    params: list[Any] = [tenant_id, user_id]
+    query, params = _apply_seat_and_date_filters(
+        query, params, seat_id=seat_id, booking_date=booking_date,
+    )
+    query += " ORDER BY b.updated_at DESC"
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            f"""
-            SELECT
-                b.id::text AS booking_id,
-                'BOOKING' AS activity_source,
-
-                b.booked_for_user_id::text,
-                NULL::text AS booked_for_guest_id,
-
-                b.booked_by_user_id::text,
-
-                creator.full_name AS booked_by_name,
-                creator.email AS booked_by_email,
-
-                employee.full_name AS booked_for_name,
-                employee.email AS booked_for_email,
-
-                NULL::text AS guest_visit_id,
-
-                b.booking_type,
-
-                b.seat_id::text,
-                b.site_id::text,
-                b.building_id::text,
-                b.floor_id::text,
-
-                s.seat_code,
-                si.site_name,
-                bu.building_name,
-                f.floor_name,
-
-                b.booking_date,
-                b.booking_status,
-
-                b.cancelled_at,
-                b.cancellation_reason,
-
-                b.created_at,
-                b.updated_at
-
-            FROM bookings b
-
-            INNER JOIN app_users employee
-                ON employee.id = b.booked_for_user_id
-            AND employee.tenant_id = b.tenant_id
-
-            LEFT JOIN app_users creator
-                ON creator.id = b.booked_by_user_id
-            AND creator.tenant_id = b.tenant_id
-
-            LEFT JOIN seats s
-                ON s.id = b.seat_id
-
-            LEFT JOIN sites si
-                ON si.id = b.site_id
-
-            LEFT JOIN buildings bu
-                ON bu.id = b.building_id
-
-            LEFT JOIN floors f
-                ON f.id = b.floor_id
-
-            WHERE b.tenant_id = %s
-            AND b.booked_by_user_id = %s
-            AND b.booked_for_user_id <> b.booked_by_user_id
-            AND b.booking_status = 'CANCELLED'
-
-            ORDER BY b.updated_at DESC
-            """,
-     (tenant_id, user_id),
-        )
-
+        cur.execute(query, params)
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
@@ -1461,20 +1586,25 @@ def fetch_cancelled_bookings_for_user(
     *,
     tenant_id: str,
     user_id: str,
+    seat_id: str | None = None,
+    booking_date: date | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch bookings for one user within one tenant."""
+    query = f"""
+        SELECT {BOOKING_SELECT_FIELDS}
+        {BOOKING_SELECT_FROM}
+        WHERE b.booked_for_user_id = %s
+          AND b.tenant_id = %s
+          AND b.booking_status = 'CANCELLED'
+    """
+    params: list[Any] = [user_id, tenant_id]
+    query, params = _apply_seat_and_date_filters(
+        query, params, seat_id=seat_id, booking_date=booking_date,
+    )
+    query += " ORDER BY b.booking_date DESC"
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            f"""
-            SELECT {BOOKING_SELECT_FIELDS}
-            {BOOKING_SELECT_FROM}
-            WHERE b.booked_for_user_id = %s
-              AND b.tenant_id = %s
-              AND b.booking_status = 'CANCELLED'
-            ORDER BY b.booking_date DESC
-            """,
-            (user_id, tenant_id),
-        )
+        cur.execute(query, params)
         rows = cur.fetchall()
     return [dict(row) for row in rows]
 
@@ -1483,21 +1613,26 @@ def fetch_future_bookings_for_user(
     *,
     tenant_id: str,
     user_id: str,
+    seat_id: str | None = None,
+    booking_date: date | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch bookings for one user within one tenant."""
+    query = f"""
+        SELECT {BOOKING_SELECT_FIELDS}
+        {BOOKING_SELECT_FROM}
+        WHERE b.booked_for_user_id = %s
+          AND b.tenant_id = %s
+          AND b.booking_status = 'CONFIRMED'
+          AND b.booking_date > CURRENT_DATE
+    """
+    params: list[Any] = [user_id, tenant_id]
+    query, params = _apply_seat_and_date_filters(
+        query, params, seat_id=seat_id, booking_date=booking_date,
+    )
+    query += " ORDER BY b.booking_date DESC"
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            f"""
-            SELECT {BOOKING_SELECT_FIELDS}
-            {BOOKING_SELECT_FROM}
-            WHERE b.booked_for_user_id = %s
-              AND b.tenant_id = %s
-              AND b.booking_status = 'CONFIRMED'
-              AND b.booking_date > CURRENT_DATE
-            ORDER BY b.booking_date DESC
-            """,
-            (user_id, tenant_id),
-        )
+        cur.execute(query, params)
         rows = cur.fetchall()
     return [dict(row) for row in rows]
 

@@ -375,3 +375,9 @@ class SeatConfigurationResponse(BaseModel):
     seat_code: str
     status: str
     is_bookable: bool
+
+
+class BulkSeatConfigurationUpdateRequest(SeatConfigurationUpdateRequest):
+    """Payload for applying one configuration to multiple seats at once."""
+
+    seat_ids: list[int] = Field(min_length=1)
