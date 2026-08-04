@@ -281,6 +281,9 @@ class GuestBookingMigrationTests(unittest.TestCase):
             "user_id": "10",
             "role_name": "FACILITATOR",
         }
+        audit_patcher = patch.object(guest_service, "safe_write_audit_log")
+        audit_patcher.start()
+        self.addCleanup(audit_patcher.stop)
 
     def _guest_create_patches(self):
         return (
