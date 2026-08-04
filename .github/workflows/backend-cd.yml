@@ -1,13 +1,13 @@
 name: Backend CD (Deploy to Dev)
 
 on:
-  push:
-    branches: [ "feature/cicd-pipeline-setup" ]
-    paths:
-      - 'backend/**'
-      - 'template.yaml'
-      - 'pyproject.toml'
-      - 'uv.lock'
+  workflow_run:
+    workflows: ["Backend CI"]
+    types:
+      - completed
+    branches: 
+      - "feature/cicd-pipeline-setup"
+      - "dev"
 
 # Ensure permissions are configured for AWS OIDC authentication
 permissions:
