@@ -6,7 +6,6 @@ on:
     types:
       - completed
     branches: 
-      - "feature/cicd-pipeline-setup"
       - "dev"
 
 # Ensure permissions are configured for AWS OIDC authentication
