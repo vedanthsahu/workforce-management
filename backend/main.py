@@ -18,6 +18,7 @@ from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
+
 import structlog
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
