@@ -99,6 +99,9 @@ class GuestWorkflowTests(unittest.TestCase):
             "user_id": "10",
             "role_name": "FACILITATOR",
         }
+        audit_patcher = patch.object(guest_service, "safe_write_audit_log")
+        audit_patcher.start()
+        self.addCleanup(audit_patcher.stop)
 
     def test_schema_does_not_accept_guest_id_and_route_is_registered(self) -> None:
         self.assertNotIn("guest_id", GuestWorkflowRequest.model_fields)
@@ -317,15 +320,6 @@ class GuestWorkflowTests(unittest.TestCase):
             guest_type="VENDOR",
             purpose_of_visit="VENDOR_VISIT",
         )
-        new_booking = _booking(
-            booking_id="201",
-            guest_visit_id="61",
-            seat_id="30",
-            site_id="5",
-            building_id="6",
-            floor_id="7",
-            booking_date=_future_date(20),
-        )
         payload = ModifyGuestVisitRequest(
             host_user_id=21,
             site_id=5,
@@ -363,12 +357,11 @@ class GuestWorkflowTests(unittest.TestCase):
             return_value=new_visit,
         ) as insert_visit, patch.object(
             guest_service,
-            "insert_guest_booking",
-            return_value=new_booking,
-        ) as insert_booking, patch.object(
-            guest_service,
             "update_guest_visit_booking_details",
         ), patch.object(
+            guest_service,
+            "sync_booking_from_guest_visit",
+        ) as sync_booking, patch.object(
             guest_service,
             "recalculate_guest_visit_requires_seat",
         ), patch.object(
@@ -399,16 +392,18 @@ class GuestWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(insert_visit.call_args.kwargs["modified_from_guest_visit_id"], "60")
         self.assertNotIn("modification_reason", insert_visit.call_args.kwargs)
-        self.assertEqual(insert_booking.call_args.kwargs["modified_from_booking_id"], "200")
-        self.assertEqual(insert_booking.call_args.kwargs["guest_visit_id"], "61")
-        self.assertNotIn("modification_reason", insert_booking.call_args.kwargs)
+        self.assertEqual(sync_booking.call_args.kwargs["guest_visit_id"], "60")
+        self.assertEqual(sync_booking.call_args.kwargs["site_id"], "5")
+        self.assertEqual(sync_booking.call_args.kwargs["building_id"], "6")
+        self.assertEqual(sync_booking.call_args.kwargs["floor_id"], "7")
         self.assertEqual(response.guest_visit_id, "61")
-        self.assertEqual(conn.commits, 1)
+        self.assertEqual(conn.commits, 2)
 
     def test_add_booking_uses_existing_visit_as_source_of_truth(self) -> None:
         conn = FakeConnection()
         visit = _visit()
         new_booking = _booking(booking_id="201")
+        payload = _payload(GuestWorkflowAction.ADD_BOOKING)
         with patch.object(
             guest_service,
             "fetch_guest_visit_by_id_for_update",
@@ -447,6 +442,9 @@ class GuestWorkflowTests(unittest.TestCase):
             return_value=new_booking,
         ) as insert_booking, patch.object(
             guest_service,
+            "update_guest_visit_booking_details",
+        ), patch.object(
+            guest_service,
             "recalculate_guest_visit_requires_seat",
         ), patch.object(
             guest_service,
@@ -457,14 +455,14 @@ class GuestWorkflowTests(unittest.TestCase):
                 conn,
                 current_user=self.current_user,
                 guest_visit_id="60",
-                payload=_payload(GuestWorkflowAction.ADD_BOOKING),
+                payload=payload,
             )
 
-        self.assertEqual(resolve_seat.call_args.kwargs["site_id"], "2")
-        self.assertEqual(resolve_seat.call_args.kwargs["floor_id"], "4")
+        self.assertEqual(resolve_seat.call_args.kwargs["site_id"], "5")
+        self.assertEqual(resolve_seat.call_args.kwargs["floor_id"], "7")
         self.assertEqual(
             insert_booking.call_args.kwargs["booking_date"],
-            _visit()["visit_date"],
+            payload.visit_date,
         )
         self.assertEqual(response.guest_visit.guest_visit_id, "60")
         self.assertIsNotNone(response.booking)

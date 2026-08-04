@@ -239,7 +239,7 @@ class SearchTeamMembersRepositoryTests(unittest.TestCase):
         sql, params = cursor.executions[0]
         self.assertIn("WHERE tm_target.user_id = %s", sql)
         self.assertIn("AND u.status = 'ACTIVE'", sql)
-        self.assertEqual(params, ("36", "3", "nagarjuna", "nagarjuna", "nagarjuna", 20))
+        self.assertEqual(params, ("nagarjuna", "36", "3", "nagarjuna", "nagarjuna", 20))
 
     def test_include_inactive_drops_status_filter(self) -> None:
         cursor = FakeCursor(fetchall_result=[])

@@ -73,6 +73,13 @@ def _layout_row(*, layout_id: str = "10", status: str = "DRAFT") -> dict:
 
 
 class DeleteFloorLayoutServiceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        audit_patcher = patch(
+            "backend.services.floor_layout_service.safe_write_audit_log"
+        )
+        audit_patcher.start()
+        self.addCleanup(audit_patcher.stop)
+
     def test_delete_draft_layout_succeeds(self) -> None:
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
