@@ -1,4 +1,4 @@
-"""Console logging helpers for backend diagnostics."""
+"""Structured JSON logging — structlog wrapping stdlib for a single output pipeline."""
 
 from __future__ import annotations
 
@@ -8,34 +8,68 @@ import threading
 from pathlib import Path
 from types import FrameType
 
+import structlog
+
 LOGGER_NAME = "seat_management"
 
 _FUNCTION_TRACE_ENABLED = False
 _TRACE_DEPTH_BY_THREAD: dict[int, int] = {}
 
 
-def configure_console_logging(level_name: str) -> None:
-    """Configure app logs so they are visible in the command window."""
+def configure_logging(level_name: str = "INFO") -> None:
+    """Configure structlog + stdlib logging to emit JSON to stdout.
+
+    All logs — HTTP requests, errors, graph sync, audit events — pass through
+    one processor pipeline and render as JSON for CloudWatch Insights queries.
+    Existing ``logging.getLogger()`` calls need no changes; they automatically
+    produce JSON output via the ProcessorFormatter bridge.
+    """
     level = _resolve_log_level(level_name)
-    formatter = logging.Formatter(
-        fmt="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+
+    # merge_contextvars must be first so request_id (and any other
+    # per-request context bound via bind_contextvars()) appears in every
+    # log entry produced inside that request, regardless of which logger
+    # or module emitted it.
+    shared_processors: list = [
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+    ]
+
+    # Native structlog calls go through shared_processors then wrap for the
+    # ProcessorFormatter bridge before being handled by the stdlib handler.
+    structlog.configure(
+        processors=shared_processors + [
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.BoundLogger,
+        cache_logger_on_first_use=True,
     )
 
-    root_logger = logging.getLogger()
-    if not root_logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(formatter)
-        root_logger.addHandler(handler)
-    else:
-        for handler in root_logger.handlers:
-            handler.setFormatter(formatter)
+    # Renders both native structlog events and foreign stdlib records as JSON.
+    # remove_processors_meta strips the internal bridge key before JSONRenderer.
+    formatter = structlog.stdlib.ProcessorFormatter(
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            structlog.processors.JSONRenderer(),
+        ],
+        foreign_pre_chain=shared_processors,
+    )
 
-    root_logger.setLevel(level)
-    logging.getLogger(LOGGER_NAME).setLevel(level)
-    logging.getLogger("uvicorn").setLevel(level)
-    logging.getLogger("uvicorn.access").setLevel(level)
-    logging.getLogger("uvicorn.error").setLevel(level)
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(formatter)
+
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(level)
+
+    for name in (LOGGER_NAME, "uvicorn", "uvicorn.access", "uvicorn.error"):
+        logging.getLogger(name).setLevel(level)
 
 
 def enable_backend_function_trace() -> None:
@@ -109,6 +143,7 @@ def enable_backend_function_trace() -> None:
     sys.setprofile(trace_calls)
     threading.setprofile(trace_calls)
     logger.warning("Backend function tracing is enabled. Expect very verbose logs.")
+
 
 
 def _resolve_log_level(level_name: str) -> int:

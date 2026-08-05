@@ -133,3 +133,16 @@ node_modules/
 
 package.json
 package-lock.json
+docs.zip
+uv.lock
+docs/Admin-Management-Flow-Reference.docx
+docs/Auth-Data-and-Privacy-Reference.docx
+docs/Backend-Hardening-Review.docx
+docs/Booking-Flow-Reference.docx
+docs/Locations-Layouts-Flow-Reference.docx
+docs/Sign-In-Security-Plan.docx
+docs/Performance-and-Scaling-Upgrades.docx
+docs/SSO-Login-Flow-Reference.docx
+docs/System-Overview.docx
+docs/Teams-Dashboard-Flow-Reference.docx
+uv.lock

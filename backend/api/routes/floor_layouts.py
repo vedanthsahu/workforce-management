@@ -21,6 +21,8 @@ from fastapi import (
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import require_permission
+from backend.core.audit_actions import FLOOR_LAYOUT_UPLOADED
+from backend.repositories.audit_repository import safe_write_audit_log
 from backend.db.connection import get_db
 
 from backend.schemas.floor_layout import (
@@ -77,13 +79,30 @@ def create_floor_layout_route(
     )
 
 
-    return create_floor_layout(
-        conn,
-        current_user=current_user,
-        payload=payload,
-        file=file,
-        background_tasks=background_tasks,
+    try:
+        result = create_floor_layout(
+            conn,
+            current_user=current_user,
+            payload=payload,
+            file=file,
+            background_tasks=background_tasks,
+        )
+    except HTTPException as he:
+        _d = he.detail if isinstance(he.detail, dict) else {}
+        safe_write_audit_log(
+            conn, action=FLOOR_LAYOUT_UPLOADED, tenant_id=str(current_user["tenant_id"]),
+            current_user=current_user, resource_type="floor_layout", resource_id=None,
+            event_status="DENIED" if he.status_code == 403 else "FAILURE",
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
+        )
+        raise
+    safe_write_audit_log(
+        conn, action=FLOOR_LAYOUT_UPLOADED, tenant_id=str(current_user["tenant_id"]),
+        current_user=current_user, resource_type="floor_layout", resource_id=str(result.layout_id),
+        new_values={"layout_name": result.layout_name, "floor_id": str(payload.floor_id), "status": result.status},
     )
+    return result
 
 
 @router.get(
@@ -125,12 +144,13 @@ def activate_floor_layout_route(
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> FloorLayoutResponse:
 
-    return activate_floor_layout(
+    result = activate_floor_layout(
         conn,
         current_user=current_user,
         layout_id=str(layout_id),
         background_tasks=background_tasks,
     )
+    return result
 
 @router.delete(
     "/{layout_id}",
@@ -147,11 +167,12 @@ def delete_floor_layout_route(
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> FloorLayoutResponse:
 
-    return delete_floor_layout(
+    result = delete_floor_layout(
         conn,
         current_user=current_user,
         layout_id=str(layout_id),
     )
+    return result
 
 
 @router.get(

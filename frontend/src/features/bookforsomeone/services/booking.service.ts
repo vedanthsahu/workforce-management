@@ -3,16 +3,13 @@ import {
   Building,
   CreateGuestInput,
   CreateGuestVisitInput,
+  EligibilityResponse,
   Employee,
   Floor,
   Guest,
   GuestVisitResponse,
-  GuestType,
-  PurposeOfVisit,
   Site,
 } from "../types/booking";
-
-export type { CreateGuestInput, CreateGuestVisitInput, GuestVisitResponse };
 
 // ── Users (employee search) ───────────────────────────────────────────────────
 
@@ -170,11 +167,6 @@ export async function createGuestVisit(input: CreateGuestVisitInput): Promise<Gu
 }
 
 // ── Booking Eligibility ─────────────────────────────────────────────────────
-
-interface EligibilityResponse {
-  eligible: boolean;
-  message: string;
-}
 
 export async function checkGuestBookingEligibility(
   guestId: string,

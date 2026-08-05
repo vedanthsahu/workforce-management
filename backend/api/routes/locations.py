@@ -23,13 +23,14 @@ from backend.schemas.booking import AvailableSeatListResponse
 
 from backend.schemas.location import (
     BuildingResponse,
+    BulkLayoutSeatConfigurationUpdateRequest,
+    BulkSeatConfigurationUpdateRequest,
     CreateBuildingRequest,
     CreateFloorRequest,
     CreateSiteRequest,
     FloorResponse,
     SeatConfigurationResponse,
     SeatConfigurationUpdateRequest,
-    SeatResponse,
     SiteDetailsResponse,
     SiteResponse,
     UpdateBuildingRequest,
@@ -49,8 +50,10 @@ from backend.services.location_service import (
     update_building_metadata,
     update_floor_metadata,
     update_seat_configuration_metadata,
+    update_seats_configuration_bulk,
     update_site_metadata,
     update_layout_seat_configuration,
+    update_layout_seat_configurations_bulk,
 )
 
 from backend.services.booking_service import (
@@ -103,11 +106,7 @@ def create_site_route(
         Depends(get_db),
     ],
 ) -> SiteResponse:
-    return create_site(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        payload=payload,
-    )
+    return create_site(conn, tenant_id=str(current_user["tenant_id"]), payload=payload, current_user=current_user)
 @router.get("/sites/{site_id}", response_model=SiteDetailsResponse)
 def site_details(
     site_id: Annotated[int, Path(gt=0)],
@@ -140,12 +139,7 @@ def update_site_route(
         Depends(get_db),
     ],
 ) -> SiteResponse:
-    return update_site_metadata(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        site_id=str(site_id),
-        payload=payload,
-    )
+    return update_site_metadata(conn, tenant_id=str(current_user["tenant_id"]), site_id=str(site_id), payload=payload, current_user=current_user)
 
 
 @router.get("/buildings", response_model=list[BuildingResponse])
@@ -191,11 +185,7 @@ def create_building_route(
         Depends(get_db),
     ],
 ) -> BuildingResponse:
-    return create_building(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        payload=payload,
-    )
+    return create_building(conn, tenant_id=str(current_user["tenant_id"]), payload=payload, current_user=current_user)
 
 
 @router.patch("/buildings/{building_id}", response_model=BuildingResponse)
@@ -211,12 +201,7 @@ def update_building_route(
         Depends(get_db),
     ],
 ) -> BuildingResponse:
-    return update_building_metadata(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        building_id=str(building_id),
-        payload=payload,
-    )
+    return update_building_metadata(conn, tenant_id=str(current_user["tenant_id"]), building_id=str(building_id), payload=payload, current_user=current_user)
 
 
 @router.get(
@@ -302,11 +287,7 @@ def create_floor_route(
         Depends(get_db),
     ],
 ) -> FloorResponse:
-    return create_floor(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        payload=payload,
-    )
+    return create_floor(conn, tenant_id=str(current_user["tenant_id"]), payload=payload, current_user=current_user)
 
 
 @router.patch("/floors/{floor_id}", response_model=FloorResponse)
@@ -322,12 +303,7 @@ def update_floor_route(
         Depends(get_db),
     ],
 ) -> FloorResponse:
-    return update_floor_metadata(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        floor_id=str(floor_id),
-        payload=payload,
-    )
+    return update_floor_metadata(conn, tenant_id=str(current_user["tenant_id"]), floor_id=str(floor_id), payload=payload, current_user=current_user)
 
 
 @router.patch(
@@ -345,12 +321,30 @@ def update_seat_configuration_route(
         PGConnection,
         Depends(get_db),
     ],
-) -> SeatConfigurationResponse:  
-    return update_seat_configuration_metadata(
+) -> SeatConfigurationResponse:
+    return update_seat_configuration_metadata(conn, tenant_id=str(current_user["tenant_id"]), seat_id=str(seat_id), payload=payload, current_user=current_user)
+
+
+@router.patch(
+    "/seats/bulk-configuration",
+    response_model=list[SeatConfigurationResponse],
+)
+def update_seats_bulk_configuration_route(
+    payload: BulkSeatConfigurationUpdateRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_any_permission(["location:manage", "layout:upload"])),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+) -> list[SeatConfigurationResponse]:
+    return update_seats_configuration_bulk(
         conn,
         tenant_id=str(current_user["tenant_id"]),
-        seat_id=str(seat_id),
         payload=payload,
+        current_user=current_user,
     )
 
 
@@ -486,6 +480,29 @@ def update_layout_seat_configuration_route(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         layout_seat_mapping_id=str(layout_seat_mapping_id),
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@router.patch(
+    "/layout-seats/bulk-configuration",
+    response_model=list[LayoutSeatConfigurationResponse],
+)
+def update_layout_seats_bulk_configuration_route(
+    payload: BulkLayoutSeatConfigurationUpdateRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_any_permission(["location:manage", "layout:upload"])),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+) -> list[LayoutSeatConfigurationResponse]:
+    return update_layout_seat_configurations_bulk(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
         payload=payload,
         current_user=current_user,
     )

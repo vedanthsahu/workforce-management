@@ -61,7 +61,7 @@ import {
   UserCheck,
   CalendarSearch,
   History,
-  UserPlus, 
+  UserPlus,
 } from "lucide-react";
 
 import { getInitials, type User } from "@/features/auth/types/auth.types";
@@ -95,47 +95,47 @@ interface NavItem {
 // ─── Route map ────────────────────────────────────────────────────────────────
 
 const ROUTE_MAP: Record<string, string> = {
-  dashboard:   "/dashboard",
-  book:        "/book",
-  mybookings:  "/mybookings",
-  team:        "/book-for-someone",
-  schedule:    "/schedule",
-  find:        "/find",
+  dashboard: "/dashboard",
+  book: "/book",
+  mybookings: "/mybookings",
+  team: "/book-for-someone",
+  schedule: "/schedule",
+  find: "/find",
   notifications: "/notifications",
-  favourites:  "/favourites",
+  favourites: "/favourites",
 
   admin_dashboard: "/dashboard",
-  offices:         "/admin/offices",
-  buildings:       "/admin/building",
-  floors:          "/admin/floors",
-  layouts:         "/admin/layouts",
-  seats:           "/admin/seats",
-  amenities:       "/admin/amenities",
-  seatstatus:      "/admin/seat-status",
-  bookings:        "/admin/bookings",
-  users:           "/admin/users",
-  roles:           "/admin/roles",
-  occupancy:       "/admin/occupancy",
-  utilization:     "/admin/utilization",
-  audit:           "/admin/audit",
-  settings:        "/admin/settings",
+  offices: "/admin/offices",
+  buildings: "/admin/building",
+  floors: "/admin/floors",
+  layouts: "/admin/layouts",
+  seats: "/admin/seats",
+  amenities: "/admin/amenities",
+  seatstatus: "/admin/seat-status",
+  bookings: "/admin/bookings",
+  users: "/admin/users",
+  roles: "/admin/roles",
+  occupancy: "/admin/occupancy",
+  utilization: "/admin/utilization",
+  audit: "/admin/audit",
+  settings: "/admin/settings",
 
   front_office_dashboard: "/dashboard",
-  today_visitors:     "/front_office/today-visitors",
-  checked_in:          "/front_office/checked-in",
-  visitor_search:      "/front_office/visitor-search",
-  past_visits:         "/front_office/past-visits",
-  invite_guest:        "/front_office/invite-guest",
+  today_visitors: "/front_office/today-visitors",
+  checked_in: "/front_office/checked-in",
+  visitor_search: "/front_office/visitor-search",
+  past_visits: "/front_office/past-visits",
+  invite_guest: "/front_office/invite-guest",
 };
 
 // ─── Nav configs ──────────────────────────────────────────────────────────────
 
 const MAIN_NAV: NavItem[] = [
-  { id: "dashboard",  label: "Dashboard",        icon: LayoutDashboard },
-  { id: "book",       label: "Book a seat",       icon: CalendarDays,  permission: "seat:book_self" },
-  { id: "mybookings", label: "My bookings",       icon: BookOpen,      badge: 3, badgeRed: true,   permission: "booking:view_own" },
-  { id: "team",       label: "Book for someone",  icon: Monitor,       badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
-  { id: "schedule",   label: "My schedule",       icon: CalendarCheck, permission: "booking:view_own" },
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "book", label: "Book a seat", icon: CalendarDays, permission: "seat:book_self" },
+  { id: "mybookings", label: "My bookings", icon: BookOpen, badge: 3, badgeRed: true, permission: "booking:view_own" },
+  { id: "team", label: "Book for someone", icon: Monitor, badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
+  { id: "schedule", label: "My schedule", icon: CalendarCheck, permission: "booking:view_own" },
 ];
 
 const OFFICE_NAV: NavItem[] = [
@@ -144,36 +144,36 @@ const OFFICE_NAV: NavItem[] = [
 
 const PERSONAL_NAV: NavItem[] = [
   { id: "notifications", label: "Notifications", icon: Bell, badge: 2, badgeRed: true },
-  { id: "favourites",    label: "Preferences",   icon: Star },
+  { id: "favourites", label: "Preferences", icon: Star },
 ];
 
 const ADMIN_DASHBOARD: NavItem[] = [
   { id: "admin_dashboard", label: "Dashboard", icon: LayoutDashboard },
- 
+
 ];
 
 const ADMIN_MANAGE_NAV: NavItem[] = [
-  { id: "offices",    label: "Offices",       icon: Building2     },
-  { id: "buildings",  label: "Buildings",     icon: Building     },
-  { id: "floors",     label: "Floors",        icon: MapPin        },
-  { id: "layouts",    label: "Floor Layouts", icon: ClipboardList },
-  { id: "seats",      label: "Seats",         icon: CalendarDays  },
-  { id: "amenities",  label: "Amenities",     icon: Star          },
-  { id: "seatstatus", label: "Seat Status",   icon: Settings      },
+  { id: "offices", label: "Offices", icon: Building2 },
+  { id: "buildings", label: "Buildings", icon: Building },
+  { id: "floors", label: "Floors", icon: MapPin },
+  { id: "layouts", label: "Floor Layouts", icon: ClipboardList },
+  { id: "seats", label: "Seats", icon: CalendarDays },
+  { id: "amenities", label: "Amenities", icon: Star },
+  { id: "seatstatus", label: "Seat Status", icon: Settings },
 ];
 
 const ADMIN_OPERATIONS_NAV: NavItem[] = [
-  { id: "bookings",      label: "Bookings",      icon: CalendarDays },
-   { id: "team",       label: "Book for someone",  icon: Monitor,       badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
-  { id: "users",         label: "Users",         icon: Users        },
-  { id: "roles",         label: "Role Management",  icon: ShieldCheck  },
-  { id: "notifications", label: "Notifications", icon: Bell         },
+  { id: "bookings", label: "Bookings", icon: CalendarDays },
+  { id: "team", label: "Book for someone", icon: Monitor, badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
+  { id: "users", label: "Users", icon: Users },
+  { id: "roles", label: "Role Management", icon: ShieldCheck },
+  { id: "notifications", label: "Notifications", icon: Bell },
 ];
 
 const ADMIN_REPORTS_NAV: NavItem[] = [
-  { id: "occupancy",   label: "Occupancy",   icon: BarChart3   },
-  { id: "utilization", label: "Utilization", icon: BarChart3   },
-  { id: "audit",       label: "Audit Logs",  icon: ShieldCheck },
+  { id: "occupancy", label: "Occupancy", icon: BarChart3 },
+  { id: "utilization", label: "Utilization", icon: BarChart3 },
+  { id: "audit", label: "Audit Logs", icon: ShieldCheck },
 ];
 
 const ADMIN_SETTINGS_NAV: NavItem[] = [
@@ -185,10 +185,10 @@ const FRONT_OFFICE_DASHBOARD: NavItem[] = [
 ];
 
 const FRONT_OFFICE_VISITOR_NAV: NavItem[] = [
-  { id: "today_visitors", label: "Today's Visitors",   icon: CalendarCheck },
-  { id: "checked_in",     label: "Checked-in Visitors", icon: UserCheck     },
-  { id: "visitor_search", label: "Visitor Search",      icon: CalendarSearch },
-  { id: "past_visits",    label: "Past Visits",         icon: History       },
+  { id: "today_visitors", label: "Today's Visitors", icon: CalendarCheck },
+  { id: "checked_in", label: "Checked-in Visitors", icon: UserCheck },
+  { id: "visitor_search", label: "Visitor Search", icon: CalendarSearch },
+  { id: "past_visits", label: "Past Visits", icon: History },
 ];
 
 const FRONT_OFFICE_ACTIONS_NAV: NavItem[] = [
@@ -199,20 +199,20 @@ const FRONT_OFFICE_ACTIONS_NAV: NavItem[] = [
 
 const ROLE_LABELS: Record<string, string> = {
   TENANT_ADMIN: "Admin",
-  MANAGER:      "Manager",
-  EMPLOYEE:     "Employee",
-  FACILITATOR:  "Facilitator",
+  MANAGER: "Manager",
+  EMPLOYEE: "Employee",
+  FACILITATOR: "Facilitator",
   FRONT_OFFICE: "Front Office",
-  FACILITIES:   "Facilities",
+  FACILITIES: "Facilities",
 };
 
 const ROLE_BADGE_STYLES: Record<string, string> = {
   TENANT_ADMIN: "bg-rose-50 text-rose-600 ring-rose-200",
-  MANAGER:      "bg-violet-50 text-violet-600 ring-violet-200",
-  EMPLOYEE:     "bg-blue-50 text-blue-600 ring-blue-200",
-  FACILITATOR:  "bg-teal-50 text-teal-600 ring-teal-200",
+  MANAGER: "bg-violet-50 text-violet-600 ring-violet-200",
+  EMPLOYEE: "bg-blue-50 text-blue-600 ring-blue-200",
+  FACILITATOR: "bg-teal-50 text-teal-600 ring-teal-200",
   FRONT_OFFICE: "bg-amber-50 text-amber-600 ring-amber-200",
-  FACILITIES:   "bg-orange-50 text-orange-600 ring-orange-200",
+  FACILITIES: "bg-orange-50 text-orange-600 ring-orange-200",
 };
 
 function getRoleLabel(r: string) { return ROLE_LABELS[r] ?? r; }
@@ -284,7 +284,7 @@ function NavSection({
               {item.badge !== undefined && (
                 <Badge className={cn(
                   "text-[10px] h-[18px] min-w-[18px] px-1.5 rounded-full leading-none font-medium border-0 shrink-0",
-                  item.badgeRed   && "bg-red-500 text-white hover:bg-red-500",
+                  item.badgeRed && "bg-red-500 text-white hover:bg-red-500",
                   item.badgeGreen && "bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
                 )}>
                   {item.badge}
@@ -305,19 +305,19 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ user }: AppSidebarProps) {
-  const router   = useRouter();
+  const router = useRouter();
   const pathname = usePathname();
 
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
 
-  const { state }  = useSidebar();
+  const { state } = useSidebar();
   const { logout } = useAuthContext();
 
   const isCollapsed = state === "collapsed";
 
-  const initials    = user ? resolveInitials(user)    : "?";
+  const initials = user ? resolveInitials(user) : "?";
   const displayName = user ? resolveDisplayName(user) : "Loading...";
-  const displaySub  = user ? resolveSubtitle(user)    : "";
+  const displaySub = user ? resolveSubtitle(user) : "";
 
   const role: AppRole = user?.role ?? "EMPLOYEE";
   const isAdmin = role === "TENANT_ADMIN";
@@ -326,8 +326,8 @@ export function AppSidebar({ user }: AppSidebarProps) {
   const relevantItems = isAdmin
     ? [...ADMIN_DASHBOARD, ...ADMIN_MANAGE_NAV, ...ADMIN_OPERATIONS_NAV, ...ADMIN_REPORTS_NAV, ...ADMIN_SETTINGS_NAV]
     : isSecurity
-    ? [...FRONT_OFFICE_DASHBOARD, ...FRONT_OFFICE_VISITOR_NAV, ...FRONT_OFFICE_ACTIONS_NAV]
-    : [...MAIN_NAV, ...OFFICE_NAV, ...PERSONAL_NAV];
+      ? [...FRONT_OFFICE_DASHBOARD, ...FRONT_OFFICE_VISITOR_NAV, ...FRONT_OFFICE_ACTIONS_NAV]
+      : [...MAIN_NAV, ...OFFICE_NAV, ...PERSONAL_NAV];
 
   const activeItem = relevantItems
     .map((item) => ({ id: item.id, path: ROUTE_MAP[item.id] ?? "" }))
@@ -396,13 +396,13 @@ export function AppSidebar({ user }: AppSidebarProps) {
               <SidebarGroup>
                 <SidebarGroupLabel>Overview</SidebarGroupLabel>
                 <SidebarMenu>
-                  <NavSection items={ADMIN_DASHBOARD}      activeItem={activeItem} onNavigate={handleNav} />
+                  <NavSection items={ADMIN_DASHBOARD} activeItem={activeItem} onNavigate={handleNav} />
                 </SidebarMenu>
               </SidebarGroup>
               <SidebarGroup>
                 <SidebarGroupLabel>Manage</SidebarGroupLabel>
                 <SidebarMenu>
-                  <NavSection items={ADMIN_MANAGE_NAV}     activeItem={activeItem} onNavigate={handleNav} />
+                  <NavSection items={ADMIN_MANAGE_NAV} activeItem={activeItem} onNavigate={handleNav} />
                 </SidebarMenu>
               </SidebarGroup>
               <SidebarGroup>
@@ -414,24 +414,24 @@ export function AppSidebar({ user }: AppSidebarProps) {
               <SidebarGroup>
                 <SidebarGroupLabel>Reports</SidebarGroupLabel>
                 <SidebarMenu>
-                  <NavSection items={ADMIN_REPORTS_NAV}    activeItem={activeItem} onNavigate={handleNav} />
+                  <NavSection items={ADMIN_REPORTS_NAV} activeItem={activeItem} onNavigate={handleNav} />
                 </SidebarMenu>
               </SidebarGroup>
               <SidebarGroup>
                 <SidebarGroupLabel>Settings</SidebarGroupLabel>
                 <SidebarMenu>
-                  <NavSection items={ADMIN_SETTINGS_NAV}   activeItem={activeItem} onNavigate={handleNav} />
+                  <NavSection items={ADMIN_SETTINGS_NAV} activeItem={activeItem} onNavigate={handleNav} />
                 </SidebarMenu>
               </SidebarGroup>
             </>
-          // ) : (
-          //-----------------------security-----------------------------------------------------------------
+            // ) : (
+            //-----------------------security-----------------------------------------------------------------
           ) : isSecurity ? (
             <>
               <SidebarGroup>
                 <SidebarGroupLabel>Overview</SidebarGroupLabel>
                 <SidebarMenu>
-                  <NavSection items={FRONT_OFFICE_DASHBOARD}   activeItem={activeItem} onNavigate={handleNav} />
+                  <NavSection items={FRONT_OFFICE_DASHBOARD} activeItem={activeItem} onNavigate={handleNav} />
                 </SidebarMenu>
               </SidebarGroup>
               <SidebarGroup>
@@ -447,19 +447,19 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 </SidebarMenu>
               </SidebarGroup>
             </>
-          //--------------------------------------------------------------------------------------------------  
+            //--------------------------------------------------------------------------------------------------  
           ) : (
             <>
               <SidebarGroup>
                 <SidebarGroupLabel>Main</SidebarGroupLabel>
                 <SidebarMenu>
-                  <NavSection items={MAIN_NAV}     activeItem={activeItem} onNavigate={handleNav} />
+                  <NavSection items={MAIN_NAV} activeItem={activeItem} onNavigate={handleNav} />
                 </SidebarMenu>
               </SidebarGroup>
               <SidebarGroup>
                 <SidebarGroupLabel>Office</SidebarGroupLabel>
                 <SidebarMenu>
-                  <NavSection items={OFFICE_NAV}   activeItem={activeItem} onNavigate={handleNav} />
+                  <NavSection items={OFFICE_NAV} activeItem={activeItem} onNavigate={handleNav} />
                 </SidebarMenu>
               </SidebarGroup>
               <SidebarGroup>
