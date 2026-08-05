@@ -203,6 +203,15 @@ def fetch_admin_dashboard_summary(
                    AND sf.site_id = st.site_id
                    AND sf.building_id = st.building_id
                    AND sf.status = 'ACTIVE'
+                -- Only seats belonging to the floor's currently published
+                -- layout count toward stats -- seats left over from a
+                -- superseded layout must not inflate total/available counts.
+                INNER JOIN floor_layouts AS sfl
+                    ON sfl.floor_id = st.floor_id
+                   AND sfl.tenant_id = st.tenant_id
+                   AND sfl.is_published = TRUE
+                   AND sfl.status = 'PUBLISHED'
+                   AND sfl.id = st.layout_id
                 WHERE st.tenant_id = %(tenant_id)s
                   AND (
                         %(site_id)s IS NULL
@@ -835,6 +844,15 @@ def fetch_date_range_occupancy(
                    AND fl.site_id = s.site_id
                    AND fl.building_id = s.building_id
                    AND fl.status = 'ACTIVE'
+                -- Only seats belonging to the floor's currently published
+                -- layout count toward occupancy -- seats left over from a
+                -- superseded layout must not inflate total/available counts.
+                INNER JOIN floor_layouts AS pfl
+                    ON pfl.floor_id = s.floor_id
+                   AND pfl.tenant_id = s.tenant_id
+                   AND pfl.is_published = TRUE
+                   AND pfl.status = 'PUBLISHED'
+                   AND pfl.id = s.layout_id
                 WHERE s.tenant_id = %(tenant_id)s
                   AND s.status = 'ACTIVE'
                   AND s.is_bookable = TRUE
