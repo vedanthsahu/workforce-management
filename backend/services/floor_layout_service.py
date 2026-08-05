@@ -20,6 +20,7 @@ from backend.core.app_logging import LOGGER_NAME
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.core.storage import upload_svg_to_s3
 from backend.repositories.floor_layout_repository import (
+    acquire_floor_publish_lock,
     activate_floor_layout as activate_floor_layout_record,
     archive_existing_published_layouts,
     reconcile_published_layout_seats,
@@ -329,6 +330,15 @@ def activate_floor_layout(
             and layout.get("status") == LayoutStatus.PUBLISHED.value
         ):
             return FloorLayoutResponse(**layout)
+
+        # No unique index enforces "one published layout per floor" at the
+        # DB level today -- serialize concurrent activate attempts for
+        # this floor so archive-then-activate can't race with itself.
+        acquire_floor_publish_lock(
+            conn,
+            tenant_id=tenant_id,
+            floor_id=str(layout["floor_id"]),
+        )
 
         archive_existing_published_layouts(
             conn,

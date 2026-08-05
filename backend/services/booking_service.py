@@ -36,6 +36,7 @@ from backend.repositories.audit_repository import (
     write_audit_log,
 )
 from backend.repositories.booking_repository import (
+    acquire_booking_slot_locks,
     fetch_available_seats,
     fetch_available_seats_by_range,
     fetch_admin_bookings,
@@ -471,6 +472,19 @@ def book_seat(
                     "message": "The requested seat is not bookable.",
                 },
             )
+
+        # No DB constraint backstops "one active booking per seat/user per
+        # day" today -- serialize concurrent attempts for this exact
+        # (seat, date) and (user, date) pair so the checks below and the
+        # insert that follows can't race with another request.
+        acquire_booking_slot_locks(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+            subject_id=booked_for_user_id,
+            booking_date=payload.booking_date,
+        )
+
         if user_has_active_booking_on_date(
             conn,
             tenant_id=tenant_id,
@@ -1139,6 +1153,17 @@ def modify_booking(
                     "message": "The requested seat is not bookable.",
                 },
             )
+
+        # Same race as book_seat(): serialize on the target (seat, date)
+        # and (user, date) before checking for conflicts and inserting the
+        # replacement booking.
+        acquire_booking_slot_locks(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+            subject_id=str(booked_for_user_id),
+            booking_date=payload.booking_date,
+        )
 
         if user_has_active_booking_on_date(
             conn,
@@ -1877,6 +1902,7 @@ payload: BookingEligibilityRequest,
             conn,
             tenant_id=tenant_id,
             seat_id=str(payload.seat_id),
+            require_current_layout=True,
         )
         if seat is None:
             raise HTTPException(

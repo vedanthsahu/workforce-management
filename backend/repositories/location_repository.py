@@ -11,6 +11,22 @@ from psycopg2.extras import Json
 
 from backend.core.enums import NON_DELETED_LAYOUT_STATUSES
 
+# A seat only counts toward these admin aggregates if it belongs to its
+# floor's currently published layout -- seats left over from a superseded
+# layout (retired or not) must never inflate seat_count/active_seat_count/
+# bookable_seat_count. Every `seat_counts` LATERAL below correlates on the
+# seat alias `st`, so this fragment is safe to splice into any of them.
+_SEAT_IN_PUBLISHED_LAYOUT_SQL = """
+              AND st.layout_id = (
+                  SELECT id
+                  FROM floor_layouts
+                  WHERE floor_id = st.floor_id
+                    AND tenant_id = st.tenant_id
+                    AND is_published = TRUE
+                    AND status = 'PUBLISHED'
+              )"""
+
+
 def fetch_sites(
     conn: PGConnection,
     *,
@@ -21,7 +37,7 @@ def fetch_sites(
     status_filter: str | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch tenant-scoped sites with additive admin aggregate fields."""
-    query = """
+    query = f"""
         SELECT
             s.id::text AS site_id,
             s.site_code,
@@ -61,6 +77,7 @@ def fetch_sites(
             FROM seats AS st
             WHERE st.tenant_id = s.tenant_id
               AND st.site_id = s.id
+              {_SEAT_IN_PUBLISHED_LAYOUT_SQL}
         ) AS seat_counts ON TRUE
         WHERE s.tenant_id = %s
     """
@@ -92,7 +109,7 @@ def fetch_buildings_by_site(
     status_filter: str | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch buildings under one active tenant-scoped site."""
-    query = """
+    query = f"""
         SELECT
             b.id::text AS building_id,
             b.site_id::text AS site_id,
@@ -125,6 +142,7 @@ def fetch_buildings_by_site(
             FROM seats AS st
             WHERE st.tenant_id = b.tenant_id
               AND st.building_id = b.id
+              {_SEAT_IN_PUBLISHED_LAYOUT_SQL}
         ) AS seat_counts ON TRUE
         WHERE b.tenant_id = %s
     """
@@ -162,7 +180,7 @@ def fetch_floors_by_building(
     status_filter: str | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch floors under given building for one tenant-scoped site."""
-    query = """
+    query = f"""
         SELECT
             f.id::text AS floor_id,
             f.site_id::text AS site_id,
@@ -201,6 +219,7 @@ def fetch_floors_by_building(
             FROM seats AS st
             WHERE st.tenant_id = f.tenant_id
               AND st.floor_id = f.id
+              {_SEAT_IN_PUBLISHED_LAYOUT_SQL}
         ) AS seat_counts ON TRUE
         LEFT JOIN LATERAL (
             SELECT
@@ -280,7 +299,7 @@ def fetch_site_by_id(
     """Fetch one tenant-scoped site with aggregate counts."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
+            f"""
             SELECT
                 s.id::text AS site_id,
                 s.site_code,
@@ -320,6 +339,7 @@ def fetch_site_by_id(
                 FROM seats AS st
                 WHERE st.tenant_id = s.tenant_id
                   AND st.site_id = s.id
+                  {_SEAT_IN_PUBLISHED_LAYOUT_SQL}
             ) AS seat_counts ON TRUE
             WHERE s.tenant_id = %s
               AND s.id = %s
@@ -460,7 +480,7 @@ def fetch_building_by_id(
     """Fetch one tenant-scoped building with aggregate counts."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
+            f"""
             SELECT
                 b.id::text AS building_id,
                 b.site_id::text AS site_id,
@@ -493,6 +513,7 @@ def fetch_building_by_id(
                 FROM seats AS st
                 WHERE st.tenant_id = b.tenant_id
                   AND st.building_id = b.id
+                  {_SEAT_IN_PUBLISHED_LAYOUT_SQL}
             ) AS seat_counts ON TRUE
             WHERE b.tenant_id = %s
               AND b.id = %s
@@ -637,7 +658,7 @@ def fetch_floor_by_id(
     """Fetch one tenant-scoped floor with aggregate counts."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
+            f"""
             SELECT
                 f.id::text AS floor_id,
                 f.site_id::text AS site_id,
@@ -674,6 +695,7 @@ def fetch_floor_by_id(
                 FROM seats AS st
                 WHERE st.tenant_id = f.tenant_id
                   AND st.floor_id = f.id
+                  {_SEAT_IN_PUBLISHED_LAYOUT_SQL}
             ) AS seat_counts ON TRUE
             LEFT JOIN LATERAL (
                 SELECT
@@ -1148,25 +1170,43 @@ def fetch_seat_configuration(
     *,
     tenant_id: str,
     seat_id: str,
+    require_current_layout: bool = False,
 ) -> dict[str, Any] | None:
-    """Fetch one tenant-scoped seat for configuration updates."""
+    """Fetch one tenant-scoped seat for configuration updates.
+
+    Admin seat-configuration callers intentionally leave
+    ``require_current_layout`` False -- they must still be able to find and
+    fix a seat left over from a superseded layout. Callers validating
+    booking-time eligibility should pass True so a stale seat is treated as
+    not found, matching the booking/availability queries.
+    """
+    query = """
+        SELECT
+            id::text AS seat_id,
+            site_id::text AS site_id,
+            building_id::text AS building_id,
+            floor_id::text AS floor_id,
+            seat_code,
+            status,
+            is_bookable
+        FROM seats
+        WHERE tenant_id = %s
+          AND id = %s
+    """
+    if require_current_layout:
+        query += """
+          AND layout_id = (
+              SELECT id
+              FROM floor_layouts
+              WHERE floor_id = seats.floor_id
+                AND tenant_id = seats.tenant_id
+                AND is_published = TRUE
+                AND status = 'PUBLISHED'
+          )
+        """
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            """
-            SELECT
-                id::text AS seat_id,
-                site_id::text AS site_id,
-                building_id::text AS building_id,
-                floor_id::text AS floor_id,
-                seat_code,
-                status,
-                is_bookable
-            FROM seats
-            WHERE tenant_id = %s
-              AND id = %s
-            """,
-            (tenant_id, seat_id),
-        )
+        cur.execute(query, (tenant_id, seat_id))
         row = cur.fetchone()
     return dict(row) if row else None
 
@@ -1328,13 +1368,25 @@ def fetch_seats_by_floor(
                    AND s.tenant_id = f.tenant_id
                    AND s.site_id = f.site_id
                    AND s.building_id = f.building_id
+                   AND f.status = 'ACTIVE'
                 JOIN buildings AS b
                     ON f.building_id = b.id
                    AND f.tenant_id = b.tenant_id
                    AND f.site_id = b.site_id
+                   AND b.status = 'ACTIVE'
                 JOIN sites AS si
                     ON b.site_id = si.id
                    AND b.tenant_id = si.tenant_id
+                   AND si.status = 'ACTIVE'
+                -- Only seats belonging to the floor's currently published
+                -- layout are shown -- everything else is a stale/orphaned
+                -- row left over from a superseded layout.
+                JOIN floor_layouts AS fl
+                    ON fl.floor_id = s.floor_id
+                   AND fl.tenant_id = s.tenant_id
+                   AND fl.is_published = TRUE
+                   AND fl.status = 'PUBLISHED'
+                   AND fl.id = s.layout_id
                 CROSS JOIN requested_count AS rc
                 LEFT JOIN booked_seats AS bs
                     ON bs.seat_id = s.id

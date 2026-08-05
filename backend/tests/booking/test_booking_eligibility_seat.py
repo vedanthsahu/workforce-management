@@ -94,6 +94,31 @@ class BookingEligibilitySeatTests(unittest.TestCase):
         result = self._run(_payload())
         self.assertTrue(result.eligible)
 
+    def test_seat_lookup_requires_current_published_layout(self) -> None:
+        """A seat left over from a superseded layout must be treated as
+        not-found here, same as the booking-creation path."""
+        with patch(
+            "backend.services.booking_service._resolve_booked_for_user",
+            return_value={"user_id": "7"},
+        ), patch(
+            "backend.services.booking_service.user_has_active_booking_in_range",
+            return_value=False,
+        ), patch(
+            "backend.services.booking_service.fetch_seat_configuration",
+            return_value=dict(ACTIVE_BOOKABLE_SEAT),
+        ) as mock_fetch_seat, patch(
+            "backend.services.booking_service.seat_has_active_block_in_range",
+            return_value=False,
+        ), patch(
+            "backend.services.booking_service.seat_has_active_booking_in_range",
+            return_value=False,
+        ):
+            check_booking_eligibility(
+                conn=object(), tenant_id="1", current_user=CALLER, payload=_payload(),
+            )
+
+        self.assertTrue(mock_fetch_seat.call_args.kwargs["require_current_layout"])
+
     def test_seat_not_found_raises_404(self) -> None:
         with self.assertRaises(HTTPException) as context:
             self._run(

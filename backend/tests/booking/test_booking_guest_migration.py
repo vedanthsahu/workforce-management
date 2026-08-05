@@ -236,6 +236,9 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
             },
         ), patch.object(
             booking_service,
+            "acquire_booking_slot_locks",
+        ), patch.object(
+            booking_service,
             "user_has_active_booking_on_date",
             return_value=False,
         ), patch.object(
@@ -307,6 +310,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
                     "is_bookable": True,
                 },
             ),
+            patch.object(guest_service, "acquire_booking_slot_locks"),
         )
 
     def test_guest_permission_failure(self) -> None:
@@ -383,8 +387,8 @@ class GuestBookingMigrationTests(unittest.TestCase):
 
     def test_guest_booking_creation_is_atomic(self) -> None:
         conn = FakeConnection()
-        guest_patch, host_patch, seat_patch = self._guest_create_patches()
-        with guest_patch, host_patch, seat_patch, patch.object(
+        guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
+        with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
             guest_service,
             "guest_has_active_booking_on_date",
             return_value=False,
@@ -418,8 +422,8 @@ class GuestBookingMigrationTests(unittest.TestCase):
 
     def test_guest_visit_insert_failure_rolls_back_before_booking(self) -> None:
         conn = FakeConnection()
-        guest_patch, host_patch, seat_patch = self._guest_create_patches()
-        with guest_patch, host_patch, seat_patch, patch.object(
+        guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
+        with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
             guest_service,
             "guest_has_active_booking_on_date",
             return_value=False,
@@ -448,8 +452,8 @@ class GuestBookingMigrationTests(unittest.TestCase):
 
     def test_guest_booking_insert_failure_rolls_back_visit(self) -> None:
         conn = FakeConnection()
-        guest_patch, host_patch, seat_patch = self._guest_create_patches()
-        with guest_patch, host_patch, seat_patch, patch.object(
+        guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
+        with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
             guest_service,
             "guest_has_active_booking_on_date",
             return_value=False,
@@ -481,8 +485,8 @@ class GuestBookingMigrationTests(unittest.TestCase):
 
     def test_guest_conflict_prevents_inserts(self) -> None:
         conn = FakeConnection()
-        guest_patch, host_patch, seat_patch = self._guest_create_patches()
-        with guest_patch, host_patch, seat_patch, patch.object(
+        guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
+        with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
             guest_service,
             "guest_has_active_booking_on_date",
             return_value=True,
@@ -506,8 +510,8 @@ class GuestBookingMigrationTests(unittest.TestCase):
 
     def test_seat_conflict_prevents_inserts(self) -> None:
         conn = FakeConnection()
-        guest_patch, host_patch, seat_patch = self._guest_create_patches()
-        with guest_patch, host_patch, seat_patch, patch.object(
+        guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
+        with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
             guest_service,
             "guest_has_active_booking_on_date",
             return_value=False,
@@ -610,6 +614,9 @@ class GuestBookingMigrationTests(unittest.TestCase):
                 "status": "ACTIVE",
                 "is_bookable": True,
             },
+        ), patch.object(
+            guest_service,
+            "acquire_booking_slot_locks",
         ), patch.object(
             guest_service,
             "guest_has_active_booking_on_date",
