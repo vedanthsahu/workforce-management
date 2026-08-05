@@ -285,5 +285,6 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
       </Card>
 
     </div>
+    
   );
 }
