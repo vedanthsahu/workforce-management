@@ -526,7 +526,7 @@ export default function BookingManagementFilters({
                               b.person_type === "Guest" ? "bg-violet-100 text-violet-700" : "bg-indigo-100 text-indigo-700"
                             }`}
                           >
-                            {b.person_type === "Guest" ? "GV" : initialsOf(b.person_name)}
+                            {initialsOf(b.person_name)}
                           </span>
                           <span className="flex-1 min-w-0">
                             <p className="text-[13px] font-medium text-gray-800 truncate">{b.person_name}</p>

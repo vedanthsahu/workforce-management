@@ -184,6 +184,21 @@ export function useBookingForm() {
     hasAnyParam ? stepFromUrl : 1
   );
 
+  // Frozen snapshot of the original booking being modified, captured once at
+  // mount (a lazy useState initializer runs exactly once, unlike reading
+  // straight from searchParams — those get rewritten on every step
+  // transition since navigateTo/buildUrl replace the whole query string).
+  // Used below to gate "proceed" on modify screens so a no-op modification
+  // (same site/building/floor/date/seat as before) can't be submitted.
+  const [originalBooking] = useState(() => ({
+    siteName:     prefillLocationName,
+    buildingName: prefillBuildingName,
+    floorName:    prefillFloorName,
+    fromDate:     prefillFromDate,
+    toDate:       prefillToDate,
+    seatId:       searchParams.get("seatId"),
+  }));
+
   const [sites,                setSites]                = useState<Site[]>([]);
   const [buildings,            setBuildings]            = useState<Building[]>([]);
   const [floors,               setFloors]               = useState<Floor[]>([]);
@@ -732,6 +747,18 @@ export function useBookingForm() {
     !!form.fromDate   &&
     !!form.toDate;
 
+  // Only meaningful in modify mode — true once the seat, date, or location
+  // differs from the original booking. Gates the review/confirm actions so
+  // a no-op "modification" (nothing actually changed) can't be submitted.
+  const hasBookingChanges =
+    !isModifyMode ||
+    (selectedSite?.name     ?? null) !== originalBooking.siteName     ||
+    (selectedBuilding?.name ?? null) !== originalBooking.buildingName ||
+    (selectedFloor?.name    ?? null) !== originalBooking.floorName    ||
+    form.fromDate       !== originalBooking.fromDate ||
+    form.toDate         !== originalBooking.toDate   ||
+    form.selectedSeatId !== originalBooking.seatId;
+
   return {
     step,
     form,
@@ -754,6 +781,7 @@ export function useBookingForm() {
     selectedSeat,
     dayCount,
     step1Valid,
+    hasBookingChanges,
     isModifyMode,
     isAdminFlow,
     isBookingForSomeone,

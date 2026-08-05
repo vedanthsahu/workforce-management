@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { useBookingForm, useSiteBuildingOptions } from "../hooks/useBooking";
-import type { BookingType } from "../types/booking";
+import type { BookingType, VisitDetails } from "../types/booking";
 import { checkGuestBookingEligibility } from "../services/booking.service";
 import { fetchEmployeeWorkPreferences } from "@/features/book/services/Bookingform.service";
 import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
@@ -61,6 +61,11 @@ const currentUserId = data?.user.user_id;
   // booking:book_for_* permissions) still land on My Bookings as before.
   const isAdminFlow = searchParams.get("adminFlow") === "true" || hasRole("TENANT_ADMIN");
   const prefillApplied = useRef(false);
+  // Frozen snapshot of the visit's original details, captured once when the
+  // editVisitId prefill applies — compared against the live visitDetails
+  // below to gate "Continue" so a no-op edit (nothing actually changed)
+  // can't be submitted.
+  const originalVisitDetailsRef = useRef<VisitDetails | null>(null);
 
   // The wizard's formState lives in a module-level Zustand store so browser
   // Back can restore it mid-flow — but that also means a stale step/selection
@@ -96,25 +101,28 @@ const currentUserId = data?.user.user_id;
     const buildingId     = searchParams.get("buildingId") ?? "";
     const floorId        = searchParams.get("floorId") ?? "";
 
+    const prefilledVisitDetails: VisitDetails = {
+      guestType: (guestType || "INTERVIEW_CANDIDATE") as any,
+      purposeOfVisit: (purposeOfVisit || "INTERVIEW") as any,
+      hostEmployee: hostName ? { id: hostUserId, name: hostName, email: "", role: "", status: "ACTIVE" } : null,
+      siteId,
+      buildingId,
+      floorId,
+      visitDate,
+      endDate,
+      startTime,
+      endTime,
+      additionalNotes: "",
+    };
+    originalVisitDetailsRef.current = prefilledVisitDetails;
+
     setFormState(() => ({
       step: 2,
       bookingType: "visitor",
       selectedEmployee: null,
       selectedGuest: guestName ? { id: "", fullName: guestName, email: guestEmail } : null,
       seatRequired: null,
-      visitDetails: {
-        guestType: (guestType || "INTERVIEW_CANDIDATE") as any,
-        purposeOfVisit: (purposeOfVisit || "INTERVIEW") as any,
-        hostEmployee: hostName ? { id: hostUserId, name: hostName, email: "", role: "", status: "ACTIVE" } : null,
-        siteId,
-        buildingId,
-        floorId,
-        visitDate,
-        endDate,
-        startTime,
-        endTime,
-        additionalNotes: "",
-      },
+      visitDetails: prefilledVisitDetails,
     }));
   }, [editVisitId]);
 
@@ -235,14 +243,37 @@ const currentUserId = data?.user.user_id;
   const displayStep =
     bookingType === "visitor" && step === 4 ? 5 : isSuccessStep ? steps.length + 1 : step;
 
+  // Only meaningful when editing an existing visit — true once host, date,
+  // location, or any other visit detail differs from the original.
+  const hasVisitChanges = (() => {
+    if (!editVisitId) return true;
+    const orig = originalVisitDetailsRef.current;
+    if (!orig) return false;
+    return (
+      (visitDetails.hostEmployee?.id ?? "") !== (orig.hostEmployee?.id ?? "") ||
+      visitDetails.siteId          !== orig.siteId          ||
+      visitDetails.buildingId      !== orig.buildingId      ||
+      visitDetails.floorId         !== orig.floorId          ||
+      visitDetails.visitDate       !== orig.visitDate        ||
+      visitDetails.endDate         !== orig.endDate          ||
+      visitDetails.startTime       !== orig.startTime        ||
+      visitDetails.endTime         !== orig.endTime          ||
+      visitDetails.guestType       !== orig.guestType        ||
+      visitDetails.purposeOfVisit  !== orig.purposeOfVisit   ||
+      visitDetails.additionalNotes !== orig.additionalNotes
+    );
+  })();
+
+  const visitDetailsRequiredFilled =
+    !!visitDetails.hostEmployee && !!visitDetails.visitDate && !!visitDetails.endDate && !!visitDetails.siteId && !!visitDetails.buildingId && !!visitDetails.floorId;
+
   let canContinue = true;
   if (bookingType === "internal") {
     if (step === 1) canContinue = !!selectedEmployee;
   } else {
     if (step === 1) canContinue = !!selectedGuest;
     if (step === 2)
-      canContinue =
-        !!visitDetails.hostEmployee && !!visitDetails.visitDate && !!visitDetails.endDate && !!visitDetails.siteId && !!visitDetails.buildingId && !!visitDetails.floorId && !checkingEligibility;
+      canContinue = visitDetailsRequiredFilled && !checkingEligibility && hasVisitChanges;
     if (step === 3) canContinue = seatRequired !== null;
     if (step === 4) canContinue = !(isSubmitting || editSubmitting);
   }
@@ -260,7 +291,9 @@ const currentUserId = data?.user.user_id;
   const infoText =
     (bookingType === "internal" && step === 1) || (bookingType === "visitor" && step === 3 && seatRequired === "yes")
       ? `After clicking "${submitLabel}", you will continue in the existing booking flow to select workspace, date, preferences and choose a seat.`
-      : editError ?? submitError;
+      : (editVisitId && bookingType === "visitor" && step === 2 && visitDetailsRequiredFilled && !hasVisitChanges)
+        ? "Change the host, date, location, or another detail to save changes."
+        : editError ?? submitError;
 
   const handlePrimaryAction = async () => {
     if (bookingType === "internal" && step === 1) {
