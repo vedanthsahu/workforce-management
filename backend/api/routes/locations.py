@@ -23,6 +23,7 @@ from backend.schemas.booking import AvailableSeatListResponse
 
 from backend.schemas.location import (
     BuildingResponse,
+    BulkLayoutSeatConfigurationUpdateRequest,
     BulkSeatConfigurationUpdateRequest,
     CreateBuildingRequest,
     CreateFloorRequest,
@@ -52,6 +53,7 @@ from backend.services.location_service import (
     update_seats_configuration_bulk,
     update_site_metadata,
     update_layout_seat_configuration,
+    update_layout_seat_configurations_bulk,
 )
 
 from backend.services.booking_service import (
@@ -478,6 +480,29 @@ def update_layout_seat_configuration_route(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         layout_seat_mapping_id=str(layout_seat_mapping_id),
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@router.patch(
+    "/layout-seats/bulk-configuration",
+    response_model=list[LayoutSeatConfigurationResponse],
+)
+def update_layout_seats_bulk_configuration_route(
+    payload: BulkLayoutSeatConfigurationUpdateRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_any_permission(["location:manage", "layout:upload"])),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+) -> list[LayoutSeatConfigurationResponse]:
+    return update_layout_seat_configurations_bulk(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
         payload=payload,
         current_user=current_user,
     )

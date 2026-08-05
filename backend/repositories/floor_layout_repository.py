@@ -15,6 +15,33 @@ from backend.repositories.location_repository import (
     replace_seat_amenities,
 )
 
+# Distinct advisory-lock class from the booking locks in
+# booking_repository.py (1=seat/date, 2=subject/date) so the two lock
+# families can never collide with each other's hashed key.
+_FLOOR_PUBLISH_LOCK_CLASS = 3
+
+
+def acquire_floor_publish_lock(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+) -> None:
+    """Serialize concurrent publish/activate attempts for the same floor.
+
+    No unique index enforces "at most one PUBLISHED layout per floor" at
+    the database level today, so two concurrent activate requests could
+    otherwise both archive-then-activate and leave two floor_layouts rows
+    marked PUBLISHED for the same floor. Advisory lock, same rationale as
+    acquire_booking_slot_locks: no schema change, no special privilege.
+    """
+    key = f"{tenant_id}:floor:{floor_id}"
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT pg_advisory_xact_lock(%s::int, hashtext(%s))",
+            (_FLOOR_PUBLISH_LOCK_CLASS, key),
+        )
+
 FLOOR_LAYOUT_SELECT_FIELDS = """
     fl.id::text AS layout_id,
     fl.tenant_id::text AS tenant_id,
@@ -554,6 +581,17 @@ def reconcile_published_layout_seats(
                 (
                     EXISTS (SELECT 1 FROM bookings b WHERE b.seat_id = s.id)
                     OR EXISTS (SELECT 1 FROM blocked_seats bl WHERE bl.seat_id = s.id)
+                    -- A seat that was only ever configured/audited (never
+                    -- booked or blocked) must still be retired, not hard
+                    -- deleted -- otherwise its audit_logs rows become
+                    -- unverifiable references to a seat that no longer
+                    -- exists anywhere.
+                    OR EXISTS (
+                        SELECT 1 FROM audit_logs al
+                        WHERE al.tenant_id = s.tenant_id
+                          AND al.entity_type = 'seat'
+                          AND al.entity_id = s.id::text
+                    )
                 ) AS has_history
             FROM seats AS s
             WHERE s.tenant_id = %s

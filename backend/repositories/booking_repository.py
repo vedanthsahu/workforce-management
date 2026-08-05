@@ -10,6 +10,49 @@ from psycopg2.extensions import connection as PGConnection
 
 SOURCE_CHANNELS = {"WEB", "MOBILE", "ADMIN", "API"}
 
+# Advisory-lock "classes" (the first key of the two-key lock) keep
+# different kinds of locks from colliding with each other's hashed second
+# key. Keep these numbers stable -- changing them changes what a running
+# transaction is actually serialized against.
+_SEAT_DATE_LOCK_CLASS = 1
+_SUBJECT_DATE_LOCK_CLASS = 2
+
+
+def acquire_booking_slot_locks(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seat_id: str,
+    subject_id: str,
+    booking_date: date,
+) -> None:
+    """Serialize concurrent booking attempts for the same seat+date and the
+    same subject (employee or guest)+date within this transaction.
+
+    No unique/exclusion constraint enforces either of these at the
+    database level today, so two concurrent requests can otherwise both
+    pass the check-then-insert conflict check before either commits.
+    pg_advisory_xact_lock closes that race without any schema change: it's
+    a plain function call any role that can already INSERT/SELECT is
+    allowed to use, scoped to the current transaction, and released
+    automatically on commit or rollback.
+
+    Callers must acquire the seat lock before the subject lock, always in
+    that order, so two transactions racing for different (seat, subject)
+    pairs can never deadlock on each other.
+    """
+    seat_key = f"{tenant_id}:seat:{seat_id}:{booking_date.isoformat()}"
+    subject_key = f"{tenant_id}:subject:{subject_id}:{booking_date.isoformat()}"
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT pg_advisory_xact_lock(%s::int, hashtext(%s))",
+            (_SEAT_DATE_LOCK_CLASS, seat_key),
+        )
+        cur.execute(
+            "SELECT pg_advisory_xact_lock(%s::int, hashtext(%s))",
+            (_SUBJECT_DATE_LOCK_CLASS, subject_key),
+        )
+
 
 def _apply_seat_and_date_filters(
     query: str,
@@ -757,14 +800,27 @@ def fetch_seat_for_booking(
             JOIN sites si
                 ON si.id = s.site_id
             AND si.tenant_id = s.tenant_id
+            AND si.status = 'ACTIVE'
 
             JOIN buildings bu
                 ON bu.id = s.building_id
             AND bu.tenant_id = s.tenant_id
+            AND bu.status = 'ACTIVE'
 
             JOIN floors f
                 ON f.id = s.floor_id
             AND f.tenant_id = s.tenant_id
+            AND f.status = 'ACTIVE'
+
+            -- A seat is only bookable if it belongs to the floor's
+            -- currently published layout. Seats left over from a
+            -- superseded layout (retired or not) must never match here.
+            JOIN floor_layouts fl
+                ON fl.floor_id = s.floor_id
+            AND fl.tenant_id = s.tenant_id
+            AND fl.is_published = TRUE
+            AND fl.status = 'PUBLISHED'
+            AND fl.id = s.layout_id
 
             WHERE s.id = %s
             AND s.floor_id = %s
@@ -1681,6 +1737,29 @@ def fetch_available_seats_by_range(
                     rd.booking_date
                 FROM seats s
                 CROSS JOIN requested_dates rd
+
+                -- Only seats belonging to the floor's currently published
+                -- layout, on an active site/building/floor, are ever
+                -- eligible -- everything else is a stale/orphaned row.
+                INNER JOIN floor_layouts fl
+                    ON fl.floor_id = s.floor_id
+                   AND fl.tenant_id = s.tenant_id
+                   AND fl.is_published = TRUE
+                   AND fl.status = 'PUBLISHED'
+                   AND fl.id = s.layout_id
+                INNER JOIN floors flr
+                    ON flr.id = s.floor_id
+                   AND flr.tenant_id = s.tenant_id
+                   AND flr.status = 'ACTIVE'
+                INNER JOIN buildings bldg
+                    ON bldg.id = s.building_id
+                   AND bldg.tenant_id = s.tenant_id
+                   AND bldg.status = 'ACTIVE'
+                INNER JOIN sites st
+                    ON st.id = s.site_id
+                   AND st.tenant_id = s.tenant_id
+                   AND st.status = 'ACTIVE'
+
                 WHERE s.tenant_id = %s
                   AND s.floor_id = %s
             ),
@@ -2108,6 +2187,26 @@ def fetch_available_seats(
                     ON bls.seat_id = s.id
                 LEFT JOIN amenity_matches AS am
                     ON am.seat_id = s.id
+                -- Only seats belonging to the floor's currently published
+                -- layout, on an active site/building/floor, are eligible.
+                INNER JOIN floor_layouts fl
+                    ON fl.floor_id = s.floor_id
+                   AND fl.tenant_id = s.tenant_id
+                   AND fl.is_published = TRUE
+                   AND fl.status = 'PUBLISHED'
+                   AND fl.id = s.layout_id
+                INNER JOIN floors flr
+                    ON flr.id = s.floor_id
+                   AND flr.tenant_id = s.tenant_id
+                   AND flr.status = 'ACTIVE'
+                INNER JOIN buildings bldg
+                    ON bldg.id = s.building_id
+                   AND bldg.tenant_id = s.tenant_id
+                   AND bldg.status = 'ACTIVE'
+                INNER JOIN sites st
+                    ON st.id = s.site_id
+                   AND st.tenant_id = s.tenant_id
+                   AND st.status = 'ACTIVE'
                 WHERE s.tenant_id = %s
                   AND s.floor_id = %s
             )

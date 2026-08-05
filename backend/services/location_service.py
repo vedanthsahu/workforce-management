@@ -43,6 +43,7 @@ from backend.repositories.location_repository import (
 
 from backend.schemas.location import (
     BuildingResponse,
+    BulkLayoutSeatConfigurationUpdateRequest,
     BulkSeatConfigurationUpdateRequest,
     CreateBuildingRequest,
     CreateFloorRequest,
@@ -391,6 +392,87 @@ def update_layout_seat_configuration(
             fallback_code="seat_configuration_failed",
             fallback_message="Failed to configure layout seat.",
         )
+
+
+def update_layout_seat_configurations_bulk(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    payload: BulkLayoutSeatConfigurationUpdateRequest,
+    current_user: dict[str, Any],
+) -> list[LayoutSeatConfigurationResponse]:
+    """Apply one draft configuration to multiple layout seat mappings.
+
+    Draft isolation applies here exactly as it does for the single-mapping
+    endpoint: this only ever touches layout_seat_mappings, never seats.
+    All-or-nothing: if any mapping id fails validation, none are updated.
+    """
+    amenity_ids = payload.amenity_ids or []
+    mapping_ids = [str(mapping_id) for mapping_id in dict.fromkeys(payload.layout_seat_mapping_ids)]
+    responses: list[LayoutSeatConfigurationResponse] = []
+
+    try:
+        for mapping_id in mapping_ids:
+            mapping = fetch_layout_seat_mapping_by_id(
+                conn,
+                tenant_id=tenant_id,
+                layout_seat_mapping_id=mapping_id,
+            )
+            if mapping is None:
+                _raise_not_found("layout seat mapping")
+
+            updated_mapping = update_layout_seat_mapping_configuration(
+                conn,
+                tenant_id=tenant_id,
+                layout_seat_mapping_id=mapping_id,
+                seat_name=payload.seat_name,
+                seat_type=payload.seat_type,
+                status=payload.status,
+                is_bookable=payload.is_bookable,
+                is_reserved=payload.is_reserved,
+                amenity_ids=amenity_ids,
+                updated_by=str(current_user["user_id"]),
+            )
+
+            responses.append(
+                LayoutSeatConfigurationResponse(
+                    layout_seat_mapping_id=str(updated_mapping["id"]),
+                    seat_id=None,
+                    layout_id=str(mapping["layout_id"]),
+                    floor_id=str(mapping["floor_id"]),
+                    seat_code=str(mapping["seat_code"]),
+                    seat_name=updated_mapping.get("seat_name"),
+                    seat_type=updated_mapping["seat_type"],
+                    status=updated_mapping["status"],
+                    is_bookable=updated_mapping["is_bookable"],
+                    is_reserved=updated_mapping["is_reserved"],
+                    is_configured=True,
+                    configuration_status="COMPLETED",
+                    amenity_ids=updated_mapping.get("amenity_ids") or [],
+                )
+            )
+
+        # Draft isolation: editing mappings must only ever touch
+        # layout_seat_mappings. The `seats` table is a published projection
+        # that is rebuilt exclusively by the layout activate/publish flow.
+        conn.commit()
+
+    except HTTPException:
+        conn.rollback()
+        raise
+
+    except psycopg2.Error as exc:
+        conn.rollback()
+        logger.exception("location.db_error")
+
+        _raise_write_error(
+            exc,
+            duplicate_code="seat_configuration_conflict",
+            fallback_code="seat_configuration_failed",
+            fallback_message="Failed to configure layout seat.",
+        )
+
+    return responses
 
 
 def get_site_details(

@@ -58,6 +58,7 @@ class CreateBookingSourceChannelTests(unittest.TestCase):
                     "is_bookable": True,
                 },
             ),
+            patch("backend.services.booking_service.acquire_booking_slot_locks"),
             patch(
                 "backend.services.booking_service.user_has_active_booking_on_date",
                 return_value=False,
@@ -107,6 +108,7 @@ class CreateBookingSourceChannelTests(unittest.TestCase):
                     "is_bookable": True,
                 },
             ),
+            patch("backend.services.booking_service.acquire_booking_slot_locks"),
             patch(
                 "backend.services.booking_service.user_has_active_booking_on_date",
                 return_value=False,
