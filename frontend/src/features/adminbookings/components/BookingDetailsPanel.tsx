@@ -115,7 +115,7 @@ export default function BookingDetailsPanel({
                 isGuest ? "bg-violet-100 text-violet-700" : "bg-indigo-100 text-indigo-700"
               )}
             >
-              {isGuest ? "GV" : initialsOf(booking.person_name)}
+              {initialsOf(booking.person_name)}
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-gray-900 truncate">{booking.person_name}</p>

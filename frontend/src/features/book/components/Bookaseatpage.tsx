@@ -160,6 +160,7 @@ const BookASeatPage: React.FC = () => {
     selectedSeat,
     dayCount,
     step1Valid,
+    hasBookingChanges,
     isModifyMode,
     isAdminFlow,
     isBookingForSomeone,
@@ -478,17 +479,24 @@ const BookASeatPage: React.FC = () => {
               preferences={availablePreferences}
             />
 
-            <div className="flex justify-between pt-1 border-t border-[#EBEBF5]">
-              <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px]">
-                ← Back
-              </Button>
-              <Button
-                onClick={goToReview}
-                disabled={!form.selectedSeatId}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-6 gap-2 text-[12.5px] sm:text-[13px] font-semibold"
-              >
-                Review Booking <ChevronRight size={14} />
-              </Button>
+            <div className="flex flex-col items-end gap-1.5 pt-1 border-t border-[#EBEBF5]">
+              <div className="w-full flex justify-between">
+                <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px]">
+                  ← Back
+                </Button>
+                <Button
+                  onClick={goToReview}
+                  disabled={!form.selectedSeatId || (isModifyMode && !hasBookingChanges)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-6 gap-2 text-[12.5px] sm:text-[13px] font-semibold"
+                >
+                  Review Booking <ChevronRight size={14} />
+                </Button>
+              </div>
+              {isModifyMode && form.selectedSeatId && !hasBookingChanges && (
+                <p className="text-[11.5px] text-amber-600">
+                  Select a different seat, date, or location to continue.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -575,20 +583,27 @@ const BookASeatPage: React.FC = () => {
                 </div>
 
                 {/* Actions */}
-                <div className="flex justify-between items-center">
-                  <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px] h-10 px-5">
-                    ← Back
-                  </Button>
-                  <Button
-                    onClick={confirmBooking}
-                    disabled={submitting}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 sm:px-8 gap-2 text-[13px] font-semibold h-10"
-                  >
-                    {submitting
-                      ? isModifyMode ? "Modifying…" : "Confirming…"
-                      : isModifyMode ? "Confirm Modification" : "Confirm Booking"}
-                    {!submitting && <ChevronRight size={14} />}
-                  </Button>
+                <div className="flex flex-col items-end gap-1.5">
+                  <div className="w-full flex justify-between items-center">
+                    <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px] h-10 px-5">
+                      ← Back
+                    </Button>
+                    <Button
+                      onClick={confirmBooking}
+                      disabled={submitting || (isModifyMode && !hasBookingChanges)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 sm:px-8 gap-2 text-[13px] font-semibold h-10"
+                    >
+                      {submitting
+                        ? isModifyMode ? "Modifying…" : "Confirming…"
+                        : isModifyMode ? "Confirm Modification" : "Confirm Booking"}
+                      {!submitting && <ChevronRight size={14} />}
+                    </Button>
+                  </div>
+                  {isModifyMode && !hasBookingChanges && (
+                    <p className="text-[11.5px] text-amber-600">
+                      Nothing has changed yet — go back and pick a different seat, date, or location.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
