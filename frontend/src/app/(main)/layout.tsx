@@ -62,6 +62,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { BookOpen, Menu } from "lucide-react";
+import { ChatbotEmbed } from "@/features/chatbot/components/ChatbotEmbed";
 
 
 function SidebarSkeleton() {
@@ -86,7 +87,6 @@ function SidebarSkeleton() {
     </div>
   );
 }
-
 export default function MainLayout({
   children,
 }: {
@@ -159,8 +159,8 @@ export default function MainLayout({
 
           {children}
         </div>
+        {!showSidebarSkeleton && user ? <ChatbotEmbed /> : null}
       </div>
     </SidebarProvider>
   );
 }
- 

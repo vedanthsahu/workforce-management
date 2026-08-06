@@ -3,6 +3,12 @@ import type { User } from "../types/auth.types";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+export interface ChatbotToken {
+  access_token: string;
+  token_type: "bearer";
+  expires_in: number;
+}
+
 export const authService = {
   // Redirects browser → backend → Microsoft login page
   // After Microsoft auth, backend redirects to FRONTEND_URL (http://localhost:3000/)
@@ -20,5 +26,12 @@ export const authService = {
   // Backend clears access_token + refresh_token cookies
   async logout(): Promise<void> {
     await axiosInstance.post("/auth/logout");
+  },
+
+  async getChatbotToken(): Promise<ChatbotToken> {
+    const { data } = await axiosInstance.post<ChatbotToken>(
+      "/auth/chatbot-token",
+    );
+    return data;
   },
 };

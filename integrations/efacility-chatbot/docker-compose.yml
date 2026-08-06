@@ -1,0 +1,141 @@
+services:
+  db:
+    image: pgvector/pgvector:pg15
+    environment:
+      POSTGRES_USER: efacility
+      POSTGRES_PASSWORD: efacility123
+      POSTGRES_DB: efacility_chatbot
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U efacility -d efacility_chatbot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "${ELASTICSEARCH_HOST_PORT:-9200}:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.14.3
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+      - "${KIBANA_HOST_PORT:-5601}:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./backend/.env
+    ports:
+      - "${API_HOST_PORT:-8100}:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://efacility:efacility123@db:5432/efacility_chatbot
+      SYNC_DATABASE_URL: postgresql://efacility:efacility123@db:5432/efacility_chatbot
+      APP_ENV: development
+      SECRET_KEY: dev-secret-change-in-production
+      ALLOWED_ORIGINS: http://localhost:${FRONTEND_HOST_PORT:-4200},http://localhost:3000
+      DEFAULT_TENANT_ID: 3
+      SESSION_TTL_MINUTES: 30
+      ALLOW_MULTIPLE_SEATS: "false"
+      ENABLE_FREE_TEXT: "true"
+      ENABLE_VECTOR_INTENT: "true"
+      ENABLE_TELEMETRY: "true"
+      ENABLE_QUICK_BOOK_EXACT_SEAT: "true"
+      ENABLE_BOOKING_ACTION_CONFIRMATION: "true"
+      ENABLE_REDIS_MEMORY: "true"
+      REDIS_URL: redis://redis:6379/0
+      ENABLE_ELK_CONVERSATION_LOGS: "true"
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_CONVERSATION_INDEX: logs-efacility-chatbot-conversations-default
+      ELASTICSEARCH_TIMEOUT_SECONDS: 2
+      ADMIN_API_TOKEN: ""
+      WHATSAPP_ENABLED: "true"
+      WHATSAPP_VERIFY_TOKEN: efacility_chatbot_verify
+      WHATSAPP_GRAPH_API_VERSION: v25.0
+      WHATSAPP_SEND_MAX_RETRIES: 3
+      WHATSAPP_RETRY_BACKOFF_SECONDS: 0.75
+      WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS: 86400
+      WHATSAPP_USE_FLOWS: "false"
+      WHATSAPP_BOOKING_FLOW_ID: ""
+      WHATSAPP_BOOKING_FLOW_SCREEN: BOOKING_FORM
+      WHATSAPP_BOOKING_FLOW_CTA: "Open booking form"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    env_file:
+      - ./backend/.env
+    command: ["http", "http://api:8000", "--log=stdout"]
+    ports:
+      - "${NGROK_HOST_PORT:-4040}:4040"
+    depends_on:
+      - api
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    working_dir: /app
+    ports:
+      - "${FRONTEND_HOST_PORT:-4200}:4200"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+      - ./validation-results:/validation-results
+    command: sh -c "npm install --no-audit --no-fund && npm run dev -- --hostname 0.0.0.0 --port 4200"
+    environment:
+      - NODE_OPTIONS=--max_old_space_size=2048
+      - CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+      - NEXT_PUBLIC_API_URL=http://localhost:${API_HOST_PORT:-8100}
+      - NEXT_PUBLIC_CHATBOT_API_URL=http://localhost:${API_HOST_PORT:-8100}
+      - NEXT_PUBLIC_HOST_APP_ORIGIN=http://localhost:3000
+
+volumes:
+  postgres_data:
+  redis_data:
+  elasticsearch_data:
+  frontend_node_modules:
