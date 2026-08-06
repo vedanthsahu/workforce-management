@@ -965,3 +965,5 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
 
 export default SvgFloorMapPage;
 
+
+
