@@ -201,7 +201,10 @@ class AdminManagementRepositoryTests(unittest.TestCase):
 
         combined_sql = " ".join(sql for sql, _ in cursor.executions)
         self.assertIn("au.tenant_id = %(tenant_id)s", combined_sql)
-        self.assertIn("au.role_name = ANY(", combined_sql)
+        self.assertIn(
+    "UPPER(REPLACE(au.role_name, ' ', '_')) = ANY(",
+    combined_sql,
+)
         self.assertIn("%(role_names)s::text[]", combined_sql)
         self.assertIn("au.status = %(status)s", combined_sql)
         self.assertIn("LOWER(au.full_name)", combined_sql)
