@@ -2,7 +2,7 @@ name: Backend CD (Deploy to Dev)
 
 on:
   push:
-    branches: ["feature/dev-intermediate"]
+    branches: ["post-deployment-fixes"]
     paths:
       - 'backend/**'
       - 'template.yaml'
