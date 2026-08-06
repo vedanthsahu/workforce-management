@@ -595,6 +595,17 @@ class GuestBookingMigrationTests(unittest.TestCase):
             return_value=old_booking,
         ), patch.object(
             guest_service,
+            "fetch_guest_visit_by_id",
+            return_value={
+                "host_user_id": "20",
+                "guest_type": "CUSTOMER",
+                "purpose_of_visit": "MEETING",
+                "start_time": None,
+                "end_time": None,
+                "notes": None,
+            },
+        ),  patch.object(
+            guest_service,
             "_resolve_guest",
             return_value={
                 "guest_id": "50",
