@@ -119,6 +119,10 @@ class RefreshTokenReuseDetectionTests(unittest.TestCase):
                 "backend.services.auth_service.rotate_refresh_token",
                 return_value={"session_id": "session-abc"},
             ),
+            patch(
+                "backend.services.auth_service.create_scoped_refresh_token",
+                return_value="new-refresh-token",
+            ),
             patch("backend.services.auth_service.record_auth_event"),
             patch("backend.services.auth_service._build_access_token_for_user", return_value="jwt"),
         ):
