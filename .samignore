@@ -1,0 +1,42 @@
+# Frontend and JavaScript dependencies
+frontend/
+node_modules/
+
+# Git and development tooling
+.git/
+.github/
+.claude/
+.vscode/
+.idea/
+
+# Python environments and caches
+.venv/
+venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# SAM build and local configuration
+.aws-sam/
+events/
+samconfig.toml
+template.yaml
+
+# Tests and local reports
+backend/tests/
+test-results/
+coverage.xml
+
+# Local environment files and secrets
+.env
+.env.*
+*.env
+
+# Generated archives and deployment artifacts
+*.zip
+*.tar
+*.tar.gz

@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+
 class CreateFloorLayoutRequest(BaseModel):
     site_id: int = Field(gt=0)
 

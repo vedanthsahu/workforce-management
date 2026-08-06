@@ -13,39 +13,30 @@ from fastapi import BackgroundTasks, HTTPException, status
 from psycopg2 import errorcodes
 from psycopg2.extensions import connection as PGConnection
 
-from backend.repositories.guest_visit_repository import (
-    fetch_guest_visits,
-    fetch_guest_visit_summary,
-    check_in_guest_visit,
-    check_out_guest_visit,
-    fetch_cancelled_guest_visits,
-    recalculate_guest_visit_requires_seat,
-    fetch_guest_visit_integrity_findings,
-)
-
-from backend.schemas.guest import (
-    GuestVisitListItem,
-    GuestVisitListResponse,
-    CancelledGuestVisitResponse,
-    CancelledGuestVisitItem,
-    AttachSeatToGuestVisitRequest,
-    ModifyGuestVisitRequest,
-    GuestVisitStatusUpdateResponse,
-)
 from backend.core.app_logging import LOGGER_NAME
-from backend.core.enums import BookingModificationReason
 from backend.core.audit_actions import (
-    GUEST_BOOKING_CANCELLED, GUEST_BOOKING_CREATED, GUEST_BOOKING_MODIFIED,
-    GUEST_CREATED, GUEST_STATUS_UPDATED, GUEST_UPDATED,
-    GUEST_VISIT_CANCELLED, GUEST_VISIT_CHECKED_IN, GUEST_VISIT_CHECKED_OUT,
-    GUEST_VISIT_CREATED, GUEST_VISIT_MODIFIED, GUEST_VISIT_WORKFLOW_EXECUTED,
-    GUEST_VISIT_BOOKING_ADDED, GUEST_VISIT_BOOKING_CANCELLED, GUEST_VISIT_AND_BOOKING_MODIFIED,
+    GUEST_BOOKING_CANCELLED,
+    GUEST_BOOKING_CREATED,
+    GUEST_BOOKING_MODIFIED,
+    GUEST_CREATED,
+    GUEST_STATUS_UPDATED,
+    GUEST_UPDATED,
+    GUEST_VISIT_AND_BOOKING_MODIFIED,
+    GUEST_VISIT_BOOKING_ADDED,
+    GUEST_VISIT_BOOKING_CANCELLED,
+    GUEST_VISIT_CANCELLED,
+    GUEST_VISIT_CHECKED_IN,
+    GUEST_VISIT_CHECKED_OUT,
+    GUEST_VISIT_CREATED,
+    GUEST_VISIT_MODIFIED,
+    GUEST_VISIT_WORKFLOW_EXECUTED,
 )
+from backend.core.enums import BookingModificationReason
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.booking_repository import (
     acquire_booking_slot_locks,
     cancel_booking,
-    mark_booking_modified,
+    cancel_future_guest_bookings_for_guest,
     count_guest_bookings,
     fetch_booking_by_id,
     fetch_booking_by_id_for_update,
@@ -54,37 +45,44 @@ from backend.repositories.booking_repository import (
     guest_has_active_booking_on_date,
     has_active_booking_conflict,
     insert_guest_booking,
+    mark_booking_modified,
 )
 from backend.repositories.guest_repository import (
     create_guest,
     fetch_guest_by_email,
+    fetch_guest_by_email_excluding_guest,
     fetch_guest_by_id,
     fetch_guest_by_phone,
-    fetch_guest_by_email_excluding_guest,
     fetch_guest_by_phone_excluding_guest,
     search_guests,
     update_guest,
+)
+from backend.repositories.guest_repository import (
     update_guest_status as update_guest_status_repo,
 )
 from backend.repositories.guest_visit_repository import (
-    insert_guest_visit,
-    update_guest_visit_booking_details,
-    fetch_guest_visit_by_id,
-    guest_visit_has_active_booking,
-    fetch_guest_visit_status,
-    update_guest_visit_requires_seat,
+    cancel_future_guest_visits_for_guest,
     cancel_guest_visit,
+    check_in_guest_visit,
+    check_out_guest_visit,
     fetch_active_booking_by_guest_visit,
     fetch_active_booking_for_guest_visit,
+    fetch_cancelled_guest_visits,
+    fetch_guest_visit_by_id,
     fetch_guest_visit_by_id_for_update,
-    mark_guest_visit_modified,
     fetch_guest_visit_history,
     fetch_guest_visit_history_summary,
-    cancel_future_guest_visits_for_guest,
+    fetch_guest_visit_integrity_findings,
+    fetch_guest_visit_status,
+    fetch_guest_visit_summary,
+    fetch_guest_visits,
+    guest_visit_has_active_booking,
+    insert_guest_visit,
+    mark_guest_visit_modified,
+    recalculate_guest_visit_requires_seat,
     sync_booking_from_guest_visit,
-)
-from backend.repositories.booking_repository import (
-    cancel_future_guest_bookings_for_guest,
+    update_guest_visit_booking_details,
+    update_guest_visit_requires_seat,
 )
 from backend.repositories.location_repository import (
     fetch_building_by_id,
@@ -92,23 +90,34 @@ from backend.repositories.location_repository import (
     fetch_site_by_id,
 )
 from backend.repositories.user_repository import fetch_user_by_id
-from backend.schemas.booking import BookingResponse, ModifyBookingRequest, PaginatedBookingResponse
-from backend.schemas.pagination import PaginationMetadata
+from backend.schemas.booking import (
+    BookingResponse,
+    ModifyBookingRequest,
+    PaginatedBookingResponse,
+)
 from backend.schemas.guest import (
+    AttachSeatToGuestVisitRequest,
+    CancelledGuestVisitItem,
+    CancelledGuestVisitResponse,
     CreateGuestBookingRequest,
     CreateGuestRequest,
     CreateGuestVisitRequest,
     GuestResponse,
+    GuestVisitHistoryItem,
+    GuestVisitHistoryResponse,
+    GuestVisitHistorySummary,
+    GuestVisitListItem,
+    GuestVisitListResponse,
     GuestVisitResponse,
+    GuestVisitStatusUpdateResponse,
     GuestWorkflowAction,
     GuestWorkflowRequest,
     GuestWorkflowResponse,
+    ModifyGuestVisitRequest,
     UpdateGuestRequest,
     UpdateGuestStatusRequest,
-    GuestVisitHistoryResponse,
-    GuestVisitHistorySummary,
-    GuestVisitHistoryItem,
 )
+from backend.schemas.pagination import PaginationMetadata
 from backend.services.booking_service import (
     GUEST_OPERATION_ROLES,
     _apply_modified_display_status,
@@ -119,10 +128,10 @@ from backend.services.booking_service import (
 from backend.services.notification_service import (
     booking_notification_details,
     format_notification_value,
-    queue_email_notification,
     queue_booking_cancelled_notification,
     queue_booking_created_notification,
     queue_booking_modified_notification,
+    queue_email_notification,
 )
 
 logger = logging.getLogger(f"{LOGGER_NAME}.guests")

@@ -5,7 +5,9 @@ Next.js 15 (App Router) + TypeScript + Tailwind v4 + shadcn/ui + Zustand.
 ## Routing & layouts
 - File-based routing under `src/app/`. Route groups `(auth)` and `(main)` organize routes without affecting the URL.
 - Only two layouts exist: `app/layout.tsx` (root: HTML shell, global providers) and `app/(main)/layout.tsx` (sidebar shell for all authenticated pages). Don't add a new layout unless a new group of routes needs a fundamentally different shell.
-- `src/middleware.ts` handles auth/role redirects via the `access_token` cookie (decoded with `jwt-decode` for routing hints only — the backend independently verifies the signature). Don't duplicate redirect logic in components.
+- `AuthProvider` validates sessions through `/auth/me`. Authentication cookies are scoped to the backend origin and are not readable by Next.js middleware on the frontend origin.
+- `app/page.tsx` handles the post-login root redirect, while `app/(main)/layout.tsx` provides client-side authentication and role-routing guards.
+- Backend authentication and RBAC remain authoritative. Do not reintroduce cookie-reading frontend middleware unless the application adopts a same-origin BFF or compatible shared-domain cookie architecture.
 - Any page using `useSearchParams()` must wrap its content in `<Suspense>` (required by `next build`, not enforced in dev).
 
 ## Folder structure

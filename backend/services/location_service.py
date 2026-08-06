@@ -12,10 +12,13 @@ from psycopg2.extensions import connection as PGConnection
 
 from backend.core.app_logging import LOGGER_NAME
 from backend.core.audit_actions import (
-    BUILDING_CREATED, BUILDING_UPDATED,
-    FLOOR_CREATED, FLOOR_UPDATED,
+    BUILDING_CREATED,
+    BUILDING_UPDATED,
+    FLOOR_CREATED,
+    FLOOR_UPDATED,
     SEAT_CONFIGURED,
-    SITE_CREATED, SITE_UPDATED,
+    SITE_CREATED,
+    SITE_UPDATED,
 )
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.location_repository import (
@@ -25,10 +28,8 @@ from backend.repositories.location_repository import (
     fetch_floor_by_id,
     fetch_floor_duplicates,
     fetch_floors_by_building,
-    fetch_seat_configuration,
     fetch_layout_seat_mapping_by_id,
-    update_layout_seat_mapping_configuration,
-    fetch_seat_amenity_ids,
+    fetch_seat_configuration,
     fetch_site_by_id,
     fetch_site_duplicates,
     fetch_sites,
@@ -37,10 +38,10 @@ from backend.repositories.location_repository import (
     insert_site,
     update_building,
     update_floor,
+    update_layout_seat_mapping_configuration,
     update_seat_configuration,
     update_site,
 )
-
 from backend.schemas.location import (
     BuildingResponse,
     BulkLayoutSeatConfigurationUpdateRequest,

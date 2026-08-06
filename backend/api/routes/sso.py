@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 import sys
-from typing import Annotated, Any, Callable
+from collections.abc import Callable
+from typing import Annotated, Any
 
 import psycopg2
 from fastapi import APIRouter, Depends, Request, status
@@ -12,6 +14,8 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user
+from backend.core.app_logging import LOGGER_NAME
+from backend.core.audit_actions import USER_LOGIN
 from backend.core.config import get_settings
 from backend.core.security import (
     ACCESS_TOKEN_COOKIE_NAME,
@@ -19,11 +23,10 @@ from backend.core.security import (
     SESSION_TOKEN_COOKIE_NAME,
     build_auth_cookie_settings,
 )
-from backend.core.app_logging import LOGGER_NAME
 from backend.core.sso import (
+    STATE_TTL_SECONDS,
     GraphAPIError,
     SSOError,
-    STATE_TTL_SECONDS,
     build_auth_url,
     exchange_code_for_token,
     fetch_graph_groups,
@@ -32,6 +35,7 @@ from backend.core.sso import (
     verify_id_token,
 )
 from backend.db.connection import get_db
+from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.user_repository import (
     create_app_user_from_graph,
     create_auth_identity_for_user,
@@ -43,10 +47,11 @@ from backend.repositories.user_repository import (
     update_user_department,
     upsert_user_graph_profile,
 )
-from backend.services.auth_service import AuthTokens, determine_graph_onboarding_role, issue_tokens_for_user
-from backend.core.audit_actions import USER_LOGIN
-from backend.repositories.audit_repository import safe_write_audit_log
-import logging
+from backend.services.auth_service import (
+    AuthTokens,
+    determine_graph_onboarding_role,
+    issue_tokens_for_user,
+)
 
 router = APIRouter(tags=["SSO"])
 logger = logging.getLogger(f"{LOGGER_NAME}.sso")
@@ -133,7 +138,7 @@ def auth_callback(
         return _error_response(exc.status_code, exc.code, exc.message, exc.details)
     except Exception as exc:
         debug(f"Unexpected error in token exchange: {type(exc).__name__}: {exc}")
-        return _error_response(500, "token_exchange_failed", f"{type(exc).__name__}: {str(exc)}")
+        return _error_response(500, "token_exchange_failed", f"{type(exc).__name__}: {exc!s}")
 
     azure_tenant_id = str(claims.get("tid") or "").strip()
     debug(f"azure_tenant_id={azure_tenant_id!r}")
@@ -152,7 +157,7 @@ def auth_callback(
         return _error_response(409, "tenant_resolution_ambiguous", str(exc))
     except Exception as exc:
         debug(f"Exception in tenant fetch: {type(exc).__name__}: {exc}")
-        return _error_response(500, "tenant_resolution_failed", f"{type(exc).__name__}: {str(exc)}")
+        return _error_response(500, "tenant_resolution_failed", f"{type(exc).__name__}: {exc!s}")
 
     tenant_id = str(tenant["tenant_id"])
     debug(f"tenant_id={tenant_id}")
@@ -256,7 +261,7 @@ def auth_callback(
         debug(f"Unexpected exception: {type(exc).__name__}: {exc}")
         import traceback
         traceback.print_exc(file=sys.stderr)
-        return _error_response(500, "sso_failed", f"{type(exc).__name__}: {str(exc)}")
+        return _error_response(500, "sso_failed", f"{type(exc).__name__}: {exc!s}")
 
     settings = get_settings()
     response = RedirectResponse(url=settings.frontend_url, status_code=status.HTTP_302_FOUND)
