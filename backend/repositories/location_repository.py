@@ -10,7 +10,6 @@ from psycopg2.extras import Json, RealDictCursor
 
 from backend.core.enums import NON_DELETED_LAYOUT_STATUSES
 
-
 _SEAT_IN_PUBLISHED_LAYOUT_SQL = """
               AND st.layout_id = (
                   SELECT id
