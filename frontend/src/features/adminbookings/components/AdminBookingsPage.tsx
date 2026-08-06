@@ -22,6 +22,7 @@ import {
   ADMIN_BOOKINGS_EXPECT_RETURN_KEY,
 } from "../utils/constants";
 
+
 type PersistedSearchState = {
   filters: ReturnType<typeof defaultAdminBookingFilters>;
   appliedFilters: ReturnType<typeof defaultAdminBookingFilters>;
