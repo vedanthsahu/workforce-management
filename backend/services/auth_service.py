@@ -34,6 +34,7 @@ from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.permission_repository import fetch_permissions_for_role
 from backend.repositories.token_repository import (
     create_user_session,
+    fetch_active_session,
     fetch_session_by_refresh_token,
     record_auth_event,
     revoke_all_user_sessions,
@@ -486,6 +487,34 @@ def refresh_auth_tokens(
             refresh_token_hash=token_hash,
         )
         if session is None:
+            # The hash didn't match any row for this session_id. That's
+            # either a wholly bogus token, or reuse of a refresh token that
+            # was already rotated past -- distinguish the two by checking
+            # whether the session itself is still active. A stale-but-once
+            # valid token being replayed means it leaked; kill the session
+            # immediately rather than just rejecting this one request.
+            reused_session = fetch_active_session(
+                conn,
+                tenant_id=refresh_scope["tenant_id"],
+                user_id=refresh_scope["user_id"],
+                session_id=refresh_scope["session_id"],
+            )
+            if reused_session is not None:
+                revoke_user_session(
+                    conn,
+                    tenant_id=refresh_scope["tenant_id"],
+                    user_id=refresh_scope["user_id"],
+                    session_id=refresh_scope["session_id"],
+                )
+                record_auth_event(
+                    conn,
+                    tenant_id=refresh_scope["tenant_id"],
+                    user_id=refresh_scope["user_id"],
+                    session_id=refresh_scope["session_id"],
+                    event_type="REFRESH_TOKEN_REUSE_DETECTED",
+                )
+                if commit:
+                    conn.commit()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={

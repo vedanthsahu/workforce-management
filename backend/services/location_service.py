@@ -43,6 +43,8 @@ from backend.repositories.location_repository import (
 
 from backend.schemas.location import (
     BuildingResponse,
+    BulkLayoutSeatConfigurationUpdateRequest,
+    BulkSeatConfigurationUpdateRequest,
     CreateBuildingRequest,
     CreateFloorRequest,
     CreateSiteRequest,
@@ -390,6 +392,87 @@ def update_layout_seat_configuration(
             fallback_code="seat_configuration_failed",
             fallback_message="Failed to configure layout seat.",
         )
+
+
+def update_layout_seat_configurations_bulk(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    payload: BulkLayoutSeatConfigurationUpdateRequest,
+    current_user: dict[str, Any],
+) -> list[LayoutSeatConfigurationResponse]:
+    """Apply one draft configuration to multiple layout seat mappings.
+
+    Draft isolation applies here exactly as it does for the single-mapping
+    endpoint: this only ever touches layout_seat_mappings, never seats.
+    All-or-nothing: if any mapping id fails validation, none are updated.
+    """
+    amenity_ids = payload.amenity_ids or []
+    mapping_ids = [str(mapping_id) for mapping_id in dict.fromkeys(payload.layout_seat_mapping_ids)]
+    responses: list[LayoutSeatConfigurationResponse] = []
+
+    try:
+        for mapping_id in mapping_ids:
+            mapping = fetch_layout_seat_mapping_by_id(
+                conn,
+                tenant_id=tenant_id,
+                layout_seat_mapping_id=mapping_id,
+            )
+            if mapping is None:
+                _raise_not_found("layout seat mapping")
+
+            updated_mapping = update_layout_seat_mapping_configuration(
+                conn,
+                tenant_id=tenant_id,
+                layout_seat_mapping_id=mapping_id,
+                seat_name=payload.seat_name,
+                seat_type=payload.seat_type,
+                status=payload.status,
+                is_bookable=payload.is_bookable,
+                is_reserved=payload.is_reserved,
+                amenity_ids=amenity_ids,
+                updated_by=str(current_user["user_id"]),
+            )
+
+            responses.append(
+                LayoutSeatConfigurationResponse(
+                    layout_seat_mapping_id=str(updated_mapping["id"]),
+                    seat_id=None,
+                    layout_id=str(mapping["layout_id"]),
+                    floor_id=str(mapping["floor_id"]),
+                    seat_code=str(mapping["seat_code"]),
+                    seat_name=updated_mapping.get("seat_name"),
+                    seat_type=updated_mapping["seat_type"],
+                    status=updated_mapping["status"],
+                    is_bookable=updated_mapping["is_bookable"],
+                    is_reserved=updated_mapping["is_reserved"],
+                    is_configured=True,
+                    configuration_status="COMPLETED",
+                    amenity_ids=updated_mapping.get("amenity_ids") or [],
+                )
+            )
+
+        # Draft isolation: editing mappings must only ever touch
+        # layout_seat_mappings. The `seats` table is a published projection
+        # that is rebuilt exclusively by the layout activate/publish flow.
+        conn.commit()
+
+    except HTTPException:
+        conn.rollback()
+        raise
+
+    except psycopg2.Error as exc:
+        conn.rollback()
+        logger.exception("location.db_error")
+
+        _raise_write_error(
+            exc,
+            duplicate_code="seat_configuration_conflict",
+            fallback_code="seat_configuration_failed",
+            fallback_message="Failed to configure layout seat.",
+        )
+
+    return responses
 
 
 def get_site_details(
@@ -902,6 +985,86 @@ def update_seat_configuration_metadata(
     )
     return SeatConfigurationResponse(**updated_seat)
 
+
+def update_seats_configuration_bulk(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    payload: BulkSeatConfigurationUpdateRequest,
+    current_user: dict[str, Any],
+) -> list[SeatConfigurationResponse]:
+    """Apply one configuration to multiple seats in a single transaction.
+
+    Every seat gets the exact same status/is_bookable update. All-or-nothing:
+    if any seat_id fails validation, none of the seats are updated.
+    """
+    _reject_extra_fields(payload, SEAT_FORBIDDEN_CONFIGURATION_FIELDS)
+    updates = _extract_updates(payload, SEAT_CONFIGURATION_FIELDS)
+    _reject_empty_updates(updates)
+    _reject_null_updates(updates, {"status", "is_bookable"})
+
+    seat_ids = [str(seat_id) for seat_id in dict.fromkeys(payload.seat_ids)]
+    audit_entries: list[tuple[str, dict[str, Any]]] = []
+    responses: list[SeatConfigurationResponse] = []
+
+    try:
+        for seat_id in seat_ids:
+            seat = fetch_seat_configuration(
+                conn,
+                tenant_id=tenant_id,
+                seat_id=seat_id,
+            )
+            if seat is None:
+                _raise_not_found("seat")
+
+            updated_seat = update_seat_configuration(
+                conn,
+                tenant_id=tenant_id,
+                seat_id=seat_id,
+                updates=updates,
+            )
+            if updated_seat is None:
+                _raise_not_found("seat")
+
+            audit_entries.append((seat_id, seat))
+            responses.append(SeatConfigurationResponse(**updated_seat))
+        conn.commit()
+    except HTTPException as he:
+        conn.rollback()
+        _d = he.detail if isinstance(he.detail, dict) else {}
+        safe_write_audit_log(
+            conn, action=SEAT_CONFIGURED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="seat", resource_id=",".join(seat_ids),
+            event_status="DENIED" if he.status_code == 403 else "FAILURE",
+            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+        )
+        raise
+    except psycopg2.Error as exc:
+        conn.rollback()
+        logger.exception("location.db_error")
+        safe_write_audit_log(
+            conn, action=SEAT_CONFIGURED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="seat", resource_id=",".join(seat_ids),
+            event_status="FAILURE",
+            failure_code="seat_conflict" if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "seat_configuration_update_failed",
+            failure_reason="Duplicate record." if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "Failed to update seat configuration.",
+        )
+        _raise_write_error(
+            exc,
+            duplicate_code="seat_conflict",
+            fallback_code="seat_configuration_update_failed",
+            fallback_message="Failed to update seat configuration.",
+        )
+
+    for seat_id, seat in audit_entries:
+        safe_write_audit_log(
+            conn, action=SEAT_CONFIGURED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="seat", resource_id=seat_id,
+            old_values={k: seat.get(k) for k in updates},
+            new_values=updates,
+            changed_fields=[k for k in updates if seat.get(k) != updates[k]] or None,
+        )
+    return responses
 
 
 def _build_floor_response(floor: dict[str, object]) -> FloorResponse:

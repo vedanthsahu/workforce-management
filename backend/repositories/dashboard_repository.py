@@ -203,6 +203,15 @@ def fetch_admin_dashboard_summary(
                    AND sf.site_id = st.site_id
                    AND sf.building_id = st.building_id
                    AND sf.status = 'ACTIVE'
+                -- Only seats belonging to the floor's currently published
+                -- layout count toward stats -- seats left over from a
+                -- superseded layout must not inflate total/available counts.
+                INNER JOIN floor_layouts AS sfl
+                    ON sfl.floor_id = st.floor_id
+                   AND sfl.tenant_id = st.tenant_id
+                   AND sfl.is_published = TRUE
+                   AND sfl.status = 'PUBLISHED'
+                   AND sfl.id = st.layout_id
                 WHERE st.tenant_id = %(tenant_id)s
                   AND (
                         %(site_id)s IS NULL
@@ -442,14 +451,14 @@ def _fetch_employee_activity_rows(
                 booked_by.id::text AS booked_by_id,
                 booked_by.full_name AS booked_by_name,
                 booked_by.email AS booked_by_email,
-                booked_by.role_name AS booked_by_role,
+                UPPER(REPLACE(booked_by.role_name, ' ', '_')) AS booked_by_role,
                 booked_by.department AS booked_by_department,
                 booked_by.job_title AS booked_by_job_title,
 
                 booked_for.id::text AS booked_for_id,
                 booked_for.full_name AS booked_for_name,
                 booked_for.email AS booked_for_email,
-                booked_for.role_name AS booked_for_role,
+                UPPER(REPLACE(booked_for.role_name, ' ', '_')) AS booked_for_role,
                 booked_for.department AS booked_for_department,
                 booked_for.job_title AS booked_for_job_title,
 
@@ -602,7 +611,7 @@ def _fetch_guest_activity_rows(
                 booked_by.id::text AS booked_by_id,
                 booked_by.full_name AS booked_by_name,
                 booked_by.email AS booked_by_email,
-                booked_by.role_name AS booked_by_role,
+                UPPER(REPLACE(booked_by.role_name, ' ', '_')) AS booked_by_role,
                 booked_by.department AS booked_by_department,
                 booked_by.job_title AS booked_by_job_title,
 
@@ -624,7 +633,7 @@ def _fetch_guest_activity_rows(
                 booked_by.id::text AS booked_by_id,
                 booked_by.full_name AS booked_by_name,
                 booked_by.email AS booked_by_email,
-                booked_by.role_name AS booked_by_role,
+                UPPER(REPLACE(booked_by.role_name, ' ', '_')) AS booked_by_role,
                 booked_by.department AS booked_by_department,
                 booked_by.job_title AS booked_by_job_title,
 
@@ -835,6 +844,15 @@ def fetch_date_range_occupancy(
                    AND fl.site_id = s.site_id
                    AND fl.building_id = s.building_id
                    AND fl.status = 'ACTIVE'
+                -- Only seats belonging to the floor's currently published
+                -- layout count toward occupancy -- seats left over from a
+                -- superseded layout must not inflate total/available counts.
+                INNER JOIN floor_layouts AS pfl
+                    ON pfl.floor_id = s.floor_id
+                   AND pfl.tenant_id = s.tenant_id
+                   AND pfl.is_published = TRUE
+                   AND pfl.status = 'PUBLISHED'
+                   AND pfl.id = s.layout_id
                 WHERE s.tenant_id = %(tenant_id)s
                   AND s.status = 'ACTIVE'
                   AND s.is_bookable = TRUE

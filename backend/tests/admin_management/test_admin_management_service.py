@@ -37,6 +37,9 @@ class FakeConnection:
         self.rollbacks += 1
 
 
+TENANT_ADMIN_CALLER = {"user_id": "1", "email": "admin@example.com", "role_name": "TENANT_ADMIN"}
+
+
 class AdminManagementServiceTests(unittest.TestCase):
     def test_create_site_rejects_duplicate_tenant_code(self) -> None:
         conn = FakeConnection()
@@ -51,9 +54,9 @@ class AdminManagementServiceTests(unittest.TestCase):
         with patch(
             "backend.services.location_service.fetch_site_duplicates",
             return_value=[{"site_code": "BLR", "site_name": "Other"}],
-        ):
+        ), patch("backend.services.location_service.safe_write_audit_log"):
             with self.assertRaises(HTTPException) as context:
-                create_site(conn, tenant_id="1", payload=payload)
+                create_site(conn, tenant_id="1", payload=payload, current_user=TENANT_ADMIN_CALLER)
 
         self.assertEqual(context.exception.status_code, 409)
         self.assertEqual(context.exception.detail["code"], "duplicate_site_code")
@@ -70,6 +73,7 @@ class AdminManagementServiceTests(unittest.TestCase):
                 tenant_id="1",
                 site_id="2",
                 payload=payload,
+                current_user=TENANT_ADMIN_CALLER,
             )
 
         self.assertEqual(context.exception.status_code, 400)
@@ -88,9 +92,9 @@ class AdminManagementServiceTests(unittest.TestCase):
         with patch(
             "backend.services.location_service.fetch_building_by_id",
             return_value={"building_id": "3", "site_id": "99"},
-        ):
+        ), patch("backend.services.location_service.safe_write_audit_log"):
             with self.assertRaises(HTTPException) as context:
-                create_floor(conn, tenant_id="1", payload=payload)
+                create_floor(conn, tenant_id="1", payload=payload, current_user=TENANT_ADMIN_CALLER)
 
         self.assertEqual(context.exception.status_code, 400)
         self.assertEqual(context.exception.detail["code"], "invalid_hierarchy")
@@ -107,6 +111,7 @@ class AdminManagementServiceTests(unittest.TestCase):
                 tenant_id="1",
                 seat_id="4",
                 payload=payload,
+                current_user=TENANT_ADMIN_CALLER,
             )
 
         self.assertEqual(context.exception.status_code, 400)
