@@ -26,10 +26,8 @@ from backend.repositories.audit_repository import (
     write_audit_log,
 )
 from backend.repositories.booking_repository import (
-    cancel_booking,
     acquire_booking_slot_locks,
-    fetch_available_seats,
-    fetch_available_seats_by_range,
+    cancel_booking,
     fetch_admin_bookings,
     fetch_admin_bookings_summary,
     fetch_admin_guest_visits_without_booking,
@@ -55,8 +53,6 @@ from backend.repositories.booking_repository import (
     insert_booking,
     insert_guest_booking,
     mark_booking_modified,
-    fetch_booking_by_id_for_update,
-    fetch_booking_by_id,
     seat_has_active_block_in_range,
     seat_has_active_booking_in_range,
     user_has_active_booking_in_range,

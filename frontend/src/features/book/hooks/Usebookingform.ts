@@ -191,13 +191,19 @@ export function useBookingForm() {
   // transition since navigateTo/buildUrl replace the whole query string).
   // Used below to gate "proceed" on modify screens so a no-op modification
   // (same site/building/floor/date/seat as before) can't be submitted.
+  //
+  // Seat is compared by label (seat_code), not seatId: `booking.seatId` is
+  // optional on the Booking type and isn't always populated, whereas `seat`
+  // (the label) is required — comparing by the unreliable id previously made
+  // hasModification always true, since the resolved form.selectedSeatId
+  // would never match an empty original seatId.
   const [originalBooking] = useState(() => ({
     siteName: prefillLocationName,
     buildingName: prefillBuildingName,
     floorName: prefillFloorName,
     fromDate: prefillFromDate,
     toDate: prefillToDate,
-    seatId: searchParams.get("seatId"),
+    seatLabel: prefillSeatLabel,
   }));
 
   const [sites, setSites] = useState<Site[]>([]);
@@ -784,7 +790,7 @@ export function useBookingForm() {
     (selectedFloor?.name ?? null) !== originalBooking.floorName ||
     form.fromDate !== originalBooking.fromDate ||
     form.toDate !== originalBooking.toDate ||
-    form.selectedSeatId !== originalBooking.seatId;
+    (selectedSeat?.label ?? null) !== originalBooking.seatLabel;
 
   return {
     step,
