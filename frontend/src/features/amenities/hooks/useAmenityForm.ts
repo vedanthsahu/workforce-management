@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { toast } from "sonner";
 import { amenitiesService } from "../services/amenitiesService";
 import { AmenityCategory, AmenityFormData } from "../types/amenities.types";
 

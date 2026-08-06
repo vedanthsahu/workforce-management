@@ -356,7 +356,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
           <DialogHeader>
             <DialogTitle>Sign out?</DialogTitle>
             <DialogDescription>
-              You'll be signed out of your account.
+              You&apos;ll be signed out of your account.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

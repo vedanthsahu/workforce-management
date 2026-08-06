@@ -4,6 +4,7 @@ export const FALLBACK_PREFERENCE_NAMES = ["Window Seat", "Near Cafeteria"];
 
 export const TAG_STYLES: Record<string, string> = {
   confirmed: "bg-[#E8F5E9] text-[#2E7D32] border border-[#A5D6A7]",
+  modified:  "bg-[#FFF8E1] text-[#F57F17] border border-[#FFE082]",
   manager:   "bg-[#E3F2FD] text-[#1565C0] border border-[#90CAF9]",
   zone:      "bg-[#F3E5F5] text-[#6A1B9A] border border-[#CE93D8]",
   sprint:    "bg-[#FFF8E1] text-[#F57F17] border border-[#FFE082]",

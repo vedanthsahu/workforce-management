@@ -85,7 +85,7 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-semibold">
-            Today's Overview
+            Today&apos;s Overview
           </CardTitle>
         </CardHeader>
 

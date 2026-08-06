@@ -4,9 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { useBookingForm, useSiteBuildingOptions } from "../hooks/useBooking";
-import type { BookingType } from "../types/booking";
+import type { BookingType, GuestType, PurposeOfVisit } from "../types/booking";
 import { checkGuestBookingEligibility } from "../services/booking.service";
-import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
+import { guestVisitWorkflow, type GuestWorkflowAction } from "@/features/bookings/services/bookings.service";
 import { BookingTypeSelector, FormFooter, InternalEmployeeForm } from "./BookForSomeone";
 import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 import {
@@ -85,8 +85,8 @@ const currentUserId = data?.user.user_id;
       selectedGuest: guestName ? { id: "", fullName: guestName, email: guestEmail } : null,
       seatRequired: null,
       visitDetails: {
-        guestType: (guestType || "INTERVIEW_CANDIDATE") as any,
-        purposeOfVisit: (purposeOfVisit || "INTERVIEW") as any,
+        guestType: (guestType || "INTERVIEW_CANDIDATE") as GuestType,
+        purposeOfVisit: (purposeOfVisit || "INTERVIEW") as PurposeOfVisit,
         hostEmployee: hostName ? { id: hostUserId, name: hostName, email: "", role: "", status: "ACTIVE" } : null,
         siteId,
         buildingId,
@@ -98,7 +98,7 @@ const currentUserId = data?.user.user_id;
         additionalNotes: "",
       },
     }));
-  }, [editVisitId]);
+  }, [editVisitId, searchParams, setFormState]);
 
   // Admin's "Booking Management" page links here with ?entry=employee or
   // ?entry=guest depending on which button was clicked — lock the wizard to
@@ -115,7 +115,7 @@ const currentUserId = data?.user.user_id;
     if (entry === "guest") { setBookingType("visitor"); return; }
     if (canBookEmployee && !canBookGuest) setBookingType("internal");
     if (canBookGuest && !canBookEmployee) setBookingType("visitor");
-  }, [canBookEmployee, canBookGuest, entry]);
+  }, [canBookEmployee, canBookGuest, entry, editVisitId, setBookingType]);
 
   const showTypeSelector = canBookEmployee && canBookGuest;
 
@@ -287,7 +287,7 @@ const currentUserId = data?.user.user_id;
             workflowPayload.seat_id = Number(seatId);
           }
           console.log("[ModifyVisit] Action:", action, "Payload:", JSON.stringify(workflowPayload));
-          await guestVisitWorkflow(editVisitId, action as any, workflowPayload);
+          await guestVisitWorkflow(editVisitId, action as GuestWorkflowAction, workflowPayload);
         } catch (err: unknown) {
           const detail = axios.isAxiosError(err) ? JSON.stringify(err.response?.data) : String(err);
           console.error("[ModifyVisit] Workflow error:", detail);

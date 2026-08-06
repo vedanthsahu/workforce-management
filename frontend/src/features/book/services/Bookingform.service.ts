@@ -169,7 +169,9 @@ export async function fetchAvailability(params: {
   bookedForGuestId?: string | null;
   calendarMode?: boolean;
 }): Promise<AvailableSeatResponse[]> {
-  const { data } = await axiosInstance.get<any>(
+  const { data } = await axiosInstance.get<
+    AvailableSeatResponse[] | { items: AvailableSeatResponse[] }
+  >(
     `/floors/${params.floorId}/seats`,
     {
       params: {

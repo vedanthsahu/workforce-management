@@ -105,6 +105,22 @@ export function useBookingForm() {
 
   const modifyBookingId = searchParams.get("modifyBookingId");
   const isModifyMode    = Boolean(modifyBookingId);
+
+  // Snapshot the booking's original seat/dates once, on first mount — before
+  // any step navigation (navigateTo → buildUrl) rewrites the seatId/fromDate/
+  // toDate URL params to reflect whatever the user is currently editing.
+  // Used to detect whether a modification is a genuine no-op.
+  //
+  // Compared by label (seat_code), not seatId: `booking.seatId` is optional
+  // on the Booking type and isn't always populated, whereas `seat` (the
+  // label) is required — comparing by the unreliable id previously made
+  // hasModification always true, since the resolved form.selectedSeatId
+  // would never match an empty original seatId.
+  const [originalBooking] = useState(() => ({
+    seatLabel: isModifyMode ? searchParams.get("seatLabel") : null,
+    fromDate:  isModifyMode ? searchParams.get("fromDate")  : null,
+    toDate:    isModifyMode ? searchParams.get("toDate")    : null,
+  }));
   // Set only by AdminBookingsPage's row-menu "Modify" action (useAdminBookingActions.modifySeat)
   // so the confirmation screen can show admin-specific copy/navigation without affecting
   // the employee "My Bookings" or facilitator "Book for Someone" modify flows, which share this route.
@@ -199,8 +215,21 @@ export function useBookingForm() {
 
   const [myPreferencesApplied, setMyPreferencesApplied] = useState(false);
   const [userPrefsSettled,    setUserPrefsSettled]    = useState(false);
+  const [savedPreferenceNames, setSavedPreferenceNames] = useState<{
+    siteName: string | null;
+    buildingName: string | null;
+    floorName: string | null;
+  }>({ siteName: null, buildingName: null, floorName: null });
 
   // ── Reset on clean /book navigation ──────────────────────────────────────
+  // This only fires once the URL has genuinely settled to a param-less
+  // /book (searchParams is derived straight from the router, so a
+  // router.push from resetForm lags a render or two behind it). Resetting
+  // the preference-prefill guards here — not synchronously inside
+  // resetForm — avoids a race where the auto-fill effect below wakes up
+  // while hasAnyParam is still stale-true (from the just-finished booking's
+  // URL), silently skips the site/building/floor fields because of that,
+  // and then locks itself out permanently.
 
   useEffect(() => {
     if (hasAnyParam) return;
@@ -212,6 +241,9 @@ export function useBookingForm() {
     setFloorLayoutUrl(null);
     setConfirmation(null);
     setError(null);
+    setMyPreferencesApplied(false);
+    setUserPrefsSettled(false);
+    setSavedPreferenceNames({ siteName: null, buildingName: null, floorName: null });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.toString()]);
 
@@ -251,25 +283,21 @@ export function useBookingForm() {
   }, [availablePreferences]);
 
   // ── Auto-fill office/building/floor/amenities from saved preferences ─────
-  // Self-booking: GET /dashboard/me, only on a fresh visit (no URL params).
+  // Self-booking: GET /dashboard/me, on a fresh visit or once the form's
+  // location fields are actually empty (see the f.siteId check below).
   // Facilitator booking for an employee: GET /dashboard/employee/{id}, using
-  // whoever bookedForUserId points at — not gated on hasAnyParam, since that
-  // flow always carries bookedForUserId/bookingForName (and sometimes
-  // fromDate) but never a siteId of its own to preserve.
-  // Skipped for guest bookings (no work_preferences exist for a guest) and
-  // modify mode. If the target user has never saved a preference, the form
-  // is left exactly as it was (all fields blank).
-  const [savedPreferenceNames, setSavedPreferenceNames] = useState<{
-    siteName: string | null;
-    buildingName: string | null;
-    floorName: string | null;
-  }>({ siteName: null, buildingName: null, floorName: null });
+  // whoever bookedForUserId points at — that flow always carries a `step`/
+  // `bookedForUserId` param (so hasAnyParam is always true for it) but never
+  // a siteId of its own, so it must still get the location prefill.
+  // Skipped for guest bookings (no work_preferences exist for a guest).
+  // If the target user has never saved a preference, the form is left
+  // exactly as it was (all fields blank).
 
   useEffect(() => {
     if (myPreferencesApplied) return;
     // Guest bookings have no work preferences to fetch; skip entirely.
     // Modify mode is allowed through so the user's current profile amenities
-    // are prefilled (location fields are protected by the hasAnyParam guard below).
+    // are prefilled (location fields are protected by the isModifyMode/f.siteId guard below).
     if (isGuestBooking) { setUserPrefsSettled(true); return; }
     if (availablePreferences.length === 0) return;
 
@@ -293,9 +321,14 @@ export function useBookingForm() {
 
         setForm((f) => ({
           ...f,
-          // Modify mode always has URL params (modifyBookingId etc.), so
-          // hasAnyParam=true — location fields are never touched here.
-          ...(!hasAnyParam && {
+          // Only fill in location fields the form doesn't already have. This
+          // protects modify mode (always has a site from the booking being
+          // edited) and deep links like "book my favourite seat" (arrives
+          // with siteId/buildingId/floorId already set) without depending on
+          // hasAnyParam, which is always true for book-for-someone (it
+          // always carries a `step`/`bookedForUserId` param) and would
+          // otherwise block that flow's location prefill entirely.
+          ...(!isModifyMode && !f.siteId && {
             siteId:     prefs.siteId     ?? f.siteId,
             buildingId: prefs.buildingId ?? f.buildingId,
             floorId:    prefs.floorId    ?? f.floorId,
@@ -307,7 +340,6 @@ export function useBookingForm() {
       })
       .catch(() => {})
       .finally(() => setUserPrefsSettled(true));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availablePreferences, hasAnyParam, bookedForUserId, isGuestBooking, isModifyMode, myPreferencesApplied]);
 
   // ── Navigate helper ───────────────────────────────────────────────────────
@@ -570,7 +602,7 @@ export function useBookingForm() {
     } finally {
       setLoadingSeats(false);
     }
-  }, [form, resolveAmenityIds, navigateTo, searchParams, modifyBookingId]);
+  }, [form, resolveAmenityIds, navigateTo, searchParams, modifyBookingId, bookedForUserId, guestId, isGuestBooking]);
 
   // ── Step 2: select seat ───────────────────────────────────────────────────
 
@@ -662,7 +694,11 @@ export function useBookingForm() {
     } finally {
       setSubmitting(false);
     }
-  }, [form, isModifyMode, modifyBookingId]);
+  }, [
+    form, isModifyMode, modifyBookingId, isGuestModify, isAddBookingToVisit, visitId,
+    isGuestBooking, guestId, hostUserId, guestType, purposeOfVisit,
+    guestStartTime, guestEndTime, guestNotes, bookedForUserId,
+  ]);
 
   // ── Navigation helpers ────────────────────────────────────────────────────
 
@@ -688,6 +724,12 @@ export function useBookingForm() {
     setFloorLayoutUrl(null);
     setConfirmation(null);
     setError(null);
+    // Let the preferences auto-fill effect run again for the next booking —
+    // it's a one-shot guard per component mount, and "Book Another Seat"
+    // reuses this same mount instead of remounting.
+    setMyPreferencesApplied(false);
+    setUserPrefsSettled(false);
+    setSavedPreferenceNames({ siteName: null, buildingName: null, floorName: null });
     if (isModifyMode) {
       const forSomeone = isBookingForSomeone || isGuestModify || Boolean(bookedForUserId);
       router.push(forSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings");
@@ -721,6 +763,15 @@ export function useBookingForm() {
     !!form.fromDate   &&
     !!form.toDate;
 
+  // In modify mode, only treat the booking as changed if the seat or date
+  // actually differs from the original — prevents submitting a no-op
+  // "modification" that just recreates the exact same booking.
+  const hasModification =
+    !isModifyMode ||
+    (selectedSeat?.label ?? "").toLowerCase() !== (originalBooking.seatLabel ?? "").toLowerCase() ||
+    form.fromDate !== originalBooking.fromDate ||
+    form.toDate   !== originalBooking.toDate;
+
   return {
     step,
     form,
@@ -731,6 +782,7 @@ export function useBookingForm() {
     availablePreferences,
     confirmation,
     error,
+    setError,
     loadingSites,
     loadingBuildings,
     loadingFloors,
@@ -743,6 +795,7 @@ export function useBookingForm() {
     selectedSeat,
     dayCount,
     step1Valid,
+    hasModification,
     isModifyMode,
     isAdminFlow,
     isBookingForSomeone,

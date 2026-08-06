@@ -494,12 +494,14 @@ def book_seat(
             new_values={
                 "booking_date": str(booking.get("booking_date")),
                 "seat_code": booking.get("seat_code"),
-                "floor_name": booking.get("floor_name"),
+                "site_id": str(booking.get("site_id")) if booking.get("site_id") is not None else None,
+                "site_name": booking.get("site_name"),
+                "building_id": str(booking.get("building_id")) if booking.get("building_id") is not None else None,
                 "building_name": booking.get("building_name"),
+                "floor_id": str(booking.get("floor_id")) if booking.get("floor_id") is not None else None,
+                "floor_name": booking.get("floor_name"),
                 "booked_for_user_id": str(booked_for_user_id),
                 "booked_for_email": booked_for_user.get("email"),
-            },
-            metadata={
                 "operation": "book_for_user",
                 "done_by_email": current_user.get("email"),
                 "done_by_name": current_user.get("full_name"),
@@ -883,19 +885,29 @@ def cancel_booking_by_id(
                 },
             )
 
+        _cancel_context = {
+            "booked_for_user_id": str(booked_for_user_id),
+            "booked_for_email": booking_user.get("email"),
+            "seat_id": booking.get("seat_id"),
+            "seat_code": booking.get("seat_code"),
+            "site_id": booking.get("site_id"),
+            "site_name": booking.get("site_name"),
+            "building_id": booking.get("building_id"),
+            "building_name": booking.get("building_name"),
+            "floor_id": booking.get("floor_id"),
+            "floor_name": booking.get("floor_name"),
+        }
         _cancel_old = {
             "booking_date": str(booking.get("booking_date")),
-            "seat_code": booking.get("seat_code"),
             "booking_status": booking.get("booking_status"),
             "cancellation_reason": booking.get("cancellation_reason"),
+            **_cancel_context,
         }
         _cancel_new = {
             "booking_date": str(booking.get("booking_date")),
-            "seat_code": booking.get("seat_code"),
             "booking_status": "CANCELLED",
             "cancellation_reason": updated_booking.get("cancellation_reason"),
-            "booked_for_user_id": str(booked_for_user_id),
-            "booked_for_email": booking_user.get("email"),
+            **_cancel_context,
         }
         safe_write_audit_log(
             conn,
@@ -1162,14 +1174,22 @@ def modify_booking(
         _old_vals = {
             "booking_date": str(old_booking_for_email.get("booking_date")),
             "seat_code": old_booking_for_email.get("seat_code"),
-            "floor_name": old_booking_for_email.get("floor_name"),
+            "site_id": str(old_booking_for_email.get("site_id")) if old_booking_for_email.get("site_id") is not None else None,
+            "site_name": old_booking_for_email.get("site_name"),
+            "building_id": str(old_booking_for_email.get("building_id")) if old_booking_for_email.get("building_id") is not None else None,
             "building_name": old_booking_for_email.get("building_name"),
+            "floor_id": str(old_booking_for_email.get("floor_id")) if old_booking_for_email.get("floor_id") is not None else None,
+            "floor_name": old_booking_for_email.get("floor_name"),
         }
         _new_vals = {
             "booking_date": str(new_booking.get("booking_date")),
             "seat_code": new_booking.get("seat_code"),
-            "floor_name": new_booking.get("floor_name"),
+            "site_id": str(new_booking.get("site_id")) if new_booking.get("site_id") is not None else None,
+            "site_name": new_booking.get("site_name"),
+            "building_id": str(new_booking.get("building_id")) if new_booking.get("building_id") is not None else None,
             "building_name": new_booking.get("building_name"),
+            "floor_id": str(new_booking.get("floor_id")) if new_booking.get("floor_id") is not None else None,
+            "floor_name": new_booking.get("floor_name"),
         }
         _actually_changed = [k for k in _new_vals if _old_vals.get(k) != _new_vals[k]]
         safe_write_audit_log(
@@ -1591,10 +1611,20 @@ def book_guest_seat(
             resource_id=str(booking.get("booking_id")),
             new_values={
                 "guest_id": str(payload.guest_id),
+                "host_user_id": str(payload.host_user_id),
                 "visit_date": str(payload.visit_date),
+                "guest_type": payload.guest_type.value if payload.guest_type is not None else None,
+                "purpose_of_visit": payload.purpose_of_visit.value if payload.purpose_of_visit is not None else None,
+                "start_time": str(payload.start_time) if payload.start_time is not None else None,
+                "end_time": str(payload.end_time) if payload.end_time is not None else None,
+                "notes": payload.notes,
                 "seat_code": booking.get("seat_code"),
-                "floor_name": booking.get("floor_name"),
+                "site_id": str(booking.get("site_id")) if booking.get("site_id") is not None else None,
+                "site_name": booking.get("site_name"),
+                "building_id": str(booking.get("building_id")) if booking.get("building_id") is not None else None,
                 "building_name": booking.get("building_name"),
+                "floor_id": str(booking.get("floor_id")) if booking.get("floor_id") is not None else None,
+                "floor_name": booking.get("floor_name"),
                 "guest_visit_id": str(visit["guest_visit_id"]),
             },
         )

@@ -69,7 +69,7 @@ function ManageLayoutPage() {
     if (selectedLayout?.layout_id) {
       fetchSeats(selectedLayout.layout_id);
     }
-  }, [selectedLayout?.layout_id]);
+  }, [selectedLayout?.layout_id, fetchSeats]);
 
   // ── Sync URL whenever any selection changes ────────────────────────────
   // Runs on every change — guards against pushing identical URLs
@@ -91,6 +91,12 @@ function ManageLayoutPage() {
     ) {
       syncUrl({});
     }
+    // syncUrl is a plain (non-memoized) function recreated every render, and
+    // params changes identity right after syncUrl() writes the URL — adding
+    // either would make this effect re-run far more often than intended.
+    // This is a one-way sync (selection state -> URL); it deliberately does
+    // not react to URL changes on their own (e.g. browser back/forward).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSiteId, selectedBuildingId, selectedFloorId, selectedLayoutId]);
 
   // ── Handlers ───────────────────────────────────────────────────────────

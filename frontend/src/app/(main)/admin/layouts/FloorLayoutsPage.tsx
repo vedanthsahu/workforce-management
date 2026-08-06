@@ -6,7 +6,6 @@ import { useLayoutSelection, LayoutSelection } from "@/features/adminlayouts1/ho
 import { useLayoutsStore }    from "@/store/useLayoutsStore";
 import Link        from "next/link";
 import { useEffect, useCallback, useRef } from "react";
-import { toast }   from "sonner";
 import { useSearchParams, useRouter } from "next/navigation";
 
 const DEFAULT_SELECTION: LayoutSelection = {
@@ -30,7 +29,7 @@ export default function FloorLayoutsPage() {
     return DEFAULT_SELECTION;
   });
 
-  const { fetchLayouts, invalidateFloor, invalidateAll } = useLayoutsStore();
+  const { fetchLayouts, invalidateFloor } = useLayoutsStore();
 
   // Restore selection from localStorage after hydration (client-only)
   const restoredRef = useRef(false);

@@ -38,11 +38,20 @@ export const useFloors = () => {
     };
 
     loadDefaultSelection();
+    // handleSiteChange/handleBuildingChange are plain functions recreated
+    // every render, not memoized. This effect must fire only once when
+    // `sites` first populates — adding them here would re-run it on every
+    // render and repeatedly force the selection back to the hardcoded
+    // defaults ("5"/"7"), overwriting whatever the user actually picked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sites]);
 
   // Restore a selection saved before navigating away (e.g. after creating a floor)
   useEffect(() => {
     restoreSelection();
+    // Same reasoning as above: restoreSelection is recreated every render;
+    // this must only run once when `sites` first populates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sites]);
 
   const fetchSites = async () => {

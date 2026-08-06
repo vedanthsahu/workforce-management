@@ -18,7 +18,7 @@
  */
 
 import { useAuthContext } from "@/features/auth/context/AuthContext";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,8 +50,11 @@ export type AppRole =
 export function usePermissions() {
   const { user } = useAuthContext();
 
-  // user.permissions comes from /auth/me as string[].
-  const permissions: string[] = user?.permissions ?? [];
+  // user.permissions comes from /auth/me as string[]. Memoized so the
+  // fallback `[]` doesn't get a fresh reference every render — that would
+  // silently break `can`/`canAny`'s useCallback memoization below whenever
+  // permissions is nullish.
+  const permissions: string[] = useMemo(() => user?.permissions ?? [], [user?.permissions]);
   const role: AppRole         = user?.role ?? "EMPLOYEE";
 
   /**

@@ -5,7 +5,23 @@ import { LayoutSeatStats } from "../types/layout.types";
 // ─── Mapper ───────────────────────────────────────────────────────────────────
 // No fake defaults — null stays null so the UI can show "—" for unconfigured seats
 
-function mapApiItemToSeat(item: any, forceConfigured = false): Seat {
+interface RawSeatItem {
+  layout_seat_mapping_id: string | number;
+  svg_element_id:  string | number;
+  seat_code:       string;
+  seat_name?:      string | null;
+  seat_type?:      string | null;
+  status?:         string | null;
+  is_bookable?:    boolean | null;
+  is_reserved?:    boolean | null;
+  is_configured?:  boolean | null;
+  configuration_status?: string | null;
+  amenity_ids?:    (string | number)[] | null;
+  layout_id:       string | number;
+  notes?:          string | null;
+}
+
+function mapApiItemToSeat(item: RawSeatItem, forceConfigured = false): Seat {
   return {
     seat_id:                String(item.layout_seat_mapping_id),
     seat_svg_id:            String(item.svg_element_id),
@@ -31,7 +47,7 @@ interface LayoutSeatsApiResponse {
   total_seats:      number;
   configured_seats: number;
   pending_seats:    number;
-  items:            any[];
+  items:            RawSeatItem[];
 }
 
 export async function fetchLayoutSeats(
@@ -72,7 +88,7 @@ export async function configureSeat(
   layoutSeatMappingId: string,
   payload: SeatConfigPayload
 ): Promise<Seat> {
-  const { data } = await axiosInstance.patch(
+  const { data } = await axiosInstance.patch<RawSeatItem>(
     `/layout-seats/${layoutSeatMappingId}/configuration`,
     payload,
     {

@@ -8,9 +8,10 @@ const BASE = "/bookings";
 
 // ── Status normaliser ─────────────────────────────────────────────────────────
 
-function normaliseStatus(raw: string): "confirmed" | "cancelled" | "pending" {
+function normaliseStatus(raw: string): "confirmed" | "modified" | "cancelled" | "pending" {
   const s = raw.toUpperCase();
   if (s === "CONFIRMED" || s === "ACTIVE")   return "confirmed";
+  if (s === "MODIFIED")                      return "modified";
   if (s === "CANCELLED" || s === "CANCELED") return "cancelled";
   return "pending";
 }
@@ -79,6 +80,8 @@ function mapRawBooking(raw: RawBooking, currentUserId: string): Booking {
 
   if (status === "confirmed") {
     tagList.push({ label: "Confirmed", variant: "confirmed" });
+  } else if (status === "modified") {
+    tagList.push({ label: "Modified", variant: "modified" });
   }
 
   for (const t of raw.tags ?? []) {
@@ -307,7 +310,9 @@ export async function fetchSeatAmenities(
     const allAmenityIds = allPrefs.map((p) => p.id);
 
     // Step 2: fetch seats passing all amenity ids so the backend populates matched_amenities
-    const { data: resp } = await axiosInstance.get<any>(
+    const { data: resp } = await axiosInstance.get<
+      SeatAmenityMatch[] | { items: SeatAmenityMatch[] }
+    >(
       `/floors/${floorId}/seats`,
       {
         params: {
