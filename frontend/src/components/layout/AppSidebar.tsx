@@ -71,6 +71,7 @@ import { useUsersFilterStore } from "@/store/useUsersFilterStore";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+
 export type AppRole =
   | "TENANT_ADMIN"
   | "MANAGER"
