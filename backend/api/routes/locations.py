@@ -50,15 +50,10 @@ from backend.services.location_service import (
     update_building_metadata,
     update_floor_metadata,
     update_layout_seat_configuration,
+    update_layout_seat_configurations_bulk,
     update_seat_configuration_metadata,
     update_seats_configuration_bulk,
     update_site_metadata,
-    update_layout_seat_configuration,
-    update_layout_seat_configurations_bulk,
-)
-
-from backend.services.booking_service import (
-    get_available_seats_by_range,
 )
 
 router = APIRouter(tags=["locations"])

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -99,7 +99,7 @@ class RefreshTokenReuseDetectionTests(unittest.TestCase):
         """Regression guard: the new reuse-detection branch must not run
         (or interfere) when the presented token actually matches."""
         conn = FakeConnection()
-        future_expiry = datetime.now(timezone.utc) + timedelta(days=1)
+        future_expiry = datetime.now(UTC) + timedelta(days=1)
 
         with (
             patch(
