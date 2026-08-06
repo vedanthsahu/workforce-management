@@ -212,7 +212,7 @@ export default function BookingsTable({ data, selectedRowKey, onView, onModifySe
         <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
           <tr>
             <th className="pl-10 pr-2 py-3 text-left font-bold max-w-45">Employee / Guest</th>
-            <th className="pl-8 pr-3 py-3 text-left font-bold">Seat</th>
+            <th className="pl-9 pr-3 py-3 text-left font-bold">Seat</th>
             <th className="pl-3 pr-3 py-3 text-left font-bold">Office</th>
             <th className="pl-3 pr-1 py-3 text-left font-bold">Building</th>
             <th className="pl-5 pr-1 py-3 text-left font-bold">Floor</th>
