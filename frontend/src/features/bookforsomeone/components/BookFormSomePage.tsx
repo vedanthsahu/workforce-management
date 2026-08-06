@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { useBookingForm, useSiteBuildingOptions } from "../hooks/useBooking";
-import type { BookingType, GuestType, PurposeOfVisit } from "../types/booking";
+import type { BookingType, GuestType, PurposeOfVisit, VisitDetails } from "../types/booking";
 import { checkGuestBookingEligibility } from "../services/booking.service";
 import { guestVisitWorkflow, type GuestWorkflowAction } from "@/features/bookings/services/bookings.service";
 import { BookingTypeSelector, FormFooter, InternalEmployeeForm } from "./BookForSomeone";
