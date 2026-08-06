@@ -1639,7 +1639,7 @@ def fetch_cancelled_delegated_bookings(
         cur.execute(query, params)
         rows = cur.fetchall()
 
-    return [dict(row) for row in rows]
+    return [dict(row) for row in rows ]
 def fetch_cancelled_bookings_for_user(
     conn: PGConnection,
     *,
