@@ -541,6 +541,7 @@ def fetch_layout_seats_by_layout_id(
             LEFT JOIN seats AS s
                 ON s.tenant_id = lsm.tenant_id
                AND s.floor_id = lsm.floor_id
+               AND s.layout_id = lsm.layout_id
                AND s.seat_code = lsm.seat_code
 
             WHERE lsm.tenant_id = %s
@@ -569,9 +570,14 @@ def reconcile_published_layout_seats(
     floor_id: str,
     layout_id: str,
 ) -> None:
-    """Make `seats` an exact projection of this layout's configured mappings.
+    """Make `seats` hold only the generation just published on this floor.
 
-    Seat codes that are no longer part of the published layout are removed
+    `seats` has a UNIQUE (floor_id, layout_id, seat_code) constraint, so
+    publish_layout_seat_configurations() inserts a fresh row per configured
+    seat_code under the new layout_id rather than updating a prior
+    generation's row in place -- every seat row on this floor still carrying
+    an older layout_id is superseded by definition, regardless of whether
+    its seat_code also appears in the new layout. Such rows are removed
     outright when nothing references them; seats with booking/block history
     are retired in place (INACTIVE, unbookable, timestamped) instead of being
     deleted, so historical booking integrity is never broken.
@@ -599,14 +605,7 @@ def reconcile_published_layout_seats(
             FROM seats AS s
             WHERE s.tenant_id = %s
               AND s.floor_id = %s
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM layout_seat_mappings AS lsm
-                  WHERE lsm.tenant_id = s.tenant_id
-                    AND lsm.layout_id = %s
-                    AND lsm.is_configured = TRUE
-                    AND lsm.seat_code = s.seat_code
-              )
+              AND s.layout_id IS DISTINCT FROM %s
             """,
             (tenant_id, floor_id, layout_id),
         )

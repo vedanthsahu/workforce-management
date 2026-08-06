@@ -930,6 +930,7 @@ def upsert_operational_seat(
 
             ON CONFLICT (
                 floor_id,
+                layout_id,
                 seat_code
             )
 
