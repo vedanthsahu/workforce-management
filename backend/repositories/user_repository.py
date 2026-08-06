@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from psycopg2.extras import Json, RealDictCursor
 from psycopg2.extensions import connection as PGConnection
+from psycopg2.extras import Json, RealDictCursor
 
 USER_SELECT_FIELDS = """
     au.id::text AS user_id,
@@ -1254,7 +1254,7 @@ def search_users(
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            f"""
+            fr"""
             SELECT {USER_SELECT_FIELDS}
             {USER_SELECT_FROM}
             WHERE au.tenant_id = %s
@@ -1513,7 +1513,7 @@ def fetch_user_details_by_id(
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            f"""
+            """
             SELECT
             au.id::text AS id,
             au.email,

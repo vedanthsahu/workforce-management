@@ -4,15 +4,13 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 from backend.core.enums import GuestType, GuestVisitModificationReason, VisitPurpose
 from backend.schemas.booking import BookingResponse
 from backend.schemas.pagination import PaginationMetadata
-
-from typing import Literal
 
 GuestVisitStatus = Literal[
     "SCHEDULED",

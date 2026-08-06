@@ -2,17 +2,20 @@
 Repository helpers for floor layout persistence.
 """
 from __future__ import annotations
-from psycopg2.extras import Json
 
 from typing import Any
 
-from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
+from psycopg2.extras import Json, RealDictCursor
 
-from backend.core.enums import ALL_LAYOUT_STATUSES, LayoutStatus, NON_DELETED_LAYOUT_STATUSES
+from backend.core.enums import (
+    ALL_LAYOUT_STATUSES,
+    NON_DELETED_LAYOUT_STATUSES,
+    LayoutStatus,
+)
 from backend.repositories.location_repository import (
-    upsert_operational_seat,
     replace_seat_amenities,
+    upsert_operational_seat,
 )
 
 # Distinct advisory-lock class from the booking locks in

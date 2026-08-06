@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
+from psycopg2.extras import RealDictCursor
 
 
 def fetch_active_amenities(

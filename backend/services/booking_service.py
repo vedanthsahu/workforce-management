@@ -12,16 +12,6 @@ from fastapi import BackgroundTasks, HTTPException, status
 from psycopg2 import errorcodes
 from psycopg2.extensions import connection as PGConnection
 
-from backend.schemas.booking import (
-BookingEligibilityRequest,
-BookingEligibilityResponse,
-)
-
-from backend.repositories.guest_repository import fetch_guest_by_id
-from backend.repositories.guest_visit_repository import (
-    fetch_cancelled_guest_visits,
-    insert_guest_visit,
-)
 from backend.core.app_logging import LOGGER_NAME
 from backend.core.audit_actions import (
     BOOKING_CANCELLED,
@@ -36,28 +26,34 @@ from backend.repositories.audit_repository import (
     write_audit_log,
 )
 from backend.repositories.booking_repository import (
+    cancel_booking,
     acquire_booking_slot_locks,
     fetch_available_seats,
     fetch_available_seats_by_range,
     fetch_admin_bookings,
     fetch_admin_bookings_summary,
     fetch_admin_guest_visits_without_booking,
-    fetch_past_bookings_for_user,
-    fetch_current_bookings_for_user,
-    fetch_past_delegated_bookings,
-    fetch_cancelled_delegated_bookings,
-    fetch_future_delegated_guest_visits_without_booking,
-    fetch_current_delegated_guest_visits_without_booking,
-    fetch_past_delegated_guest_visits_without_booking,
-    fetch_current_delegated_bookings,
-    fetch_future_delegated_bookings,
+    fetch_available_seats,
+    fetch_available_seats_by_range,
+    fetch_booking_by_id,
+    fetch_booking_by_id_for_update,
     fetch_cancelled_bookings_for_user,
+    fetch_cancelled_delegated_bookings,
+    fetch_current_bookings_for_user,
+    fetch_current_delegated_bookings,
+    fetch_current_delegated_guest_visits_without_booking,
     fetch_future_bookings_for_user,
+    fetch_future_delegated_bookings,
+    fetch_future_delegated_guest_visits_without_booking,
+    fetch_past_bookings_for_user,
+    fetch_past_delegated_bookings,
+    fetch_past_delegated_guest_visits_without_booking,
     fetch_seat_for_booking,
+    guest_has_active_booking_in_range,
+    guest_has_active_visit_in_range,
     has_active_booking_conflict,
     insert_booking,
     insert_guest_booking,
-    cancel_booking,
     mark_booking_modified,
     fetch_booking_by_id_for_update,
     fetch_booking_by_id,
@@ -65,8 +61,11 @@ from backend.repositories.booking_repository import (
     seat_has_active_booking_in_range,
     user_has_active_booking_in_range,
     user_has_active_booking_on_date,
-    guest_has_active_booking_in_range,
-    guest_has_active_visit_in_range,
+)
+from backend.repositories.guest_repository import fetch_guest_by_id
+from backend.repositories.guest_visit_repository import (
+    fetch_cancelled_guest_visits,
+    insert_guest_visit,
 )
 from backend.repositories.location_repository import fetch_seat_configuration
 from backend.repositories.user_repository import fetch_user_by_id
@@ -74,9 +73,11 @@ from backend.schemas.booking import (
     AdminBookingListQuery,
     AdminBookingListResponse,
     AdminBookingSummary,
-    AvailableSeatResponse,
     AvailableSeatListResponse,
     AvailableSeatListSummary,
+    AvailableSeatResponse,
+    BookingEligibilityRequest,
+    BookingEligibilityResponse,
     BookingResponse,
     CreateBookingRequest,
     ModifyBookingRequest,

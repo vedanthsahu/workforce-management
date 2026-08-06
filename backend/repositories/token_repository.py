@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from psycopg2.extras import Json, RealDictCursor
 from psycopg2.extensions import connection as PGConnection
+from psycopg2.extras import Json, RealDictCursor
 
 
 def ensure_refresh_tokens_table(conn: PGConnection) -> None:

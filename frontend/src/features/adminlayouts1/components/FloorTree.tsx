@@ -15,24 +15,24 @@ import {
 
 type Props = {
   onSelect: (data: {
-    siteId:       string;
-    buildingId:   string;
-    floorId:      string;
-    siteName:     string;
+    siteId: string;
+    buildingId: string;
+    floorId: string;
+    siteName: string;
     buildingName: string;
-    floorName:    string;
+    floorName: string;
   }) => void;
-  initialSiteId?:     string;
+  initialSiteId?: string;
   initialBuildingId?: string;
-  initialFloorId?:    string;
+  initialFloorId?: string;
 };
 
 interface FlatFloor {
-  floor_id:     string;
-  floor_name:   string;
-  siteId:       string;
-  siteName:     string;
-  buildingId:   string;
+  floor_id: string;
+  floor_name: string;
+  siteId: string;
+  siteName: string;
+  buildingId: string;
   buildingName: string;
 }
 
@@ -43,25 +43,25 @@ const FloorTree = memo(function FloorTree({
   initialFloorId,
 }: Props) {
   const [expandedOffices, setExpandedOffices] = useState<Set<string>>(new Set());
-  const [expandedTowers,  setExpandedTowers]  = useState<Set<string>>(new Set());
-  const [selectedFloor,   setSelectedFloor]   = useState<string>("");
-  const [search,          setSearch]          = useState("");
+  const [expandedTowers, setExpandedTowers] = useState<Set<string>>(new Set());
+  const [selectedFloor, setSelectedFloor] = useState<string>("");
+  const [search, setSearch] = useState("");
 
-  const [sites,     setSites]     = useState<Site[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
   const [buildings, setBuildings] = useState<Record<string, Building[]>>({});
-  const [floors,    setFloors]    = useState<Record<string, Floor[]>>({});
+  const [floors, setFloors] = useState<Record<string, Floor[]>>({});
 
-  const [loadingSites,         setLoadingSites]         = useState(true);
-  const [loadingBuildingsFor,  setLoadingBuildingsFor]  = useState<Set<string>>(new Set());
-  const [loadingFloorsFor,     setLoadingFloorsFor]     = useState<Set<string>>(new Set());
-  const [isSearchLoading,      setIsSearchLoading]      = useState(false);
+  const [loadingSites, setLoadingSites] = useState(true);
+  const [loadingBuildingsFor, setLoadingBuildingsFor] = useState<Set<string>>(new Set());
+  const [loadingFloorsFor, setLoadingFloorsFor] = useState<Set<string>>(new Set());
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
 
   // Always-fresh refs so callbacks with stable identities never read stale state
-  const sitesRef                  = useRef<Site[]>([]);
-  const buildingsRef              = useRef<Record<string, Building[]>>({});
-  const floorsRef                 = useRef<Record<string, Floor[]>>({});
-  const inFlightBuildingFetches   = useRef<Map<string, Promise<Building[]>>>(new Map());
-  const inFlightFloorFetches      = useRef<Map<string, Promise<Floor[]>>>(new Map());
+  const sitesRef = useRef<Site[]>([]);
+  const buildingsRef = useRef<Record<string, Building[]>>({});
+  const floorsRef = useRef<Record<string, Floor[]>>({});
+  const inFlightBuildingFetches = useRef<Map<string, Promise<Building[]>>>(new Map());
+  const inFlightFloorFetches = useRef<Map<string, Promise<Floor[]>>>(new Map());
 
   // Stable ref for onSelect so effects never go stale
   const onSelectRef = useRef(onSelect);
@@ -180,11 +180,11 @@ const FloorTree = memo(function FloorTree({
     for (const { site, building, flrs } of floorResults) {
       for (const floor of flrs) {
         flat.push({
-          floor_id:     floor.floor_id,
-          floor_name:   floor.floor_name,
-          siteId:       site.site_id,
-          siteName:     site.site_name,
-          buildingId:   building.building_id,
+          floor_id: floor.floor_id,
+          floor_name: floor.floor_name,
+          siteId: site.site_id,
+          siteName: site.site_name,
+          buildingId: building.building_id,
           buildingName: building.building_name,
         });
       }
@@ -221,12 +221,12 @@ const FloorTree = memo(function FloorTree({
       if (cancelled || !floor) return;
 
       onSelectRef.current({
-        siteId:       initialSiteId,
-        buildingId:   initialBuildingId,
-        floorId:      initialFloorId,
-        siteName:     site.site_name,
+        siteId: initialSiteId,
+        buildingId: initialBuildingId,
+        floorId: initialFloorId,
+        siteName: site.site_name,
         buildingName: building.building_name,
-        floorName:    floor.floor_name,
+        floorName: floor.floor_name,
       });
     })();
 
@@ -246,7 +246,7 @@ const FloorTree = memo(function FloorTree({
     setIsSearchLoading(true);
     loadEverythingForSearch()
       .then((flat) => {
-        const q       = value.toLowerCase();
+        const q = value.toLowerCase();
         const matches = flat.filter((f) => f.floor_name.toLowerCase().includes(q));
         if (matches.length === 0) return;
         setExpandedOffices(new Set(matches.map((m) => m.siteId)));
@@ -262,11 +262,11 @@ const FloorTree = memo(function FloorTree({
       for (const building of buildings[site.site_id] || []) {
         for (const floor of floors[building.building_id] || []) {
           flat.push({
-            floor_id:     floor.floor_id,
-            floor_name:   floor.floor_name,
-            siteId:       site.site_id,
-            siteName:     site.site_name,
-            buildingId:   building.building_id,
+            floor_id: floor.floor_id,
+            floor_name: floor.floor_name,
+            siteId: site.site_id,
+            siteName: site.site_name,
+            buildingId: building.building_id,
             buildingName: building.building_name,
           });
         }
@@ -277,10 +277,10 @@ const FloorTree = memo(function FloorTree({
 
   const matchingFloorIds: Set<string> | null = search.trim()
     ? new Set(
-        allFloorsFlat
-          .filter((f) => f.floor_name.toLowerCase().includes(search.toLowerCase()))
-          .map((f) => f.floor_id)
-      )
+      allFloorsFlat
+        .filter((f) => f.floor_name.toLowerCase().includes(search.toLowerCase()))
+        .map((f) => f.floor_id)
+    )
     : null;
 
   // ── Expand / collapse — fetches children lazily on first expand ─────────
@@ -371,7 +371,7 @@ const FloorTree = memo(function FloorTree({
                   <span className="font-medium">{site.site_name}</span>
                 </div>
                 {expandedOffices.has(site.site_id)
-                  ? <ChevronDown  className="w-4 h-4" />
+                  ? <ChevronDown className="w-4 h-4" />
                   : <ChevronRight className="w-4 h-4" />}
               </div>
 
@@ -401,7 +401,7 @@ const FloorTree = memo(function FloorTree({
                         >
                           <span>{building.building_name}</span>
                           {expandedTowers.has(building.building_id)
-                            ? <ChevronDown  className="w-4 h-4" />
+                            ? <ChevronDown className="w-4 h-4" />
                             : <ChevronRight className="w-4 h-4" />}
                         </div>
 
@@ -423,21 +423,20 @@ const FloorTree = memo(function FloorTree({
                                   onClick={() => {
                                     setSelectedFloor(floor.floor_id);
                                     onSelect({
-                                      siteId:       site.site_id,
-                                      buildingId:   building.building_id,
-                                      floorId:      floor.floor_id,
-                                      siteName:     site.site_name,
+                                      siteId: site.site_id,
+                                      buildingId: building.building_id,
+                                      floorId: floor.floor_id,
+                                      siteName: site.site_name,
                                       buildingName: building.building_name,
-                                      floorName:    floor.floor_name,
+                                      floorName: floor.floor_name,
                                     });
                                   }}
-                                  className={`cursor-pointer px-2 py-1 rounded transition-colors ${
-                                    selectedFloor === floor.floor_id
+                                  className={`cursor-pointer px-2 py-1 rounded transition-colors ${selectedFloor === floor.floor_id
                                       ? "bg-indigo-100 text-indigo-600 font-medium"
                                       : matchingFloorIds?.has(floor.floor_id)
-                                      ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-                                      : "hover:bg-gray-100"
-                                  }`}
+                                        ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                                        : "hover:bg-gray-100"
+                                    }`}
                                 >
                                   {floor.floor_name}
                                 </div>

@@ -1,9 +1,11 @@
 """Pydantic schemas for authentication endpoints."""
 
 from __future__ import annotations
+
 from datetime import datetime
 
 from pydantic import BaseModel, model_validator
+
 
 class MessageResponse(BaseModel):
     """Simple message-only response."""

@@ -13,8 +13,8 @@ from botocore.client import BaseClient
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import HTTPException, UploadFile, status
 
-from backend.core.config import get_settings
 from backend.core.app_logging import LOGGER_NAME
+from backend.core.config import get_settings
 from backend.core.retry import aws_retry
 
 logger = logging.getLogger(f"{LOGGER_NAME}.storage")
@@ -26,8 +26,6 @@ def get_s3_client() -> BaseClient:
     return boto3.client(
         "s3",
         region_name=settings.aws_region,
-        aws_access_key_id=settings.aws_access_key_id,
-        aws_secret_access_key=settings.aws_secret_access_key,
     )
 
 

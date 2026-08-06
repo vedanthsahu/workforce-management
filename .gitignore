@@ -133,6 +133,13 @@ node_modules/
 
 package.json
 package-lock.json
+
+# Local AWS SAM artifacts and environment configuration
+.aws-sam/
+events/env.json
+events/container-env.json
+samconfig.toml
+
 docs.zip
 uv.lock
 docs/Admin-Management-Flow-Reference.docx

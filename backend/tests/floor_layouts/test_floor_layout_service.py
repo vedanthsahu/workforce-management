@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -30,7 +30,7 @@ class FakeConnection:
 
 
 def _layout_row(*, layout_id: str = "10", status: str = "DRAFT") -> dict:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return {
         "layout_id": layout_id,
         "tenant_id": "1",
@@ -73,6 +73,13 @@ def _layout_row(*, layout_id: str = "10", status: str = "DRAFT") -> dict:
 
 
 class DeleteFloorLayoutServiceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        audit_patcher = patch(
+            "backend.services.floor_layout_service.safe_write_audit_log"
+        )
+        audit_patcher.start()
+        self.addCleanup(audit_patcher.stop)
+
     def test_delete_draft_layout_succeeds(self) -> None:
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
@@ -125,13 +132,12 @@ class DeleteFloorLayoutServiceTests(unittest.TestCase):
             return_value=_layout_row(status="PUBLISHED"),
         ), patch(
             "backend.services.floor_layout_service.soft_delete_floor_layout",
-        ) as mock_delete:
-            with self.assertRaises(HTTPException) as context:
-                delete_floor_layout(
-                    conn,
-                    current_user=current_user,
-                    layout_id="10",
-                )
+        ) as mock_delete, self.assertRaises(HTTPException) as context:
+            delete_floor_layout(
+                conn,
+                current_user=current_user,
+                layout_id="10",
+            )
 
         self.assertEqual(context.exception.status_code, 409)
         self.assertEqual(
@@ -149,13 +155,12 @@ class DeleteFloorLayoutServiceTests(unittest.TestCase):
         with patch(
             "backend.services.floor_layout_service.fetch_floor_layout_by_id",
             return_value=None,
-        ):
-            with self.assertRaises(HTTPException) as context:
-                delete_floor_layout(
-                    conn,
-                    current_user=current_user,
-                    layout_id="999",
-                )
+        ), self.assertRaises(HTTPException) as context:
+            delete_floor_layout(
+                conn,
+                current_user=current_user,
+                layout_id="999",
+            )
 
         self.assertEqual(context.exception.status_code, 404)
         self.assertEqual(
@@ -177,13 +182,12 @@ class DeleteFloorLayoutServiceTests(unittest.TestCase):
         with patch(
             "backend.services.floor_layout_service.fetch_floor_layout_by_id",
             return_value=None,
-        ):
-            with self.assertRaises(HTTPException) as context:
-                delete_floor_layout(
-                    conn,
-                    current_user=current_user,
-                    layout_id="10",
-                )
+        ), self.assertRaises(HTTPException) as context:
+            delete_floor_layout(
+                conn,
+                current_user=current_user,
+                layout_id="10",
+            )
 
         self.assertEqual(context.exception.status_code, 404)
         self.assertNotIn("delete", context.exception.detail["message"].lower())
@@ -197,13 +201,12 @@ class DeletedLayoutVisibilityServiceTests(unittest.TestCase):
         with patch(
             "backend.services.floor_layout_service.fetch_floor_layout_by_id",
             return_value=None,
-        ):
-            with self.assertRaises(HTTPException) as context:
-                activate_floor_layout(
-                    conn,
-                    current_user=current_user,
-                    layout_id="10",
-                )
+        ), self.assertRaises(HTTPException) as context:
+            activate_floor_layout(
+                conn,
+                current_user=current_user,
+                layout_id="10",
+            )
 
         self.assertEqual(context.exception.status_code, 404)
         self.assertEqual(
@@ -220,13 +223,12 @@ class DeletedLayoutVisibilityServiceTests(unittest.TestCase):
             return_value=None,
         ) as mock_fetch_layout, patch(
             "backend.services.floor_layout_service.fetch_layout_seats_by_layout_id",
-        ) as mock_fetch_seats:
-            with self.assertRaises(HTTPException) as context:
-                get_floor_layout_seats(
-                    conn,
-                    current_user=current_user,
-                    layout_id="10",
-                )
+        ) as mock_fetch_seats, self.assertRaises(HTTPException) as context:
+            get_floor_layout_seats(
+                conn,
+                current_user=current_user,
+                layout_id="10",
+            )
 
         self.assertEqual(context.exception.status_code, 404)
         mock_fetch_seats.assert_not_called()

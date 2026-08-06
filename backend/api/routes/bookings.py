@@ -13,18 +13,11 @@ from fastapi import (
 )
 from psycopg2.extensions import connection as PGConnection
 
-from backend.schemas.booking import (
-BookingEligibilityRequest,
-BookingEligibilityResponse,
-)
-
-from backend.services.booking_service import (
-check_booking_eligibility,
-)
-
 from backend.api.deps import get_current_user
 from backend.db.connection import get_db
 from backend.schemas.booking import (
+    BookingEligibilityRequest,
+    BookingEligibilityResponse,
     BookingResponse,
     CancelBookingRequest,
     CreateBookingRequest,
@@ -34,17 +27,17 @@ from backend.schemas.booking import (
 from backend.services.booking_service import (
     book_seat,
     cancel_booking_by_id,
-    get_user_past_bookings,
-    get_user_current_bookings,
-    get_user_cancelled_bookings,
-    get_delegated_past_bookings,
+    check_booking_eligibility,
+    get_delegated_cancelled_bookings,
     get_delegated_current_bookings,
     get_delegated_future_bookings,
-    get_delegated_cancelled_bookings,
+    get_delegated_past_bookings,
+    get_user_cancelled_bookings,
+    get_user_current_bookings,
     get_user_future_bookings,
+    get_user_past_bookings,
     modify_booking,
 )
-
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 

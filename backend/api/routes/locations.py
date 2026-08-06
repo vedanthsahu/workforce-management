@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Annotated
+from typing import Annotated, Any
 
 from fastapi import (
     APIRouter,
@@ -13,14 +13,11 @@ from fastapi import (
     Query,
     status,
 )
-
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user, require_any_permission
 from backend.db.connection import get_db
-
 from backend.schemas.booking import AvailableSeatListResponse
-
 from backend.schemas.location import (
     BuildingResponse,
     BulkLayoutSeatConfigurationUpdateRequest,
@@ -29,6 +26,8 @@ from backend.schemas.location import (
     CreateFloorRequest,
     CreateSiteRequest,
     FloorResponse,
+    LayoutSeatConfigurationResponse,
+    LayoutSeatConfigurationUpdateRequest,
     SeatConfigurationResponse,
     SeatConfigurationUpdateRequest,
     SiteDetailsResponse,
@@ -36,8 +35,9 @@ from backend.schemas.location import (
     UpdateBuildingRequest,
     UpdateFloorRequest,
     UpdateSiteRequest,
-    LayoutSeatConfigurationUpdateRequest,
-    LayoutSeatConfigurationResponse,
+)
+from backend.services.booking_service import (
+    get_available_seats_by_range,
 )
 from backend.services.location_service import (
     create_building,
@@ -49,6 +49,7 @@ from backend.services.location_service import (
     get_sites,
     update_building_metadata,
     update_floor_metadata,
+    update_layout_seat_configuration,
     update_seat_configuration_metadata,
     update_seats_configuration_bulk,
     update_site_metadata,

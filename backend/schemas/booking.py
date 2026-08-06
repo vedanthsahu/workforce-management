@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from typing import Any, Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from pydantic import BaseModel, Field
 
 from backend.core.enums import (
     BookingModificationReason,
