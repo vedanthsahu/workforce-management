@@ -495,6 +495,12 @@ function EditPreferencesDialog({
       })
       .catch(() => setAmenitiesError(true))
       .finally(() => setLoadingAmenities(false));
+    // preferences.* fields are intentionally excluded: this effect must only
+    // hydrate state when the dialog transitions to open, not whenever
+    // `preferences` changes identity while it's already open — see the
+    // comment on the effect below, which was written to avoid exactly that
+    // "clobbers the restored value" failure mode.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Fetch the building list for the selected site. Selection resets are

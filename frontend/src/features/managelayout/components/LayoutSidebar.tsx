@@ -216,7 +216,7 @@ export default function LayoutSidebar({
     );
   }
 
-  const isDraft = !layout.is_published && layout.status !== "ARCHIVED";
+  const _isDraft = !layout.is_published && layout.status !== "ARCHIVED";
   const isArchived = layout.status === "ARCHIVED";
 
   return (

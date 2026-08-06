@@ -29,7 +29,7 @@ export const buildingService = {
     search?: string;
     status?: string;
   }): Promise<SiteOption[]> {
-    const { data } = await axiosInstance.get("/sites");
+    const { data } = await axiosInstance.get("/sites", { params });
 
     return data;
   },

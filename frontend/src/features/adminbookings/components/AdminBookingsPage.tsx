@@ -500,16 +500,6 @@ export default function AdminBookingsPage() {
             <BookingDetailsPanel
               booking={selectedBooking}
               onClose={() => setSelectedBooking(null)}
-              onModifySeat={modifySeat}
-              onModifyVisit={modifyVisit}
-              onCancelSeat={(booking) => {
-                setSelectedBooking(null);
-                openCancelSeat(booking);
-              }}
-              onCancelVisit={(booking) => {
-                setSelectedBooking(null);
-                openCancelVisit(booking);
-              }}
             />
           )}
 

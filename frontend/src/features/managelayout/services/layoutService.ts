@@ -1,12 +1,33 @@
 import { axiosInstance } from "@/lib/http/axios";
 import { Building, Floor, Layout, LayoutSeatStats, Site } from "../types/layout.types";
 
+interface RawSite {
+  site_id: number | string;
+  site_name: string;
+  city?: string;
+  country?: string;
+  timezone?: string;
+}
+
+interface RawBuilding {
+  building_id: number | string;
+  site_id: number | string;
+  building_name: string;
+}
+
+interface RawFloor {
+  floor_id: number | string;
+  building_id?: number | string;
+  floor_name?: string;
+  floor_code?: string;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Location services
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function fetchSites(): Promise<Site[]> {
-  const { data } = await axiosInstance.get<any[]>("/sites");
+  const { data } = await axiosInstance.get<RawSite[]>("/sites");
   return data.map((s) => ({
     id: String(s.site_id),       // ← String() back
     name: s.site_name,
@@ -17,7 +38,7 @@ export async function fetchSites(): Promise<Site[]> {
 }
 
 export async function fetchBuildings(siteId: string): Promise<Building[]> {
-  const { data } = await axiosInstance.get<any[]>("/buildings", {
+  const { data } = await axiosInstance.get<RawBuilding[]>("/buildings", {
     params: { site_id: siteId },
   });
   return data.map((b) => ({
@@ -28,7 +49,7 @@ export async function fetchBuildings(siteId: string): Promise<Building[]> {
 }
 
 export async function fetchFloors(buildingId: string): Promise<Floor[]> {
-  const { data } = await axiosInstance.get<any[]>(
+  const { data } = await axiosInstance.get<RawFloor[]>(
     `/buildings/${buildingId}/floors`
   );
   return data.map((f) => ({
@@ -69,9 +90,17 @@ export interface Preference {
   icon_name: string;
 }
 
+interface RawPreference {
+  id: number | string;
+  name: string;
+  category: string;
+  description?: string;
+  icon?: string;
+}
+
 export async function fetchAllPreferences(): Promise<Preference[]> {
-  const { data } = await axiosInstance.get<{ amenities: any[] } | any[]>("/preferences");
-  const raw: any[] = Array.isArray(data) ? data : (data as any).amenities ?? [];
+  const { data } = await axiosInstance.get<{ amenities: RawPreference[] } | RawPreference[]>("/preferences");
+  const raw: RawPreference[] = Array.isArray(data) ? data : data.amenities ?? [];
   return raw.map((item) => ({
     preference_id:   String(item.id),
     preference_name: item.name,
@@ -86,7 +115,7 @@ export interface LayoutSeatsApiResponse {
   total_seats: number;
   configured_seats: number;
   pending_seats: number;           // API uses "pending" not "unconfigured"
-  items: any[];
+  items: { is_bookable: boolean }[];
 }
 
 export async function fetchLayoutSeatStats(layoutId: string): Promise<LayoutSeatStats> {

@@ -4,7 +4,6 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { useRoleChange } from "../hooks/useRoleChange";
 import UserProfileCard from "./UserProfileCard";
 import ChangeRolePanel from "./ChangeRolePanel";

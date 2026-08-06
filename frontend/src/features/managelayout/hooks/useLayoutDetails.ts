@@ -168,6 +168,12 @@ export function useCascadeLocation(
       })
       .catch(console.error)
       .finally(() => setLoadingSites(false));
+    // initialSiteId is intentionally excluded: this effect must run only
+    // once on mount (as the comment above says). Changes to initialSiteId
+    // after mount are already handled by the ref-tracking effect above,
+    // which sets selectedSiteId/BuildingId/FloorId directly without
+    // re-fetching the (site-independent) sites list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Load buildings whenever the selected site changes ─────────────────
@@ -195,6 +201,14 @@ export function useCascadeLocation(
       })
       .catch(console.error)
       .finally(() => setLoadingBuildings(false));
+    // selectedBuildingId and initialBuildingId are intentionally excluded.
+    // selectedBuildingId is SET by this same effect (via setSelectedBuildingId
+    // above) — adding it as a trigger would cause this effect to re-run
+    // right after it just ran, double-fetching buildings for the same site.
+    // initialBuildingId changes are already handled by the ref-tracking
+    // effect above; this cascade should only re-run when selectedSiteId
+    // itself changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSiteId]);
 
   // ── Load floors whenever the selected building changes ────────────────
@@ -221,6 +235,11 @@ export function useCascadeLocation(
       })
       .catch(console.error)
       .finally(() => setLoadingFloors(false));
+    // Same reasoning as the buildings cascade above: selectedFloorId is set
+    // by this same effect, and initialFloorId changes are handled by the
+    // ref-tracking effect — this should only re-run when selectedBuildingId
+    // itself changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBuildingId]);
 
   return {
@@ -288,7 +307,7 @@ export function useFloorLayouts(
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [floorId]);
+  }, [floorId, initialLayoutId]);
 
   const selectedLayout = layouts.find((l) => l.layout_id === selectedLayoutId) ?? null;
 

@@ -6,11 +6,9 @@ import {
   Clock,
   Mail,
   MapPin,
-  Phone,
   User,
   X,
   Armchair,
-  Briefcase,
   FileText,
   Hash,
   Building,
@@ -20,7 +18,6 @@ import {
   getStatusBadgeClass,
   getStatusLabel,
   getBookingStatusBadgeClass,
-  getGuestTypeLabel,
 } from "../utils/security.utils";
 import type { Visitor } from "../types/security.types";
 

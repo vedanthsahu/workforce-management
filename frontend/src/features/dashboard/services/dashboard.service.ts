@@ -37,8 +37,11 @@ export type DashboardResult =
 
 function mapBookingStatus(status: string): "Confirmed" | "Pending" | "Cancelled" {
   const s = status.toUpperCase();
-  if (s === "CONFIRMED" || s === "ACTIVE")   return "Confirmed";
-  if (s === "CANCELLED" || s === "CANCELED") return "Cancelled";
+  // MODIFIED is still an active, confirmed booking (just with a modification
+  // history) — this widget has no separate "Modified" badge state, unlike
+  // My Bookings, so it's treated the same as Confirmed here.
+  if (s === "CONFIRMED" || s === "ACTIVE" || s === "MODIFIED") return "Confirmed";
+  if (s === "CANCELLED" || s === "CANCELED")                  return "Cancelled";
   return "Pending";
 }
 

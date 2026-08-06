@@ -751,6 +751,7 @@ def create_floor(
             "building_id": str(floor.get("building_id")),
             "building_name": floor.get("building_name"),
             "site_id": str(floor.get("site_id")),
+            "site_name": building.get("site_name"),
             "status": floor.get("status"),
         },
     )

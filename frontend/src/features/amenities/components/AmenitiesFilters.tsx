@@ -12,8 +12,6 @@ type Props = {
 export default function AmenitiesFilters({
   search,
   setSearch,
-  status,
-  setStatus,
 }: Props) {
   return (
     <div className="flex items-center gap-3 w-full sm:w-auto">
