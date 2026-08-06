@@ -61,7 +61,7 @@ function parseSvgDimensions(svgText: string): { w: number; h: number } {
     if (w > 0 && h > 0) return { w, h };
   }
 
-  const width  = svgTag.match(/\swidth=["']([\d.]+)(?:px)?["']/);
+  const width = svgTag.match(/\swidth=["']([\d.]+)(?:px)?["']/);
   const height = svgTag.match(/\sheight=["']([\d.]+)(?:px)?["']/);
   if (width && height) {
     const w = parseFloat(width[1]);
@@ -148,7 +148,7 @@ function recolorSeat(svg: string, svgId: string, paletteKey: string): string {
   }
 
   const isClickable = ["available", "best_match", "partial_match", "yours", "selected"].includes(paletteKey);
-  const isSelected  = paletteKey === "selected";
+  const isSelected = paletteKey === "selected";
   block = block.replace(
     `<g id="${svgId}">`,
     `<g id="${svgId}"${isSelected ? ` class="_sel-pulse"` : ""} style="opacity:${p.opacity};cursor:${isClickable ? "pointer" : "default"}">`
@@ -270,12 +270,12 @@ const SeatTooltip: React.FC<{
   const seat = tooltip.seat;
   const avail = seat.availabilitySummary;
 
-  const sc  = SEAT_STATUS_CONFIG[seat.status] ?? SEAT_STATUS_CONFIG.unavailable;
-  const mc  = seat.preferenceMatchStatus ? PREFERENCE_MATCH_CONFIG[seat.preferenceMatchStatus] : null;
+  const sc = SEAT_STATUS_CONFIG[seat.status] ?? SEAT_STATUS_CONFIG.unavailable;
+  const mc = seat.preferenceMatchStatus ? PREFERENCE_MATCH_CONFIG[seat.preferenceMatchStatus] : null;
   const pct = avail?.availability_percentage ?? null;
 
   let left = tooltip.x + 14;
-  let top  = tooltip.y - 10;
+  let top = tooltip.y - 10;
 
   if (left + TOOLTIP_WIDTH > containerRect.width - TOOLTIP_PADDING) left = tooltip.x - TOOLTIP_WIDTH - 14;
   if (top < TOOLTIP_PADDING) top = TOOLTIP_PADDING;
@@ -296,17 +296,17 @@ const SeatTooltip: React.FC<{
     <div ref={boxRef} style={{ position: "absolute", left, top, width: TOOLTIP_WIDTH, pointerEvents: "none", zIndex: 50 }}>
       <div style={{
         position: "absolute",
-        left:  arrowOnRight ? "auto" : -6,
-        right: arrowOnRight ? -6    : "auto",
-        top:    flippedVertically ? "auto" : 20,
+        left: arrowOnRight ? "auto" : -6,
+        right: arrowOnRight ? -6 : "auto",
+        top: flippedVertically ? "auto" : 20,
         bottom: flippedVertically ? 20 : "auto",
         width: 12, height: 12,
         background: "white",
         border: "1px solid #e5e7eb",
-        borderRight:  arrowOnRight ? "1px solid #e5e7eb" : "none",
+        borderRight: arrowOnRight ? "1px solid #e5e7eb" : "none",
         borderBottom: arrowOnRight ? "1px solid #e5e7eb" : "none",
-        borderLeft:   arrowOnRight ? "none" : "1px solid #e5e7eb",
-        borderTop:    arrowOnRight ? "none" : "1px solid #e5e7eb",
+        borderLeft: arrowOnRight ? "none" : "1px solid #e5e7eb",
+        borderTop: arrowOnRight ? "none" : "1px solid #e5e7eb",
         transform: arrowOnRight ? "rotate(-45deg)" : "rotate(135deg)",
       }} />
 
@@ -372,28 +372,28 @@ const SeatTooltip: React.FC<{
           seat.preferenceMatchStatus !== "FULL_MATCH" &&
           seat.preferenceMatchStatus !== "PARTIAL_MATCH" &&
           seat.amenities.length > 0 && (
-          <>
-            <div style={{ borderTop: "1px solid #f3f4f6" }} />
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
-                Seat Type
+            <>
+              <div style={{ borderTop: "1px solid #f3f4f6" }} />
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
+                  Seat Type
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {seat.amenities.map((a) => (
+                    <span key={a} style={{
+                      fontSize: 10, fontWeight: 500,
+                      color: "#374151", background: "#f3f4f6",
+                      borderRadius: 5, padding: "2px 8px", textTransform: "capitalize",
+                      display: "inline-flex", alignItems: "center", gap: 4,
+                    }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: getAmenityColor(a, categoryByName.get(a.toLowerCase())).hex, flexShrink: 0 }} />
+                      {a}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                {seat.amenities.map((a) => (
-                  <span key={a} style={{
-                    fontSize: 10, fontWeight: 500,
-                    color: "#374151", background: "#f3f4f6",
-                    borderRadius: 5, padding: "2px 8px", textTransform: "capitalize",
-                    display: "inline-flex", alignItems: "center", gap: 4,
-                  }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: getAmenityColor(a, categoryByName.get(a.toLowerCase())).hex, flexShrink: 0 }} />
-                    {a}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
+            </>
+          )}
 
         {/* Amenities — only for partial/full match */}
         {(seat.preferenceMatchStatus === "FULL_MATCH" || seat.preferenceMatchStatus === "PARTIAL_MATCH") && (
@@ -426,34 +426,34 @@ const SeatTooltip: React.FC<{
             )}
             {seat.amenities.length > 0 &&
               JSON.stringify(seat.amenities) !== JSON.stringify(seat.matchedAmenityNames ?? []) && (
-              <>
-                <div style={{ borderTop: "1px solid #f3f4f6" }} />
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
-                    Amenities
+                <>
+                  <div style={{ borderTop: "1px solid #f3f4f6" }} />
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
+                      Amenities
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                      {seat.amenities.map((a) => {
+                        const isMatched = (seat.matchedAmenityNames ?? [])
+                          .map((n) => n.toLowerCase())
+                          .some((n) => n.includes(a.toLowerCase()) || a.toLowerCase().includes(n));
+                        const color = getAmenityColor(a, categoryByName.get(a.toLowerCase()));
+                        return (
+                          <span key={a} style={{
+                            fontSize: 10, fontWeight: 500,
+                            color: color.hex, background: color.bgHex,
+                            borderRadius: 5, padding: "2px 8px", textTransform: "capitalize",
+                            display: "inline-flex", alignItems: "center", gap: 4,
+                          }}>
+                            {isMatched && <span style={{ fontSize: 9 }}>✓</span>}
+                            {a}
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                    {seat.amenities.map((a) => {
-                      const isMatched = (seat.matchedAmenityNames ?? [])
-                        .map((n) => n.toLowerCase())
-                        .some((n) => n.includes(a.toLowerCase()) || a.toLowerCase().includes(n));
-                      const color = getAmenityColor(a, categoryByName.get(a.toLowerCase()));
-                      return (
-                        <span key={a} style={{
-                          fontSize: 10, fontWeight: 500,
-                          color: color.hex, background: color.bgHex,
-                          borderRadius: 5, padding: "2px 8px", textTransform: "capitalize",
-                          display: "inline-flex", alignItems: "center", gap: 4,
-                        }}>
-                          {isMatched && <span style={{ fontSize: 9 }}>✓</span>}
-                          {a}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
+                </>
+              )}
           </>
         )}
 
@@ -576,34 +576,34 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     [preferences]
   );
 
-  const wrapperRef   = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const transformRef = useRef<HTMLDivElement>(null);
 
-  const scaleRef     = useRef(1);
+  const scaleRef = useRef(1);
   const translateRef = useRef({ x: 0, y: 0 });
-  const isPanning    = useRef(false);
-  const panStart     = useRef({ x: 0, y: 0 });
+  const isPanning = useRef(false);
+  const panStart = useRef({ x: 0, y: 0 });
   const mouseDownPos = useRef({ x: 0, y: 0 });
-  const didDrag      = useRef(false);
-  const fitDoneRef   = useRef(false);
+  const didDrag = useRef(false);
+  const fitDoneRef = useRef(false);
 
-  const [rawSvg,      setRawSvg]      = useState<string | null>(null);
-  const [svgError,    setSvgError]    = useState(false);
+  const [rawSvg, setRawSvg] = useState<string | null>(null);
+  const [svgError, setSvgError] = useState(false);
   const [zoomDisplay, setZoomDisplay] = useState(100);
-  const [mapReady,    setMapReady]    = useState(false);
+  const [mapReady, setMapReady] = useState(false);
 
   // Actual canvas size of the loaded SVG — read from its own markup, not
   // assumed to always match the SVG_W/SVG_H default.
   const [svgDims, setSvgDims] = useState<{ w: number; h: number }>({ w: SVG_W, h: SVG_H });
 
   // Dynamically extracted seat IDs from the SVG — no hardcoding
-  const [svgSeatIds,    setSvgSeatIds]    = useState<string[]>([]);
+  const [svgSeatIds, setSvgSeatIds] = useState<string[]>([]);
   const svgSeatIdsSet = useRef<Set<string>>(new Set());
 
   const [tooltip, setTooltip] = useState<TooltipState>({
     visible: false, x: 0, y: 0, seat: null,
   });
-  const containerRectRef  = useRef<DOMRect | null>(null);
+  const containerRectRef = useRef<DOMRect | null>(null);
   const tooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const coloredSvg =
@@ -717,7 +717,7 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     setZoomDisplay(Math.round(newScale * 100));
   }, [applyTransform]);
 
-  const zoomIn  = useCallback(() => zoomStep(ZOOM_BUTTON_FACTOR),     [zoomStep]);
+  const zoomIn = useCallback(() => zoomStep(ZOOM_BUTTON_FACTOR), [zoomStep]);
   const zoomOut = useCallback(() => zoomStep(1 / ZOOM_BUTTON_FACTOR), [zoomStep]);
 
   // ── Wheel zoom ────────────────────────────────────────────────────────────
@@ -726,13 +726,13 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     if (!el) return;
     const handler = (e: WheelEvent) => {
       e.preventDefault();
-      const factor   = e.deltaY < 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR;
+      const factor = e.deltaY < 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR;
       const oldScale = scaleRef.current;
       const newScale = Math.min(Math.max(oldScale * factor, ZOOM_MIN), ZOOM_MAX);
-      const rect     = el.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
       translateRef.current = {
         x: e.clientX - rect.left - (e.clientX - rect.left - translateRef.current.x) * (newScale / oldScale),
-        y: e.clientY - rect.top  - (e.clientY - rect.top  - translateRef.current.y) * (newScale / oldScale),
+        y: e.clientY - rect.top - (e.clientY - rect.top - translateRef.current.y) * (newScale / oldScale),
       };
       scaleRef.current = newScale;
       applyTransform();
@@ -760,10 +760,10 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
 
   // ── Pan handlers ──────────────────────────────────────────────────────────
   const onMouseDown = (e: React.MouseEvent) => {
-    isPanning.current    = true;
-    didDrag.current      = false;
+    isPanning.current = true;
+    didDrag.current = false;
     mouseDownPos.current = { x: e.clientX, y: e.clientY };
-    panStart.current     = { ...translateRef.current };
+    panStart.current = { ...translateRef.current };
     (e.currentTarget as HTMLElement).style.cursor = "grabbing";
   };
 
@@ -816,113 +816,113 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
   };
 
   // ── Legend counts ─────────────────────────────────────────────────────────
-  const hasPreferences    = seats.some((s) => s.preferenceMatchStatus === "FULL_MATCH" || s.preferenceMatchStatus === "PARTIAL_MATCH");
+  const hasPreferences = seats.some((s) => s.preferenceMatchStatus === "FULL_MATCH" || s.preferenceMatchStatus === "PARTIAL_MATCH");
   const partialMatchCount = seats.filter((s) => s.preferenceMatchStatus === "PARTIAL_MATCH" && s.status === "available").length;
 
-  const showSpinner  = (!!svgUrl && !rawSvg && !svgError) || loading || (!!rawSvg && !mapReady);
+  const showSpinner = (!!svgUrl && !rawSvg && !svgError) || loading || (!!rawSvg && !mapReady);
   const showNoLayout = !svgUrl && !loading;
 
   return (
     <>
-    <div
-      className="relative bg-[#F7F8FC] border border-[#EBEBF5] rounded-xl overflow-hidden"
-      style={{ width: "100%", height: 520 }}
-    >
-      {/* Zoom controls */}
-      {mapReady && (
-        <div className="absolute top-3 right-3 z-20 flex flex-col gap-1.5">
-          {(
-            [
-              { icon: <ZoomIn size={14} />,    action: zoomIn,  title: "Zoom in"     },
-              { icon: <ZoomOut size={14} />,   action: zoomOut, title: "Zoom out"    },
-              { icon: <Maximize2 size={14} />, action: fitView, title: "Fit to view" },
-            ] as const
-          ).map(({ icon, action, title }) => (
-            <button
-              key={title}
-              onClick={(e) => { e.stopPropagation(); action(); }}
-              title={title}
-              className="w-8 h-8 rounded-lg bg-white border border-[#EBEBF5] shadow-sm flex items-center justify-center hover:bg-gray-50 text-gray-600 transition-colors"
-            >
-              {icon}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Zoom % */}
-      {mapReady && (
-        <div className="absolute top-3 left-3 z-20 text-[10px] font-semibold text-gray-400 bg-white/80 px-2 py-1 rounded-md border border-[#EBEBF5] select-none tabular-nums">
-          {zoomDisplay}%
-        </div>
-      )}
-
-      {/* Map viewport */}
       <div
-        ref={wrapperRef}
-        className="w-full h-full overflow-hidden select-none"
-        style={{ cursor: "grab" }}
-        onMouseDown={onMouseDown}
-        onMouseMove={(e) => { onMouseMove(e); onMapMouseMove(e); }}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMapMouseLeave}
-        onClick={onMapClick}
+        className="relative bg-[#F7F8FC] border border-[#EBEBF5] rounded-xl overflow-hidden"
+        style={{ width: "100%", height: 520 }}
       >
-        {/* Loading spinner */}
-        {showSpinner && !svgError && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#F7F8FC] z-10">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-              <p className="text-[12.5px] text-gray-400">Loading floor plan…</p>
-            </div>
+        {/* Zoom controls */}
+        {mapReady && (
+          <div className="absolute top-3 right-3 z-20 flex flex-col gap-1.5">
+            {(
+              [
+                { icon: <ZoomIn size={14} />, action: zoomIn, title: "Zoom in" },
+                { icon: <ZoomOut size={14} />, action: zoomOut, title: "Zoom out" },
+                { icon: <Maximize2 size={14} />, action: fitView, title: "Fit to view" },
+              ] as const
+            ).map(({ icon, action, title }) => (
+              <button
+                key={title}
+                onClick={(e) => { e.stopPropagation(); action(); }}
+                title={title}
+                className="w-8 h-8 rounded-lg bg-white border border-[#EBEBF5] shadow-sm flex items-center justify-center hover:bg-gray-50 text-gray-600 transition-colors"
+              >
+                {icon}
+              </button>
+            ))}
           </div>
         )}
 
-        {/* Fetch error */}
-        {svgError && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-[13px] text-gray-500 mb-1">Floor plan unavailable</p>
-              <p className="text-[11.5px] text-gray-400">
-                The layout file could not be loaded. Please try again or contact support.
-              </p>
-            </div>
+        {/* Zoom % */}
+        {mapReady && (
+          <div className="absolute top-3 left-3 z-20 text-[10px] font-semibold text-gray-400 bg-white/80 px-2 py-1 rounded-md border border-[#EBEBF5] select-none tabular-nums">
+            {zoomDisplay}%
           </div>
         )}
 
-        {/* No layout configured */}
-        {showNoLayout && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-[13px] text-gray-500 mb-1">No floor plan available</p>
-              <p className="text-[11.5px] text-gray-400">
-                No published layout has been configured for this floor.
-              </p>
+        {/* Map viewport */}
+        <div
+          ref={wrapperRef}
+          className="w-full h-full overflow-hidden select-none"
+          style={{ cursor: "grab" }}
+          onMouseDown={onMouseDown}
+          onMouseMove={(e) => { onMouseMove(e); onMapMouseMove(e); }}
+          onMouseUp={onMouseUp}
+          onMouseLeave={onMapMouseLeave}
+          onClick={onMapClick}
+        >
+          {/* Loading spinner */}
+          {showSpinner && !svgError && (
+            <div className="absolute inset-0 flex items-center justify-center bg-[#F7F8FC] z-10">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+                <p className="text-[12.5px] text-gray-400">Loading floor plan…</p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {coloredSvg && (
-          <div
-            ref={transformRef}
-            style={{
-              transformOrigin: "top left",
-              width: `${svgDims.w}px`,
-              height: `${svgDims.h}px`,
-              willChange: "transform",
-              visibility: mapReady ? "visible" : "hidden",
-            }}
-            dangerouslySetInnerHTML={{ __html: coloredSvg }}
-          />
-        )}
+          {/* Fetch error */}
+          {svgError && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-[13px] text-gray-500 mb-1">Floor plan unavailable</p>
+                <p className="text-[11.5px] text-gray-400">
+                  The layout file could not be loaded. Please try again or contact support.
+                </p>
+              </div>
+            </div>
+          )}
 
-        {tooltip.visible && tooltip.seat && containerRectRef.current && (
-          <SeatTooltip tooltip={tooltip} containerRect={containerRectRef.current} categoryByName={categoryByName} />
-        )}
+          {/* No layout configured */}
+          {showNoLayout && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-[13px] text-gray-500 mb-1">No floor plan available</p>
+                <p className="text-[11.5px] text-gray-400">
+                  No published layout has been configured for this floor.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {coloredSvg && (
+            <div
+              ref={transformRef}
+              style={{
+                transformOrigin: "top left",
+                width: `${svgDims.w}px`,
+                height: `${svgDims.h}px`,
+                willChange: "transform",
+                visibility: mapReady ? "visible" : "hidden",
+              }}
+              dangerouslySetInnerHTML={{ __html: coloredSvg }}
+            />
+          )}
+
+          {tooltip.visible && tooltip.seat && containerRectRef.current && (
+            <SeatTooltip tooltip={tooltip} containerRect={containerRectRef.current} categoryByName={categoryByName} />
+          )}
+        </div>
       </div>
-    </div>
 
-    {/* Legend + hint — below the map, never overlapping */}
+      {/* Legend + hint — below the map, never overlapping */}
       {mapReady && (
         <div className="flex items-center justify-between flex-wrap gap-2 px-1">
           <div className="flex items-center gap-3 flex-wrap">
@@ -964,3 +964,4 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
 };
 
 export default SvgFloorMapPage;
+
