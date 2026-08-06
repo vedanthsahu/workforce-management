@@ -1558,10 +1558,8 @@ def fetch_cancelled_delegated_bookings(
     seat_id: str | None = None,
     booking_date: date | None = None,
 ):
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            """
-            SELECT
+    query = """
+        SELECT
                 b.id::text AS booking_id,
                 'BOOKING' AS activity_source,
 

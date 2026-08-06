@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { useBookingForm, useSiteBuildingOptions } from "../hooks/useBooking";
-import type { BookingType, GuestType, PurposeOfVisit } from "../types/booking";
+import type { BookingType, GuestType, PurposeOfVisit, VisitDetails } from "../types/booking";
 import { checkGuestBookingEligibility } from "../services/booking.service";
+import { fetchEmployeeWorkPreferences } from "@/features/book/services/Bookingform.service";
 import { guestVisitWorkflow, type GuestWorkflowAction } from "@/features/bookings/services/bookings.service";
 import { BookingTypeSelector, FormFooter, InternalEmployeeForm } from "./BookForSomeone";
 import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
@@ -100,27 +101,59 @@ export default function BookForSomeonePage() {
     const buildingId = searchParams.get("buildingId") ?? "";
     const floorId = searchParams.get("floorId") ?? "";
 
+    const prefilledVisitDetails: VisitDetails = {
+      guestType: (guestType || "INTERVIEW_CANDIDATE") as GuestType,
+      purposeOfVisit: (purposeOfVisit || "INTERVIEW") as PurposeOfVisit,
+      hostEmployee: hostName ? { id: hostUserId, name: hostName, email: "", role: "", status: "ACTIVE" } : null,
+      siteId,
+      buildingId,
+      floorId,
+      visitDate,
+      endDate,
+      startTime,
+      endTime,
+      additionalNotes: "",
+    };
+    originalVisitDetailsRef.current = prefilledVisitDetails;
+
     setFormState(() => ({
       step: 2,
       bookingType: "visitor",
       selectedEmployee: null,
       selectedGuest: guestName ? { id: "", fullName: guestName, email: guestEmail } : null,
       seatRequired: null,
-      visitDetails: {
-        guestType: (guestType || "INTERVIEW_CANDIDATE") as GuestType,
-        purposeOfVisit: (purposeOfVisit || "INTERVIEW") as PurposeOfVisit,
-        hostEmployee: hostName ? { id: hostUserId, name: hostName, email: "", role: "", status: "ACTIVE" } : null,
-        siteId,
-        buildingId,
-        floorId,
-        visitDate,
-        endDate,
-        startTime,
-        endTime,
-        additionalNotes: "",
-      },
+      visitDetails: prefilledVisitDetails,
     }));
   }, [editVisitId, searchParams, setFormState]);
+
+  // Auto-populate Office/Building/Floor from the selected host employee's
+  // saved work preferences (GET /dashboard/employee/{id} — same endpoint the
+  // seat-booking flow already uses to prefill an employee's own booking).
+  // A guest has no preferences of its own, so the host's location stands in
+  // for it — this covers the Guest path for both Admin and Facilitator,
+  // since they share this same wizard. Only fills in when the fields are
+  // still blank, so it never clobbers a location already chosen (manually,
+  // or via editVisitId's own prefill above); re-fetches if a different host
+  // is picked while the fields are still blank.
+  const hostPrefsAppliedForId = useRef<string | null>(null);
+  useEffect(() => {
+    const hostId = visitDetails.hostEmployee?.id;
+    if (bookingType !== "visitor" || editVisitId || !hostId) return;
+    if (hostPrefsAppliedForId.current === hostId) return;
+    if (visitDetails.siteId || visitDetails.buildingId || visitDetails.floorId) return;
+
+    hostPrefsAppliedForId.current = hostId;
+    fetchEmployeeWorkPreferences(hostId)
+      .then((prefs) => {
+        if (!prefs?.siteId) return;
+        updateVisitDetails({
+          siteId: prefs.siteId,
+          buildingId: prefs.buildingId ?? "",
+          floorId: prefs.floorId ?? "",
+        });
+      })
+      .catch(() => {});
+  }, [visitDetails.hostEmployee?.id, bookingType, editVisitId, visitDetails.siteId, visitDetails.buildingId, visitDetails.floorId, updateVisitDetails]);
 
   // Admin's "Booking Management" page links here with ?entry=employee or
   // ?entry=guest depending on which button was clicked — lock the wizard to
