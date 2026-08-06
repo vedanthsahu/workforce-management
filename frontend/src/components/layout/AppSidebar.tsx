@@ -90,6 +90,9 @@ interface NavItem {
   permission?: string;
   anyPermission?: string[];
   roles?: string[];
+  // Page isn't built yet — show the item so people know it's coming, but
+  // don't let it navigate to a route that 404s.
+  disabled?: boolean;
 }
 
 // ─── Route map ────────────────────────────────────────────────────────────────
@@ -135,7 +138,7 @@ const MAIN_NAV: NavItem[] = [
   { id: "book", label: "Book a seat", icon: CalendarDays, permission: "seat:book_self" },
   { id: "mybookings", label: "My bookings", icon: BookOpen, badge: 3, badgeRed: true, permission: "booking:view_own" },
   { id: "team", label: "Book for someone", icon: Monitor, badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
-  { id: "schedule", label: "My schedule", icon: CalendarCheck, permission: "booking:view_own" },
+  { id: "schedule", label: "My schedule", icon: CalendarCheck, permission: "booking:view_own", disabled: true },
 ];
 
 const OFFICE_NAV: NavItem[] = [
@@ -143,8 +146,8 @@ const OFFICE_NAV: NavItem[] = [
 ];
 
 const PERSONAL_NAV: NavItem[] = [
-  { id: "notifications", label: "Notifications", icon: Bell, badge: 2, badgeRed: true },
-  { id: "favourites", label: "Preferences", icon: Star },
+  { id: "notifications", label: "Notifications", icon: Bell, badge: 2, badgeRed: true, disabled: true },
+  { id: "favourites", label: "Preferences", icon: Star, disabled: true },
 ];
 
 const ADMIN_DASHBOARD: NavItem[] = [
@@ -157,9 +160,9 @@ const ADMIN_MANAGE_NAV: NavItem[] = [
   { id: "buildings", label: "Buildings", icon: Building },
   { id: "floors", label: "Floors", icon: MapPin },
   { id: "layouts", label: "Floor Layouts", icon: ClipboardList },
-  { id: "seats", label: "Seats", icon: CalendarDays },
+  { id: "seats", label: "Seats", icon: CalendarDays, disabled: true },
   { id: "amenities", label: "Amenities", icon: Star },
-  { id: "seatstatus", label: "Seat Status", icon: Settings },
+  { id: "seatstatus", label: "Seat Status", icon: Settings, disabled: true },
 ];
 
 const ADMIN_OPERATIONS_NAV: NavItem[] = [
@@ -167,17 +170,17 @@ const ADMIN_OPERATIONS_NAV: NavItem[] = [
   { id: "team", label: "Book for someone", icon: Monitor, badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
   { id: "users", label: "Users", icon: Users },
   { id: "roles", label: "Role Management", icon: ShieldCheck },
-  { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "notifications", label: "Notifications", icon: Bell, disabled: true },
 ];
 
 const ADMIN_REPORTS_NAV: NavItem[] = [
-  { id: "occupancy", label: "Occupancy", icon: BarChart3 },
-  { id: "utilization", label: "Utilization", icon: BarChart3 },
-  { id: "audit", label: "Audit Logs", icon: ShieldCheck },
+  { id: "occupancy", label: "Occupancy", icon: BarChart3, disabled: true },
+  { id: "utilization", label: "Utilization", icon: BarChart3, disabled: true },
+  { id: "audit", label: "Audit Logs", icon: ShieldCheck, disabled: true },
 ];
 
 const ADMIN_SETTINGS_NAV: NavItem[] = [
-  { id: "settings", label: "Settings", icon: Settings },
+  { id: "settings", label: "Settings", icon: Settings, disabled: true },
 ];
 //--------security nav config----------------------------------------------------
 const FRONT_OFFICE_DASHBOARD: NavItem[] = [
@@ -185,14 +188,14 @@ const FRONT_OFFICE_DASHBOARD: NavItem[] = [
 ];
 
 const FRONT_OFFICE_VISITOR_NAV: NavItem[] = [
-  { id: "today_visitors", label: "Today's Visitors", icon: CalendarCheck },
-  { id: "checked_in", label: "Checked-in Visitors", icon: UserCheck },
-  { id: "visitor_search", label: "Visitor Search", icon: CalendarSearch },
-  { id: "past_visits", label: "Past Visits", icon: History },
+  { id: "today_visitors", label: "Today's Visitors", icon: CalendarCheck, disabled: true },
+  { id: "checked_in", label: "Checked-in Visitors", icon: UserCheck, disabled: true },
+  { id: "visitor_search", label: "Visitor Search", icon: CalendarSearch, disabled: true },
+  { id: "past_visits", label: "Past Visits", icon: History, disabled: true },
 ];
 
 const FRONT_OFFICE_ACTIONS_NAV: NavItem[] = [
-  { id: "invite_guest", label: "Invite Guest", icon: UserPlus },
+  { id: "invite_guest", label: "Invite Guest", icon: UserPlus, disabled: true },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -271,17 +274,25 @@ function NavSection({
           <SidebarMenuItem key={item.id}>
             <SidebarMenuButton
               isActive={activeItem === item.id}
-              tooltip={item.label}
-              onMouseEnter={() => router.prefetch(href)}
-              onClick={() => onNavigate(item.id)}
-              className="justify-between"
+              tooltip={item.disabled ? `${item.label} (coming soon)` : item.label}
+              onMouseEnter={item.disabled ? undefined : () => router.prefetch(href)}
+              onClick={item.disabled ? undefined : () => onNavigate(item.id)}
+              aria-disabled={item.disabled}
+              className={cn(
+                "justify-between",
+                item.disabled && "opacity-50 cursor-not-allowed hover:bg-transparent active:bg-transparent"
+              )}
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <item.icon className="w-4 h-4 shrink-0" />
                 <span className="truncate text-[12.5px]">{item.label}</span>
               </div>
 
-              {item.badge !== undefined && (
+              {item.disabled ? (
+                <Badge className="text-[10px] h-[18px] px-1.5 rounded-full leading-none font-medium border-0 shrink-0 bg-gray-100 text-gray-400 hover:bg-gray-100">
+                  Soon
+                </Badge>
+              ) : item.badge !== undefined && (
                 <Badge className={cn(
                   "text-[10px] h-[18px] min-w-[18px] px-1.5 rounded-full leading-none font-medium border-0 shrink-0",
                   item.badgeRed && "bg-red-500 text-white hover:bg-red-500",
