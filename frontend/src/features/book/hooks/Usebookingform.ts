@@ -108,25 +108,6 @@ export function useBookingForm() {
   const modifyBookingId = searchParams.get("modifyBookingId");
   const isModifyMode = Boolean(modifyBookingId);
 
-  // Snapshot the booking's original seat/dates once, on first mount — before
-  // any step navigation (navigateTo → buildUrl) rewrites the seatId/fromDate/
-  // toDate URL params to reflect whatever the user is currently editing.
-  // Used to detect whether a modification is a genuine no-op.
-  //
-  // Compared by label (seat_code), not seatId: `booking.seatId` is optional
-  // on the Booking type and isn't always populated, whereas `seat` (the
-  // label) is required — comparing by the unreliable id previously made
-  // hasModification always true, since the resolved form.selectedSeatId
-  // would never match an empty original seatId.
-  const [originalBooking] = useState(() => ({
-    seatLabel: isModifyMode ? searchParams.get("seatLabel") : null,
-    fromDate: isModifyMode ? searchParams.get("fromDate") : null,
-    toDate: isModifyMode ? searchParams.get("toDate") : null,
-  }));
-  // Set only by AdminBookingsPage's row-menu "Modify" action (useAdminBookingActions.modifySeat)
-  // so the confirmation screen can show admin-specific copy/navigation without affecting
-  // the employee "My Bookings" or facilitator "Book for Someone" modify flows, which share this route.
-  const isAdminFlow = searchParams.get("adminFlow") === "true";
   // True when reached via AdminBookingsPage's row-menu "Modify" action
   // (useAdminBookingActions.modifySeat sets ?adminFlow=true), OR when a
   // TENANT_ADMIN is booking a seat *for someone else* (isBookingForSomeone,
@@ -210,13 +191,19 @@ export function useBookingForm() {
   // transition since navigateTo/buildUrl replace the whole query string).
   // Used below to gate "proceed" on modify screens so a no-op modification
   // (same site/building/floor/date/seat as before) can't be submitted.
+  //
+  // Seat is compared by label (seat_code), not seatId: `booking.seatId` is
+  // optional on the Booking type and isn't always populated, whereas `seat`
+  // (the label) is required — comparing by the unreliable id previously made
+  // hasModification always true, since the resolved form.selectedSeatId
+  // would never match an empty original seatId.
   const [originalBooking] = useState(() => ({
     siteName: prefillLocationName,
     buildingName: prefillBuildingName,
     floorName: prefillFloorName,
     fromDate: prefillFromDate,
     toDate: prefillToDate,
-    seatId: searchParams.get("seatId"),
+    seatLabel: prefillSeatLabel,
   }));
 
   const [sites, setSites] = useState<Site[]>([]);
@@ -803,7 +790,7 @@ export function useBookingForm() {
     (selectedFloor?.name ?? null) !== originalBooking.floorName ||
     form.fromDate !== originalBooking.fromDate ||
     form.toDate !== originalBooking.toDate ||
-    form.selectedSeatId !== originalBooking.seatId;
+    (selectedSeat?.label ?? null) !== originalBooking.seatLabel;
 
   return {
     step,
