@@ -10,7 +10,17 @@ from psycopg2.extras import Json, RealDictCursor
 
 from backend.core.enums import NON_DELETED_LAYOUT_STATUSES
 
+_SEAT_IN_PUBLISHED_LAYOUT_SQL = """
+              AND st.layout_id = (
+                  SELECT id
+                  FROM floor_layouts
+                  WHERE floor_id = st.floor_id
+                    AND tenant_id = st.tenant_id
+                    AND is_published = TRUE
+                    AND status = 'PUBLISHED'
+              )"""
 
+ 
 def fetch_sites(
     conn: PGConnection,
     *,

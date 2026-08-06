@@ -1549,7 +1549,6 @@ def fetch_past_delegated_bookings(
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
-
 def fetch_cancelled_delegated_bookings(
     conn: PGConnection,
     *,
@@ -1560,8 +1559,8 @@ def fetch_cancelled_delegated_bookings(
 ):
     query = """
         SELECT
-                b.id::text AS booking_id,
-                'BOOKING' AS activity_source,
+            b.id::text AS booking_id,
+            'BOOKING' AS activity_source,
 
             b.booked_for_user_id::text,
             NULL::text AS booked_for_guest_id,
@@ -1601,11 +1600,11 @@ def fetch_cancelled_delegated_bookings(
 
         INNER JOIN app_users employee
             ON employee.id = b.booked_for_user_id
-        AND employee.tenant_id = b.tenant_id
+            AND employee.tenant_id = b.tenant_id
 
         LEFT JOIN app_users creator
             ON creator.id = b.booked_by_user_id
-        AND creator.tenant_id = b.tenant_id
+            AND creator.tenant_id = b.tenant_id
 
         LEFT JOIN seats s
             ON s.id = b.seat_id
@@ -1620,23 +1619,27 @@ def fetch_cancelled_delegated_bookings(
             ON f.id = b.floor_id
 
         WHERE b.tenant_id = %s
-        AND b.booked_by_user_id = %s
-        AND b.booked_for_user_id <> b.booked_by_user_id
-        AND b.booking_status = 'CANCELLED'
+          AND b.booked_by_user_id = %s
+          AND b.booked_for_user_id <> b.booked_by_user_id
+          AND b.booking_status = 'CANCELLED'
     """
+
     params: list[Any] = [tenant_id, user_id]
+
     query, params = _apply_seat_and_date_filters(
-        query, params, seat_id=seat_id, booking_date=booking_date,
+        query,
+        params,
+        seat_id=seat_id,
+        booking_date=booking_date,
     )
+
     query += " ORDER BY b.updated_at DESC"
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(query, params)
         rows = cur.fetchall()
 
-    return [dict(row) for row in rows]
-
-
+    return [dict(row) for row in rows ]
 def fetch_cancelled_bookings_for_user(
     conn: PGConnection,
     *,

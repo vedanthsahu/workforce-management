@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -29,8 +29,8 @@ DRAFT_LAYOUT = {
     "is_published": False,
     "uploaded_by_user_id": "5",
     "updated_by_user_id": "5",
-    "created_at": datetime.now(timezone.utc),
-    "updated_at": datetime.now(timezone.utc),
+    "created_at": datetime.now(UTC),
+    "updated_at": datetime.now(UTC),
 }
 
 

@@ -153,6 +153,24 @@ Rules:
   declared inline in the page component.
 - Wrap any `useSearchParams()` usage in `<Suspense>`.
 
+## Sidebar navigation (`components/layout/AppSidebar.tsx`)
+The sidebar's `ROUTE_MAP` and nav configs (`MAIN_NAV`, `ADMIN_MANAGE_NAV`, `FRONT_OFFICE_VISITOR_NAV`,
+etc.) are **not** guaranteed to only list routes that exist under `src/app/`. Some entries were added
+ahead of the page being built and are marked `disabled: true` on the `NavItem` so `NavSection` renders
+them visible-but-unclickable ("Soon" badge, no `onClick`/prefetch) instead of navigating to a 404.
+
+- **Adding a new page for an existing nav item**: after creating `src/app/.../page.tsx` for a route
+  already in `ROUTE_MAP`, check whether its `NavItem` has `disabled: true` — if so, remove that flag
+  now that the page exists. Grep the item's `id` in `AppSidebar.tsx` to find it.
+- **Adding a brand-new nav item before its page exists**: add the `ROUTE_MAP` entry and `NavItem` as
+  usual, but set `disabled: true` on the item so it doesn't 404 when clicked. Don't skip adding the
+  nav entry just because the page isn't built yet — the point of this flag is "visible, not broken."
+- **Never** silently ship a nav item pointing at a route with no `page.tsx` and no `disabled: true` —
+  that's exactly the bug this flag exists to prevent (clicking it lands on Next's not-found page).
+- This is a per-route flag, not per-role — the same disabled item may appear in multiple role sections
+  (e.g. `notifications` shows up in both `PERSONAL_NAV` and `ADMIN_OPERATIONS_NAV`); update every
+  occurrence of the `id`, not just the first one you find.
+
 ## State
 - Local UI state → `useState` in the component or hook.
 - Don't introduce a new Zustand store or Context unless the data must persist across route

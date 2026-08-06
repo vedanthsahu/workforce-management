@@ -27,7 +27,7 @@ class FakeCursor:
     def __init__(self) -> None:
         self.executions: list[tuple[str, Any]] = []
 
-    def __enter__(self) -> "FakeCursor":
+    def __enter__(self) -> FakeCursor:
         return self
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:

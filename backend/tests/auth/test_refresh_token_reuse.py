@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -99,7 +99,7 @@ class RefreshTokenReuseDetectionTests(unittest.TestCase):
         """Regression guard: the new reuse-detection branch must not run
         (or interfere) when the presented token actually matches."""
         conn = FakeConnection()
-        future_expiry = datetime.now(timezone.utc) + timedelta(days=1)
+        future_expiry = datetime.now(UTC) + timedelta(days=1)
 
         with (
             patch(
@@ -118,6 +118,15 @@ class RefreshTokenReuseDetectionTests(unittest.TestCase):
             patch(
                 "backend.services.auth_service.rotate_refresh_token",
                 return_value={"session_id": "session-abc"},
+            ),
+            patch(
+                "backend.services.auth_service.create_scoped_refresh_token",
+                return_value={
+                    "id": "session-abc",
+                    "token": "new-refresh-token",
+                    "token_hash": "new-refresh-token-hash",
+                    "expires_at": future_expiry,
+                },
             ),
             patch("backend.services.auth_service.record_auth_event"),
             patch("backend.services.auth_service._build_access_token_for_user", return_value="jwt"),

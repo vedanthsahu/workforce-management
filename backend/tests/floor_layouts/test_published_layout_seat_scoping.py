@@ -14,7 +14,9 @@ from backend.repositories.booking_repository import (
     fetch_seat_for_booking,
 )
 from backend.repositories.dashboard_repository import fetch_admin_dashboard_summary
-from backend.repositories.floor_layout_repository import reconcile_published_layout_seats
+from backend.repositories.floor_layout_repository import (
+    reconcile_published_layout_seats,
+)
 from backend.repositories.location_repository import (
     fetch_seat_configuration,
     fetch_site_by_id,
@@ -25,7 +27,7 @@ class FakeCursor:
     def __init__(self) -> None:
         self.executions: list[tuple[str, Any]] = []
 
-    def __enter__(self) -> "FakeCursor":
+    def __enter__(self) -> FakeCursor:
         return self
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:

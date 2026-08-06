@@ -21,9 +21,6 @@ from backend.core.storage import upload_svg_to_s3
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.floor_layout_repository import (
     acquire_floor_publish_lock,
-    activate_floor_layout as activate_floor_layout_record,
-)
-from backend.repositories.floor_layout_repository import (
     archive_existing_published_layouts,
     fetch_floor_for_layout,
     fetch_floor_layout_by_id,
@@ -34,6 +31,9 @@ from backend.repositories.floor_layout_repository import (
     publish_layout_seat_configurations,
     reconcile_published_layout_seats,
     soft_delete_floor_layout,
+)
+from backend.repositories.floor_layout_repository import (
+    activate_floor_layout as activate_floor_layout_record,
 )
 from backend.repositories.layout_seat_mapping_repository import (
     bulk_insert_layout_seat_mappings,
