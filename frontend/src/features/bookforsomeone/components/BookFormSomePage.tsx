@@ -22,8 +22,8 @@ import { useBookForSomeoneStore } from "@/store/useBookForSomeoneStore";
 
 export default function BookForSomeonePage() {
   const router = useRouter();
-const { data } = useDashboard();
-const currentUserId = data?.user.user_id;
+  const { data } = useDashboard();
+  const currentUserId = data?.user.user_id;
   const {
     formState,
     isSubmitting,
@@ -47,36 +47,58 @@ const currentUserId = data?.user.user_id;
   const { step, bookingType, selectedEmployee, selectedGuest, visitDetails, seatRequired } = formState;
   const { sites, buildings, floors, isLoadingBuildings, isLoadingFloors } = useSiteBuildingOptions(visitDetails.siteId, visitDetails.buildingId);
 
-  const { can } = usePermissions();
+  const { can, hasRole } = usePermissions();
   const canBookEmployee = can("booking:book_for_employee");
-  const canBookGuest    = can("booking:book_for_guest");
+  const canBookGuest = can("booking:book_for_guest");
 
   // ── Prefill from URL when editing a visit ──
   const editVisitId = searchParams.get("editVisitId");
-  // Set only by AdminBookingsPage's row-menu "Modify" action so the success
-  // screen can navigate back to Admin Bookings instead of My Bookings.
-  const isAdminFlow = searchParams.get("adminFlow") === "true";
+  // True when reached via AdminBookingsPage's row-menu "Modify" action
+  // (?adminFlow=true), OR whenever a TENANT_ADMIN uses Book for Someone —
+  // both cases should send the success screen back to Admin Bookings
+  // instead of My Bookings. Facilitators (non-admin roles with the same
+  // booking:book_for_* permissions) still land on My Bookings as before.
+  const isAdminFlow = searchParams.get("adminFlow") === "true" || hasRole("TENANT_ADMIN");
   const prefillApplied = useRef(false);
+  // Frozen snapshot of the visit's original details, captured once when the
+  // editVisitId prefill applies — compared against the live visitDetails
+  // below to gate "Continue" so a no-op edit (nothing actually changed)
+  // can't be submitted.
+  const originalVisitDetailsRef = useRef<VisitDetails | null>(null);
+
+  // The wizard's formState lives in a module-level Zustand store so browser
+  // Back can restore it mid-flow — but that also means a stale step/selection
+  // (e.g. left on the success screen, or on Guest from a previous visit)
+  // would otherwise still be there the next time this page is opened fresh.
+  // Reset once per mount so every fresh entry (button, sidebar link) starts
+  // clean at the type selector; skip it for an editVisitId deep link, which
+  // needs its own prefilled state instead.
+  const resetOnMountApplied = useRef(false);
+  useEffect(() => {
+    if (resetOnMountApplied.current) return;
+    resetOnMountApplied.current = true;
+    if (!editVisitId) resetWizard();
+  }, [editVisitId, resetWizard]);
 
   useEffect(() => {
     if (!editVisitId || prefillApplied.current) return;
     prefillApplied.current = true;
 
-    const guestName      = searchParams.get("guestName") ?? "";
-    const guestEmail     = searchParams.get("guestEmail") ?? "";
-    const guestType      = searchParams.get("guestType") ?? "";
+    const guestName = searchParams.get("guestName") ?? "";
+    const guestEmail = searchParams.get("guestEmail") ?? "";
+    const guestType = searchParams.get("guestType") ?? "";
     const purposeOfVisit = searchParams.get("purposeOfVisit") ?? "";
-    const visitDate      = searchParams.get("visitDate") ?? "";
-    const endDate        = searchParams.get("endDate") ?? "";
-    const rawStart       = searchParams.get("startTime") ?? "";
-    const rawEnd         = searchParams.get("endTime") ?? "";
-    const startTime      = rawStart.slice(0, 5);
-    const endTime        = rawEnd.slice(0, 5);
-    const hostName       = searchParams.get("hostName") ?? "";
-    const hostUserId     = searchParams.get("hostUserId") ?? "";
-    const siteId         = searchParams.get("siteId") ?? "";
-    const buildingId     = searchParams.get("buildingId") ?? "";
-    const floorId        = searchParams.get("floorId") ?? "";
+    const visitDate = searchParams.get("visitDate") ?? "";
+    const endDate = searchParams.get("endDate") ?? "";
+    const rawStart = searchParams.get("startTime") ?? "";
+    const rawEnd = searchParams.get("endTime") ?? "";
+    const startTime = rawStart.slice(0, 5);
+    const endTime = rawEnd.slice(0, 5);
+    const hostName = searchParams.get("hostName") ?? "";
+    const hostUserId = searchParams.get("hostUserId") ?? "";
+    const siteId = searchParams.get("siteId") ?? "";
+    const buildingId = searchParams.get("buildingId") ?? "";
+    const floorId = searchParams.get("floorId") ?? "";
 
     setFormState(() => ({
       step: 2,
@@ -167,8 +189,8 @@ const currentUserId = data?.user.user_id;
       if (visitDetails.hostEmployee) params.set("hostUserId", visitDetails.hostEmployee.id);
       params.set("guestType", visitDetails.guestType);
       if (visitDetails.purposeOfVisit) params.set("purposeOfVisit", visitDetails.purposeOfVisit);
-      if (visitDetails.startTime)      params.set("startTime", visitDetails.startTime);
-      if (visitDetails.endTime)        params.set("endTime", visitDetails.endTime);
+      if (visitDetails.startTime) params.set("startTime", visitDetails.startTime);
+      if (visitDetails.endTime) params.set("endTime", visitDetails.endTime);
       if (visitDetails.additionalNotes) params.set("notes", visitDetails.additionalNotes);
     }
 
@@ -188,14 +210,37 @@ const currentUserId = data?.user.user_id;
   const displayStep =
     bookingType === "visitor" && step === 4 ? 5 : isSuccessStep ? steps.length + 1 : step;
 
+  // Only meaningful when editing an existing visit — true once host, date,
+  // location, or any other visit detail differs from the original.
+  const hasVisitChanges = (() => {
+    if (!editVisitId) return true;
+    const orig = originalVisitDetailsRef.current;
+    if (!orig) return false;
+    return (
+      (visitDetails.hostEmployee?.id ?? "") !== (orig.hostEmployee?.id ?? "") ||
+      visitDetails.siteId !== orig.siteId ||
+      visitDetails.buildingId !== orig.buildingId ||
+      visitDetails.floorId !== orig.floorId ||
+      visitDetails.visitDate !== orig.visitDate ||
+      visitDetails.endDate !== orig.endDate ||
+      visitDetails.startTime !== orig.startTime ||
+      visitDetails.endTime !== orig.endTime ||
+      visitDetails.guestType !== orig.guestType ||
+      visitDetails.purposeOfVisit !== orig.purposeOfVisit ||
+      visitDetails.additionalNotes !== orig.additionalNotes
+    );
+  })();
+
+  const visitDetailsRequiredFilled =
+    !!visitDetails.hostEmployee && !!visitDetails.visitDate && !!visitDetails.endDate && !!visitDetails.siteId && !!visitDetails.buildingId && !!visitDetails.floorId;
+
   let canContinue = true;
   if (bookingType === "internal") {
     if (step === 1) canContinue = !!selectedEmployee;
   } else {
     if (step === 1) canContinue = !!selectedGuest;
     if (step === 2)
-      canContinue =
-        !!visitDetails.hostEmployee && !!visitDetails.visitDate && !!visitDetails.endDate && !!visitDetails.siteId && !!visitDetails.buildingId && !!visitDetails.floorId && !checkingEligibility;
+      canContinue = visitDetailsRequiredFilled && !checkingEligibility && hasVisitChanges;
     if (step === 3) canContinue = seatRequired !== null;
     if (step === 4) canContinue = !(isSubmitting || editSubmitting);
   }
@@ -213,7 +258,9 @@ const currentUserId = data?.user.user_id;
   const infoText =
     (bookingType === "internal" && step === 1) || (bookingType === "visitor" && step === 3 && seatRequired === "yes")
       ? `After clicking "${submitLabel}", you will continue in the existing booking flow to select workspace, date, preferences and choose a seat.`
-      : editError ?? submitError;
+      : (editVisitId && bookingType === "visitor" && step === 2 && visitDetailsRequiredFilled && !hasVisitChanges)
+        ? "Change the host, date, location, or another detail to save changes."
+        : editError ?? submitError;
 
   const handlePrimaryAction = async () => {
     if (bookingType === "internal" && step === 1) {
@@ -361,16 +408,16 @@ const currentUserId = data?.user.user_id;
   const howItWorks =
     bookingType === "internal"
       ? [
-          { step: "1", title: "Choose who", desc: "Search and select the employee you're booking for." },
-          { step: "2", title: "Pick a seat", desc: "Continue to the booking flow to choose workspace, date and seat." },
-        ]
+        { step: "1", title: "Choose who", desc: "Search and select the employee you're booking for." },
+        { step: "2", title: "Pick a seat", desc: "Continue to the booking flow to choose workspace, date and seat." },
+      ]
       : [
-          { step: "1", title: "Choose who", desc: "Select a recent guest or create a new one." },
-          { step: "2", title: "Fill in details", desc: "Set guest type, purpose, host employee and visit time." },
-          { step: "3", title: "Seat required?", desc: "Decide whether this guest needs a workspace." },
-          { step: "4", title: "Pick a seat", desc: "Continue to the booking flow to choose workspace and seat." },
-          { step: "5", title: "Confirm", desc: "Review the details and send the invite." },
-        ];
+        { step: "1", title: "Choose who", desc: "Select a recent guest or create a new one." },
+        { step: "2", title: "Fill in details", desc: "Set guest type, purpose, host employee and visit time." },
+        { step: "3", title: "Seat required?", desc: "Decide whether this guest needs a workspace." },
+        { step: "4", title: "Pick a seat", desc: "Continue to the booking flow to choose workspace and seat." },
+        { step: "5", title: "Confirm", desc: "Review the details and send the invite." },
+      ];
 
   return (
     <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#F7F8FC]">
@@ -429,8 +476,8 @@ const currentUserId = data?.user.user_id;
                     onBack={
                       editVisitId
                         ? (step === 4
-                            ? () => setFormState((prev) => ({ ...prev, step: 2 }))
-                            : () => router.push("/mybookings?tab=bookedForSomeone"))
+                          ? () => setFormState((prev) => ({ ...prev, step: 2 }))
+                          : () => router.push("/mybookings?tab=bookedForSomeone"))
                         : step > 1
                           ? goBack
                           : undefined

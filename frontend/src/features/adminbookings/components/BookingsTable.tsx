@@ -191,7 +191,7 @@ function PersonCell({ booking }: { booking: AdminBooking }) {
           isGuest ? "bg-violet-100 text-violet-700" : "bg-indigo-100 text-indigo-700"
         }`}
       >
-        {isGuest ? "GV" : initialsOf(booking.person_name)}
+        {initialsOf(booking.person_name)}
       </div>
       <div className="min-w-0">
         <p className="text-xs font-medium text-gray-900 line-clamp-2 wrap-break-word">{booking.person_name}</p>

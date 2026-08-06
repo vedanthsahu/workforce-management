@@ -261,7 +261,7 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
             <col style={{ width: "22%" }} />
             <col style={{ width: "9%" }} />
           </colgroup>
-          <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
+          <thead className="text-xs text-blue-600 bg-blue-100 border-b">
             <tr>
               <th className="pl-5 px-3 py-3 font-bold text-left">Layout Name</th>
               <th className="pl-7 px-3 py-3 font-bold text-left">Status</th>

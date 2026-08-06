@@ -30,6 +30,7 @@ class CreateBookingRequest(BaseModel):
     booking_date: date
     start_time: time = time(9, 0)
     end_time: time = time(18, 0)
+    source_channel: str | None = None
 
 
 
@@ -215,6 +216,11 @@ class BookingEligibilityRequest(BaseModel):
     )
 
     exclude_booking_id: str | None = None
+
+    seat_id: int | None = Field(
+        default=None,
+        gt=0,
+    )
 
 class BookingEligibilityResponse(BaseModel):
     eligible: bool

@@ -43,6 +43,7 @@ from backend.core.audit_actions import (
 )
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.booking_repository import (
+    acquire_booking_slot_locks,
     cancel_booking,
     mark_booking_modified,
     count_guest_bookings,
@@ -990,6 +991,16 @@ def create_guest_booking(
             seat_id=str(payload.seat_id),
         )
 
+        # Same seat/date race as employee bookings -- no DB constraint
+        # backstops this, so serialize before checking for conflicts.
+        acquire_booking_slot_locks(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+            subject_id=guest_id,
+            booking_date=payload.visit_date,
+        )
+
         if guest_has_active_booking_on_date(
             conn,
             tenant_id=tenant_id,
@@ -1338,6 +1349,15 @@ def modify_guest_booking(
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
         )
+
+        acquire_booking_slot_locks(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+            subject_id=guest_id,
+            booking_date=payload.booking_date,
+        )
+
         if guest_has_active_booking_on_date(
             conn,
             tenant_id=tenant_id,

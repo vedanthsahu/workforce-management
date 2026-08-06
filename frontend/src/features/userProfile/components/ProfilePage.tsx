@@ -7,6 +7,7 @@ import {
   Layers, CalendarCheck2, CalendarClock, History,
   ChevronRight, CalendarDays,
   Building, Armchair, Check, Pencil, Save, X, ChevronDown,
+  Sparkles, IdCard, BarChart3, SlidersHorizontal,
 } from "lucide-react";
 
 import { Button }    from "@/components/ui/button";
@@ -48,11 +49,24 @@ const ROLE_BADGE: Record<string, string> = {
   FACILITIES:   "bg-orange-50 text-orange-600 ring-orange-200",
 };
 
-function RolePill({ role }: { role: string }) {
-  const style = ROLE_BADGE[role] ?? "bg-gray-50 text-gray-600 ring-gray-200";
+// Same role→color mapping as ROLE_BADGE, but as a solid white pill for use
+// on top of the colorful identity banner (a tinted bg would be invisible there).
+const ROLE_BADGE_ON_BANNER: Record<string, string> = {
+  TENANT_ADMIN: "bg-white text-rose-600",
+  MANAGER:      "bg-white text-violet-600",
+  EMPLOYEE:     "bg-white text-blue-600",
+  FACILITATOR:  "bg-white text-teal-600",
+  FRONT_OFFICE: "bg-white text-amber-600",
+  FACILITIES:   "bg-white text-orange-600",
+};
+
+function RolePill({ role, onBanner = false }: { role: string; onBanner?: boolean }) {
+  const style = onBanner
+    ? (ROLE_BADGE_ON_BANNER[role] ?? "bg-white text-gray-600")
+    : (ROLE_BADGE[role] ?? "bg-gray-50 text-gray-600 ring-gray-200");
   const label = role.charAt(0) + role.slice(1).toLowerCase().replace(/_/g, " ");
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold ring-1 ${style}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${onBanner ? "" : "ring-1"} ${style}`}>
       {label}
     </span>
   );
@@ -103,17 +117,38 @@ function groupBookingsByMonth(bookings: ApiBooking[]) {
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`bg-white rounded-xl border border-gray-100 shadow-sm ${className}`}>
+    <div className={`bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-200 ${className}`}>
       {children}
     </div>
   );
 }
 
-function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+function SectionHeading({ icon: Icon, title, color = "bg-indigo-100 text-indigo-600" }: { icon: React.ElementType; title: string; color?: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${color}`}>
+        <Icon className="w-3.5 h-3.5" />
+      </div>
+      <h3 className="text-[13.5px] font-semibold text-gray-800">{title}</h3>
+    </div>
+  );
+}
+
+const INFO_ROW_COLORS = [
+  { bg: "bg-violet-100",  icon: "text-violet-600"  },
+  { bg: "bg-blue-100",    icon: "text-blue-600"    },
+  { bg: "bg-rose-100",    icon: "text-rose-600"    },
+  { bg: "bg-emerald-100", icon: "text-emerald-600" },
+  { bg: "bg-amber-100",   icon: "text-amber-600"   },
+  { bg: "bg-teal-100",    icon: "text-teal-600"    },
+];
+
+function InfoRow({ icon: Icon, label, value, colorIndex = 0 }: { icon: React.ElementType; label: string; value: string; colorIndex?: number }) {
+  const { bg, icon } = INFO_ROW_COLORS[colorIndex % INFO_ROW_COLORS.length];
   return (
     <div className="flex items-start gap-3 py-2.5">
-      <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center shrink-0 mt-0.5">
-        <Icon className="w-3.5 h-3.5 text-gray-400" />
+      <div className={`w-8 h-8 rounded-full ${bg} flex items-center justify-center shrink-0 mt-0.5`}>
+        <Icon className={`w-3.5 h-3.5 ${icon}`} />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[11px] text-gray-400 font-medium leading-none mb-1">{label}</p>
@@ -125,7 +160,7 @@ function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label:
 
 function SkillTag({ label }: { label: string }) {
   return (
-    <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-[11.5px] font-medium ring-1 ring-indigo-100">
+    <span className="inline-flex items-center px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-[11.5px] font-medium ring-1 ring-indigo-100 hover:bg-indigo-100 hover:ring-indigo-200 transition-colors">
       {label}
     </span>
   );
@@ -209,7 +244,8 @@ function AmenitiesCheckboxGroup({
           <div className="grid grid-cols-2 gap-1.5">
             {items.map((a) => {
               const on = selected.includes(a.id);
-              const color = getAmenityColor(a.name, a.category);
+              // Per-category coloring disabled for now — profile page only.
+              // const color = getAmenityColor(a.name, a.category);
               return (
                 <button
                   key={a.id}
@@ -226,7 +262,8 @@ function AmenitiesCheckboxGroup({
                   }`}>
                     {on && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                   </span>
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${color.dot}`} />
+                  {/* <span className={`w-2 h-2 rounded-full shrink-0 ${color.dot}`} /> */}
+                  <span className="w-2 h-2 rounded-full shrink-0 bg-gray-400" />
                   <span className="truncate">{a.name}</span>
                 </button>
               );
@@ -285,7 +322,12 @@ function BookingHistoryModal({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="w-[calc(100vw-2rem)] sm:w-full max-w-lg max-h-[90dvh] sm:max-h-[85vh] flex flex-col p-0 gap-0 rounded-xl">
         <DialogHeader className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 shrink-0">
-          <DialogTitle className="text-[15px]">Booking History</DialogTitle>
+          <DialogTitle className="text-[15px] flex items-center gap-2.5">
+            <span className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+              <History className="w-3.5 h-3.5" />
+            </span>
+            Booking History
+          </DialogTitle>
         </DialogHeader>
         <div className="flex gap-1.5 px-4 sm:px-5 pb-3 shrink-0">
           {(["all", "upcoming", "past"] as const).map((t) => (
@@ -374,7 +416,12 @@ function EditProfileDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="w-[calc(100vw-2rem)] sm:w-full max-w-md max-h-[90dvh] sm:max-h-[85vh] flex flex-col p-0 gap-0 rounded-xl">
         <DialogHeader className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 shrink-0 border-b border-gray-100">
-          <DialogTitle className="text-[15px]">Edit About Me</DialogTitle>
+          <DialogTitle className="text-[15px] flex items-center gap-2.5">
+            <span className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+              <Sparkles className="w-3.5 h-3.5" />
+            </span>
+            Edit About Me
+          </DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-4 space-y-4 min-h-0">
@@ -554,7 +601,12 @@ function EditPreferencesDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="w-[calc(100vw-2rem)] sm:w-full max-w-md max-h-[90dvh] sm:max-h-[85vh] flex flex-col p-0 gap-0 rounded-xl">
         <DialogHeader className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 shrink-0 border-b border-gray-100">
-          <DialogTitle className="text-[15px]">Edit Preferences</DialogTitle>
+          <DialogTitle className="text-[15px] flex items-center gap-2.5">
+            <span className="w-7 h-7 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center shrink-0">
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+            </span>
+            Edit Preferences
+          </DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-4 space-y-4 min-h-0">
@@ -634,25 +686,71 @@ function EditPreferencesDialog({
 
 function ProfileSkeleton() {
   return (
-    <div className="space-y-4">
-      <Card className="p-5">
-        <div className="flex items-start gap-5">
-          <Skeleton className="w-20 h-20 rounded-full shrink-0" />
-          <div className="flex-1 space-y-2 pt-1">
-            <Skeleton className="h-5 w-48" />
-            <Skeleton className="h-3.5 w-32" />
-            <Skeleton className="h-3.5 w-40" />
+    <div className="flex-1 min-h-0 overflow-y-auto bg-gradient-to-b from-indigo-50/40 via-white to-white">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+        {/* Page header */}
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-3.5 w-64" />
+        </div>
+
+        {/* Identity card */}
+        <Card className="overflow-hidden p-0!">
+          <div className="bg-gradient-to-br from-indigo-600/20 via-indigo-600/20 to-indigo-700/20 px-5 sm:px-8 py-7 sm:py-9">
+            <div className="flex flex-col items-center sm:flex-row sm:items-center gap-5 sm:gap-7">
+              <Skeleton className="w-20 h-20 sm:w-24 sm:h-24 rounded-full shrink-0" />
+              <div className="flex-1 min-w-0 space-y-2 w-full">
+                <Skeleton className="h-4 w-40 mx-auto sm:mx-0" />
+                <Skeleton className="h-3 w-28 mx-auto sm:mx-0" />
+                <Skeleton className="h-3 w-52 mx-auto sm:mx-0" />
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Main grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2 space-y-5">
+            <Card className="p-4 sm:p-5 space-y-3">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-3/4" />
+            </Card>
+            <Card className="p-4 sm:p-5 space-y-3">
+              <Skeleton className="h-4 w-40 mb-1" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-9 w-full" />
+                ))}
+              </div>
+            </Card>
+            <Card className="p-4 sm:p-5 space-y-3">
+              <Skeleton className="h-4 w-32 mb-1" />
+              <div className="grid grid-cols-3 gap-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-20 w-full rounded-xl" />
+                ))}
+              </div>
+              <Skeleton className="h-11 w-full rounded-xl" />
+            </Card>
+          </div>
+          <div className="space-y-5">
+            <Card className="p-4 sm:p-5 space-y-3">
+              <Skeleton className="h-4 w-28 mb-1" />
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 w-full" />
+              ))}
+            </Card>
+            <Card className="p-4 sm:p-5 space-y-3">
+              <Skeleton className="h-4 w-24 mb-1" />
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 w-full" />
+              ))}
+            </Card>
           </div>
         </div>
-      </Card>
-      <Card className="p-5">
-        <Skeleton className="h-4 w-36 mb-4" />
-        <div className="grid grid-cols-2 gap-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-8 w-full" />
-          ))}
-        </div>
-      </Card>
+      </div>
     </div>
   );
 }
@@ -668,7 +766,7 @@ function PrefDisplayRow({
 }) {
   return (
     <div className="flex items-start gap-3 py-2.5">
-      <div className={`w-7 h-7 rounded-lg ${color} flex items-center justify-center shrink-0 mt-0.5`}>
+      <div className={`w-8 h-8 rounded-full ${color} flex items-center justify-center shrink-0 mt-0.5`}>
         <Icon className={`w-3.5 h-3.5 ${iconColor}`} />
       </div>
       <div className="flex-1 min-w-0">
@@ -685,7 +783,10 @@ function AmenityChip({ name, category }: { name: string; category?: string }) {
   const color = getAmenityColor(name, category);
   const Icon = color.icon;
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11.5px] font-medium ring-1 ${color.bg} ${color.text} ${color.border.replace("border-", "ring-")}`}>
+    // Per-category coloring disabled for now — profile page only, other
+    // surfaces (e.g. book flow) still use getAmenityColor's colors as-is.
+    // <span className={`inline-flex items-center px-3 py-1 rounded-full text-[11.5px] font-medium ring-1 ${color.bg} ${color.text} ${color.border.replace("border-", "ring-")}`}>
+    <span className="inline-flex items-center px-3 py-1 rounded-full text-[11.5px] font-medium ring-1 bg-gray-50 text-gray-600 ring-gray-200">
       <Icon className="w-3 h-3 mr-1.5" />
       {name}
     </span>
@@ -708,19 +809,21 @@ export default function ProfilePage() {
 
   if (isFatal) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center px-6">
-        <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
-          <TriangleAlert className="w-5 h-5 text-red-500" />
-        </div>
-        <div>
-          <p className="text-[14px] font-semibold text-gray-800 mb-1">
-            {fatalError?.message ?? "Failed to load profile"}
-          </p>
-          <p className="text-[12px] text-gray-400">{fatalError?.code}</p>
-        </div>
-        <Button variant="outline" size="sm" className="text-[12.5px] gap-1.5" onClick={refetch}>
-          <RefreshCw className="w-3.5 h-3.5" />Retry
-        </Button>
+      <div className="flex-1 min-h-0 overflow-y-auto bg-gradient-to-b from-indigo-50/40 via-white to-white flex items-center justify-center px-6">
+        <Card className="flex flex-col items-center gap-4 text-center px-8 py-10 max-w-sm">
+          <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
+            <TriangleAlert className="w-5 h-5 text-red-500" />
+          </div>
+          <div>
+            <p className="text-[14px] font-semibold text-gray-800 mb-1">
+              {fatalError?.message ?? "Failed to load profile"}
+            </p>
+            <p className="text-[12px] text-gray-400">{fatalError?.code}</p>
+          </div>
+          <Button size="sm" className="text-[12.5px] gap-1.5 bg-indigo-600 hover:bg-indigo-700" onClick={refetch}>
+            <RefreshCw className="w-3.5 h-3.5" />Retry
+          </Button>
+        </Card>
       </div>
     );
   }
@@ -769,7 +872,7 @@ export default function ProfilePage() {
         }}
       />
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto bg-gradient-to-b from-indigo-50/40 via-white to-white">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
 
         {/* Page header */}
@@ -778,57 +881,66 @@ export default function ProfilePage() {
           <p className="text-[13px] text-gray-400 mt-0.5">View and manage your personal information.</p>
         </div>
 
-        {/* ── Identity card ─────────────────────────────────────────────── */}
-        <Card className="p-4 sm:p-6">
-          <div className="flex flex-col items-center sm:flex-row sm:items-center gap-5 sm:gap-7">
-            {/* Avatar */}
-            <div className="relative shrink-0 ml-0 sm:ml-2">
-              {profile.avatarUrl ? (
-                <img
-                  src={profile.avatarUrl}
-                  alt={profile.displayName}
-                  className="w-[80px] h-[80px] rounded-full object-cover ring-2 ring-gray-100"
-                />
-              ) : (
-                <div className="w-[80px] h-[80px] rounded-full bg-indigo-100 flex items-center justify-center text-[22px] font-bold text-indigo-700 ring-2 ring-gray-100 select-none">
-                  {initials}
-                </div>
-              )}
-              <button
-                onClick={() => avatarInputRef.current?.click()}
-                disabled={isUploadingAvatar}
-                className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all"
-              >
-                {isUploadingAvatar
-                  ? <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
-                  : <Camera className="w-3 h-3 text-gray-500" />}
-              </button>
-            </div>
+        {/* ── Identity card — avatar + info sit directly on the gradient in white ── */}
+        <Card className="overflow-hidden p-0!">
+          <div className="relative bg-gradient-to-br from-indigo-600 via-indigo-600 to-indigo-700 px-5 sm:px-8 py-5 sm:py-6">
+            {/* Decorative wave + glow overlay */}
+            <svg className="absolute inset-0 w-full h-full opacity-10 pointer-events-none" preserveAspectRatio="none" viewBox="0 0 800 200">
+              <path d="M0,110 C150,190 350,30 500,110 C650,190 800,70 800,110 L800,200 L0,200 Z" fill="white" />
+            </svg>
+            <div className="absolute w-56 h-56 rounded-full bg-white/[0.07] -top-20 -right-10 pointer-events-none" />
+            <div className="absolute w-32 h-32 rounded-full bg-white/[0.06] -bottom-10 right-36 pointer-events-none" />
 
-            {/* Info */}
-            <div className="flex-1 min-w-0 text-center sm:text-left">
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-1">
-                <h2 className="text-[18px] font-bold text-gray-900 leading-tight">{profile.displayName}</h2>
-                <RolePill role={profile.role} />
+            <div className="relative flex flex-col items-center sm:flex-row sm:items-center gap-5 sm:gap-7">
+              {/* Avatar */}
+              <div className="relative shrink-0">
+                {profile.avatarUrl ? (
+                  <img
+                    src={profile.avatarUrl}
+                    alt={profile.displayName}
+                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover ring-4 ring-white/40 shadow-lg"
+                  />
+                ) : (
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white/15 flex items-center justify-center text-[24px] sm:text-[26px] font-bold text-white ring-4 ring-white/40 shadow-lg select-none">
+                    {initials}
+                  </div>
+                )}
+                <button
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={isUploadingAvatar}
+                  className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all"
+                >
+                  {isUploadingAvatar
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
+                    : <Camera className="w-3.5 h-3.5 text-gray-600" />}
+                </button>
               </div>
-              <p className="text-[12.5px] text-gray-400 mb-2.5">
-                {profile.jobTitle}
-                {profile.department !== "—" && <> &nbsp;·&nbsp; {profile.department}</>}
-              </p>
-              <div className="flex flex-col sm:flex-row sm:flex-wrap items-center sm:items-center gap-y-1.5 gap-x-5">
-                <div className="flex items-center gap-1.5 text-[12.5px] text-gray-600">
-                  <Mail className="w-3.5 h-3.5 text-gray-400 shrink-0" />{profile.email}
+
+              {/* Info */}
+              <div className="flex-1 min-w-0 text-center sm:text-left">
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-1.5">
+                  <h2 className="text-[19px] sm:text-[21px] font-bold text-white leading-tight">{profile.displayName}</h2>
+                  <RolePill role={profile.role} onBanner />
                 </div>
-                {profile.phone !== "—" && (
-                  <div className="flex items-center gap-1.5 text-[12.5px] text-gray-600">
-                    <Phone className="w-3.5 h-3.5 text-gray-400 shrink-0" />{profile.phone}
+                <p className="text-[13px] text-white/80 mb-3">
+                  {profile.jobTitle}
+                  {profile.department !== "—" && <> &nbsp;·&nbsp; {profile.department}</>}
+                </p>
+                <div className="flex flex-col sm:flex-row sm:flex-wrap items-center sm:items-center gap-y-1.5 gap-x-5">
+                  <div className="flex items-center gap-1.5 text-[12.5px] text-white/90">
+                    <Mail className="w-3.5 h-3.5 text-white/70 shrink-0" />{profile.email}
                   </div>
-                )}
-                {profile.workLocation !== "—" && (
-                  <div className="flex items-center gap-1.5 text-[12.5px] text-gray-600">
-                    <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />{profile.workLocation}
-                  </div>
-                )}
+                  {profile.phone !== "—" && (
+                    <div className="flex items-center gap-1.5 text-[12.5px] text-white/90">
+                      <Phone className="w-3.5 h-3.5 text-white/70 shrink-0" />{profile.phone}
+                    </div>
+                  )}
+                  {profile.workLocation !== "—" && (
+                    <div className="flex items-center gap-1.5 text-[12.5px] text-white/90">
+                      <MapPin className="w-3.5 h-3.5 text-white/70 shrink-0" />{profile.workLocation}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -841,9 +953,9 @@ export default function ProfilePage() {
           <div className="lg:col-span-2 space-y-5">
 
              {/* About Me */}
-            <Card className="p-4 sm:p-5">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[13.5px] font-semibold text-gray-800">About Me</h3>
+            <Card className="overflow-hidden">
+              <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-indigo-50/60 border-b border-indigo-100">
+                <SectionHeading icon={Sparkles} title="About Me" color="bg-indigo-100 text-indigo-600" />
                 <Button
                   variant="ghost"
                   size="sm"
@@ -853,65 +965,71 @@ export default function ProfilePage() {
                   <Pencil className="w-3 h-3" />Edit
                 </Button>
               </div>
-              <p className="text-[12.5px] text-gray-500 leading-relaxed mb-4">
-                {profile.bio ||
-                  "Tell your teammates a bit about yourself."}
-              </p>
-              {profile.skills.length > 0 && (
-  <>
-    <p className="text-[12px] font-semibold text-gray-700 mb-2">Skills</p>
-    <div className="flex flex-wrap gap-1.5">
-      {profile.skills.map((s) => (
-        <SkillTag key={s} label={s} />
-      ))}
-    </div>
-  </>
-)}
+              <div className="p-4 sm:p-5">
+                <p className="text-[12.5px] text-gray-600 leading-relaxed mb-4 pl-3 border-l-2 border-indigo-100">
+                  {profile.bio ||
+                    <span className="text-gray-400 italic">Tell your teammates a bit about yourself.</span>}
+                </p>
+                {profile.skills.length > 0 && (
+                  <>
+                    <p className="text-[12px] font-semibold text-gray-700 mb-2">Skills</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {profile.skills.map((s) => (
+                        <SkillTag key={s} label={s} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </Card>
 
             {/* Personal Information */}
-            <Card>
-              <div className="flex items-center justify-between px-4 sm:px-5 pt-4 pb-3">
-                <h3 className="text-[13.5px] font-semibold text-gray-800">Personal Information</h3>
+            <Card className="overflow-hidden">
+              <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-blue-50/60 border-b border-blue-100">
+                <SectionHeading icon={IdCard} title="Personal Information" color="bg-blue-100 text-blue-600" />
               </div>
-              <Separator />
               <div className="px-4 sm:px-5 py-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6">
-                <InfoRow icon={BadgeCheck}  label="Employee ID"       value={profile.employeeId} />
-                <InfoRow icon={UserCheck}   label="Reporting Manager" value={profile.reportingManager} />
-                <InfoRow icon={MapPin}      label="Work Location"     value={profile.workLocation} />
-                <InfoRow icon={Building2}   label="Department"        value={profile.department} />
-                <InfoRow icon={Briefcase}   label="Designation"       value={profile.jobTitle} />
-                <InfoRow icon={Phone}       label="Mobile Number"     value={profile.phone} />
+                <InfoRow icon={BadgeCheck}  label="Employee ID"       value={profile.employeeId}       colorIndex={0} />
+                <InfoRow icon={UserCheck}   label="Reporting Manager" value={profile.reportingManager} colorIndex={1} />
+                <InfoRow icon={MapPin}      label="Work Location"     value={profile.workLocation}     colorIndex={2} />
+                <InfoRow icon={Building2}   label="Department"        value={profile.department}       colorIndex={3} />
+                <InfoRow icon={Briefcase}   label="Designation"       value={profile.jobTitle}         colorIndex={4} />
+                <InfoRow icon={Phone}       label="Mobile Number"     value={profile.phone}             colorIndex={5} />
               </div>
             </Card>
 
-           
-
             {/* Activity Summary — moved to left column */}
-            <Card className="p-4 sm:p-5">
-              <h3 className="text-[13.5px] font-semibold text-gray-800 mb-4">Activity Summary</h3>
-              <div className="grid grid-cols-3 gap-3 mb-4">
-                {[
-                  { icon: CalendarCheck2, value: activitySummary.totalBookings,    label: "Total Bookings",    bg: "bg-indigo-50", iconBg: "bg-indigo-100", num: "text-indigo-700", sub: "text-indigo-500", iconCls: "text-indigo-600" },
-                  { icon: CalendarClock,  value: activitySummary.upcomingBookings, label: "Upcoming Bookings", bg: "bg-amber-50",  iconBg: "bg-amber-100",  num: "text-amber-700",  sub: "text-amber-500",  iconCls: "text-amber-600" },
-                  { icon: History,        value: activitySummary.pastBookings,     label: "Past Bookings",     bg: "bg-gray-50",   iconBg: "bg-gray-100",   num: "text-gray-700",   sub: "text-gray-400",   iconCls: "text-gray-500" },
-                ].map(({ icon: Icon, value, label, bg, iconBg, num, sub, iconCls }) => (
-                  <div key={label} className={`flex flex-col items-center justify-center p-3 rounded-xl ${bg} text-center`}>
-                    <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center mb-2`}>
-                      <Icon className={`w-4 h-4 ${iconCls}`} />
-                    </div>
-                    <p className={`text-[22px] font-bold ${num} leading-none`}>{value}</p>
-                    <p className={`text-[11px] ${sub} font-medium mt-1 leading-tight`}>{label}</p>
-                  </div>
-                ))}
+            <Card className="overflow-hidden">
+              <div className="px-4 sm:px-5 py-3 bg-amber-50/60 border-b border-amber-100">
+                <SectionHeading icon={BarChart3} title="Activity Summary" color="bg-amber-100 text-amber-600" />
               </div>
-              <button
-                onClick={() => setHistoryOpen(true)}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors group"
-              >
-                <span className="block text-center text-[12.5px] font-medium text-indigo-600">View Booking History</span>
-                <ChevronRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-0.5 transition-transform" />
-              </button>
+              <div className="p-4 sm:p-5">
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  {[
+                    { icon: CalendarCheck2, value: activitySummary.totalBookings,    label: "Total Bookings",    bg: "bg-indigo-100", iconBg: "bg-indigo-500", num: "text-indigo-700", sub: "text-indigo-500" },
+                    { icon: CalendarClock,  value: activitySummary.upcomingBookings, label: "Upcoming Bookings", bg: "bg-amber-100",  iconBg: "bg-amber-500",  num: "text-amber-700",  sub: "text-amber-500" },
+                    { icon: History,        value: activitySummary.pastBookings,     label: "Past Bookings",     bg: "bg-violet-100", iconBg: "bg-violet-500", num: "text-violet-700", sub: "text-violet-500" },
+                  ].map(({ icon: Icon, value, label, bg, iconBg, num, sub }) => (
+                    <div key={label} className={`flex flex-col items-center justify-center p-3 rounded-xl ${bg} text-center hover:shadow-sm transition-shadow duration-200`}>
+                      <div className={`w-8 h-8 rounded-full ${iconBg} flex items-center justify-center mb-2`}>
+                        <Icon className="w-4 h-4 text-white" />
+                      </div>
+                      <p className={`text-[22px] font-bold ${num} leading-none`}>{value}</p>
+                      <p className={`text-[11px] ${sub} font-medium mt-1 leading-tight`}>{label}</p>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setHistoryOpen(true)}
+                  className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 active:scale-[0.99] transition-all duration-200 group"
+                >
+                  <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center shrink-0">
+                    <History className="w-4 h-4 text-white" />
+                  </div>
+                  <span className="flex-1 text-left text-[12.5px] font-semibold text-indigo-600">View Booking History</span>
+                  <ChevronRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-0.5 group-hover:text-indigo-600 transition-all shrink-0" />
+                </button>
+              </div>
             </Card>
           </div>
 
@@ -919,28 +1037,22 @@ export default function ProfilePage() {
           <div className="space-y-5">
 
             {/* Work Details */}
-            <Card className="p-4 sm:p-5">
-              <h3 className="text-[13.5px] font-semibold text-gray-800 mb-4">Work Details</h3>
-              <div className="space-y-3">
-                {[
-                  // { label: "Employee ID",   value: profile.employeeId },
-                  { label: "Department",    value: profile.department },
-                  { label: "Designation",   value: profile.jobTitle },
-                  { label: "Work Location", value: profile.workLocation },
-                  { label: "Manager",       value: profile.reportingManager },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex items-center justify-between gap-3">
-                    <span className="text-[12px] text-gray-400 shrink-0">{label}</span>
-                    <span className="text-[12.5px] text-gray-700 font-medium text-right truncate">{value}</span>
-                  </div>
-                ))}
+            <Card className="overflow-hidden">
+              <div className="px-4 sm:px-5 py-3 bg-emerald-50/60 border-b border-emerald-100">
+                <SectionHeading icon={Briefcase} title="Work Details" color="bg-emerald-100 text-emerald-600" />
+              </div>
+              <div className="px-4 sm:px-5 py-1">
+                <PrefDisplayRow icon={Building2}  label="Department"    value={profile.department}   color="bg-emerald-100" iconColor="text-emerald-600" />
+                <PrefDisplayRow icon={Briefcase}  label="Designation"   value={profile.jobTitle}     color="bg-blue-100"    iconColor="text-blue-600" />
+                <PrefDisplayRow icon={MapPin}     label="Work Location" value={profile.workLocation} color="bg-rose-100"    iconColor="text-rose-600" />
+                <PrefDisplayRow icon={UserCheck}  label="Manager"       value={profile.reportingManager} color="bg-amber-100" iconColor="text-amber-600" />
               </div>
             </Card>
 
             {/* Preferences — moved to right column */}
-            <Card>
-              <div className="flex items-center justify-between px-4 sm:px-5 pt-4 pb-3">
-                <h3 className="text-[13.5px] font-semibold text-gray-800">Preferences</h3>
+            <Card className="overflow-hidden">
+              <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-violet-50/60 border-b border-violet-100">
+                <SectionHeading icon={SlidersHorizontal} title="Preferences" color="bg-violet-100 text-violet-600" />
                 {prefErr ? (
                   <span className="text-[11px] text-amber-500 flex items-center gap-1">
                     <TriangleAlert className="w-3 h-3" />{prefErr.message}
@@ -956,28 +1068,27 @@ export default function ProfilePage() {
                   </Button>
                 )}
               </div>
-              <Separator />
               <div className="px-4 sm:px-5 py-1">
                 <PrefDisplayRow
                   icon={Building}
                   label="Default Office"
                   value={preferences.preferredOfficeName}
-                  color="bg-blue-50"
-                  iconColor="text-blue-400"
+                  color="bg-blue-100"
+                  iconColor="text-blue-600"
                 />
                 <PrefDisplayRow
                   icon={Building2}
                   label="Default Building"
                   value={preferences.preferredBuildingName}
-                  color="bg-indigo-50"
-                  iconColor="text-indigo-400"
+                  color="bg-indigo-100"
+                  iconColor="text-indigo-600"
                 />
                 <PrefDisplayRow
                   icon={Layers}
                   label="Default Floor"
                   value={preferences.preferredFloorName}
-                  color="bg-violet-50"
-                  iconColor="text-violet-400"
+                  color="bg-violet-100"
+                  iconColor="text-violet-600"
                 />
               </div>
               <div className="px-4 sm:px-5 pb-4">
@@ -989,7 +1100,9 @@ export default function ProfilePage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-[12px] text-gray-400 italic">No amenities selected.</p>
+                  <p className="text-[12px] text-gray-400 italic border border-dashed border-gray-200 rounded-lg px-3 py-2.5 text-center">
+                    No amenities selected.
+                  </p>
                 )}
               </div>
             </Card>

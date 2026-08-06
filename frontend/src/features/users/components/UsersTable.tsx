@@ -64,7 +64,7 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
                     </div>
                   </td>
                   <td className="py-3 px-6 text-sm text-black w-[34%] truncate">{user.email}</td>
-                  <td className="py-3 px-4 w-[18%]">
+                  <td className="pl-3 py-2 px-4 w-[18%]">
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ring-1 ${getRoleBadgeClass(
                         user.currentRole

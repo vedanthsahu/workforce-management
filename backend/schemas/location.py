@@ -324,6 +324,13 @@ class LayoutSeatConfigurationUpdateRequest(BaseModel):
     amenity_ids: list[int] | None = None
 
 
+class BulkLayoutSeatConfigurationUpdateRequest(LayoutSeatConfigurationUpdateRequest):
+    """Payload for applying one draft configuration to multiple layout seat
+    mappings at once (layout editor, pre-publish)."""
+
+    layout_seat_mapping_ids: list[int] = Field(min_length=1)
+
+
 class LayoutSeatConfigurationResponse(BaseModel):
 
     layout_seat_mapping_id: str
@@ -375,3 +382,9 @@ class SeatConfigurationResponse(BaseModel):
     seat_code: str
     status: str
     is_bookable: bool
+
+
+class BulkSeatConfigurationUpdateRequest(SeatConfigurationUpdateRequest):
+    """Payload for applying one configuration to multiple seats at once."""
+
+    seat_ids: list[int] = Field(min_length=1)
