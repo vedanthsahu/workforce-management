@@ -57,6 +57,7 @@ desktop.ini
 # =========================
 *.log
 logs/
+.local-run/
 
 # =========================
 # Testing / coverage

@@ -73,10 +73,14 @@ export default function Chatbot() {
 
     async function handleHostMessage(event: MessageEvent) {
       if (event.origin !== hostOrigin || event.source !== window.parent) return;
-      if (hostInitializedRef.current) return;
       if (event.data?.source !== 'seatbook-host' || event.data?.type !== 'chatbot:init') return;
       const token = String(event.data?.accessToken || '').trim();
       if (!token) return;
+      if (hostInitializedRef.current) {
+        setAccessToken(token);
+        setIsOpen(true);
+        return;
+      }
 
       hostInitializedRef.current = true;
       setAccessToken(token);
@@ -273,12 +277,16 @@ export default function Chatbot() {
 
   function selectBookingTab(value: string) {
     if (!sessionId || isLoading) return;
+    const mode = value.includes('past') ? 'past' : value.includes('cancelled') ? 'cancelled' : 'upcoming';
     setActiveFormCard(null);
     setActiveDropdownKey(null);
     suppressAutoScrollRef.current = true;
-    setBookingTabLoading(value.includes('past') ? 'past' : value.includes('cancelled') ? 'cancelled' : 'upcoming');
+    setBookingTabLoading(mode);
     replaceBookingListRef.current = true;
-    void dispatchMessage({ text: value, message_type: 'TEXT' });
+    void dispatchMessage({
+      form_data: { action: 'booking_list_mode', mode },
+      message_type: 'FORM_SUBMIT',
+    });
   }
 
   function selectSeat(seat: SeatCard) {

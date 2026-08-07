@@ -6,6 +6,7 @@ Each node knows exactly what input to expect and where to go next.
 Menus are loaded from the chatbot_menu_items DB table (managed by DB team).
 """
 from __future__ import annotations
+import asyncio
 import json
 import logging
 import random
@@ -2125,6 +2126,22 @@ class ChatEngine:
             action = form_data.get("action")
             booking_id = form_data.get("booking_id")
 
+            if action == "booking_list_mode":
+                requested_mode = str(form_data.get("mode") or "upcoming").lower()
+                list_mode = requested_mode if requested_mode in {"upcoming", "past", "cancelled"} else "upcoming"
+                await self._set_context_bulk(
+                    session.id,
+                    {
+                        "booking_action": "",
+                        "booking_list_mode": list_mode,
+                        "booking_list_offset": "0",
+                        "date_range_start": "",
+                        "date_range_end": "",
+                    },
+                    db,
+                )
+                return await self._build_my_bookings(session, db)
+
             if action == "cancel" and booking_id and settings.ENABLE_BOOKING_ACTION_CONFIRMATION:
                 return await self._build_booking_action_confirmation(session, "cancel", booking_id, db)
             if action == "cancel" and booking_id:
@@ -2287,7 +2304,19 @@ class ChatEngine:
                     past_rows, past_has_more = past_result
                     result = (self._cancelled_booking_rows(past_rows), past_has_more)
         else:
-            result = await seat_backend_api_service.my_future_bookings(page=page, limit=page_size)
+            if page == 1:
+                # Warm the immutable past-booking view while the first upcoming
+                # page is loading. Both calls share the same request window, so
+                # opening the Past tab avoids another SSM/database round-trip.
+                result, _prefetched_past = await asyncio.gather(
+                    seat_backend_api_service.my_future_bookings(page=page, limit=page_size),
+                    seat_backend_api_service.my_past_bookings(
+                        page=1,
+                        limit=self._past_bookings_page_size(),
+                    ),
+                )
+            else:
+                result = await seat_backend_api_service.my_future_bookings(page=page, limit=page_size)
         if result is None:
             return None
         rows, has_more = result
@@ -2700,24 +2729,28 @@ class ChatEngine:
         days: Optional[int] = None,
         reserved_dates: Optional[dict[str, str]] = None,
     ) -> list[RebookCalendarDay]:
-        calendar: list[RebookCalendarDay] = []
         if month_start is None:
             month_start = date.today().replace(day=1)
         reserved_dates = reserved_dates or {}
         total_days = days or self._days_in_month(month_start)
-        for index in range(total_days):
+
+        # Bound concurrency so a month view does not wait on 28-31 sequential
+        # SeatBook requests while still protecting the main API and DB pool.
+        semaphore = asyncio.Semaphore(6)
+
+        async def build_day(index: int) -> RebookCalendarDay:
             booking_date = month_start + timedelta(days=index)
             booking_date_str = booking_date.isoformat()
             selectable = booking_date >= date.today()
             if not selectable:
-                calendar.append(RebookCalendarDay(date=booking_date_str, available=False, selectable=False))
-                continue
-            seats = await seat_backend_api_service.available_seats(
-                floor_id=floor_id,
-                booking_date=booking_date_str,
-                amenity_ids=[],
-                modify_booking_id=reserved_dates.get(booking_date_str),
-            )
+                return RebookCalendarDay(date=booking_date_str, available=False, selectable=False)
+            async with semaphore:
+                seats = await seat_backend_api_service.available_seats(
+                    floor_id=floor_id,
+                    booking_date=booking_date_str,
+                    amenity_ids=[],
+                    modify_booking_id=reserved_dates.get(booking_date_str),
+                )
             available = False
             if seats is not None:
                 available = any(
@@ -2726,14 +2759,15 @@ class ChatEngine:
                     for seat in seats
                 )
             reserved = booking_date_str in reserved_dates
-            calendar.append(RebookCalendarDay(
+            return RebookCalendarDay(
                 date=booking_date_str,
                 available=available,
                 selectable=True,
                 reserved=reserved,
                 reserved_seat_available=available if reserved else False,
-            ))
-        return calendar
+            )
+
+        return list(await asyncio.gather(*(build_day(index) for index in range(total_days))))
 
     async def _reserved_booking_dates_for_month(self, month_start: date) -> dict[str, str]:
         month_end = self._add_months(month_start, 1)

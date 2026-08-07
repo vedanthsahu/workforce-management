@@ -32,6 +32,10 @@ class SeatBackendApiService:
         self._client: Optional[httpx.AsyncClient] = None
         self._last_refresh_monotonic = 0.0
         self._me: Optional[dict[str, Any]] = None
+        self._past_bookings_cache: dict[
+            tuple[str, int, int],
+            tuple[float, tuple[list[dict[str, Any]], bool]],
+        ] = {}
 
     @property
     def enabled(self) -> bool:
@@ -92,8 +96,20 @@ class SeatBackendApiService:
         return self._paged_items(payload, limit)
 
     async def my_past_bookings(self, *, page: int = 1, limit: int = 20) -> Optional[tuple[list[dict[str, Any]], bool]]:
+        request_user = current_seatbook_user() or {}
+        user_id = str(request_user.get("user_id") or request_user.get("sub") or "").strip()
+        cache_key = (user_id, page, limit)
+        cached = self._past_bookings_cache.get(cache_key) if user_id else None
+        if cached and time.monotonic() - cached[0] < 120:
+            rows, has_more = cached[1]
+            return list(rows), has_more
+
         payload = await self._request("GET", "/bookings/me/past", params={"page": page, "limit": limit})
-        return self._paged_items(payload, limit)
+        result = self._paged_items(payload, limit)
+        if result is not None and user_id:
+            rows, has_more = result
+            self._past_bookings_cache[cache_key] = (time.monotonic(), (list(rows), has_more))
+        return result
 
     async def my_cancelled_bookings(self, *, page: int = 1, limit: int = 20) -> Optional[tuple[list[dict[str, Any]], bool]]:
         payload = await self._request("GET", "/bookings/me/cancelled", params={"page": page, "limit": limit})
@@ -308,6 +324,7 @@ class SeatBackendApiService:
             self._client = httpx.AsyncClient(
                 base_url=str(settings.SEAT_BACKEND_API_URL).rstrip("/"),
                 timeout=float(settings.SEAT_BACKEND_TIMEOUT_SECONDS or 10.0),
+                trust_env=settings.SEAT_BACKEND_TRUST_ENV,
                 headers={"Accept": "application/json"},
                 cookies=self._configured_cookies(),
             )

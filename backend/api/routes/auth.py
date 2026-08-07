@@ -45,6 +45,12 @@ def chatbot_token(
         current_user,
         extra_claims={
             "session_id": session_id or None,
+            "display_name": (
+                current_user.get("display_name")
+                or current_user.get("full_name")
+                or current_user.get("name")
+                or current_user.get("email")
+            ),
             "role": current_user.get("role_name") or current_user.get("role"),
         },
     )
