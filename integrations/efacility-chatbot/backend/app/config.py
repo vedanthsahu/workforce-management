@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     SYNC_DATABASE_URL: str = "postgresql://efacility:efacility123@localhost:5432/efacility_chatbot"
     APP_ENV: str = "development"
     SECRET_KEY: str = "dev-secret-key-change-in-production"
+    MAIN_APP_JWT_SECRET: str = ""
+    MAIN_APP_JWT_ALGORITHM: str = "HS256"
     ALLOWED_ORIGINS: str = "http://localhost:4200"
     DEFAULT_TENANT_ID: int = 3
     SESSION_TTL_MINUTES: int = 30
@@ -34,6 +36,7 @@ class Settings(BaseSettings):
     SEAT_BACKEND_TOKEN_CACHE_PATH: str = ".seat_backend_tokens.json"
     SEAT_BACKEND_REFRESH_INTERVAL_SECONDS: int = 840
     SEAT_BACKEND_TIMEOUT_SECONDS: float = 10.0
+    SEAT_BACKEND_TRUST_ENV: bool = False
     WHATSAPP_ENABLED: bool = False
     WHATSAPP_VERIFY_TOKEN: str = ""
     WHATSAPP_ACCESS_TOKEN: str = ""

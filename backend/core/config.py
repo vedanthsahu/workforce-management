@@ -13,6 +13,7 @@ DEFAULT_JWT_ALLOWED_CLAIMS = (
     "user_id",
     "sub",
     "email",
+    "display_name",
     "role",
     "tenant_id",
     "session_id",

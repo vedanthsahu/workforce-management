@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import AsyncIterator
 
 import httpx
+import jwt
 from fastapi import HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -15,6 +16,9 @@ _request_client: ContextVar[httpx.AsyncClient | None] = ContextVar(
 )
 _request_user: ContextVar[dict | None] = ContextVar(
     "seatbook_request_user", default=None
+)
+_request_token: ContextVar[str | None] = ContextVar(
+    "seatbook_request_token", default=None
 )
 _bearer = HTTPBearer(auto_error=False)
 
@@ -27,7 +31,20 @@ class SeatBookIdentity:
 
 
 def current_seatbook_client() -> httpx.AsyncClient | None:
-    return _request_client.get()
+    client = _request_client.get()
+    token = _request_token.get()
+    if client is None and token:
+        client = httpx.AsyncClient(
+            base_url=str(settings.SEAT_BACKEND_API_URL).rstrip("/"),
+            timeout=float(settings.SEAT_BACKEND_TIMEOUT_SECONDS or 10.0),
+            trust_env=settings.SEAT_BACKEND_TRUST_ENV,
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Bearer {token}",
+            },
+        )
+        _request_client.set(client)
+    return client
 
 
 def current_seatbook_user() -> dict | None:
@@ -43,22 +60,42 @@ async def require_seatbook_identity(
             detail="A SeatBook chatbot token is required.",
         )
 
-    client = httpx.AsyncClient(
-        base_url=str(settings.SEAT_BACKEND_API_URL).rstrip("/"),
-        timeout=float(settings.SEAT_BACKEND_TIMEOUT_SECONDS or 10.0),
-        headers={
-            "Accept": "application/json",
-            "Authorization": f"Bearer {credentials.credentials}",
-        },
-    )
+    request_token = _request_token.set(credentials.credentials)
+    _request_client.set(None)
     try:
-        response = await client.get("/auth/me")
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="The SeatBook session is invalid or expired.",
-            )
-        user = response.json()
+        if settings.MAIN_APP_JWT_SECRET:
+            try:
+                claims = jwt.decode(
+                    credentials.credentials,
+                    settings.MAIN_APP_JWT_SECRET,
+                    algorithms=[settings.MAIN_APP_JWT_ALGORITHM],
+                )
+            except jwt.PyJWTError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="The SeatBook session is invalid or expired.",
+                ) from exc
+            user = {
+                "user_id": claims.get("user_id") or claims.get("sub"),
+                "tenant_id": claims.get("tenant_id"),
+                "display_name": claims.get("display_name") or claims.get("email"),
+                "email": claims.get("email"),
+                "role": claims.get("role"),
+            }
+        else:
+            client = current_seatbook_client()
+            if client is None:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="SeatBook authentication is temporarily unavailable.",
+                )
+            response = await client.get("/auth/me")
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="The SeatBook session is invalid or expired.",
+                )
+            user = response.json()
         user_id = str(user.get("user_id") or "").strip()
         tenant_id = str(user.get("tenant_id") or "").strip()
         display_name = str(
@@ -74,7 +111,6 @@ async def require_seatbook_identity(
                 detail="SeatBook returned an incomplete authenticated identity.",
             )
 
-        client_token = _request_client.set(client)
         user_token = _request_user.set(user)
         try:
             yield SeatBookIdentity(
@@ -84,11 +120,14 @@ async def require_seatbook_identity(
             )
         finally:
             _request_user.reset(user_token)
-            _request_client.reset(client_token)
     except httpx.HTTPError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="SeatBook authentication is temporarily unavailable.",
         ) from exc
     finally:
-        await client.aclose()
+        client = _request_client.get()
+        if client is not None:
+            await client.aclose()
+        _request_client.set(None)
+        _request_token.reset(request_token)

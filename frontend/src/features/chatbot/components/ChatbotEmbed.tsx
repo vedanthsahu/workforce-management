@@ -15,6 +15,7 @@ const CHATBOT_URL =
 
 export function ChatbotEmbed() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const tokenExpiresAtRef = useRef(0);
   const [isOpen, setIsOpen] = useState(false);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -28,17 +29,42 @@ export function ChatbotEmbed() {
     }
   }, []);
 
-  const initializeChatbot = useCallback(() => {
-    if (!chatbotOrigin || !accessToken) return;
+  const postChatbotInit = useCallback((token: string) => {
+    if (!chatbotOrigin || !token) return;
     iframeRef.current?.contentWindow?.postMessage(
       {
         source: "seatbook-host",
         type: "chatbot:init",
-        accessToken,
+        accessToken: token,
       },
       chatbotOrigin,
     );
-  }, [accessToken, chatbotOrigin]);
+  }, [chatbotOrigin]);
+
+  const initializeChatbot = useCallback(() => {
+    if (!accessToken) return;
+    postChatbotInit(accessToken);
+  }, [accessToken, postChatbotInit]);
+
+  const ensureAccessToken = useCallback(async () => {
+    if (accessToken && tokenExpiresAtRef.current > Date.now() + 30_000) {
+      return accessToken;
+    }
+    const token = await authService.getChatbotToken();
+    tokenExpiresAtRef.current = Date.now() + token.expires_in * 1000;
+    setAccessToken(token.access_token);
+    return token.access_token;
+  }, [accessToken]);
+
+  // Load the iframe and token in the background after the authenticated layout
+  // mounts so opening the assistant does not pay a cold-start penalty.
+  useEffect(() => {
+    void ensureAccessToken().catch(() => undefined);
+  }, [ensureAccessToken]);
+
+  useEffect(() => {
+    initializeChatbot();
+  }, [initializeChatbot]);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent<ChatbotStateMessage>) {
@@ -61,9 +87,11 @@ export function ChatbotEmbed() {
     setError(null);
     setIsStarting(true);
     try {
-      const token = await authService.getChatbotToken();
-      setAccessToken(token.access_token);
+      const token = await ensureAccessToken();
       setIsOpen(true);
+      // The iframe remains mounted while minimized. Always resend the init
+      // message so an already initialized chatbot switches itself back open.
+      postChatbotInit(token);
     } catch {
       setError("Unable to start the assistant. Please refresh and try again.");
     } finally {
@@ -97,16 +125,19 @@ export function ChatbotEmbed() {
         </>
       ) : null}
 
-      {isOpen && accessToken ? (
-        <iframe
-          ref={iframeRef}
-          src={`${CHATBOT_URL}?embedded=1`}
-          title="SeatBook assistant"
-          onLoad={initializeChatbot}
-          sandbox="allow-forms allow-same-origin allow-scripts"
-          className="fixed right-0 bottom-0 z-[100] h-dvh w-full border-0 bg-transparent sm:right-6 sm:bottom-6 sm:h-[min(680px,calc(100dvh-48px))] sm:w-[min(420px,calc(100vw-48px))] sm:rounded-[20px] sm:shadow-2xl"
-        />
-      ) : null}
+      <iframe
+        ref={iframeRef}
+        src={`${CHATBOT_URL}?embedded=1`}
+        title="SeatBook assistant"
+        onLoad={initializeChatbot}
+        aria-hidden={!isOpen}
+        sandbox="allow-forms allow-same-origin allow-scripts"
+        className={`fixed right-0 bottom-0 z-[100] h-dvh w-full border-0 bg-transparent transition-opacity sm:right-6 sm:bottom-6 sm:h-[min(680px,calc(100dvh-48px))] sm:w-[min(420px,calc(100vw-48px))] sm:rounded-[20px] sm:shadow-2xl ${
+          isOpen
+            ? "visible opacity-100"
+            : "invisible pointer-events-none opacity-0"
+        }`}
+      />
     </>
   );
 }
