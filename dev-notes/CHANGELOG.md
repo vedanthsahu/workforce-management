@@ -288,3 +288,83 @@ pre-existing unrelated failures as before this change.
   screens for a stray `status='ACTIVE'`-less listing query I may not have
   found via grep, though the 7-file/full-grep audit above should have
   caught every SQL-level touchpoint.
+
+---
+
+## 2026-08-11 17:30 — Merge audit: `post-deployment-fixes` branch had already built the same append-only fix independently
+
+**Context**
+
+User pulled latest code and merged `post-deployment-fixes` into the
+branch containing today's earlier work (merge commit `12c3ef0`, parents
+`390fed6` = today's work, `d06f1e4` = tip of `post-deployment-fixes`).
+Asked me to verify the merge for gaps.
+
+Discovery: `post-deployment-fixes` already had an almost-identical fix
+for the exact same seats-append-only problem, committed 5 days earlier
+(`8eba57b`, 2026-08-06, "[vedanth] fixed constraint validation on Seats
+upload. UNIQUE (floor_id, layout_id, seat_code)") on a branch I had no
+visibility into during today's earlier work. It independently made the
+same three changes I made today: `ON CONFLICT` widened to include
+`layout_id` in `upsert_operational_seat`, `fetch_layout_seats_by_layout_id`'s
+join gained `AND s.layout_id = lsm.layout_id`, and
+`reconcile_published_layout_seats` was scoped by `layout_id` instead of
+seat_code comparison (though their version kept the old has-history/
+delete branching, mine replaced it with an unconditional retire — mine
+is what survived the merge, see below).
+
+**What was wrong (the actual merge gap)**
+
+`fetch_layout_seats_by_layout_id`'s `LEFT JOIN seats` ended up with the
+`AND s.layout_id = lsm.layout_id` condition **twice** — both branches
+added the same line independently, in slightly different positions
+relative to the existing `seat_code` condition, so git's merge kept both
+insertions instead of recognizing them as the same fix. Harmless
+(redundant condition, not incorrect), but sloppy and worth cleaning up.
+
+**What changed**
+
+- `backend/repositories/floor_layout_repository.py::fetch_layout_seats_by_layout_id` —
+  removed the duplicate `AND s.layout_id = lsm.layout_id` line, keeping one.
+
+**Verified**
+
+- `ast.parse()` on every file touched by today's + the merged work — all
+  clean, no syntax damage from the merge.
+- Grepped for duplicate top-level `def`/`class` names across all 5 touched
+  files — none (no silent shadowing from the merge).
+- Grepped for leftover `<<<<<<<`/`=======`/`>>>>>>>` conflict markers
+  repo-wide — none.
+- Swept all touched files for adjacent duplicate lines (the actual
+  merge-artifact signature) — only the one instance above, now fixed.
+- `reconcile_published_layout_seats` (my unconditional-retire version)
+  and `upsert_operational_seat`'s 3-column conflict target both survived
+  the merge as my version, not the older `post-deployment-fixes` one —
+  confirmed by direct read of current file content.
+- `update_layout_seat_configurations_bulk` (today's full per-seat bulk
+  redesign) survived the merge completely intact — confirmed by direct
+  read.
+- `./.venv/Scripts/python.exe -m pytest backend/tests -q` — **195 passed,
+  0 failed** (up from 175 passed / 13 failed before this merge). The
+  merge brought in independent fixes for all 13 previously-failing
+  pre-existing tests I'd flagged as unrelated in the earlier session
+  (admin_dashboard, admin_management repo test, booking guest-migration/
+  workflow tests, `test_team_overview.py`, `DeleteFloorLayoutServiceTests`).
+
+**Separate issue flagged to the user (not fixed without confirmation)**
+
+`dev-notes/CHANGELOG.md` and `dev-notes/EXECUTION-FLOW.md` are tracked in
+git (`git ls-files dev-notes/` lists both) and were committed in `390fed6`
+and pushed — despite being listed in `.gitignore`. Once a file is already
+tracked, adding it to `.gitignore` doesn't untrack it, only prevents
+future `git add .`/`-A` from re-adding it if removed. These were almost
+certainly staged before the `.gitignore` entry took effect in whatever
+`git add` the user ran. They're now in the shared branch's history,
+visible to "everyone" per the user's own framing of this branch. Flagged
+directly in chat rather than silently `git rm --cached`-ing them, since
+that's a decision the user should make (and history already has the
+content regardless).
+
+**Files touched**
+
+- `backend/repositories/floor_layout_repository.py`

@@ -575,7 +575,6 @@ def fetch_layout_seats_by_layout_id(
                AND s.floor_id = lsm.floor_id
                AND s.layout_id = lsm.layout_id
                AND s.seat_code = lsm.seat_code
-               AND s.layout_id = lsm.layout_id
 
             WHERE lsm.tenant_id = %s
               AND lsm.layout_id = %s
