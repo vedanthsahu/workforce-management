@@ -4,12 +4,12 @@ import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Suspense, useRef, useLayoutEffect, useState } from "react";
 
-import LayoutPreview   from "@/features/managelayout/components/LayoutPreview";
-import SeatFiltersBar  from "@/features/managelayout1/components/SeatFiltersBar";
-import SeatTable       from "@/features/managelayout1/components/SeatTable";
-import EditSeatPanel   from "@/features/managelayout1/components/EditSeatPanel";
-import BulkEditModal   from "@/features/managelayout1/components/BulkEditModal";
-import ViewToggle      from "@/features/managelayout1/components/ViewToggle";
+import LayoutPreview from "@/features/managelayout/components/LayoutPreview";
+import SeatFiltersBar from "@/features/managelayout1/components/SeatFiltersBar";
+import SeatTable from "@/features/managelayout1/components/SeatTable";
+import EditSeatPanel from "@/features/managelayout1/components/EditSeatPanel";
+import BulkEditModal from "@/features/managelayout1/components/BulkEditModal";
+import ViewToggle from "@/features/managelayout1/components/ViewToggle";
 import { useManageSeats } from "@/features/managelayout1/hooks/Usemanageseats";
 import LayoutStatCards from "@/features/managelayout/components/Layoutstatcards";
 import { usePublishLayout } from "@/features/managelayout/hooks/useLayoutDetails";
@@ -87,6 +87,13 @@ function ManageSeatsPage() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
+  // Deliberately no dependency array: this re-measures the edit panel's
+  // actual DOM height after every render, not just when isMobile/panelOpen
+  // toggle — the panel's height also changes from its own content (e.g. a
+  // validation message, a longer amenity list), which needs the same
+  // resync. Safe from render loops: setTableHeight receives a plain number,
+  // and React bails out of re-rendering when the value is unchanged.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     if (!isMobile && panelOpen && panelRef.current) {
       setTableHeight(panelRef.current.offsetHeight);
@@ -108,9 +115,7 @@ function ManageSeatsPage() {
           {(layoutError || !layout) && (
             <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4 flex items-center justify-between">
               <p className="text-sm text-red-600">Failed to load layout. The layout may have been removed or the server is slow.</p>
-              <button onClick={() => router.back()} className="text-sm font-medium text-indigo-600 hover:text-indigo-800 underline whitespace-nowrap ml-4">
-                Go back
-              </button>
+
             </div>
           )}
 

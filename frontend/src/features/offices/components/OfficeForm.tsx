@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import axios from "axios";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, AlertCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -60,9 +61,9 @@ export default function OfficeForm() {
     try {
       const result = await createSite(formData);
       router.push(`/admin/offices?success=true&site_id=${result.site_id}`);
-    } catch (error: any) {
-      const status = error?.response?.status;
-      const serverMessage = error?.response?.data?.message;
+    } catch (error) {
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+      const serverMessage = axios.isAxiosError(error) ? error.response?.data?.message : undefined;
 
       if (status === 409) {
         setErrorMessage(
@@ -73,15 +74,6 @@ export default function OfficeForm() {
       }
     }
   };
-
-  const inputClass =
-    "w-full h-9 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-150";
-
-  const selectClass =
-    "w-full max-w-full min-w-0 h-9 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-150 cursor-pointer";
-
-  const labelClass =
-    "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 bg-[#f7f8fa]">

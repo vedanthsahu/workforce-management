@@ -4,10 +4,10 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { useBookingForm, useSiteBuildingOptions } from "../hooks/useBooking";
-import type { BookingType, VisitDetails } from "../types/booking";
+import type { BookingType, GuestType, PurposeOfVisit, VisitDetails } from "../types/booking";
 import { checkGuestBookingEligibility } from "../services/booking.service";
 import { fetchEmployeeWorkPreferences } from "@/features/book/services/Bookingform.service";
-import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
+import { guestVisitWorkflow, type GuestWorkflowAction } from "@/features/bookings/services/bookings.service";
 import { BookingTypeSelector, FormFooter, InternalEmployeeForm } from "./BookForSomeone";
 import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 import {
@@ -23,8 +23,8 @@ import { useBookForSomeoneStore } from "@/store/useBookForSomeoneStore";
 
 export default function BookForSomeonePage() {
   const router = useRouter();
-const { data } = useDashboard();
-const currentUserId = data?.user.user_id;
+  const { data } = useDashboard();
+  const currentUserId = data?.user.user_id;
   const {
     formState,
     isSubmitting,
@@ -50,7 +50,7 @@ const currentUserId = data?.user.user_id;
 
   const { can, hasRole } = usePermissions();
   const canBookEmployee = can("booking:book_for_employee");
-  const canBookGuest    = can("booking:book_for_guest");
+  const canBookGuest = can("booking:book_for_guest");
 
   // ── Prefill from URL when editing a visit ──
   const editVisitId = searchParams.get("editVisitId");
@@ -85,25 +85,25 @@ const currentUserId = data?.user.user_id;
     if (!editVisitId || prefillApplied.current) return;
     prefillApplied.current = true;
 
-    const guestName      = searchParams.get("guestName") ?? "";
-    const guestEmail     = searchParams.get("guestEmail") ?? "";
-    const guestType      = searchParams.get("guestType") ?? "";
+    const guestName = searchParams.get("guestName") ?? "";
+    const guestEmail = searchParams.get("guestEmail") ?? "";
+    const guestType = searchParams.get("guestType") ?? "";
     const purposeOfVisit = searchParams.get("purposeOfVisit") ?? "";
-    const visitDate      = searchParams.get("visitDate") ?? "";
-    const endDate        = searchParams.get("endDate") ?? "";
-    const rawStart       = searchParams.get("startTime") ?? "";
-    const rawEnd         = searchParams.get("endTime") ?? "";
-    const startTime      = rawStart.slice(0, 5);
-    const endTime        = rawEnd.slice(0, 5);
-    const hostName       = searchParams.get("hostName") ?? "";
-    const hostUserId     = searchParams.get("hostUserId") ?? "";
-    const siteId         = searchParams.get("siteId") ?? "";
-    const buildingId     = searchParams.get("buildingId") ?? "";
-    const floorId        = searchParams.get("floorId") ?? "";
+    const visitDate = searchParams.get("visitDate") ?? "";
+    const endDate = searchParams.get("endDate") ?? "";
+    const rawStart = searchParams.get("startTime") ?? "";
+    const rawEnd = searchParams.get("endTime") ?? "";
+    const startTime = rawStart.slice(0, 5);
+    const endTime = rawEnd.slice(0, 5);
+    const hostName = searchParams.get("hostName") ?? "";
+    const hostUserId = searchParams.get("hostUserId") ?? "";
+    const siteId = searchParams.get("siteId") ?? "";
+    const buildingId = searchParams.get("buildingId") ?? "";
+    const floorId = searchParams.get("floorId") ?? "";
 
     const prefilledVisitDetails: VisitDetails = {
-      guestType: (guestType || "INTERVIEW_CANDIDATE") as any,
-      purposeOfVisit: (purposeOfVisit || "INTERVIEW") as any,
+      guestType: (guestType || "INTERVIEW_CANDIDATE") as GuestType,
+      purposeOfVisit: (purposeOfVisit || "INTERVIEW") as PurposeOfVisit,
       hostEmployee: hostName ? { id: hostUserId, name: hostName, email: "", role: "", status: "ACTIVE" } : null,
       siteId,
       buildingId,
@@ -124,7 +124,7 @@ const currentUserId = data?.user.user_id;
       seatRequired: null,
       visitDetails: prefilledVisitDetails,
     }));
-  }, [editVisitId]);
+  }, [editVisitId, searchParams, setFormState]);
 
   // Auto-populate Office/Building/Floor from the selected host employee's
   // saved work preferences (GET /dashboard/employee/{id} — same endpoint the
@@ -170,7 +170,7 @@ const currentUserId = data?.user.user_id;
     if (entry === "guest") { setBookingType("visitor"); return; }
     if (canBookEmployee && !canBookGuest) setBookingType("internal");
     if (canBookGuest && !canBookEmployee) setBookingType("visitor");
-  }, [canBookEmployee, canBookGuest, entry]);
+  }, [canBookEmployee, canBookGuest, entry, editVisitId, setBookingType]);
 
   const showTypeSelector = canBookEmployee && canBookGuest;
 
@@ -222,8 +222,8 @@ const currentUserId = data?.user.user_id;
       if (visitDetails.hostEmployee) params.set("hostUserId", visitDetails.hostEmployee.id);
       params.set("guestType", visitDetails.guestType);
       if (visitDetails.purposeOfVisit) params.set("purposeOfVisit", visitDetails.purposeOfVisit);
-      if (visitDetails.startTime)      params.set("startTime", visitDetails.startTime);
-      if (visitDetails.endTime)        params.set("endTime", visitDetails.endTime);
+      if (visitDetails.startTime) params.set("startTime", visitDetails.startTime);
+      if (visitDetails.endTime) params.set("endTime", visitDetails.endTime);
       if (visitDetails.additionalNotes) params.set("notes", visitDetails.additionalNotes);
     }
 
@@ -251,15 +251,15 @@ const currentUserId = data?.user.user_id;
     if (!orig) return false;
     return (
       (visitDetails.hostEmployee?.id ?? "") !== (orig.hostEmployee?.id ?? "") ||
-      visitDetails.siteId          !== orig.siteId          ||
-      visitDetails.buildingId      !== orig.buildingId      ||
-      visitDetails.floorId         !== orig.floorId          ||
-      visitDetails.visitDate       !== orig.visitDate        ||
-      visitDetails.endDate         !== orig.endDate          ||
-      visitDetails.startTime       !== orig.startTime        ||
-      visitDetails.endTime         !== orig.endTime          ||
-      visitDetails.guestType       !== orig.guestType        ||
-      visitDetails.purposeOfVisit  !== orig.purposeOfVisit   ||
+      visitDetails.siteId !== orig.siteId ||
+      visitDetails.buildingId !== orig.buildingId ||
+      visitDetails.floorId !== orig.floorId ||
+      visitDetails.visitDate !== orig.visitDate ||
+      visitDetails.endDate !== orig.endDate ||
+      visitDetails.startTime !== orig.startTime ||
+      visitDetails.endTime !== orig.endTime ||
+      visitDetails.guestType !== orig.guestType ||
+      visitDetails.purposeOfVisit !== orig.purposeOfVisit ||
       visitDetails.additionalNotes !== orig.additionalNotes
     );
   })();
@@ -367,7 +367,7 @@ const currentUserId = data?.user.user_id;
             workflowPayload.seat_id = Number(seatId);
           }
           console.log("[ModifyVisit] Action:", action, "Payload:", JSON.stringify(workflowPayload));
-          await guestVisitWorkflow(editVisitId, action as any, workflowPayload);
+          await guestVisitWorkflow(editVisitId, action as GuestWorkflowAction, workflowPayload);
         } catch (err: unknown) {
           const detail = axios.isAxiosError(err) ? JSON.stringify(err.response?.data) : String(err);
           console.error("[ModifyVisit] Workflow error:", detail);
@@ -441,16 +441,16 @@ const currentUserId = data?.user.user_id;
   const howItWorks =
     bookingType === "internal"
       ? [
-          { step: "1", title: "Choose who", desc: "Search and select the employee you're booking for." },
-          { step: "2", title: "Pick a seat", desc: "Continue to the booking flow to choose workspace, date and seat." },
-        ]
+        { step: "1", title: "Choose who", desc: "Search and select the employee you're booking for." },
+        { step: "2", title: "Pick a seat", desc: "Continue to the booking flow to choose workspace, date and seat." },
+      ]
       : [
-          { step: "1", title: "Choose who", desc: "Select a recent guest or create a new one." },
-          { step: "2", title: "Fill in details", desc: "Set guest type, purpose, host employee and visit time." },
-          { step: "3", title: "Seat required?", desc: "Decide whether this guest needs a workspace." },
-          { step: "4", title: "Pick a seat", desc: "Continue to the booking flow to choose workspace and seat." },
-          { step: "5", title: "Confirm", desc: "Review the details and send the invite." },
-        ];
+        { step: "1", title: "Choose who", desc: "Select a recent guest or create a new one." },
+        { step: "2", title: "Fill in details", desc: "Set guest type, purpose, host employee and visit time." },
+        { step: "3", title: "Seat required?", desc: "Decide whether this guest needs a workspace." },
+        { step: "4", title: "Pick a seat", desc: "Continue to the booking flow to choose workspace and seat." },
+        { step: "5", title: "Confirm", desc: "Review the details and send the invite." },
+      ];
 
   return (
     <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#F7F8FC]">
@@ -509,8 +509,8 @@ const currentUserId = data?.user.user_id;
                     onBack={
                       editVisitId
                         ? (step === 4
-                            ? () => setFormState((prev) => ({ ...prev, step: 2 }))
-                            : () => router.push("/mybookings?tab=bookedForSomeone"))
+                          ? () => setFormState((prev) => ({ ...prev, step: 2 }))
+                          : () => router.push("/mybookings?tab=bookedForSomeone"))
                         : step > 1
                           ? goBack
                           : undefined

@@ -38,32 +38,32 @@ export function useBookingForm() {
 
   const setBookingType = useCallback((type: BookingType) => {
     setFormState(() => ({ ...initialBookForSomeoneFormState, bookingType: type }));
-  }, []);
+  }, [setFormState]);
 
   const setSelectedEmployee = useCallback((employee: Employee | null) => {
     setFormState((prev) => ({ ...prev, selectedEmployee: employee }));
-  }, []);
+  }, [setFormState]);
 
   const selectGuest = useCallback((guest: Guest | null) => {
     setFormState((prev) => ({ ...prev, selectedGuest: guest }));
-  }, []);
+  }, [setFormState]);
 
   const createAndSelectGuest = useCallback(async (data: CreateGuestInput) => {
     const guest = await createGuest(data);
     setFormState((prev) => ({ ...prev, selectedGuest: guest }));
     return guest;
-  }, []);
+  }, [setFormState]);
 
   const updateVisitDetails = useCallback((updates: Partial<VisitDetails>) => {
     setFormState((prev) => ({
       ...prev,
       visitDetails: { ...prev.visitDetails, ...updates },
     }));
-  }, []);
+  }, [setFormState]);
 
   const setSeatRequired = useCallback((value: SeatRequired) => {
     setFormState((prev) => ({ ...prev, seatRequired: value }));
-  }, []);
+  }, [setFormState]);
 
   const goNext = useCallback(() => {
     setFormState((prev) => {
@@ -74,19 +74,19 @@ export function useBookingForm() {
       if (prev.step === 4) return { ...prev, step: 5 };
       return prev;
     });
-  }, []);
+  }, [setFormState]);
 
   const goBack = useCallback(() => {
     setFormState((prev) => {
       if (prev.step <= 1) return prev;
       return { ...prev, step: prev.step - 1 };
     });
-  }, []);
+  }, [setFormState]);
 
   const handleCancel = useCallback(() => {
     setFormState((prev) => ({ ...initialBookForSomeoneFormState, bookingType: prev.bookingType }));
     setSubmitError(null);
-  }, []);
+  }, [setFormState]);
 
   const resetWizard = useCallback(() => {
     resetFormState();

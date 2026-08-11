@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import inspect
 import sys
 import unittest
-import inspect
 from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
@@ -13,12 +13,12 @@ from fastapi import HTTPException
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from backend.core.enums import GuestType, VisitPurpose
+from backend.repositories import booking_repository, guest_visit_repository
 from backend.schemas.booking import ModifyBookingRequest
 from backend.schemas.guest import (
     CreateGuestBookingRequest,
     CreateGuestVisitRequest,
 )
-from backend.repositories import booking_repository, guest_visit_repository
 from backend.services import booking_service, guest_service
 
 
@@ -35,11 +35,11 @@ class FakeConnection:
 
 
 class RecordingCursor:
-    def __init__(self, conn: "RecordingConnection") -> None:
+    def __init__(self, conn: RecordingConnection) -> None:
         self.conn = conn
         self.rowcount = 1
 
-    def __enter__(self) -> "RecordingCursor":
+    def __enter__(self) -> RecordingCursor:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
@@ -284,6 +284,9 @@ class GuestBookingMigrationTests(unittest.TestCase):
             "user_id": "10",
             "role_name": "FACILITATOR",
         }
+        audit_patcher = patch.object(guest_service, "safe_write_audit_log")
+        audit_patcher.start()
+        self.addCleanup(audit_patcher.stop)
 
     def _guest_create_patches(self):
         return (
@@ -438,13 +441,12 @@ class GuestBookingMigrationTests(unittest.TestCase):
         ), patch.object(
             guest_service,
             "insert_guest_booking",
-        ) as insert_booking:
-            with self.assertRaises(HTTPException):
-                guest_service.create_guest_booking(
-                    conn,
-                    current_user=self.current_user,
-                    payload=_guest_payload(),
-                )
+        ) as insert_booking, self.assertRaises(HTTPException):
+            guest_service.create_guest_booking(
+                conn,
+                current_user=self.current_user,
+                payload=_guest_payload(),
+            )
 
         insert_booking.assert_not_called()
         self.assertEqual(conn.commits, 0)
@@ -472,13 +474,12 @@ class GuestBookingMigrationTests(unittest.TestCase):
             guest_service,
             "insert_guest_booking",
             side_effect=psycopg2.DatabaseError("booking failed"),
-        ):
-            with self.assertRaises(HTTPException):
-                guest_service.create_guest_booking(
-                    conn,
-                    current_user=self.current_user,
-                    payload=_guest_payload(),
-                )
+        ), self.assertRaises(HTTPException):
+            guest_service.create_guest_booking(
+                conn,
+                current_user=self.current_user,
+                payload=_guest_payload(),
+            )
 
         self.assertEqual(conn.commits, 0)
         self.assertEqual(conn.rollbacks, 1)
@@ -493,13 +494,12 @@ class GuestBookingMigrationTests(unittest.TestCase):
         ), patch.object(
             guest_service,
             "insert_guest_visit",
-        ) as insert_visit:
-            with self.assertRaises(HTTPException) as context:
-                guest_service.create_guest_booking(
-                    conn,
-                    current_user=self.current_user,
-                    payload=_guest_payload(),
-                )
+        ) as insert_visit, self.assertRaises(HTTPException) as context:
+            guest_service.create_guest_booking(
+                conn,
+                current_user=self.current_user,
+                payload=_guest_payload(),
+            )
 
         self.assertEqual(context.exception.status_code, 409)
         self.assertEqual(
@@ -522,13 +522,12 @@ class GuestBookingMigrationTests(unittest.TestCase):
         ), patch.object(
             guest_service,
             "insert_guest_visit",
-        ) as insert_visit:
-            with self.assertRaises(HTTPException) as context:
-                guest_service.create_guest_booking(
-                    conn,
-                    current_user=self.current_user,
-                    payload=_guest_payload(),
-                )
+        ) as insert_visit, self.assertRaises(HTTPException) as context:
+            guest_service.create_guest_booking(
+                conn,
+                current_user=self.current_user,
+                payload=_guest_payload(),
+            )
 
         self.assertEqual(context.exception.status_code, 409)
         self.assertEqual(context.exception.detail["code"], "booking_conflict")
@@ -595,6 +594,17 @@ class GuestBookingMigrationTests(unittest.TestCase):
             "fetch_booking_by_id_for_update",
             return_value=old_booking,
         ), patch.object(
+            guest_service,
+            "fetch_guest_visit_by_id",
+            return_value={
+                "host_user_id": "20",
+                "guest_type": "CUSTOMER",
+                "purpose_of_visit": "MEETING",
+                "start_time": None,
+                "end_time": None,
+                "notes": None,
+            },
+        ),  patch.object(
             guest_service,
             "_resolve_guest",
             return_value={

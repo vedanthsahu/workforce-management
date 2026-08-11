@@ -1,13 +1,14 @@
-
-
 "use client";
+
+import { useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { BookOpen, Menu } from "lucide-react";
+import { BookOpen } from "lucide-react";
 
 
 function SidebarSkeleton() {
@@ -40,8 +41,29 @@ export default function MainLayout({
 }) {
   const { user, isLoading } = useAuthContext();
   const isMobile = useIsMobile();
+  const router = useRouter();
+  const pathname = usePathname();
 
-  if (!isLoading && user === null) return null;
+  const roleAllowed =
+    (!pathname.startsWith("/admin") ||
+      user?.role === "TENANT_ADMIN") &&
+    (!pathname.startsWith("/front_office") ||
+      user?.role === "FRONT_OFFICE");
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+
+    if (!roleAllowed) {
+      router.replace("/dashboard");
+    }
+  }, [isLoading, roleAllowed, router, user]);
+
+  if (!isLoading && (!user || !roleAllowed)) return null;
 
   const showSidebarSkeleton = isLoading || user === undefined;
 
@@ -109,4 +131,3 @@ export default function MainLayout({
     </SidebarProvider>
   );
 }
- 

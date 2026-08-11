@@ -374,49 +374,6 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
     if (touched[field]) validateField(field, form[field]);
   };
 
-  // const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   const raw = e.target.value;
-  //   const digits = raw.replace(/\D/g, "");
-  //   // Block input if digit count exceeds 10
-  //   if (digits.length > 10) return;
-  //   setForm((prev) => ({ ...prev, phone: raw }));
-  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
-  //   validateField("phone", raw);
-  // };
-
-  //   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   const raw = e.target.value;
-
-  //   // Only allow digits, spaces, +, -, (, )
-  //   const sanitized = raw.replace(/[^\d\s+\-()\s]/g, "");
-
-  //   // Block if digit count exceeds 10
-  //   const digits = sanitized.replace(/\D/g, "");
-  //   if (digits.length > 10) return;
-
-  //   setForm((prev) => ({ ...prev, phone: sanitized }));
-  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
-  //   validateField("phone", sanitized);
-  // };
-  // const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   const raw = e.target.value;
-  //   setForm((prev) => ({ ...prev, phone: raw }));
-  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
-  //   validateField("phone", raw);
-  // };
-  // const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   const raw = e.target.value;
-
-  //   // Block if digit count exceeds 10 (silent, no typing allowed)
-  //   const digits = raw.replace(/\D/g, "");
-  //   if (digits.length > 10) return;
-
-  //   // Allow the value through (valid or not) and let zod show errors for invalid chars
-  //   setForm((prev) => ({ ...prev, phone: raw }));
-  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
-  //   validateField("phone", raw);
-  // };
-
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
     const newDigits = raw.replace(/\D/g, "");

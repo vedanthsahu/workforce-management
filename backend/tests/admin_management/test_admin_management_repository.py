@@ -179,6 +179,7 @@ class AdminManagementRepositoryTests(unittest.TestCase):
                 }
             ],
             fetchall_values=[
+                [],
                 [
                     {
                         "id": "42",
@@ -186,7 +187,7 @@ class AdminManagementRepositoryTests(unittest.TestCase):
                         "role_name": "EMPLOYEE",
                         "status": "ACTIVE",
                     }
-                ]
+                ],
             ],
         )
         conn = FakeConnection(cursor)
@@ -200,9 +201,14 @@ class AdminManagementRepositoryTests(unittest.TestCase):
 
         combined_sql = " ".join(sql for sql, _ in cursor.executions)
         self.assertIn("au.tenant_id = %(tenant_id)s", combined_sql)
-        self.assertIn("au.role_name = %(role_name)s", combined_sql)
+        self.assertIn(
+    "UPPER(REPLACE(au.role_name, ' ', '_')) = ANY(",
+    combined_sql,
+)
+        self.assertIn("%(role_names)s::text[]", combined_sql)
         self.assertIn("au.status = %(status)s", combined_sql)
-        self.assertIn("au.full_name ASC NULLS LAST", combined_sql)
+        self.assertIn("LOWER(au.full_name)", combined_sql)
+        self.assertIn("ASC NULLS LAST", combined_sql)
         self.assertEqual(cursor.executions[0][1]["tenant_id"], "1")
         self.assertEqual(result["summary"]["filtered_users"], 4)
         self.assertEqual(result["items"][0]["id"], "42")

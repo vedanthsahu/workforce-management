@@ -13,25 +13,30 @@ from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from psycopg2.extensions import connection as PGConnection
 
+from backend.core.app_logging import LOGGER_NAME
 from backend.core.audit_actions import FLOOR_LAYOUT_DELETED, FLOOR_LAYOUT_PUBLISHED
 from backend.core.config import get_settings
 from backend.core.enums import LayoutStatus
-from backend.core.app_logging import LOGGER_NAME
-from backend.repositories.audit_repository import safe_write_audit_log
 from backend.core.storage import upload_svg_to_s3
+from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.floor_layout_repository import (
     acquire_floor_publish_lock,
-    activate_floor_layout as activate_floor_layout_record,
     archive_existing_published_layouts,
-    reconcile_published_layout_seats,
-    publish_layout_seat_configurations,
     fetch_floor_for_layout,
     fetch_floor_layout_by_id,
     fetch_floor_layouts_by_floor,
     fetch_layout_seats_by_layout_id,
     get_next_layout_version,
     insert_floor_layout,
+    publish_layout_seat_configurations,
+    reconcile_published_layout_seats,
     soft_delete_floor_layout,
+)
+from backend.repositories.floor_layout_repository import (
+    activate_floor_layout as activate_floor_layout_record,
+)
+from backend.repositories.layout_seat_mapping_repository import (
+    bulk_insert_layout_seat_mappings,
 )
 from backend.repositories.user_repository import fetch_admin_notification_emails
 from backend.schemas.floor_layout import (
@@ -43,9 +48,6 @@ from backend.schemas.floor_layout import (
 from backend.services.notification_service import (
     format_notification_value,
     queue_floor_layout_uploaded_notification,
-)
-from backend.repositories.layout_seat_mapping_repository import (
-    bulk_insert_layout_seat_mappings,
 )
 
 logger = logging.getLogger(f"{LOGGER_NAME}.floor_layouts")

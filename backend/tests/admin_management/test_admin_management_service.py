@@ -41,6 +41,13 @@ TENANT_ADMIN_CALLER = {"user_id": "1", "email": "admin@example.com", "role_name"
 
 
 class AdminManagementServiceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.current_user = {
+            "tenant_id": "1",
+            "user_id": "5",
+            "role_name": "ADMIN",
+        }
+
     def test_create_site_rejects_duplicate_tenant_code(self) -> None:
         conn = FakeConnection()
         payload = CreateSiteRequest(
@@ -54,9 +61,15 @@ class AdminManagementServiceTests(unittest.TestCase):
         with patch(
             "backend.services.location_service.fetch_site_duplicates",
             return_value=[{"site_code": "BLR", "site_name": "Other"}],
-        ), patch("backend.services.location_service.safe_write_audit_log"):
-            with self.assertRaises(HTTPException) as context:
-                create_site(conn, tenant_id="1", payload=payload, current_user=TENANT_ADMIN_CALLER)
+        ), patch(
+            "backend.services.location_service.safe_write_audit_log",
+        ), self.assertRaises(HTTPException) as context:
+            create_site(
+                conn,
+                tenant_id="1",
+                payload=payload,
+                current_user=self.current_user,
+            )
 
         self.assertEqual(context.exception.status_code, 409)
         self.assertEqual(context.exception.detail["code"], "duplicate_site_code")
@@ -73,7 +86,7 @@ class AdminManagementServiceTests(unittest.TestCase):
                 tenant_id="1",
                 site_id="2",
                 payload=payload,
-                current_user=TENANT_ADMIN_CALLER,
+                current_user=self.current_user,
             )
 
         self.assertEqual(context.exception.status_code, 400)
@@ -92,9 +105,15 @@ class AdminManagementServiceTests(unittest.TestCase):
         with patch(
             "backend.services.location_service.fetch_building_by_id",
             return_value={"building_id": "3", "site_id": "99"},
-        ), patch("backend.services.location_service.safe_write_audit_log"):
-            with self.assertRaises(HTTPException) as context:
-                create_floor(conn, tenant_id="1", payload=payload, current_user=TENANT_ADMIN_CALLER)
+        ), patch(
+            "backend.services.location_service.safe_write_audit_log",
+        ), self.assertRaises(HTTPException) as context:
+            create_floor(
+                conn,
+                tenant_id="1",
+                payload=payload,
+                current_user=self.current_user,
+            )
 
         self.assertEqual(context.exception.status_code, 400)
         self.assertEqual(context.exception.detail["code"], "invalid_hierarchy")
@@ -111,7 +130,7 @@ class AdminManagementServiceTests(unittest.TestCase):
                 tenant_id="1",
                 seat_id="4",
                 payload=payload,
-                current_user=TENANT_ADMIN_CALLER,
+                current_user=self.current_user,
             )
 
         self.assertEqual(context.exception.status_code, 400)
@@ -129,9 +148,8 @@ class AdminManagementServiceTests(unittest.TestCase):
         with patch(
             "backend.services.preferences_service.fetch_amenity_category_by_id",
             return_value=None,
-        ):
-            with self.assertRaises(HTTPException) as context:
-                create_amenity(conn, tenant_id="1", payload=payload)
+        ), self.assertRaises(HTTPException) as context:
+            create_amenity(conn, tenant_id="1", payload=payload)
 
         self.assertEqual(context.exception.status_code, 404)
         self.assertEqual(context.exception.detail["code"], "amenity_category_not_found")

@@ -13,39 +13,30 @@ from fastapi import BackgroundTasks, HTTPException, status
 from psycopg2 import errorcodes
 from psycopg2.extensions import connection as PGConnection
 
-from backend.repositories.guest_visit_repository import (
-    fetch_guest_visits,
-    fetch_guest_visit_summary,
-    check_in_guest_visit,
-    check_out_guest_visit,
-    fetch_cancelled_guest_visits,
-    recalculate_guest_visit_requires_seat,
-    fetch_guest_visit_integrity_findings,
-)
-
-from backend.schemas.guest import (
-    GuestVisitListItem,
-    GuestVisitListResponse,
-    CancelledGuestVisitResponse,
-    CancelledGuestVisitItem,
-    AttachSeatToGuestVisitRequest,
-    ModifyGuestVisitRequest,
-    GuestVisitStatusUpdateResponse,
-)
 from backend.core.app_logging import LOGGER_NAME
-from backend.core.enums import BookingModificationReason
 from backend.core.audit_actions import (
-    GUEST_BOOKING_CANCELLED, GUEST_BOOKING_CREATED, GUEST_BOOKING_MODIFIED,
-    GUEST_CREATED, GUEST_STATUS_UPDATED, GUEST_UPDATED,
-    GUEST_VISIT_CANCELLED, GUEST_VISIT_CHECKED_IN, GUEST_VISIT_CHECKED_OUT,
-    GUEST_VISIT_CREATED, GUEST_VISIT_MODIFIED, GUEST_VISIT_WORKFLOW_EXECUTED,
-    GUEST_VISIT_BOOKING_ADDED, GUEST_VISIT_BOOKING_CANCELLED, GUEST_VISIT_AND_BOOKING_MODIFIED,
+    GUEST_BOOKING_CANCELLED,
+    GUEST_BOOKING_CREATED,
+    GUEST_BOOKING_MODIFIED,
+    GUEST_CREATED,
+    GUEST_STATUS_UPDATED,
+    GUEST_UPDATED,
+    GUEST_VISIT_AND_BOOKING_MODIFIED,
+    GUEST_VISIT_BOOKING_ADDED,
+    GUEST_VISIT_BOOKING_CANCELLED,
+    GUEST_VISIT_CANCELLED,
+    GUEST_VISIT_CHECKED_IN,
+    GUEST_VISIT_CHECKED_OUT,
+    GUEST_VISIT_CREATED,
+    GUEST_VISIT_MODIFIED,
+    GUEST_VISIT_WORKFLOW_EXECUTED,
 )
+from backend.core.enums import BookingModificationReason
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.booking_repository import (
     acquire_booking_slot_locks,
     cancel_booking,
-    mark_booking_modified,
+    cancel_future_guest_bookings_for_guest,
     count_guest_bookings,
     fetch_booking_by_id,
     fetch_booking_by_id_for_update,
@@ -54,37 +45,44 @@ from backend.repositories.booking_repository import (
     guest_has_active_booking_on_date,
     has_active_booking_conflict,
     insert_guest_booking,
+    mark_booking_modified,
 )
 from backend.repositories.guest_repository import (
     create_guest,
     fetch_guest_by_email,
+    fetch_guest_by_email_excluding_guest,
     fetch_guest_by_id,
     fetch_guest_by_phone,
-    fetch_guest_by_email_excluding_guest,
     fetch_guest_by_phone_excluding_guest,
     search_guests,
     update_guest,
+)
+from backend.repositories.guest_repository import (
     update_guest_status as update_guest_status_repo,
 )
 from backend.repositories.guest_visit_repository import (
-    insert_guest_visit,
-    update_guest_visit_booking_details,
-    fetch_guest_visit_by_id,
-    guest_visit_has_active_booking,
-    fetch_guest_visit_status,
-    update_guest_visit_requires_seat,
+    cancel_future_guest_visits_for_guest,
     cancel_guest_visit,
+    check_in_guest_visit,
+    check_out_guest_visit,
     fetch_active_booking_by_guest_visit,
     fetch_active_booking_for_guest_visit,
+    fetch_cancelled_guest_visits,
+    fetch_guest_visit_by_id,
     fetch_guest_visit_by_id_for_update,
-    mark_guest_visit_modified,
     fetch_guest_visit_history,
     fetch_guest_visit_history_summary,
-    cancel_future_guest_visits_for_guest,
+    fetch_guest_visit_integrity_findings,
+    fetch_guest_visit_status,
+    fetch_guest_visit_summary,
+    fetch_guest_visits,
+    guest_visit_has_active_booking,
+    insert_guest_visit,
+    mark_guest_visit_modified,
+    recalculate_guest_visit_requires_seat,
     sync_booking_from_guest_visit,
-)
-from backend.repositories.booking_repository import (
-    cancel_future_guest_bookings_for_guest,
+    update_guest_visit_booking_details,
+    update_guest_visit_requires_seat,
 )
 from backend.repositories.location_repository import (
     fetch_building_by_id,
@@ -92,23 +90,34 @@ from backend.repositories.location_repository import (
     fetch_site_by_id,
 )
 from backend.repositories.user_repository import fetch_user_by_id
-from backend.schemas.booking import BookingResponse, ModifyBookingRequest, PaginatedBookingResponse
-from backend.schemas.pagination import PaginationMetadata
+from backend.schemas.booking import (
+    BookingResponse,
+    ModifyBookingRequest,
+    PaginatedBookingResponse,
+)
 from backend.schemas.guest import (
+    AttachSeatToGuestVisitRequest,
+    CancelledGuestVisitItem,
+    CancelledGuestVisitResponse,
     CreateGuestBookingRequest,
     CreateGuestRequest,
     CreateGuestVisitRequest,
     GuestResponse,
+    GuestVisitHistoryItem,
+    GuestVisitHistoryResponse,
+    GuestVisitHistorySummary,
+    GuestVisitListItem,
+    GuestVisitListResponse,
     GuestVisitResponse,
+    GuestVisitStatusUpdateResponse,
     GuestWorkflowAction,
     GuestWorkflowRequest,
     GuestWorkflowResponse,
+    ModifyGuestVisitRequest,
     UpdateGuestRequest,
     UpdateGuestStatusRequest,
-    GuestVisitHistoryResponse,
-    GuestVisitHistorySummary,
-    GuestVisitHistoryItem,
 )
+from backend.schemas.pagination import PaginationMetadata
 from backend.services.booking_service import (
     GUEST_OPERATION_ROLES,
     _apply_modified_display_status,
@@ -119,10 +128,10 @@ from backend.services.booking_service import (
 from backend.services.notification_service import (
     booking_notification_details,
     format_notification_value,
-    queue_email_notification,
     queue_booking_cancelled_notification,
     queue_booking_created_notification,
     queue_booking_modified_notification,
+    queue_email_notification,
 )
 
 logger = logging.getLogger(f"{LOGGER_NAME}.guests")
@@ -890,9 +899,16 @@ def create_guest_visit(
             resource_id=str(visit["guest_visit_id"]),
             new_values={
                 "guest_id": str(payload.guest_id),
+                "host_user_id": str(payload.host_user_id),
                 "visit_date": str(payload.visit_date),
                 "site_id": str(payload.site_id),
                 "building_id": str(payload.building_id),
+                "floor_id": floor_id,
+                "guest_type": _enum_value(payload.guest_type),
+                "purpose_of_visit": _enum_value(payload.purpose_of_visit),
+                "start_time": str(payload.start_time) if payload.start_time is not None else None,
+                "end_time": str(payload.end_time) if payload.end_time is not None else None,
+                "notes": _clean_optional(payload.notes),
             },
         )
         email_visit = (
@@ -1077,13 +1093,22 @@ def create_guest_booking(
         resource_id=str(booking.get("booking_id")),
         new_values={
             "guest_id": guest_id,
+            "host_user_id": str(payload.host_user_id),
             "guest_visit_id": str(visit["guest_visit_id"]),
             "visit_date": str(payload.visit_date),
+            "guest_type": _enum_value(payload.guest_type),
+            "purpose_of_visit": _enum_value(payload.purpose_of_visit),
+            "start_time": str(payload.start_time) if payload.start_time is not None else None,
+            "end_time": str(payload.end_time) if payload.end_time is not None else None,
+            "notes": _clean_optional(payload.notes),
             "seat_id": booking.get("seat_id"),
             "seat_code": booking.get("seat_code"),
             "site_id": booking.get("site_id"),
+            "site_name": booking.get("site_name"),
             "building_id": booking.get("building_id"),
+            "building_name": booking.get("building_name"),
             "floor_id": booking.get("floor_id"),
+            "floor_name": booking.get("floor_name"),
         },
     )
     _queue_guest_booking_created(background_tasks, booking=booking, guest=guest)
@@ -1246,17 +1271,29 @@ def cancel_guest_booking(
         )
         _translate_guest_db_error(exc, action="booking_cancel")
 
+    _bc_context = {
+        "guest_id": str(booking.get("booked_for_guest_id")),
+        "guest_email": guest.get("email") if guest else None,
+        "seat_id": booking.get("seat_id"),
+        "seat_code": booking.get("seat_code"),
+        "site_id": booking.get("site_id"),
+        "site_name": booking.get("site_name"),
+        "building_id": booking.get("building_id"),
+        "building_name": booking.get("building_name"),
+        "floor_id": booking.get("floor_id"),
+        "floor_name": booking.get("floor_name"),
+    }
     _bc_old = {
         "booking_date": str(booking.get("booking_date")),
-        "seat_code": booking.get("seat_code"),
         "booking_status": booking.get("booking_status"),
         "cancellation_reason": booking.get("cancellation_reason"),
+        **_bc_context,
     }
     _bc_new = {
         "booking_date": str(booking.get("booking_date")),
-        "seat_code": booking.get("seat_code"),
         "booking_status": "CANCELLED",
         "cancellation_reason": updated_booking.get("cancellation_reason"),
+        **_bc_context,
     }
     safe_write_audit_log(
         conn, action=GUEST_BOOKING_CANCELLED, tenant_id=tenant_id,
@@ -1417,6 +1454,17 @@ def modify_guest_booking(
         )
         _translate_guest_db_error(exc, action="booking_modify")
 
+    _visit_context = fetch_guest_visit_by_id(
+        conn, tenant_id=tenant_id, guest_visit_id=guest_visit_id,
+    )
+    _bm_visit_fields = {
+        "host_user_id": _visit_context.get("host_user_id") if _visit_context else None,
+        "guest_type": _enum_value(_visit_context.get("guest_type")) if _visit_context else None,
+        "purpose_of_visit": _enum_value(_visit_context.get("purpose_of_visit")) if _visit_context else None,
+        "start_time": str(_visit_context.get("start_time")) if _visit_context and _visit_context.get("start_time") is not None else None,
+        "end_time": str(_visit_context.get("end_time")) if _visit_context and _visit_context.get("end_time") is not None else None,
+        "notes": _visit_context.get("notes") if _visit_context else None,
+    }
     _bm_fields = ("booking_date", "seat_id", "seat_code", "site_id", "building_id", "floor_id")
     _bm_old = {
         "booking_id": booking_id,
@@ -1424,8 +1472,12 @@ def modify_guest_booking(
         "seat_id": old_booking.get("seat_id"),
         "seat_code": old_booking.get("seat_code"),
         "site_id": old_booking.get("site_id"),
+        "site_name": old_booking.get("site_name"),
         "building_id": old_booking.get("building_id"),
+        "building_name": old_booking.get("building_name"),
         "floor_id": old_booking.get("floor_id"),
+        "floor_name": old_booking.get("floor_name"),
+        **_bm_visit_fields,
     }
     _bm_new = {
         "booking_id": str(new_booking.get("booking_id")),
@@ -1433,8 +1485,12 @@ def modify_guest_booking(
         "seat_id": new_booking.get("seat_id"),
         "seat_code": new_booking.get("seat_code"),
         "site_id": new_booking.get("site_id"),
+        "site_name": new_booking.get("site_name"),
         "building_id": new_booking.get("building_id"),
+        "building_name": new_booking.get("building_name"),
         "floor_id": new_booking.get("floor_id"),
+        "floor_name": new_booking.get("floor_name"),
+        **_bm_visit_fields,
     }
     _bm_changed = [k for k in _bm_fields if str(_bm_old.get(k) or "") != str(_bm_new.get(k) or "")]
     safe_write_audit_log(
@@ -2098,13 +2154,24 @@ def cancel_guest_visit_record(
         )
 
         conn.commit()
+        _vc_context = {
+            "guest_id": visit_for_email.get("guest_id") if visit_for_email else None,
+            "host_user_id": visit_for_email.get("host_user_id") if visit_for_email else None,
+            "site_id": visit_for_email.get("site_id") if visit_for_email else None,
+            "building_id": visit_for_email.get("building_id") if visit_for_email else None,
+            "floor_id": visit_for_email.get("floor_id") if visit_for_email else None,
+            "seat_code": visit_for_email.get("seat_code") if visit_for_email else None,
+            **_guest_visit_audit_context(visit_for_email),
+        }
         _vc_old = {
             "visit_status": visit_for_email.get("visit_status") if visit_for_email else None,
             "cancellation_reason": None,
+            **_vc_context,
         }
         _vc_new = {
             "visit_status": "CANCELLED",
             "cancellation_reason": cancellation_reason,
+            **_vc_context,
         }
         safe_write_audit_log(
             conn, action=GUEST_VISIT_CANCELLED, tenant_id=tenant_id,
@@ -2471,12 +2538,21 @@ def attach_seat_to_guest_visit(
         resource_id=str(booking.get("booking_id")),
         new_values={
             "guest_visit_id": guest_visit_id,
+            "host_user_id": visit.get("host_user_id"),
+            "guest_type": _enum_value(visit.get("guest_type")),
+            "purpose_of_visit": _enum_value(visit.get("purpose_of_visit")),
+            "start_time": str(visit.get("start_time")) if visit.get("start_time") is not None else None,
+            "end_time": str(visit.get("end_time")) if visit.get("end_time") is not None else None,
+            "notes": visit.get("notes"),
             "booking_date": str(booking.get("booking_date")),
             "seat_id": booking.get("seat_id"),
             "seat_code": booking.get("seat_code"),
             "site_id": booking.get("site_id"),
+            "site_name": booking.get("site_name"),
             "building_id": booking.get("building_id"),
+            "building_name": booking.get("building_name"),
             "floor_id": booking.get("floor_id"),
+            "floor_name": booking.get("floor_name"),
         },
     )
     return BookingResponse(**booking)
@@ -2636,6 +2712,7 @@ def execute_guest_visit_workflow(
                 ),
             )
             _aud_old = {
+                "guest_id": visit.get("guest_id"),
                 "visit_date": _iso(visit.get("visit_date")),
                 "start_time": _iso(visit.get("start_time")),
                 "end_time": _iso(visit.get("end_time")),
@@ -2648,6 +2725,7 @@ def execute_guest_visit_workflow(
                 "notes": visit.get("notes"),
             }
             _aud_new = {
+                "guest_id": visit.get("guest_id"),
                 "visit_date": _iso(payload.visit_date),
                 "start_time": _iso(payload.start_time),
                 "end_time": _iso(payload.end_time),
@@ -2687,7 +2765,7 @@ def execute_guest_visit_workflow(
                 )
 
             _validate_visit_times(payload.start_time, payload.end_time)
-            _resolve_guest(
+            guest = _resolve_guest(
                 conn,
                 tenant_id=tenant_id,
                 guest_id=str(visit["guest_id"]),
@@ -2789,6 +2867,8 @@ def execute_guest_visit_workflow(
                 message="Guest visit and booking replaced; prior records retained.",
             )
             _aud_old = {
+                "guest_id": visit.get("guest_id"),
+                "guest_email": guest.get("email") if guest else None,
                 "visit_date": _iso(visit.get("visit_date")),
                 "start_time": _iso(visit.get("start_time")),
                 "end_time": _iso(visit.get("end_time")),
@@ -2803,17 +2883,23 @@ def execute_guest_visit_workflow(
                 "booking_date": _iso(booking.get("booking_date")),
             }
             _aud_new = {
+                "guest_id": visit.get("guest_id"),
+                "guest_email": guest.get("email") if guest else None,
                 "visit_date": _iso(payload.visit_date),
                 "start_time": _iso(payload.start_time),
                 "end_time": _iso(payload.end_time),
                 "host_user_id": _s(payload.host_user_id),
                 "site_id": _s(payload.site_id),
+                "site_name": seat.get("site_name"),
                 "building_id": _s(payload.building_id),
+                "building_name": seat.get("building_name"),
                 "floor_id": _s(payload.floor_id),
+                "floor_name": seat.get("floor_name"),
                 "guest_type": _enum_value(payload.guest_type),
                 "purpose_of_visit": _enum_value(payload.purpose_of_visit),
                 "notes": _clean_optional(payload.notes),
                 "seat_id": seat.get("seat_id"),
+                "seat_code": seat.get("seat_code"),
                 "booking_date": _iso(payload.visit_date),
             }
             _aud_changed = [k for k in _aud_new if _aud_old.get(k) != _aud_new[k]] or None
@@ -2847,7 +2933,7 @@ def execute_guest_visit_workflow(
                 building_id=str(payload.building_id),
                 floor_id=str(payload.floor_id),
             )
-            _resolve_guest(
+            guest = _resolve_guest(
                 conn,
                 tenant_id=tenant_id,
                 guest_id=str(visit["guest_id"]),
@@ -2907,11 +2993,16 @@ def execute_guest_visit_workflow(
                 message="Booking added to guest visit.",
             )
             _aud_new = {
+                "guest_id": visit.get("guest_id"),
+                "guest_email": guest.get("email") if guest else None,
                 "seat_id": seat.get("seat_id"),
                 "seat_code": seat.get("seat_code"),
                 "site_id": seat.get("site_id"),
+                "site_name": seat.get("site_name"),
                 "building_id": seat.get("building_id"),
+                "building_name": seat.get("building_name"),
                 "floor_id": seat.get("floor_id"),
+                "floor_name": seat.get("floor_name"),
                 "booking_date": _iso(payload.visit_date),
             }
 
@@ -2930,13 +3021,14 @@ def execute_guest_visit_workflow(
                 guest_visit_id=guest_visit_id,
             )
             _validate_mutable_guest_booking(booking, action="cancel")
+            _booking_cancellation_reason = _normalize_cancellation_reason(
+                payload.cancellation_reason,
+            )
             cancel_booking(
                 conn,
                 tenant_id=tenant_id,
                 booking_id=str(booking["booking_id"]),
-                cancellation_reason=_normalize_cancellation_reason(
-                    payload.cancellation_reason,
-                ),
+                cancellation_reason=_booking_cancellation_reason,
             )
             recalculate_guest_visit_requires_seat(
                 conn,
@@ -2951,17 +3043,32 @@ def execute_guest_visit_workflow(
                 booking_id=str(booking["booking_id"]),
                 message="Guest booking cancelled; guest visit remains active.",
             )
+            _aud_context = {
+                "guest_id": booking.get("booked_for_guest_id"),
+                "guest_email": result.booking.booked_for_email if result.booking else None,
+                "seat_code": result.booking.seat_code if result.booking else None,
+                "site_id": booking.get("site_id"),
+                "site_name": result.booking.site_name if result.booking else None,
+                "building_id": booking.get("building_id"),
+                "building_name": result.booking.building_name if result.booking else None,
+                "floor_id": booking.get("floor_id"),
+                "floor_name": result.booking.floor_name if result.booking else None,
+            }
             _aud_old = {
                 "booking_id": booking.get("booking_id"),
                 "seat_id": booking.get("seat_id"),
                 "booking_date": _iso(booking.get("booking_date")),
                 "booking_status": booking.get("booking_status"),
+                "cancellation_reason": booking.get("cancellation_reason"),
+                **_aud_context,
             }
             _aud_new = {
                 "booking_id": booking.get("booking_id"),
                 "seat_id": booking.get("seat_id"),
                 "booking_date": _iso(booking.get("booking_date")),
                 "booking_status": "CANCELLED",
+                "cancellation_reason": _booking_cancellation_reason,
+                **_aud_context,
             }
             _aud_changed = [k for k in _aud_new if _aud_old.get(k) != _aud_new[k]]
 
@@ -3012,17 +3119,33 @@ def execute_guest_visit_workflow(
                 ),
                 message="Guest visit and any active booking cancelled.",
             )
+            _aud_context = {
+                "guest_id": visit.get("guest_id"),
+                "host_user_id": visit.get("host_user_id"),
+                "site_id": visit.get("site_id"),
+                "site_name": result.booking.site_name if result.booking else None,
+                "building_id": visit.get("building_id"),
+                "building_name": result.booking.building_name if result.booking else None,
+                "floor_id": visit.get("floor_id"),
+                "floor_name": result.booking.floor_name if result.booking else None,
+                "seat_id": booking.get("seat_id") if booking is not None else None,
+                "seat_code": result.booking.seat_code if result.booking else None,
+            }
             _aud_old = {
                 "visit_status": visit.get("visit_status"),
                 "visit_date": _iso(visit.get("visit_date")),
                 "booking_id": booking.get("booking_id") if booking is not None else None,
                 "booking_status": booking.get("booking_status") if booking is not None else None,
+                "cancellation_reason": None,
+                **_aud_context,
             }
             _aud_new = {
                 "visit_status": "CANCELLED",
                 "visit_date": _iso(visit.get("visit_date")),
                 "booking_id": booking.get("booking_id") if booking is not None else None,
                 "booking_status": "CANCELLED" if booking is not None else None,
+                "cancellation_reason": cancellation_reason,
+                **_aud_context,
             }
             _aud_changed = [k for k in _aud_new if _aud_old.get(k) != _aud_new[k]]
 

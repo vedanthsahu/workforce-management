@@ -5,17 +5,11 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
-from psycopg2.extras import Json
+from psycopg2.extras import Json, RealDictCursor
 
 from backend.core.enums import NON_DELETED_LAYOUT_STATUSES
 
-# A seat only counts toward these admin aggregates if it belongs to its
-# floor's currently published layout -- seats left over from a superseded
-# layout (retired or not) must never inflate seat_count/active_seat_count/
-# bookable_seat_count. Every `seat_counts` LATERAL below correlates on the
-# seat alias `st`, so this fragment is safe to splice into any of them.
 _SEAT_IN_PUBLISHED_LAYOUT_SQL = """
               AND st.layout_id = (
                   SELECT id
@@ -26,7 +20,7 @@ _SEAT_IN_PUBLISHED_LAYOUT_SQL = """
                     AND status = 'PUBLISHED'
               )"""
 
-
+ 
 def fetch_sites(
     conn: PGConnection,
     *,

@@ -18,27 +18,54 @@ type Props = {
 
 // ── Seat color helpers ────────────────────────────────────────────────────────
 
+// Unconfigured seats (desk or room) keep the floor plan's original artwork
+// colors — they only start recoloring once an admin has actually configured
+// them.
 function resolveSeatFill(seat: Seat): string {
-  if (!seat.is_configured) return "#D1D5DB";
   if (seat.status === "INACTIVE") return "#EF4444";
   if (!seat.is_bookable) return "#F59E0B";
   return "#22C55E";
 }
 
+// Cabin/conference/meeting room seats are grouped under one svg id containing
+// a "CBN"/"CFR"/"MR" segment (e.g. "HYD-PRV-F11-CBN-04", "HYD-PRV-F11-CFR-02",
+// "HYD-PRV-F11-MR-01"), not a dedicated field.
+const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr)([-_]|$)/i;
+
+function isRoomSvgId(svgId: string): boolean {
+  return ROOM_SVG_ID_PATTERN.test(svgId);
+}
+
+function recolorGroup(svgText: string, id: string, fill: string): string {
+  const re = new RegExp(`(<g[^>]*\\bid="${id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "m");
+  return svgText.replace(re, (_m, open, inner, close) => {
+    const colored = inner
+      .replace(/fill="[^"]*"/g, `fill="${fill}"`)
+      .replace(/fill:[^;"}\s]*/g, `fill:${fill}`);
+    return `${open}${colored}${close}`;
+  });
+}
+
 function applyColors(svgText: string, seats: Seat[]): string {
   let result = svgText;
   for (const seat of seats) {
-    const fill = resolveSeatFill(seat);
-    const re = new RegExp(
-      `(<g[^>]*\\bid="${seat.seat_svg_id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`,
-      "m",
-    );
-    result = result.replace(re, (_m, open, inner, close) => {
-      const colored = inner
-        .replace(/fill="[^"]*"/g, `fill="${fill}"`)
-        .replace(/fill:[^;"}\s]*/g, `fill:${fill}`);
-      return `${open}${colored}${close}`;
-    });
+    const id = seat.seat_svg_id;
+
+    // Unconfigured — leave the original artwork colors, desk or room, until
+    // an admin actually configures it.
+    if (!seat.is_configured) continue;
+
+    if (isRoomSvgId(id)) {
+      // Configured rooms only recolor when explicitly non-bookable/inactive,
+      // and just a flat grey rather than the red/amber distinction used for
+      // desks — a bookable room still keeps its original artwork colors.
+      const isNotBookable = seat.status === "INACTIVE" || !seat.is_bookable;
+      if (!isNotBookable) continue;
+      result = recolorGroup(result, id, "#D1D5DB");
+      continue;
+    }
+
+    result = recolorGroup(result, id, resolveSeatFill(seat));
   }
   return result;
 }

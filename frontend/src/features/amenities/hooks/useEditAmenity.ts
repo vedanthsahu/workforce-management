@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 
 import { amenitiesService } from "../services/amenitiesService";
 import { Amenity, AmenityCategory } from "../types/amenities.types";

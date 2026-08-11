@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,9 +16,9 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const errorCode = searchParams.get("error");
-  const [errorMessage, setErrorMessage] = useState<string | null>(
-    errorCode ? (LOGIN_ERROR_MESSAGES[errorCode] ?? "Something went wrong. Please try again.") : null
-  );
+  const errorMessage = errorCode
+    ? (LOGIN_ERROR_MESSAGES[errorCode] ?? "Something went wrong. Please try again.")
+    : null;
 
   useEffect(() => {
     if (errorCode) {
@@ -90,7 +90,7 @@ export function LoginForm() {
           <rect x="0"  y="11" width="9" height="9" fill="#00A4EF"/>
           <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
         </svg>
-        You'll be redirected to Microsoft to complete sign in.
+        You&apos;ll be redirected to Microsoft to complete sign in.
       </div>
     </form>
   );
