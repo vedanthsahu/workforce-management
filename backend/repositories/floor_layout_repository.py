@@ -64,12 +64,12 @@ FLOOR_LAYOUT_SELECT_FIELDS = """
     UPPER(REPLACE(au.role_name, ' ', '_')) AS uploaded_by_role,
     au.department AS uploaded_by_department,
     au.job_title AS uploaded_by_job_title,
-    fl.uploaded_by_user_id::text AS updated_by_user_id,
-    au.full_name AS updated_by_name,
-    au.email AS updated_by_email,
-    UPPER(REPLACE(au.role_name, ' ', '_')) AS updated_by_role,
-    au.department AS updated_by_department,
-    au.job_title AS updated_by_job_title,
+    fl.updated_by_user_id::text AS updated_by_user_id,
+    upd.full_name AS updated_by_name,
+    upd.email AS updated_by_email,
+    UPPER(REPLACE(upd.role_name, ' ', '_')) AS updated_by_role,
+    upd.department AS updated_by_department,
+    upd.job_title AS updated_by_job_title,
     fl.published_by_user_id::text AS published_by_user_id,
     pub.full_name AS published_by_name,
     pub.email AS published_by_email,
@@ -90,6 +90,9 @@ FLOOR_LAYOUT_USER_JOINS = """
     LEFT JOIN app_users AS pub
         ON pub.id = fl.published_by_user_id
        AND pub.tenant_id = fl.tenant_id
+    LEFT JOIN app_users AS upd
+        ON upd.id = fl.updated_by_user_id
+       AND upd.tenant_id = fl.tenant_id
 """
 
 
@@ -341,6 +344,35 @@ def activate_floor_layout(
     )
 
 
+def touch_floor_layout_updated_by(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    updated_by_user_id: str,
+) -> None:
+    """Stamp who last edited this layout's seat configuration.
+
+    The only writers of floor_layouts today are create/activate/archive/
+    delete -- none of which represent "an admin edited this layout's
+    seats." Bulk layout-seat-configuration saves call this directly so
+    updated_by_user_id/updated_at reflect the real last editor instead of
+    staying NULL forever.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE floor_layouts
+            SET
+                updated_by_user_id = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            """,
+            (updated_by_user_id, tenant_id, layout_id),
+        )
+
+
 def soft_delete_floor_layout(
     conn: PGConnection,
     *,
@@ -539,6 +571,7 @@ def fetch_layout_seats_by_layout_id(
                 ON s.tenant_id = lsm.tenant_id
                AND s.floor_id = lsm.floor_id
                AND s.seat_code = lsm.seat_code
+               AND s.layout_id = lsm.layout_id
 
             WHERE lsm.tenant_id = %s
               AND lsm.layout_id = %s
@@ -566,92 +599,38 @@ def reconcile_published_layout_seats(
     floor_id: str,
     layout_id: str,
 ) -> None:
-    """Make `seats` an exact projection of this layout's configured mappings.
+    """Retire every still-live seat on this floor that isn't part of the
+    layout that was just published.
 
-    Seat codes that are no longer part of the published layout are removed
-    outright when nothing references them; seats with booking/block history
-    are retired in place (INACTIVE, unbookable, timestamped) instead of being
-    deleted, so historical booking integrity is never broken.
+    `seats` is append-only per layout version: unique key is (floor_id,
+    seat_code, layout_id), so publish_layout_seat_configurations's upsert
+    already created fresh rows under the new `layout_id` for everything it
+    configured -- it never touches a previous version's rows. Whatever is
+    still marked live (`live_until IS NULL`) under any other layout_id on
+    this floor is, by definition, superseded. Retiring (never deleting)
+    keeps bookings/audit_logs pointing at the exact historical seat row
+    they were made against, and keeps every layout_id-scoped stats/
+    availability query (which already excludes non-live seats) correct
+    with no query changes needed there.
     """
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            """
-            SELECT
-                s.id::text AS seat_id,
-                (
-                    EXISTS (SELECT 1 FROM bookings b WHERE b.seat_id = s.id)
-                    OR EXISTS (SELECT 1 FROM blocked_seats bl WHERE bl.seat_id = s.id)
-                    -- A seat that was only ever configured/audited (never
-                    -- booked or blocked) must still be retired, not hard
-                    -- deleted -- otherwise its audit_logs rows become
-                    -- unverifiable references to a seat that no longer
-                    -- exists anywhere.
-                    OR EXISTS (
-                        SELECT 1 FROM audit_logs al
-                        WHERE al.tenant_id = s.tenant_id
-                          AND al.entity_type = 'seat'
-                          AND al.entity_id = s.id::text
-                    )
-                ) AS has_history
-            FROM seats AS s
-            WHERE s.tenant_id = %s
-              AND s.floor_id = %s
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM layout_seat_mappings AS lsm
-                  WHERE lsm.tenant_id = s.tenant_id
-                    AND lsm.layout_id = %s
-                    AND lsm.is_configured = TRUE
-                    AND lsm.seat_code = s.seat_code
-              )
-            """,
-            (tenant_id, floor_id, layout_id),
-        )
-        stale_seats = cur.fetchall()
-
-    if not stale_seats:
-        return
-
-    stale_ids = [row["seat_id"] for row in stale_seats]
-    deletable_ids = [row["seat_id"] for row in stale_seats if not row["has_history"]]
-    retire_ids = [row["seat_id"] for row in stale_seats if row["has_history"]]
-
     with conn.cursor() as cur:
         cur.execute(
             """
-            DELETE FROM seat_amenities
+            UPDATE seats
+            SET
+                status = 'INACTIVE',
+                is_bookable = FALSE,
+                is_reserved = FALSE,
+                live_until = NOW(),
+                retired_reason = 'LAYOUT_REPUBLISHED',
+                updated_at = NOW()
             WHERE tenant_id = %s
-              AND seat_id = ANY(%s::bigint[])
+              AND floor_id = %s
+              AND layout_id <> %s
+              AND live_until IS NULL
             """,
-            (tenant_id, stale_ids),
+            (tenant_id, floor_id, layout_id),
         )
-
-        if deletable_ids:
-            cur.execute(
-                """
-                DELETE FROM seats
-                WHERE tenant_id = %s
-                  AND id = ANY(%s::bigint[])
-                """,
-                (tenant_id, deletable_ids),
-            )
-
-        if retire_ids:
-            cur.execute(
-                """
-                UPDATE seats
-                SET
-                    status = 'INACTIVE',
-                    is_bookable = FALSE,
-                    is_reserved = FALSE,
-                    live_until = NOW(),
-                    retired_reason = 'LAYOUT_REPUBLISHED',
-                    updated_at = NOW()
-                WHERE tenant_id = %s
-                  AND id = ANY(%s::bigint[])
-                """,
-                (tenant_id, retire_ids),
-            )
 
 def publish_layout_seat_configurations(
     conn: PGConnection,
