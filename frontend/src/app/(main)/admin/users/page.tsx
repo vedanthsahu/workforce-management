@@ -8,7 +8,7 @@ import UsersPagination from "@/features/users/components/UsersPagination";
 import RoleFilterDropdown from "@/features/users/components/RoleFilterDropdown";
 import StatusFilterDropdown from "@/features/users/components/StatusFilterDropdown";
 import { useUsers } from "@/features/users/hooks/useUsers";
-import type { RoleKey, User } from "@/features/users/types/users.types";
+import type { User } from "@/features/users/types/users.types";
 import { TableSkeleton, TableBodySkeleton } from "@/components/ui/table-skeleton";
 import { normalizeRoleKey } from "@/features/users/utils/users.utils";
 import { useUsersFilterStore } from "@/store/useUsersFilterStore";
@@ -86,14 +86,6 @@ function UserManagementPage() {
   // this component sits inside a Suspense boundary that reads useSearchParams()
   // causes Next to re-suspend/remount the subtree, wiping selectedRoles right
   // after it's set. We just guard with a ref so it only applies once.
-  // useEffect(() => {
-  //   const roleParam = searchParams.get("role");
-  //   if (!roleParam || roleFilterAppliedRef.current) return;
-  //   roleFilterAppliedRef.current = true;
-  //   setSelectedRoles([roleParam as RoleKey]);
-  //   setPage(1);
-  //   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // }, [searchParams]);
   useEffect(() => {
     const roleParam = searchParams.get("role");
     if (!roleParam || roleFilterAppliedRef.current || !summary?.roles?.length) return;

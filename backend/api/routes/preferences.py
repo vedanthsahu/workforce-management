@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from typing import Any, Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user, require_any_permission
 from backend.core.audit_actions import (
-    AMENITY_CATEGORY_CREATED, AMENITY_CATEGORY_UPDATED,
-    AMENITY_CREATED, AMENITY_UPDATED,
+    AMENITY_CATEGORY_CREATED,
+    AMENITY_CATEGORY_UPDATED,
+    AMENITY_CREATED,
+    AMENITY_UPDATED,
 )
-from backend.repositories.audit_repository import safe_write_audit_log
 from backend.db.connection import get_db
+from backend.repositories.audit_repository import safe_write_audit_log
 from backend.schemas.preferences import (
     AdminAmenityResponse,
     AmenityCategoryListResponse,
@@ -32,7 +34,6 @@ from backend.services.preferences_service import (
     get_amenity,
     get_amenity_categories,
     get_amenity_category,
-    get_my_preferences,
     get_preferences,
     update_amenity_category_metadata,
     update_amenity_metadata,

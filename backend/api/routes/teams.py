@@ -1,4 +1,5 @@
-from typing import Any, Annotated
+from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends, Query
 from psycopg2.extensions import connection as PGConnection
 

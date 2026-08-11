@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { X, Armchair, MapPin, Building2, Layers, CalendarDays, CalendarPlus, ChevronDown } from "lucide-react";
+import { X, Armchair, MapPin, Building2, Layers, CalendarDays, CalendarPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AdminBooking } from "../types/adminBooking.types";
 import { BOOKING_STATUS_STYLES } from "../utils/constants";
@@ -9,10 +8,6 @@ import { BOOKING_STATUS_STYLES } from "../utils/constants";
 type Props = {
   booking: AdminBooking;
   onClose: () => void;
-  onModifySeat: (booking: AdminBooking) => void;
-  onModifyVisit: (booking: AdminBooking) => void;
-  onCancelSeat: (booking: AdminBooking) => void;
-  onCancelVisit: (booking: AdminBooking) => void;
 };
 
 function initialsOf(name: string) {
@@ -62,26 +57,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export default function BookingDetailsPanel({
   booking,
   onClose,
-  onModifySeat,
-  onModifyVisit,
-  onCancelSeat,
-  onCancelVisit,
 }: Props) {
   const isGuest = booking.person_type === "Guest";
-  // A guest booking linked to a guest-visit invite has both a "visit" and a
-  // "seat" side that can be modified/cancelled independently; a plain seat
-  // booking (employee, or a guest with no linked visit) only has the seat.
-  const hasVisit = isGuest && !!booking.guest_visit_id;
-  // GET /admin/bookings also unions in visit-only guest rows — a guest
-  // visit with no linked seat booking at all (booking_id/seat_id both null)
-  // — which have nothing to "modify/cancel seat" on.
-  const hasBooking = !!booking.booking_id;
-  // Only future, still-active bookings can be modified/cancelled — the
-  // backend rejects today/past dates for both /modify and /cancel, and a
-  // booking that's already Cancelled has nothing left to modify or cancel.
-  const canMutate =
-    booking.status !== "Cancelled" &&
-    booking.activity_date > new Date().toISOString().slice(0, 10);
 
   // The parenthetical now shows who the seat was booked for ("Self" or the
   // actual booker's name) instead of the seat type, per the standalone

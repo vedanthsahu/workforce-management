@@ -1,10 +1,6 @@
 import { create } from "zustand";
 import {
   BookingFormState,
-  BookingType,
-  Employee,
-  Guest,
-  SeatRequired,
   VisitDetails,
 } from "@/features/bookforsomeone/types/booking";
 

@@ -1,6 +1,7 @@
 "use client";
  
 import { useEffect, useRef, useState } from "react";
+import axios from "axios";
 import { useRouter } from "next/navigation";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -68,7 +69,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
         site: { id: siteId, name: match.site_name, code: match.site_code ?? "" },
       }));
     }
-  }, [sites]);
+  }, [sites, formData.site, setFormData]);
  
   // Load buildings whenever selected site changes
   useEffect(() => {
@@ -78,6 +79,13 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       return;
     }
     layoutService.getBuildings(formData.site.id).then(setBuildings);
+    // formData.site (the object) is intentionally excluded: the site-name
+    // resolver effect above replaces it with a new object (same id, now
+    // with a name) once sites load. Depending on the whole object here
+    // would re-fetch buildings for the same site right after that resolves.
+    // formData.site?.id already covers every meaningful transition (a real
+    // site change, or site becoming null).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.site?.id]);
  
   // Resolve building name once buildings list arrives (pre-seed case)
@@ -91,7 +99,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
         building: { id: buildingId, name: match.building_name, code: match.building_code ?? "" },
       }));
     }
-  }, [buildings]);
+  }, [buildings, formData.building, setFormData]);
  
   // Load floors whenever selected building changes
   useEffect(() => {
@@ -100,6 +108,12 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       return;
     }
     layoutService.getFloors(formData.building.id).then(setFloors);
+    // formData.building (the object) is intentionally excluded, same
+    // reasoning as the buildings loader above: the building-name resolver
+    // effect replaces it with a new object (same id) once buildings load,
+    // and depending on the whole object here would re-fetch floors for the
+    // same building right after that resolves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.building?.id]);
  
   // Resolve floor name once floors list arrives (pre-seed case)
@@ -128,7 +142,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
         layoutLastUpdated: match.layout_last_updated,
       });
     }
-  }, [floors]);
+  }, [floors, formData.floor, setFormData, onFloorLayoutInfo]);
  
   // Auto-generate layout name once site, building and floor codes are known
   useEffect(() => {
@@ -174,6 +188,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
     formData.site?.code,
     formData.building?.code,
     formData.floor?.code,
+    setFormData,
   ]);
 
   const noSeatsDetected = !!formData.file && !countingSeats && seatIds.length === 0;
@@ -262,9 +277,13 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       // Keep isSubmitting=true so the button stays disabled while navigation
       // completes — the component will unmount once the new page loads.
       router.push(`/admin/layouts/manage-layout?${params.toString()}`);
-    } catch (err: any) {
-      console.error("[LayoutForm] Upload error:", err?.response?.data || err.message);
-      setSubmitError(err?.response?.data?.message || "Failed to save layout. Please try again.");
+    } catch (err) {
+      const message = axios.isAxiosError(err)
+        ? err.response?.data || err.message
+        : err;
+      console.error("[LayoutForm] Upload error:", message);
+      const serverMessage = axios.isAxiosError(err) ? err.response?.data?.message : undefined;
+      setSubmitError(serverMessage || "Failed to save layout. Please try again.");
       setIsSubmitting(false);
     }
   };

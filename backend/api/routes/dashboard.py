@@ -3,7 +3,7 @@ Employee dashboard
 '''
 from __future__ import annotations
 
-from typing import Any, Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Path
 from psycopg2.extensions import connection as PGConnection
@@ -11,7 +11,10 @@ from psycopg2.extensions import connection as PGConnection
 from backend.api.deps import get_current_user
 from backend.db.connection import get_db
 from backend.schemas.dashboard import DashboardMeResponse
-from backend.services.dashboard_service import get_dashboard_for_employee, get_dashboard_me
+from backend.services.dashboard_service import (
+    get_dashboard_for_employee,
+    get_dashboard_me,
+)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 

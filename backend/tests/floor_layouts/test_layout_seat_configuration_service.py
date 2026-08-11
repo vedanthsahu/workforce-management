@@ -33,15 +33,14 @@ class UpdateLayoutSeatConfigurationVisibilityTests(unittest.TestCase):
         with patch(
             "backend.services.location_service.fetch_layout_seat_mapping_by_id",
             return_value=None,
-        ):
-            with self.assertRaises(HTTPException) as context:
-                update_layout_seat_configuration(
-                    conn,
-                    tenant_id=str(current_user["tenant_id"]),
-                    layout_seat_mapping_id="20",
-                    payload=payload,
-                    current_user=current_user,
-                )
+        ), self.assertRaises(HTTPException) as context:
+            update_layout_seat_configuration(
+                conn,
+                tenant_id=str(current_user["tenant_id"]),
+                layout_seat_mapping_id="20",
+                payload=payload,
+                current_user=current_user,
+            )
 
         self.assertEqual(context.exception.status_code, 404)
 

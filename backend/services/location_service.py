@@ -12,10 +12,13 @@ from psycopg2.extensions import connection as PGConnection
 
 from backend.core.app_logging import LOGGER_NAME
 from backend.core.audit_actions import (
-    BUILDING_CREATED, BUILDING_UPDATED,
-    FLOOR_CREATED, FLOOR_UPDATED,
+    BUILDING_CREATED,
+    BUILDING_UPDATED,
+    FLOOR_CREATED,
+    FLOOR_UPDATED,
     SEAT_CONFIGURED,
-    SITE_CREATED, SITE_UPDATED,
+    SITE_CREATED,
+    SITE_UPDATED,
 )
 from backend.core.enums import LayoutStatus
 from backend.repositories.audit_repository import safe_write_audit_log
@@ -30,11 +33,9 @@ from backend.repositories.location_repository import (
     fetch_floor_by_id,
     fetch_floor_duplicates,
     fetch_floors_by_building,
-    fetch_seat_configuration,
     fetch_layout_seat_mapping_by_id,
     replace_seat_amenities,
-    update_layout_seat_mapping_configuration,
-    fetch_seat_amenity_ids,
+    fetch_seat_configuration,
     fetch_site_by_id,
     fetch_site_duplicates,
     fetch_sites,
@@ -43,11 +44,11 @@ from backend.repositories.location_repository import (
     insert_site,
     update_building,
     update_floor,
+    update_layout_seat_mapping_configuration,
     update_seat_configuration,
     update_site,
     upsert_operational_seat,
 )
-
 from backend.schemas.location import (
     BuildingResponse,
     BulkLayoutSeatConfigurationUpdateRequest,
@@ -917,6 +918,7 @@ def create_floor(
             "building_id": str(floor.get("building_id")),
             "building_name": floor.get("building_name"),
             "site_id": str(floor.get("site_id")),
+            "site_name": building.get("site_name"),
             "status": floor.get("status"),
         },
     )

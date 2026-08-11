@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import time
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -13,6 +13,7 @@ from fastapi import HTTPException, status
 from psycopg2.extensions import TRANSACTION_STATUS_IDLE
 from psycopg2.extensions import connection as PGConnection
 
+from backend.core.audit_actions import USER_LOGIN, USER_LOGOUT
 from backend.core.config import get_settings
 from backend.core.security import (
     TokenError,
@@ -29,7 +30,6 @@ from backend.core.sso import (
     fetch_graph_group_member_ids,
     fetch_graph_users_with_department,
 )
-from backend.core.audit_actions import USER_LOGIN, USER_LOGOUT
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.permission_repository import fetch_permissions_for_role
 from backend.repositories.token_repository import (
@@ -41,12 +41,13 @@ from backend.repositories.token_repository import (
     revoke_user_session,
     rotate_refresh_token,
 )
-from backend.repositories.user_repository import normalize_role_name
-from backend.repositories.user_repository import fetch_tenant_name_by_id, fetch_user_by_id
 from backend.repositories.user_repository import (
     fetch_active_tenant_ids,
     fetch_graph_linked_users,
     fetch_graph_managed_role_users,
+    fetch_tenant_name_by_id,
+    fetch_user_by_id,
+    normalize_role_name,
     sync_department_team_for_user,
     update_user_department,
     update_user_role,
@@ -171,7 +172,7 @@ def sync_graph_managed_roles(
     changed = 0
     promoted = 0
     demoted = 0
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
 
     try:
         tenant_ids = [tenant_id] if tenant_id is not None else fetch_active_tenant_ids(conn)
@@ -533,8 +534,8 @@ def refresh_auth_tokens(
 
         expires_at = session["expires_at"]
         if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-        if expires_at <= datetime.now(timezone.utc):
+            expires_at = expires_at.replace(tzinfo=UTC)
+        if expires_at <= datetime.now(UTC):
             revoke_user_session(
                 conn,
                 tenant_id=refresh_scope["tenant_id"],

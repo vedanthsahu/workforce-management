@@ -38,6 +38,34 @@ function extractSeatIds(svgText: string): string[] {
   return ids;
 }
 
+// Reads the uploaded layout's actual canvas size from its own <svg viewBox>
+// (falling back to width/height attributes, then to the SVG_W/SVG_H default)
+// instead of assuming every floor plan was authored at exactly 2466x2039 —
+// a layout drawn at a different size would otherwise fit-to-view incorrectly
+// (undersized scale, content bleeding past the right/bottom edge).
+function parseSvgDimensions(svgText: string): { w: number; h: number } {
+  const svgTag = svgText.match(/<svg\b[^>]*>/)?.[0] ?? "";
+
+  const viewBox = svgTag.match(
+    /viewBox=["']\s*[\d.+-]+\s+[\d.+-]+\s+([\d.]+)\s+([\d.]+)\s*["']/
+  );
+  if (viewBox) {
+    const w = parseFloat(viewBox[1]);
+    const h = parseFloat(viewBox[2]);
+    if (w > 0 && h > 0) return { w, h };
+  }
+
+  const width  = svgTag.match(/\swidth=["']([\d.]+)(?:px)?["']/);
+  const height = svgTag.match(/\sheight=["']([\d.]+)(?:px)?["']/);
+  if (width && height) {
+    const w = parseFloat(width[1]);
+    const h = parseFloat(height[1]);
+    if (w > 0 && h > 0) return { w, h };
+  }
+
+  return { w: SVG_W, h: SVG_H };
+}
+
 function getSeatIdFromClick(target: EventTarget | null, knownIds: Set<string>): string | null {
   let el = target as Element | null;
   while (el) {
@@ -51,17 +79,36 @@ function getSeatIdFromClick(target: EventTarget | null, knownIds: Set<string>): 
 
 // ─── Seat color resolution ────────────────────────────────────────────────────
 //
-// Priority (highest → lowest):
-//   1. Not configured                     → Gray    (#D1D5DB)
-//   2. INACTIVE (regardless of bookable)  → Red     (#EF4444)
-//   3. ACTIVE + is_bookable = false       → Amber   (#F59E0B)
-//   4. ACTIVE + is_bookable = true        → Green   (#22C55E)
+// Unconfigured seats (desk or room) keep the floor plan's original artwork
+// colors — they only start recoloring once an admin has actually configured
+// them. For a configured desk:
+//   INACTIVE (regardless of bookable) → Red   (#EF4444)
+//   ACTIVE + is_bookable = false      → Amber (#F59E0B)
+//   ACTIVE + is_bookable = true       → Green (#22C55E)
 
 function resolveSeatFill(seat: Seat): string {
-  if (!seat.is_configured)        return "#D1D5DB"; // Unconfigured — gray
   if (seat.status === "INACTIVE") return "#EF4444"; // Inactive     — red
   if (!seat.is_bookable)          return "#F59E0B"; // Non-bookable — amber
   return "#22C55E";                                 // Bookable     — green
+}
+
+// Cabin/conference/meeting room seats are grouped under one svg id containing
+// a "CBN"/"CFR"/"MR" segment (e.g. "HYD-PRV-F11-CBN-04", "HYD-PRV-F11-CFR-02",
+// "HYD-PRV-F11-MR-01"), not a dedicated field.
+const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr)([-_]|$)/i;
+
+function isRoomSvgId(svgId: string): boolean {
+  return ROOM_SVG_ID_PATTERN.test(svgId);
+}
+
+function recolorGroup(svgText: string, id: string, fill: string): string {
+  const groupRegex = new RegExp(`(<g[^>]*id="${id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "m");
+  return svgText.replace(groupRegex, (_match, open, inner, close) => {
+    const colored = inner
+      .replace(/fill="[^"]*"/g, `fill="${fill}"`)
+      .replace(/fill:[^;"}\s]*/g, `fill:${fill}`);
+    return `${open}${colored}${close}`;
+  });
 }
 
 function colorSeats(svgText: string, seats: Seat[], filteredIds?: Set<string>): string {
@@ -70,21 +117,28 @@ function colorSeats(svgText: string, seats: Seat[], filteredIds?: Set<string>): 
 
   seats.forEach((seat) => {
     const id = seat.seat_svg_id;
-    const fill = hasFilter && filteredIds!.has(id)
-      ? "#FACC15"          // Highlight matching seats — vivid yellow
-      : resolveSeatFill(seat);
+    const isHighlighted = hasFilter && filteredIds!.has(id);
 
-    const groupRegex = new RegExp(
-      `(<g[^>]*id="${id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`,
-      "m"
-    );
+    if (isHighlighted) {
+      result = recolorGroup(result, id, "#FACC15"); // Highlight matching seats — vivid yellow
+      return;
+    }
 
-    result = result.replace(groupRegex, (_match, open, inner, close) => {
-      const colored = inner
-        .replace(/fill="[^"]*"/g, `fill="${fill}"`)
-        .replace(/fill:[^;"}\s]*/g, `fill:${fill}`);
-      return `${open}${colored}${close}`;
-    });
+    // Unconfigured — leave the floor plan's original artwork colors, desk or
+    // room, until an admin actually configures it.
+    if (!seat.is_configured) return;
+
+    if (isRoomSvgId(id)) {
+      // Configured rooms only recolor when explicitly non-bookable/inactive,
+      // and just a flat grey rather than the red/amber distinction used for
+      // desks — a bookable room still keeps its original artwork colors.
+      const isNotBookable = seat.status === "INACTIVE" || !seat.is_bookable;
+      if (!isNotBookable) return;
+      result = recolorGroup(result, id, "#D1D5DB");
+      return;
+    }
+
+    result = recolorGroup(result, id, resolveSeatFill(seat));
   });
 
   return result;
@@ -392,6 +446,10 @@ export default function LayoutPreview({
   const [mapReady,    setMapReady]    = useState(false);
   const [loading,     setLoading]     = useState(false);
 
+  // Actual canvas size of the loaded SVG — read from its own markup, not
+  // assumed to always match the SVG_W/SVG_H default.
+  const [svgDims, setSvgDims] = useState<{ w: number; h: number }>({ w: SVG_W, h: SVG_H });
+
   const seatIdsRef = useRef<Set<string>>(new Set());
 
   const [dialogOpen,  setDialogOpen]  = useState(false);
@@ -407,9 +465,11 @@ export default function LayoutPreview({
     if (!rawUrl) { setRawSvg(null); setSvgError(false); setMapReady(false); return; }
     const url = resolveUrl(rawUrl);
     setLoading(true); setRawSvg(null); setSvgError(false); setMapReady(false);
+    setSvgDims({ w: SVG_W, h: SVG_H });
     fetch(url)
       .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
       .then((text) => {
+        setSvgDims(parseSvgDimensions(text));
         const fluid = text
           .replace(/\bwidth="[^"]*"/, 'width="100%"')
           .replace(/\bheight="[^"]*"/, 'height="100%"');
@@ -419,6 +479,14 @@ export default function LayoutPreview({
       })
       .catch(() => setSvgError(true))
       .finally(() => setLoading(false));
+    // onSeatSave is intentionally excluded: it's the `saveSeat` callback from
+    // useManageSeats, whose identity changes whenever the seats array
+    // updates (e.g. right after a successful save). Adding it here would
+    // re-fetch the SVG from the network and reset the map state every time
+    // a seat is saved. This effect should only reload when the SVG's own
+    // URL changes; onSeatSave is only used below to pick between two
+    // transforms of the already-fetched text, not to decide whether to fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout?.layout_file_url]);
 
   // ── Compute colored SVG ────────────────────────────────────────────────
@@ -449,12 +517,12 @@ export default function LayoutPreview({
     if (!wrapper) return;
     const { width: wW, height: wH } = wrapper.getBoundingClientRect();
     if (wW === 0 || wH === 0) return;
-    const scale = Math.min(wW / SVG_W, wH / SVG_H);
+    const scale = Math.min(wW / svgDims.w, wH / svgDims.h);
     scaleRef.current = scale;
-    translateRef.current = { x: (wW - SVG_W * scale) / 2, y: (wH - SVG_H * scale) / 2 };
+    translateRef.current = { x: (wW - svgDims.w * scale) / 2, y: (wH - svgDims.h * scale) / 2 };
     applyTransform();
     setZoomDisplay(Math.round(scale * 100));
-  }, [applyTransform]);
+  }, [applyTransform, svgDims]);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
@@ -765,8 +833,8 @@ export default function LayoutPreview({
                 ref={transformRef}
                 style={{
                   transformOrigin: "top left",
-                  width: `${SVG_W}px`,
-                  height: `${SVG_H}px`,
+                  width: `${svgDims.w}px`,
+                  height: `${svgDims.h}px`,
                   willChange: "transform",
                   visibility: mapReady ? "visible" : "hidden",
                 }}

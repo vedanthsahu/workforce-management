@@ -19,26 +19,31 @@ from typing import Any
 from uuid import uuid4
 
 import structlog
-from structlog.contextvars import bind_contextvars, clear_contextvars
-
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from structlog.contextvars import bind_contextvars, clear_contextvars
 
-from backend.api.routes.dashboard import router as dashboard_router
+from backend.api.routes import teams
+from backend.api.routes.admin_bookings import router as admin_bookings_router
+from backend.api.routes.admin_dashboard import router as admin_dashboard_router
 from backend.api.routes.auth import router as auth_router
 from backend.api.routes.bookings import router as bookings_router
+from backend.api.routes.dashboard import router as dashboard_router
+from backend.api.routes.floor_layouts import router as floor_layout_router
 from backend.api.routes.guest_bookings import router as guest_bookings_router
 from backend.api.routes.guest_visits import router as guest_visits_router
 from backend.api.routes.guests import router as guests_router
 from backend.api.routes.locations import router as locations_router
+from backend.api.routes.preferences import router as preferences_router
 from backend.api.routes.sso import router as sso_router
-from backend.core.config import get_settings
+from backend.api.routes.user_management import router as user_management_router
 from backend.core.app_logging import (
     LOGGER_NAME,
     configure_logging,
     enable_backend_function_trace,
 )
+from backend.core.config import get_settings
 from backend.db.connection import get_db_connection
 from backend.repositories.token_repository import (
     ensure_refresh_tokens_table,
@@ -46,13 +51,11 @@ from backend.repositories.token_repository import (
     purge_expired_refresh_tokens,
     purge_expired_sessions,
 )
-from backend.services.auth_service import sync_department_teams, sync_graph_managed_roles
-from backend.api.routes import teams
-from backend.api.routes.preferences import router as preferences_router
-from backend.api.routes.admin_bookings import router as admin_bookings_router
-from backend.api.routes.admin_dashboard import router as admin_dashboard_router
-from backend.api.routes.floor_layouts import router as floor_layout_router
-from backend.api.routes.user_management import router as user_management_router
+from backend.services.auth_service import (
+    sync_department_teams,
+    sync_graph_managed_roles,
+)
+
 settings = get_settings()
 configure_logging(
     "DEBUG" if settings.app_trace_functions else settings.app_log_level,

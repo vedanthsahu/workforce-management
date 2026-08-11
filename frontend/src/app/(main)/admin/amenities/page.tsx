@@ -51,7 +51,7 @@ function AmenitiesPage() {
     if (!exists) return;
     activatePin(addedId, "Amenity added successfully!");
     router.replace("/admin/amenities");
-  }, [searchParams, data]);
+  }, [searchParams, data, router]);
 
   // Cleanup timer on unmount
   useEffect(() => () => { if (pinTimerRef.current) clearTimeout(pinTimerRef.current); }, []);

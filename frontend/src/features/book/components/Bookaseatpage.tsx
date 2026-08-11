@@ -13,7 +13,6 @@ import {
   Settings2,
   Users,
   X,
-  Pencil,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -78,33 +77,6 @@ const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; subtitle: 
   </div>
 );
 
-// ── Summary row ───────────────────────────────────────────────────────────────
-
-const SummaryRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div className="flex justify-between items-center py-2.5 sm:py-3 border-b border-[#EBEBF5] last:border-0 gap-4">
-    <span className="text-[12px] sm:text-[12.5px] text-gray-500 shrink-0">{label}</span>
-    <span className="text-[12px] sm:text-[13px] font-semibold text-[#1A1A2E] text-right">{value}</span>
-  </div>
-);
-
-// ── Review section header ─────────────────────────────────────────────────────
-
-const ReviewSectionHeader: React.FC<{ icon: React.ReactNode; title: string; subtitle: string }> = ({
-  icon,
-  title,
-  subtitle,
-}) => (
-  <div className="flex items-center gap-2.5 mb-4">
-    <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0 text-indigo-600">
-      {icon}
-    </div>
-    <div>
-      <p className="text-[13px] font-semibold text-[#1A1A2E] leading-tight">{title}</p>
-      <p className="text-[11.5px] text-gray-400">{subtitle}</p>
-    </div>
-  </div>
-);
-
 // ── Date input ────────────────────────────────────────────────────────────────
 
 const DateInput: React.FC<{
@@ -150,6 +122,7 @@ const BookASeatPage: React.FC = () => {
     seats,
     confirmation,
     error,
+    setError,
     loadingSites,
     loadingBuildings,
     loadingFloors,
@@ -175,7 +148,6 @@ const BookASeatPage: React.FC = () => {
     setFromDate,
     setToDate,
     togglePreference,
-    clearAll,
     findAvailableSeats,
     selectSeat,
     goToReview,
@@ -274,7 +246,7 @@ const BookASeatPage: React.FC = () => {
             className="bg-red-50 border border-red-200 rounded-xl px-4 sm:px-5 py-3 text-red-500 text-[12.5px] sm:text-[13px] flex items-center justify-between gap-3"
           >
             <span>{error}</span>
-            <button onClick={() => { }} className="text-red-400 hover:text-red-600 shrink-0">
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 shrink-0">
               <X size={14} />
             </button>
           </div>
@@ -673,7 +645,7 @@ const BookASeatPage: React.FC = () => {
                     {(() => {
                       // is_modified/booking_status both come straight from the API (BookingResponse) —
                       // is_modified is derived server-side from modified_from_booking_id, never guessed here.
-                      const rawLabel = isAdminFlow && confirmation.is_modified ? "Modified" : confirmation.booking_status;
+                      const rawLabel = confirmation.is_modified ? "Modified" : confirmation.booking_status;
                       const statusLabel = rawLabel.toUpperCase();
                       const isModifiedStatus = statusLabel === "MODIFIED";
                       return (

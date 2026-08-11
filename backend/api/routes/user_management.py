@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Annotated
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import (
@@ -13,28 +13,21 @@ from backend.api.deps import (
 from backend.db.connection import get_db
 from backend.schemas.auth import UserResponse
 from backend.schemas.user_management import (
-    AdminUserAccessUpdateRequest,
-    AdminDirectoryRole,
     AdminDirectoryStatus,
-    UserDetailsResponse,
+    AdminUserAccessUpdateRequest,
     AdminUserDirectoryResponse,
     UpdateMyProfileRequest,
     UserBookingHistoryResponse,
-)
-from backend.services.user_management_service import (
-    admin_update_user_access_service,
-    get_user_booking_history,
-    get_user_by_id_service,
-    get_admin_user_directory,
-    update_my_profile,
-)
-from fastapi import Query
-
-from backend.schemas.user_management import (
+    UserDetailsResponse,
     UserSearchResponse,
 )
 from backend.services.user_management_service import (
+    admin_update_user_access_service,
+    get_admin_user_directory,
+    get_user_booking_history,
+    get_user_by_id_service,
     search_user_profiles,
+    update_my_profile,
 )
 
 router = APIRouter(tags=["user-management"])

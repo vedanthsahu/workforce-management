@@ -12,10 +12,16 @@ import boto3
 from botocore.client import BaseClient
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import BackgroundTasks
-from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateError, select_autoescape
+from jinja2 import (
+    Environment,
+    FileSystemLoader,
+    StrictUndefined,
+    TemplateError,
+    select_autoescape,
+)
 
-from backend.core.config import Settings, get_settings
 from backend.core.app_logging import LOGGER_NAME
+from backend.core.config import Settings, get_settings
 from backend.core.retry import aws_retry
 
 logger = logging.getLogger(f"{LOGGER_NAME}.notifications")
@@ -238,11 +244,9 @@ class NotificationService:
 
     def _build_ses_client(self) -> BaseClient:
         return boto3.client(
-            "ses",
-            region_name=self._settings.aws_region,
-            aws_access_key_id=self._settings.aws_ses_access_key_id,
-            aws_secret_access_key=self._settings.aws_ses_secret_access_key,
-        )
+        "ses",
+        region_name=self._settings.aws_region,
+    )
 
     def _build_template_environment(self) -> Environment:
         template_dir = _resolve_template_dir(self._settings.email_template_dir)

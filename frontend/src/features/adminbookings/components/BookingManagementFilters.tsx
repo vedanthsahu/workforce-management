@@ -511,7 +511,7 @@ export default function BookingManagementFilters({
                 ) : (
                   <ul role="listbox" className="py-1 max-h-60 overflow-y-auto divide-y divide-gray-100">
                     {employeeSuggestions.map((b) => (
-                      <li key={`${b.person_name}-${b.person_email}`} role="option">
+                      <li key={`${b.person_name}-${b.person_email}`} role="option" aria-selected={false}>
                         <button
                           type="button"
                           onMouseDown={(e) => {
@@ -581,7 +581,7 @@ export default function BookingManagementFilters({
                 ) : (
                   <ul role="listbox" className="py-1 max-h-60 overflow-y-auto divide-y divide-gray-100">
                     {seatSuggestions.map((b) => (
-                      <li key={b.seat_code} role="option">
+                      <li key={b.seat_code} role="option" aria-selected={false}>
                         <button
                           type="button"
                           onMouseDown={(e) => {
