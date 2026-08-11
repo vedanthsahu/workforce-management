@@ -1,4 +1,7 @@
-# Dev Change-Log (personal, git-ignored)
+# Backend Change-Log
+
+Backend-only. See [`dev-notes/README.md`](../README.md) for what this file
+is, why it's separate from the frontend log, and the conventions below.
 
 Append-only. Never edit or delete a past entry — if something changes again,
 add a new entry underneath. Newest entry at the bottom.
