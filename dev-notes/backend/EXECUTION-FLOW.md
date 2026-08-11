@@ -1,4 +1,7 @@
-# Dev Execution-Flow Notes (personal, git-ignored)
+# Backend Execution-Flow Notes
+
+Backend-only. See [`dev-notes/README.md`](../README.md) for what this file
+is, why it's separate from the frontend log, and the conventions below.
 
 Append-only. For each feature/change: what functions exist now, what got
 added/removed, and how data actually flows end-to-end (route → service →
