@@ -896,7 +896,18 @@ def upsert_operational_seat(
     svg_element_id: str,
     source_layout_mapping_id: str | None = None,
 ) -> dict[str, Any]:
+    """Insert or update the operational seat row for one layout_seat_mapping.
 
+    Seats are append-only per layout version: the unique key is
+    (floor_id, seat_code, layout_id), not just (floor_id, seat_code). A
+    save against the SAME already-published layout_id updates its row in
+    place (in-version edits, e.g. update_layout_seat_configurations_bulk's
+    published-layout cascade); publishing a NEW layout_id always inserts a
+    fresh row instead of overwriting the previous version's, so old
+    bookings keep pointing at the exact historical seat row they were
+    made against. reconcile_published_layout_seats retires (never
+    deletes) the previous version's now-superseded rows.
+    """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
 
         cur.execute(
@@ -936,11 +947,11 @@ def upsert_operational_seat(
 
             ON CONFLICT (
                 floor_id,
-                seat_code
+                seat_code,
+                layout_id
             )
 
             DO UPDATE SET
-                layout_id = EXCLUDED.layout_id,
                 seat_name = EXCLUDED.seat_name,
                 seat_type = EXCLUDED.seat_type,
                 is_bookable = EXCLUDED.is_bookable,
