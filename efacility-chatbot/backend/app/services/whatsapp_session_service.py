@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.services.session_service import SessionService
 from app.services.user_identity_service import user_identity_service
+from app.logging_config import mask_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ class WhatsAppSessionService:
                 await self.clear_session_id(wa_id)
             else:
                 await self.clear_session_id(wa_id)
-            logger.info("WhatsApp mapped session expired wa_id=%s session_id=%s", wa_id, existing)
+            logger.info("event=whatsapp_session_expired wa_id=%s session_id=%s", mask_identifier(wa_id), existing)
 
         session = await SessionService.create(identity.user_name, db)
         session_id = str(session.id)

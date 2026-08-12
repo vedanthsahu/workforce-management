@@ -5,20 +5,21 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import create_tables
+from app.logging_config import configure_logging
 from app.middleware.request_id import RequestIdMiddleware
 from app.routers import chat, whatsapp
 
-logging.basicConfig(level=logging.INFO)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting eFACiLiTY Chatbot API...")
+    logger.info("event=service_start environment=%s", settings.APP_ENV)
     await create_tables()
-    logger.info("Database tables ready.")
+    logger.info("event=database_ready")
     yield
-    logger.info("Shutting down.")
+    logger.info("event=service_stop")
 
 
 app = FastAPI(

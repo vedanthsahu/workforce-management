@@ -28,6 +28,12 @@ class ChatAdapterService:
     async def create_session(self, body: CreateSessionRequest, db: AsyncSession, identity: SeatBookIdentity | None = None) -> SessionOut:
         started = telemetry_service.timer()
         user_name = identity.display_name if identity else body.user_name
+        logger.info(
+            "event=chat_session_create_started channel=%s authenticated=%s tenant_id=%s",
+            getattr(body, "channel", "browser"),
+            identity is not None,
+            identity.tenant_id if identity else "-",
+        )
         session = await SessionService.create(
             user_name,
             db,
@@ -49,6 +55,14 @@ class ChatAdapterService:
             logger.exception("Error during session init: %s", exc)
             initial = None
         telemetry_service.record_latency("create_session", telemetry_service.elapsed_ms(started), ok=ok)
+        elapsed_ms = telemetry_service.elapsed_ms(started)
+        logger.info(
+            "event=chat_session_create_completed session_id=%s node=%s ok=%s elapsed_ms=%s",
+            session.id,
+            session.current_node,
+            ok,
+            round(elapsed_ms, 2),
+        )
         telemetry_service.record_step(
             "session.initial_response",
             session_id=str(session.id),
@@ -66,6 +80,14 @@ class ChatAdapterService:
 
     async def process_message(self, session_id: str, body: UserMessage, db: AsyncSession, identity: SeatBookIdentity | None = None) -> ChatResponse | None:
         started = telemetry_service.timer()
+        logger.info(
+            "event=chat_message_started session_id=%s message_type=%s has_text=%s text_length=%s form_keys=%s",
+            session_id,
+            body.message_type,
+            bool(body.text),
+            len(body.text or ""),
+            sorted((body.form_data or {}).keys()),
+        )
         session = await SessionService.get(
             session_id,
             db,
@@ -73,6 +95,7 @@ class ChatAdapterService:
             authenticated_tenant_id=identity.tenant_id if identity else None,
         )
         if not session:
+            logger.warning("event=chat_message_rejected session_id=%s reason=session_missing_or_not_owned", session_id)
             return None
 
         telemetry_service.record_step(
@@ -117,6 +140,16 @@ class ChatAdapterService:
                 ],
             )
         telemetry_service.record_latency("send_message", telemetry_service.elapsed_ms(started), ok=ok)
+        elapsed_ms = telemetry_service.elapsed_ms(started)
+        logger.info(
+            "event=chat_message_completed session_id=%s from_node=%s to_node=%s ok=%s elapsed_ms=%s response_types=%s",
+            session_id,
+            session.current_node,
+            response.current_node,
+            ok,
+            round(elapsed_ms, 2),
+            [message.type.value for message in response.messages],
+        )
         telemetry_service.record_step(
             "message.response",
             session_id=session_id,

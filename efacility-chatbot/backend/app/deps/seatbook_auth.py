@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import AsyncIterator
@@ -10,6 +11,8 @@ from fastapi import HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 _request_client: ContextVar[httpx.AsyncClient | None] = ContextVar(
     "seatbook_request_client", default=None
@@ -55,6 +58,7 @@ async def require_seatbook_identity(
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
 ) -> AsyncIterator[SeatBookIdentity]:
     if credentials is None or credentials.scheme.lower() != "bearer":
+        logger.warning("event=auth_rejected reason=missing_bearer_token")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="A SeatBook chatbot token is required.",
@@ -71,6 +75,10 @@ async def require_seatbook_identity(
                     algorithms=[settings.MAIN_APP_JWT_ALGORITHM],
                 )
             except jwt.PyJWTError as exc:
+                logger.warning(
+                    "event=auth_rejected reason=invalid_local_token error_type=%s",
+                    type(exc).__name__,
+                )
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="The SeatBook session is invalid or expired.",
@@ -85,12 +93,17 @@ async def require_seatbook_identity(
         else:
             client = current_seatbook_client()
             if client is None:
+                logger.error("event=auth_failed reason=seatbook_client_unavailable")
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail="SeatBook authentication is temporarily unavailable.",
                 )
             response = await client.get("/auth/me")
             if response.status_code != 200:
+                logger.warning(
+                    "event=auth_rejected reason=remote_validation_failed status_code=%s",
+                    response.status_code,
+                )
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="The SeatBook session is invalid or expired.",
@@ -106,12 +119,24 @@ async def require_seatbook_identity(
             or ""
         ).strip()
         if not user_id or not tenant_id or not display_name:
+            logger.warning(
+                "event=auth_rejected reason=incomplete_identity has_user_id=%s has_tenant_id=%s has_display_name=%s",
+                bool(user_id),
+                bool(tenant_id),
+                bool(display_name),
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="SeatBook returned an incomplete authenticated identity.",
             )
 
         user_token = _request_user.set(user)
+        logger.info(
+            "event=auth_accepted source=%s user_id=%s tenant_id=%s",
+            "local_jwt" if settings.MAIN_APP_JWT_SECRET else "remote_auth_me",
+            user_id,
+            tenant_id,
+        )
         try:
             yield SeatBookIdentity(
                 user_id=user_id,
@@ -121,6 +146,10 @@ async def require_seatbook_identity(
         finally:
             _request_user.reset(user_token)
     except httpx.HTTPError as exc:
+        logger.warning(
+            "event=auth_failed reason=network_error error_type=%s",
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="SeatBook authentication is temporarily unavailable.",

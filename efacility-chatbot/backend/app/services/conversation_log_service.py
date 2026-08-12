@@ -74,7 +74,12 @@ class ConversationLogService:
                 response = await client.post(endpoint, json=event)
                 response.raise_for_status()
         except Exception as exc:
-            logger.debug("Elasticsearch conversation logging unavailable: %s", exc)
+            logger.warning(
+                "event=conversation_index_failed session_id=%s event_id=%s error_type=%s",
+                event.get("session_id"),
+                event.get("event_id"),
+                type(exc).__name__,
+            )
 
     async def health(self) -> bool:
         if not settings.ENABLE_ELK_CONVERSATION_LOGS:

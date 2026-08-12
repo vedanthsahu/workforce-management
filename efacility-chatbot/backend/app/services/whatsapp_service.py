@@ -6,6 +6,7 @@ from typing import Any, Optional
 import httpx
 
 from app.config import settings
+from app.logging_config import mask_identifier
 from app.schemas.chat import BotMessage, BookingCard, ChatOption, ChatResponse, MessageType
 
 logger = logging.getLogger(__name__)
@@ -200,7 +201,7 @@ class WhatsAppService:
 
     async def _send_message(self, wa_id: str, request_body: dict[str, Any]) -> dict[str, Any]:
         if not settings.WHATSAPP_ENABLED:
-            logger.info("WhatsApp send skipped because WHATSAPP_ENABLED=false wa_id=%s", wa_id)
+            logger.info("event=whatsapp_send_skipped reason=disabled wa_id=%s", mask_identifier(wa_id))
             return {"skipped": True, "reason": "disabled"}
 
         if not settings.WHATSAPP_ACCESS_TOKEN or not settings.WHATSAPP_PHONE_NUMBER_ID:
@@ -236,7 +237,11 @@ class WhatsAppService:
                         await asyncio.sleep(delay)
 
         if response is None:
-            logger.warning("WhatsApp outgoing failed after retries wa_id=%s error=%s", wa_id, last_error)
+            logger.warning(
+                "event=whatsapp_send_failed wa_id=%s attempts=%s reason=no_response",
+                mask_identifier(wa_id),
+                attempts,
+            )
             return {"status_code": 0, "body": last_error or "request_failed", "attempts": attempts}
 
         body_preview = response.text[:500]
@@ -244,17 +249,16 @@ class WhatsAppService:
 
         if response.status_code >= 400:
             logger.warning(
-                "WhatsApp outgoing failed status=%s wa_id=%s attempts=%s body=%s",
+                "event=whatsapp_send_failed status_code=%s wa_id=%s attempts=%s",
                 response.status_code,
-                wa_id,
+                mask_identifier(wa_id),
                 attempts,
-                body_preview,
             )
         else:
             logger.info(
-                "WhatsApp outgoing response status=%s wa_id=%s message_id=%s",
+                "event=whatsapp_send_completed status_code=%s wa_id=%s message_id=%s",
                 response.status_code,
-                wa_id,
+                mask_identifier(wa_id),
                 message_id or "",
             )
         return {

@@ -19,7 +19,7 @@ from app.models.chatbot import ChatbotSession, ChatbotSessionContext
 from app.schemas.chat import (
     ChatResponse, BotMessage, MessageType, ChatOption,
     FormCard, FormField, SeatList, SeatCard,
-    BookingConfirmation, BookingSuccess, QuickBookCard,
+    BookingConfirmation, BookingSuccess,
     BookingCard, BookingListData, RebookCalendarData, RebookCalendarDay,
 )
 from app.services.menu_service import menu_service, MenuService
@@ -238,12 +238,12 @@ class ChatEngine:
         db: AsyncSession,
     ) -> Optional[ChatResponse]:
         logger.info(
-            "Free text selected intent=%s confidence=%s source=%s next_node_pending=%s entities=%s",
+            "event=free_text_routed intent=%s confidence=%s source=%s needs_confirmation=%s entity_keys=%s",
             result.intent.value,
             result.confidence,
             result.source,
             result.needs_confirmation,
-            result.entities,
+            sorted(result.entities.keys()),
         )
 
         if result.intent == Intent.HELP and result.is_global_command:
@@ -309,7 +309,11 @@ class ChatEngine:
         entities: Dict[str, Any],
         db: AsyncSession,
     ) -> ChatResponse:
-        logger.info("Free text execute intent=%s entities=%s", intent.value, entities)
+        logger.info(
+            "event=free_text_execute intent=%s entity_keys=%s",
+            intent.value,
+            sorted(entities.keys()),
+        )
         telemetry_service.record_step(
             "free_text.execute",
             session_id=str(session.id),

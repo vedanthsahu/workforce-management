@@ -226,7 +226,13 @@ class SeatBackendApiService:
                 request_id=request_id_ctx.get(),
                 error=str(exc),
             )
-            logger.warning("Seat backend API call failed method=%s path=%s error=%s", method, path, exc)
+            logger.warning(
+                "event=seat_backend_call_failed method=%s path=%s error_type=%s elapsed_ms=%s",
+                method,
+                path,
+                type(exc).__name__,
+                round((time.monotonic() - started) * 1000, 2),
+            )
             return None
 
         if response.status_code == 401 and retry_refresh:
@@ -262,11 +268,11 @@ class SeatBackendApiService:
                 payload_shape="unexpected_status",
             )
             logger.warning(
-                "Seat backend API returned unexpected status method=%s path=%s status=%s body=%s",
+                "event=seat_backend_unexpected_status method=%s path=%s status_code=%s elapsed_ms=%s",
                 method,
                 path,
                 response.status_code,
-                response.text[:500],
+                round((time.monotonic() - started) * 1000, 2),
             )
             return None
 
@@ -341,7 +347,7 @@ class SeatBackendApiService:
         try:
             response = await client.post("/auth/refresh")
         except httpx.HTTPError as exc:
-            logger.warning("Seat backend token refresh failed: %s", exc)
+            logger.warning("event=seat_backend_refresh_failed error_type=%s", type(exc).__name__)
             return
         if response.status_code == 200:
             self._last_refresh_monotonic = time.monotonic()
@@ -349,7 +355,7 @@ class SeatBackendApiService:
             self._save_cached_cookies(client.cookies)
             return
         if force:
-            logger.warning("Seat backend token refresh failed status=%s body=%s", response.status_code, response.text[:500])
+            logger.warning("event=seat_backend_refresh_failed status_code=%s", response.status_code)
 
     @staticmethod
     def _items(payload: Any) -> Optional[list[dict[str, Any]]]:

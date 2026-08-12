@@ -406,7 +406,7 @@ Backend flags `can_modify` and `can_cancel` control whether booking cards show a
 | `DATABASE_URL` | Required | Async SQLAlchemy URL |
 | `SYNC_DATABASE_URL` | Optional | Sync URL for scripts |
 | `APP_ENV` | `development` | Runtime environment |
-| `SECRET_KEY` | Dev value | Application secret |
+| `LOG_LEVEL` | `INFO` | Operational log threshold (`DEBUG`, `INFO`, `WARNING`, or `ERROR`) |
 | `ALLOWED_ORIGINS` | `http://localhost:4200` | CORS origins |
 | `DEFAULT_TENANT_ID` | `3` | Tenant scope |
 | `SESSION_TTL_MINUTES` | `30` | Session expiry |
