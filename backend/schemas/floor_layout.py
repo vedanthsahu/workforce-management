@@ -62,9 +62,10 @@ class FloorLayoutResponse(BaseModel):
     uploaded_by_department: str | None = None
     uploaded_by_job_title: str | None = None
 
-    # Placeholder: floor_layouts has no updated_by column yet, so this
-    # mirrors uploaded_by until a real column/join is added.
-    updated_by_user_id: str
+    # NULL until the layout's seat configuration has been edited at least
+    # once (see touch_floor_layout_updated_by) -- a freshly uploaded,
+    # never-edited layout has no "updated by" yet.
+    updated_by_user_id: str | None = None
     updated_by_name: str | None = None
     updated_by_email: str | None = None
     updated_by_role: str | None = None
