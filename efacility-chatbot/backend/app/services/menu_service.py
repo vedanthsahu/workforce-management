@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.chatbot import ChatbotMenuItem
-from app.config import settings
 
 logger = logging.getLogger(__name__)
 

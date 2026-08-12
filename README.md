@@ -15,10 +15,9 @@ Enterprise seat booking and workspace management system integrated with the eFAC
 .
 |-- backend/                              # Workforce Management API
 |-- frontend/                             # Workforce Management UI
-|-- integrations/
-|   `-- efacility-chatbot/
-|       |-- backend/                      # Chatbot API
-|       `-- frontend/                     # Embedded chatbot UI
+|-- efacility-chatbot/
+|   |-- backend/                          # Chatbot API
+|   `-- frontend/                         # Embedded chatbot UI
 |-- .env                                  # Main backend configuration (local only)
 |-- pyproject.toml
 `-- requirements.txt
@@ -82,10 +81,10 @@ NEXT_PUBLIC_ALLOWED_EMAIL_DOMAINS=solugenix.com,sgxdev.com
 Copy the integration environment template into the chatbot backend directory:
 
 ```powershell
-Copy-Item integrations\efacility-chatbot\.env.example integrations\efacility-chatbot\backend\.env
+Copy-Item efacility-chatbot\.env.example efacility-chatbot\backend\.env
 ```
 
-Update `integrations/efacility-chatbot/backend/.env` for the local database and optional services. These integration values are especially important:
+Update `efacility-chatbot/backend/.env` for the local database and optional services. These integration values are especially important:
 
 ```env
 ALLOWED_ORIGINS=http://localhost:4200,http://localhost:3000
@@ -100,19 +99,19 @@ MAIN_APP_JWT_ALGORITHM=HS256
 Install chatbot backend dependencies if its virtual environment does not exist:
 
 ```powershell
-Set-Location integrations\efacility-chatbot\backend
+Set-Location efacility-chatbot\backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-Set-Location ..\..\..
+Set-Location ..\..
 ```
 
 ### 4. Chatbot frontend
 
 ```powershell
-Set-Location integrations\efacility-chatbot\frontend
+Set-Location efacility-chatbot\frontend
 npm install
-Set-Location ..\..\..
+Set-Location ..\..
 ```
 
 The chatbot frontend uses `http://localhost:8100` as its API by default.
@@ -169,7 +168,7 @@ Set-Location <repository-root>
 ### Terminal 3 - chatbot backend
 
 ```powershell
-Set-Location <repository-root>\integrations\efacility-chatbot\backend
+Set-Location <repository-root>\efacility-chatbot\backend
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8100
 ```
 
@@ -183,7 +182,7 @@ npm run dev -- -H localhost -p 3000
 ### Terminal 5 - chatbot frontend
 
 ```powershell
-Set-Location <repository-root>\integrations\efacility-chatbot\frontend
+Set-Location <repository-root>\efacility-chatbot\frontend
 npm run start -- -H localhost -p 4200
 ```
 
@@ -249,7 +248,7 @@ npm run start
 Chatbot frontend:
 
 ```powershell
-Set-Location integrations\efacility-chatbot\frontend
+Set-Location efacility-chatbot\frontend
 npm run build
 npx next start -p 4200
 ```

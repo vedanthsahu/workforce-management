@@ -150,14 +150,27 @@ class TelemetryService:
         if not settings.ENABLE_TELEMETRY:
             return
         self._booking_funnel[event_name] += 1
-        logger.info("Telemetry booking_event=%s data=%s", event_name, data)
+        logger.info(
+            "event=telemetry_booking booking_event=%s session_id=%s source=%s data_keys=%s",
+            event_name,
+            data.get("session_id", "-"),
+            data.get("source", "-"),
+            sorted(data.keys()),
+        )
         self._append("booking", {"booking_event": event_name, **data})
 
     def record_step(self, step: str, **data: Any):
         if not settings.ENABLE_TELEMETRY:
             return
         self._step_counts[step] += 1
-        logger.info("Telemetry step=%s data=%s", step, data)
+        logger.info(
+            "event=telemetry_step step=%s session_id=%s node=%s ok=%s data_keys=%s",
+            step,
+            data.get("session_id", "-"),
+            data.get("current_node", data.get("node", "-")),
+            data.get("ok", "-"),
+            sorted(data.keys()),
+        )
         self._append("step", {"step": step, **data})
 
     def record_seat_backend_call(

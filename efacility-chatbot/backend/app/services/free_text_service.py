@@ -55,9 +55,9 @@ class FreeTextService:
     ) -> FreeTextResult:
         normalized = self.normalize(user_message)
         logger.info(
-            "Free text original=%r normalized=%r existing_context_keys=%s",
-            user_message,
-            normalized,
+            "event=free_text_received text_length=%s normalized_length=%s context_keys=%s",
+            len(user_message or ""),
+            len(normalized),
             sorted(session_context.keys()),
         )
 
@@ -73,7 +73,7 @@ class FreeTextService:
         result = self._build_result(selected, normalized, entities)
 
         logger.info(
-            "Free text rule=%s/%s vector=%s/%s selected=%s/%s source=%s entities=%s metadata=%s",
+            "event=free_text_classified rule_intent=%s rule_confidence=%s vector_intent=%s vector_confidence=%s selected_intent=%s selected_confidence=%s source=%s entity_keys=%s metadata_keys=%s",
             rule_result.intent.value if rule_result else None,
             rule_result.confidence if rule_result else None,
             vector_result.intent.value if vector_result else None,
@@ -81,8 +81,8 @@ class FreeTextService:
             result.intent.value,
             result.confidence,
             result.source,
-            result.entities,
-            result.metadata,
+            sorted(result.entities.keys()),
+            sorted(result.metadata.keys()),
         )
         return result
 

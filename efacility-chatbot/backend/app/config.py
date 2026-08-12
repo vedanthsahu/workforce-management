@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://efacility:efacility123@localhost:5432/efacility_chatbot"
     SYNC_DATABASE_URL: str = "postgresql://efacility:efacility123@localhost:5432/efacility_chatbot"
     APP_ENV: str = "development"
-    SECRET_KEY: str = "dev-secret-key-change-in-production"
+    LOG_LEVEL: str = "INFO"
     MAIN_APP_JWT_SECRET: str = ""
     MAIN_APP_JWT_ALGORITHM: str = "HS256"
     ALLOWED_ORIGINS: str = "http://localhost:4200"

@@ -13,6 +13,7 @@ from app.services.whatsapp_interaction_service import whatsapp_interaction_servi
 from app.services.whatsapp_message_store import whatsapp_message_store
 from app.services.whatsapp_service import whatsapp_service
 from app.services.whatsapp_session_service import whatsapp_session_service
+from app.logging_config import mask_identifier
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -47,7 +48,13 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks) -
 
     metadata = whatsapp_service.extract_message_metadata(payload)
     if metadata:
-        logger.info("WhatsApp webhook received metadata=%s", metadata)
+        logger.info(
+            "event=whatsapp_webhook_received wa_id=%s message_id=%s message_type=%s interactive_type=%s",
+            mask_identifier(metadata.get("wa_id")),
+            metadata.get("message_id", ""),
+            metadata.get("message_type", ""),
+            metadata.get("interactive_type", ""),
+        )
 
     if not whatsapp_service.extract_text_message(payload):
         logger.info("WhatsApp webhook ignored non-message payload")
@@ -76,21 +83,21 @@ async def handle_webhook_payload(payload: dict[str, Any], db: AsyncSession) -> d
         if not is_new_message:
             logger.info(
                 "WhatsApp duplicate webhook ignored wa_id=%s message_id=%s",
-                wa_id,
+                mask_identifier(wa_id),
                 metadata.get("message_id"),
             )
             return {"status": "duplicate_ignored"}
 
     logger.info(
-        "WhatsApp incoming wa_id=%s message_id=%s text=%s",
-        wa_id,
+        "event=whatsapp_message_received wa_id=%s message_id=%s text_length=%s",
+        mask_identifier(wa_id),
         metadata.get("message_id", ""),
-        text[:500],
+        len(text or ""),
     )
 
     try:
         session_id = await whatsapp_session_service.get_or_create_session_id(wa_id, db)
-        logger.info("WhatsApp session mapped wa_id=%s session_id=%s", wa_id, session_id)
+        logger.info("event=whatsapp_session_mapped wa_id=%s session_id=%s", mask_identifier(wa_id), session_id)
 
         interaction_result = await whatsapp_interaction_service.handle_incoming(
             wa_id=wa_id,
@@ -99,7 +106,12 @@ async def handle_webhook_payload(payload: dict[str, Any], db: AsyncSession) -> d
             db=db,
         )
         if interaction_result:
-            logger.info("WhatsApp interaction handled wa_id=%s result=%s", wa_id, interaction_result)
+            logger.info(
+                "event=whatsapp_interaction_handled wa_id=%s status=%s handled=%s",
+                mask_identifier(wa_id),
+                interaction_result.get("status", "unknown"),
+                interaction_result.get("handled", "-"),
+            )
             await whatsapp_message_store.record_outgoing(wa_id, interaction_result)
             return {"status": "ok"}
 
@@ -130,7 +142,7 @@ async def handle_webhook_payload(payload: dict[str, Any], db: AsyncSession) -> d
             )
         logger.info(
             "WhatsApp outgoing handled wa_id=%s session_id=%s result=%s",
-            wa_id,
+            mask_identifier(wa_id),
             session_id,
             {k: v for k, v in send_result.items() if k != "body"},
         )

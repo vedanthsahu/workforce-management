@@ -76,9 +76,9 @@ $requiredFiles = @(
     ".venv\Scripts\python.exe",
     "frontend\node_modules",
     "frontend\.env.local",
-    "integrations\efacility-chatbot\backend\.venv\Scripts\python.exe",
-    "integrations\efacility-chatbot\backend\.env",
-    "integrations\efacility-chatbot\frontend\node_modules"
+    "efacility-chatbot\backend\.venv\Scripts\python.exe",
+    "efacility-chatbot\backend\.env",
+    "efacility-chatbot\frontend\node_modules"
 )
 
 foreach ($relativePath in $requiredFiles) {
@@ -143,7 +143,7 @@ try {
         -Arguments @("-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", "8000") `
         -WorkingDirectory $repositoryRoot
 
-    $chatbotBackend = Join-Path $repositoryRoot "integrations\efacility-chatbot\backend"
+    $chatbotBackend = Join-Path $repositoryRoot "efacility-chatbot\backend"
     $processes += Start-LoggedProcess -Name "chatbot-api" `
         -FilePath (Join-Path $chatbotBackend ".venv\Scripts\python.exe") `
         -Arguments @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8100") `
@@ -157,7 +157,7 @@ try {
     $processes += Start-LoggedProcess -Name "chatbot-frontend" `
         -FilePath "npm.cmd" `
         -Arguments @("run", "start", "--", "-H", "localhost", "-p", "4200") `
-        -WorkingDirectory (Join-Path $repositoryRoot "integrations\efacility-chatbot\frontend")
+        -WorkingDirectory (Join-Path $repositoryRoot "efacility-chatbot\frontend")
 
     $processes | ConvertTo-Json | Set-Content -LiteralPath $pidFile -Encoding UTF8
 

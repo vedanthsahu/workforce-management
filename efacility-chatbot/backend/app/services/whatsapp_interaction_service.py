@@ -65,9 +65,9 @@ class WhatsAppInteractionService:
         if not state:
             return None
         logger.info(
-            "WhatsApp interaction incoming wa_id=%s text=%s state=%s",
+            "event=whatsapp_interaction_received wa_id=%s text_length=%s state=%s",
             self._mask_wa_id(wa_id),
-            self._safe_text(text),
+            len(text or ""),
             self._state_summary(state),
         )
 
@@ -299,10 +299,10 @@ class WhatsAppInteractionService:
             value = self._value_for_display_text(text, field, state)
         if value is None:
             logger.info(
-                "WhatsApp dynamic label did not match wa_id=%s field=%s text=%s cached=%s",
+                "event=whatsapp_dynamic_label_unmatched wa_id=%s field=%s text_length=%s cached=%s",
                 self._mask_wa_id(wa_id),
                 field.key,
-                self._safe_text(text),
+                len(text or ""),
                 len(state.get("option_cache", {}).get(field.key) or []),
             )
             return None
