@@ -43,9 +43,12 @@ export function useManageSeats() {
     seats,
     stats,
     loading: statsLoading,
+    isDirty,
     fetchSeats,
     updateSeat,
     markDirty,
+    markSeatDirty,
+    clearDirty,
   } = useSeatsStore();
 
   // ── Layout ─────────────────────────────────────────────────────────────
@@ -108,6 +111,20 @@ export function useManageSeats() {
     });
   }, [seats, filters]);
 
+  // Whether a filter is actually narrowing the seat list — driven by the
+  // filter inputs themselves, not by comparing filteredSeats.length to
+  // seats.length. Those two aren't equivalent: a real, active filter can
+  // still land on the same count as the full seat list (e.g. by coincidence,
+  // or if `seats` and the matched subset happen to be the same size), and
+  // that shouldn't be read as "no filter applied" — doing so was silently
+  // skipping the map's yellow highlight for genuine filter matches.
+  const hasActiveFilters =
+    filters.search.trim() !== "" ||
+    filters.seat_type !== "All" ||
+    filters.status    !== "All" ||
+    filters.bookable  !== "All" ||
+    filters.amenity   !== "All";
+
   // Static list — always show all types regardless of what's configured
   const seatTypes = ["All", "STANDARD", "WINDOW", "CABIN", "ACCESSIBLE", "HOT_DESK"];
 
@@ -140,18 +157,25 @@ export function useManageSeats() {
   const closeEditPanel = useCallback(() => setEditingSeat(null), []);
 
   // ── Save seat ──────────────────────────────────────────────────────────
+  // For an already-published layout, edits are staged locally only (no PATCH)
+  // until the admin explicitly publishes — see usePublishLayout, which flushes
+  // everything tracked by markSeatDirty before re-syncing the live layout.
   const saveSeat = useCallback(async (payload: SeatUpdatePayload) => {
     const seat = seats.find((s) => s.seat_svg_id === payload.seat_svg_id);
     if (!seat) throw new Error("Seat not found");
 
-    await configureSeat(seat.layout_seat_mapping_id, {
-      seat_name:   seat.seat_code,
-      seat_type:   payload.seat_type,
-      status:      payload.status,
-      is_bookable: payload.is_bookable,
-      is_reserved: seat.is_reserved,
-      amenity_ids: payload.amenity_ids.map(Number),
-    });
+    const isPublished = layout?.is_published === true;
+
+    if (!isPublished) {
+      await configureSeat(seat.layout_seat_mapping_id, {
+        seat_name:   seat.seat_code,
+        seat_type:   payload.seat_type,
+        status:      payload.status,
+        is_bookable: payload.is_bookable,
+        is_reserved: seat.is_reserved,
+        amenity_ids: payload.amenity_ids.map(Number),
+      });
+    }
 
     const updated: Seat = {
       ...seat,
@@ -161,10 +185,17 @@ export function useManageSeats() {
       is_configured: true,
       amenity_ids:   payload.amenity_ids,
       notes:         payload.notes ?? seat.notes,
+      has_unpublished_changes: isPublished ? true : seat.has_unpublished_changes,
     };
 
     updateSeat(updated);
-    markDirty();
+
+    if (isPublished) {
+      markSeatDirty(seat.layout_seat_mapping_id);
+    } else {
+      markDirty();
+    }
+
     setEditingSeat(null);
     setSelected((prev) => {
       const next = new Set(prev);
@@ -173,7 +204,7 @@ export function useManageSeats() {
     });
 
     return updated;
-  }, [seats, updateSeat, markDirty]);
+  }, [seats, layout?.is_published, updateSeat, markDirty, markSeatDirty]);
 
   // ── Bulk edit ──────────────────────────────────────────────────────────
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -185,23 +216,53 @@ export function useManageSeats() {
     const affectedSeats = seats.filter((s) => payload.seat_svg_ids.includes(s.seat_svg_id));
     if (affectedSeats.length === 0) return;
 
-    const mappingIds = affectedSeats.map((s) => s.layout_seat_mapping_id);
-    const first      = affectedSeats[0];
+    const mappingIds  = affectedSeats.map((s) => s.layout_seat_mapping_id);
+    const first        = affectedSeats[0];
+    const isPublished  = layout?.is_published === true;
 
-    await bulkConfigureSeats(mappingIds, {
+    const resolvedPayload = {
       seat_type:   payload.seat_type   ?? first.seat_type   ?? "STANDARD",
       status:      payload.status      ?? first.status      ?? "ACTIVE",
       is_bookable: payload.is_bookable ?? first.is_bookable ?? true,
       is_reserved: first.is_reserved,
       amenity_ids: (payload.amenity_ids ?? first.amenity_ids).map(Number),
-    });
+    };
 
-    await fetchSeats(layoutId);
-    markDirty();
+    if (isPublished) {
+      // Local-only: apply to every affected seat's in-memory state and stage
+      // it for the Publish flush. Deliberately no fetchSeats() here — nothing
+      // changed server-side yet, and refetching would overwrite these edits
+      // with the still-unchanged server state.
+      affectedSeats.forEach((seat) => {
+        updateSeat({
+          ...seat,
+          seat_type:     resolvedPayload.seat_type,
+          status:        resolvedPayload.status,
+          is_bookable:   resolvedPayload.is_bookable,
+          is_configured: true,
+          amenity_ids:   resolvedPayload.amenity_ids.map(String),
+          has_unpublished_changes: true,
+        });
+        markSeatDirty(seat.layout_seat_mapping_id);
+      });
+    } else {
+      await bulkConfigureSeats(mappingIds, resolvedPayload);
+      await fetchSeats(layoutId);
+      markDirty();
+    }
 
     clearSelection();
     setBulkOpen(false);
-  }, [seats, layoutId, clearSelection, fetchSeats, markDirty]);
+  }, [seats, layout?.is_published, layoutId, clearSelection, fetchSeats, markDirty, markSeatDirty, updateSeat]);
+
+  // ── Discard pending changes (already-published layout only) ────────────
+  // Nothing was ever written server-side, so "discarding" just means
+  // re-fetching the true server state and clearing the local dirty markers.
+  const discardChanges = useCallback(async () => {
+    if (!layoutId) return;
+    await fetchSeats(layoutId);
+    clearDirty();
+  }, [layoutId, fetchSeats, clearDirty]);
 
   // ── View toggle ────────────────────────────────────────────────────────
   const [view, setView] = useState<ViewMode>("list");
@@ -234,10 +295,15 @@ export function useManageSeats() {
     // seats
     seats,
     filteredSeats,
+    hasActiveFilters,
     filters,
     updateFilter,
     resetFilters,
     seatTypes,
+
+    // unpublished (local-only) edits on an already-published layout
+    isDirty,
+    discardChanges,
 
     // preferences
     preferences,

@@ -15,6 +15,9 @@ import LayoutStatCards from "@/features/managelayout/components/Layoutstatcards"
 import { usePublishLayout } from "@/features/managelayout/hooks/useLayoutDetails";
 import { useLayoutsStore } from "@/store/useLayoutsStore";
 import { ManageSeatsSkeleton } from "@/features/managelayout1/components/ManageSeatsSkeleton";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
+import { useNavigationGuardStore } from "@/store/useNavigationGuardStore";
 
 function ManageSeatsPage() {
   const router = useRouter();
@@ -35,6 +38,7 @@ function ManageSeatsPage() {
     statsLoading,
     seats,
     filteredSeats,
+    hasActiveFilters,
     filters,
     updateFilter,
     resetFilters,
@@ -56,10 +60,13 @@ function ManageSeatsPage() {
     saveBulk,
     view,
     setView,
+    isDirty,
+    discardChanges,
   } = useManageSeats();
 
   const {
     publishing,
+    publishError,
     canPublish,
     allConfigured,
     publishLayout,
@@ -76,6 +83,26 @@ function ManageSeatsPage() {
       );
     }
   );
+
+  // Edits to an already-published layout are staged locally until the admin
+  // publishes. There's no standalone "Discard" button on the page — discard
+  // only happens through the shared leave-confirmation dialog below, so
+  // trying to navigate away (sidebar, back button, browser back/refresh) is
+  // the one and only place it's offered.
+  const hasUnpublishedEdits = !!layout?.is_published && isDirty;
+  useUnsavedChangesGuard(
+    hasUnpublishedEdits,
+    "You have unpublished seat changes. If you leave now, they will be lost.",
+    discardChanges
+  );
+  const { requestNavigation } = useNavigationGuardStore();
+
+  const [showPublishConfirm, setShowPublishConfirm] = useState(false);
+
+  const handleConfirmPublish = async () => {
+    await publishLayout();
+    setShowPublishConfirm(false);
+  };
 
   const panelOpen = !!editingSeat;
 
@@ -129,14 +156,14 @@ function ManageSeatsPage() {
             </div>
             <div className="flex gap-3 items-center">
               <button
-                onClick={() => router.back()}
+                onClick={() => requestNavigation(() => router.back())}
                 className="flex items-center gap-2 border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-md text-sm hover:bg-gray-50 transition-colors"
               >
                 <ArrowLeft className="w-4 h-4" />
                 Back to Layout
               </button>
               <button
-                onClick={publishLayout}
+                onClick={() => setShowPublishConfirm(true)}
                 disabled={!canPublish || publishing}
                 title={!allConfigured ? `Configure all seats before publishing` : undefined}
                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
@@ -152,6 +179,12 @@ function ManageSeatsPage() {
               </button>
             </div>
           </div>
+
+          {publishError && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-3 text-sm text-red-600">
+              Failed to publish. Your pending changes are safe and were not lost — please try again.
+            </div>
+          )}
 
           {/* STAT CARDS */}
           <LayoutStatCards stats={stats} loading={statsLoading} />
@@ -179,7 +212,7 @@ function ManageSeatsPage() {
               className="w-full lg:flex-1 lg:min-w-0 bg-white rounded-xl border border-gray-200 flex flex-col overflow-hidden"
               style={{ height: tableHeight ?? "auto" }}
             >
-              <div className="flex-1 overflow-y-auto py-4">
+              <div className="flex-1 overflow-y-auto px-4 py-4">
                 {view === "map" ? (
                   <LayoutPreview
                     layout={layout}
@@ -188,6 +221,7 @@ function ManageSeatsPage() {
                     preferences={preferences}
                     onSeatSave={saveSeat}
                     filteredSeats={filteredSeats}
+                    isFilterActive={hasActiveFilters}
                   />
                 ) : (
                   <SeatTable
@@ -235,6 +269,20 @@ function ManageSeatsPage() {
           onSave={saveBulk}
         />
       )}
+
+      <ConfirmDialog
+        open={showPublishConfirm}
+        title={hasUnpublishedEdits ? "Publish pending seat changes?" : "Publish this layout?"}
+        description={
+          hasUnpublishedEdits
+            ? "This will save your seat changes and make them live immediately for everyone booking this floor."
+            : "This will make this layout the live layout for its floor."
+        }
+        confirmLabel={publishing ? "Publishing…" : "Yes, Publish"}
+        loading={publishing}
+        onConfirm={handleConfirmPublish}
+        onClose={() => setShowPublishConfirm(false)}
+      />
     </div>
   );
 }

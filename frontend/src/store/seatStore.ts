@@ -4,24 +4,30 @@ import { LayoutSeatStats } from "@/features/managelayout/types/layout.types";
 import { fetchLayoutSeats } from "@/features/managelayout1/services/seatService";
 
 interface SeatsState {
-  seats:      Seat[];
-  stats:      LayoutSeatStats | null;
-  loading:    boolean;
-  layoutId:   string | null;
-  isDirty:    boolean;
-  fetchSeats: (layoutId: string) => Promise<void>;
-  updateSeat: (updated: Seat) => void;
-  resetSeats: () => void;
-  markDirty:  () => void;
-  clearDirty: () => void;
+  seats:           Seat[];
+  stats:           LayoutSeatStats | null;
+  loading:         boolean;
+  layoutId:        string | null;
+  isDirty:         boolean;
+  // layout_seat_mapping_ids edited locally (already-published layout) since
+  // the last publish/discard — the exact set that publishLayout must flush
+  // to the server before it re-syncs the live `seats` table.
+  dirtyMappingIds: Set<string>;
+  fetchSeats:      (layoutId: string) => Promise<void>;
+  updateSeat:      (updated: Seat) => void;
+  resetSeats:      () => void;
+  markDirty:       () => void;
+  markSeatDirty:   (mappingId: string) => void;
+  clearDirty:      () => void;
 }
 
 export const useSeatsStore = create<SeatsState>((set) => ({
-  seats:    [],
-  stats:    null,
-  loading:  false,
-  layoutId: null,
-  isDirty:  false,
+  seats:           [],
+  stats:           null,
+  loading:         false,
+  layoutId:        null,
+  isDirty:         false,
+  dirtyMappingIds: new Set(),
 
   fetchSeats: async (layoutId: string) => {
     set({ loading: true, layoutId });
@@ -56,8 +62,17 @@ export const useSeatsStore = create<SeatsState>((set) => ({
     });
   },
 
-  resetSeats: () => set({ seats: [], stats: null, layoutId: null, isDirty: false }),
+  resetSeats: () =>
+    set({ seats: [], stats: null, layoutId: null, isDirty: false, dirtyMappingIds: new Set() }),
 
-  markDirty:  () => set({ isDirty: true }),
-  clearDirty: () => set({ isDirty: false }),
+  markDirty: () => set({ isDirty: true }),
+
+  markSeatDirty: (mappingId: string) =>
+    set((state) => {
+      const next = new Set(state.dirtyMappingIds);
+      next.add(mappingId);
+      return { dirtyMappingIds: next, isDirty: true };
+    }),
+
+  clearDirty: () => set({ isDirty: false, dirtyMappingIds: new Set() }),
 }));

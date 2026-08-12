@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
+import { UnsavedChangesDialog } from "@/components/layout/UnsavedChangesDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -128,6 +129,8 @@ export default function MainLayout({
           {children}
         </div>
       </div>
+
+      <UnsavedChangesDialog />
     </SidebarProvider>
   );
 }

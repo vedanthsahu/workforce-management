@@ -74,6 +74,21 @@ function ConfiguredPill({ configured }: { configured: boolean }) {
   );
 }
 
+// Shown next to the Configuration pill for a seat edited locally on an
+// already-published layout — a reminder that this change isn't in the
+// database yet and will be lost unless the admin publishes.
+function PendingPill() {
+  return (
+    <span
+      title="Edited locally — not saved until you publish"
+      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border bg-orange-50 text-orange-700 border-orange-200"
+    >
+      <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+      Pending
+    </span>
+  );
+}
+
 function SortIcon({ active, order }: { active: boolean; order: SortOrder }) {
   if (!active) return <ArrowUp size={11} className="opacity-25" />;
   return order === "asc"
@@ -300,7 +315,10 @@ export default function SeatTable({
                     </td>
 
                     <td className="px-4 py-3">
-                      <ConfiguredPill configured={seat.is_configured} />
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <ConfiguredPill configured={seat.is_configured} />
+                        {seat.has_unpublished_changes && <PendingPill />}
+                      </div>
                     </td>
                     <td className="px-9 py-3 text-right">
                       <button

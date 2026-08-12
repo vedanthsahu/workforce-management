@@ -36,12 +36,27 @@ function isRoomSvgId(svgId: string): boolean {
   return ROOM_SVG_ID_PATTERN.test(svgId);
 }
 
+// Escapes regex metacharacters so seat ids containing them (e.g. "F9.1",
+// "Group (2)") can be safely interpolated into a RegExp instead of being
+// misinterpreted as pattern syntax.
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function recolorGroup(svgText: string, id: string, fill: string): string {
-  const re = new RegExp(`(<g[^>]*\\bid="${id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "m");
+  // "g" flag: some exported floor plans reuse the same <g id="..."> more than
+  // once (e.g. a duplicated furniture block that wasn't re-keyed). Without
+  // it, String.replace only recolors the first occurrence, leaving whichever
+  // copy actually renders on screen untouched.
+  const re = new RegExp(`(<g[^>]*\\bid="${escapeRegExp(id)}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "gm");
   return svgText.replace(re, (_m, open, inner, close) => {
+    // fill="none" (and fill:none) are deliberately transparent — outlines,
+    // cutouts, gaps between an icon's parts. Overwriting those too flattens
+    // the whole group into one solid-color block, erasing the icon's shape
+    // instead of just recoloring its visible parts.
     const colored = inner
-      .replace(/fill="[^"]*"/g, `fill="${fill}"`)
-      .replace(/fill:[^;"}\s]*/g, `fill:${fill}`);
+      .replace(/fill="(?!none")[^"]*"/g, `fill="${fill}"`)
+      .replace(/fill:(?!none)[^;"}\s]*/g, `fill:${fill}`);
     return `${open}${colored}${close}`;
   });
 }
@@ -51,19 +66,13 @@ function applyColors(svgText: string, seats: Seat[]): string {
   for (const seat of seats) {
     const id = seat.seat_svg_id;
 
-    // Unconfigured — leave the original artwork colors, desk or room, until
-    // an admin actually configures it.
-    if (!seat.is_configured) continue;
+    // Cabins/conference/meeting rooms are never recolored on the admin
+    // side — they always keep the floor plan's original artwork colors.
+    if (isRoomSvgId(id)) continue;
 
-    if (isRoomSvgId(id)) {
-      // Configured rooms only recolor when explicitly non-bookable/inactive,
-      // and just a flat grey rather than the red/amber distinction used for
-      // desks — a bookable room still keeps its original artwork colors.
-      const isNotBookable = seat.status === "INACTIVE" || !seat.is_bookable;
-      if (!isNotBookable) continue;
-      result = recolorGroup(result, id, "#D1D5DB");
-      continue;
-    }
+    // Unconfigured — leave the original artwork colors until an admin
+    // actually configures it.
+    if (!seat.is_configured) continue;
 
     result = recolorGroup(result, id, resolveSeatFill(seat));
   }

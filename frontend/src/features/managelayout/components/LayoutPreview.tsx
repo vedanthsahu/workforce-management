@@ -8,6 +8,7 @@ import {
 import { Layout } from "../types/layout.types";
 import { Preference, Seat, SeatStatus, SeatType, SeatUpdatePayload } from "@/features/managelayout1";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
+import { extractSeatIds } from "@/lib/svg/extractSeatIds";
 
 interface LayoutPreviewProps {
   layout: Layout | null;
@@ -17,6 +18,12 @@ interface LayoutPreviewProps {
   preferences?: Preference[];
   onSeatSave?: (payload: SeatUpdatePayload) => Promise<unknown>;
   filteredSeats?: Seat[];
+  // Explicit "a filter is actually applied" signal from the caller — must be
+  // derived from the filter inputs, not inferred here by comparing
+  // filteredSeats.length to seats.length. That comparison can land on equal
+  // counts even when a real filter is active, which used to make the map
+  // silently skip the yellow highlight for genuine matches.
+  isFilterActive?: boolean;
 }
 
 // ─── SVG Helpers ──────────────────────────────────────────────────────────────
@@ -25,17 +32,6 @@ function resolveUrl(url: string): string {
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
   if (typeof window !== "undefined") return `${window.location.origin}${url}`;
   return url;
-}
-
-function extractSeatIds(svgText: string): string[] {
-  const ids: string[] = [];
-  const seatIdPattern = /^\d+$|^[A-Z]+-.*-\d+$/;
-  const regex = /<g\s+id="([^"]+)"/g;
-  let match;
-  while ((match = regex.exec(svgText)) !== null) {
-    if (seatIdPattern.test(match[1])) ids.push(match[1]);
-  }
-  return ids;
 }
 
 // Reads the uploaded layout's actual canvas size from its own <svg viewBox>
@@ -101,22 +97,43 @@ function isRoomSvgId(svgId: string): boolean {
   return ROOM_SVG_ID_PATTERN.test(svgId);
 }
 
+// Escapes regex metacharacters so seat ids containing them (e.g. "F9.1",
+// "Group (2)") can be safely interpolated into a RegExp instead of being
+// misinterpreted as pattern syntax.
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function recolorGroup(svgText: string, id: string, fill: string): string {
-  const groupRegex = new RegExp(`(<g[^>]*id="${id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "m");
+  // "g" flag: some exported floor plans reuse the same <g id="..."> more than
+  // once (e.g. a duplicated furniture block that wasn't re-keyed). Without
+  // it, String.replace only recolors the first occurrence, leaving whichever
+  // copy actually renders on screen untouched.
+  const groupRegex = new RegExp(`(<g[^>]*id="${escapeRegExp(id)}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "gm");
   return svgText.replace(groupRegex, (_match, open, inner, close) => {
+    // fill="none" (and fill:none) are deliberately transparent — outlines,
+    // cutouts, gaps between an icon's parts. Overwriting those too flattens
+    // the whole group into one solid-color block, erasing the icon's shape
+    // instead of just recoloring its visible parts.
     const colored = inner
-      .replace(/fill="[^"]*"/g, `fill="${fill}"`)
-      .replace(/fill:[^;"}\s]*/g, `fill:${fill}`);
+      .replace(/fill="(?!none")[^"]*"/g, `fill="${fill}"`)
+      .replace(/fill:(?!none)[^;"}\s]*/g, `fill:${fill}`);
     return `${open}${colored}${close}`;
   });
 }
 
-function colorSeats(svgText: string, seats: Seat[], filteredIds?: Set<string>): string {
+function colorSeats(svgText: string, seats: Seat[], filteredIds: Set<string> | undefined, isFilterActive: boolean): string {
   let result = svgText;
-  const hasFilter = filteredIds !== undefined && filteredIds.size !== seats.length;
+  const hasFilter = isFilterActive && filteredIds !== undefined;
 
   seats.forEach((seat) => {
     const id = seat.seat_svg_id;
+
+    // Cabins/conference/meeting rooms are never recolored on the admin
+    // side — no status/bookable grey, no filter highlight — they always
+    // keep the floor plan's original artwork colors.
+    if (isRoomSvgId(id)) return;
+
     const isHighlighted = hasFilter && filteredIds!.has(id);
 
     if (isHighlighted) {
@@ -124,19 +141,16 @@ function colorSeats(svgText: string, seats: Seat[], filteredIds?: Set<string>): 
       return;
     }
 
-    // Unconfigured — leave the floor plan's original artwork colors, desk or
-    // room, until an admin actually configures it.
-    if (!seat.is_configured) return;
-
-    if (isRoomSvgId(id)) {
-      // Configured rooms only recolor when explicitly non-bookable/inactive,
-      // and just a flat grey rather than the red/amber distinction used for
-      // desks — a bookable room still keeps its original artwork colors.
-      const isNotBookable = seat.status === "INACTIVE" || !seat.is_bookable;
-      if (!isNotBookable) return;
-      result = recolorGroup(result, id, "#D1D5DB");
+    // Edited locally on an already-published layout but not yet published —
+    // flag it distinctly so the admin can see at a glance what will change.
+    if (seat.has_unpublished_changes) {
+      result = recolorGroup(result, id, "#FB923C"); // Pending — orange
       return;
     }
+
+    // Unconfigured — leave the floor plan's original artwork colors until an
+    // admin actually configures it.
+    if (!seat.is_configured) return;
 
     result = recolorGroup(result, id, resolveSeatFill(seat));
   });
@@ -425,6 +439,7 @@ export default function LayoutPreview({
   preferences = [],
   onSeatSave,
   filteredSeats,
+  isFilterActive = false,
 }: LayoutPreviewProps) {
   const wrapperRef   = useRef<HTMLDivElement>(null);
   const transformRef = useRef<HTMLDivElement>(null);
@@ -473,7 +488,7 @@ export default function LayoutPreview({
         const fluid = text
           .replace(/\bwidth="[^"]*"/, 'width="100%"')
           .replace(/\bheight="[^"]*"/, 'height="100%"');
-        const ids = extractSeatIds(fluid);
+        const ids = extractSeatIds(fluid, "LayoutPreview");
         seatIdsRef.current = new Set(ids);
         setRawSvg(onSeatSave ? addPointerCursors(fluid, ids) : fluid);
       })
@@ -497,8 +512,8 @@ export default function LayoutPreview({
 
   const coloredSvg = useMemo(() => {
     if (!rawSvg || seats.length === 0) return rawSvg;
-    return colorSeats(rawSvg, seats, filteredIds);
-  }, [rawSvg, seats, filteredIds]);
+    return colorSeats(rawSvg, seats, filteredIds, isFilterActive);
+  }, [rawSvg, seats, filteredIds, isFilterActive]);
 
   const displaySvg = useMemo(() => {
     if (!coloredSvg || !clickedSeat || !dialogOpen) return coloredSvg;
