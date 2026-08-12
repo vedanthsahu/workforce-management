@@ -105,9 +105,8 @@ export async function bulkConfigureSeats(
   mappingIds: string[],
   payload: Omit<SeatConfigPayload, "seat_name">
 ): Promise<void> {
-  await Promise.all(
-    mappingIds.map((id) =>
-      axiosInstance.patch(`/layout-seats/${id}/configuration`, payload)
-    )
-  );
+  await axiosInstance.patch(`/layout-seats/bulk-configuration`, {
+    layout_seat_mapping_ids: mappingIds.map(Number),
+    ...payload,
+  });
 }

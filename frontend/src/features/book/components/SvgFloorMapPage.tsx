@@ -15,6 +15,7 @@ import {
   PREFERENCE_MATCH_CONFIG,
 } from "../utils/constants";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
+import { extractSeatIds } from "@/lib/svg/extractSeatIds";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface SeatWithSvgId extends Seat {
@@ -29,19 +30,6 @@ export interface SeatWithSvgId extends Seat {
     total_available_days: number;
     availability_percentage: number;
   } | null;
-}
-
-// ─── Extract all <g id="..."> values from raw SVG text ───────────────────────
-
-function extractSeatIds(svgText: string): string[] {
-  const ids: string[] = [];
-  const seatIdPattern = /^\d+$|^[A-Z]+-.*-\d+$/;
-  const regex = /<g\s+id="([^"]+)"/g;
-  let match;
-  while ((match = regex.exec(svgText)) !== null) {
-    if (seatIdPattern.test(match[1])) ids.push(match[1]);
-  }
-  return ids;
 }
 
 // Reads the uploaded layout's actual canvas size from its own <svg viewBox>
@@ -92,10 +80,11 @@ const FALLBACK_FILL: Record<string, string> = {
 
 // Cabin/conference/meeting room seats are grouped under one svg id containing
 // a "CBN"/"CFR"/"MR" segment (e.g. "HYD-PRV-F11-CBN-04", "HYD-PRV-F11-CFR-02",
-// "HYD-PRV-F11-MR-01"), not a dedicated field. When available, they keep the
-// floor plan's original artwork colors instead of being flooded with a solid
-// status fill (while staying clickable); when booked/unavailable/selected
-// they still recolor like any other seat.
+// "HYD-PRV-F11-MR-01"), not a dedicated field. When available, best/partial
+// match, or selected, they keep the floor plan's original artwork colors
+// instead of being flooded with a solid status fill (while staying
+// clickable, and while selected still showing the pulse/glow highlight);
+// when booked/unavailable they still recolor like any other seat.
 const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr)([-_]|$)/i;
 
 function isRoomSvgId(svgId: string): boolean {
@@ -112,21 +101,62 @@ function getPaletteKey(seat: SeatWithSvgId, isSelected: boolean): string {
   return "available";
 }
 
+// Finds the closing "</g>" tag that actually matches the group opened at
+// `start`, by tracking <g ...> opens vs </g> closes (depth-aware) instead of
+// naively taking the first "</g>" found after `start`. Room groups (CBN/CFR/
+// MR) contain nested <g> sub-groups — a naive indexOf("</g>", start) would
+// close the first inner sub-group instead of the room's own outer group,
+// causing only a small/arbitrary fragment of the room to be affected by any
+// recoloring below (which is what produced inconsistent results between
+// different rooms depending on how their first nested group happened to be
+// sized/positioned).
+function findMatchingGroupEnd(svg: string, start: number): number {
+  const tagRegex = /<g\b[^>]*>|<\/g>/g;
+  tagRegex.lastIndex = start;
+  let depth = 0;
+  let match: RegExpExecArray | null;
+  while ((match = tagRegex.exec(svg)) !== null) {
+    if (match[0] === "</g>") {
+      depth--;
+      if (depth === 0) return match.index;
+    } else {
+      depth++;
+    }
+  }
+  return -1;
+}
+
 function recolorSeat(svg: string, svgId: string, paletteKey: string): string {
   const p = SEAT_PALETTES[paletteKey] ?? SEAT_PALETTES.unloaded;
   const openTag = `<g id="${svgId}">`;
   const start = svg.indexOf(openTag);
   if (start === -1) return svg;
-  const end = svg.indexOf("</g>", start);
+  const end = findMatchingGroupEnd(svg, start);
   if (end === -1) return svg;
   const before = svg.slice(0, start);
   let block = svg.slice(start, end + 4);
   const after = svg.slice(end + 4);
 
-  const isAvailableFamily = paletteKey === "available" || paletteKey === "best_match" || paletteKey === "partial_match";
-  const skipRoomColor = isRoomSvgId(svgId) && isAvailableFamily;
+  // Rooms keep their original artwork (no flood-fill) for available, best
+  // match, partial match, AND selected — selection is communicated purely
+  // via the border/glow pulse added below, not a solid fill.
+  const isAvailableFamily =
+    paletteKey === "available" ||
+    paletteKey === "best_match" ||
+    paletteKey === "partial_match" ||
+    paletteKey === "selected";
+  const isRoom = isRoomSvgId(svgId);
+  const skipRoomColor = isRoom && isAvailableFamily;
+  // Booked/unavailable rooms: never flood-fill every path to one flat color
+  // like a regular seat — a room is full illustrated artwork (table, chairs,
+  // plants…), not a single-shape chair icon, so replacing every fill turns
+  // it into one opaque grey blob with all detail gone. Instead leave the
+  // artwork's own colors alone and desaturate + dim the whole group via a
+  // CSS filter/opacity, so it still reads as "this room" — just a
+  // transparent grey overlay, not a solid block.
+  const isGreyedRoom = isRoom && !isAvailableFamily;
 
-  if (!skipRoomColor) {
+  if (!skipRoomColor && !isGreyedRoom) {
     const beforeRecolor = block;
     block = block.replace(/fill="#C8C8C8" stroke="#888888"/g, `fill="${p.body}" stroke="${p.bodyStroke}"`);
     block = block.replace(/fill="#B0B0B0" stroke="#888888"/g, `fill="${p.armrest}" stroke="${p.bodyStroke}"`);
@@ -149,11 +179,52 @@ function recolorSeat(svg: string, svgId: string, paletteKey: string): string {
 
   const isClickable = ["available", "best_match", "partial_match", "yours", "selected"].includes(paletteKey);
   const isSelected = paletteKey === "selected";
+  // Rooms (cabin/conference/meeting) get a darker selection glow than
+  // individual seats — a large room filled with original artwork reads as
+  // washed-out under the same lighter indigo used for small seat icons, so
+  // it gets its own (darker) pulse class instead of reusing "_sel-pulse".
+  const pulseClass = isSelected ? (isRoom ? "_sel-pulse-room" : "_sel-pulse") : "";
+  const groupOpacity = isGreyedRoom ? "0.45" : p.opacity;
+  const roomGreyFilter = isGreyedRoom ? "filter:grayscale(1) saturate(0.5);" : "";
   block = block.replace(
     `<g id="${svgId}">`,
-    `<g id="${svgId}"${isSelected ? ` class="_sel-pulse"` : ""} style="opacity:${p.opacity};cursor:${isClickable ? "pointer" : "default"}">`
+    `<g id="${svgId}"${pulseClass ? ` class="${pulseClass}"` : ""} style="opacity:${groupOpacity};cursor:${isClickable ? "pointer" : "default"};${roomGreyFilter}">`
   );
   return before + block + after;
+}
+
+// Moves the given svgId's <g> block to just before </svg> so it always
+// paints last — on top of every sibling — regardless of its original
+// position in the file. Needed because adjacent rooms/seats are frequently
+// drawn as flush, zero-gap shapes sharing a wall edge; whichever one is
+// earlier in source order has its selection glow (a drop-shadow filter)
+// overdrawn along that shared edge by whatever neighbor comes after it in
+// paint order, making the glow look like it's missing on one or more sides
+// instead of fully surrounding the room. Relocating the selected element's
+// markup guarantees it's always the topmost thing drawn.
+//
+// This only repositions the element in paint order, not on screen: it's
+// safe as long as no ancestor <g> between the element and the root carries
+// a `transform` the element depends on for its position (a clip-path alone
+// is fine, since clipping to the full canvas is a no-op for content already
+// inside it). If your SVG source ever adds transforms on wrapper groups,
+// this function would need to account for them (e.g. by reading and
+// re-applying the cumulative transform to the moved block).
+function bringToFront(svg: string, svgId: string): string {
+  // Match by the `id="..."` attribute rather than the exact original
+  // `<g id="X">` string, since recolorSeat has already rewritten this
+  // opening tag to add `class`/`style` attributes by this point.
+  const start = svg.indexOf(`<g id="${svgId}"`);
+  if (start === -1) return svg;
+  const end = findMatchingGroupEnd(svg, start);
+  if (end === -1) return svg;
+
+  const block = svg.slice(start, end + 4);
+  const withoutBlock = svg.slice(0, start) + svg.slice(end + 4);
+  const closeSvgIdx = withoutBlock.lastIndexOf("</svg>");
+  if (closeSvgIdx === -1) return svg;
+
+  return withoutBlock.slice(0, closeSvgIdx) + block + withoutBlock.slice(closeSvgIdx);
 }
 
 const SELECTED_PULSE_STYLE = `<style>
@@ -162,6 +233,11 @@ const SELECTED_PULSE_STYLE = `<style>
   50%{filter:drop-shadow(0 0 12px #6366f1) drop-shadow(0 0 24px #818cf8) brightness(1.12);}
 }
 ._sel-pulse{animation:_selGlow 1.6s ease-in-out infinite;}
+@keyframes _selGlowRoom{
+  0%,100%{filter:drop-shadow(0 0 4px #3730a3) drop-shadow(0 0 8px #4338ca);}
+  50%{filter:drop-shadow(0 0 12px #3730a3) drop-shadow(0 0 24px #4338ca) brightness(1.06);}
+}
+._sel-pulse-room{animation:_selGlowRoom 1.6s ease-in-out infinite;}
 </style>`;
 
 // svgSeatIds: dynamically extracted from the fetched SVG, not hardcoded
@@ -179,11 +255,19 @@ function buildColoredSvg(
     const key = !seat ? "unloaded" : getPaletteKey(seat, seat.id === selectedSeatId);
     svg = recolorSeat(svg, svgId, key);
   });
-  // Inject pulse keyframes when a seat is selected
+
   if (selectedSeatId) {
+    // Inject pulse keyframes
     const firstClose = svg.indexOf('>');
     if (firstClose !== -1) svg = svg.slice(0, firstClose + 1) + SELECTED_PULSE_STYLE + svg.slice(firstClose + 1);
+
+    // Bring the selected element's group to the very end of the document so
+    // its glow always paints on top of every neighboring room/seat — see
+    // bringToFront for why this is necessary.
+    const selectedSeat = seats.find((s) => s.id === selectedSeatId);
+    if (selectedSeat) svg = bringToFront(svg, selectedSeat.svgId);
   }
+
   return svg;
 }
 
@@ -632,7 +716,7 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
       })
       .then((text) => {
         // Extract <g id="..."> values dynamically — these are the seat IDs
-        const ids = extractSeatIds(text);
+        const ids = extractSeatIds(text, "SvgFloorMapPage");
         setSvgSeatIds(ids);
         svgSeatIdsSet.current = new Set(ids);
         setSvgDims(parseSvgDimensions(text));
@@ -964,6 +1048,3 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
 };
 
 export default SvgFloorMapPage;
-
-
-

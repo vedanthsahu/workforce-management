@@ -12,24 +12,14 @@ import { UploadCloud, FileCheck2, X } from "lucide-react";
 import { layoutService } from "../services/layout.service";
 import SVGPreviewModal from "./Svgpreviewmodal";
 import { Building, Floor, FloorLayoutInfo, LayoutFormState, Site } from "../types/layout.types";
- 
+import { extractSeatIds } from "@/lib/svg/extractSeatIds";
+
 interface LayoutFormProps {
   formData: LayoutFormState;
   setFormData: (data: LayoutFormState | ((prev: LayoutFormState) => LayoutFormState)) => void;
   onFloorLayoutInfo?: (info: FloorLayoutInfo | null) => void;
 }
- 
-function extractSeatIds(svgText: string): string[] {
-  const ids: string[] = [];
-  const seatIdPattern = /^\d+$|^[A-Z]+-.*-\d+$/;
-  const regex = /<g\s+id="([^"]+)"/g;
-  let match;
-  while ((match = regex.exec(svgText)) !== null) {
-    if (seatIdPattern.test(match[1])) ids.push(match[1]);
-  }
-  return ids;
-}
- 
+
 export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }: LayoutFormProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
@@ -220,15 +210,15 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
     setCountingSeats(true);
     try {
       const text = await file.text();
-      setSeatIds(extractSeatIds(text));
- 
+      setSeatIds(extractSeatIds(text, "LayoutForm"));
+
       // Make SVG fluid and store for preview
       const fluid = text
         .replace(/\bwidth="[^"]*"/, 'width="100%"')
         .replace(/\bheight="[^"]*"/, 'height="100%"');
       setSvgPreview(fluid);
     } catch (err) {
-      console.warn("[LayoutForm] Could not extract seat IDs:", err);
+      console.warn("[LayoutForm] Could not read or parse the uploaded SVG file:", err);
     } finally {
       setCountingSeats(false);
     }

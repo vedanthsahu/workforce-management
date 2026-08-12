@@ -9,6 +9,7 @@ import {
   getLayoutsByFloor,
 } from "../services/layoutService";
 import { useSeatsStore } from "@/store/seatStore";
+import { bulkConfigureSeats, SeatConfigPayload } from "@/features/managelayout1/services/seatService";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // useLayoutSeatStats
@@ -65,7 +66,7 @@ export function usePublishLayout(
   const [publishing,   setPublishing]   = useState(false);
   const [publishError, setPublishError] = useState(false);
 
-  const { isDirty, clearDirty } = useSeatsStore();
+  const { isDirty, dirtyMappingIds, seats, clearDirty, fetchSeats } = useSeatsStore();
 
   const allConfigured =
     stats != null &&
@@ -86,7 +87,45 @@ export function usePublishLayout(
     setPublishing(true);
     setPublishError(false);
     try {
+      // layout_seat_mappings is only ever written immediately for a DRAFT/
+      // ARCHIVED layout. For an already-published layout, edits since the
+      // last publish were staged locally only (Usemanageseats) and tracked
+      // by mapping id — flush them to layout_seat_mappings first, grouped by
+      // identical resulting config to keep this to a handful of sequential
+      // requests (sequential, not Promise.all, to stay under the backend's
+      // concurrency limits). If any group fails, the catch below skips
+      // clearDirty/activateLayout entirely, so the pending edits are never
+      // lost and nothing is reported as published.
+      if (layout.is_published && dirtyMappingIds.size > 0) {
+        const dirtySeats = seats.filter((s) => dirtyMappingIds.has(s.layout_seat_mapping_id));
+        const groups = new Map<string, { ids: string[]; payload: Omit<SeatConfigPayload, "seat_name"> }>();
+
+        for (const seat of dirtySeats) {
+          const payload: Omit<SeatConfigPayload, "seat_name"> = {
+            seat_type:   seat.seat_type   ?? "STANDARD",
+            status:      seat.status      ?? "ACTIVE",
+            is_bookable: seat.is_bookable ?? true,
+            is_reserved: seat.is_reserved,
+            amenity_ids: seat.amenity_ids.map(Number),
+          };
+          const key = JSON.stringify(payload);
+          if (!groups.has(key)) groups.set(key, { ids: [], payload });
+          groups.get(key)!.ids.push(seat.layout_seat_mapping_id);
+        }
+
+        for (const { ids, payload } of groups.values()) {
+          await bulkConfigureSeats(ids, payload);
+        }
+      }
+
       await activateLayout(layout.layout_id);
+
+      if (layout.is_published) {
+        // Pull canonical server state now that layout_seat_mappings/seats
+        // have been synced, rather than trusting the local optimistic values.
+        await fetchSeats(layout.layout_id);
+      }
+
       clearDirty();
       onPublishSuccess();
     } catch (err) {
@@ -95,7 +134,7 @@ export function usePublishLayout(
     } finally {
       setPublishing(false);
     }
-  }, [layout?.layout_id, onPublishSuccess, clearDirty]);
+  }, [layout, dirtyMappingIds, seats, onPublishSuccess, clearDirty, fetchSeats]);
 
   return { publishing, publishError, canPublish, allConfigured, publishLayout };
 }

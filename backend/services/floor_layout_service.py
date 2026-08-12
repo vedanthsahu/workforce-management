@@ -331,6 +331,27 @@ def activate_floor_layout(
             layout.get("is_published") is True
             and layout.get("status") == LayoutStatus.PUBLISHED.value
         ):
+            # Already the live layout for this floor -- no version change
+            # needed, but there may be pending layout_seat_mappings edits
+            # (draft isolation: edits only ever touch layout_seat_mappings,
+            # never the live `seats` projection directly) that still need
+            # syncing into `seats`. Re-running these is idempotent: they
+            # upsert/retire by (floor_id, layout_id, seat_code), so calling
+            # them again for the same already-published layout only picks up
+            # whatever changed since the last publish.
+            publish_layout_seat_configurations(
+                conn,
+                tenant_id=tenant_id,
+                layout_id=layout_id,
+                published_by_user_id=user_id,
+            )
+            reconcile_published_layout_seats(
+                conn,
+                tenant_id=tenant_id,
+                floor_id=str(layout["floor_id"]),
+                layout_id=layout_id,
+            )
+            conn.commit()
             return FloorLayoutResponse(**layout)
 
         # No unique index enforces "one published layout per floor" at the
