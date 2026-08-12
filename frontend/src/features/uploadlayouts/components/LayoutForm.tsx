@@ -100,6 +100,27 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       }));
     }
   }, [buildings, formData.building, setFormData]);
+
+  // Auto-select single building when the selected site has only one building
+  useEffect(() => {
+    if (buildings.length !== 1) return;
+    const b = buildings[0];
+    if (!b) return;
+    if (!formData.building || String(formData.building.id) !== String(b.building_id)) {
+      setFormData((prev) => ({
+        ...prev,
+        building: {
+          id: b.building_id,
+          name: b.building_name,
+          code: b.building_code ?? "",
+        },
+        floor: null,
+        layoutName: "",
+      }));
+      onFloorLayoutInfo?.(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildings]);
  
   // Load floors whenever selected building changes
   useEffect(() => {
@@ -143,6 +164,35 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       });
     }
   }, [floors, formData.floor, setFormData, onFloorLayoutInfo]);
+
+  // Auto-select single floor when the selected building has only one floor
+  useEffect(() => {
+    if (floors.length !== 1) return;
+    const f = floors[0];
+    if (!f) return;
+    if (!formData.floor || String(formData.floor.id) !== String(f.floor_id)) {
+      setFormData((prev) => ({
+        ...prev,
+        floor: {
+          id: f.floor_id,
+          name: f.floor_name ?? f.floor_code ?? "",
+          code: f.floor_code ?? "",
+        },
+      }));
+      onFloorLayoutInfo?.({
+        layoutId: f.layout_id,
+        layoutName: f.layout_name,
+        layoutStatus: f.layout_status,
+        layoutIsPublished: f.layout_is_published,
+        layoutVersionNo: f.layout_version_no,
+        layoutFileUrl: f.layout_file_url,
+        layoutCount: f.layout_count,
+        publishedByName: f.published_by_name,
+        layoutLastUpdated: f.layout_last_updated,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [floors]);
  
   // Auto-generate layout name once site, building and floor codes are known
   useEffect(() => {
@@ -320,7 +370,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                 }}
                 className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="" disabled hidden>Select a site</option>
+                <option value="" disabled hidden>Select a office</option>
                 {sites.map((s) => (
                   <option key={s.site_id} value={String(s.site_id)}>
                     {s.site_name}
