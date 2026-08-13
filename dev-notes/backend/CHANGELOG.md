@@ -371,3 +371,243 @@ content regardless).
 **Files touched**
 
 - `backend/repositories/floor_layout_repository.py`
+
+---
+
+## 2026-08-13 10:00 — Fixed: `floor_layouts.updated_by_user_id` stale on 3 of 4 seat-configuration write paths
+
+**Context**
+
+User asked why `updated_by`/`uploaded_by`/`published_by` on
+`GET /floors/{floor_id}` responses looked inconsistent, and asked for
+diagnostic SQL to confirm from the DB side before any fix ("Database is
+always the source of truth"). User ran the queries and returned results.
+
+**What was wrong**
+
+`touch_floor_layout_updated_by` (added in the 2026-08-11 15:30 entry
+above) was wired into exactly one of the four write paths that mutate
+`layout_seat_mappings`/`seats`:
+
+- `update_layout_seat_configurations_bulk` (bulk layout-seat-mapping
+  edit) — called it. Correct.
+- `update_layout_seat_configuration` (single-mapping edit,
+  `backend/services/location_service.py:333`) — did not.
+- `update_seat_configuration_metadata` (single direct-`seats` edit,
+  `location_service.py:1004`) — did not.
+- `update_seats_configuration_bulk` (bulk direct-`seats` edit,
+  `location_service.py:1073`) — did not.
+
+Confirmed empirically from the user's query results before fixing: floors
+189/190/191 had `updated_by_user_id` still `NULL` despite
+`layout_seat_mappings` rows on them being edited days after the layout was
+created — those edits went through the single-mapping endpoint, which
+never stamped it.
+
+`fetch_seat_configuration`/`update_seat_configuration`
+(`backend/repositories/location_repository.py`) also didn't `SELECT`/
+`RETURNING` a seat's `layout_id`, so the two direct-`seats`-edit service
+functions had no way to know which `floor_layouts` row to stamp even if
+they'd tried.
+
+**What changed**
+
+- `backend/repositories/location_repository.py` — `fetch_seat_configuration`
+  now selects `layout_id::text AS layout_id`; `update_seat_configuration`
+  now returns it in its `RETURNING` clause too.
+- `backend/services/location_service.py` —
+  `update_layout_seat_configuration`, `update_seat_configuration_metadata`,
+  and `update_seats_configuration_bulk` all now call
+  `touch_floor_layout_updated_by` on success. The two direct-`seats`-edit
+  functions stamp using the seat's own `layout_id` — confirmed with the
+  user this should apply even when that `layout_id` is a superseded,
+  non-published layout (deliberate: "last edited" means last edited, not
+  "last edited while live"). `update_seats_configuration_bulk` dedupes by
+  `layout_id` before stamping, so N seats sharing one layout only issue
+  one `UPDATE floor_layouts` instead of N.
+- Added regression tests: `tests/floor_layouts/test_layout_seat_configuration_service.py`
+  (single-mapping stamp), `tests/admin_management/test_admin_management_service.py`
+  (single-seat stamp + skip-when-`layout_id`-is-`NULL`),
+  `tests/admin_management/test_bulk_seat_configuration.py` (dedup-by-layout
+  across a bulk seat batch).
+
+**Verified**
+
+`python -m pytest tests/ -q` — 201 passed (up from 199; +2 new tests).
+
+**Files touched**
+
+- `backend/repositories/location_repository.py`
+- `backend/services/location_service.py`
+- `backend/tests/floor_layouts/test_layout_seat_configuration_service.py`
+- `backend/tests/admin_management/test_admin_management_service.py`
+- `backend/tests/admin_management/test_bulk_seat_configuration.py`
+
+---
+
+## 2026-08-13 11:15 — Fixed: single-seat PATCH silently skipped the live `seats`/`seat_amenities` cascade on a PUBLISHED layout
+
+**Context**
+
+After the fix above, user asked whether a broader sweep would find other
+places where a parent/summary table drifts out of sync because a
+sync/cascade helper exists but isn't called from every write path that
+should trigger it — the same bug *class* as the `updated_by_user_id` fix,
+generalized. Delegated to an Explore agent to search `repositories/` and
+`services/` for this pattern; it returned one high-confidence finding
+(reported below) plus several checked-and-ruled-out candidates
+(`reconcile_published_layout_seats`, count fields computed live via
+`COUNT(*)` rather than stored, SSO department-sync helpers — all
+single-entry-point or already comprehensively wired, no drift).
+
+**What was wrong**
+
+`update_layout_seat_configuration` (`backend/services/location_service.py:333`,
+backing `PATCH /layout-seats/{id}/configuration`) always wrote
+`layout_seat_mappings` only, with a comment claiming *"the `seats` table
+is a published projection that is rebuilt exclusively by the layout
+activate/publish flow."* That's true for DRAFT/ARCHIVED layouts, false for
+PUBLISHED ones — `update_layout_seat_configurations_bulk` (the sibling
+bulk endpoint) already cascades into `seats`/`seat_amenities` when the
+layout is PUBLISHED, precisely because a published layout has no separate
+"push to live" step for a later edit; the single-mapping endpoint's
+comment and code disagreed with that sibling's own documented rationale.
+
+Confirmed this was reachable, not theoretical: `PATCH
+/layout-seats/{id}/configuration` has no layout-status gate at the route
+or service level, and the "Manage Layout" admin action is available for
+PUBLISHED layouts (only "Discard" is DRAFT-only in the admin layout
+table). Practical effect: an admin editing one seat's status/bookability/
+amenities on an already-live floor got a `200 OK` response while the
+`seats` row that booking/availability queries actually read from stayed
+unchanged — a silent correctness bug on live data, not just a metadata
+gap.
+
+**What changed**
+
+- `backend/services/location_service.py::update_layout_seat_configuration` —
+  after updating `layout_seat_mappings`, fetches the parent layout
+  (`fetch_floor_layout_by_id`); if its status is `PUBLISHED`, cascades into
+  `seats`/`seat_amenities` via the same `upsert_operational_seat` +
+  `replace_seat_amenities` calls the bulk endpoint already used. Removed
+  the now-incorrect "draft isolation" comment; draft isolation still holds
+  for DRAFT/ARCHIVED, just not unconditionally.
+- Added regression tests in
+  `tests/floor_layouts/test_layout_seat_configuration_service.py`:
+  PUBLISHED layout cascades into `seats`/`seat_amenities` with the right
+  args; DRAFT layout still does not (draft isolation preserved).
+
+**Explicitly out of scope, flagged not fixed**: two duplicate foreign-key
+constraints (`floor_layouts_updated_by_user_id_fkey` and
+`fk_layout_updated_by_user`, both on the same column) and two duplicate
+indexes (`ix_floor_layouts_updated_by_user_id` /
+`ix_layout_updated_by_user_id`) were spotted while reading `information_schema`
+output the user supplied for the entry above. Harmless, likely a leftover
+from the no-migrations-folder direct-DB-change workflow. Not touched —
+out of scope for this fix, flagged to the user directly.
+
+**Verified**
+
+`python -m pytest tests/ -q` — 201 passed (2 new tests added, replacing
+the count from the previous entry; net same total since one earlier test
+in this file was extended rather than added-to separately).
+
+**Files touched**
+
+- `backend/services/location_service.py`
+- `backend/tests/floor_layouts/test_layout_seat_configuration_service.py`
+
+---
+
+## 2026-08-13 14:30 — Fixed: bulk layout-seat configuration rewritten from a per-seat loop to set-based SQL
+
+**Context**
+
+User flagged that a 100-seat bulk-configure request doing one DB
+round trip per seat "is bound to fail because of rate limiting or
+anything" and asked for options. Confirmed the actual cost: even though
+the whole request runs inside one DB connection/transaction, every
+`cursor.execute()` in a Python loop is still its own network round trip
+(send statement, DB parses/plans/executes, sends result back) — for 100
+seats × ~6 statements each (fetch mapping, update mapping, upsert seat,
+delete+insert-per-amenity), that's ~600 sequential round trips holding one
+transaction/row-locks open the whole time. Not a connection-pool
+exhaustion risk (one connection), but a real latency/lock-duration
+problem that gets worse linearly with batch size. Recommended set-based
+SQL (bulk `SELECT`/`UPDATE`/`INSERT` covering the whole batch in one
+statement each) as the standard fix for exactly this shape of problem —
+user agreed, with the explicit constraint that the request/response
+schema (`BulkLayoutSeatConfigurationUpdateRequest`/
+`LayoutSeatConfigurationResponse`) must not change, only the internal
+implementation.
+
+**What was wrong**
+
+`update_layout_seat_configurations_bulk` looped over `payload.seats` in
+Python, issuing one `fetch_layout_seat_mapping_by_id` SELECT and one
+`update_layout_seat_mapping_configuration` UPDATE per seat; then, if the
+layout was PUBLISHED, a second loop issuing one `upsert_operational_seat`
+INSERT and one `replace_seat_amenities` DELETE+`executemany`-INSERT per
+seat. `executemany` in psycopg2 does not batch on the wire by default —
+it sends one INSERT per row, so "N amenities across M seats" was already
+effectively N+M additional round trips beyond the per-seat count above.
+
+**What changed**
+
+Four new bulk repository functions added alongside their existing
+single-row counterparts in `backend/repositories/location_repository.py`
+(the single-row versions are untouched and still used by the single-seat
+endpoint):
+
+- `fetch_layout_seat_mappings_by_ids` — one `SELECT ... WHERE id = ANY(%s)`,
+  returns a dict keyed by mapping id.
+- `update_layout_seat_mapping_configurations_bulk` — one multi-row
+  `UPDATE layout_seat_mappings AS lsm ... FROM (VALUES (...), (...), ...)
+  AS v(...) WHERE lsm.id = v.id`, with the same per-row
+  `COALESCE(v.col, lsm.col)` "None means keep existing" semantics the
+  single-row version has via its own `COALESCE(%s, col)`.
+- `upsert_operational_seats_bulk` — one multi-row `INSERT ... ON CONFLICT
+  DO UPDATE` via `psycopg2.extras.execute_values` (auto-pages internally
+  if a batch ever exceeded a safe single-statement size; not a concern at
+  today's seat-per-floor scale but free correctness insurance). Returns a
+  dict keyed by `source_layout_mapping_id` so results map straight back to
+  the mapping each came from.
+- `replace_seat_amenities_bulk` — one `DELETE FROM seat_amenities WHERE
+  seat_id = ANY(%s)` across every touched seat, then one multi-row
+  `INSERT` via `execute_values` (true multi-row insert, unlike the
+  single-row version's `executemany`).
+
+`backend/services/location_service.py::update_layout_seat_configurations_bulk`
+rewritten to call these four instead of looping: bulk-fetch all mappings
+up front (validating presence + single-`layout_id` constraint before
+anything is written, so an invalid batch still writes nothing), bulk-
+update, then — if PUBLISHED — bulk-upsert seats and bulk-replace
+amenities, then the existing single `touch_floor_layout_updated_by` call.
+Response order is reconstructed to match request order (`ORDER BY` isn't
+guaranteed on a multi-row `UPDATE ... RETURNING`, so results are looked up
+by id from a dict rather than assumed to come back in input order). Net:
+~6 SQL statements total for a 100-seat request, not ~600. No change to
+`BulkLayoutSeatConfigurationUpdateRequest`/`LayoutSeatConfigurationResponse`
+or any other schema; no change to the single-seat endpoint or its cascade
+(previous entry) — they don't share code with these new bulk functions.
+
+Fully rewrote `tests/floor_layouts/test_bulk_layout_seat_configuration.py`
+to mock the four new bulk repository functions instead of the old
+per-loop single-row ones. Same behavioral assertions as before (response
+order, 404/400 + rollback with nothing written, draft isolation, published
+cascade, per-seat resolved values reaching the batched UPDATE correctly).
+
+**Explicitly not done in this pass**: no live Postgres instance was
+available in the working environment to execute the new multi-row SQL
+against a real DB (no `docker`, no configured DB credentials) — validated
+via `py_compile`, the mocked unit-test suite (201 passed), and manual
+review of parameter-count/placeholder alignment only. **A manual smoke
+test against a real dev DB is recommended before this is considered fully
+verified**, given it rewrites the core seat-configuration write
+transaction.
+
+**Files touched**
+
+- `backend/repositories/location_repository.py`
+- `backend/services/location_service.py`
+- `backend/tests/floor_layouts/test_bulk_layout_seat_configuration.py`

@@ -69,7 +69,10 @@ def _published_layout(layout_id: str = "100") -> dict[str, object]:
 
 
 class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
-    """Per-seat bulk layout-seat configuration. DRAFT/ARCHIVED layouts keep
+    """Per-seat bulk layout-seat configuration, now implemented as a
+    handful of set-based SQL statements (one bulk fetch, one bulk update,
+    one bulk seat upsert, one bulk amenities replace) instead of a Python
+    loop issuing one round trip per seat. DRAFT/ARCHIVED layouts keep
     draft isolation (layout_seat_mappings only); PUBLISHED layouts cascade
     the same edits into seats/seat_amenities in the same transaction."""
 
@@ -86,16 +89,20 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
 
         with (
             patch(
-                "backend.services.location_service.fetch_layout_seat_mapping_by_id",
-                side_effect=[_mapping_row("1"), _mapping_row("2"), _mapping_row("3")],
+                "backend.services.location_service.fetch_layout_seat_mappings_by_ids",
+                return_value={
+                    "1": _mapping_row("1"),
+                    "2": _mapping_row("2"),
+                    "3": _mapping_row("3"),
+                },
             ),
             patch(
-                "backend.services.location_service.update_layout_seat_mapping_configuration",
-                side_effect=[
-                    _updated_row("1", is_reserved=True),
-                    _updated_row("2", is_reserved=True),
-                    _updated_row("3", is_reserved=True),
-                ],
+                "backend.services.location_service.update_layout_seat_mapping_configurations_bulk",
+                return_value={
+                    "1": _updated_row("1", is_reserved=True),
+                    "2": _updated_row("2", is_reserved=True),
+                    "3": _updated_row("3", is_reserved=True),
+                },
             ) as mock_update,
             patch(
                 "backend.services.location_service.fetch_floor_layout_by_id",
@@ -116,10 +123,12 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
             [r.layout_seat_mapping_id for r in responses], ["1", "2", "3"]
         )
         self.assertTrue(all(r.is_reserved is True for r in responses))
-        self.assertEqual(mock_update.call_count, 3)
-        for call in mock_update.call_args_list:
-            self.assertEqual(call.kwargs["is_reserved"], True)
-            self.assertEqual(call.kwargs["updated_by"], "5")
+        mock_update.assert_called_once()
+        entries = mock_update.call_args.kwargs["entries"]
+        self.assertEqual(len(entries), 3)
+        for entry in entries:
+            self.assertEqual(entry["is_reserved"], True)
+        self.assertEqual(mock_update.call_args.kwargs["updated_by"], "5")
         mock_touch.assert_called_once_with(
             conn, tenant_id="1", layout_id="100", updated_by_user_id="5"
         )
@@ -138,15 +147,15 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
 
         with (
             patch(
-                "backend.services.location_service.fetch_layout_seat_mapping_by_id",
-                side_effect=[_mapping_row("1"), _mapping_row("2")],
+                "backend.services.location_service.fetch_layout_seat_mappings_by_ids",
+                return_value={"1": _mapping_row("1"), "2": _mapping_row("2")},
             ),
             patch(
-                "backend.services.location_service.update_layout_seat_mapping_configuration",
-                side_effect=[
-                    _updated_row("1", status="ACTIVE"),
-                    _updated_row("2", status="INACTIVE"),
-                ],
+                "backend.services.location_service.update_layout_seat_mapping_configurations_bulk",
+                return_value={
+                    "1": _updated_row("1", status="ACTIVE"),
+                    "2": _updated_row("2", status="INACTIVE"),
+                },
             ) as mock_update,
             patch(
                 "backend.services.location_service.fetch_floor_layout_by_id",
@@ -161,8 +170,11 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
                 current_user=CALLER,
             )
 
-        self.assertEqual(mock_update.call_args_list[0].kwargs["status"], "ACTIVE")
-        self.assertEqual(mock_update.call_args_list[1].kwargs["status"], "INACTIVE")
+        entries = mock_update.call_args.kwargs["entries"]
+        self.assertEqual(entries[0]["layout_seat_mapping_id"], "1")
+        self.assertEqual(entries[0]["status"], "ACTIVE")
+        self.assertEqual(entries[1]["layout_seat_mapping_id"], "2")
+        self.assertEqual(entries[1]["status"], "INACTIVE")
 
     def test_rejects_duplicate_mapping_ids_in_payload(self) -> None:
         """Silent dedup was the old behavior; a duplicate id in a per-seat
@@ -177,6 +189,9 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
             )
 
     def test_unknown_mapping_rolls_back_the_whole_batch(self) -> None:
+        """The bulk fetch simply omits ids with no matching row; any
+        requested id missing from that result must 404 and roll back
+        before the batch UPDATE is ever issued -- no partial writes."""
         conn = FakeConnection()
         payload = BulkLayoutSeatConfigurationUpdateRequest(
             seats=[
@@ -187,13 +202,12 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
 
         with (
             patch(
-                "backend.services.location_service.fetch_layout_seat_mapping_by_id",
-                side_effect=[_mapping_row("1"), None],
+                "backend.services.location_service.fetch_layout_seat_mappings_by_ids",
+                return_value={"1": _mapping_row("1")},
             ),
             patch(
-                "backend.services.location_service.update_layout_seat_mapping_configuration",
-                return_value=_updated_row("1", seat_type="STANDING_DESK"),
-            ),
+                "backend.services.location_service.update_layout_seat_mapping_configurations_bulk",
+            ) as mock_update,
         ):
             with self.assertRaises(HTTPException) as context:
                 update_layout_seat_configurations_bulk(
@@ -204,6 +218,7 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
                 )
 
         self.assertEqual(context.exception.status_code, 404)
+        mock_update.assert_not_called()
         self.assertEqual(conn.commits, 0)
         self.assertEqual(conn.rollbacks, 1)
 
@@ -218,16 +233,15 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
 
         with (
             patch(
-                "backend.services.location_service.fetch_layout_seat_mapping_by_id",
-                side_effect=[
-                    _mapping_row("1", layout_id="100"),
-                    _mapping_row("2", layout_id="200"),
-                ],
+                "backend.services.location_service.fetch_layout_seat_mappings_by_ids",
+                return_value={
+                    "1": _mapping_row("1", layout_id="100"),
+                    "2": _mapping_row("2", layout_id="200"),
+                },
             ),
             patch(
-                "backend.services.location_service.update_layout_seat_mapping_configuration",
-                return_value=_updated_row("1", status="ACTIVE"),
-            ),
+                "backend.services.location_service.update_layout_seat_mapping_configurations_bulk",
+            ) as mock_update,
         ):
             with self.assertRaises(HTTPException) as context:
                 update_layout_seat_configurations_bulk(
@@ -241,6 +255,7 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
         self.assertEqual(
             context.exception.detail["code"], "mixed_layout_bulk_request"
         )
+        mock_update.assert_not_called()
         self.assertEqual(conn.commits, 0)
         self.assertEqual(conn.rollbacks, 1)
 
@@ -254,12 +269,12 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
 
         with (
             patch(
-                "backend.services.location_service.fetch_layout_seat_mapping_by_id",
-                return_value=_mapping_row("1"),
+                "backend.services.location_service.fetch_layout_seat_mappings_by_ids",
+                return_value={"1": _mapping_row("1")},
             ),
             patch(
-                "backend.services.location_service.update_layout_seat_mapping_configuration",
-                return_value=_updated_row("1"),
+                "backend.services.location_service.update_layout_seat_mapping_configurations_bulk",
+                return_value={"1": _updated_row("1")},
             ),
             patch(
                 "backend.services.location_service.fetch_floor_layout_by_id",
@@ -267,10 +282,10 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
             ),
             patch("backend.services.location_service.touch_floor_layout_updated_by"),
             patch(
-                "backend.services.location_service.upsert_operational_seat",
-            ) as mock_upsert_seat,
+                "backend.services.location_service.upsert_operational_seats_bulk",
+            ) as mock_upsert_seats,
             patch(
-                "backend.services.location_service.replace_seat_amenities",
+                "backend.services.location_service.replace_seat_amenities_bulk",
             ) as mock_replace_amenities,
         ):
             update_layout_seat_configurations_bulk(
@@ -280,13 +295,15 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
                 current_user=CALLER,
             )
 
-        mock_upsert_seat.assert_not_called()
+        mock_upsert_seats.assert_not_called()
         mock_replace_amenities.assert_not_called()
 
     def test_published_layout_cascades_edits_into_seats(self) -> None:
         """A layout that's already PUBLISHED has no separate publish step
         for a later edit -- the bulk save must push straight into
-        seats/seat_amenities in the same call/transaction."""
+        seats/seat_amenities in the same call/transaction, via one bulk
+        upsert and one bulk amenities replace covering every seat in the
+        batch."""
         conn = FakeConnection()
         payload = BulkLayoutSeatConfigurationUpdateRequest(
             seats=[
@@ -297,15 +314,15 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
 
         with (
             patch(
-                "backend.services.location_service.fetch_layout_seat_mapping_by_id",
-                side_effect=[_mapping_row("1"), _mapping_row("2")],
+                "backend.services.location_service.fetch_layout_seat_mappings_by_ids",
+                return_value={"1": _mapping_row("1"), "2": _mapping_row("2")},
             ),
             patch(
-                "backend.services.location_service.update_layout_seat_mapping_configuration",
-                side_effect=[
-                    _updated_row("1", status="ACTIVE", amenity_ids=[9]),
-                    _updated_row("2", status="ACTIVE"),
-                ],
+                "backend.services.location_service.update_layout_seat_mapping_configurations_bulk",
+                return_value={
+                    "1": _updated_row("1", status="ACTIVE", amenity_ids=[9]),
+                    "2": _updated_row("2", status="ACTIVE"),
+                },
             ),
             patch(
                 "backend.services.location_service.fetch_floor_layout_by_id",
@@ -315,11 +332,14 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
                 "backend.services.location_service.touch_floor_layout_updated_by",
             ) as mock_touch,
             patch(
-                "backend.services.location_service.upsert_operational_seat",
-                side_effect=[{"seat_id": "501"}, {"seat_id": "502"}],
-            ) as mock_upsert_seat,
+                "backend.services.location_service.upsert_operational_seats_bulk",
+                return_value={
+                    "1": {"seat_id": "501"},
+                    "2": {"seat_id": "502"},
+                },
+            ) as mock_upsert_seats,
             patch(
-                "backend.services.location_service.replace_seat_amenities",
+                "backend.services.location_service.replace_seat_amenities_bulk",
             ) as mock_replace_amenities,
         ):
             update_layout_seat_configurations_bulk(
@@ -329,17 +349,17 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
                 current_user=CALLER,
             )
 
-        self.assertEqual(mock_upsert_seat.call_count, 2)
-        self.assertEqual(mock_replace_amenities.call_count, 2)
+        mock_upsert_seats.assert_called_once()
+        seats_payload = mock_upsert_seats.call_args.kwargs["seats"]
+        self.assertEqual(len(seats_payload), 2)
+
+        mock_replace_amenities.assert_called_once()
+        seat_amenities = mock_replace_amenities.call_args.kwargs["seat_amenities"]
+        self.assertEqual(seat_amenities, [("501", [9]), ("502", [])])
         self.assertEqual(
-            mock_replace_amenities.call_args_list[0].kwargs["seat_id"], "501"
+            mock_replace_amenities.call_args.kwargs["assigned_by_user_id"], "5"
         )
-        self.assertEqual(
-            mock_replace_amenities.call_args_list[0].kwargs["amenity_ids"], [9]
-        )
-        self.assertEqual(
-            mock_replace_amenities.call_args_list[1].kwargs["amenity_ids"], []
-        )
+
         mock_touch.assert_called_once_with(
             conn, tenant_id="1", layout_id="100", updated_by_user_id="5"
         )
