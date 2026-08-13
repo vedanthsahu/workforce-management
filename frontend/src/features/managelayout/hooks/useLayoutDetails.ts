@@ -9,7 +9,7 @@ import {
   getLayoutsByFloor,
 } from "../services/layoutService";
 import { useSeatsStore } from "@/store/seatStore";
-import { bulkConfigureSeats, SeatConfigPayload } from "@/features/managelayout1/services/seatService";
+import { bulkConfigureSeats, SeatBulkEntry } from "@/features/managelayout1/services/seatService";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // useLayoutSeatStats
@@ -87,43 +87,36 @@ export function usePublishLayout(
     setPublishing(true);
     setPublishError(false);
     try {
-      // layout_seat_mappings is only ever written immediately for a DRAFT/
-      // ARCHIVED layout. For an already-published layout, edits since the
-      // last publish were staged locally only (Usemanageseats) and tracked
-      // by mapping id — flush them to layout_seat_mappings first, grouped by
-      // identical resulting config to keep this to a handful of sequential
-      // requests (sequential, not Promise.all, to stay under the backend's
-      // concurrency limits). If any group fails, the catch below skips
-      // clearDirty/activateLayout entirely, so the pending edits are never
-      // lost and nothing is reported as published.
       if (layout.is_published && dirtyMappingIds.size > 0) {
+        // Already the live layout: PATCH /layout-seats/bulk-configuration
+        // itself cascades every edited mapping into the live `seats` table
+        // in the same transaction when the parent layout is PUBLISHED (see
+        // dev-notes/backend/CURRENT.md) — there is no separate "push these
+        // edits live" call, and activateLayout is a no-op for an
+        // already-published layout, so it's not called at all here. One
+        // request, each dirty seat carrying its own fields (no more
+        // grouping-by-identical-payload — the new payload shape allows
+        // per-seat overrides in a single call).
         const dirtySeats = seats.filter((s) => dirtyMappingIds.has(s.layout_seat_mapping_id));
-        const groups = new Map<string, { ids: string[]; payload: Omit<SeatConfigPayload, "seat_name"> }>();
+        const entries: SeatBulkEntry[] = dirtySeats.map((seat) => ({
+          layout_seat_mapping_id: Number(seat.layout_seat_mapping_id),
+          seat_type:   seat.seat_type   ?? "STANDARD",
+          status:      seat.status      ?? "ACTIVE",
+          is_bookable: seat.is_bookable ?? true,
+          is_reserved: seat.is_reserved,
+          amenity_ids: seat.amenity_ids.map(Number),
+        }));
 
-        for (const seat of dirtySeats) {
-          const payload: Omit<SeatConfigPayload, "seat_name"> = {
-            seat_type:   seat.seat_type   ?? "STANDARD",
-            status:      seat.status      ?? "ACTIVE",
-            is_bookable: seat.is_bookable ?? true,
-            is_reserved: seat.is_reserved,
-            amenity_ids: seat.amenity_ids.map(Number),
-          };
-          const key = JSON.stringify(payload);
-          if (!groups.has(key)) groups.set(key, { ids: [], payload });
-          groups.get(key)!.ids.push(seat.layout_seat_mapping_id);
-        }
+        await bulkConfigureSeats({ seats: entries });
 
-        for (const { ids, payload } of groups.values()) {
-          await bulkConfigureSeats(ids, payload);
-        }
-      }
-
-      await activateLayout(layout.layout_id);
-
-      if (layout.is_published) {
         // Pull canonical server state now that layout_seat_mappings/seats
         // have been synced, rather than trusting the local optimistic values.
         await fetchSeats(layout.layout_id);
+      } else {
+        // First (or re-)promotion of a DRAFT/ARCHIVED layout to PUBLISHED.
+        // Seat data was already written immediately while the layout was a
+        // draft, so this call carries no seat payload of its own.
+        await activateLayout(layout.layout_id);
       }
 
       clearDirty();

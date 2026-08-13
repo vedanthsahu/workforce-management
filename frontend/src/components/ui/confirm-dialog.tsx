@@ -22,6 +22,11 @@ interface ConfirmDialogProps {
   destructive?: boolean;
   onConfirm: () => void;
   onClose: () => void;
+  // Extra content (form fields, etc.) rendered below the description, OUTSIDE
+  // it — AlertDialogDescription renders as a <p>, so block-level elements
+  // (div/label/input/another <p>) must never go in `description` itself, or
+  // React logs an invalid-DOM-nesting/hydration error.
+  children?: ReactNode;
 }
 
 // Generic "are you sure?" dialog on the same AlertDialog primitives/styling
@@ -37,6 +42,7 @@ export function ConfirmDialog({
   destructive = false,
   onConfirm,
   onClose,
+  children,
 }: ConfirmDialogProps) {
   const handleOpenChange = (val: boolean) => {
     if (!val) onClose();
@@ -51,6 +57,7 @@ export function ConfirmDialog({
             {description}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {children && <div className="py-2">{children}</div>}
         <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:gap-3">
           <AlertDialogCancel onClick={onClose} className="text-[12.5px] w-full sm:w-auto">
             {cancelLabel}

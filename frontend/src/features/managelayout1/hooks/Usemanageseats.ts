@@ -246,7 +246,12 @@ export function useManageSeats() {
         markSeatDirty(seat.layout_seat_mapping_id);
       });
     } else {
-      await bulkConfigureSeats(mappingIds, resolvedPayload);
+      // All affected seats share one config, so it goes in `defaults` and
+      // each entry only needs to carry its own mapping id.
+      await bulkConfigureSeats({
+        defaults: resolvedPayload,
+        seats: mappingIds.map((id) => ({ layout_seat_mapping_id: Number(id) })),
+      });
       await fetchSeats(layoutId);
       markDirty();
     }

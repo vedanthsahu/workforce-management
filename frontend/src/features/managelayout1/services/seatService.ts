@@ -100,13 +100,33 @@ export async function configureSeat(
 }
 
 // ─── Bulk configure ───────────────────────────────────────────────────────────
+// Matches backend/schemas/location.py's BulkLayoutSeatConfigurationUpdateRequest
+// (see dev-notes/backend/CURRENT.md, "PATCH /layout-seats/bulk-configuration —
+// one endpoint, status-aware"): a per-seat entry always wins over `defaults`,
+// which wins over the mapping's existing stored value. Any field omitted on
+// an entry AND in `defaults` is left untouched server-side.
+//
+// If the parent layout is already PUBLISHED, this same call also cascades
+// into the live `seats` table in the same transaction — there is no separate
+// "push these edits live" step, so callers must NOT also call activateLayout
+// for an already-published layout's edits (see usePublishLayout).
 
-export async function bulkConfigureSeats(
-  mappingIds: string[],
-  payload: Omit<SeatConfigPayload, "seat_name">
-): Promise<void> {
-  await axiosInstance.patch(`/layout-seats/bulk-configuration`, {
-    layout_seat_mapping_ids: mappingIds.map(Number),
-    ...payload,
-  });
+export interface SeatBulkEntry {
+  layout_seat_mapping_id: number;
+  seat_name?:   string;
+  seat_type?:   string;
+  status?:      string;
+  is_bookable?: boolean;
+  is_reserved?: boolean;
+  amenity_ids?: number[];
+}
+
+export interface BulkConfigureSeatsPayload {
+  defaults?: Partial<SeatConfigPayload>;
+  seats: SeatBulkEntry[];
+}
+
+export async function bulkConfigureSeats(payload: BulkConfigureSeatsPayload): Promise<Seat[]> {
+  const { data } = await axiosInstance.patch<RawSeatItem[]>(`/layout-seats/bulk-configuration`, payload);
+  return data.map((item) => mapApiItemToSeat(item, true));
 }

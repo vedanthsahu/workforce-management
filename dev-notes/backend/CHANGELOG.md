@@ -371,3 +371,69 @@ content regardless).
 **Files touched**
 
 - `backend/repositories/floor_layout_repository.py`
+
+---
+
+## 2026-08-12 17:00 — Reverted a stale patch to `activate_floor_layout`'s already-published no-op
+
+**What was wrong**
+
+Before the 2026-08-11 15:30 entry above landed (per-seat bulk config +
+PUBLISHED cascade in `update_layout_seat_configurations_bulk`), a separate,
+independent fix had been made directly to `activate_floor_layout`
+(`backend/services/floor_layout_service.py`): instead of the documented
+no-op when `layout.is_published is True and status == PUBLISHED`, it called
+`publish_layout_seat_configurations` + `reconcile_published_layout_seats`
+itself, on the theory that re-publishing an already-live layout needed
+*some* endpoint to re-sync `layout_seat_mappings` into `seats`. That patch
+was made in a frontend-facing session that hadn't seen the backend's own
+redesign land yet, and the two changes never got reconciled — the code and
+`CURRENT.md` disagreed (`CURRENT.md` said "no-op, touches nothing"; the code
+didn't) until this entry.
+
+**What changed**
+
+- `backend/services/floor_layout_service.py::activate_floor_layout` —
+  removed the `publish_layout_seat_configurations`/
+  `reconcile_published_layout_seats` calls from the already-published
+  branch. It's a pure no-op again, matching `CURRENT.md`. The frontend was
+  updated in the same pass (see `dev-notes/frontend/CHANGELOG.md`,
+  2026-08-12) to stop calling `POST .../activate` at all for an
+  already-published layout's edits — it now only calls
+  `PATCH /layout-seats/bulk-configuration`, which already does the
+  `seats` cascade itself, in the same transaction as the edit. Re-running
+  the sync a second time from `activate` would have been redundant, not
+  incorrect, but leaving it in place kept the code and the documented
+  contract visibly disagreeing.
+
+**Files touched**
+
+- `backend/services/floor_layout_service.py`
+
+---
+
+## 2026-08-13 10:15 — Single-seat config endpoint never stamped `floor_layouts.updated_by`
+
+**What was wrong**
+
+`touch_floor_layout_updated_by` (2026-08-11 15:30 entry) was only ever
+called from `update_layout_seat_configurations_bulk`. The single-seat
+endpoint, `update_layout_seat_configuration` (`PATCH
+/layout-seats/{id}/configuration`, used whenever an admin edits exactly
+one seat through the seat panel rather than Bulk Edit), never called it.
+Net effect, visible directly in the admin layout list: a layout edited one
+seat at a time — however many times — kept showing `—` for "Last Updated
+Details" forever, while a layout touched even once via Bulk Edit showed
+correct info. Not intentional; just an omission when the bulk path was
+added.
+
+**What changed**
+
+- `backend/services/location_service.py::update_layout_seat_configuration` —
+  now also calls `touch_floor_layout_updated_by` before commit, same as
+  the bulk endpoint. Both seat-config write paths now consistently stamp
+  `floor_layouts.updated_by_user_id`/`updated_at`.
+
+**Files touched**
+
+- `backend/services/location_service.py`

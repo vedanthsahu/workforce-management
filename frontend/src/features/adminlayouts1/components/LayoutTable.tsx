@@ -339,8 +339,24 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                     <td className="px-3 py-3">
                       {(() => {
                         const isPublished = row.status === "PUBLISHED" && row.is_published;
-                        const name = isPublished ? (row.published_by_name ?? "—") : (row.updated_by_name ?? "—");
-                        const date = isPublished ? row.published_at : row.updated_at;
+                        // A published row's "last updated" must reflect
+                        // whichever happened more recently: the original
+                        // publish, or a later edit made through the
+                        // bulk-configuration endpoint. That endpoint stamps
+                        // updated_at/updated_by on every save but never
+                        // touches published_at/published_by — activate is
+                        // no longer called at all when republishing an
+                        // already-published layout's edits (see
+                        // dev-notes/frontend/CHANGELOG.md, 2026-08-12 17:00),
+                        // so published_at alone would go stale after any
+                        // post-publish edit.
+                        const updatedTime = row.updated_at ? new Date(row.updated_at).getTime() : null;
+                        const publishedTime = row.published_at ? new Date(row.published_at).getTime() : null;
+                        const useUpdated =
+                          !isPublished ||
+                          (updatedTime !== null && (publishedTime === null || updatedTime > publishedTime));
+                        const name = useUpdated ? (row.updated_by_name ?? "—") : (row.published_by_name ?? "—");
+                        const date = useUpdated ? row.updated_at : row.published_at;
                         return (
                           <div className="flex flex-col gap-0.5">
                             <span className="text-xs font-medium text-gray-800">{name}</span>
