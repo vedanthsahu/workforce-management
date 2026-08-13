@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CalendarDays } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Suspense, useRef, useLayoutEffect, useState } from "react";
 
@@ -18,6 +18,10 @@ import { ManageSeatsSkeleton } from "@/features/managelayout1/components/ManageS
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { useNavigationGuardStore } from "@/store/useNavigationGuardStore";
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function ManageSeatsPage() {
   const router = useRouter();
@@ -98,6 +102,15 @@ function ManageSeatsPage() {
   const { requestNavigation } = useNavigationGuardStore();
 
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
+  // Frontend-only for now, per explicit instruction — not sent to the
+  // backend/publish API in any form. Purely a UI field until there's a
+  // real "effective date" concept on the backend to wire it into.
+  const [effectiveDate, setEffectiveDate] = useState(todayIso);
+
+  const openPublishConfirm = () => {
+    setEffectiveDate(todayIso());
+    setShowPublishConfirm(true);
+  };
 
   const handleConfirmPublish = async () => {
     await publishLayout();
@@ -163,7 +176,7 @@ function ManageSeatsPage() {
                 Back to Layout
               </button>
               <button
-                onClick={() => setShowPublishConfirm(true)}
+                onClick={openPublishConfirm}
                 disabled={!canPublish || publishing}
                 title={!allConfigured ? `Configure all seats before publishing` : undefined}
                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
@@ -282,7 +295,24 @@ function ManageSeatsPage() {
         loading={publishing}
         onConfirm={handleConfirmPublish}
         onClose={() => setShowPublishConfirm(false)}
-      />
+      >
+        <label htmlFor="publish-effective-date" className="text-[12.5px] font-medium text-gray-600 mb-1.5 block">
+          Effective Date
+        </label>
+        <div className="relative">
+          <CalendarDays
+            size={13}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+          />
+          <input
+            id="publish-effective-date"
+            type="date"
+            value={effectiveDate}
+            onChange={(e) => setEffectiveDate(e.target.value)}
+            className="w-full h-9 pl-8 pr-3 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+          />
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }

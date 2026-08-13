@@ -365,6 +365,17 @@ def update_layout_seat_configuration(
                 updated_by=str(current_user["user_id"]),
             )
 
+        # Same "who last touched this layout" stamp the bulk endpoint
+        # applies -- without this, a layout only ever edited one seat at a
+        # time (never through Bulk Edit) would show no "Last Updated" info
+        # at all, no matter how many single-seat edits happened.
+        touch_floor_layout_updated_by(
+            conn,
+            tenant_id=tenant_id,
+            layout_id=str(mapping["layout_id"]),
+            updated_by_user_id=str(current_user["user_id"]),
+        )
+
         # Draft isolation: editing a mapping must only ever touch
         # layout_seat_mappings. The `seats` table is a published projection
         # that is rebuilt exclusively by the layout activate/publish flow.

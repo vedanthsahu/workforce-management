@@ -331,27 +331,15 @@ def activate_floor_layout(
             layout.get("is_published") is True
             and layout.get("status") == LayoutStatus.PUBLISHED.value
         ):
-            # Already the live layout for this floor -- no version change
-            # needed, but there may be pending layout_seat_mappings edits
-            # (draft isolation: edits only ever touch layout_seat_mappings,
-            # never the live `seats` projection directly) that still need
-            # syncing into `seats`. Re-running these is idempotent: they
-            # upsert/retire by (floor_id, layout_id, seat_code), so calling
-            # them again for the same already-published layout only picks up
-            # whatever changed since the last publish.
-            publish_layout_seat_configurations(
-                conn,
-                tenant_id=tenant_id,
-                layout_id=layout_id,
-                published_by_user_id=user_id,
-            )
-            reconcile_published_layout_seats(
-                conn,
-                tenant_id=tenant_id,
-                floor_id=str(layout["floor_id"]),
-                layout_id=layout_id,
-            )
-            conn.commit()
+            # Pure no-op: activate is only a DRAFT/ARCHIVED -> PUBLISHED
+            # promotion and never carries seat data. Editing an
+            # already-published layout's seats goes through
+            # update_layout_seat_configurations_bulk instead (see
+            # dev-notes/backend/CURRENT.md) -- that endpoint cascades into
+            # `seats` itself, in the same transaction as the edit, when the
+            # parent layout is already PUBLISHED. Re-running the
+            # publish/reconcile sync here on every activate call would be
+            # redundant with that and is deliberately not done.
             return FloorLayoutResponse(**layout)
 
         # No unique index enforces "one published layout per floor" at the
