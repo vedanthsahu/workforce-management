@@ -137,6 +137,92 @@ class AdminManagementServiceTests(unittest.TestCase):
         self.assertEqual(context.exception.detail["code"], "immutable_field_update")
         self.assertEqual(conn.rollbacks, 0)
 
+    def test_seat_configuration_stamps_the_seat_parent_layout(self) -> None:
+        """Editing a seat directly (the admin fix-a-stale-seat path) must
+        stamp floor_layouts.updated_by_user_id for that seat's own
+        layout_id, published or superseded, so `updated_by` doesn't drift
+        out of sync with what actually changed on `seats`."""
+        conn = FakeConnection()
+        payload = SeatConfigurationUpdateRequest(status="INACTIVE")
+        seat_row = {
+            "seat_id": "4",
+            "site_id": "1",
+            "building_id": "1",
+            "floor_id": "12",
+            "layout_id": "100",
+            "seat_code": "SEAT-4",
+            "status": "ACTIVE",
+            "is_bookable": True,
+        }
+
+        with (
+            patch(
+                "backend.services.location_service.fetch_seat_configuration",
+                return_value=seat_row,
+            ),
+            patch(
+                "backend.services.location_service.update_seat_configuration",
+                return_value={**seat_row, "status": "INACTIVE"},
+            ),
+            patch("backend.services.location_service.safe_write_audit_log"),
+            patch(
+                "backend.services.location_service.touch_floor_layout_updated_by",
+            ) as mock_touch,
+        ):
+            update_seat_configuration_metadata(
+                conn,
+                tenant_id="1",
+                seat_id="4",
+                payload=payload,
+                current_user=self.current_user,
+            )
+
+        mock_touch.assert_called_once_with(
+            conn, tenant_id="1", layout_id="100", updated_by_user_id="5"
+        )
+        self.assertEqual(conn.commits, 1)
+
+    def test_seat_configuration_skips_touch_when_seat_has_no_layout(self) -> None:
+        """A seat that predates layout tracking (layout_id NULL) must not
+        crash the stamping step -- there is nothing to stamp."""
+        conn = FakeConnection()
+        payload = SeatConfigurationUpdateRequest(status="INACTIVE")
+        seat_row = {
+            "seat_id": "4",
+            "site_id": "1",
+            "building_id": "1",
+            "floor_id": "12",
+            "layout_id": None,
+            "seat_code": "SEAT-4",
+            "status": "ACTIVE",
+            "is_bookable": True,
+        }
+
+        with (
+            patch(
+                "backend.services.location_service.fetch_seat_configuration",
+                return_value=seat_row,
+            ),
+            patch(
+                "backend.services.location_service.update_seat_configuration",
+                return_value={**seat_row, "status": "INACTIVE"},
+            ),
+            patch("backend.services.location_service.safe_write_audit_log"),
+            patch(
+                "backend.services.location_service.touch_floor_layout_updated_by",
+            ) as mock_touch,
+        ):
+            update_seat_configuration_metadata(
+                conn,
+                tenant_id="1",
+                seat_id="4",
+                payload=payload,
+                current_user=self.current_user,
+            )
+
+        mock_touch.assert_not_called()
+        self.assertEqual(conn.commits, 1)
+
     def test_create_amenity_rejects_cross_tenant_or_missing_category(self) -> None:
         conn = FakeConnection()
         payload = CreateAmenityRequest(

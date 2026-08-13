@@ -69,7 +69,9 @@ third shared file for it.
   place to state the new reality -- don't leave the old, now-wrong rule
   sitting next to the new one. The superseded reasoning stays alive in
   `CHANGELOG.md`, not here. If `CURRENT.md` and the code ever disagree,
-  the code is right and `CURRENT.md` is out of date -- fix `CURRENT.md`.
+  treat the discrepancy as an issue to investigate. Do not assume which
+  one is correct; verify the current implementation and update
+  `CURRENT.md` once the intended state is established.
 - **`CHANGELOG.md` = why/how we arrived here.** Append-only history: what
   was wrong, why it needed to change, what actually changed, what was
   explicitly left out of scope. This is the record of *reasoning*, not a

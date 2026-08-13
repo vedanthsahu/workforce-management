@@ -243,3 +243,148 @@ a fix, `fetch_layout_seats_by_layout_id` (used by the layout editor to
 show "does this draft mapping already have a live seat"), joined by
 `floor_id + seat_code` only with no `layout_id` -- fixed by adding
 `AND s.layout_id = lsm.layout_id` to the join.
+
+---
+
+## 2026-08-13 — All four seat-configuration write paths now stamp `floor_layouts`, and the single-seat endpoint now cascades on PUBLISHED
+
+**Supersedes:** the "New: per-seat bulk layout-seat configuration flow"
+entry above (2026-08-11 15:30) is still accurate for the *bulk* endpoint's
+shape at that point in time, but its per-seat Python-loop internals are
+superseded by the 14:30 entry further below. The single-seat endpoint's
+flow (never previously documented in this file) is new below.
+
+### `PATCH /layout-seats/{id}/configuration` (single mapping) -- now cascades on PUBLISHED
+
+```
+locations.py: update_layout_seat_configuration_route(layout_seat_mapping_id, payload)
+  -> require_any_permission(["location:manage", "layout:upload"])
+  -> location_service.update_layout_seat_configuration(conn, tenant_id, layout_seat_mapping_id, payload, current_user)
+
+       mapping = fetch_layout_seat_mapping_by_id(layout_seat_mapping_id)   -> repo SELECT, 404 if None
+       updated_mapping = update_layout_seat_mapping_configuration(...)     -> repo UPDATE on `layout_seat_mappings`, COALESCE(%s, col)
+
+       layout = fetch_floor_layout_by_id(mapping.layout_id)                -> repo SELECT on `floor_layouts`
+       if layout.status == 'PUBLISHED':                                   # NEW as of 2026-08-13 -- previously never ran
+           seat = upsert_operational_seat(updated_mapping.*)               -> repo UPSERT on `seats` (ON CONFLICT floor_id, seat_code, layout_id)
+           replace_seat_amenities(seat.seat_id, updated_mapping.amenity_ids) -> repo DELETE+INSERT on `seat_amenities`
+           # identical cascade the bulk endpoint below already ran -- this
+           # endpoint used to skip it unconditionally regardless of status
+
+       touch_floor_layout_updated_by(mapping.layout_id, current_user.user_id)  -> repo UPDATE floor_layouts SET updated_by_user_id, updated_at
+                                                                                 # NEW as of 2026-08-13 -- previously never called from here
+
+       conn.commit()   # all-or-nothing
+  -> response: LayoutSeatConfigurationResponse (seat_id always None, same as the bulk endpoint's responses)
+```
+
+### `PATCH /seats/{id}/configuration` and `/seats/bulk-configuration` (direct live-seat edits) -- now also stamp `floor_layouts`
+
+```
+locations.py: update_seat_configuration_route(seat_id, payload)
+  -> location_service.update_seat_configuration_metadata(conn, tenant_id, seat_id, payload, current_user)
+       seat = fetch_seat_configuration(seat_id)              -> repo SELECT on `seats`, now also selects layout_id
+       updated_seat = update_seat_configuration(seat_id, updates) -> repo UPDATE on `seats`, RETURNING now also includes layout_id
+       if updated_seat.layout_id is not None:                # NEW as of 2026-08-13
+           touch_floor_layout_updated_by(updated_seat.layout_id, current_user.user_id)
+           # stamps the SEAT'S OWN layout_id, even if that layout is a
+           # superseded/non-published one -- deliberate, see CURRENT.md
+       conn.commit()
+
+locations.py: update_seats_bulk_configuration_route(payload)
+  -> location_service.update_seats_configuration_bulk(conn, tenant_id, payload, current_user)
+       touched_layout_ids: set[str] = {}
+       for seat_id in seat_ids:
+           seat = fetch_seat_configuration(seat_id)
+           updated_seat = update_seat_configuration(seat_id, updates)
+           if updated_seat.layout_id is not None:
+               touched_layout_ids.add(updated_seat.layout_id)
+       for layout_id in touched_layout_ids:                  # NEW as of 2026-08-13 -- deduped, not one call per seat
+           touch_floor_layout_updated_by(layout_id, current_user.user_id)
+       conn.commit()
+```
+
+---
+
+## 2026-08-13 — Bulk layout-seat configuration rewritten: set-based SQL instead of a per-seat loop
+
+**Supersedes:** the per-seat `for entry in payload.seats: fetch, update`
+loop (and the PUBLISHED-cascade's `for mapping in updated_mappings:
+upsert, replace_amenities` loop) documented in the 2026-08-11 15:30 entry
+above. The request/response shapes documented there are unchanged; only
+the internal call chain is new.
+
+### `PATCH /layout-seats/bulk-configuration` -- new internal flow
+
+```
+locations.py: update_layout_seats_bulk_configuration_route(payload: BulkLayoutSeatConfigurationUpdateRequest)
+  -> location_service.update_layout_seat_configurations_bulk(conn, tenant_id, payload, current_user)
+
+       mapping_ids = [str(entry.layout_seat_mapping_id) for entry in payload.seats]
+
+       mappings_by_id = fetch_layout_seat_mappings_by_ids(mapping_ids)
+           -> repo: ONE `SELECT lsm.* FROM layout_seat_mappings lsm JOIN floor_layouts fl ...
+                     WHERE lsm.id = ANY(%s) AND fl.status = ANY(non_deleted_statuses)`
+           -> dict keyed by mapping id; ids with no row are simply absent
+
+       # validate BEFORE writing anything (still all-or-nothing, just
+       # earlier -- nothing is written if this fails)
+       for mapping_id in mapping_ids:
+           if mapping_id not in mappings_by_id: 404
+       layout_id = first mapping's layout_id; 400 mixed_layout_bulk_request if any other mapping's layout_id differs
+
+       update_entries = [per-seat resolved fields: own value > defaults > None ("keep existing")]
+
+       updated_mappings_by_id = update_layout_seat_mapping_configurations_bulk(entries, updated_by)
+           -> repo: ONE `UPDATE layout_seat_mappings AS lsm SET
+                       seat_name = COALESCE(v.seat_name, lsm.seat_name), ... (same per-field COALESCE as single-row)
+                     FROM (VALUES (%s::bigint, %s::text, ...), (%s::bigint, %s::text, ...), ...) AS v(id, seat_name, ...)
+                     WHERE lsm.id = v.id
+                     RETURNING lsm.*`
+           -> dict keyed by mapping id
+
+       responses = [build LayoutSeatConfigurationResponse per mapping_id, in REQUEST order
+                     (dict lookup, since UPDATE...RETURNING doesn't guarantee row order)]
+
+       layout = fetch_floor_layout_by_id(layout_id)   -> repo SELECT on `floor_layouts`
+       if layout.status == 'PUBLISHED':
+           seats_payload = [per-mapping seat fields, built from updated_mappings_by_id]
+           seats_by_mapping_id = upsert_operational_seats_bulk(seats_payload)
+               -> repo: ONE `INSERT INTO seats (...) VALUES %s ON CONFLICT (floor_id, seat_code, layout_id) DO UPDATE ...
+                         RETURNING id::text AS seat_id, source_layout_mapping_id::text`
+                  via psycopg2.extras.execute_values (auto-paged internally for very large batches)
+               -> dict keyed by source_layout_mapping_id (== mapping_id)
+
+           amenity_entries = [(seats_by_mapping_id[mid].seat_id, updated_mappings_by_id[mid].amenity_ids) for mid in mapping_ids]
+           replace_seat_amenities_bulk(amenity_entries, assigned_by_user_id)
+               -> repo: ONE `DELETE FROM seat_amenities WHERE seat_id = ANY(%s)` across all touched seats
+                  + ONE multi-row `INSERT INTO seat_amenities (...) VALUES %s` via execute_values
+
+       touch_floor_layout_updated_by(layout_id, current_user.user_id)   -> unchanged from before
+
+       conn.commit()
+  -> response: list[LayoutSeatConfigurationResponse], same shape as before, in request order
+```
+
+### Round-trip count, before vs. after
+
+```
+Before (2026-08-11 15:30 entry): per seat in the batch --
+  1 SELECT (fetch mapping) + 1 UPDATE (mapping) + 1 INSERT..ON CONFLICT (seat, if PUBLISHED)
+  + 1 DELETE (amenities) + 1 INSERT per amenity via executemany (if PUBLISHED)
+  => for 100 seats, ~600 sequential statements on one connection/transaction.
+
+After: fixed count regardless of batch size --
+  1 SELECT (all mappings) + 1 UPDATE (all mappings, multi-row VALUES)
+  + [1 INSERT..ON CONFLICT (all seats, multi-row) + 1 DELETE (all amenities) + 1 INSERT (all amenities, multi-row)] if PUBLISHED
+  + 1 UPDATE (floor_layouts stamp)
+  => ~6 statements total for any batch size (execute_values pages internally
+     past its default page size, so very large batches become a small
+     multiple of that, not O(N)).
+```
+
+Same atomicity guarantee both before and after (one transaction, any
+failure rolls back everything); the difference is purely round-trip count
+and how early validation happens (now before any write, previously
+partway through the per-seat loop but still safely rolled back by the
+transaction either way).
