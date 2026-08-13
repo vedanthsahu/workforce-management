@@ -34,7 +34,9 @@ from backend.repositories.location_repository import (
     fetch_floor_duplicates,
     fetch_floors_by_building,
     fetch_layout_seat_mapping_by_id,
+    fetch_layout_seat_mappings_by_ids,
     replace_seat_amenities,
+    replace_seat_amenities_bulk,
     fetch_seat_configuration,
     fetch_site_by_id,
     fetch_site_duplicates,
@@ -45,9 +47,11 @@ from backend.repositories.location_repository import (
     update_building,
     update_floor,
     update_layout_seat_mapping_configuration,
+    update_layout_seat_mapping_configurations_bulk,
     update_seat_configuration,
     update_site,
     upsert_operational_seat,
+    upsert_operational_seats_bulk,
 )
 from backend.schemas.location import (
     BuildingResponse,
@@ -365,10 +369,42 @@ def update_layout_seat_configuration(
                 updated_by=str(current_user["user_id"]),
             )
 
-        # Same "who last touched this layout" stamp the bulk endpoint
-        # applies -- without this, a layout only ever edited one seat at a
-        # time (never through Bulk Edit) would show no "Last Updated" info
-        # at all, no matter how many single-seat edits happened.
+        # Draft isolation only holds for DRAFT/ARCHIVED layouts. A PUBLISHED
+        # layout has no separate "push the draft live" step (same rationale
+        # as update_layout_seat_configurations_bulk), so this single-mapping
+        # edit must cascade into seats/seat_amenities too -- otherwise an
+        # admin editing one already-live seat gets a 200 while the seat
+        # bookings actually read from stays stale.
+        layout = fetch_floor_layout_by_id(
+            conn,
+            tenant_id=tenant_id,
+            layout_id=str(mapping["layout_id"]),
+        )
+        if layout is not None and layout["status"] == LayoutStatus.PUBLISHED.value:
+            seat = upsert_operational_seat(
+                conn,
+                tenant_id=tenant_id,
+                layout_id=str(updated_mapping["layout_id"]),
+                site_id=str(updated_mapping["site_id"]),
+                building_id=str(updated_mapping["building_id"]),
+                floor_id=str(updated_mapping["floor_id"]),
+                seat_code=str(updated_mapping["seat_code"]),
+                seat_name=updated_mapping.get("seat_name"),
+                seat_type=updated_mapping["seat_type"],
+                status=updated_mapping["status"],
+                is_bookable=updated_mapping["is_bookable"],
+                is_reserved=updated_mapping.get("is_reserved"),
+                svg_element_id=str(updated_mapping["svg_element_id"]),
+                source_layout_mapping_id=str(updated_mapping["id"]),
+            )
+            replace_seat_amenities(
+                conn,
+                tenant_id=tenant_id,
+                seat_id=str(seat["seat_id"]),
+                amenity_ids=updated_mapping.get("amenity_ids") or [],
+                assigned_by_user_id=str(current_user["user_id"]),
+            )
+
         touch_floor_layout_updated_by(
             conn,
             tenant_id=tenant_id,
@@ -376,9 +412,6 @@ def update_layout_seat_configuration(
             updated_by_user_id=str(current_user["user_id"]),
         )
 
-        # Draft isolation: editing a mapping must only ever touch
-        # layout_seat_mappings. The `seats` table is a published projection
-        # that is rebuilt exclusively by the layout activate/publish flow.
         conn.commit()
 
         return LayoutSeatConfigurationResponse(
@@ -441,26 +474,33 @@ def update_layout_seat_configurations_bulk(
     so an admin editing five already-live seats needs one call that lands
     both tables together, not a second round trip. All-or-nothing: if any
     entry fails validation, nothing is written.
+
+    Every step below is one set-based SQL statement covering the whole
+    batch (fetch/update mappings, upsert seats, replace amenities), not a
+    per-seat loop of round trips -- a request with 100 seats used to mean
+    ~600 sequential statements on one connection; it's now a small
+    constant number regardless of batch size.
     """
     defaults = payload.defaults
-    responses: list[LayoutSeatConfigurationResponse] = []
-    updated_mappings: list[dict[str, Any]] = []
-    layout_id: str | None = None
+    mapping_ids = [str(entry.layout_seat_mapping_id) for entry in payload.seats]
 
     try:
-        for entry in payload.seats:
-            mapping_id = str(entry.layout_seat_mapping_id)
-            mapping = fetch_layout_seat_mapping_by_id(
-                conn,
-                tenant_id=tenant_id,
-                layout_seat_mapping_id=mapping_id,
-            )
-            if mapping is None:
+        mappings_by_id = fetch_layout_seat_mappings_by_ids(
+            conn,
+            tenant_id=tenant_id,
+            layout_seat_mapping_ids=mapping_ids,
+        )
+
+        for mapping_id in mapping_ids:
+            if mapping_id not in mappings_by_id:
                 _raise_not_found("layout seat mapping")
 
+        layout_id: str | None = None
+        for mapping_id in mapping_ids:
+            mapping_layout_id = str(mappings_by_id[mapping_id]["layout_id"])
             if layout_id is None:
-                layout_id = str(mapping["layout_id"])
-            elif layout_id != str(mapping["layout_id"]):
+                layout_id = mapping_layout_id
+            elif layout_id != mapping_layout_id:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail={
@@ -469,41 +509,46 @@ def update_layout_seat_configurations_bulk(
                     },
                 )
 
-            amenity_ids = _resolve_bulk_field(
-                entry.amenity_ids, defaults.amenity_ids if defaults else None
-            )
+        update_entries = [
+            {
+                "layout_seat_mapping_id": str(entry.layout_seat_mapping_id),
+                "seat_name": _resolve_bulk_field(entry.seat_name, defaults.seat_name if defaults else None),
+                "seat_type": _resolve_bulk_field(entry.seat_type, defaults.seat_type if defaults else None),
+                "status": _resolve_bulk_field(entry.status, defaults.status if defaults else None),
+                "is_bookable": _resolve_bulk_field(entry.is_bookable, defaults.is_bookable if defaults else None),
+                "is_reserved": _resolve_bulk_field(entry.is_reserved, defaults.is_reserved if defaults else None),
+                "amenity_ids": _resolve_bulk_field(
+                    entry.amenity_ids, defaults.amenity_ids if defaults else None
+                ),
+            }
+            for entry in payload.seats
+        ]
 
-            updated_mapping = update_layout_seat_mapping_configuration(
-                conn,
-                tenant_id=tenant_id,
-                layout_seat_mapping_id=mapping_id,
-                seat_name=_resolve_bulk_field(entry.seat_name, defaults.seat_name if defaults else None),
-                seat_type=_resolve_bulk_field(entry.seat_type, defaults.seat_type if defaults else None),
-                status=_resolve_bulk_field(entry.status, defaults.status if defaults else None),
-                is_bookable=_resolve_bulk_field(entry.is_bookable, defaults.is_bookable if defaults else None),
-                is_reserved=_resolve_bulk_field(entry.is_reserved, defaults.is_reserved if defaults else None),
-                amenity_ids=amenity_ids,
-                updated_by=str(current_user["user_id"]),
-            )
-            updated_mappings.append(updated_mapping)
+        updated_mappings_by_id = update_layout_seat_mapping_configurations_bulk(
+            conn,
+            tenant_id=tenant_id,
+            entries=update_entries,
+            updated_by=str(current_user["user_id"]),
+        )
 
-            responses.append(
-                LayoutSeatConfigurationResponse(
-                    layout_seat_mapping_id=str(updated_mapping["id"]),
-                    seat_id=None,
-                    layout_id=str(mapping["layout_id"]),
-                    floor_id=str(mapping["floor_id"]),
-                    seat_code=str(mapping["seat_code"]),
-                    seat_name=updated_mapping.get("seat_name"),
-                    seat_type=updated_mapping["seat_type"],
-                    status=updated_mapping["status"],
-                    is_bookable=updated_mapping["is_bookable"],
-                    is_reserved=updated_mapping["is_reserved"],
-                    is_configured=True,
-                    configuration_status="COMPLETED",
-                    amenity_ids=updated_mapping.get("amenity_ids") or [],
-                )
+        responses = [
+            LayoutSeatConfigurationResponse(
+                layout_seat_mapping_id=str(updated_mappings_by_id[mapping_id]["id"]),
+                seat_id=None,
+                layout_id=str(mappings_by_id[mapping_id]["layout_id"]),
+                floor_id=str(mappings_by_id[mapping_id]["floor_id"]),
+                seat_code=str(mappings_by_id[mapping_id]["seat_code"]),
+                seat_name=updated_mappings_by_id[mapping_id].get("seat_name"),
+                seat_type=updated_mappings_by_id[mapping_id]["seat_type"],
+                status=updated_mappings_by_id[mapping_id]["status"],
+                is_bookable=updated_mappings_by_id[mapping_id]["is_bookable"],
+                is_reserved=updated_mappings_by_id[mapping_id]["is_reserved"],
+                is_configured=True,
+                configuration_status="COMPLETED",
+                amenity_ids=updated_mappings_by_id[mapping_id].get("amenity_ids") or [],
             )
+            for mapping_id in mapping_ids
+        ]
 
         if layout_id is not None:
             layout = fetch_floor_layout_by_id(
@@ -518,30 +563,43 @@ def update_layout_seat_configurations_bulk(
                 # transaction. Scoped to just the edited mappings, not a
                 # full reconcile -- nothing is being removed from the
                 # layout here, only reconfigured.
-                for mapping in updated_mappings:
-                    seat = upsert_operational_seat(
-                        conn,
-                        tenant_id=tenant_id,
-                        layout_id=str(mapping["layout_id"]),
-                        site_id=str(mapping["site_id"]),
-                        building_id=str(mapping["building_id"]),
-                        floor_id=str(mapping["floor_id"]),
-                        seat_code=str(mapping["seat_code"]),
-                        seat_name=mapping.get("seat_name"),
-                        seat_type=mapping["seat_type"],
-                        status=mapping["status"],
-                        is_bookable=mapping["is_bookable"],
-                        is_reserved=mapping.get("is_reserved"),
-                        svg_element_id=str(mapping["svg_element_id"]),
-                        source_layout_mapping_id=str(mapping["id"]),
+                seats_payload = [
+                    {
+                        "layout_id": str(updated_mappings_by_id[mapping_id]["layout_id"]),
+                        "site_id": str(updated_mappings_by_id[mapping_id]["site_id"]),
+                        "building_id": str(updated_mappings_by_id[mapping_id]["building_id"]),
+                        "floor_id": str(updated_mappings_by_id[mapping_id]["floor_id"]),
+                        "seat_code": str(updated_mappings_by_id[mapping_id]["seat_code"]),
+                        "seat_name": updated_mappings_by_id[mapping_id].get("seat_name"),
+                        "seat_type": updated_mappings_by_id[mapping_id]["seat_type"],
+                        "status": updated_mappings_by_id[mapping_id]["status"],
+                        "is_bookable": updated_mappings_by_id[mapping_id]["is_bookable"],
+                        "is_reserved": updated_mappings_by_id[mapping_id].get("is_reserved"),
+                        "svg_element_id": str(updated_mappings_by_id[mapping_id]["svg_element_id"]),
+                        "source_layout_mapping_id": str(updated_mappings_by_id[mapping_id]["id"]),
+                    }
+                    for mapping_id in mapping_ids
+                ]
+
+                seats_by_mapping_id = upsert_operational_seats_bulk(
+                    conn,
+                    tenant_id=tenant_id,
+                    seats=seats_payload,
+                )
+
+                amenity_entries = [
+                    (
+                        seats_by_mapping_id[mapping_id]["seat_id"],
+                        updated_mappings_by_id[mapping_id].get("amenity_ids") or [],
                     )
-                    replace_seat_amenities(
-                        conn,
-                        tenant_id=tenant_id,
-                        seat_id=str(seat["seat_id"]),
-                        amenity_ids=mapping.get("amenity_ids") or [],
-                        assigned_by_user_id=str(current_user["user_id"]),
-                    )
+                    for mapping_id in mapping_ids
+                ]
+                replace_seat_amenities_bulk(
+                    conn,
+                    tenant_id=tenant_id,
+                    seat_amenities=amenity_entries,
+                    assigned_by_user_id=str(current_user["user_id"]),
+                )
 
             touch_floor_layout_updated_by(
                 conn,
@@ -1043,6 +1101,15 @@ def update_seat_configuration_metadata(
         )
         if updated_seat is None:
             _raise_not_found("seat")
+
+        if updated_seat.get("layout_id") is not None:
+            touch_floor_layout_updated_by(
+                conn,
+                tenant_id=tenant_id,
+                layout_id=str(updated_seat["layout_id"]),
+                updated_by_user_id=str(current_user["user_id"]),
+            )
+
         conn.commit()
     except HTTPException as he:
         conn.rollback()
@@ -1101,6 +1168,7 @@ def update_seats_configuration_bulk(
     seat_ids = [str(seat_id) for seat_id in dict.fromkeys(payload.seat_ids)]
     audit_entries: list[tuple[str, dict[str, Any]]] = []
     responses: list[SeatConfigurationResponse] = []
+    touched_layout_ids: set[str] = set()
 
     try:
         for seat_id in seat_ids:
@@ -1121,8 +1189,20 @@ def update_seats_configuration_bulk(
             if updated_seat is None:
                 _raise_not_found("seat")
 
+            if updated_seat.get("layout_id") is not None:
+                touched_layout_ids.add(str(updated_seat["layout_id"]))
+
             audit_entries.append((seat_id, seat))
             responses.append(SeatConfigurationResponse(**updated_seat))
+
+        for layout_id in touched_layout_ids:
+            touch_floor_layout_updated_by(
+                conn,
+                tenant_id=tenant_id,
+                layout_id=layout_id,
+                updated_by_user_id=str(current_user["user_id"]),
+            )
+
         conn.commit()
     except HTTPException as he:
         conn.rollback()
