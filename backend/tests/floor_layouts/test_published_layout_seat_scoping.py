@@ -20,6 +20,7 @@ from backend.repositories.floor_layout_repository import (
 from backend.repositories.location_repository import (
     fetch_seat_configuration,
     fetch_site_by_id,
+    upsert_operational_seat,
 )
 
 
@@ -138,18 +139,55 @@ class SeatQueriesOnlyConsiderPublishedLayoutTests(unittest.TestCase):
         self.assertIn("is_published = TRUE", sql)
 
 
-class ReconcilePublishedLayoutSeatsHistoryCheckTests(unittest.TestCase):
-    def test_has_history_also_checks_audit_logs(self) -> None:
-        """A seat that was only ever configured/audited (never booked or
-        blocked) must still be retired rather than hard-deleted, or its
-        audit_logs rows become unverifiable."""
-        cursor = FakeCursor()
-        reconcile_published_layout_seats(
-            FakeConnection(cursor), tenant_id="1", floor_id="1", layout_id="1",
+class _FakeUpsertCursor(FakeCursor):
+    def fetchone(self):
+        return {"seat_id": "501"}
+
+
+class UpsertOperationalSeatAppendOnlyTests(unittest.TestCase):
+    def test_conflict_target_includes_layout_id(self) -> None:
+        """Unique key is (floor_id, seat_code, layout_id): an upsert against
+        the SAME layout_id updates in place (in-version edits); a new
+        layout_id always inserts a fresh row instead of overwriting the
+        previous version's, so seats is append-only across republishes."""
+        cursor = _FakeUpsertCursor()
+        upsert_operational_seat(
+            FakeConnection(cursor),
+            tenant_id="1", layout_id="10", site_id="1", building_id="1",
+            floor_id="2", seat_code="A-1", seat_type="STANDARD",
+            status="ACTIVE", is_bookable=True, svg_element_id="svg-1",
         )
         sql, _ = cursor.executions[0]
-        self.assertIn("audit_logs", sql)
-        self.assertIn("entity_type = 'seat'", sql)
+        self.assertIn("ON CONFLICT", sql)
+        self.assertIn("floor_id,", sql)
+        self.assertIn("seat_code,", sql)
+        self.assertIn("layout_id", sql)
+        self.assertNotIn("layout_id = EXCLUDED.layout_id", sql)
+
+
+class ReconcilePublishedLayoutSeatsAppendOnlyTests(unittest.TestCase):
+    """seats is append-only per layout version (unique key floor_id,
+    seat_code, layout_id): reconciling a newly published layout must only
+    ever retire the previous version's still-live rows, never delete
+    anything -- bookings/audit_logs must keep pointing at the exact
+    historical seat row they were made against."""
+
+    def test_retires_by_layout_id_never_deletes(self) -> None:
+        cursor = FakeCursor()
+        reconcile_published_layout_seats(
+            FakeConnection(cursor), tenant_id="1", floor_id="2", layout_id="10",
+        )
+
+        self.assertEqual(len(cursor.executions), 1)
+        sql, params = cursor.executions[0]
+        self.assertIn("UPDATE seats", sql)
+        self.assertNotIn("DELETE", sql)
+        self.assertIn("status = 'INACTIVE'", sql)
+        self.assertIn("is_bookable = FALSE", sql)
+        self.assertIn("live_until = NOW()", sql)
+        self.assertIn("layout_id <> %s", sql)
+        self.assertIn("live_until IS NULL", sql)
+        self.assertEqual(params, ("1", "2", "10"))
 
 
 if __name__ == "__main__":

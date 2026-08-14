@@ -6,7 +6,7 @@ from datetime import date
 from typing import Any
 
 from psycopg2.extensions import connection as PGConnection
-from psycopg2.extras import Json, RealDictCursor
+from psycopg2.extras import Json, RealDictCursor, execute_values
 
 from backend.core.enums import NON_DELETED_LAYOUT_STATUSES
 
@@ -812,6 +812,46 @@ def fetch_layout_seat_mapping_by_id(
     return dict(row) if row else None
 
 
+def fetch_layout_seat_mappings_by_ids(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_seat_mapping_ids: list[str],
+) -> dict[str, dict[str, Any]]:
+    """Bulk counterpart to fetch_layout_seat_mapping_by_id -- one round
+    trip for the whole batch instead of one per id, same
+    non-DELETED-layout visibility rule. Returns a dict keyed by mapping id
+    (as a string); an id with no matching row (unknown, or its layout is
+    DELETED) is simply absent from the result, same as the single-row
+    function returning None.
+    """
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+        cur.execute(
+            """
+            SELECT
+                lsm.*
+            FROM layout_seat_mappings AS lsm
+            JOIN floor_layouts AS fl
+                ON fl.id = lsm.layout_id
+               AND fl.tenant_id = lsm.tenant_id
+            WHERE lsm.tenant_id = %s
+              AND lsm.id = ANY(%s::bigint[])
+              AND fl.status = ANY(%s)
+            """,
+            (
+                tenant_id,
+                layout_seat_mapping_ids,
+                list(NON_DELETED_LAYOUT_STATUSES),
+            ),
+        )
+
+        rows = cur.fetchall()
+
+    return {str(row["id"]): dict(row) for row in rows}
+
+
 def update_layout_seat_mapping_configuration(
     conn: PGConnection,
     *,
@@ -873,6 +913,81 @@ def update_layout_seat_mapping_configuration(
 
     return dict(row)
 
+
+def update_layout_seat_mapping_configurations_bulk(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    entries: list[dict[str, Any]],
+    updated_by: str,
+) -> dict[str, dict[str, Any]]:
+    """Bulk counterpart to update_layout_seat_mapping_configuration -- one
+    multi-row UPDATE (via a VALUES list joined back to the table) instead
+    of one round trip per mapping. `entries` is a non-empty list of dicts
+    with keys layout_seat_mapping_id, seat_name, seat_type, status,
+    is_bookable, is_reserved, amenity_ids -- any of the latter six may be
+    None per entry, meaning "keep this mapping's stored value" (same
+    per-row COALESCE semantics as the single-row version). Returns a dict
+    keyed by mapping id (as a string).
+    """
+
+    row_placeholders = ", ".join(
+        ["(%s::bigint, %s::text, %s::text, %s::text, %s::boolean, %s::boolean, %s::jsonb)"]
+        * len(entries)
+    )
+
+    params: list[Any] = [updated_by]
+    for entry in entries:
+        amenity_ids = entry["amenity_ids"]
+        params.extend(
+            [
+                entry["layout_seat_mapping_id"],
+                entry["seat_name"],
+                entry["seat_type"],
+                entry["status"],
+                entry["is_bookable"],
+                entry["is_reserved"],
+                Json(amenity_ids) if amenity_ids is not None else None,
+            ]
+        )
+    params.append(tenant_id)
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+        cur.execute(
+            f"""
+            UPDATE layout_seat_mappings AS lsm
+            SET
+                seat_name = COALESCE(v.seat_name, lsm.seat_name),
+                seat_type = COALESCE(v.seat_type, lsm.seat_type),
+                status = COALESCE(v.status, lsm.status),
+                is_bookable = COALESCE(v.is_bookable, lsm.is_bookable),
+                is_reserved = COALESCE(v.is_reserved, lsm.is_reserved),
+
+                amenity_ids = COALESCE(v.amenity_ids, lsm.amenity_ids),
+
+                is_configured = TRUE,
+                configuration_status = 'COMPLETED',
+
+                updated_by = %s,
+                updated_at = NOW()
+
+            FROM (VALUES {row_placeholders}) AS v(
+                id, seat_name, seat_type, status, is_bookable, is_reserved, amenity_ids
+            )
+            WHERE lsm.tenant_id = %s
+              AND lsm.id = v.id
+
+            RETURNING lsm.*
+            """,
+            params,
+        )
+
+        rows = cur.fetchall()
+
+    return {str(row["id"]): dict(row) for row in rows}
+
+
 def upsert_operational_seat(
     conn: PGConnection,
     *,
@@ -890,7 +1005,18 @@ def upsert_operational_seat(
     svg_element_id: str,
     source_layout_mapping_id: str | None = None,
 ) -> dict[str, Any]:
+    """Insert or update the operational seat row for one layout_seat_mapping.
 
+    Seats are append-only per layout version: the unique key is
+    (floor_id, seat_code, layout_id), not just (floor_id, seat_code). A
+    save against the SAME already-published layout_id updates its row in
+    place (in-version edits, e.g. update_layout_seat_configurations_bulk's
+    published-layout cascade); publishing a NEW layout_id always inserts a
+    fresh row instead of overwriting the previous version's, so old
+    bookings keep pointing at the exact historical seat row they were
+    made against. reconcile_published_layout_seats retires (never
+    deletes) the previous version's now-superseded rows.
+    """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
 
         cur.execute(
@@ -930,12 +1056,11 @@ def upsert_operational_seat(
 
             ON CONFLICT (
                 floor_id,
-                layout_id,
-                seat_code
+                seat_code,
+                layout_id
             )
 
             DO UPDATE SET
-                layout_id = EXCLUDED.layout_id,
                 seat_name = EXCLUDED.seat_name,
                 seat_type = EXCLUDED.seat_type,
                 is_bookable = EXCLUDED.is_bookable,
@@ -974,6 +1099,98 @@ def upsert_operational_seat(
         raise LookupError("Seat upsert failed.")
 
     return dict(row)
+
+
+def upsert_operational_seats_bulk(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seats: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Bulk counterpart to upsert_operational_seat -- one multi-row
+    INSERT ... ON CONFLICT DO UPDATE (via psycopg2's execute_values,
+    which pages large batches automatically) instead of one round trip
+    per seat. Each dict in `seats` carries the same fields
+    upsert_operational_seat takes as keyword arguments, plus a
+    `source_layout_mapping_id` (this cascade's only caller always sets
+    it). Returns a dict keyed by source_layout_mapping_id (as a string)
+    so the caller can map each resulting seat_id straight back to the
+    mapping it came from.
+    """
+
+    rows = [
+        (
+            tenant_id,
+            seat["layout_id"],
+            seat["site_id"],
+            seat["building_id"],
+            seat["floor_id"],
+            seat["seat_code"],
+            seat.get("seat_name"),
+            seat["seat_type"],
+            seat["is_bookable"],
+            seat.get("is_reserved"),
+            seat["status"],
+            seat["svg_element_id"],
+            seat["source_layout_mapping_id"],
+        )
+        for seat in seats
+    ]
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+        result_rows = execute_values(
+            cur,
+            """
+            INSERT INTO seats (
+                tenant_id,
+                layout_id,
+                site_id,
+                building_id,
+                floor_id,
+                seat_code,
+                seat_name,
+                seat_type,
+                is_bookable,
+                is_reserved,
+                status,
+                svg_element_id,
+                source_layout_mapping_id,
+                live_from
+            )
+            VALUES %s
+
+            ON CONFLICT (
+                floor_id,
+                seat_code,
+                layout_id
+            )
+
+            DO UPDATE SET
+                seat_name = EXCLUDED.seat_name,
+                seat_type = EXCLUDED.seat_type,
+                is_bookable = EXCLUDED.is_bookable,
+                is_reserved = EXCLUDED.is_reserved,
+                status = EXCLUDED.status,
+                svg_element_id = EXCLUDED.svg_element_id,
+                source_layout_mapping_id = EXCLUDED.source_layout_mapping_id,
+                live_from = COALESCE(seats.live_from, NOW()),
+                live_until = NULL,
+                retired_reason = NULL,
+                updated_at = NOW()
+
+            RETURNING
+                id::text AS seat_id,
+                source_layout_mapping_id::text AS source_layout_mapping_id
+            """,
+            rows,
+            template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())",
+            fetch=True,
+        )
+
+    return {row["source_layout_mapping_id"]: dict(row) for row in result_rows}
+
+
 def replace_seat_amenities(
     conn: PGConnection,
     *,
@@ -1022,6 +1239,67 @@ def replace_seat_amenities(
             """,
             values,
         )
+
+
+def replace_seat_amenities_bulk(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seat_amenities: list[tuple[str, list[int]]],
+    assigned_by_user_id: str,
+) -> None:
+    """Bulk counterpart to replace_seat_amenities -- one DELETE across all
+    touched seats plus one multi-row INSERT (via execute_values), instead
+    of a delete-then-executemany pair per seat. `seat_amenities` is a
+    non-empty list of (seat_id, amenity_ids) tuples; a seat may legitimately
+    map to an empty amenity_ids list (explicitly clearing its amenities),
+    same as the single-seat version.
+    """
+
+    seat_ids = [seat_id for seat_id, _ in seat_amenities]
+
+    with conn.cursor() as cur:
+
+        cur.execute(
+            """
+            DELETE FROM seat_amenities
+            WHERE tenant_id = %s
+              AND seat_id = ANY(%s::bigint[])
+            """,
+            (
+                tenant_id,
+                seat_ids,
+            ),
+        )
+
+        values = [
+            (
+                tenant_id,
+                seat_id,
+                amenity_id,
+                assigned_by_user_id,
+            )
+            for seat_id, amenity_ids in seat_amenities
+            for amenity_id in amenity_ids
+        ]
+
+        if not values:
+            return
+
+        execute_values(
+            cur,
+            """
+            INSERT INTO seat_amenities (
+                tenant_id,
+                seat_id,
+                amenity_id,
+                assigned_by_user_id
+            )
+            VALUES %s
+            """,
+            values,
+        )
+
 
 def fetch_seat_amenity_ids(
     conn: PGConnection,
@@ -1181,6 +1459,7 @@ def fetch_seat_configuration(
             site_id::text AS site_id,
             building_id::text AS building_id,
             floor_id::text AS floor_id,
+            layout_id::text AS layout_id,
             seat_code,
             status,
             is_bookable
@@ -1234,6 +1513,7 @@ def update_seat_configuration(
                 site_id::text AS site_id,
                 building_id::text AS building_id,
                 floor_id::text AS floor_id,
+                layout_id::text AS layout_id,
                 seat_code,
                 status,
                 is_bookable
