@@ -27,12 +27,13 @@ class FakeConnection:
         self.rollbacks += 1
 
 
-def _seat_row(seat_id: str) -> dict[str, object]:
+def _seat_row(seat_id: str, *, layout_id: str | None = None) -> dict[str, object]:
     return {
         "seat_id": seat_id,
         "site_id": "1",
         "building_id": "1",
         "floor_id": "1",
+        "layout_id": layout_id,
         "seat_code": f"SEAT-{seat_id}",
         "status": "ACTIVE",
         "is_bookable": True,
@@ -135,6 +136,50 @@ class BulkSeatConfigurationServiceTests(unittest.TestCase):
         # Failure audit written once for the whole batch, not per seat.
         mock_audit.assert_called_once()
         self.assertEqual(mock_audit.call_args.kwargs["event_status"], "FAILURE")
+
+    def test_stamps_each_distinct_parent_layout_exactly_once(self) -> None:
+        """Seats in the batch that share a layout_id must only stamp that
+        layout once; a seat with no layout_id (pre-tracking data) must not
+        be stamped at all."""
+        conn = FakeConnection()
+        payload = BulkSeatConfigurationUpdateRequest(seat_ids=[1, 2, 3], is_bookable=False)
+
+        fetched = [
+            _seat_row("1", layout_id="100"),
+            _seat_row("2", layout_id="100"),
+            _seat_row("3", layout_id=None),
+        ]
+        updated = [
+            {**_seat_row("1", layout_id="100"), "is_bookable": False},
+            {**_seat_row("2", layout_id="100"), "is_bookable": False},
+            {**_seat_row("3", layout_id=None), "is_bookable": False},
+        ]
+
+        with (
+            patch(
+                "backend.services.location_service.fetch_seat_configuration",
+                side_effect=fetched,
+            ),
+            patch(
+                "backend.services.location_service.update_seat_configuration",
+                side_effect=updated,
+            ),
+            patch("backend.services.location_service.safe_write_audit_log"),
+            patch(
+                "backend.services.location_service.touch_floor_layout_updated_by",
+            ) as mock_touch,
+        ):
+            update_seats_configuration_bulk(
+                conn,
+                tenant_id="1",
+                payload=payload,
+                current_user=TENANT_ADMIN_CALLER,
+            )
+
+        mock_touch.assert_called_once_with(
+            conn, tenant_id="1", layout_id="100", updated_by_user_id="1"
+        )
+        self.assertEqual(conn.commits, 1)
 
     def test_rejects_immutable_fields_like_the_single_seat_endpoint(self) -> None:
         conn = FakeConnection()

@@ -331,6 +331,15 @@ def activate_floor_layout(
             layout.get("is_published") is True
             and layout.get("status") == LayoutStatus.PUBLISHED.value
         ):
+            # Pure no-op: activate is only a DRAFT/ARCHIVED -> PUBLISHED
+            # promotion and never carries seat data. Editing an
+            # already-published layout's seats goes through
+            # update_layout_seat_configurations_bulk instead (see
+            # dev-notes/backend/CURRENT.md) -- that endpoint cascades into
+            # `seats` itself, in the same transaction as the edit, when the
+            # parent layout is already PUBLISHED. Re-running the
+            # publish/reconcile sync here on every activate call would be
+            # redundant with that and is deliberately not done.
             return FloorLayoutResponse(**layout)
 
         # No unique index enforces "one published layout per floor" at the

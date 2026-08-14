@@ -36,12 +36,27 @@ function isRoomSvgId(svgId: string): boolean {
   return ROOM_SVG_ID_PATTERN.test(svgId);
 }
 
+// Escapes regex metacharacters so seat ids containing them (e.g. "F9.1",
+// "Group (2)") can be safely interpolated into a RegExp instead of being
+// misinterpreted as pattern syntax.
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function recolorGroup(svgText: string, id: string, fill: string): string {
-  const re = new RegExp(`(<g[^>]*\\bid="${id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "m");
+  // "g" flag: some exported floor plans reuse the same <g id="..."> more than
+  // once (e.g. a duplicated furniture block that wasn't re-keyed). Without
+  // it, String.replace only recolors the first occurrence, leaving whichever
+  // copy actually renders on screen untouched.
+  const re = new RegExp(`(<g[^>]*\\bid="${escapeRegExp(id)}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "gm");
   return svgText.replace(re, (_m, open, inner, close) => {
+    // fill="none" (and fill:none) are deliberately transparent — outlines,
+    // cutouts, gaps between an icon's parts. Overwriting those too flattens
+    // the whole group into one solid-color block, erasing the icon's shape
+    // instead of just recoloring its visible parts.
     const colored = inner
-      .replace(/fill="[^"]*"/g, `fill="${fill}"`)
-      .replace(/fill:[^;"}\s]*/g, `fill:${fill}`);
+      .replace(/fill="(?!none")[^"]*"/g, `fill="${fill}"`)
+      .replace(/fill:(?!none)[^;"}\s]*/g, `fill:${fill}`);
     return `${open}${colored}${close}`;
   });
 }
@@ -51,19 +66,13 @@ function applyColors(svgText: string, seats: Seat[]): string {
   for (const seat of seats) {
     const id = seat.seat_svg_id;
 
-    // Unconfigured — leave the original artwork colors, desk or room, until
-    // an admin actually configures it.
-    if (!seat.is_configured) continue;
+    // Cabins/conference/meeting rooms are never recolored on the admin
+    // side — they always keep the floor plan's original artwork colors.
+    if (isRoomSvgId(id)) continue;
 
-    if (isRoomSvgId(id)) {
-      // Configured rooms only recolor when explicitly non-bookable/inactive,
-      // and just a flat grey rather than the red/amber distinction used for
-      // desks — a bookable room still keeps its original artwork colors.
-      const isNotBookable = seat.status === "INACTIVE" || !seat.is_bookable;
-      if (!isNotBookable) continue;
-      result = recolorGroup(result, id, "#D1D5DB");
-      continue;
-    }
+    // Unconfigured — leave the original artwork colors until an admin
+    // actually configures it.
+    if (!seat.is_configured) continue;
 
     result = recolorGroup(result, id, resolveSeatFill(seat));
   }
@@ -330,8 +339,37 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                     <td className="px-3 py-3">
                       {(() => {
                         const isPublished = row.status === "PUBLISHED" && row.is_published;
-                        const name = isPublished ? (row.published_by_name ?? "—") : (row.updated_by_name ?? "—");
-                        const date = isPublished ? row.published_at : row.updated_at;
+                        // A published row's "last updated" must reflect
+                        // whichever happened more recently: the original
+                        // publish, or a later edit made through the
+                        // bulk-configuration endpoint. That endpoint stamps
+                        // updated_at/updated_by on every save but never
+                        // touches published_at/published_by — activate is
+                        // no longer called at all when republishing an
+                        // already-published layout's edits (see
+                        // dev-notes/frontend/CHANGELOG.md, 2026-08-12 17:00),
+                        // so published_at alone would go stale after any
+                        // post-publish edit.
+                        const updatedTime = row.updated_at ? new Date(row.updated_at).getTime() : null;
+                        const publishedTime = row.published_at ? new Date(row.published_at).getTime() : null;
+                        const useUpdated =
+                          !isPublished ||
+                          (updatedTime !== null && (publishedTime === null || updatedTime > publishedTime));
+                        // If the row has never actually been updated/published
+                        // (e.g. a fresh DRAFT no one has touched yet), fall
+                        // back to the same Created info shown in the column to
+                        // its left rather than showing a bare dash — there's
+                        // real info to show, it's just the same as "created."
+                        // Gate the fallback on the NAME being present, not the
+                        // date: updated_at defaults to the row's creation time
+                        // at insert (so it's never actually null), while
+                        // updated_by_user_id/name stay genuinely null until a
+                        // real edit happens — checking the date here would
+                        // never trigger the fallback at all.
+                        const primaryName = useUpdated ? row.updated_by_name : row.published_by_name;
+                        const primaryDate = useUpdated ? row.updated_at : row.published_at;
+                        const name = primaryName ?? row.uploaded_by_name ?? "—";
+                        const date = primaryName ? primaryDate : row.created_at;
                         return (
                           <div className="flex flex-col gap-0.5">
                             <span className="text-xs font-medium text-gray-800">{name}</span>
