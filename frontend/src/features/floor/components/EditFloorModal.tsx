@@ -28,7 +28,7 @@ export default function EditFloorModal({
   onClose,
   onSuccess,
 }: Props) {
-  const { loading, formData, handleChange, handleUpdate } = useEditFloor(floor);
+  const { loading, formData, handleChange, handleUpdate } = useEditFloor(floor, open);
 
   const hasChanges =
     formData.floor_name !== floor.floor_name ||

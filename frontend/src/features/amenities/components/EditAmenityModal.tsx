@@ -31,7 +31,7 @@ export default function EditAmenityModal({
   onSuccess,
 }: Props) {
   const { loading, formData, categories, handleChange, handleUpdate } =
-    useEditAmenity(amenity);
+    useEditAmenity(amenity, open);
 
   const hasChanges =
     formData.amenity_name !== amenity.amenity_name ||
