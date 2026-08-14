@@ -30,7 +30,8 @@ export default function EditBuildingModal({
 }: Props) {
   const { loading, formData, handleChange, handleUpdate } = useEditBuilding(
     building,
-    onSuccess
+    onSuccess,
+    open
   );
 
   return (

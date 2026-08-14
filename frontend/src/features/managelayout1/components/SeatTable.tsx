@@ -312,9 +312,31 @@ export default function SeatTable({
                             );
                           })}
                           {seat.amenity_ids.length > 2 && (
-                            <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-medium border border-gray-200">
-                              +{seat.amenity_ids.length - 2}
-                            </span>
+                            <div className="relative inline-block group">
+                              <button
+                                type="button"
+                                className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-medium border border-gray-200 cursor-pointer focus:outline-none"
+                               
+                              >
+                                +{seat.amenity_ids.length - 2}
+                              </button>
+
+                              <div className="hidden group-hover:block absolute right-0 mt-1 w-auto bg-white border border-gray-200 rounded-md shadow-lg p-1.5 z-10 text-xs">
+                                {seat.amenity_ids.slice(2).map((id) => {
+                                  const pref = prefMap[id]
+                                  const name = pref?.preference_name ?? id;
+                                  const category = pref?.preference_type ?? null;
+                                  const color = getAmenityColor(name, category);
+                                  return (
+                                    <div key={id} className="py-0.5">
+                                      <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-medium whitespace-nowrap border ${color.bg} ${color.text} ${color.border}`}>
+                                        {name}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           )}
                         </div>
                       )}
