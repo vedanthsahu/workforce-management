@@ -19,8 +19,12 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { useNavigationGuardStore } from "@/store/useNavigationGuardStore";
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+// Effective date must be at least 15 days out — e.g. today the 14th means
+// the 14th-28th are unavailable and the 29th is the earliest pickable date.
+function minEffectiveDateIso(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 15);
+  return d.toISOString().slice(0, 10);
 }
 
 function ManageSeatsPage() {
@@ -105,10 +109,10 @@ function ManageSeatsPage() {
   // Frontend-only for now, per explicit instruction — not sent to the
   // backend/publish API in any form. Purely a UI field until there's a
   // real "effective date" concept on the backend to wire it into.
-  const [effectiveDate, setEffectiveDate] = useState(todayIso);
+  const [effectiveDate, setEffectiveDate] = useState(minEffectiveDateIso);
 
   const openPublishConfirm = () => {
-    setEffectiveDate(todayIso());
+    setEffectiveDate(minEffectiveDateIso());
     setShowPublishConfirm(true);
   };
 
@@ -288,7 +292,7 @@ function ManageSeatsPage() {
         title={hasUnpublishedEdits ? "Publish pending seat changes?" : "Publish this layout?"}
         description={
           hasUnpublishedEdits
-            ? "This will save your seat changes and make them live immediately for everyone booking this floor."
+            ? "This will publish your recent configuration changes and make them available to users on the selected effective date."
             : "This will make this layout the live layout for its floor."
         }
         confirmLabel={publishing ? "Publishing…" : "Yes, Publish"}
@@ -307,8 +311,18 @@ function ManageSeatsPage() {
           <input
             id="publish-effective-date"
             type="date"
+            min={minEffectiveDateIso()}
             value={effectiveDate}
-            onChange={(e) => setEffectiveDate(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              const min = minEffectiveDateIso();
+              // The `min` attribute only greys out the calendar dropdown and
+              // marks the input :invalid — it does NOT stop a date typed
+              // directly into the MM/DD/YYYY segments from being accepted.
+              // Clamp any manually-typed date earlier than the minimum
+              // instead of letting it through silently.
+              setEffectiveDate(value && value < min ? min : value);
+            }}
             className="w-full h-9 pl-8 pr-3 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
           />
         </div>

@@ -51,7 +51,7 @@ function parseSvgDimensions(svgText: string): { w: number; h: number } {
     if (w > 0 && h > 0) return { w, h };
   }
 
-  const width  = svgTag.match(/\swidth=["']([\d.]+)(?:px)?["']/);
+  const width = svgTag.match(/\swidth=["']([\d.]+)(?:px)?["']/);
   const height = svgTag.match(/\sheight=["']([\d.]+)(?:px)?["']/);
   if (width && height) {
     const w = parseFloat(width[1]);
@@ -84,7 +84,7 @@ function getSeatIdFromClick(target: EventTarget | null, knownIds: Set<string>): 
 
 function resolveSeatFill(seat: Seat): string {
   if (seat.status === "INACTIVE") return "#EF4444"; // Inactive     — red
-  if (!seat.is_bookable)          return "#F59E0B"; // Non-bookable — amber
+  if (!seat.is_bookable) return "#F59E0B"; // Non-bookable — amber
   return "#22C55E";                                 // Bookable     — green
 }
 
@@ -181,11 +181,11 @@ function highlightSeat(svgText: string, svgId: string): string {
 
 const SEAT_TYPES: SeatType[] = ["STANDARD", "WINDOW", "CABIN", "ACCESSIBLE", "HOT_DESK"];
 const SEAT_TYPE_LABELS: Record<string, string> = {
-  STANDARD:   "STANDARD",
-  WINDOW:     "WINDOW",
-  CABIN:      "CABIN",
+  STANDARD: "STANDARD",
+  WINDOW: "WINDOW",
+  CABIN: "CABIN",
   ACCESSIBLE: "ACCESSIBLE",
-  HOT_DESK:   "HOT_DESK",
+  HOT_DESK: "HOT_DESK",
 };
 const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
 
@@ -198,14 +198,14 @@ interface SeatConfigDialogProps {
 }
 
 const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat, preferences, onSave }) => {
-  const [seatType,   setSeatType]   = useState<SeatType>("STANDARD");
-  const [bookable,   setBookable]   = useState(true);
-  const [status,     setStatus]     = useState<SeatStatus>("ACTIVE");
+  const [seatType, setSeatType] = useState<SeatType>("STANDARD");
+  const [bookable, setBookable] = useState(true);
+  const [status, setStatus] = useState<SeatStatus>("ACTIVE");
   const [amenityIds, setAmenityIds] = useState<string[]>([]);
-  const [notes,      setNotes]      = useState("");
-  const [saving,     setSaving]     = useState(false);
-  const [saveError,  setSaveError]  = useState(false);
-  const [saved,      setSaved]      = useState(false);
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (!seat) return;
@@ -231,12 +231,12 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
     try {
       await onSave({
         seat_svg_id: seat.seat_svg_id,
-        layout_id:   seat.layout_id,
-        seat_type:   seatType,
+        layout_id: seat.layout_id,
+        seat_type: seatType,
         is_bookable: bookable,
         status,
         amenity_ids: amenityIds,
-        notes:       notes || undefined,
+        notes: notes || undefined,
       });
       setSaved(true);
       setTimeout(() => onClose(), 800);
@@ -316,9 +316,8 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
-              <span className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none ${
-                status === "ACTIVE" ? "bg-emerald-500" : "bg-gray-400"
-              }`} />
+              <span className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none ${status === "ACTIVE" ? "bg-emerald-500" : "bg-gray-400"
+                }`} />
             </div>
           </div>
 
@@ -338,13 +337,11 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
                     <button
                       key={p.preference_id}
                       onClick={() => toggleAmenity(p.preference_id)}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left text-xs font-medium transition-colors ${
-                        on ? "bg-indigo-50 border-indigo-300 text-indigo-700" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                      }`}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left text-xs font-medium transition-colors ${on ? "bg-indigo-50 border-indigo-300 text-indigo-700" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                        }`}
                     >
-                      <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${
-                        on ? "bg-indigo-600 border-indigo-600" : "border-gray-300"
-                      }`}>
+                      <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${on ? "bg-indigo-600 border-indigo-600" : "border-gray-300"
+                        }`}>
                         {on && (
                           <svg viewBox="0 0 8 7" className="w-2.5 h-2.5">
                             <path d="M1 3.5l2 2L7 1" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -406,10 +403,10 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
 // ─── Legend ───────────────────────────────────────────────────────────────────
 
 const LEGEND_ITEMS = [
-  { label: "Bookable",     color: "#22C55E" },
+  { label: "Bookable", color: "#22C55E" },
   { label: "Non-bookable", color: "#F59E0B" },
-  { label: "Inactive",     color: "#EF4444" },
-  { label: "Unconfigured", color: "#D1D5DB" },
+  { label: "Inactive", color: "#EF4444" },
+  { label: "Unconfigured", color: "#000000ff" },
 ] as const;
 
 // FIX: flex-wrap + gap-y so items wrap on narrow screens instead of overflowing
@@ -441,25 +438,25 @@ export default function LayoutPreview({
   filteredSeats,
   isFilterActive = false,
 }: LayoutPreviewProps) {
-  const wrapperRef   = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const transformRef = useRef<HTMLDivElement>(null);
 
   // ── pan / zoom state (all refs to avoid re-renders) ────────────────────
-  const scaleRef     = useRef(1);
+  const scaleRef = useRef(1);
   const translateRef = useRef({ x: 0, y: 0 });
-  const isPanning    = useRef(false);
-  const panStart     = useRef({ x: 0, y: 0 });
+  const isPanning = useRef(false);
+  const panStart = useRef({ x: 0, y: 0 });
   const mouseDownPos = useRef({ x: 0, y: 0 });
-  const didDrag      = useRef(false);
+  const didDrag = useRef(false);
 
   // FIX: touch support refs
   const pinchStartRef = useRef<number | null>(null);
 
-  const [rawSvg,      setRawSvg]      = useState<string | null>(null);
-  const [svgError,    setSvgError]    = useState(false);
+  const [rawSvg, setRawSvg] = useState<string | null>(null);
+  const [svgError, setSvgError] = useState(false);
   const [zoomDisplay, setZoomDisplay] = useState(100);
-  const [mapReady,    setMapReady]    = useState(false);
-  const [loading,     setLoading]     = useState(false);
+  const [mapReady, setMapReady] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Actual canvas size of the loaded SVG — read from its own markup, not
   // assumed to always match the SVG_W/SVG_H default.
@@ -467,7 +464,7 @@ export default function LayoutPreview({
 
   const seatIdsRef = useRef<Set<string>>(new Set());
 
-  const [dialogOpen,  setDialogOpen]  = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [clickedSeat, setClickedSeat] = useState<Seat | null>(null);
 
   // ── Hover tooltip (only in configure mode) ────────────────────────────
@@ -570,7 +567,7 @@ export default function LayoutPreview({
     setZoomDisplay(Math.round(newScale * 100));
   }, [applyTransform]);
 
-  const zoomIn  = useCallback(() => zoomStep(1.25),     [zoomStep]);
+  const zoomIn = useCallback(() => zoomStep(1.25), [zoomStep]);
   const zoomOut = useCallback(() => zoomStep(1 / 1.25), [zoomStep]);
 
   // ── Wheel zoom ─────────────────────────────────────────────────────────
@@ -585,7 +582,7 @@ export default function LayoutPreview({
       const rect = el.getBoundingClientRect();
       translateRef.current = {
         x: e.clientX - rect.left - (e.clientX - rect.left - translateRef.current.x) * (newScale / oldScale),
-        y: e.clientY - rect.top  - (e.clientY - rect.top  - translateRef.current.y) * (newScale / oldScale),
+        y: e.clientY - rect.top - (e.clientY - rect.top - translateRef.current.y) * (newScale / oldScale),
       };
       scaleRef.current = newScale;
       applyTransform();
@@ -618,10 +615,10 @@ export default function LayoutPreview({
               const relY = e.clientY - rect.top;
               // Flip above cursor when within 170px of the bottom to avoid clipping
               const nearBottom = relY > rect.height - 170;
-              const nearRight  = relX > rect.width  - 170;
+              const nearRight = relX > rect.width - 170;
               setTooltip({
                 seat: hovered,
-                x: nearRight  ? relX - 160 : relX + 14,
+                x: nearRight ? relX - 160 : relX + 14,
                 y: nearBottom ? relY - 155 : relY - 10,
               });
             }
@@ -938,12 +935,12 @@ export default function LayoutPreview({
             if (!prev) return null;
             return {
               ...prev,
-              seat_name:   prev.seat_code,
-              seat_type:   payload.seat_type,
+              seat_name: prev.seat_code,
+              seat_type: payload.seat_type,
               is_bookable: payload.is_bookable,
-              status:      payload.status,
+              status: payload.status,
               amenity_ids: payload.amenity_ids,
-              notes:       payload.notes ?? prev.notes,
+              notes: payload.notes ?? prev.notes,
             };
           });
         }}

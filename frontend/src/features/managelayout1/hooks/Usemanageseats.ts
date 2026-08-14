@@ -46,8 +46,8 @@ export function useManageSeats() {
     isDirty,
     fetchSeats,
     updateSeat,
+    applyLocalEdit,
     markDirty,
-    markSeatDirty,
     clearDirty,
   } = useSeatsStore();
 
@@ -158,8 +158,11 @@ export function useManageSeats() {
 
   // ── Save seat ──────────────────────────────────────────────────────────
   // For an already-published layout, edits are staged locally only (no PATCH)
-  // until the admin explicitly publishes — see usePublishLayout, which flushes
-  // everything tracked by markSeatDirty before re-syncing the live layout.
+  // until the admin explicitly publishes — see usePublishLayout, which
+  // flushes everything still in dirtyMappingIds before re-syncing the live
+  // layout. applyLocalEdit compares against the seat's original fetched
+  // value, so editing it back to that value (e.g. Active -> Inactive ->
+  // Active) un-marks it as pending instead of leaving it stuck dirty.
   const saveSeat = useCallback(async (payload: SeatUpdatePayload) => {
     const seat = seats.find((s) => s.seat_svg_id === payload.seat_svg_id);
     if (!seat) throw new Error("Seat not found");
@@ -185,14 +188,12 @@ export function useManageSeats() {
       is_configured: true,
       amenity_ids:   payload.amenity_ids,
       notes:         payload.notes ?? seat.notes,
-      has_unpublished_changes: isPublished ? true : seat.has_unpublished_changes,
     };
 
-    updateSeat(updated);
-
     if (isPublished) {
-      markSeatDirty(seat.layout_seat_mapping_id);
+      applyLocalEdit(updated);
     } else {
+      updateSeat(updated);
       markDirty();
     }
 
@@ -204,7 +205,7 @@ export function useManageSeats() {
     });
 
     return updated;
-  }, [seats, layout?.is_published, updateSeat, markDirty, markSeatDirty]);
+  }, [seats, layout?.is_published, updateSeat, applyLocalEdit, markDirty]);
 
   // ── Bulk edit ──────────────────────────────────────────────────────────
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -232,18 +233,18 @@ export function useManageSeats() {
       // Local-only: apply to every affected seat's in-memory state and stage
       // it for the Publish flush. Deliberately no fetchSeats() here — nothing
       // changed server-side yet, and refetching would overwrite these edits
-      // with the still-unchanged server state.
+      // with the still-unchanged server state. applyLocalEdit compares each
+      // seat against its original fetched value, so any seat this bulk edit
+      // happens to land back on its original config is un-marked as pending.
       affectedSeats.forEach((seat) => {
-        updateSeat({
+        applyLocalEdit({
           ...seat,
           seat_type:     resolvedPayload.seat_type,
           status:        resolvedPayload.status,
           is_bookable:   resolvedPayload.is_bookable,
           is_configured: true,
           amenity_ids:   resolvedPayload.amenity_ids.map(String),
-          has_unpublished_changes: true,
         });
-        markSeatDirty(seat.layout_seat_mapping_id);
       });
     } else {
       // All affected seats share one config, so it goes in `defaults` and
@@ -258,7 +259,7 @@ export function useManageSeats() {
 
     clearSelection();
     setBulkOpen(false);
-  }, [seats, layout?.is_published, layoutId, clearSelection, fetchSeats, markDirty, markSeatDirty, updateSeat]);
+  }, [seats, layout?.is_published, layoutId, clearSelection, fetchSeats, markDirty, applyLocalEdit]);
 
   // ── Discard pending changes (already-published layout only) ────────────
   // Nothing was ever written server-side, so "discarding" just means

@@ -140,6 +140,9 @@ events/env.json
 events/container-env.json
 samconfig.toml
 
+# Dev-notes engineering log (not meant to be pushed on this branch)
+dev-notes/
+
 docs.zip
 uv.lock
 docs/Admin-Management-Flow-Reference.docx
