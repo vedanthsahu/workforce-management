@@ -355,8 +355,21 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                         const useUpdated =
                           !isPublished ||
                           (updatedTime !== null && (publishedTime === null || updatedTime > publishedTime));
-                        const name = useUpdated ? (row.updated_by_name ?? "—") : (row.published_by_name ?? "—");
-                        const date = useUpdated ? row.updated_at : row.published_at;
+                        // If the row has never actually been updated/published
+                        // (e.g. a fresh DRAFT no one has touched yet), fall
+                        // back to the same Created info shown in the column to
+                        // its left rather than showing a bare dash — there's
+                        // real info to show, it's just the same as "created."
+                        // Gate the fallback on the NAME being present, not the
+                        // date: updated_at defaults to the row's creation time
+                        // at insert (so it's never actually null), while
+                        // updated_by_user_id/name stay genuinely null until a
+                        // real edit happens — checking the date here would
+                        // never trigger the fallback at all.
+                        const primaryName = useUpdated ? row.updated_by_name : row.published_by_name;
+                        const primaryDate = useUpdated ? row.updated_at : row.published_at;
+                        const name = primaryName ?? row.uploaded_by_name ?? "—";
+                        const date = primaryName ? primaryDate : row.created_at;
                         return (
                           <div className="flex flex-col gap-0.5">
                             <span className="text-xs font-medium text-gray-800">{name}</span>
