@@ -1,13 +1,12 @@
 name: Backend CD (Deploy to Dev)
 
 on:
-  push:
-    branches: ["dev"]
-    paths:
-      - 'backend/**'
-      - 'template.yaml'
-      - 'pyproject.toml'
-      - 'uv.lock'
+  workflow_run:
+    workflows: ["Backend CI"]
+    types:
+      - completed
+    branches:
+    - "dev"
 
 # Ensure permissions are configured for AWS OIDC authentication
 permissions:
@@ -18,6 +17,7 @@ jobs:
   deploy:
     name: Deploy to Dev
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     environment: dev
     concurrency: dev
 
