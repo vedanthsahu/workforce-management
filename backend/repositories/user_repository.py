@@ -8,6 +8,8 @@ from typing import Any
 from psycopg2.extensions import connection as PGConnection
 from psycopg2.extras import Json, RealDictCursor
 
+from backend.core.text import titlecase_name
+
 USER_SELECT_FIELDS = """
     au.id::text AS user_id,
     au.tenant_id::text AS tenant_id,
@@ -486,7 +488,7 @@ def create_app_user_from_graph(
             (
                 tenant_id,
                 normalized_email,
-                _required_text(full_name, field_name="full_name", max_length=200),
+                _required_text(titlecase_name(full_name), field_name="full_name", max_length=200),
                 normalized_role,
                 normalized_status,
                 _required_text(microsoft_object_id, field_name="microsoft_object_id", max_length=150),
@@ -824,7 +826,7 @@ def update_user_profile(
             RETURNING {USER_RETURNING_FIELDS}
             """,
             (
-                _normalize_text(full_name, max_length=200),
+                titlecase_name(_normalize_text(full_name, max_length=200)),
                 _normalize_text(display_name, max_length=200),
                 _normalize_text(mobile_phone, max_length=50),
                 _normalize_text(office_location, max_length=200),
@@ -1000,7 +1002,7 @@ def sync_app_user_from_graph(
             """,
             (
                 _required_text(_normalize_email(email), field_name="email", max_length=200),
-                _required_text(full_name, field_name="full_name", max_length=200),
+                _required_text(titlecase_name(full_name), field_name="full_name", max_length=200),
                 _normalize_text(display_name, max_length=200),
                 _role_name_for_storage(normalized_role),
                 _required_text(microsoft_object_id, field_name="microsoft_object_id", max_length=150),
@@ -1257,44 +1259,39 @@ def search_users(
             fr"""
             SELECT {USER_SELECT_FIELDS}
             {USER_SELECT_FROM}
+            LEFT JOIN LATERAL (
+                SELECT MIN(pos) AS match_position
+                FROM unnest(
+                    regexp_split_to_array(
+                        lower(coalesce(au.full_name, '')),
+                        '\s+'
+                    )
+                ) WITH ORDINALITY AS t(word, pos)
+                WHERE word LIKE %s || '%%'
+            ) mp ON TRUE
             WHERE au.tenant_id = %s
             {status_clause}
               AND (
-                    EXISTS (
-                        SELECT 1
-                        FROM unnest(
-                            regexp_split_to_array(
-                                lower(coalesce(au.full_name, '')),
-                                '\s+'
-                            )
-                        ) AS name_part
-                        WHERE name_part LIKE %s || '%%'
-                    )
+                    mp.match_position IS NOT NULL
                  OR lower(coalesce(au.employee_id, ''))
                         LIKE %s || '%%'
                  OR coalesce(au.mobile_phone, '')
                         LIKE %s || '%%'
               )
             ORDER BY
-                CASE
-                    WHEN lower(coalesce(au.full_name, ''))
-                         LIKE %s || '%%'
-                    THEN 1
-                    ELSE 2
-                END,
+                COALESCE(mp.match_position, 999),
                 au.full_name,
                 au.id
             LIMIT %s
             """,
             (
+                # LATERAL match_position
+                search_text,
+
                 tenant_id,
 
                 # WHERE
                 search_text,
-                search_text,
-                search_text,
-
-                # ORDER BY
                 search_text,
 
                 limit,

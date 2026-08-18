@@ -13,7 +13,7 @@ from backend.repositories.location_repository import (
     fetch_sites,
 )
 from backend.repositories.preferences_repository import fetch_amenities
-from backend.repositories.user_repository import fetch_admin_user_directory
+from backend.repositories.user_repository import fetch_admin_user_directory, search_users
 
 
 class FakeCursor:
@@ -212,6 +212,40 @@ class AdminManagementRepositoryTests(unittest.TestCase):
         self.assertEqual(cursor.executions[0][1]["tenant_id"], "1")
         self.assertEqual(result["summary"]["filtered_users"], 4)
         self.assertEqual(result["items"][0]["id"], "42")
+
+
+class SearchUsersRepositoryTests(unittest.TestCase):
+    """A word must match at the START of a name token to count -- 'K'
+    matches 'Kishore' (token 1) and 'Kumar' (token 2 of 'Amit Kumar'), and
+    whichever match sits earliest in its own name ranks first. This is the
+    same match_position ranking search_team_members already used; search_
+    guests uses the identical pattern for the same reason."""
+
+    def test_orders_by_earliest_matching_word_position(self) -> None:
+        cursor = FakeCursor(fetchall_values=[[]])
+        conn = FakeConnection(cursor)
+
+        search_users(conn, tenant_id="1", search_text="K", limit=20)
+
+        sql, params = cursor.executions[0]
+        self.assertIn("WITH ORDINALITY", sql)
+        self.assertIn("word LIKE %s || '%%'", sql)
+        self.assertIn("COALESCE(mp.match_position, 999)", sql)
+        self.assertIn("mp.match_position IS NOT NULL", sql)
+        # Search text feeds the LATERAL join first (it appears earliest in
+        # the SQL text), then tenant_id, then the remaining WHERE clauses.
+        self.assertEqual(params, ("k", "1", "k", "k", 20))
+
+    def test_include_inactive_drops_status_filter(self) -> None:
+        cursor = FakeCursor(fetchall_values=[[]])
+        conn = FakeConnection(cursor)
+
+        search_users(
+            conn, tenant_id="1", search_text="amit", include_inactive=True,
+        )
+
+        sql, _ = cursor.executions[0]
+        self.assertNotIn("au.status = 'ACTIVE'", sql)
 
 
 if __name__ == "__main__":
