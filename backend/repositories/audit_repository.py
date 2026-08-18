@@ -1,13 +1,16 @@
-"""Repository for writing structured audit events to the audit_logs table."""
+"""Repository for writing structured audit events to, and reading them back
+from, the audit_logs table."""
 
 from __future__ import annotations
 
 import json
 import logging
+from datetime import date, timedelta
 from typing import Any
 
 import structlog
 from psycopg2.extensions import connection as PGConnection
+from psycopg2.extras import RealDictCursor
 from structlog.contextvars import get_contextvars
 
 from backend.core.app_logging import LOGGER_NAME
@@ -238,3 +241,279 @@ def safe_write_audit_log(
             conn.rollback()
         except Exception:
             pass
+
+
+# ─── Reading audit_logs (admin Audit Logs page) ────────────────────────────
+
+# Lightweight columns for the paginated table — excludes the heavier
+# JSON/free-text columns (old/new values, user agent, metadata, ...) that
+# only the single-record detail view needs, so a page of results stays small.
+AUDIT_LIST_SELECT_FIELDS = """
+    al.id::text AS id,
+    al.actor_user_id::text AS actor_user_id,
+    COALESCE(au.display_name, au.full_name) AS actor_name,
+    al.actor_email,
+    al.actor_role,
+    al.action,
+    al.module,
+    al.entity_type,
+    al.entity_id,
+    al.event_status,
+    al.request_method,
+    al.source_channel,
+    al.occurred_at
+"""
+
+# Full column set for GET /admin/audit/{id} — everything the detail drawer
+# renders, including the JSON old/new-values diff.
+AUDIT_DETAIL_SELECT_FIELDS = """
+    al.id::text AS id,
+    al.actor_user_id::text AS actor_user_id,
+    COALESCE(au.display_name, au.full_name) AS actor_name,
+    al.actor_email,
+    al.actor_role,
+    al.action,
+    al.module,
+    al.entity_type,
+    al.entity_id,
+    al.event_status,
+    al.request_method,
+    al.request_path,
+    al.request_id,
+    al.correlation_id,
+    al.ip_address,
+    al.user_agent,
+    al.source_channel,
+    al.old_values,
+    al.new_values,
+    al.changed_fields,
+    al.metadata,
+    al.failure_code,
+    al.failure_reason,
+    al.occurred_at,
+    al.created_at
+"""
+
+AUDIT_SELECT_FROM = """
+    FROM audit_logs AS al
+    LEFT JOIN app_users AS au
+        ON au.id = al.actor_user_id
+       AND au.tenant_id = al.tenant_id
+"""
+
+# Maps the client-facing `sortBy` value to the SQL expression to order by.
+# Allow-listed on purpose -- never interpolate a caller-supplied column name
+# directly into the ORDER BY clause.
+_AUDIT_SORT_COLUMNS: dict[str, str] = {
+    "occurred_at": "al.occurred_at",
+    "action": "al.action",
+    "module": "al.module",
+    "status": "al.event_status",
+    "actor": "COALESCE(au.display_name, au.full_name, al.actor_email)",
+}
+
+_JSON_FIELDS = ("old_values", "new_values", "changed_fields", "metadata")
+
+
+def _parse_json_fields(row: dict[str, Any]) -> dict[str, Any]:
+    """Defensively json.loads() the JSON-ish columns.
+
+    psycopg2 already returns native dict/list for jsonb/json columns, but if
+    the column ever turns out to be plain text this keeps the API response
+    shape correct instead of handing the caller a raw JSON string.
+    """
+    for field in _JSON_FIELDS:
+        value = row.get(field)
+        if isinstance(value, str):
+            try:
+                row[field] = json.loads(value)
+            except (TypeError, ValueError):
+                pass
+    return row
+
+
+def _build_audit_log_filters(
+    *,
+    tenant_id: str,
+    action: str | None = None,
+    module: str | None = None,
+    entity_type: str | None = None,
+    event_status: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    search: str | None = None,
+) -> tuple[str, list[Any]]:
+    conditions = ["al.tenant_id = %s"]
+    params: list[Any] = [tenant_id]
+
+    if action is not None:
+        conditions.append("al.action = %s")
+        params.append(action)
+    if module is not None:
+        conditions.append("al.module = %s")
+        params.append(module)
+    if entity_type is not None:
+        conditions.append("al.entity_type = %s")
+        params.append(entity_type)
+    if event_status is not None:
+        conditions.append("al.event_status = %s")
+        params.append(event_status)
+    if start_date is not None:
+        conditions.append("al.occurred_at >= %s")
+        params.append(start_date)
+    if end_date is not None:
+        # occurred_at is a timestamp -- compare against the start of the
+        # *next* day so the whole end_date calendar day is included.
+        conditions.append("al.occurred_at < %s")
+        params.append(end_date + timedelta(days=1))
+    if search is not None:
+        conditions.append(
+            "(COALESCE(au.display_name, au.full_name) ILIKE %s"
+            " OR al.actor_email ILIKE %s"
+            " OR al.action ILIKE %s"
+            " OR al.module ILIKE %s"
+            " OR al.entity_type ILIKE %s"
+            " OR al.entity_id ILIKE %s)"
+        )
+        like_search = f"%{search}%"
+        params.extend([like_search] * 6)
+
+    return " AND ".join(conditions), params
+
+
+def fetch_audit_logs(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    action: str | None = None,
+    module: str | None = None,
+    entity_type: str | None = None,
+    event_status: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    search: str | None = None,
+    sort_by: str = "occurred_at",
+    sort_dir: str = "desc",
+    page: int = 1,
+    limit: int = 10,
+) -> tuple[list[dict[str, Any]], int]:
+    """Tenant-scoped, filtered, sorted, paginated audit_logs listing for the
+    admin Audit Logs table.
+
+    Returns (items, total) -- total is the filtered (not paginated) row
+    count, computed in the same query via COUNT(*) OVER() so no second
+    round-trip is needed for pagination metadata.
+    """
+    where_clause, params = _build_audit_log_filters(
+        tenant_id=tenant_id,
+        action=action,
+        module=module,
+        entity_type=entity_type,
+        event_status=event_status,
+        start_date=start_date,
+        end_date=end_date,
+        search=search,
+    )
+    sort_column = _AUDIT_SORT_COLUMNS.get(sort_by, _AUDIT_SORT_COLUMNS["occurred_at"])
+    sort_direction = "ASC" if sort_dir.lower() == "asc" else "DESC"
+    offset = (page - 1) * limit
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {AUDIT_LIST_SELECT_FIELDS},
+                   COUNT(*) OVER()::integer AS _total_count
+            {AUDIT_SELECT_FROM}
+            WHERE {where_clause}
+            ORDER BY {sort_column} {sort_direction}, al.id DESC
+            LIMIT %s OFFSET %s
+            """,
+            [*params, limit, offset],
+        )
+        rows = [dict(row) for row in cur.fetchall()]
+
+    total = rows[0].pop("_total_count") if rows else 0
+    for row in rows:
+        row.pop("_total_count", None)
+
+    return rows, total
+
+
+def fetch_audit_logs_summary(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    action: str | None = None,
+    module: str | None = None,
+    entity_type: str | None = None,
+    event_status: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    search: str | None = None,
+) -> dict[str, int]:
+    """Aggregate counts over the same filtered dataset `fetch_audit_logs`
+    would page through (no LIMIT/OFFSET), for the admin summary cards."""
+    where_clause, params = _build_audit_log_filters(
+        tenant_id=tenant_id,
+        action=action,
+        module=module,
+        entity_type=entity_type,
+        event_status=event_status,
+        start_date=start_date,
+        end_date=end_date,
+        search=search,
+    )
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT
+                COUNT(*)::integer AS total_events,
+                COUNT(*) FILTER (WHERE al.event_status = 'SUCCESS')::integer AS successful_events,
+                -- "Failed" on the summary cards covers both FAILURE and DENIED
+                -- outcomes -- anything that isn't a clean SUCCESS.
+                COUNT(*) FILTER (WHERE al.event_status <> 'SUCCESS')::integer AS failed_events,
+                COUNT(DISTINCT al.actor_user_id)::integer AS unique_users
+            {AUDIT_SELECT_FROM}
+            WHERE {where_clause}
+            """,
+            params,
+        )
+        row = cur.fetchone()
+
+    return (
+        dict(row)
+        if row
+        else {
+            "total_events": 0,
+            "successful_events": 0,
+            "failed_events": 0,
+            "unique_users": 0,
+        }
+    )
+
+
+def fetch_audit_log_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    audit_id: str,
+) -> dict[str, Any] | None:
+    """Fetch one tenant-scoped audit_logs row with the full column set, for
+    the admin Audit Logs detail drawer."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {AUDIT_DETAIL_SELECT_FIELDS}
+            {AUDIT_SELECT_FROM}
+            WHERE al.tenant_id = %s
+              AND al.id = %s
+            """,
+            (tenant_id, audit_id),
+        )
+        row = cur.fetchone()
+
+    if row is None:
+        return None
+
+    return _parse_json_fields(dict(row))
