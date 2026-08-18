@@ -7,6 +7,8 @@ from typing import Any
 from psycopg2.extensions import connection as PGConnection
 from psycopg2.extras import RealDictCursor
 
+from backend.core.text import titlecase_name
+
 GUEST_SELECT_FIELDS = """
     g.id::text AS guest_id,
     g.tenant_id::text AS tenant_id,
@@ -56,7 +58,7 @@ def create_guest(
             """,
             (
                 tenant_id,
-                full_name,
+                titlecase_name(full_name),
                 email,
                 phone,
                 organization,
@@ -111,44 +113,39 @@ def search_guests(
             fr"""
             SELECT {GUEST_SELECT_FIELDS}
             FROM guests AS g
+            LEFT JOIN LATERAL (
+                SELECT MIN(pos) AS match_position
+                FROM unnest(
+                    regexp_split_to_array(
+                        lower(coalesce(g.full_name, '')),
+                        '\s+'
+                    )
+                ) WITH ORDINALITY AS t(word, pos)
+                WHERE word LIKE %s || '%%'
+            ) mp ON TRUE
             WHERE g.tenant_id = %s
             {status_clause}
               AND (
-                    EXISTS (
-                        SELECT 1
-                        FROM unnest(
-                            regexp_split_to_array(
-                                lower(coalesce(g.full_name, '')),
-                                '\s+'
-                            )
-                        ) AS name_part
-                        WHERE name_part LIKE %s || '%%'
-                    )
+                    mp.match_position IS NOT NULL
                  OR coalesce(g.phone, '')
                         LIKE %s || '%%'
                  OR lower(coalesce(g.email, ''))
                         LIKE '%%' || %s || '%%'
               )
             ORDER BY
-                CASE
-                    WHEN lower(coalesce(g.full_name, ''))
-                         LIKE %s || '%%'
-                    THEN 1
-                    ELSE 2
-                END,
+                COALESCE(mp.match_position, 999),
                 g.full_name,
                 g.id
             LIMIT %s
             """,
             (
+                # LATERAL match_position
+                search_text,
+
                 tenant_id,
 
                 # WHERE
                 search_text,
-                search_text,
-                search_text,
-
-                # ORDER BY
                 search_text,
 
                 limit,
@@ -308,6 +305,9 @@ def update_guest(
     updates: dict[str, Any],
 ) -> dict[str, Any]:
     """Apply a partial update to one tenant-scoped guest."""
+    if "full_name" in updates:
+        updates = {**updates, "full_name": titlecase_name(updates["full_name"])}
+
     allowed_fields = ("full_name", "email", "phone", "organization")
     set_clauses = [
         f"{field} = %s" for field in allowed_fields if field in updates
