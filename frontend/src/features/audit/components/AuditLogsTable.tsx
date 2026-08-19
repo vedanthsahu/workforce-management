@@ -77,11 +77,13 @@ export default function AuditLogsTable({ data, selectedId, onSelect }: Props) {
               <th className={`${COL.view} pl-3 pr-5 py-3 text-right font-bold`} />
             </tr>
           </thead>
-          {/* Fixed to exactly 10 rows (56px each) -- always shows a full page
-             of 10 without scrolling, and only scrolls internally once a
-             larger page size (25/50/100) puts more than 10 rows on screen. */}
+          {/* Capped at 10 rows tall (56px each) -- fewer rows (e.g. the last
+             page, or a narrow filter result) just shrink to fit instead of
+             leaving blank space below them; a full page of exactly 10 still
+             fits with no scrollbar; only a larger page size (25/50/100)
+             pushes past the cap and scrolls internally. */}
           <tbody
-            className="audit-tbody-scroll block w-full h-140 divide-y divide-gray-100 overflow-y-auto"
+            className="audit-tbody-scroll block w-full max-h-140 divide-y divide-gray-100 overflow-y-auto"
             style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
           >
             {data.map((log) => {

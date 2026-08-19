@@ -16,14 +16,20 @@ export function useAuditLogs(appliedFilters: AuditLogFilters) {
   const fetchLogs = useCallback(async () => {
     try {
       setLoading(true);
+      // Date Range and the relative "Last N min" filter are a toggle in the
+      // UI, not two independent filters -- only send the one that's active,
+      // same rule the backend itself falls back on if both were ever sent.
+      const isRelative = appliedFilters.timeMode === "relative";
+
       const res = await auditService.list({
         search: appliedFilters.search.trim() || undefined,
         action: appliedFilters.action !== "All" ? appliedFilters.action : undefined,
         module: appliedFilters.module !== "All" ? appliedFilters.module : undefined,
         entity: appliedFilters.entity !== "All" ? appliedFilters.entity : undefined,
         status: appliedFilters.status !== "All" ? appliedFilters.status : undefined,
-        startDate: appliedFilters.dateFrom || undefined,
-        endDate: appliedFilters.dateTo || undefined,
+        startDate: !isRelative ? appliedFilters.dateFrom || undefined : undefined,
+        endDate: !isRelative ? appliedFilters.dateTo || undefined : undefined,
+        lastSeconds: isRelative ? appliedFilters.lastSeconds ?? undefined : undefined,
         sortBy: SORT_BY,
         sortDir: SORT_DIR,
         page,

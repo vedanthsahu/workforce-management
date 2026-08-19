@@ -81,6 +81,20 @@ export const AUDIT_STATUS_OPTIONS: { value: string; label: string }[] = [
 
 export const AUDIT_PAGE_SIZES = [10, 25, 50, 75, 100];
 
+// Preset "Last N minutes" quick-time-filter options -- value is seconds,
+// sent to the backend as lastSeconds (see backend/api/routes/admin_audit.py).
+// The backend itself accepts any positive integer of seconds, not just these
+// presets; this is just what the UI currently exposes.
+export const AUDIT_RELATIVE_TIME_OPTIONS: { value: number; label: string }[] = [
+  { value: 5 * 60, label: "Last 5 min" },
+  { value: 10 * 60, label: "Last 10 min" },
+  { value: 20 * 60, label: "Last 20 min" },
+  { value: 30 * 60, label: "Last 30 min" },
+  { value: 45 * 60, label: "Last 45 min" },
+  { value: 60 * 60, label: "Last 60 min" },
+  { value: 120 * 60, label: "Last 120 min" },
+];
+
 export function moduleBadgeStyle(module: string): string {
   return AUDIT_MODULE_STYLES[module] ?? AUDIT_MODULE_FALLBACK_STYLE;
 }

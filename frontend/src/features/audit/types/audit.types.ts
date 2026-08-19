@@ -84,14 +84,22 @@ export interface AuditLog extends AuditLogListItem {
   createdAt: string;
 }
 
+/** Which time-window control is active in the filter bar -- the two are
+ * mutually exclusive (a toggle, not two independent filters): "date" sends
+ * dateFrom/dateTo, "relative" sends lastSeconds. See useAuditLogs.ts. */
+export type AuditTimeMode = "date" | "relative";
+
 export interface AuditLogFilters {
   search: string;
   action: string;
   module: string;
   entity: string;
   status: string;
+  timeMode: AuditTimeMode;
   dateFrom: string;
   dateTo: string;
+  /** Selected "Last N seconds" preset value, or null when none is picked. */
+  lastSeconds: number | null;
 }
 
 export function defaultAuditLogFilters(): AuditLogFilters {
@@ -104,8 +112,10 @@ export function defaultAuditLogFilters(): AuditLogFilters {
     module: "All",
     entity: "All",
     status: "All",
+    timeMode: "date",
     dateFrom: todayIso,
     dateTo: todayIso,
+    lastSeconds: null,
   };
 }
 

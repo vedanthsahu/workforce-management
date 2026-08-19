@@ -32,6 +32,7 @@ def get_audit_logs(
     event_status: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    last_seconds: int | None = None,
     search: str | None = None,
     sort_by: str = "occurred_at",
     sort_dir: str = "desc",
@@ -40,8 +41,14 @@ def get_audit_logs(
 ) -> AuditLogListResponse:
     """Tenant-scoped, filtered, sorted, paginated audit_logs listing plus a
     summary of counts over the same filtered set, for the admin Audit Logs
-    page (table + summary cards)."""
-    if start_date is not None and end_date is not None and start_date > end_date:
+    page (table + summary cards).
+
+    `last_seconds` is the relative "Last N minutes/hours" quick filter --
+    when set it takes precedence over start_date/end_date at the repository
+    layer (see _build_audit_log_filters), so the date-range validation below
+    only applies to the explicit-range path.
+    """
+    if last_seconds is None and start_date is not None and end_date is not None and start_date > end_date:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -58,6 +65,7 @@ def get_audit_logs(
         "event_status": event_status,
         "start_date": start_date,
         "end_date": end_date,
+        "last_seconds": last_seconds,
         "search": search.strip() if search else None,
     }
 

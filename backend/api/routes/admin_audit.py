@@ -27,10 +27,12 @@ router = APIRouter(prefix="/admin", tags=["admin-audit"])
     summary="Search the tenant-wide audit log",
     description=(
         "Admin Audit Logs listing: tenant-scoped audit_logs rows with optional "
-        "action, module, entity type, status, date range and free-text search "
-        "filters, plus sorting and pagination -- all applied server-side -- and "
-        "a summary of counts (total/successful/failed events, unique actors) "
-        "over the filtered dataset for the page's summary cards. "
+        "action, module, entity type, status, date range (or relative "
+        "lastSeconds window), and actor-name search filters, plus sorting and "
+        "pagination -- all applied server-side -- and a summary of counts "
+        "(total/successful/failed events, unique actors) over the filtered "
+        "dataset for the page's summary cards. lastSeconds, when given, takes "
+        "precedence over startDate/endDate. "
         "Requires admin_dashboard:view or an admin role."
     ),
     responses={
@@ -81,9 +83,22 @@ def admin_audit_logs(
         date | None,
         Query(alias="endDate", description="Inclusive occurred_at date range end."),
     ] = None,
+    last_seconds: Annotated[
+        int | None,
+        Query(
+            alias="lastSeconds",
+            ge=1,
+            description=(
+                "Relative 'Last N seconds' quick filter (e.g. 300 for last 5 "
+                "minutes, 7200 for last 2 hours) -- occurred_at >= NOW() - "
+                "this many seconds. Takes precedence over startDate/endDate "
+                "when provided."
+            ),
+        ),
+    ] = None,
     search: Annotated[
         str | None,
-        Query(min_length=1, description="Partial, case-insensitive match on actor name/email, action, module, or entity."),
+        Query(min_length=1, description="Partial, case-insensitive match on actor name only -- for the type-ahead search box."),
     ] = None,
     sort_by: Annotated[
         AuditSortBy,
@@ -105,6 +120,7 @@ def admin_audit_logs(
         event_status=event_status,
         start_date=start_date,
         end_date=end_date,
+        last_seconds=last_seconds,
         search=search,
         sort_by=sort_by,
         sort_dir=sort_dir,
