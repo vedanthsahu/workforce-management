@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CalendarDays, ChevronDown, Download, Search, SlidersHorizontal, X } from "lucide-react";
+import { CalendarDays, ChevronDown, Search, X } from "lucide-react";
 import { AuditLogFilters as AuditLogFiltersType } from "../types/audit.types";
 import {
   AUDIT_ACTION_OPTIONS,
@@ -13,7 +13,6 @@ import {
 type Props = {
   filters: AuditLogFiltersType;
   onUpdate: <K extends keyof AuditLogFiltersType>(key: K, value: AuditLogFiltersType[K]) => void;
-  onExport: () => void;
 };
 
 function formatDate(iso: string): string {
@@ -70,8 +69,15 @@ function DateRangeField({
             <input
               type="date"
               value={draftFrom}
-              max={draftTo || undefined}
-              onChange={(e) => setDraftFrom(e.target.value)}
+              onChange={(e) => {
+                // Picking a new From date resets To to match it -- keeps the
+                // range valid without the user having to also touch To, but
+                // they can still pick a different To afterward (min below
+                // just stops them picking one earlier than From).
+                const next = e.target.value;
+                setDraftFrom(next);
+                setDraftTo(next);
+              }}
               onKeyDown={(e) => {
                 if (!["Tab", "Escape", "Shift"].includes(e.key)) e.preventDefault();
               }}
@@ -153,13 +159,37 @@ function NativeSelect({
   );
 }
 
-export default function AuditLogFilters({ filters, onUpdate, onExport }: Props) {
-  const [moreOpen, setMoreOpen] = useState(false);
-
+export default function AuditLogFilters({ filters, onUpdate }: Props) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[240px]">
+        <div className="flex-1 min-w-60">
+          <DateRangeField
+            dateFrom={filters.dateFrom}
+            dateTo={filters.dateTo}
+            onChange={(from, to) => {
+              onUpdate("dateFrom", from);
+              onUpdate("dateTo", to);
+            }}
+          />
+        </div>
+
+        <div className="w-[150px]">
+          <NativeSelect value={filters.action} onChange={(v) => onUpdate("action", v)} options={AUDIT_ACTION_OPTIONS} />
+        </div>
+        <div className="w-[150px]">
+          <NativeSelect value={filters.module} onChange={(v) => onUpdate("module", v)} options={AUDIT_MODULE_OPTIONS} />
+        </div>
+        <div className="w-[150px]">
+          <NativeSelect value={filters.entity} onChange={(v) => onUpdate("entity", v)} options={AUDIT_ENTITY_OPTIONS} />
+        </div>
+        <div className="w-[150px]">
+          <NativeSelect value={filters.status} onChange={(v) => onUpdate("status", v)} options={AUDIT_STATUS_OPTIONS} />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative w-60">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
@@ -178,58 +208,7 @@ export default function AuditLogFilters({ filters, onUpdate, onExport }: Props) 
             </button>
           )}
         </div>
-
-        <div className="w-[150px]">
-          <NativeSelect value={filters.action} onChange={(v) => onUpdate("action", v)} options={AUDIT_ACTION_OPTIONS} />
-        </div>
-        <div className="w-[150px]">
-          <NativeSelect value={filters.module} onChange={(v) => onUpdate("module", v)} options={AUDIT_MODULE_OPTIONS} />
-        </div>
-        <div className="w-[150px]">
-          <NativeSelect value={filters.entity} onChange={(v) => onUpdate("entity", v)} options={AUDIT_ENTITY_OPTIONS} />
-        </div>
-        <div className="w-[150px]">
-          <NativeSelect value={filters.status} onChange={(v) => onUpdate("status", v)} options={AUDIT_STATUS_OPTIONS} />
-        </div>
       </div>
-
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="w-[240px]">
-          <DateRangeField
-            dateFrom={filters.dateFrom}
-            dateTo={filters.dateTo}
-            onChange={(from, to) => {
-              onUpdate("dateFrom", from);
-              onUpdate("dateTo", to);
-            }}
-          />
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setMoreOpen((v) => !v)}
-          className="h-10 px-4 flex items-center gap-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          <SlidersHorizontal size={14} />
-          More Filters
-        </button>
-
-        <button
-          type="button"
-          onClick={onExport}
-          className="h-10 px-4 ml-auto flex items-center gap-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          <Download size={14} />
-          Export
-        </button>
-      </div>
-
-      {moreOpen && (
-        <div className="flex items-center gap-3 flex-wrap px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-500">
-          Additional filters (source channel, request method, correlation ID) are not yet wired up — coming once the
-          audit API is available.
-        </div>
-      )}
     </div>
   );
 }

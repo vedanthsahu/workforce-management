@@ -95,14 +95,17 @@ export interface AuditLogFilters {
 }
 
 export function defaultAuditLogFilters(): AuditLogFilters {
+  // Date Range defaults to today so the page loads showing today's audit
+  // events without the admin needing to pick a date first.
+  const todayIso = new Date().toISOString().slice(0, 10);
   return {
     search: "",
     action: "All",
     module: "All",
     entity: "All",
     status: "All",
-    dateFrom: "",
-    dateTo: "",
+    dateFrom: todayIso,
+    dateTo: todayIso,
   };
 }
 
