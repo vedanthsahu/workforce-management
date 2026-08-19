@@ -20,8 +20,7 @@ export default function AuditLogsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState(false);
 
-  const { response, loading, page, setPage, pageSize, setPageSize, sortBy, sortDir, toggleSort } =
-    useAuditLogs(filters);
+  const { response, loading, page, setPage, pageSize, setPageSize } = useAuditLogs(filters);
 
   const items = useMemo(() => (response?.items ?? []).map(mapAuditLogListItemToUi), [response]);
 
@@ -40,10 +39,6 @@ export default function AuditLogsPage() {
 
   const handleUpdateFilter = <K extends keyof typeof filters>(key: K, value: (typeof filters)[K]) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleExport = () => {
-    // Export isn't wired up until the real audit API supports it — no-op for now.
   };
 
   const handleSelectRow = (item: AuditLogListItem) => {
@@ -79,25 +74,18 @@ export default function AuditLogsPage() {
 
       {/* FILTERS CARD */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 sm:p-5">
-        <AuditLogFilters filters={filters} onUpdate={handleUpdateFilter} onExport={handleExport} />
+        <AuditLogFilters filters={filters} onUpdate={handleUpdateFilter} />
       </div>
 
       {/* STATS */}
       <AuditStatCards stats={stats} />
 
       {/* TABLE */}
-      <div className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
+      <div className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col overflow-hidden">
         {loading ? (
           <p className="px-6 py-12 text-center text-gray-400 text-sm">Loading audit events…</p>
         ) : (
-          <AuditLogsTable
-            data={items}
-            selectedId={selectedId}
-            onSelect={handleSelectRow}
-            sortBy={sortBy}
-            sortDir={sortDir}
-            onToggleSort={toggleSort}
-          />
+          <AuditLogsTable data={items} selectedId={selectedId} onSelect={handleSelectRow} />
         )}
 
         {/* FOOTER */}
@@ -118,7 +106,7 @@ export default function AuditLogsPage() {
                 >
                   {AUDIT_PAGE_SIZES.map((n) => (
                     <option key={n} value={n}>
-                      {n} / page
+                      {n}
                     </option>
                   ))}
                 </select>

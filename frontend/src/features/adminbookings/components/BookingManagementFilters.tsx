@@ -88,8 +88,15 @@ function DateRangeField({
             <input
               type="date"
               value={draftFrom}
-              max={draftTo || undefined}
-              onChange={(e) => setDraftFrom(e.target.value)}
+              onChange={(e) => {
+                // Picking a new From date resets To to match it -- keeps the
+                // range valid without the user having to also touch To, but
+                // they can still pick a different To afterward (min below
+                // just stops them picking one earlier than From).
+                const next = e.target.value;
+                setDraftFrom(next);
+                setDraftTo(next);
+              }}
               onKeyDown={(e) => {
                 if (!["Tab", "Escape", "Shift"].includes(e.key)) e.preventDefault();
               }}

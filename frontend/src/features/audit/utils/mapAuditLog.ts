@@ -74,7 +74,20 @@ function hasFields(value: Record<string, unknown> | null): value is Record<strin
   return !!value && Object.keys(value).length > 0;
 }
 
-export function getAuditEventCategory(log: Pick<AuditLog, "status" | "action" | "oldValues" | "newValues">): AuditEventCategory {
+/**
+ * Classifies which "Changes" block to render.
+ *
+ * `action`/old-new-values shape decide it first (the most concrete signal),
+ * `request_method` only steps in as a fallback when a *successful* event
+ * captured no old/new payload at all and the action name itself doesn't say
+ * ".created"/".updated"/etc -- GET never mutates data, so a payload-less GET
+ * always means "nothing changed" regardless of module/entity; POST/PATCH/
+ * PUT/DELETE hint at the closest category for whatever module/entity this
+ * event belongs to.
+ */
+export function getAuditEventCategory(
+  log: Pick<AuditLog, "status" | "action" | "oldValues" | "newValues" | "requestMethod">
+): AuditEventCategory {
   if (log.status !== "SUCCESS") return "FAILED";
 
   const action = log.action.toLowerCase();
@@ -96,7 +109,20 @@ export function getAuditEventCategory(log: Pick<AuditLog, "status" | "action" | 
   if (action.endsWith(".deleted") || action.endsWith(".delete")) return "DELETE";
   if (action.endsWith(".updated") || action.endsWith("_updated") || action.endsWith(".cancel")) return "UPDATE";
 
-  return "NONE";
+  // Still nothing to go on -- the HTTP method is the last reliable signal.
+  switch (log.requestMethod?.toUpperCase()) {
+    case "GET":
+      return "AUTH"; // read-only call, nothing to have changed
+    case "DELETE":
+      return "DELETE";
+    case "PATCH":
+    case "PUT":
+      return "UPDATE";
+    case "POST":
+      return "CREATE";
+    default:
+      return "NONE";
+  }
 }
 
 /** Field keys to render for an UPDATE -- changed_fields when the backend
@@ -106,6 +132,19 @@ export function updateFieldKeys(log: Pick<AuditLog, "changedFields" | "oldValues
   if (log.changedFields && log.changedFields.length > 0) return log.changedFields;
   const keys = new Set<string>([...Object.keys(log.oldValues ?? {}), ...Object.keys(log.newValues ?? {})]);
   return [...keys];
+}
+
+/** "booking" -> "Booking", "guest_visit" -> "Guest Visit"; falls back to the
+ * module (e.g. "LOCATION" -> "Location") when entity_type wasn't captured,
+ * so CREATE/DELETE banners can name what actually changed instead of a
+ * generic "record". */
+export function formatEntityLabel(entityType: string, module: string): string {
+  const source = entityType || module.toLowerCase() || "record";
+  return source
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((word) => word[0].toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
 }
 
 /** "building_code" -> "Building Code", "site_id" -> "Site ID" */

@@ -178,7 +178,7 @@ const ADMIN_OPERATIONS_NAV: NavItem[] = [
 const ADMIN_REPORTS_NAV: NavItem[] = [
   { id: "occupancy", label: "Occupancy", icon: BarChart3, disabled: true },
   { id: "utilization", label: "Utilization", icon: BarChart3, disabled: true },
-  { id: "audit", label: "Audit Logs", icon: ShieldCheck, disabled: true },
+  { id: "audit", label: "Audit Logs", icon: ShieldCheck },
 ];
 
 const ADMIN_SETTINGS_NAV: NavItem[] = [

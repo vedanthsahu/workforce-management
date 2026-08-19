@@ -1,22 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { auditService } from "../services/audit.service";
-import { AuditLogFilters, AuditLogListResponse, AuditSortBy, AuditSortDir } from "../types/audit.types";
+import { AuditLogFilters, AuditLogListResponse } from "../types/audit.types";
 import { AUDIT_PAGE_SIZES } from "../utils/constants";
+
+// The table has no sort-by-column UI -- always newest first.
+const SORT_BY = "occurred_at";
+const SORT_DIR = "desc";
 
 export function useAuditLogs(appliedFilters: AuditLogFilters) {
   const [response, setResponse] = useState<AuditLogListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(AUDIT_PAGE_SIZES[0]);
-  const [sortBy, setSortBy] = useState<AuditSortBy>("occurred_at");
-  const [sortDir, setSortDir] = useState<AuditSortDir>("desc");
-
-  const toggleSort = useCallback((column: AuditSortBy) => {
-    setSortBy((prevColumn) => {
-      setSortDir((prevDir) => (prevColumn === column && prevDir === "desc" ? "asc" : "desc"));
-      return column;
-    });
-  }, []);
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -29,8 +24,8 @@ export function useAuditLogs(appliedFilters: AuditLogFilters) {
         status: appliedFilters.status !== "All" ? appliedFilters.status : undefined,
         startDate: appliedFilters.dateFrom || undefined,
         endDate: appliedFilters.dateTo || undefined,
-        sortBy,
-        sortDir,
+        sortBy: SORT_BY,
+        sortDir: SORT_DIR,
         page,
         limit: pageSize,
       });
@@ -41,16 +36,16 @@ export function useAuditLogs(appliedFilters: AuditLogFilters) {
     } finally {
       setLoading(false);
     }
-  }, [appliedFilters, page, pageSize, sortBy, sortDir]);
+  }, [appliedFilters, page, pageSize]);
 
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
 
-  // Any filter change (not page/pageSize/sort) should snap back to page 1.
+  // Any filter change (not page/pageSize) should snap back to page 1.
   useEffect(() => {
     setPage(1);
   }, [appliedFilters]);
 
-  return { response, loading, page, setPage, pageSize, setPageSize, sortBy, sortDir, toggleSort, refetch: fetchLogs };
+  return { response, loading, page, setPage, pageSize, setPageSize, refetch: fetchLogs };
 }
