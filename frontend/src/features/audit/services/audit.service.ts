@@ -9,6 +9,8 @@ export interface AuditLogListParams {
   status?: string;
   startDate?: string;
   endDate?: string;
+  /** Relative "Last N seconds" quick filter -- takes precedence over startDate/endDate when set. */
+  lastSeconds?: number;
   sortBy?: AuditSortBy;
   sortDir?: AuditSortDir;
   page?: number;

@@ -341,6 +341,7 @@ def _build_audit_log_filters(
     event_status: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    last_seconds: int | None = None,
     search: str | None = None,
 ) -> tuple[str, list[Any]]:
     conditions = ["al.tenant_id = %s"]
@@ -358,25 +359,32 @@ def _build_audit_log_filters(
     if event_status is not None:
         conditions.append("al.event_status = %s")
         params.append(event_status)
-    if start_date is not None:
-        conditions.append("al.occurred_at >= %s")
-        params.append(start_date)
-    if end_date is not None:
-        # occurred_at is a timestamp -- compare against the start of the
-        # *next* day so the whole end_date calendar day is included.
-        conditions.append("al.occurred_at < %s")
-        params.append(end_date + timedelta(days=1))
+
+    # The admin UI toggles between an explicit Date Range and a relative
+    # "Last N seconds/minutes/hours" quick filter -- only one is ever active
+    # at a time there, but if a caller somehow sends both, last_seconds wins
+    # and the explicit date range is ignored, rather than silently ANDing
+    # two different time-window filters together.
+    if last_seconds is not None:
+        conditions.append("al.occurred_at >= NOW() - make_interval(secs => %s)")
+        params.append(last_seconds)
+    else:
+        if start_date is not None:
+            conditions.append("al.occurred_at >= %s")
+            params.append(start_date)
+        if end_date is not None:
+            # occurred_at is a timestamp -- compare against the start of the
+            # *next* day so the whole end_date calendar day is included.
+            conditions.append("al.occurred_at < %s")
+            params.append(end_date + timedelta(days=1))
+
     if search is not None:
-        conditions.append(
-            "(COALESCE(au.display_name, au.full_name) ILIKE %s"
-            " OR al.actor_email ILIKE %s"
-            " OR al.action ILIKE %s"
-            " OR al.module ILIKE %s"
-            " OR al.entity_type ILIKE %s"
-            " OR al.entity_id ILIKE %s)"
-        )
-        like_search = f"%{search}%"
-        params.extend([like_search] * 6)
+        # Name-only, to match the type-ahead "search as you go" pattern the
+        # admin Audit Logs filter bar uses (same as the Book for Someone
+        # employee search) -- not action/module/entity, those have their own
+        # dedicated dropdown filters.
+        conditions.append("COALESCE(au.display_name, au.full_name) ILIKE %s")
+        params.append(f"%{search}%")
 
     return " AND ".join(conditions), params
 
@@ -391,6 +399,7 @@ def fetch_audit_logs(
     event_status: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    last_seconds: int | None = None,
     search: str | None = None,
     sort_by: str = "occurred_at",
     sort_dir: str = "desc",
@@ -412,6 +421,7 @@ def fetch_audit_logs(
         event_status=event_status,
         start_date=start_date,
         end_date=end_date,
+        last_seconds=last_seconds,
         search=search,
     )
     sort_column = _AUDIT_SORT_COLUMNS.get(sort_by, _AUDIT_SORT_COLUMNS["occurred_at"])
@@ -449,6 +459,7 @@ def fetch_audit_logs_summary(
     event_status: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    last_seconds: int | None = None,
     search: str | None = None,
 ) -> dict[str, int]:
     """Aggregate counts over the same filtered dataset `fetch_audit_logs`
@@ -461,6 +472,7 @@ def fetch_audit_logs_summary(
         event_status=event_status,
         start_date=start_date,
         end_date=end_date,
+        last_seconds=last_seconds,
         search=search,
     )
 
