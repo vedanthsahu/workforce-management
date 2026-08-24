@@ -571,6 +571,26 @@ class QuickBookDefaultProfileTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response, "book-seat-flow")
         start_book_seat.assert_awaited_once()
 
+    async def test_generic_book_intent_resets_previous_booking_draft(self):
+        engine = ChatEngine()
+        session = SimpleNamespace(id="session-1", current_node="MAIN_MENU")
+
+        with patch.object(engine, "_reset_manual_booking_context", AsyncMock()) as reset_context, patch.object(
+            engine,
+            "_route_book_seat_from_entities",
+            AsyncMock(return_value="when-where-card"),
+        ) as route_booking:
+            response = await engine._execute_free_text_intent(
+                session,
+                Intent.BOOK_SEAT,
+                {},
+                db=object(),
+            )
+
+        self.assertEqual(response, "when-where-card")
+        reset_context.assert_awaited_once_with("session-1", unittest.mock.ANY)
+        route_booking.assert_awaited_once()
+
     async def test_numeric_book_a_seat_from_bookings_starts_full_booking_flow(self):
         engine = ChatEngine()
         session = SimpleNamespace(id="session-1")
@@ -633,6 +653,49 @@ class QuickBookDefaultProfileTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(resp)
         self.assertIn("cannot be cancelled or modified", resp.messages[0].text)
         self.assertEqual([option.value for option in resp.messages[1].options], ["0"])
+
+    async def test_cancel_rebook_targets_duplicate_booking_only(self):
+        engine = ChatEngine()
+        session = SimpleNamespace(
+            id="session-1",
+            current_menu_id=123,
+            current_node="BOOK_WHEN_WHERE",
+            state="NAVIGATING",
+        )
+        selected_date = (date.today() + timedelta(days=2)).isoformat()
+        booking_row = {
+            "booking_id": "booking-42",
+            "booking_date": selected_date,
+            "seat_code": "BEG-ROX-F8-D-114",
+            "status": "CONFIRMED",
+        }
+        stored_context = {}
+
+        async def store_context(_session_id, updates, _db):
+            stored_context.update(updates)
+
+        with patch.object(engine, "_external_booking_for_date", AsyncMock(return_value=booking_row)), patch.object(
+            engine, "_set_context_bulk", AsyncMock(side_effect=store_context)
+        ), patch.object(engine, "_update_node", AsyncMock()):
+            response = await engine._build_duplicate_booking_response(session, selected_date, db=object())
+
+        self.assertIsNotNone(response)
+        self.assertEqual(stored_context["duplicate_booking_id"], "booking-42")
+        self.assertEqual(stored_context["date_range_start"], selected_date)
+        self.assertEqual(stored_context["date_range_end"], selected_date)
+
+        with patch.object(engine, "_get_context", AsyncMock(return_value=stored_context)), patch.object(
+            engine, "_update_node", AsyncMock()
+        ), patch.object(
+            engine,
+            "_build_booking_action_confirmation",
+            AsyncMock(return_value="single-booking-confirmation"),
+        ) as confirmation, patch.object(engine, "_build_my_bookings", AsyncMock()) as all_bookings:
+            result = await engine._handle_main_menu(session, "cancel_rebook", None, db=object())
+
+        self.assertEqual(result, "single-booking-confirmation")
+        confirmation.assert_awaited_once_with(session, "cancel", "booking-42", unittest.mock.ANY)
+        all_bookings.assert_not_awaited()
 
     def test_current_booking_action_blocked_message_uses_action(self):
         message = ChatEngine._current_booking_action_blocked_message(

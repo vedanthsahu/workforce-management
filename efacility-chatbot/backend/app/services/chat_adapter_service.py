@@ -4,7 +4,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.chat import ChatResponse, BotMessage, CreateSessionRequest, MessageType, SessionOut, UserMessage
-from app.deps.seatbook_auth import SeatBookIdentity
+from app.deps.seatbook_auth import SeatBookIdentity, current_seatbook_identity
 from app.services.chat_engine import chat_engine
 from app.services.session_service import SessionService
 from app.services.telemetry_service import telemetry_service
@@ -79,6 +79,7 @@ class ChatAdapterService:
         )
 
     async def process_message(self, session_id: str, body: UserMessage, db: AsyncSession, identity: SeatBookIdentity | None = None) -> ChatResponse | None:
+        identity = identity or current_seatbook_identity()
         started = telemetry_service.timer()
         logger.info(
             "event=chat_message_started session_id=%s message_type=%s has_text=%s text_length=%s form_keys=%s",

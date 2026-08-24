@@ -367,6 +367,13 @@ class ChatEngine:
             return await self._start_quick_book_entry(session, db, booking_date_str=entities.get("booking_date"))
         if intent == Intent.BOOK_SEAT:
             telemetry_service.record_booking_event("booking_flow_started", source="free_text")
+            if session.current_node not in {
+                Node.BOOK_WHEN_WHERE,
+                Node.BOOK_DETAILS,
+                Node.AVAILABLE_SEATS,
+                Node.CONFIRM,
+            }:
+                await self._reset_manual_booking_context(session.id, db)
             return await self._route_book_seat_from_entities(session, entities, db)
 
         return await self._go_to_main_menu(session, db)
@@ -640,6 +647,29 @@ class ChatEngine:
                 detail_text += (
                     "If you'd like to change it, please cancel the existing booking first and then book a new one."
                 )
+                booking_id = str(external_existing.get("booking_id") or "")
+                booking_summary = {
+                    "booking_ref": str(external_existing.get("booking_id") or ""),
+                    "booking_date": str(external_existing.get("booking_date") or booking_date_str),
+                    "site_id": str(external_existing.get("site_id") or ""),
+                    "building_id": str(external_existing.get("building_id") or ""),
+                    "floor_id": str(external_existing.get("floor_id") or ""),
+                    "seat_id": str(external_existing.get("seat_id") or ""),
+                    "seat_code": str(external_existing.get("seat_code") or ""),
+                    "site_name": str(external_existing.get("site_name") or ""),
+                    "building_name": str(external_existing.get("building_name") or ""),
+                    "floor_name": str(external_existing.get("floor_name") or ""),
+                    "status": str(external_existing.get("booking_status") or external_existing.get("status") or ""),
+                }
+                await self._set_context_bulk(session.id, {
+                    "duplicate_booking_id": booking_id,
+                    "booking_action": "cancel",
+                    "booking_list_source": "seat_backend_api",
+                    "booking_list_ids": f"1:{booking_id}",
+                    "booking_list_summaries": json.dumps({booking_id: booking_summary}),
+                    "date_range_start": booking_date_str,
+                    "date_range_end": booking_date_str,
+                }, db)
                 options = [
                     ChatOption(number=1, label="Cancel existing & rebook", value="cancel_rebook"),
                     ChatOption(number=0, label="Back to main menu", value="0"),
@@ -901,7 +931,11 @@ class ChatEngine:
 
         # Handle "cancel & rebook" shortcut from duplicate booking warning
         if user_text and user_text.strip().lower() == "cancel_rebook":
+            ctx = await self._get_context(session.id, db)
+            booking_id = str(ctx.get("duplicate_booking_id") or "").strip()
             await self._update_node(session, Node.MY_BOOKINGS, "NAVIGATING", db)
+            if booking_id:
+                return await self._build_booking_action_confirmation(session, "cancel", booking_id, db)
             return await self._build_my_bookings(session, db)
 
         if navigation_service.is_main_menu_command(user_text):
@@ -1406,7 +1440,12 @@ class ChatEngine:
 
     async def _start_book_seat_entry(self, session, db: AsyncSession) -> ChatResponse:
         session.current_menu_id = None
-        await self._set_context_bulk(session.id, {
+        await self._reset_manual_booking_context(session.id, db)
+        await self._update_node(session, Node.BOOK_WHEN_WHERE, "BOOKING_WHEN_WHERE", db)
+        return await self._build_when_where_card(session, db)
+
+    async def _reset_manual_booking_context(self, session_id, db: AsyncSession) -> None:
+        await self._set_context_bulk(session_id, {
             "booking_date": "",
             "site_id": "",
             "building_id": "",
@@ -1420,8 +1459,6 @@ class ChatEngine:
             "booking_prefill_source": "manual",
             "quick_book_mode": "",
         }, db)
-        await self._update_node(session, Node.BOOK_WHEN_WHERE, "BOOKING_WHEN_WHERE", db)
-        return await self._build_when_where_card(session, db)
 
     # ── STEP 1: WHEN + WHERE (Form Card) ──────────────────────────────────────
     async def _build_when_where_card(self, session, db: Optional[AsyncSession] = None) -> ChatResponse:

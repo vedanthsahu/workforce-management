@@ -26,10 +26,13 @@ from app.services.user_identity_service import UserIdentityService
 class WhatsAppWebhookVerificationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.original_token = settings.WHATSAPP_VERIFY_TOKEN
+        self.original_enabled = settings.WHATSAPP_ENABLED
+        settings.WHATSAPP_ENABLED = True
         settings.WHATSAPP_VERIFY_TOKEN = "efacility_chatbot_verify"
 
     async def asyncTearDown(self):
         settings.WHATSAPP_VERIFY_TOKEN = self.original_token
+        settings.WHATSAPP_ENABLED = self.original_enabled
 
     async def test_get_webhook_verification_success(self):
         response = await whatsapp_router.verify_webhook(
@@ -119,15 +122,19 @@ class WhatsAppWebhookPayloadTests(unittest.IsolatedAsyncioTestCase):
         )
 
         db = object()
+        fake_identity_service = SimpleNamespace(resolve_whatsapp_user_async=AsyncMock(return_value=SimpleNamespace(
+            user_id="38", tenant_id="3", user_name="Test User", phone_key="919999999999", matched=True,
+        )))
         with patch.object(whatsapp_router, "whatsapp_session_service", fake_session_service), \
              patch.object(whatsapp_router, "chat_adapter_service", fake_chat_adapter), \
              patch.object(whatsapp_router, "whatsapp_interaction_service", fake_interaction_service), \
              patch.object(whatsapp_router, "whatsapp_service", fake_whatsapp_service), \
-             patch.object(whatsapp_router, "whatsapp_message_store", fake_message_store):
+             patch.object(whatsapp_router, "whatsapp_message_store", fake_message_store), \
+             patch.object(whatsapp_router, "user_identity_service", fake_identity_service):
             result = await whatsapp_router.handle_webhook_payload(payload, db=db)
 
         self.assertEqual(result["status"], "ok")
-        fake_session_service.get_or_create_session_id.assert_awaited_once_with("919999999999", db)
+        self.assertEqual(fake_session_service.get_or_create_session_id.await_args.args[:2], ("919999999999", db))
         fake_interaction_service.deliver_response.assert_awaited_once()
 
     async def test_post_ignores_duplicate_message_id(self):
@@ -210,11 +217,15 @@ class WhatsAppWebhookPayloadTests(unittest.IsolatedAsyncioTestCase):
             record_outgoing=AsyncMock(),
         )
 
+        fake_identity_service = SimpleNamespace(resolve_whatsapp_user_async=AsyncMock(return_value=SimpleNamespace(
+            user_id="38", tenant_id="3", user_name="Test User", phone_key="919999999999", matched=True,
+        )))
         with patch.object(whatsapp_router, "whatsapp_session_service", fake_session_service), \
              patch.object(whatsapp_router, "chat_adapter_service", fake_chat_adapter), \
              patch.object(whatsapp_router, "whatsapp_interaction_service", fake_interaction_service), \
              patch.object(whatsapp_router, "whatsapp_service", fake_whatsapp_service), \
-             patch.object(whatsapp_router, "whatsapp_message_store", fake_message_store):
+             patch.object(whatsapp_router, "whatsapp_message_store", fake_message_store), \
+             patch.object(whatsapp_router, "user_identity_service", fake_identity_service):
             await whatsapp_router.handle_webhook_payload(payload, db=db)
 
         fake_chat_adapter.process_message.assert_awaited_once()
@@ -1094,15 +1105,17 @@ class WhatsAppSessionMappingTests(unittest.IsolatedAsyncioTestCase):
         service = WhatsAppSessionService()
         service._redis_unavailable = True
         fake_created_session = SimpleNamespace(id="session-1")
-        fake_existing_session = SimpleNamespace(id="session-1", user_name="WhatsApp 919999999999")
+        fake_existing_session = SimpleNamespace(id="session-1", user_name="Test User")
         fake_session_service = SimpleNamespace(
             create=AsyncMock(return_value=fake_created_session),
             get=AsyncMock(return_value=fake_existing_session),
         )
         fake_identity = SimpleNamespace(
-            user_name="WhatsApp 919999999999",
+            user_id="38",
+            tenant_id="3",
+            user_name="Test User",
             phone_key="919999999999",
-            matched=False,
+            matched=True,
         )
         db = object()
 
@@ -1117,11 +1130,13 @@ class WhatsAppSessionMappingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first_session_id, "session-1")
         self.assertEqual(second_session_id, "session-1")
         fake_session_service.create.assert_awaited_once()
-        fake_session_service.get.assert_awaited_once_with("session-1", db)
+        fake_session_service.get.assert_awaited_once_with(
+            "session-1", db, authenticated_user_id="38", authenticated_tenant_id="3"
+        )
 
     async def test_session_mapping_uses_configured_user_for_phone(self):
         original_mappings = settings.WHATSAPP_USER_MAPPINGS
-        settings.WHATSAPP_USER_MAPPINGS = "8686123214:Naga"
+        settings.WHATSAPP_USER_MAPPINGS = "918686123214|38|3|Naga"
         service = WhatsAppSessionService()
         service._redis_unavailable = True
         fake_created_session = SimpleNamespace(id="session-1")
@@ -1129,7 +1144,7 @@ class WhatsAppSessionMappingTests(unittest.IsolatedAsyncioTestCase):
             create=AsyncMock(return_value=fake_created_session),
             get=AsyncMock(return_value=None),
         )
-        fake_identity = SimpleNamespace(user_name="Naga", phone_key="8686123214", matched=True)
+        fake_identity = SimpleNamespace(user_id="38", tenant_id="3", user_name="Naga", phone_key="918686123214", matched=True)
 
         try:
             with patch("app.services.whatsapp_session_service.SessionService", fake_session_service), \
@@ -1145,17 +1160,16 @@ class WhatsAppSessionMappingTests(unittest.IsolatedAsyncioTestCase):
         fake_session_service.create.assert_awaited_once()
         self.assertEqual(fake_session_service.create.await_args.args[0], "Naga")
 
-    def test_user_identity_matches_country_code_suffix(self):
+    def test_user_identity_requires_exact_normalized_number(self):
         original_mappings = settings.WHATSAPP_USER_MAPPINGS
-        settings.WHATSAPP_USER_MAPPINGS = "8686123214:Naga"
+        settings.WHATSAPP_USER_MAPPINGS = "8686123214|38|3|Naga"
         try:
             identity = UserIdentityService().resolve_whatsapp_user("918686123214")
         finally:
             settings.WHATSAPP_USER_MAPPINGS = original_mappings
 
-        self.assertEqual(identity.user_name, "Naga")
-        self.assertEqual(identity.phone_key, "8686123214")
-        self.assertTrue(identity.matched)
+        self.assertEqual(identity.user_name, "")
+        self.assertFalse(identity.matched)
 
 
 if __name__ == "__main__":

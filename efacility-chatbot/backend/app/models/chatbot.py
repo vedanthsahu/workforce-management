@@ -94,6 +94,7 @@ class ChatbotUserIdentityMap(Base):
     tenant_id = Column(Integer, nullable=False, default=3)
     channel = Column(String(50), nullable=False, default="whatsapp")
     external_id = Column(String(255), nullable=False)
+    user_id = Column(String(255), nullable=True)
     user_name = Column(String(255), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)

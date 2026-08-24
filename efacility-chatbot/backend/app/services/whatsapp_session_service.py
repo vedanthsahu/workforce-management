@@ -7,6 +7,7 @@ from app.config import settings
 from app.services.session_service import SessionService
 from app.services.user_identity_service import user_identity_service
 from app.logging_config import mask_identifier
+from app.deps.seatbook_auth import SeatBookIdentity
 
 logger = logging.getLogger(__name__)
 
@@ -19,32 +20,39 @@ class WhatsAppSessionService:
         self._redis_unavailable = False
         self._fallback_sessions: dict[str, str] = {}
 
-    async def get_or_create_session_id(self, wa_id: str, db: AsyncSession) -> str:
-        identity = await user_identity_service.resolve_whatsapp_user_async(wa_id, db)
+    async def get_or_create_session_id(self, wa_id: str, db: AsyncSession, identity=None) -> str:
+        identity = identity or await user_identity_service.resolve_whatsapp_user_async(wa_id, db)
+        if not identity.matched:
+            raise PermissionError("WhatsApp sender is not allowlisted")
         existing = await self.get_session_id(wa_id)
         if existing:
-            session = await SessionService.get(existing, db)
+            session = await SessionService.get(existing, db, authenticated_user_id=identity.user_id, authenticated_tenant_id=identity.tenant_id)
             if session and session.user_name == identity.user_name:
                 return str(session.id)
             if session:
                 logger.info(
                     "WhatsApp mapped session user changed wa_id=%s old_user=%s new_user=%s",
-                    wa_id,
-                    session.user_name,
-                    identity.user_name,
+                    mask_identifier(wa_id),
+                    "configured",
+                    "configured",
                 )
                 await self.clear_session_id(wa_id)
             else:
                 await self.clear_session_id(wa_id)
             logger.info("event=whatsapp_session_expired wa_id=%s session_id=%s", mask_identifier(wa_id), existing)
 
-        session = await SessionService.create(identity.user_name, db)
+        session = await SessionService.create(
+            identity.user_name,
+            db,
+            authenticated_user_id=identity.user_id,
+            authenticated_tenant_id=identity.tenant_id,
+        )
         session_id = str(session.id)
         await self.set_session_id(wa_id, session_id)
         logger.info(
             "WhatsApp user resolved wa_id=%s user_name=%s matched=%s",
-            wa_id,
-            identity.user_name,
+            mask_identifier(wa_id),
+            "configured",
             identity.matched,
         )
         return session_id
