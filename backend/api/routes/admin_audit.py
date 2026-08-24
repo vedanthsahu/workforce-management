@@ -32,7 +32,10 @@ router = APIRouter(prefix="/admin", tags=["admin-audit"])
         "pagination -- all applied server-side -- and a summary of counts "
         "(total/successful/failed events, unique actors) over the filtered "
         "dataset for the page's summary cards. lastSeconds, when given, takes "
-        "precedence over startDate/endDate. "
+        "precedence over startDate/endDate. Also returns filter_options -- "
+        "every distinct (module, entity_type, action) triple that exists for "
+        "the tenant (unaffected by the filters above), for the filter bar's "
+        "cascading Module -> Entity -> Action dropdowns. "
         "Requires admin_dashboard:view or an admin role."
     ),
     responses={

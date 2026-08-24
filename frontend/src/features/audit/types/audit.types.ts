@@ -133,8 +133,19 @@ export interface AuditLogPagination {
   total_pages: number;
 }
 
+/** One (module, entity_type, action) combination that actually exists for
+ * the tenant -- see backend/schemas/audit.py AuditLogFilterOption. A flat
+ * array (not a nested module -> entity -> action object): the filter bar
+ * derives each dropdown's options by filtering/mapping this one array. */
+export interface AuditLogFilterOptionRaw {
+  module: AuditModule;
+  entity_type: string | null;
+  action: string;
+}
+
 export interface AuditLogListResponse {
   items: AuditLogListItemRaw[];
   summary: AuditLogSummary;
+  filter_options: AuditLogFilterOptionRaw[];
   pagination: AuditLogPagination;
 }

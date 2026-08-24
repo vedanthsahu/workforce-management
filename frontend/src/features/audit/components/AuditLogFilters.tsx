@@ -1,21 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CalendarDays, Clock, ChevronDown, Search, X } from "lucide-react";
+import { CalendarDays, Clock, ChevronDown, RotateCcw, Search, X } from "lucide-react";
 import { auditService } from "../services/audit.service";
-import { AuditLogFilters as AuditLogFiltersType, AuditLogListItem, AuditTimeMode } from "../types/audit.types";
-import { initialsOf, mapAuditLogListItemToUi } from "../utils/mapAuditLog";
-import {
-  AUDIT_ACTION_OPTIONS,
-  AUDIT_ENTITY_OPTIONS,
-  AUDIT_MODULE_OPTIONS,
-  AUDIT_RELATIVE_TIME_OPTIONS,
-  AUDIT_STATUS_OPTIONS,
-} from "../utils/constants";
+import { AuditLogFilterOptionRaw, AuditLogFilters as AuditLogFiltersType, AuditLogListItem, AuditTimeMode } from "../types/audit.types";
+import { deriveAuditFilterOptions, initialsOf, mapAuditLogListItemToUi } from "../utils/mapAuditLog";
+import { AUDIT_RELATIVE_TIME_OPTIONS, AUDIT_STATUS_OPTIONS } from "../utils/constants";
 
 type Props = {
   filters: AuditLogFiltersType;
   onUpdate: <K extends keyof AuditLogFiltersType>(key: K, value: AuditLogFiltersType[K]) => void;
+  onSearch: () => void;
+  onClear: () => void;
+  /** Every real (module, entity_type, action) combination for the tenant --
+   * powers the cascading Module -> Entity -> Action dropdowns below. */
+  filterOptions: AuditLogFilterOptionRaw[];
 };
 
 function formatDate(iso: string): string {
@@ -134,7 +133,7 @@ function DateRangeField({
 
 function TimeModeToggle({ mode, onChange }: { mode: AuditTimeMode; onChange: (mode: AuditTimeMode) => void }) {
   return (
-    <div className="h-10 inline-flex items-center bg-gray-200 border border-gray-200 p-1 rounded-lg gap-1 shrink-0">
+    <div className="flex items-center gap-3">
       {(
         [
           { key: "date", label: "Date" },
@@ -147,8 +146,8 @@ function TimeModeToggle({ mode, onChange }: { mode: AuditTimeMode; onChange: (mo
             key={key}
             type="button"
             onClick={() => onChange(key)}
-            className={`inline-flex items-center justify-center h-full px-3 text-[12px] font-medium rounded-md transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 ${
-              active ? "bg-indigo-700 text-white shadow-sm" : "bg-white text-gray-700 shadow-sm hover:bg-gray-50"
+            className={`text-xs font-medium pb-0.5 border-b-2 transition-colors duration-150 ${
+              active ? "border-indigo-600 text-indigo-600 font-semibold" : "border-transparent text-gray-600 hover:text-gray-700"
             }`}
           >
             {label}
@@ -340,44 +339,147 @@ function UserSearchField({ value, onChange }: { value: string; onChange: (name: 
   );
 }
 
-export default function AuditLogFilters({ filters, onUpdate }: Props) {
+function optionLabel(options: { value: string; label: string }[], value: string): string {
+  return options.find((o) => o.value === value)?.label ?? value;
+}
+
+export default function AuditLogFilters({ filters, onUpdate, onSearch, onClear, filterOptions }: Props) {
+  const { moduleOptions, entityOptions, actionOptions } = deriveAuditFilterOptions(
+    filterOptions,
+    filters.module,
+    filters.entity
+  );
+
+  // Module -> Entity -> Action is a real hierarchy (see deriveAuditFilterOptions),
+  // so narrowing an upstream level resets whatever's downstream -- otherwise
+  // a stale Entity/Action selection could point at a combination that no
+  // longer applies under the newly picked Module/Entity.
+  const handleModuleChange = (module: string) => {
+    onUpdate("module", module);
+    onUpdate("entity", "All");
+    onUpdate("action", "All");
+  };
+  const handleEntityChange = (entity: string) => {
+    onUpdate("entity", entity);
+    onUpdate("action", "All");
+  };
+
+  // Chips summarizing whichever of Module/Entity/Action/Status aren't "All" --
+  // each one's remove button reuses the same cascading reset as its select so
+  // clearing Module from a chip also clears the now-stale Entity/Action picks.
+  const activeFilterChips = [
+    filters.module !== "All" && {
+      key: "module",
+      label: "Module",
+      value: optionLabel(moduleOptions, filters.module),
+      onRemove: () => handleModuleChange("All"),
+    },
+    filters.entity !== "All" && {
+      key: "entity",
+      label: "Entity",
+      value: optionLabel(entityOptions, filters.entity),
+      onRemove: () => handleEntityChange("All"),
+    },
+    filters.action !== "All" && {
+      key: "action",
+      label: "Action",
+      value: optionLabel(actionOptions, filters.action),
+      onRemove: () => onUpdate("action", "All"),
+    },
+    filters.status !== "All" && {
+      key: "status",
+      label: "Status",
+      value: optionLabel(AUDIT_STATUS_OPTIONS, filters.status),
+      onRemove: () => onUpdate("status", "All"),
+    },
+  ].filter((chip): chip is { key: string; label: string; value: string; onRemove: () => void } => Boolean(chip));
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2 flex-1 min-w-60">
+        <div className="w-70.5 flex flex-col gap-1">
           <TimeModeToggle mode={filters.timeMode} onChange={(mode) => onUpdate("timeMode", mode)} />
-          <div className="flex-1 min-w-0">
-            {filters.timeMode === "date" ? (
-              <DateRangeField
-                dateFrom={filters.dateFrom}
-                dateTo={filters.dateTo}
-                onChange={(from, to) => {
-                  onUpdate("dateFrom", from);
-                  onUpdate("dateTo", to);
-                }}
-              />
-            ) : (
-              <RelativeTimeField value={filters.lastSeconds} onChange={(seconds) => onUpdate("lastSeconds", seconds)} />
-            )}
-          </div>
+          {filters.timeMode === "date" ? (
+            <DateRangeField
+              dateFrom={filters.dateFrom}
+              dateTo={filters.dateTo}
+              onChange={(from, to) => {
+                onUpdate("dateFrom", from);
+                onUpdate("dateTo", to);
+              }}
+            />
+          ) : (
+            <RelativeTimeField value={filters.lastSeconds} onChange={(seconds) => onUpdate("lastSeconds", seconds)} />
+          )}
         </div>
 
-        <div className="w-[150px]">
-          <NativeSelect value={filters.action} onChange={(v) => onUpdate("action", v)} options={AUDIT_ACTION_OPTIONS} />
+        <div className="w-41 flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-600">Module</label>
+          <NativeSelect value={filters.module} onChange={handleModuleChange} options={moduleOptions} />
         </div>
-        <div className="w-[150px]">
-          <NativeSelect value={filters.module} onChange={(v) => onUpdate("module", v)} options={AUDIT_MODULE_OPTIONS} />
+        <div className="w-41 flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-600">Entity</label>
+          <NativeSelect value={filters.entity} onChange={handleEntityChange} options={entityOptions} />
         </div>
-        <div className="w-[150px]">
-          <NativeSelect value={filters.entity} onChange={(v) => onUpdate("entity", v)} options={AUDIT_ENTITY_OPTIONS} />
+        <div className="w-42 flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-600">Action</label>
+          <NativeSelect value={filters.action} onChange={(v) => onUpdate("action", v)} options={actionOptions} />
         </div>
-        <div className="w-[150px]">
+        <div className="w-42 flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-600">Status</label>
           <NativeSelect value={filters.status} onChange={(v) => onUpdate("status", v)} options={AUDIT_STATUS_OPTIONS} />
         </div>
       </div>
 
+      {activeFilterChips.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-medium text-gray-500">
+            {activeFilterChips.length} filter{activeFilterChips.length > 1 ? "s" : ""} selected:
+          </span>
+          {activeFilterChips.map((chip) => (
+            <span
+              key={chip.key}
+              className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full"
+            >
+              <span className="text-indigo-400 font-normal">{chip.label}:</span>
+              {chip.value}
+              <button
+                type="button"
+                onClick={chip.onRemove}
+                className="p-0.5 rounded-full hover:bg-indigo-100 transition-colors"
+                aria-label={`Clear ${chip.label} filter`}
+              >
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center gap-3 flex-wrap">
-        <UserSearchField value={filters.search} onChange={(name) => onUpdate("search", name)} />
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-600">Search</label>
+          <UserSearchField value={filters.search} onChange={(name) => onUpdate("search", name)} />
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto justify-end">
+          <button
+            type="button"
+            onClick={onClear}
+            className="h-10 px-4 flex items-center gap-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <RotateCcw size={14} />
+            Clear
+          </button>
+          <button
+            type="button"
+            onClick={onSearch}
+            className="h-10 px-5 flex items-center gap-1.5 text-sm font-medium text-white bg-indigo-700 hover:bg-indigo-800 rounded-lg transition-colors shadow-sm"
+          >
+            <Search size={14} />
+            Search
+          </button>
+        </div>
       </div>
     </div>
   );

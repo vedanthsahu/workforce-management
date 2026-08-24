@@ -11,11 +11,13 @@ from psycopg2.extensions import connection as PGConnection
 
 from backend.repositories.audit_repository import (
     fetch_audit_log_by_id,
+    fetch_audit_log_filter_options,
     fetch_audit_logs,
     fetch_audit_logs_summary,
 )
 from backend.schemas.audit import (
     AuditLogDetailResponse,
+    AuditLogFilterOption,
     AuditLogListItemResponse,
     AuditLogListResponse,
     AuditLogSummary,
@@ -79,6 +81,9 @@ def get_audit_logs(
             limit=limit,
         )
         summary_row = fetch_audit_logs_summary(conn, **filters)
+        # Deliberately tenant-scoped only, not narrowed by the filters above --
+        # see fetch_audit_log_filter_options's docstring.
+        filter_option_rows = fetch_audit_log_filter_options(conn, tenant_id=tenant_id)
     except psycopg2.Error as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -91,6 +96,7 @@ def get_audit_logs(
     return AuditLogListResponse(
         items=[AuditLogListItemResponse(**row) for row in rows],
         summary=AuditLogSummary(**summary_row),
+        filter_options=[AuditLogFilterOption(**row) for row in filter_option_rows],
         pagination={
             "total": total,
             "page": page,

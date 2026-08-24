@@ -557,9 +557,10 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 </DropdownMenuItem>
 
                 <DropdownMenuItem
-                  onMouseEnter={() => router.prefetch("/notifications")}
-                  onClick={() => useNavigationGuardStore.getState().requestNavigation(() => router.push("/notifications"))}
-                  className="gap-2.5 px-2 py-2 text-[12.5px] cursor-pointer"
+                  disabled
+                  aria-disabled
+                  title="Notifications (coming soon)"
+                  className="gap-2.5 px-2 py-2 text-[12.5px] opacity-50 cursor-not-allowed"
                 >
                   <Bell className="w-4 h-4 text-gray-400" />
                   Notifications
