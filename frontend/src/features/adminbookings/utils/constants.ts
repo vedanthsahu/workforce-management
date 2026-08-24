@@ -11,22 +11,26 @@ export const BOOKING_STATUS_STYLES: Record<BookingStatus, string> = {
   "No Show": "bg-orange-100 text-orange-700",
 };
 
+// "Completed" is intentionally excluded here — it remains a valid computed
+// row status (see mapAdminBooking.ts) with its own badge style below, but is
+// no longer offered as a selectable filter option.
 export const BOOKING_STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "All", label: "All Status" },
-  ...(Object.keys(BOOKING_STATUS_STYLES) as BookingStatus[]).map((status) => ({
-    value: status,
-    label: status,
-  })),
+  ...(Object.keys(BOOKING_STATUS_STYLES) as BookingStatus[])
+    .filter((status) => status !== "Completed")
+    .map((status) => ({
+      value: status,
+      label: status,
+    })),
 ];
 
-// The backend's bookingStatus filter only recognizes these five values —
+// The backend's bookingStatus filter only recognizes these four values —
 // Scheduled/Checked In/Checked Out are derived client-side from timestamps,
 // not stored as their own booking_status, so they can't be sent as a filter.
 export const BOOKING_STATUS_PARAM: Record<string, AdminBookingApiStatus> = {
   Confirmed: "CONFIRMED",
   Cancelled: "CANCELLED",
   Modified: "MODIFIED",
-  Completed: "COMPLETED",
   "No Show": "NO_SHOW",
 };
 

@@ -25,7 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const [user,         setUser]         = useState<UserState>(undefined);
   const [isLoading,    setIsLoading]    = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [, setIsRefreshing] = useState(false);
 
   const didInitialCheck = useRef(false);
 

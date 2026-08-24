@@ -100,12 +100,14 @@ class AdminDashboardRepositoryTests(unittest.TestCase):
                     {
                         "activity_id": "employee-booking-10",
                         "created_at": "2026-05-22T08:30:00",
+                        "updated_at": "2026-05-22T08:30:00",
                     }
                 ],
                 [
                     {
                         "activity_id": "guest-booking-20",
                         "created_at": "2026-05-22T08:45:00",
+                        "updated_at": "2026-05-22T08:45:00",
                     }
                 ],
             ],

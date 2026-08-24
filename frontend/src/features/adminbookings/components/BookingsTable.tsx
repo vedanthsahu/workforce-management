@@ -191,7 +191,7 @@ function PersonCell({ booking }: { booking: AdminBooking }) {
           isGuest ? "bg-violet-100 text-violet-700" : "bg-indigo-100 text-indigo-700"
         }`}
       >
-        {isGuest ? "GV" : initialsOf(booking.person_name)}
+        {initialsOf(booking.person_name)}
       </div>
       <div className="min-w-0">
         <p className="text-xs font-medium text-gray-900 line-clamp-2 wrap-break-word">{booking.person_name}</p>
@@ -238,7 +238,7 @@ export default function BookingsTable({ data, selectedRowKey, onView, onModifySe
                       <p className="text-[11px] text-gray-400">{booking.seat_type}</p>
                     </>
                   ) : (
-                    <p className="pl-4 pr-1 py-3 text-gray-400 italic">Visit only</p>
+                    <p className="pl-1 pr-10 text-gray-900 font-medium text-center">Visit only</p>
                   )}
                 </td>
                 <td className="pr-3 py-3 text-gray-700 max-w-[80px] break-words">{booking.site_name}</td>

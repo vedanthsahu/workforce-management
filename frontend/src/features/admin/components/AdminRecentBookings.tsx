@@ -45,7 +45,7 @@ function StatusBadge({ status, className = "" }: { status: RecentBooking["status
   );
 }
 
-export default function AdminRecentBookings({ bookings, loading }: Props) {
+export default function AdminRecentBookings({ bookings }: Props) {
   return (
     <Card>
       <CardHeader>

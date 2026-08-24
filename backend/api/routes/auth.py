@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from psycopg2.extensions import connection as PGConnection
-from backend.services.auth_service import get_auth_me_payload, logout_user_session
+
 from backend.api.deps import get_current_user
 from backend.core.config import get_settings
 from backend.core.security import (
@@ -21,7 +21,12 @@ from backend.core.security import (
 )
 from backend.db.connection import get_db
 from backend.schemas.auth import MessageResponse, UserResponse
-from backend.services.auth_service import AuthTokens, refresh_auth_tokens
+from backend.services.auth_service import (
+    AuthTokens,
+    get_auth_me_payload,
+    logout_user_session,
+    refresh_auth_tokens,
+)
 
 router = APIRouter(tags=["auth"])
 

@@ -24,6 +24,7 @@ export const getLayoutsByFloor = async (
   const res = await axiosInstance.get(
     `/admin/floor-layouts/floors/${floorId}`
   );
+  console.log(res.data)
   return res.data;
 };
 

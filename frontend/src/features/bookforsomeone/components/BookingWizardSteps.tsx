@@ -374,49 +374,6 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
     if (touched[field]) validateField(field, form[field]);
   };
 
-  // const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   const raw = e.target.value;
-  //   const digits = raw.replace(/\D/g, "");
-  //   // Block input if digit count exceeds 10
-  //   if (digits.length > 10) return;
-  //   setForm((prev) => ({ ...prev, phone: raw }));
-  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
-  //   validateField("phone", raw);
-  // };
-
-  //   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   const raw = e.target.value;
-
-  //   // Only allow digits, spaces, +, -, (, )
-  //   const sanitized = raw.replace(/[^\d\s+\-()\s]/g, "");
-
-  //   // Block if digit count exceeds 10
-  //   const digits = sanitized.replace(/\D/g, "");
-  //   if (digits.length > 10) return;
-
-  //   setForm((prev) => ({ ...prev, phone: sanitized }));
-  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
-  //   validateField("phone", sanitized);
-  // };
-  // const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   const raw = e.target.value;
-  //   setForm((prev) => ({ ...prev, phone: raw }));
-  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
-  //   validateField("phone", raw);
-  // };
-  // const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   const raw = e.target.value;
-
-  //   // Block if digit count exceeds 10 (silent, no typing allowed)
-  //   const digits = raw.replace(/\D/g, "");
-  //   if (digits.length > 10) return;
-
-  //   // Allow the value through (valid or not) and let zod show errors for invalid chars
-  //   setForm((prev) => ({ ...prev, phone: raw }));
-  //   if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
-  //   validateField("phone", raw);
-  // };
-
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
     const newDigits = raw.replace(/\D/g, "");
@@ -1242,9 +1199,27 @@ export function SuccessStep({
       <p style={{ fontSize: "0.8125rem", color: "#6b7280", maxWidth: 360, margin: "0 auto 1.5rem" }}>
         The guest and host employee will receive an email with the visit details. No workspace has been reserved.
       </p>
-      {isAdminFlow ? (
+      <div style={{ display: "flex", justifyContent: "center", gap: "0.75rem" }}>
+        <button
+          type="button"
+          onClick={onBookAnother}
+          style={{
+            height: 40,
+            padding: "0 1.25rem",
+            borderRadius: 8,
+            border: "1.5px solid #e5e7eb",
+            background: "#fff",
+            fontSize: "0.875rem",
+            fontWeight: 600,
+            color: "#111827",
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Book Another
+        </button>
         <Link
-          href="/admin/bookings"
+          href={isAdminFlow ? "/admin/bookings" : "/mybookings?tab=bookedForSomeone"}
           style={{
             height: 40,
             padding: "0 1.25rem",
@@ -1256,55 +1231,13 @@ export function SuccessStep({
             color: "#fff",
             display: "inline-flex",
             alignItems: "center",
-            justifyContent: "center",
-            gap: "0.5rem",
             textDecoration: "none",
             fontFamily: "inherit",
           }}
         >
-          ← Back to Bookings
+          {isAdminFlow ? "Back to Bookings" : "Go to My Bookings"}
         </Link>
-      ) : (
-        <div style={{ display: "flex", justifyContent: "center", gap: "0.75rem" }}>
-          <button
-            type="button"
-            onClick={onBookAnother}
-            style={{
-              height: 40,
-              padding: "0 1.25rem",
-              borderRadius: 8,
-              border: "1.5px solid #e5e7eb",
-              background: "#fff",
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              color: "#111827",
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            Book Another
-          </button>
-          <Link
-            href="/mybookings?tab=bookedForSomeone"
-            style={{
-              height: 40,
-              padding: "0 1.25rem",
-              borderRadius: 8,
-              border: "1.5px solid #4f46e5",
-              background: "#4f46e5",
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              color: "#fff",
-              display: "inline-flex",
-              alignItems: "center",
-              textDecoration: "none",
-              fontFamily: "inherit",
-            }}
-          >
-            Go to My Bookings
-          </Link>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

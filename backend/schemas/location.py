@@ -324,6 +324,36 @@ class LayoutSeatConfigurationUpdateRequest(BaseModel):
     amenity_ids: list[int] | None = None
 
 
+class LayoutSeatBulkConfigurationEntry(LayoutSeatConfigurationUpdateRequest):
+    """One seat's own configuration within a bulk request. Any field left
+    unset falls back to `defaults` (if provided), then to the mapping's
+    existing stored value -- never to another seat's values."""
+
+    layout_seat_mapping_id: int = Field(gt=0)
+
+
+class BulkLayoutSeatConfigurationUpdateRequest(BaseModel):
+    """Payload for configuring multiple layout seat mappings at once
+    (layout editor, pre-publish, or a published layout's own admin-edit
+    flow). Each seat may carry its own status/amenities/is_bookable/etc;
+    `defaults` is an optional base applied to every seat first, so the
+    "same config for all N seats" case still needs only one shared object
+    instead of repeating it per entry."""
+
+    defaults: LayoutSeatConfigurationUpdateRequest | None = None
+    seats: list[LayoutSeatBulkConfigurationEntry] = Field(min_length=1)
+
+    @field_validator("seats")
+    @classmethod
+    def _reject_duplicate_mapping_ids(
+        cls, entries: list[LayoutSeatBulkConfigurationEntry]
+    ) -> list[LayoutSeatBulkConfigurationEntry]:
+        seen = {entry.layout_seat_mapping_id for entry in entries}
+        if len(seen) != len(entries):
+            raise ValueError("Duplicate layout_seat_mapping_id in seats.")
+        return entries
+
+
 class LayoutSeatConfigurationResponse(BaseModel):
 
     layout_seat_mapping_id: str
@@ -375,3 +405,9 @@ class SeatConfigurationResponse(BaseModel):
     seat_code: str
     status: str
     is_bookable: bool
+
+
+class BulkSeatConfigurationUpdateRequest(SeatConfigurationUpdateRequest):
+    """Payload for applying one configuration to multiple seats at once."""
+
+    seat_ids: list[int] = Field(min_length=1)

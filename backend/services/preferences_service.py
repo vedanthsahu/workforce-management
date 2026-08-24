@@ -8,6 +8,8 @@ from fastapi import HTTPException, status
 from psycopg2 import errorcodes
 from psycopg2.extensions import connection as PGConnection
 
+from backend.core.audit_actions import USER_PREFERENCES_UPDATED
+from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.dashboard_repository import (
     fetch_building_scope,
     fetch_floor_scope,
@@ -15,6 +17,7 @@ from backend.repositories.dashboard_repository import (
 )
 from backend.repositories.preferences_repository import (
     count_amenities_for_category,
+    fetch_active_amenities,
     fetch_amenities,
     fetch_amenity_by_id,
     fetch_amenity_categories,
@@ -23,7 +26,6 @@ from backend.repositories.preferences_repository import (
     fetch_amenity_category_metrics,
     fetch_amenity_duplicates,
     fetch_amenity_ids,
-    fetch_active_amenities,
     fetch_user_preferred_amenities,
     fetch_user_work_preferences,
     insert_amenity,
@@ -33,8 +35,6 @@ from backend.repositories.preferences_repository import (
     update_amenity_category,
     upsert_user_work_preferences,
 )
-from backend.core.audit_actions import USER_PREFERENCES_UPDATED
-from backend.repositories.audit_repository import safe_write_audit_log
 from backend.schemas.preferences import (
     AdminAmenityResponse,
     AmenityCategoryListResponse,

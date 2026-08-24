@@ -23,18 +23,17 @@ class GuestAvailabilityAuthorizationTests(unittest.TestCase):
             "backend.services.booking_service.guest_has_active_booking_in_range",
         ) as mock_guest_conflict, patch(
             "backend.services.booking_service.fetch_available_seats_by_range",
-        ) as mock_fetch_seats:
-            with self.assertRaises(HTTPException) as context:
-                get_available_seats_by_range(
-                    conn=object(),
-                    tenant_id="1",
-                    floor_id="10",
-                    start_date=date(2026, 7, 1),
-                    end_date=date(2026, 7, 2),
-                    is_guest_booking=True,
-                    booked_for_guest_id="99",
-                    current_user={"user_id": "7", "role_name": "EMPLOYEE"},
-                )
+        ) as mock_fetch_seats, self.assertRaises(HTTPException) as context:
+            get_available_seats_by_range(
+                conn=object(),
+                tenant_id="1",
+                floor_id="10",
+                start_date=date(2026, 7, 1),
+                end_date=date(2026, 7, 2),
+                is_guest_booking=True,
+                booked_for_guest_id="99",
+                current_user={"user_id": "7", "role_name": "EMPLOYEE"},
+            )
 
         self.assertEqual(context.exception.status_code, 403)
         self.assertEqual(
@@ -69,18 +68,17 @@ class GuestAvailabilityAuthorizationTests(unittest.TestCase):
             return_value=True,
         ) as mock_guest_conflict, patch(
             "backend.services.booking_service.fetch_available_seats_by_range",
-        ) as mock_fetch_seats:
-            with self.assertRaises(HTTPException) as context:
-                get_available_seats_by_range(
-                    conn=object(),
-                    tenant_id="1",
-                    floor_id="10",
-                    start_date=date(2026, 7, 1),
-                    end_date=date(2026, 7, 2),
-                    is_guest_booking=True,
-                    booked_for_guest_id="99",
-                    current_user={"user_id": "39", "role_name": "FACILITATOR"},
-                )
+        ) as mock_fetch_seats, self.assertRaises(HTTPException) as context:
+            get_available_seats_by_range(
+                conn=object(),
+                tenant_id="1",
+                floor_id="10",
+                start_date=date(2026, 7, 1),
+                end_date=date(2026, 7, 2),
+                is_guest_booking=True,
+                booked_for_guest_id="99",
+                current_user={"user_id": "39", "role_name": "FACILITATOR"},
+            )
 
         self.assertEqual(context.exception.status_code, 409)
         self.assertEqual(

@@ -15,7 +15,7 @@ function BookingTagChip({ label, variant }: { label: string; variant: string }) 
     )}>
       <span className={cn(
         "w-1.5 h-1.5 rounded-full",
-        variant === "confirmed" ? "bg-green-500" : variant === "sprint" ? "bg-amber-500" : "bg-current",
+        variant === "confirmed" ? "bg-green-500" : variant === "modified" ? "bg-amber-500" : variant === "sprint" ? "bg-amber-500" : "bg-current",
       )} />
       {label}
     </span>

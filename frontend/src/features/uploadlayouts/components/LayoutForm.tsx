@@ -1,6 +1,7 @@
 "use client";
  
 import { useEffect, useRef, useState } from "react";
+import axios from "axios";
 import { useRouter } from "next/navigation";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -11,24 +12,14 @@ import { UploadCloud, FileCheck2, X } from "lucide-react";
 import { layoutService } from "../services/layout.service";
 import SVGPreviewModal from "./Svgpreviewmodal";
 import { Building, Floor, FloorLayoutInfo, LayoutFormState, Site } from "../types/layout.types";
- 
+import { extractSeatIds } from "@/lib/svg/extractSeatIds";
+
 interface LayoutFormProps {
   formData: LayoutFormState;
   setFormData: (data: LayoutFormState | ((prev: LayoutFormState) => LayoutFormState)) => void;
   onFloorLayoutInfo?: (info: FloorLayoutInfo | null) => void;
 }
- 
-function extractSeatIds(svgText: string): string[] {
-  const ids: string[] = [];
-  const seatIdPattern = /^\d+$|^[A-Z]+-.*-\d+$/;
-  const regex = /<g\s+id="([^"]+)"/g;
-  let match;
-  while ((match = regex.exec(svgText)) !== null) {
-    if (seatIdPattern.test(match[1])) ids.push(match[1]);
-  }
-  return ids;
-}
- 
+
 export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }: LayoutFormProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
@@ -68,7 +59,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
         site: { id: siteId, name: match.site_name, code: match.site_code ?? "" },
       }));
     }
-  }, [sites]);
+  }, [sites, formData.site, setFormData]);
  
   // Load buildings whenever selected site changes
   useEffect(() => {
@@ -78,6 +69,13 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       return;
     }
     layoutService.getBuildings(formData.site.id).then(setBuildings);
+    // formData.site (the object) is intentionally excluded: the site-name
+    // resolver effect above replaces it with a new object (same id, now
+    // with a name) once sites load. Depending on the whole object here
+    // would re-fetch buildings for the same site right after that resolves.
+    // formData.site?.id already covers every meaningful transition (a real
+    // site change, or site becoming null).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.site?.id]);
  
   // Resolve building name once buildings list arrives (pre-seed case)
@@ -91,6 +89,27 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
         building: { id: buildingId, name: match.building_name, code: match.building_code ?? "" },
       }));
     }
+  }, [buildings, formData.building, setFormData]);
+
+  // Auto-select single building when the selected site has only one building
+  useEffect(() => {
+    if (buildings.length !== 1) return;
+    const b = buildings[0];
+    if (!b) return;
+    if (!formData.building || String(formData.building.id) !== String(b.building_id)) {
+      setFormData((prev) => ({
+        ...prev,
+        building: {
+          id: b.building_id,
+          name: b.building_name,
+          code: b.building_code ?? "",
+        },
+        floor: null,
+        layoutName: "",
+      }));
+      onFloorLayoutInfo?.(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildings]);
  
   // Load floors whenever selected building changes
@@ -100,6 +119,12 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       return;
     }
     layoutService.getFloors(formData.building.id).then(setFloors);
+    // formData.building (the object) is intentionally excluded, same
+    // reasoning as the buildings loader above: the building-name resolver
+    // effect replaces it with a new object (same id) once buildings load,
+    // and depending on the whole object here would re-fetch floors for the
+    // same building right after that resolves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.building?.id]);
  
   // Resolve floor name once floors list arrives (pre-seed case)
@@ -128,6 +153,35 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
         layoutLastUpdated: match.layout_last_updated,
       });
     }
+  }, [floors, formData.floor, setFormData, onFloorLayoutInfo]);
+
+  // Auto-select single floor when the selected building has only one floor
+  useEffect(() => {
+    if (floors.length !== 1) return;
+    const f = floors[0];
+    if (!f) return;
+    if (!formData.floor || String(formData.floor.id) !== String(f.floor_id)) {
+      setFormData((prev) => ({
+        ...prev,
+        floor: {
+          id: f.floor_id,
+          name: f.floor_name ?? f.floor_code ?? "",
+          code: f.floor_code ?? "",
+        },
+      }));
+      onFloorLayoutInfo?.({
+        layoutId: f.layout_id,
+        layoutName: f.layout_name,
+        layoutStatus: f.layout_status,
+        layoutIsPublished: f.layout_is_published,
+        layoutVersionNo: f.layout_version_no,
+        layoutFileUrl: f.layout_file_url,
+        layoutCount: f.layout_count,
+        publishedByName: f.published_by_name,
+        layoutLastUpdated: f.layout_last_updated,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [floors]);
  
   // Auto-generate layout name once site, building and floor codes are known
@@ -174,6 +228,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
     formData.site?.code,
     formData.building?.code,
     formData.floor?.code,
+    setFormData,
   ]);
 
   const noSeatsDetected = !!formData.file && !countingSeats && seatIds.length === 0;
@@ -205,15 +260,15 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
     setCountingSeats(true);
     try {
       const text = await file.text();
-      setSeatIds(extractSeatIds(text));
- 
+      setSeatIds(extractSeatIds(text, "LayoutForm"));
+
       // Make SVG fluid and store for preview
       const fluid = text
         .replace(/\bwidth="[^"]*"/, 'width="100%"')
         .replace(/\bheight="[^"]*"/, 'height="100%"');
       setSvgPreview(fluid);
     } catch (err) {
-      console.warn("[LayoutForm] Could not extract seat IDs:", err);
+      console.warn("[LayoutForm] Could not read or parse the uploaded SVG file:", err);
     } finally {
       setCountingSeats(false);
     }
@@ -262,9 +317,13 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
       // Keep isSubmitting=true so the button stays disabled while navigation
       // completes — the component will unmount once the new page loads.
       router.push(`/admin/layouts/manage-layout?${params.toString()}`);
-    } catch (err: any) {
-      console.error("[LayoutForm] Upload error:", err?.response?.data || err.message);
-      setSubmitError(err?.response?.data?.message || "Failed to save layout. Please try again.");
+    } catch (err) {
+      const message = axios.isAxiosError(err)
+        ? err.response?.data || err.message
+        : err;
+      console.error("[LayoutForm] Upload error:", message);
+      const serverMessage = axios.isAxiosError(err) ? err.response?.data?.message : undefined;
+      setSubmitError(serverMessage || "Failed to save layout. Please try again.");
       setIsSubmitting(false);
     }
   };
@@ -301,7 +360,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                 }}
                 className="w-full h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="" disabled hidden>Select a site</option>
+                <option value="" disabled hidden>Select a office</option>
                 {sites.map((s) => (
                   <option key={s.site_id} value={String(s.site_id)}>
                     {s.site_name}

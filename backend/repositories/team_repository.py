@@ -1,6 +1,6 @@
 """This file is team_repository.py this is to get the user's team related info"""
-from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
+from psycopg2.extras import RealDictCursor
 
 
 def fetch_team_members_with_today_booking(
@@ -189,7 +189,7 @@ def search_team_members(
                 tenant_id,
                 full_name,
                 email,
-                role_name,
+                UPPER(REPLACE(role_name, ' ', '_')) AS role_name,
                 status,
                 employee_id,
                 department

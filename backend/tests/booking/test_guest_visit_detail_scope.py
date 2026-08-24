@@ -136,13 +136,12 @@ class GuestVisitDetailScopeTests(unittest.TestCase):
         with patch(
             "backend.services.guest_service.fetch_guest_visit_by_id",
             return_value=None,
-        ):
-            with self.assertRaises(HTTPException) as context:
-                get_guest_visit_details(
-                    conn=object(),
-                    current_user=current_user,
-                    guest_visit_id="404",
-                )
+        ), self.assertRaises(HTTPException) as context:
+            get_guest_visit_details(
+                conn=object(),
+                current_user=current_user,
+                guest_visit_id="404",
+            )
 
         self.assertEqual(context.exception.status_code, 404)
 

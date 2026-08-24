@@ -8,6 +8,7 @@ import {
 import { Layout } from "../types/layout.types";
 import { Preference, Seat, SeatStatus, SeatType, SeatUpdatePayload } from "@/features/managelayout1";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
+import { extractSeatIds } from "@/lib/svg/extractSeatIds";
 
 interface LayoutPreviewProps {
   layout: Layout | null;
@@ -17,6 +18,12 @@ interface LayoutPreviewProps {
   preferences?: Preference[];
   onSeatSave?: (payload: SeatUpdatePayload) => Promise<unknown>;
   filteredSeats?: Seat[];
+  // Explicit "a filter is actually applied" signal from the caller — must be
+  // derived from the filter inputs, not inferred here by comparing
+  // filteredSeats.length to seats.length. That comparison can land on equal
+  // counts even when a real filter is active, which used to make the map
+  // silently skip the yellow highlight for genuine matches.
+  isFilterActive?: boolean;
 }
 
 // ─── SVG Helpers ──────────────────────────────────────────────────────────────
@@ -27,15 +34,32 @@ function resolveUrl(url: string): string {
   return url;
 }
 
-function extractSeatIds(svgText: string): string[] {
-  const ids: string[] = [];
-  const seatIdPattern = /^\d+$|^[A-Z]+-.*-\d+$/;
-  const regex = /<g\s+id="([^"]+)"/g;
-  let match;
-  while ((match = regex.exec(svgText)) !== null) {
-    if (seatIdPattern.test(match[1])) ids.push(match[1]);
+// Reads the uploaded layout's actual canvas size from its own <svg viewBox>
+// (falling back to width/height attributes, then to the SVG_W/SVG_H default)
+// instead of assuming every floor plan was authored at exactly 2466x2039 —
+// a layout drawn at a different size would otherwise fit-to-view incorrectly
+// (undersized scale, content bleeding past the right/bottom edge).
+function parseSvgDimensions(svgText: string): { w: number; h: number } {
+  const svgTag = svgText.match(/<svg\b[^>]*>/)?.[0] ?? "";
+
+  const viewBox = svgTag.match(
+    /viewBox=["']\s*[\d.+-]+\s+[\d.+-]+\s+([\d.]+)\s+([\d.]+)\s*["']/
+  );
+  if (viewBox) {
+    const w = parseFloat(viewBox[1]);
+    const h = parseFloat(viewBox[2]);
+    if (w > 0 && h > 0) return { w, h };
   }
-  return ids;
+
+  const width = svgTag.match(/\swidth=["']([\d.]+)(?:px)?["']/);
+  const height = svgTag.match(/\sheight=["']([\d.]+)(?:px)?["']/);
+  if (width && height) {
+    const w = parseFloat(width[1]);
+    const h = parseFloat(height[1]);
+    if (w > 0 && h > 0) return { w, h };
+  }
+
+  return { w: SVG_W, h: SVG_H };
 }
 
 function getSeatIdFromClick(target: EventTarget | null, knownIds: Set<string>): string | null {
@@ -51,40 +75,84 @@ function getSeatIdFromClick(target: EventTarget | null, knownIds: Set<string>): 
 
 // ─── Seat color resolution ────────────────────────────────────────────────────
 //
-// Priority (highest → lowest):
-//   1. Not configured                     → Gray    (#D1D5DB)
-//   2. INACTIVE (regardless of bookable)  → Red     (#EF4444)
-//   3. ACTIVE + is_bookable = false       → Amber   (#F59E0B)
-//   4. ACTIVE + is_bookable = true        → Green   (#22C55E)
+// Unconfigured seats (desk or room) keep the floor plan's original artwork
+// colors — they only start recoloring once an admin has actually configured
+// them. For a configured desk:
+//   INACTIVE (regardless of bookable) → Red   (#EF4444)
+//   ACTIVE + is_bookable = false      → Amber (#F59E0B)
+//   ACTIVE + is_bookable = true       → Green (#22C55E)
 
 function resolveSeatFill(seat: Seat): string {
-  if (!seat.is_configured)        return "#D1D5DB"; // Unconfigured — gray
   if (seat.status === "INACTIVE") return "#EF4444"; // Inactive     — red
-  if (!seat.is_bookable)          return "#F59E0B"; // Non-bookable — amber
+  if (!seat.is_bookable) return "#F59E0B"; // Non-bookable — amber
   return "#22C55E";                                 // Bookable     — green
 }
 
-function colorSeats(svgText: string, seats: Seat[], filteredIds?: Set<string>): string {
+// Cabin/conference/meeting room seats are grouped under one svg id containing
+// a "CBN"/"CFR"/"MR" segment (e.g. "HYD-PRV-F11-CBN-04", "HYD-PRV-F11-CFR-02",
+// "HYD-PRV-F11-MR-01"), not a dedicated field.
+const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr)([-_]|$)/i;
+
+function isRoomSvgId(svgId: string): boolean {
+  return ROOM_SVG_ID_PATTERN.test(svgId);
+}
+
+// Escapes regex metacharacters so seat ids containing them (e.g. "F9.1",
+// "Group (2)") can be safely interpolated into a RegExp instead of being
+// misinterpreted as pattern syntax.
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function recolorGroup(svgText: string, id: string, fill: string): string {
+  // "g" flag: some exported floor plans reuse the same <g id="..."> more than
+  // once (e.g. a duplicated furniture block that wasn't re-keyed). Without
+  // it, String.replace only recolors the first occurrence, leaving whichever
+  // copy actually renders on screen untouched.
+  const groupRegex = new RegExp(`(<g[^>]*id="${escapeRegExp(id)}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "gm");
+  return svgText.replace(groupRegex, (_match, open, inner, close) => {
+    // fill="none" (and fill:none) are deliberately transparent — outlines,
+    // cutouts, gaps between an icon's parts. Overwriting those too flattens
+    // the whole group into one solid-color block, erasing the icon's shape
+    // instead of just recoloring its visible parts.
+    const colored = inner
+      .replace(/fill="(?!none")[^"]*"/g, `fill="${fill}"`)
+      .replace(/fill:(?!none)[^;"}\s]*/g, `fill:${fill}`);
+    return `${open}${colored}${close}`;
+  });
+}
+
+function colorSeats(svgText: string, seats: Seat[], filteredIds: Set<string> | undefined, isFilterActive: boolean): string {
   let result = svgText;
-  const hasFilter = filteredIds !== undefined && filteredIds.size !== seats.length;
+  const hasFilter = isFilterActive && filteredIds !== undefined;
 
   seats.forEach((seat) => {
     const id = seat.seat_svg_id;
-    const fill = hasFilter && filteredIds!.has(id)
-      ? "#FACC15"          // Highlight matching seats — vivid yellow
-      : resolveSeatFill(seat);
 
-    const groupRegex = new RegExp(
-      `(<g[^>]*id="${id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`,
-      "m"
-    );
+    // Cabins/conference/meeting rooms are never recolored on the admin
+    // side — no status/bookable grey, no filter highlight — they always
+    // keep the floor plan's original artwork colors.
+    if (isRoomSvgId(id)) return;
 
-    result = result.replace(groupRegex, (_match, open, inner, close) => {
-      const colored = inner
-        .replace(/fill="[^"]*"/g, `fill="${fill}"`)
-        .replace(/fill:[^;"}\s]*/g, `fill:${fill}`);
-      return `${open}${colored}${close}`;
-    });
+    const isHighlighted = hasFilter && filteredIds!.has(id);
+
+    if (isHighlighted) {
+      result = recolorGroup(result, id, "#FACC15"); // Highlight matching seats — vivid yellow
+      return;
+    }
+
+    // Edited locally on an already-published layout but not yet published —
+    // flag it distinctly so the admin can see at a glance what will change.
+    if (seat.has_unpublished_changes) {
+      result = recolorGroup(result, id, "#FB923C"); // Pending — orange
+      return;
+    }
+
+    // Unconfigured — leave the floor plan's original artwork colors until an
+    // admin actually configures it.
+    if (!seat.is_configured) return;
+
+    result = recolorGroup(result, id, resolveSeatFill(seat));
   });
 
   return result;
@@ -113,11 +181,11 @@ function highlightSeat(svgText: string, svgId: string): string {
 
 const SEAT_TYPES: SeatType[] = ["STANDARD", "WINDOW", "CABIN", "ACCESSIBLE", "HOT_DESK"];
 const SEAT_TYPE_LABELS: Record<string, string> = {
-  STANDARD:   "STANDARD",
-  WINDOW:     "WINDOW",
-  CABIN:      "CABIN",
+  STANDARD: "STANDARD",
+  WINDOW: "WINDOW",
+  CABIN: "CABIN",
   ACCESSIBLE: "ACCESSIBLE",
-  HOT_DESK:   "HOT_DESK",
+  HOT_DESK: "HOT_DESK",
 };
 const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
 
@@ -130,14 +198,14 @@ interface SeatConfigDialogProps {
 }
 
 const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat, preferences, onSave }) => {
-  const [seatType,   setSeatType]   = useState<SeatType>("STANDARD");
-  const [bookable,   setBookable]   = useState(true);
-  const [status,     setStatus]     = useState<SeatStatus>("ACTIVE");
+  const [seatType, setSeatType] = useState<SeatType>("STANDARD");
+  const [bookable, setBookable] = useState(true);
+  const [status, setStatus] = useState<SeatStatus>("ACTIVE");
   const [amenityIds, setAmenityIds] = useState<string[]>([]);
-  const [notes,      setNotes]      = useState("");
-  const [saving,     setSaving]     = useState(false);
-  const [saveError,  setSaveError]  = useState(false);
-  const [saved,      setSaved]      = useState(false);
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (!seat) return;
@@ -163,12 +231,12 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
     try {
       await onSave({
         seat_svg_id: seat.seat_svg_id,
-        layout_id:   seat.layout_id,
-        seat_type:   seatType,
+        layout_id: seat.layout_id,
+        seat_type: seatType,
         is_bookable: bookable,
         status,
         amenity_ids: amenityIds,
-        notes:       notes || undefined,
+        notes: notes || undefined,
       });
       setSaved(true);
       setTimeout(() => onClose(), 800);
@@ -248,9 +316,8 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
-              <span className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none ${
-                status === "ACTIVE" ? "bg-emerald-500" : "bg-gray-400"
-              }`} />
+              <span className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none ${status === "ACTIVE" ? "bg-emerald-500" : "bg-gray-400"
+                }`} />
             </div>
           </div>
 
@@ -270,13 +337,11 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
                     <button
                       key={p.preference_id}
                       onClick={() => toggleAmenity(p.preference_id)}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left text-xs font-medium transition-colors ${
-                        on ? "bg-indigo-50 border-indigo-300 text-indigo-700" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                      }`}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left text-xs font-medium transition-colors ${on ? "bg-indigo-50 border-indigo-300 text-indigo-700" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                        }`}
                     >
-                      <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${
-                        on ? "bg-indigo-600 border-indigo-600" : "border-gray-300"
-                      }`}>
+                      <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${on ? "bg-indigo-600 border-indigo-600" : "border-gray-300"
+                        }`}>
                         {on && (
                           <svg viewBox="0 0 8 7" className="w-2.5 h-2.5">
                             <path d="M1 3.5l2 2L7 1" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -338,10 +403,10 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
 // ─── Legend ───────────────────────────────────────────────────────────────────
 
 const LEGEND_ITEMS = [
-  { label: "Bookable",     color: "#22C55E" },
+  { label: "Bookable", color: "#22C55E" },
   { label: "Non-bookable", color: "#F59E0B" },
-  { label: "Inactive",     color: "#EF4444" },
-  { label: "Unconfigured", color: "#D1D5DB" },
+  { label: "Inactive", color: "#EF4444" },
+  { label: "Unconfigured", color: "#000000ff" },
 ] as const;
 
 // FIX: flex-wrap + gap-y so items wrap on narrow screens instead of overflowing
@@ -371,30 +436,35 @@ export default function LayoutPreview({
   preferences = [],
   onSeatSave,
   filteredSeats,
+  isFilterActive = false,
 }: LayoutPreviewProps) {
-  const wrapperRef   = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const transformRef = useRef<HTMLDivElement>(null);
 
   // ── pan / zoom state (all refs to avoid re-renders) ────────────────────
-  const scaleRef     = useRef(1);
+  const scaleRef = useRef(1);
   const translateRef = useRef({ x: 0, y: 0 });
-  const isPanning    = useRef(false);
-  const panStart     = useRef({ x: 0, y: 0 });
+  const isPanning = useRef(false);
+  const panStart = useRef({ x: 0, y: 0 });
   const mouseDownPos = useRef({ x: 0, y: 0 });
-  const didDrag      = useRef(false);
+  const didDrag = useRef(false);
 
   // FIX: touch support refs
   const pinchStartRef = useRef<number | null>(null);
 
-  const [rawSvg,      setRawSvg]      = useState<string | null>(null);
-  const [svgError,    setSvgError]    = useState(false);
+  const [rawSvg, setRawSvg] = useState<string | null>(null);
+  const [svgError, setSvgError] = useState(false);
   const [zoomDisplay, setZoomDisplay] = useState(100);
-  const [mapReady,    setMapReady]    = useState(false);
-  const [loading,     setLoading]     = useState(false);
+  const [mapReady, setMapReady] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // Actual canvas size of the loaded SVG — read from its own markup, not
+  // assumed to always match the SVG_W/SVG_H default.
+  const [svgDims, setSvgDims] = useState<{ w: number; h: number }>({ w: SVG_W, h: SVG_H });
 
   const seatIdsRef = useRef<Set<string>>(new Set());
 
-  const [dialogOpen,  setDialogOpen]  = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [clickedSeat, setClickedSeat] = useState<Seat | null>(null);
 
   // ── Hover tooltip (only in configure mode) ────────────────────────────
@@ -407,18 +477,28 @@ export default function LayoutPreview({
     if (!rawUrl) { setRawSvg(null); setSvgError(false); setMapReady(false); return; }
     const url = resolveUrl(rawUrl);
     setLoading(true); setRawSvg(null); setSvgError(false); setMapReady(false);
+    setSvgDims({ w: SVG_W, h: SVG_H });
     fetch(url)
       .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
       .then((text) => {
+        setSvgDims(parseSvgDimensions(text));
         const fluid = text
           .replace(/\bwidth="[^"]*"/, 'width="100%"')
           .replace(/\bheight="[^"]*"/, 'height="100%"');
-        const ids = extractSeatIds(fluid);
+        const ids = extractSeatIds(fluid, "LayoutPreview");
         seatIdsRef.current = new Set(ids);
         setRawSvg(onSeatSave ? addPointerCursors(fluid, ids) : fluid);
       })
       .catch(() => setSvgError(true))
       .finally(() => setLoading(false));
+    // onSeatSave is intentionally excluded: it's the `saveSeat` callback from
+    // useManageSeats, whose identity changes whenever the seats array
+    // updates (e.g. right after a successful save). Adding it here would
+    // re-fetch the SVG from the network and reset the map state every time
+    // a seat is saved. This effect should only reload when the SVG's own
+    // URL changes; onSeatSave is only used below to pick between two
+    // transforms of the already-fetched text, not to decide whether to fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout?.layout_file_url]);
 
   // ── Compute colored SVG ────────────────────────────────────────────────
@@ -429,8 +509,8 @@ export default function LayoutPreview({
 
   const coloredSvg = useMemo(() => {
     if (!rawSvg || seats.length === 0) return rawSvg;
-    return colorSeats(rawSvg, seats, filteredIds);
-  }, [rawSvg, seats, filteredIds]);
+    return colorSeats(rawSvg, seats, filteredIds, isFilterActive);
+  }, [rawSvg, seats, filteredIds, isFilterActive]);
 
   const displaySvg = useMemo(() => {
     if (!coloredSvg || !clickedSeat || !dialogOpen) return coloredSvg;
@@ -449,12 +529,12 @@ export default function LayoutPreview({
     if (!wrapper) return;
     const { width: wW, height: wH } = wrapper.getBoundingClientRect();
     if (wW === 0 || wH === 0) return;
-    const scale = Math.min(wW / SVG_W, wH / SVG_H);
+    const scale = Math.min(wW / svgDims.w, wH / svgDims.h);
     scaleRef.current = scale;
-    translateRef.current = { x: (wW - SVG_W * scale) / 2, y: (wH - SVG_H * scale) / 2 };
+    translateRef.current = { x: (wW - svgDims.w * scale) / 2, y: (wH - svgDims.h * scale) / 2 };
     applyTransform();
     setZoomDisplay(Math.round(scale * 100));
-  }, [applyTransform]);
+  }, [applyTransform, svgDims]);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
@@ -487,7 +567,7 @@ export default function LayoutPreview({
     setZoomDisplay(Math.round(newScale * 100));
   }, [applyTransform]);
 
-  const zoomIn  = useCallback(() => zoomStep(1.25),     [zoomStep]);
+  const zoomIn = useCallback(() => zoomStep(1.25), [zoomStep]);
   const zoomOut = useCallback(() => zoomStep(1 / 1.25), [zoomStep]);
 
   // ── Wheel zoom ─────────────────────────────────────────────────────────
@@ -502,7 +582,7 @@ export default function LayoutPreview({
       const rect = el.getBoundingClientRect();
       translateRef.current = {
         x: e.clientX - rect.left - (e.clientX - rect.left - translateRef.current.x) * (newScale / oldScale),
-        y: e.clientY - rect.top  - (e.clientY - rect.top  - translateRef.current.y) * (newScale / oldScale),
+        y: e.clientY - rect.top - (e.clientY - rect.top - translateRef.current.y) * (newScale / oldScale),
       };
       scaleRef.current = newScale;
       applyTransform();
@@ -535,10 +615,10 @@ export default function LayoutPreview({
               const relY = e.clientY - rect.top;
               // Flip above cursor when within 170px of the bottom to avoid clipping
               const nearBottom = relY > rect.height - 170;
-              const nearRight  = relX > rect.width  - 170;
+              const nearRight = relX > rect.width - 170;
               setTooltip({
                 seat: hovered,
-                x: nearRight  ? relX - 160 : relX + 14,
+                x: nearRight ? relX - 160 : relX + 14,
                 y: nearBottom ? relY - 155 : relY - 10,
               });
             }
@@ -765,8 +845,8 @@ export default function LayoutPreview({
                 ref={transformRef}
                 style={{
                   transformOrigin: "top left",
-                  width: `${SVG_W}px`,
-                  height: `${SVG_H}px`,
+                  width: `${svgDims.w}px`,
+                  height: `${svgDims.h}px`,
                   willChange: "transform",
                   visibility: mapReady ? "visible" : "hidden",
                 }}
@@ -855,12 +935,12 @@ export default function LayoutPreview({
             if (!prev) return null;
             return {
               ...prev,
-              seat_name:   prev.seat_code,
-              seat_type:   payload.seat_type,
+              seat_name: prev.seat_code,
+              seat_type: payload.seat_type,
               is_bookable: payload.is_bookable,
-              status:      payload.status,
+              status: payload.status,
               amenity_ids: payload.amenity_ids,
-              notes:       payload.notes ?? prev.notes,
+              notes: payload.notes ?? prev.notes,
             };
           });
         }}

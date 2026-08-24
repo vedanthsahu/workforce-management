@@ -5,7 +5,7 @@ Routes for floor layout management.
 from __future__ import annotations
 
 import json
-from typing import Any, Annotated
+from typing import Annotated, Any
 
 from fastapi import (
     APIRouter,
@@ -22,15 +22,13 @@ from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import require_permission
 from backend.core.audit_actions import FLOOR_LAYOUT_UPLOADED
-from backend.repositories.audit_repository import safe_write_audit_log
 from backend.db.connection import get_db
-
+from backend.repositories.audit_repository import safe_write_audit_log
 from backend.schemas.floor_layout import (
     CreateFloorLayoutRequest,
     FloorLayoutResponse,
     LayoutSeatListResponse,
 )
-
 from backend.services.floor_layout_service import (
     activate_floor_layout,
     create_floor_layout,
@@ -38,6 +36,7 @@ from backend.services.floor_layout_service import (
     get_floor_layout_seats,
     get_floor_layouts_by_floor,
 )
+
 router = APIRouter(
     prefix="/admin/floor-layouts",
     tags=["floor-layouts"],

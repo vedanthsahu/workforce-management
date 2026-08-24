@@ -7,8 +7,8 @@ import logging
 from typing import Any
 
 import structlog
-from structlog.contextvars import get_contextvars
 from psycopg2.extensions import connection as PGConnection
+from structlog.contextvars import get_contextvars
 
 from backend.core.app_logging import LOGGER_NAME
 

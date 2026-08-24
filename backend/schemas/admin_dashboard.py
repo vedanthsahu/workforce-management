@@ -4,13 +4,13 @@ Schemas for admin dashboard analytics requests and responses.
 
 from __future__ import annotations
 
-from datetime import date as Date, datetime
+from datetime import date as Date
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.schemas.pagination import PaginationMetadata
-
 
 ActivityStatus = Literal[
     "CONFIRMED",

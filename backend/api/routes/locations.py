@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Annotated
+from typing import Annotated, Any
 
 from fastapi import (
     APIRouter,
@@ -13,20 +13,21 @@ from fastapi import (
     Query,
     status,
 )
-
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user, require_any_permission
 from backend.db.connection import get_db
-
 from backend.schemas.booking import AvailableSeatListResponse
-
 from backend.schemas.location import (
     BuildingResponse,
+    BulkLayoutSeatConfigurationUpdateRequest,
+    BulkSeatConfigurationUpdateRequest,
     CreateBuildingRequest,
     CreateFloorRequest,
     CreateSiteRequest,
     FloorResponse,
+    LayoutSeatConfigurationResponse,
+    LayoutSeatConfigurationUpdateRequest,
     SeatConfigurationResponse,
     SeatConfigurationUpdateRequest,
     SiteDetailsResponse,
@@ -34,8 +35,9 @@ from backend.schemas.location import (
     UpdateBuildingRequest,
     UpdateFloorRequest,
     UpdateSiteRequest,
-    LayoutSeatConfigurationUpdateRequest,
-    LayoutSeatConfigurationResponse,
+)
+from backend.services.booking_service import (
+    get_available_seats_by_range,
 )
 from backend.services.location_service import (
     create_building,
@@ -47,13 +49,11 @@ from backend.services.location_service import (
     get_sites,
     update_building_metadata,
     update_floor_metadata,
-    update_seat_configuration_metadata,
-    update_site_metadata,
     update_layout_seat_configuration,
-)
-
-from backend.services.booking_service import (
-    get_available_seats_by_range,
+    update_layout_seat_configurations_bulk,
+    update_seat_configuration_metadata,
+    update_seats_configuration_bulk,
+    update_site_metadata,
 )
 
 router = APIRouter(tags=["locations"])
@@ -321,6 +321,29 @@ def update_seat_configuration_route(
     return update_seat_configuration_metadata(conn, tenant_id=str(current_user["tenant_id"]), seat_id=str(seat_id), payload=payload, current_user=current_user)
 
 
+@router.patch(
+    "/seats/bulk-configuration",
+    response_model=list[SeatConfigurationResponse],
+)
+def update_seats_bulk_configuration_route(
+    payload: BulkSeatConfigurationUpdateRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_any_permission(["location:manage", "layout:upload"])),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+) -> list[SeatConfigurationResponse]:
+    return update_seats_configuration_bulk(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        payload=payload,
+        current_user=current_user,
+    )
+
+
 @router.get(
     "/floors/{floor_id}/seats",
     response_model=AvailableSeatListResponse,
@@ -453,6 +476,29 @@ def update_layout_seat_configuration_route(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         layout_seat_mapping_id=str(layout_seat_mapping_id),
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@router.patch(
+    "/layout-seats/bulk-configuration",
+    response_model=list[LayoutSeatConfigurationResponse],
+)
+def update_layout_seats_bulk_configuration_route(
+    payload: BulkLayoutSeatConfigurationUpdateRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_any_permission(["location:manage", "layout:upload"])),
+    ],
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+) -> list[LayoutSeatConfigurationResponse]:
+    return update_layout_seat_configurations_bulk(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
         payload=payload,
         current_user=current_user,
     )

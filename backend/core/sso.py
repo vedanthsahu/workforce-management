@@ -74,7 +74,6 @@ class SSOError(Exception):
 class GraphAPIError(SSOError):
     """Structured exception for Microsoft Graph request failures."""
 
-    pass
 
 
 def build_auth_url() -> tuple[str, str]:

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
-from typing import Any
 import hashlib
 import secrets
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import jwt
 
@@ -29,19 +29,16 @@ ALLOWED_CLAIMS = frozenset(
 class TokenError(Exception):
     """Base exception for authentication-token validation failures."""
 
-    pass
 
 
 class ExpiredTokenError(TokenError):
     """Raised when a token is structurally valid but no longer within its TTL."""
 
-    pass
 
 
 class RefreshTokenReplayError(TokenError):
     """Reserved error type for refresh-token replay detection flows."""
 
-    pass
 
 
 def register_claim_hook(hook: ClaimHook) -> None:
@@ -101,7 +98,7 @@ def build_jwt_payload(
     if not subject:
         raise ValueError("user_id is required to build a JWT payload")
 
-    issued_at = int(datetime.now(timezone.utc).timestamp())
+    issued_at = int(datetime.now(UTC).timestamp())
     payload: dict[str, Any] = {
         "user_id": subject,
         "sub": subject,
@@ -262,7 +259,7 @@ def create_scoped_refresh_token(
     settings = get_settings()
     token_secret = secrets.token_urlsafe(32)
     token = ".".join((tenant_id, user_id, session_id, token_secret))
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.jwt_refresh_token_ttl)
+    expires_at = datetime.now(UTC) + timedelta(seconds=settings.jwt_refresh_token_ttl)
     return {
         "id": session_id,
         "token": token,

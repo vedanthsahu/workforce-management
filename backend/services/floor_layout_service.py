@@ -13,24 +13,30 @@ from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from psycopg2.extensions import connection as PGConnection
 
+from backend.core.app_logging import LOGGER_NAME
 from backend.core.audit_actions import FLOOR_LAYOUT_DELETED, FLOOR_LAYOUT_PUBLISHED
 from backend.core.config import get_settings
 from backend.core.enums import LayoutStatus
-from backend.core.app_logging import LOGGER_NAME
-from backend.repositories.audit_repository import safe_write_audit_log
 from backend.core.storage import upload_svg_to_s3
+from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.floor_layout_repository import (
-    activate_floor_layout as activate_floor_layout_record,
+    acquire_floor_publish_lock,
     archive_existing_published_layouts,
-    reconcile_published_layout_seats,
-    publish_layout_seat_configurations,
     fetch_floor_for_layout,
     fetch_floor_layout_by_id,
     fetch_floor_layouts_by_floor,
     fetch_layout_seats_by_layout_id,
     get_next_layout_version,
     insert_floor_layout,
+    publish_layout_seat_configurations,
+    reconcile_published_layout_seats,
     soft_delete_floor_layout,
+)
+from backend.repositories.floor_layout_repository import (
+    activate_floor_layout as activate_floor_layout_record,
+)
+from backend.repositories.layout_seat_mapping_repository import (
+    bulk_insert_layout_seat_mappings,
 )
 from backend.repositories.user_repository import fetch_admin_notification_emails
 from backend.schemas.floor_layout import (
@@ -42,9 +48,6 @@ from backend.schemas.floor_layout import (
 from backend.services.notification_service import (
     format_notification_value,
     queue_floor_layout_uploaded_notification,
-)
-from backend.repositories.layout_seat_mapping_repository import (
-    bulk_insert_layout_seat_mappings,
 )
 
 logger = logging.getLogger(f"{LOGGER_NAME}.floor_layouts")
@@ -328,7 +331,25 @@ def activate_floor_layout(
             layout.get("is_published") is True
             and layout.get("status") == LayoutStatus.PUBLISHED.value
         ):
+            # Pure no-op: activate is only a DRAFT/ARCHIVED -> PUBLISHED
+            # promotion and never carries seat data. Editing an
+            # already-published layout's seats goes through
+            # update_layout_seat_configurations_bulk instead (see
+            # dev-notes/backend/CURRENT.md) -- that endpoint cascades into
+            # `seats` itself, in the same transaction as the edit, when the
+            # parent layout is already PUBLISHED. Re-running the
+            # publish/reconcile sync here on every activate call would be
+            # redundant with that and is deliberately not done.
             return FloorLayoutResponse(**layout)
+
+        # No unique index enforces "one published layout per floor" at the
+        # DB level today -- serialize concurrent activate attempts for
+        # this floor so archive-then-activate can't race with itself.
+        acquire_floor_publish_lock(
+            conn,
+            tenant_id=tenant_id,
+            floor_id=str(layout["floor_id"]),
+        )
 
         archive_existing_published_layouts(
             conn,

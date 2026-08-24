@@ -1161,6 +1161,7 @@ def fetch_cancelled_guest_visits(
     *,
     tenant_id: str,
     created_by_user_id: str,
+    booking_date: date | None = None,
 ):
     query = """
         SELECT
@@ -1256,18 +1257,15 @@ def fetch_cancelled_guest_visits(
         WHERE gv.tenant_id = %s
           AND gv.created_by_user_id = %s
           AND gv.visit_status = 'CANCELLED'
-
-        ORDER BY gv.updated_at DESC
     """
+    params: list[Any] = [tenant_id, created_by_user_id]
+    if booking_date is not None:
+        query += " AND gv.visit_date = %s"
+        params.append(booking_date)
+    query += " ORDER BY gv.updated_at DESC"
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            query,
-            (
-                tenant_id,
-                created_by_user_id,
-            ),
-        )
+        cur.execute(query, params)
 
         return [dict(row) for row in cur.fetchall()]
 
