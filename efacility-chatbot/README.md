@@ -75,6 +75,34 @@ The API returns the same request ID in the `X-Request-ID` response header. Searc
 
 Operational logs do not include bearer tokens, cookies, raw browser chat text, raw WhatsApp text, or backend error response bodies. Full conversation events remain controlled separately by `ENABLE_ELK_CONVERSATION_LOGS`.
 
+### WhatsApp security configuration
+
+WhatsApp is disabled by default. Before enabling it, configure a strong webhook
+verify token, the Meta access token and phone-number ID, and the same
+`MAIN_APP_JWT_SECRET` used by Workforce Management. Every permitted sender must
+be mapped to a real Workforce identity using the exact normalized E.164 number:
+
+```env
+WHATSAPP_ENABLED=true
+WHATSAPP_USER_MAPPINGS=919876543210|38|3|Display Name
+WHATSAPP_REQUIRE_ALLOWLIST=true
+WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS=true
+WHATSAPP_MAX_WEBHOOK_BYTES=262144
+WHATSAPP_RATE_LIMIT_PER_MINUTE=30
+WHATSAPP_IP_RATE_LIMIT_PER_MINUTE=300
+WHATSAPP_MAX_CONCURRENT_TASKS=10
+```
+
+Run `alembic upgrade head` from `efacility-chatbot/backend` after pulling this
+version. Database mappings in `chatbot_user_identity_map` must populate
+`external_id`, `user_id`, `tenant_id`, and `user_name`. Unknown senders and
+legacy `phone:name` mappings are rejected.
+
+`WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS=true` is an explicitly logged temporary
+exception. Payload authenticity is not guaranteed until Meta App Secret
+signature verification is added; keep the public webhook behind HTTPS and a
+rate-limiting reverse proxy in the meantime.
+
 Configure seat backend auth in `backend/.env`:
 
 ```env

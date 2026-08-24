@@ -84,16 +84,6 @@ services:
       ELASTICSEARCH_CONVERSATION_INDEX: logs-efacility-chatbot-conversations-default
       ELASTICSEARCH_TIMEOUT_SECONDS: 2
       ADMIN_API_TOKEN: ""
-      WHATSAPP_ENABLED: "true"
-      WHATSAPP_VERIFY_TOKEN: efacility_chatbot_verify
-      WHATSAPP_GRAPH_API_VERSION: v25.0
-      WHATSAPP_SEND_MAX_RETRIES: 3
-      WHATSAPP_RETRY_BACKOFF_SECONDS: 0.75
-      WHATSAPP_MESSAGE_DEDUPE_TTL_SECONDS: 86400
-      WHATSAPP_USE_FLOWS: "false"
-      WHATSAPP_BOOKING_FLOW_ID: ""
-      WHATSAPP_BOOKING_FLOW_SCREEN: BOOKING_FORM
-      WHATSAPP_BOOKING_FLOW_CTA: "Open booking form"
     depends_on:
       db:
         condition: service_healthy

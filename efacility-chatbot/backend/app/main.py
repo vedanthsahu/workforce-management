@@ -16,6 +16,23 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("event=service_start environment=%s", settings.APP_ENV)
+    if settings.WHATSAPP_ENABLED:
+        missing = [
+            name for name, value in (
+                ("WHATSAPP_VERIFY_TOKEN", settings.WHATSAPP_VERIFY_TOKEN),
+                ("WHATSAPP_ACCESS_TOKEN", settings.WHATSAPP_ACCESS_TOKEN),
+                ("WHATSAPP_PHONE_NUMBER_ID", settings.WHATSAPP_PHONE_NUMBER_ID),
+                ("MAIN_APP_JWT_SECRET", settings.MAIN_APP_JWT_SECRET),
+            ) if not str(value or "").strip()
+        ]
+        if missing:
+            raise RuntimeError("WhatsApp is enabled but required configuration is missing: " + ", ".join(missing))
+        if settings.WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS:
+            logger.warning(
+                "event=whatsapp_security_exception control=meta_signature_verification status=deferred"
+            )
+        if not settings.WHATSAPP_REQUIRE_ALLOWLIST:
+            raise RuntimeError("WHATSAPP_REQUIRE_ALLOWLIST must remain enabled")
     await create_tables()
     logger.info("event=database_ready")
     yield

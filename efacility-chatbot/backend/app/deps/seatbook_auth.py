@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import AsyncIterator
@@ -52,6 +54,52 @@ def current_seatbook_client() -> httpx.AsyncClient | None:
 
 def current_seatbook_user() -> dict | None:
     return _request_user.get()
+
+
+def current_seatbook_identity() -> SeatBookIdentity | None:
+    user = current_seatbook_user() or {}
+    user_id = str(user.get("user_id") or "").strip()
+    tenant_id = str(user.get("tenant_id") or "").strip()
+    display_name = str(user.get("display_name") or "").strip()
+    if not user_id or not tenant_id or not display_name:
+        return None
+    return SeatBookIdentity(user_id=user_id, tenant_id=tenant_id, display_name=display_name)
+
+
+@asynccontextmanager
+async def whatsapp_seatbook_identity(identity: SeatBookIdentity):
+    """Bind one allowlisted WhatsApp message to a Workforce identity."""
+    if not settings.MAIN_APP_JWT_SECRET:
+        raise RuntimeError("MAIN_APP_JWT_SECRET is required for WhatsApp identity binding")
+    now = datetime.now(timezone.utc)
+    token = jwt.encode(
+        {
+            "user_id": identity.user_id,
+            "sub": identity.user_id,
+            "tenant_id": identity.tenant_id,
+            "display_name": identity.display_name,
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(minutes=5)).timestamp()),
+        },
+        settings.MAIN_APP_JWT_SECRET,
+        algorithm=settings.MAIN_APP_JWT_ALGORITHM,
+    )
+    token_marker = _request_token.set(token)
+    user_marker = _request_user.set({
+        "user_id": identity.user_id,
+        "tenant_id": identity.tenant_id,
+        "display_name": identity.display_name,
+    })
+    _request_client.set(None)
+    try:
+        yield
+    finally:
+        client = _request_client.get()
+        if client is not None:
+            await client.aclose()
+        _request_client.set(None)
+        _request_user.reset(user_marker)
+        _request_token.reset(token_marker)
 
 
 async def require_seatbook_identity(

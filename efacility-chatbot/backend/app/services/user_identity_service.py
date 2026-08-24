@@ -10,6 +10,8 @@ from app.models.chatbot import ChatbotUserIdentityMap
 
 @dataclass(frozen=True)
 class ResolvedUserIdentity:
+    user_id: str
+    tenant_id: str
     user_name: str
     phone_key: str
     matched: bool
@@ -44,44 +46,54 @@ class UserIdentityService:
     def _phones_match(wa_id: str, configured_phone: str) -> bool:
         if not wa_id or not configured_phone:
             return False
-        return wa_id == configured_phone or wa_id.endswith(configured_phone) or configured_phone.endswith(wa_id)
+        return wa_id == configured_phone
 
     @staticmethod
-    def _whatsapp_mappings() -> dict[str, str]:
+    def _whatsapp_mappings() -> dict[str, tuple[str, str, str]]:
+        """Parse phone|user_id|tenant_id|display_name entries.
+
+        Legacy phone:name entries intentionally do not authorize a user because
+        they cannot bind downstream calls to a Workforce identity and tenant.
+        """
         raw = settings.WHATSAPP_USER_MAPPINGS or ""
-        mappings: dict[str, str] = {}
+        mappings: dict[str, tuple[str, str, str]] = {}
         for item in raw.split(","):
-            if not item.strip() or ":" not in item:
+            if not item.strip():
                 continue
-            phone, user_name = item.split(":", 1)
-            phone = phone.strip()
-            user_name = user_name.strip()
-            if phone and user_name:
-                mappings[phone] = user_name
+            parts = [part.strip() for part in item.split("|", 3)]
+            if len(parts) != 4:
+                continue
+            phone, user_id, tenant_id, user_name = parts
+            if phone and user_id and tenant_id and user_name:
+                mappings[phone] = (user_id, tenant_id, user_name)
         return mappings
 
     def _resolve_from_mapping(
         self,
         normalized_wa_id: str,
         original_wa_id: str,
-        mappings: dict[str, str],
+        mappings: dict[str, tuple[str, str, str]],
     ) -> ResolvedUserIdentity:
-        for configured_phone, user_name in mappings.items():
+        for configured_phone, (user_id, tenant_id, user_name) in mappings.items():
             normalized_configured = self.normalize_phone(configured_phone)
             if self._phones_match(normalized_wa_id, normalized_configured):
                 return ResolvedUserIdentity(
+                    user_id=user_id,
+                    tenant_id=tenant_id,
                     user_name=user_name,
                     phone_key=normalized_configured or normalized_wa_id,
                     matched=True,
                 )
 
         return ResolvedUserIdentity(
-            user_name=f"WhatsApp {normalized_wa_id or original_wa_id}",
+            user_id="",
+            tenant_id="",
+            user_name="",
             phone_key=normalized_wa_id or original_wa_id,
             matched=False,
         )
 
-    async def _whatsapp_db_mappings(self, db: AsyncSession) -> dict[str, str]:
+    async def _whatsapp_db_mappings(self, db: AsyncSession) -> dict[str, tuple[str, str, str]]:
         result = await db.execute(
             select(ChatbotUserIdentityMap).where(
                 ChatbotUserIdentityMap.tenant_id == settings.DEFAULT_TENANT_ID,
@@ -90,9 +102,9 @@ class UserIdentityService:
             )
         )
         return {
-            row.external_id: row.user_name
+            row.external_id: (str(row.user_id or ""), str(row.tenant_id), row.user_name)
             for row in result.scalars().all()
-            if row.external_id and row.user_name
+            if row.external_id and row.user_id and row.user_name
         }
 
 
