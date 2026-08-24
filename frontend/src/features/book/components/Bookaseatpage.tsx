@@ -13,7 +13,6 @@ import {
   Settings2,
   Users,
   X,
-  Pencil,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -78,33 +77,6 @@ const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; subtitle: 
   </div>
 );
 
-// ── Summary row ───────────────────────────────────────────────────────────────
-
-const SummaryRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div className="flex justify-between items-center py-2.5 sm:py-3 border-b border-[#EBEBF5] last:border-0 gap-4">
-    <span className="text-[12px] sm:text-[12.5px] text-gray-500 shrink-0">{label}</span>
-    <span className="text-[12px] sm:text-[13px] font-semibold text-[#1A1A2E] text-right">{value}</span>
-  </div>
-);
-
-// ── Review section header ─────────────────────────────────────────────────────
-
-const ReviewSectionHeader: React.FC<{ icon: React.ReactNode; title: string; subtitle: string }> = ({
-  icon,
-  title,
-  subtitle,
-}) => (
-  <div className="flex items-center gap-2.5 mb-4">
-    <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0 text-indigo-600">
-      {icon}
-    </div>
-    <div>
-      <p className="text-[13px] font-semibold text-[#1A1A2E] leading-tight">{title}</p>
-      <p className="text-[11.5px] text-gray-400">{subtitle}</p>
-    </div>
-  </div>
-);
-
 // ── Date input ────────────────────────────────────────────────────────────────
 
 const DateInput: React.FC<{
@@ -150,6 +122,7 @@ const BookASeatPage: React.FC = () => {
     seats,
     confirmation,
     error,
+    setError,
     loadingSites,
     loadingBuildings,
     loadingFloors,
@@ -161,6 +134,7 @@ const BookASeatPage: React.FC = () => {
     selectedSeat,
     dayCount,
     step1Valid,
+    hasBookingChanges,
     isModifyMode,
     isAdminFlow,
     isBookingForSomeone,
@@ -174,7 +148,6 @@ const BookASeatPage: React.FC = () => {
     setFromDate,
     setToDate,
     togglePreference,
-    clearAll,
     findAvailableSeats,
     selectSeat,
     goToReview,
@@ -273,7 +246,7 @@ const BookASeatPage: React.FC = () => {
             className="bg-red-50 border border-red-200 rounded-xl px-4 sm:px-5 py-3 text-red-500 text-[12.5px] sm:text-[13px] flex items-center justify-between gap-3"
           >
             <span>{error}</span>
-            <button onClick={() => { }} className="text-red-400 hover:text-red-600 shrink-0">
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 shrink-0">
               <X size={14} />
             </button>
           </div>
@@ -303,14 +276,14 @@ const BookASeatPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
 
                 <div>
-                  <p className="text-[11px] font-medium text-gray-500 mb-1.5">Site (Office Location)</p>
+                  <p className="text-[11px] font-medium text-gray-500 mb-1.5">Office</p>
                   <select
                     value={form.siteId ?? ""}
                     onChange={(e) => setSiteId(e.target.value || null)}
                     disabled={loadingSites}
                     className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <option value="" disabled hidden>{loadingSites ? "Loading…" : "Select site"}</option>
+                    <option value="" disabled hidden>{loadingSites ? "Loading…" : "Select office"}</option>
                     {sites.map((s) => (
                       <option key={s.id} value={s.id} style={{ color: '#111827' }}>{s.name}</option>
                     ))}
@@ -479,17 +452,24 @@ const BookASeatPage: React.FC = () => {
               preferences={availablePreferences}
             />
 
-            <div className="flex justify-between pt-1 border-t border-[#EBEBF5]">
-              <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px]">
-                ← Back
-              </Button>
-              <Button
-                onClick={goToReview}
-                disabled={!form.selectedSeatId}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-6 gap-2 text-[12.5px] sm:text-[13px] font-semibold"
-              >
-                Review Booking <ChevronRight size={14} />
-              </Button>
+            <div className="flex flex-col items-end gap-1.5 pt-1 border-t border-[#EBEBF5]">
+              <div className="w-full flex justify-between">
+                <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px]">
+                  ← Back
+                </Button>
+                <Button
+                  onClick={goToReview}
+                  disabled={!form.selectedSeatId || (isModifyMode && !hasBookingChanges)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-6 gap-2 text-[12.5px] sm:text-[13px] font-semibold"
+                >
+                  Review Booking <ChevronRight size={14} />
+                </Button>
+              </div>
+              {isModifyMode && form.selectedSeatId && !hasBookingChanges && (
+                <p className="text-[11.5px] text-amber-600">
+                  Select a different seat, date, or location to continue.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -576,20 +556,27 @@ const BookASeatPage: React.FC = () => {
                 </div>
 
                 {/* Actions */}
-                <div className="flex justify-between items-center">
-                  <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px] h-10 px-5">
-                    ← Back
-                  </Button>
-                  <Button
-                    onClick={confirmBooking}
-                    disabled={submitting}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 sm:px-8 gap-2 text-[13px] font-semibold h-10"
-                  >
-                    {submitting
-                      ? isModifyMode ? "Modifying…" : "Confirming…"
-                      : isModifyMode ? "Confirm Modification" : "Confirm Booking"}
-                    {!submitting && <ChevronRight size={14} />}
-                  </Button>
+                <div className="flex flex-col items-end gap-1.5">
+                  <div className="w-full flex justify-between items-center">
+                    <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px] h-10 px-5">
+                      ← Back
+                    </Button>
+                    <Button
+                      onClick={confirmBooking}
+                      disabled={submitting || (isModifyMode && !hasBookingChanges)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 sm:px-8 gap-2 text-[13px] font-semibold h-10"
+                    >
+                      {submitting
+                        ? isModifyMode ? "Modifying…" : "Confirming…"
+                        : isModifyMode ? "Confirm Modification" : "Confirm Booking"}
+                      {!submitting && <ChevronRight size={14} />}
+                    </Button>
+                  </div>
+                  {isModifyMode && !hasBookingChanges && (
+                    <p className="text-[11.5px] text-amber-600">
+                      Nothing has changed yet — go back and pick a different seat, date, or location.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -658,7 +645,7 @@ const BookASeatPage: React.FC = () => {
                     {(() => {
                       // is_modified/booking_status both come straight from the API (BookingResponse) —
                       // is_modified is derived server-side from modified_from_booking_id, never guessed here.
-                      const rawLabel = isAdminFlow && confirmation.is_modified ? "Modified" : confirmation.booking_status;
+                      const rawLabel = confirmation.is_modified ? "Modified" : confirmation.booking_status;
                       const statusLabel = rawLabel.toUpperCase();
                       const isModifiedStatus = statusLabel === "MODIFIED";
                       return (
@@ -677,29 +664,24 @@ const BookASeatPage: React.FC = () => {
                 </div>
 
                 {/* CTA */}
-                {isAdminFlow ? (
-                  <Link href="/admin/bookings" className="w-full">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Link
+                    href={isAdminFlow ? "/admin/bookings" : isBookingForSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings"}
+                    className="flex-1"
+                  >
                     <Button className="bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-semibold w-full h-11 gap-2">
-                      <ArrowLeft size={15} />
-                      Back to Bookings
+                      {isAdminFlow && <ArrowLeft size={15} />}
+                      {isAdminFlow ? "Back to Bookings" : "View My Bookings"}
                     </Button>
                   </Link>
-                ) : (
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <Link href={isBookingForSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings"} className="flex-1">
-                      <Button className="bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-semibold w-full h-11">
-                        View My Bookings
-                      </Button>
-                    </Link>
-                    <Button
-                      variant="outline"
-                      onClick={resetForm}
-                      className="flex-1 h-11 text-[13px] font-semibold text-gray-600"
-                    >
-                      Book Another Seat
-                    </Button>
-                  </div>
-                )}
+                  <Button
+                    variant="outline"
+                    onClick={resetForm}
+                    className="flex-1 h-11 text-[13px] font-semibold text-gray-600"
+                  >
+                    Book Another Seat
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

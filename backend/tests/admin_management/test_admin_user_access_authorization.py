@@ -56,14 +56,13 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
             "backend.services.user_management_service.admin_update_user_access",
         ) as mock_update, patch(
             "backend.services.user_management_service.revoke_all_user_sessions",
-        ) as mock_revoke:
-            with self.assertRaises(HTTPException) as context:
-                admin_update_user_access_service(
-                    conn,
-                    current_user=CALLER,
-                    target_user_id="15",
-                    payload=AdminUserAccessUpdateRequest(role_name="EMPLOYEE"),
-                )
+        ) as mock_revoke, self.assertRaises(HTTPException) as context:
+            admin_update_user_access_service(
+                conn,
+                current_user=CALLER,
+                target_user_id="15",
+                payload=AdminUserAccessUpdateRequest(role_name="EMPLOYEE"),
+            )
 
         self.assertEqual(context.exception.status_code, 403)
         self.assertEqual(
@@ -83,14 +82,13 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
             return_value=_target("TENANT_ADMIN"),
         ), patch(
             "backend.services.user_management_service.admin_update_user_access",
-        ) as mock_update:
-            with self.assertRaises(HTTPException) as context:
-                admin_update_user_access_service(
-                    conn,
-                    current_user=CALLER,
-                    target_user_id="15",
-                    payload=AdminUserAccessUpdateRequest(status="INACTIVE"),
-                )
+        ) as mock_update, self.assertRaises(HTTPException) as context:
+            admin_update_user_access_service(
+                conn,
+                current_user=CALLER,
+                target_user_id="15",
+                payload=AdminUserAccessUpdateRequest(status="INACTIVE"),
+            )
 
         self.assertEqual(context.exception.status_code, 403)
         self.assertEqual(
@@ -106,14 +104,13 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
             return_value=_target("PRODUCT_ADMIN"),
         ), patch(
             "backend.services.user_management_service.admin_update_user_access",
-        ) as mock_update:
-            with self.assertRaises(HTTPException) as context:
-                admin_update_user_access_service(
-                    conn,
-                    current_user=CALLER,
-                    target_user_id="15",
-                    payload=AdminUserAccessUpdateRequest(status="INACTIVE"),
-                )
+        ) as mock_update, self.assertRaises(HTTPException) as context:
+            admin_update_user_access_service(
+                conn,
+                current_user=CALLER,
+                target_user_id="15",
+                payload=AdminUserAccessUpdateRequest(status="INACTIVE"),
+            )
 
         self.assertEqual(context.exception.status_code, 403)
         mock_update.assert_not_called()
@@ -150,14 +147,13 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
 
         with patch(
             "backend.services.user_management_service.fetch_user_by_id",
-        ) as mock_fetch:
-            with self.assertRaises(HTTPException) as context:
-                admin_update_user_access_service(
-                    conn,
-                    current_user=CALLER,
-                    target_user_id=CALLER["user_id"],
-                    payload=AdminUserAccessUpdateRequest(status="INACTIVE"),
-                )
+        ) as mock_fetch, self.assertRaises(HTTPException) as context:
+            admin_update_user_access_service(
+                conn,
+                current_user=CALLER,
+                target_user_id=CALLER["user_id"],
+                payload=AdminUserAccessUpdateRequest(status="INACTIVE"),
+            )
 
         self.assertEqual(context.exception.status_code, 400)
         self.assertEqual(
@@ -171,14 +167,13 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
         with patch(
             "backend.services.user_management_service.fetch_user_by_id",
             return_value=None,
-        ):
-            with self.assertRaises(HTTPException) as context:
-                admin_update_user_access_service(
-                    conn,
-                    current_user=CALLER,
-                    target_user_id="999",
-                    payload=AdminUserAccessUpdateRequest(status="INACTIVE"),
-                )
+        ), self.assertRaises(HTTPException) as context:
+            admin_update_user_access_service(
+                conn,
+                current_user=CALLER,
+                target_user_id="999",
+                payload=AdminUserAccessUpdateRequest(status="INACTIVE"),
+            )
 
         self.assertEqual(context.exception.status_code, 404)
 

@@ -141,17 +141,8 @@ interface LocalProfileOverride {
 // ─── Persistent overrides (survive refresh via localStorage) ─────────────────
 // Bio/skills/avatar have no backend endpoint yet, so they stay local-only.
 
-// const PROFILE_OVERRIDE_KEY = "seatbook:profile_override";
 const PROFILE_OVERRIDE_KEY = (userId: string) =>
   `seatbook:profile_override:${userId}`;
-
-// function loadProfileOverride(): LocalProfileOverride {
-//   try {
-//     const raw = localStorage.getItem(PROFILE_OVERRIDE_KEY);
-//     return raw ? JSON.parse(raw) : {};
-//   } catch { return {}; }
-// }
-
 
 function loadProfileOverride(userId: string): LocalProfileOverride {
   try {
@@ -162,10 +153,6 @@ function loadProfileOverride(userId: string): LocalProfileOverride {
   }
 }
 
-
-// function saveProfileOverride(data: LocalProfileOverride) {
-//   try { localStorage.setItem(PROFILE_OVERRIDE_KEY, JSON.stringify(data)); } catch {}
-// }
 
 function saveProfileOverride(
   userId: string,

@@ -11,27 +11,63 @@ import type { Seat } from "@/features/managelayout1/types/seat.types";
 
 // ── seat coloring (same logic as LayoutPreview / LayoutTable) ─────────────────
 
+// Unconfigured seats (desk or room) keep the floor plan's original artwork
+// colors — they only start recoloring once an admin has actually configured
+// them.
 function resolveSeatFill(seat: Seat): string {
-  if (!seat.is_configured)        return "#D1D5DB";
   if (seat.status === "INACTIVE") return "#EF4444";
   if (!seat.is_bookable)          return "#F59E0B";
   return "#22C55E";
 }
 
+// Cabin/conference/meeting room seats are grouped under one svg id containing
+// a "CBN"/"CFR"/"MR" segment (e.g. "HYD-PRV-F11-CBN-04", "HYD-PRV-F11-CFR-02",
+// "HYD-PRV-F11-MR-01"), not a dedicated field.
+const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr)([-_]|$)/i;
+
+function isRoomSvgId(svgId: string): boolean {
+  return ROOM_SVG_ID_PATTERN.test(svgId);
+}
+
+// Escapes regex metacharacters so seat ids containing them (e.g. "F9.1",
+// "Group (2)") can be safely interpolated into a RegExp instead of being
+// misinterpreted as pattern syntax.
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function recolorGroup(svgText: string, id: string, fill: string): string {
+  // "g" flag: some exported floor plans reuse the same <g id="..."> more than
+  // once (e.g. a duplicated furniture block that wasn't re-keyed). Without
+  // it, String.replace only recolors the first occurrence, leaving whichever
+  // copy actually renders on screen untouched.
+  const re = new RegExp(`(<g[^>]*id="${escapeRegExp(id)}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "gm");
+  return svgText.replace(re, (_m, open, inner, close) => {
+    // fill="none" (and fill:none) are deliberately transparent — outlines,
+    // cutouts, gaps between an icon's parts. Overwriting those too flattens
+    // the whole group into one solid-color block, erasing the icon's shape
+    // instead of just recoloring its visible parts.
+    const colored = inner
+      .replace(/fill="(?!none")[^"]*"/g,  `fill="${fill}"`)
+      .replace(/fill:(?!none)[^;"}\s]*/g, `fill:${fill}`);
+    return `${open}${colored}${close}`;
+  });
+}
+
 function applyColors(svgText: string, seats: Seat[]): string {
   let result = svgText;
   for (const seat of seats) {
-    const fill = resolveSeatFill(seat);
-    const re   = new RegExp(
-      `(<g[^>]*id="${seat.seat_svg_id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`,
-      "m",
-    );
-    result = result.replace(re, (_m, open, inner, close) => {
-      const colored = inner
-        .replace(/fill="[^"]*"/g,   `fill="${fill}"`)
-        .replace(/fill:[^;"}\s]*/g, `fill:${fill}`);
-      return `${open}${colored}${close}`;
-    });
+    const id = seat.seat_svg_id;
+
+    // Cabins/conference/meeting rooms are never recolored on the admin
+    // side — they always keep the floor plan's original artwork colors.
+    if (isRoomSvgId(id)) continue;
+
+    // Unconfigured — leave the original artwork colors until an admin
+    // actually configures it.
+    if (!seat.is_configured) continue;
+
+    result = recolorGroup(result, id, resolveSeatFill(seat));
   }
   return result;
 }
@@ -174,7 +210,7 @@ export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
                 <XCircle className="w-7 h-7 text-gray-300" />
                 <p className="text-[13px] font-medium text-gray-600">No published layout</p>
                 <p className="text-xs text-muted-foreground">
-                  This floor doesn't have a published layout yet.
+                  This floor doesn&apos;t have a published layout yet.
                 </p>
               </div>
             )}

@@ -26,7 +26,7 @@ class FakeCursor:
         self._fetchall_result = fetchall_result or []
         self._fetchone_result = fetchone_result
 
-    def __enter__(self) -> "FakeCursor":
+    def __enter__(self) -> FakeCursor:
         return self
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:

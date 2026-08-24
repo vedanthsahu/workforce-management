@@ -211,7 +211,7 @@ function NativeSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className={`${selectBaseClass} ${icon ? "pl-8" : "pl-3"} disabled:opacity-50 disabled:cursor-not-allowed`}
+        className={`${selectBaseClass} ${icon ? "pl-8" : "pl-3"} disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400`}
         style={showClear ? { backgroundImage: "none" } : selectArrowStyle}
       >
         {placeholder && (
@@ -364,7 +364,7 @@ export default function BookingManagementFilters({
     <div className="flex flex-col gap-4">
       {/* Row 1 */}
       <div className="flex items-end gap-3 flex-wrap">
-        <Field label="Date Range" width="230px">
+        <Field label="Date Range" width="240px">
           <DateRangeField
             dateFrom={filters.dateFrom}
             dateTo={filters.dateTo}
@@ -375,7 +375,7 @@ export default function BookingManagementFilters({
           />
         </Field>
 
-        <Field label="Office" width="180px">
+        <Field label="Office" width="175px">
           <NativeSelect
             value={filters.site}
             onChange={onSiteChange}
@@ -388,7 +388,7 @@ export default function BookingManagementFilters({
           />
         </Field>
 
-        <Field label="Building" width="180px">
+        <Field label="Building" width="175px">
           <NativeSelect
             value={filters.building}
             onChange={onBuildingChange}
@@ -402,7 +402,7 @@ export default function BookingManagementFilters({
           />
         </Field>
 
-        <Field label="Floor" width="180px">
+        <Field label="Floor" width="175px">
           <NativeSelect
             value={filters.floor}
             onChange={(v) => onUpdate("floor", v)}
@@ -511,7 +511,7 @@ export default function BookingManagementFilters({
                 ) : (
                   <ul role="listbox" className="py-1 max-h-60 overflow-y-auto divide-y divide-gray-100">
                     {employeeSuggestions.map((b) => (
-                      <li key={`${b.person_name}-${b.person_email}`} role="option">
+                      <li key={`${b.person_name}-${b.person_email}`} role="option" aria-selected={false}>
                         <button
                           type="button"
                           onMouseDown={(e) => {
@@ -526,7 +526,7 @@ export default function BookingManagementFilters({
                               b.person_type === "Guest" ? "bg-violet-100 text-violet-700" : "bg-indigo-100 text-indigo-700"
                             }`}
                           >
-                            {b.person_type === "Guest" ? "GV" : initialsOf(b.person_name)}
+                            {initialsOf(b.person_name)}
                           </span>
                           <span className="flex-1 min-w-0">
                             <p className="text-[13px] font-medium text-gray-800 truncate">{b.person_name}</p>
@@ -581,7 +581,7 @@ export default function BookingManagementFilters({
                 ) : (
                   <ul role="listbox" className="py-1 max-h-60 overflow-y-auto divide-y divide-gray-100">
                     {seatSuggestions.map((b) => (
-                      <li key={b.seat_code} role="option">
+                      <li key={b.seat_code} role="option" aria-selected={false}>
                         <button
                           type="button"
                           onMouseDown={(e) => {

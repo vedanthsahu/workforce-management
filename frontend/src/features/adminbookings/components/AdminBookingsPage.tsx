@@ -22,6 +22,7 @@ import {
   ADMIN_BOOKINGS_EXPECT_RETURN_KEY,
 } from "../utils/constants";
 
+
 type PersistedSearchState = {
   filters: ReturnType<typeof defaultAdminBookingFilters>;
   appliedFilters: ReturnType<typeof defaultAdminBookingFilters>;
@@ -154,26 +155,30 @@ export default function AdminBookingsPage() {
       seatCode: appliedFilters.seatNumber.trim() || undefined,
     };
 
-    if (appliedFilters.bookingType === "Guest" && appliedFilters.status !== "All") {
-      // Guest rows are split across two backend dimensions: bookings.booking_status
-      // (guest-with-seat bookings) and guest_visits.visit_status (the visit itself,
-      // including guest visits with no seat at all — which the backend only returns
-      // when bookingStatus is omitted entirely). No single bookingStatus or
-      // visitStatus query can capture "this status, from either source" the way the
-      // Employee tab's single-dimension bookingStatus filter can (Employee has no
-      // guest_visit at all, so it's left on the plain single-fetch path below,
-      // completely unaffected by this branch).
+    if (appliedFilters.status !== "All") {
+      // The backend can't filter by status in a single dimension for every
+      // case: Guest rows are split across bookings.booking_status
+      // (guest-with-seat bookings) and guest_visits.visit_status (the visit
+      // itself, including guest visits with no seat at all — which the
+      // backend only returns when bookingStatus is omitted entirely). And
+      // "Modified" specifically can never be matched server-side at all for
+      // Employee/Guest bookings either way: the currently-active successor
+      // booking is still stored as booking_status='CONFIRMED' (flagged via
+      // is_modified) — literal booking_status='MODIFIED' rows are superseded
+      // history that fetch_admin_bookings unconditionally excludes.
       //
-      // So for any specific Guest status: pull every Guest row, status-unfiltered,
-      // across all backend pages (booking_status='MODIFIED'/visit_status='MODIFIED'
-      // superseded-history rows are still excluded server-side same as always — see
-      // fetch_admin_bookings/fetch_admin_guest_visits_without_booking), de-duplicate
-      // a guest visit that appears both as its BOOKING row and again as a bare
-      // GUEST_VISIT row (happens once that booking is cancelled — the visit then has
-      // no *active* booking anymore, so both queries return it), then filter and
-      // paginate using the exact same resolveStatus the table renders with — so
-      // what's on screen always matches the selected filter regardless of which
-      // backend field the status actually lives in.
+      // So for any specific status (Employee or Guest tab, or the combined
+      // "All" tab): pull every row, status-unfiltered, across all backend
+      // pages (booking_status='MODIFIED'/visit_status='MODIFIED' superseded-
+      // history rows are still excluded server-side same as always — see
+      // fetch_admin_bookings/fetch_admin_guest_visits_without_booking),
+      // de-duplicate a guest visit that appears both as its BOOKING row and
+      // again as a bare GUEST_VISIT row (happens once that booking is
+      // cancelled — the visit then has no *active* booking anymore, so both
+      // queries return it), then filter and paginate using the exact same
+      // resolveStatus the table renders with — so what's on screen always
+      // matches the selected filter regardless of which backend field the
+      // status actually lives in.
       const FETCH_LIMIT = 100;
       (async () => {
         try {
@@ -229,6 +234,7 @@ export default function AdminBookingsPage() {
           // would misreport Checked In/Not Checked In/Guests otherwise.
           const checkedInCount = matchingItems.filter((item) => !!item.check_in_at).length;
           const checkedOutCount = matchingItems.filter((item) => !!item.checked_out_at).length;
+          const guestCount = matchingItems.filter((item) => item.booking_type === "GUEST").length;
 
           setBookingsResponse({
             items: pageItems,
@@ -239,8 +245,8 @@ export default function AdminBookingsPage() {
               modified_bookings: appliedFilters.status === "Modified" ? total : 0,
               completed_bookings: appliedFilters.status === "Completed" ? total : 0,
               no_show_bookings: appliedFilters.status === "No Show" ? total : 0,
-              employee_bookings: 0,
-              guest_bookings: total,
+              employee_bookings: total - guestCount,
+              guest_bookings: guestCount,
               checked_in_bookings: checkedInCount,
               checked_out_bookings: checkedOutCount,
             },
@@ -500,16 +506,6 @@ export default function AdminBookingsPage() {
             <BookingDetailsPanel
               booking={selectedBooking}
               onClose={() => setSelectedBooking(null)}
-              onModifySeat={modifySeat}
-              onModifyVisit={modifyVisit}
-              onCancelSeat={(booking) => {
-                setSelectedBooking(null);
-                openCancelSeat(booking);
-              }}
-              onCancelVisit={(booking) => {
-                setSelectedBooking(null);
-                openCancelVisit(booking);
-              }}
             />
           )}
 

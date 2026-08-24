@@ -33,8 +33,8 @@ function BookablePill({ bookable }: { bookable: boolean | null }) {
   return (
     <span
       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${bookable
-          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-          : "bg-red-50 text-red-600 border border-red-200"
+        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+        : "bg-red-50 text-red-600 border border-red-200"
         }`}
     >
       {bookable ? "Yes" : "No"}
@@ -52,24 +52,51 @@ function StatusPill({ status }: { status: string | null }) {
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${styles[status] ?? "bg-gray-100 text-gray-500 border-gray-200"}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${status === "ACTIVE" ? "bg-emerald-500" :
-          status === "MAINTENANCE" ? "bg-amber-500" :
-            "bg-gray-400"
+        status === "MAINTENANCE" ? "bg-amber-500" :
+          "bg-gray-400"
         }`} />
       {status}
     </span>
   );
 }
 
-function ConfiguredPill({ configured }: { configured: boolean }) {
+// One pill for the seat's configuration state — a seat edited locally on an
+// already-published layout shows "Pending" in place of "Configured" (it IS
+// configured, but that change isn't saved until Publish) rather than
+// stacking a second badge next to "Configured", which was redundant. The
+// row itself also gets a light tint for the same seats — see the row
+// className below — so the state reads at a glance without hunting through
+// this column.
+function ConfigurationStatusPill({ seat }: { seat: Seat }) {
+  const variant = seat.has_unpublished_changes
+    ? "pending"
+    : seat.is_configured
+      ? "configured"
+      : "unconfigured";
+
+  const styles: Record<typeof variant, string> = {
+    pending: "bg-orange-50 text-orange-700 border-orange-200",
+    configured: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    unconfigured: "bg-amber-50 text-amber-700 border-amber-200",
+  };
+  const dotStyles: Record<typeof variant, string> = {
+    pending: "bg-orange-400",
+    configured: "bg-indigo-500",
+    unconfigured: "bg-amber-400",
+  };
+  const label: Record<typeof variant, string> = {
+    pending: "Pending",
+    configured: "Configured",
+    unconfigured: "Not Configured",
+  };
+
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${configured
-          ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-          : "bg-amber-50 text-amber-700 border-amber-200"
-        }`}
+      title={variant === "pending" ? "Edited locally — not saved until you publish" : undefined}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${styles[variant]}`}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${configured ? "bg-indigo-500" : "bg-amber-400"}`} />
-      {configured ? "Configured" : "Not Configured"}
+      <span className={`w-1.5 h-1.5 rounded-full ${dotStyles[variant]}`} />
+      {label[variant]}
     </span>
   );
 }
@@ -233,7 +260,11 @@ export default function SeatTable({
                 return (
                   <tr
                     key={seat.seat_id}
-                    className={`border-b border-gray-100 transition-colors ${isSelected ? "bg-indigo-50/60" : idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"
+                    className={`border-b border-gray-100 transition-colors ${isSelected
+                      ? "bg-indigo-50/60"
+                      : seat.has_unpublished_changes
+                        ? "bg-amber-100/60"
+                        : idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"
                       } hover:bg-indigo-50/40`}
                   >
                     <td className="px-4 py-3">
@@ -281,9 +312,31 @@ export default function SeatTable({
                             );
                           })}
                           {seat.amenity_ids.length > 2 && (
-                            <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-medium border border-gray-200">
-                              +{seat.amenity_ids.length - 2}
-                            </span>
+                            <div className="relative inline-block group">
+                              <button
+                                type="button"
+                                className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-medium border border-gray-200 cursor-pointer focus:outline-none"
+                               
+                              >
+                                +{seat.amenity_ids.length - 2}
+                              </button>
+
+                              <div className="hidden group-hover:block absolute right-0 mt-1 w-auto bg-white border border-gray-200 rounded-md shadow-lg p-1.5 z-10 text-xs">
+                                {seat.amenity_ids.slice(2).map((id) => {
+                                  const pref = prefMap[id]
+                                  const name = pref?.preference_name ?? id;
+                                  const category = pref?.preference_type ?? null;
+                                  const color = getAmenityColor(name, category);
+                                  return (
+                                    <div key={id} className="py-0.5">
+                                      <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-medium whitespace-nowrap border ${color.bg} ${color.text} ${color.border}`}>
+                                        {name}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           )}
                         </div>
                       )}
@@ -300,7 +353,9 @@ export default function SeatTable({
                     </td>
 
                     <td className="px-4 py-3">
-                      <ConfiguredPill configured={seat.is_configured} />
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <ConfigurationStatusPill seat={seat} />
+                      </div>
                     </td>
                     <td className="px-9 py-3 text-right">
                       <button
@@ -360,8 +415,8 @@ export default function SeatTable({
                     key={pg}
                     onClick={() => setPage(pg)}
                     className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-medium transition-colors ${page === pg
-                        ? "bg-indigo-600 text-white border border-indigo-600"
-                        : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                      ? "bg-indigo-600 text-white border border-indigo-600"
+                      : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
                       }`}
                   >
                     {pg}

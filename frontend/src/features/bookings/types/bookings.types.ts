@@ -1,4 +1,4 @@
-export type BookingStatus = "confirmed" | "cancelled" | "pending";
+export type BookingStatus = "confirmed" | "modified" | "cancelled" | "pending";
 
 export type BookingType = "self" | "on_behalf" | "employee" | "guest" | "visit";
 
@@ -6,7 +6,7 @@ export type BookingTab = "upcoming" | "past" | "recurring" | "cancelled";
 
 export interface BookingTag {
   label: string;
-  variant: "confirmed" | "manager" | "zone" | "sprint" | "recurring";
+  variant: "confirmed" | "modified" | "manager" | "zone" | "sprint" | "recurring";
 }
 
 export interface Booking {
@@ -74,7 +74,7 @@ export interface RawBooking {
   booking_date:         string;
   from_date?:           string;
   to_date?:             string;
-  booking_status:       "CONFIRMED" | "CANCELLED" | "PENDING" | "ACTIVE";
+  booking_status:       "CONFIRMED" | "MODIFIED" | "CANCELLED" | "PENDING" | "ACTIVE";
   booking_type?:        "EMPLOYEE" | "GUEST";
   source_channel:       string;
   check_in_at:          string | null;

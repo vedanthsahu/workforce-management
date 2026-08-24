@@ -57,7 +57,7 @@ function FloorsPage() {
     }, 6000);
 
     router.replace("/admin/floors");
-  }, [searchParams]);
+  }, [searchParams, router]);
 
   const handleEdit = (floor: Floor) => {
     setSelectedFloor(floor);

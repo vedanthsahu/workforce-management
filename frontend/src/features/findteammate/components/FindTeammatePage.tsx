@@ -108,7 +108,7 @@ function TeamGroupCard({
   group: ApiTeamGroup;
   onSelectMember: (member: ApiTeamMember, teamName: string) => void;
 }) {
-  const inOfficeCount = group.members.filter((m) => m.has_booking_today).length;
+  const _inOfficeCount = group.members.filter((m) => m.has_booking_today).length;
 
   return (
     <div className="bg-white border border-[#EBEBF5] rounded-xl overflow-hidden shadow-sm">

@@ -76,6 +76,9 @@ class AdminManagementRouteTests(unittest.TestCase):
         self.assertIn(("PATCH", "/floors/{floor_id}"), route_map)
         self.assertIn(("GET", "/offices/{office_id}/floors"), route_map)
         self.assertIn(("PATCH", "/seats/{seat_id}/configuration"), route_map)
+        self.assertIn(("PATCH", "/seats/bulk-configuration"), route_map)
+        self.assertIn(("PATCH", "/layout-seats/{layout_seat_mapping_id}/configuration"), route_map)
+        self.assertIn(("PATCH", "/layout-seats/bulk-configuration"), route_map)
 
     def test_amenity_management_routes_are_registered(self) -> None:
         route_map = {
@@ -103,7 +106,9 @@ class LocationMutationsRequirePermissionTests(unittest.TestCase):
         ("POST", "/floors"),
         ("PATCH", "/floors/{floor_id}"),
         ("PATCH", "/seats/{seat_id}/configuration"),
+        ("PATCH", "/seats/bulk-configuration"),
         ("PATCH", "/layout-seats/{layout_seat_mapping_id}/configuration"),
+        ("PATCH", "/layout-seats/bulk-configuration"),
     ]
 
     READ_ROUTES = [
@@ -132,7 +137,9 @@ class LocationMutationsRequirePermissionTests(unittest.TestCase):
     ) -> None:
         for method, path in (
             ("PATCH", "/seats/{seat_id}/configuration"),
+            ("PATCH", "/seats/bulk-configuration"),
             ("PATCH", "/layout-seats/{layout_seat_mapping_id}/configuration"),
+            ("PATCH", "/layout-seats/bulk-configuration"),
         ):
             with self.subTest(route=f"{method} {path}"):
                 required = _required_permissions(

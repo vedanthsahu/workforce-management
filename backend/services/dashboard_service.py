@@ -10,6 +10,7 @@ import psycopg2
 from fastapi import HTTPException, status
 from psycopg2.extensions import connection as PGConnection
 
+from backend.repositories.preferences_repository import fetch_active_amenities
 from backend.repositories.user_repository import (
     fetch_days_in_office,
     fetch_days_in_office_current_month,
@@ -19,8 +20,6 @@ from backend.repositories.user_repository import (
     fetch_user_by_id,
     fetch_user_profile_context,
 )
-from backend.repositories.preferences_repository import fetch_active_amenities
-from backend.services.preferences_service import get_my_preferences
 from backend.schemas.dashboard import (
     DashboardManagerResponse,
     DashboardMeResponse,
@@ -28,6 +27,7 @@ from backend.schemas.dashboard import (
     DashboardPreferencesResponse,
     DashboardProfileMetadataResponse,
 )
+from backend.services.preferences_service import get_my_preferences
 
 
 def get_dashboard_me(
