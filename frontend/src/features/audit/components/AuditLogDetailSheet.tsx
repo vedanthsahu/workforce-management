@@ -118,8 +118,9 @@ export default function AuditLogDetailSheet({ open, log, loading, error, onOpenC
 
               {/* Changes — CREATE/UPDATE/DELETE/AUTH/FAILED-aware, driven
                  entirely by old_values/new_values/changed_fields from the
-                 backend. */}
-              <AuditChangesSection log={log} />
+                 backend. AUTH module events (login/logout/etc.) have no
+                 before/after field values, so the section is hidden. */}
+              {log.module.toUpperCase() !== "AUTH" && <AuditChangesSection log={log} />}
 
               {/* Additional Info */}
               <Section title="Additional Information">

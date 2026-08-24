@@ -34,6 +34,10 @@ export default function EditBuildingModal({
     open
   );
 
+  const hasChanges =
+    formData.building_name !== building.building_name ||
+    formData.status !== building.status;
+
   return (
     <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
       <DialogContent className="sm:max-w-2xl">
@@ -74,7 +78,7 @@ export default function EditBuildingModal({
               await handleUpdate();
               onClose();
             }}
-            disabled={loading}
+            disabled={loading || !hasChanges}
           >
             {loading ? "Saving..." : "Save Changes"}
           </Button>

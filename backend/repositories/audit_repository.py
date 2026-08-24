@@ -505,6 +505,36 @@ def fetch_audit_logs_summary(
     )
 
 
+def fetch_audit_log_filter_options(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+) -> list[dict[str, Any]]:
+    """Every distinct (module, entity_type, action) triple that actually
+    occurs in this tenant's audit_logs, for the admin Audit Logs filter bar's
+    cascading Module -> Entity -> Action dropdowns.
+
+    Deliberately tenant-scoped only -- NOT narrowed by whatever filters are
+    currently applied (date range, status, search, ...), so the dropdowns
+    always offer every real combination rather than shrinking as other
+    filters are picked. A flat array of rows rather than a nested
+    module -> entity -> action object: the frontend derives each dropdown's
+    options by filtering/mapping this one array, which keeps the response
+    shape simple and lets it double as the source for all three levels.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT module, entity_type, action
+            FROM audit_logs
+            WHERE tenant_id = %s
+            ORDER BY module, entity_type, action
+            """,
+            (tenant_id,),
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
 def fetch_audit_log_by_id(
     conn: PGConnection,
     *,

@@ -1,4 +1,4 @@
-import { AuditLog, AuditLogDetailRaw, AuditLogListItem, AuditLogListItemRaw } from "../types/audit.types";
+import { AuditLog, AuditLogDetailRaw, AuditLogFilterOptionRaw, AuditLogListItem, AuditLogListItemRaw } from "../types/audit.types";
 
 export function formatAuditDateTime(iso: string): string {
   const d = new Date(iso);
@@ -176,6 +176,45 @@ export function describeAuditAction(log: Pick<AuditLogListItem, "action" | "enti
   if (log.action === "user.login") return "User successfully logged in";
   if (log.action === "user.logout") return "User logged out";
   return `${log.actionLabel} event recorded`;
+}
+
+export interface AuditCascadingFilterOptions {
+  moduleOptions: { value: string; label: string }[];
+  entityOptions: { value: string; label: string }[];
+  actionOptions: { value: string; label: string }[];
+}
+
+/**
+ * Derives the Module -> Entity -> Action dropdown option lists for the
+ * filter bar from the flat `filter_options` array the list endpoint
+ * returns, narrowed by whatever's currently selected upstream: Entity
+ * options are scoped to the selected Module, Action options are scoped to
+ * the selected Module *and* Entity. Pass "All" for a level that hasn't been
+ * narrowed yet.
+ */
+export function deriveAuditFilterOptions(
+  facets: AuditLogFilterOptionRaw[],
+  selectedModule: string,
+  selectedEntity: string
+): AuditCascadingFilterOptions {
+  const modules = [...new Set(facets.map((f) => f.module))].sort();
+
+  const entityFacets = selectedModule === "All" ? facets : facets.filter((f) => f.module === selectedModule);
+  const entities = [...new Set(entityFacets.map((f) => f.entity_type).filter((e): e is string => !!e))].sort();
+
+  const actionFacets = selectedEntity === "All" ? entityFacets : entityFacets.filter((f) => f.entity_type === selectedEntity);
+  const actions = [...new Set(actionFacets.map((f) => f.action))].sort();
+
+  const toOptions = (values: string[], allLabel: string) => [
+    { value: "All", label: allLabel },
+    ...values.map((v) => ({ value: v, label: v })),
+  ];
+
+  return {
+    moduleOptions: toOptions(modules, "All Modules"),
+    entityOptions: toOptions(entities, "All Entities"),
+    actionOptions: toOptions(actions, "All Actions"),
+  };
 }
 
 export function initialsOf(name: string): string {

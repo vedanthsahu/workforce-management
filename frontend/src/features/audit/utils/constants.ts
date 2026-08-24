@@ -29,48 +29,12 @@ export const AUDIT_METHOD_STYLES: Record<string, string> = {
 };
 export const AUDIT_METHOD_FALLBACK_STYLE = "bg-gray-100 text-gray-600";
 
-// Actions are free-form dotted strings written by each call site (see
-// safe_write_audit_log usages across the backend) -- there's no backend
-// enum/endpoint to list them from yet, so this is a curated set of the
-// actions currently in use. Falls back gracefully: the table/filter still
-// work fine for any action not listed here, this list just seeds the
-// dropdown.
-export const AUDIT_ACTION_OPTIONS: { value: string; label: string }[] = [
-  { value: "All", label: "All Actions" },
-  { value: "booking.created", label: "booking.created" },
-  { value: "booking.cancel", label: "booking.cancel" },
-  { value: "user.login", label: "user.login" },
-  { value: "user.logout", label: "user.logout" },
-  { value: "user.access_updated", label: "user.access_updated" },
-  { value: "site.created", label: "site.created" },
-  { value: "site.updated", label: "site.updated" },
-  { value: "building.created", label: "building.created" },
-];
-
-export const AUDIT_MODULE_OPTIONS: { value: string; label: string }[] = [
-  { value: "All", label: "All Modules" },
-  ...Object.keys(AUDIT_MODULE_STYLES).map((module) => ({
-    value: module,
-    label: module,
-  })),
-];
-
-// Curated from the entity_type values the backend's audit call sites
-// currently pass as resource_type -- same "seeds the dropdown, doesn't
-// constrain the filter" caveat as AUDIT_ACTION_OPTIONS above.
-export const AUDIT_ENTITY_OPTIONS: { value: string; label: string }[] = [
-  { value: "All", label: "All Entities" },
-  { value: "booking", label: "booking" },
-  { value: "session", label: "session" },
-  { value: "user", label: "user" },
-  { value: "site", label: "site" },
-  { value: "building", label: "building" },
-  { value: "floor", label: "floor" },
-  { value: "seat", label: "seat" },
-  { value: "amenity", label: "amenity" },
-  { value: "guest", label: "guest" },
-  { value: "guest_visit", label: "guest_visit" },
-];
+// Action/Module/Entity dropdown OPTIONS are no longer hardcoded here -- the
+// filter bar derives them from GET /admin/audit's `filter_options` (every
+// real (module, entity_type, action) combination for the tenant) via
+// deriveAuditFilterOptions in utils/mapAuditLog.ts, so they can't drift out
+// of sync with what's actually in the data. AUDIT_MODULE_STYLES above stays
+// (it's just badge coloring, independent of the options list).
 
 export const AUDIT_STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "All", label: "All Status" },

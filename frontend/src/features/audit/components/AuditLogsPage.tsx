@@ -13,14 +13,20 @@ import { mapAuditLogDetailToUi, mapAuditLogListItemToUi } from "../utils/mapAudi
 import { AUDIT_PAGE_SIZES } from "../utils/constants";
 
 export default function AuditLogsPage() {
+  // `filters` is the draft state the filter bar binds to -- editing it
+  // (typing, picking a dropdown, applying a date range) never queries
+  // anything by itself. `appliedFilters` only changes on an explicit Search
+  // click (or Clear), and it alone drives useAuditLogs -- same staged-filter
+  // pattern as AdminBookingsPage/BookingManagementFilters.
   const [filters, setFilters] = useState(defaultAuditLogFilters());
+  const [appliedFilters, setAppliedFilters] = useState(defaultAuditLogFilters());
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AuditLog | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState(false);
 
-  const { response, loading, page, setPage, pageSize, setPageSize } = useAuditLogs(filters);
+  const { response, loading, page, setPage, pageSize, setPageSize } = useAuditLogs(appliedFilters);
 
   const items = useMemo(() => (response?.items ?? []).map(mapAuditLogListItemToUi), [response]);
 
@@ -39,6 +45,16 @@ export default function AuditLogsPage() {
 
   const handleUpdateFilter = <K extends keyof typeof filters>(key: K, value: (typeof filters)[K]) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSearch = () => {
+    setAppliedFilters(filters);
+  };
+
+  const handleClear = () => {
+    const defaults = defaultAuditLogFilters();
+    setFilters(defaults);
+    setAppliedFilters(defaults);
   };
 
   const handleSelectRow = (item: AuditLogListItem) => {
@@ -74,7 +90,13 @@ export default function AuditLogsPage() {
 
       {/* FILTERS CARD */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 sm:p-5">
-        <AuditLogFilters filters={filters} onUpdate={handleUpdateFilter} />
+        <AuditLogFilters
+          filters={filters}
+          onUpdate={handleUpdateFilter}
+          onSearch={handleSearch}
+          onClear={handleClear}
+          filterOptions={response?.filter_options ?? []}
+        />
       </div>
 
       {/* STATS */}

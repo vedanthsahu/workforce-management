@@ -16,7 +16,7 @@ import {
 } from "./BookForSomeone";
 import { GUEST_TYPES, PURPOSE_OF_VISIT } from "../constants/booking.constants";
 import { useGuestSearch } from "../hooks/useBooking";
-import { createGuestSchema } from "../schemas/guest.schema";
+import { createGuestSchema, sanitizePhoneNumber } from "../schemas/guest.schema";
 import {
   Building,
   CreateGuestInput,
@@ -364,7 +364,7 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
   const handleChange = (field: keyof typeof form) => (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const value = e.target.value;
+    const value = field === "phone" ? sanitizePhoneNumber(e.target.value) : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
     if (!touched[field]) setTouched((prev) => ({ ...prev, [field]: true }));
     validateField(field, value);
@@ -375,15 +375,11 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value;
-    const newDigits = raw.replace(/\D/g, "");
-    const maxDigits = newDigits.startsWith("91") ? 12 : 10;
+    const value = sanitizePhoneNumber(e.target.value);
 
-    if (newDigits.length > maxDigits) return;
-
-    setForm((prev) => ({ ...prev, phone: raw }));
+    setForm((prev) => ({ ...prev, phone: value }));
     if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
-    validateField("phone", raw);
+    validateField("phone", value);
   };
 
   const handleSave = async () => {
@@ -488,14 +484,14 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
           )}
         </div>
 
-        {/* Phone — blocks input beyond 10 digits */}
+        {/* Phone */}
         <div>
           <FieldLabel htmlFor="g-phone" required>Phone Number</FieldLabel>
           <input
             id="g-phone"
             type="tel"
             style={inputStyle()}
-            placeholder="+91 550000000"
+            placeholder="+91 1111111111"
             value={form.phone}
             onChange={handlePhoneChange}
             onBlur={handleBlur("phone")}
@@ -976,7 +972,7 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
   const [apiError, setApiError] = useState<string | null>(null);
 
   const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+    const value = field === "phone" ? sanitizePhoneNumber(e.target.value) : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
     if (touched[field]) validateField(field, value);
   };
