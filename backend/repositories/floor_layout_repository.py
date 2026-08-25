@@ -202,11 +202,19 @@ def get_next_layout_version(
     return current_version + 1
 
 
+# Units allowed for visibility_unit below. Kept to a fixed allow-list since
+# the unit is interpolated directly into the SQL (not bound as a param) --
+# safe only because it's always one of these, never caller/user input.
+_VISIBILITY_INTERVAL_UNITS = frozenset({"days", "hours", "minutes"})
+
+
 def fetch_floor_layouts_by_floor(
     conn: PGConnection,
     *,
     tenant_id: str,
     floor_id: str,
+    visibility_thresholds: dict[str, int] | None = None,
+    visibility_unit: str = "days",
 ) -> list[dict[str, Any]]:
     """
     Fetch all layouts for a tenant-scoped floor, including deleted ones.
@@ -215,7 +223,42 @@ def fetch_floor_layouts_by_floor(
     shows them but blocks every action (configure, activate/recover) other
     than viewing. Ordered PUBLISHED, then DRAFT, then ARCHIVED, then DELETED;
     within each group, most recently updated first.
+
+    visibility_thresholds, when provided, hides DRAFT/ARCHIVED/DELETED rows
+    whose updated_at is older than their status's allowed age, measured in
+    visibility_unit ("days" in production; "minutes" is useful for testing
+    the rule without an actual multi-day wait -- see
+    LAYOUT_VISIBILITY_INTERVAL_UNIT in floor_layout_service.py). PUBLISHED
+    is never hidden. Rows are never deleted by this -- it's a display
+    filter only, scoped per-floor by the caller. Pass
+    visibility_thresholds=None to keep today's behavior (every status
+    shown, regardless of age).
     """
+    if visibility_unit not in _VISIBILITY_INTERVAL_UNITS:
+        raise ValueError(f"Unsupported visibility_unit: {visibility_unit!r}")
+
+    visibility_clause = ""
+    params: tuple[Any, ...] = (
+        tenant_id,
+        floor_id,
+        list(ALL_LAYOUT_STATUSES),
+    )
+
+    if visibility_thresholds is not None:
+        visibility_clause = f"""
+              AND (
+                  fl.status = 'PUBLISHED'
+                  OR (fl.status = 'DRAFT' AND fl.updated_at >= NOW() - (%s || ' {visibility_unit}')::interval)
+                  OR (fl.status = 'ARCHIVED' AND fl.updated_at >= NOW() - (%s || ' {visibility_unit}')::interval)
+                  OR (fl.status = 'DELETED' AND fl.updated_at >= NOW() - (%s || ' {visibility_unit}')::interval)
+              )
+        """
+        params += (
+            str(visibility_thresholds["DRAFT"]),
+            str(visibility_thresholds["ARCHIVED"]),
+            str(visibility_thresholds["DELETED"]),
+        )
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
@@ -227,6 +270,7 @@ def fetch_floor_layouts_by_floor(
             WHERE fl.tenant_id = %s
               AND fl.floor_id = %s
               AND fl.status = ANY(%s)
+            {visibility_clause}
             ORDER BY
                 CASE fl.status
                     WHEN 'PUBLISHED' THEN 0
@@ -238,11 +282,7 @@ def fetch_floor_layouts_by_floor(
                 fl.updated_at DESC,
                 fl.id DESC
             """,
-            (
-                tenant_id,
-                floor_id,
-                list(ALL_LAYOUT_STATUSES),
-            ),
+            params,
         )
 
         rows = cur.fetchall()

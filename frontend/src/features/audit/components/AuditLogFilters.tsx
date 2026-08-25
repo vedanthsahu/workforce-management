@@ -3,7 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { CalendarDays, Clock, ChevronDown, RotateCcw, Search, X } from "lucide-react";
 import { auditService } from "../services/audit.service";
-import { AuditLogFilterOptionRaw, AuditLogFilters as AuditLogFiltersType, AuditLogListItem, AuditTimeMode } from "../types/audit.types";
+import {
+  AuditLogFilterOptionRaw,
+  AuditLogFilters as AuditLogFiltersType,
+  AuditLogListItem,
+  AuditTimeMode,
+  defaultAuditLogFilters,
+} from "../types/audit.types";
 import { deriveAuditFilterOptions, initialsOf, mapAuditLogListItemToUi } from "../utils/mapAuditLog";
 import { AUDIT_RELATIVE_TIME_OPTIONS, AUDIT_STATUS_OPTIONS } from "../utils/constants";
 
@@ -364,6 +370,25 @@ export default function AuditLogFilters({ filters, onUpdate, onSearch, onClear, 
     onUpdate("action", "All");
   };
 
+  // Date <-> Time is a mode switch, not just another field -- the value from
+  // whichever mode you're leaving (date range / relative preset) and every
+  // other filter become stale against the newly picked mode, so reset
+  // everything back to defaults. This only touches the draft `filters` state
+  // (nothing is fetched until Search is clicked), so it's a silent, instant
+  // reset with no loading flicker.
+  const handleTimeModeChange = (mode: AuditTimeMode) => {
+    const defaults = defaultAuditLogFilters();
+    onUpdate("timeMode", mode);
+    onUpdate("search", defaults.search);
+    onUpdate("module", defaults.module);
+    onUpdate("entity", defaults.entity);
+    onUpdate("action", defaults.action);
+    onUpdate("status", defaults.status);
+    onUpdate("dateFrom", defaults.dateFrom);
+    onUpdate("dateTo", defaults.dateTo);
+    onUpdate("lastSeconds", defaults.lastSeconds);
+  };
+
   // Chips summarizing whichever of Module/Entity/Action/Status aren't "All" --
   // each one's remove button reuses the same cascading reset as its select so
   // clearing Module from a chip also clears the now-stale Entity/Action picks.
@@ -398,7 +423,7 @@ export default function AuditLogFilters({ filters, onUpdate, onSearch, onClear, 
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3 flex-wrap">
         <div className="w-70.5 flex flex-col gap-1">
-          <TimeModeToggle mode={filters.timeMode} onChange={(mode) => onUpdate("timeMode", mode)} />
+          <TimeModeToggle mode={filters.timeMode} onChange={handleTimeModeChange} />
           {filters.timeMode === "date" ? (
             <DateRangeField
               dateFrom={filters.dateFrom}

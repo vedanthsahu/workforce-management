@@ -38,6 +38,35 @@ from backend.repositories.floor_layout_repository import (
 from backend.repositories.layout_seat_mapping_repository import (
     bulk_insert_layout_seat_mappings,
 )
+
+# Floors currently enrolled in the age-based list-visibility rule (see
+# get_floor_layouts_by_floor). Pilot: Roxana Towers / 7th Floor, Hyderabad
+# Begumpet Office (tenant_id=3, floor_id=9 -- confirmed against the dev DB).
+# Extending the rollout later is just adding more floor_ids here (or
+# swapping this for "all floors") — no DB change either way.
+LAYOUT_VISIBILITY_PILOT_FLOOR_IDS: frozenset[str] = frozenset({"9"})
+
+# How long a layout may sit in each status before it drops out of the list
+# for an enrolled floor, in units of LAYOUT_VISIBILITY_INTERVAL_UNIT below.
+# This does not delete data — rows stay in the database and are still
+# reachable outside this filtered list. PUBLISHED is never hidden. Based on
+# updated_at (no dedicated status-timestamp column today), so an unrelated
+# edit to a DRAFT/ARCHIVED layout's seats can reset its clock — a known,
+# accepted tradeoff, not a bug.
+LAYOUT_VISIBILITY_THRESHOLDS: dict[str, int] = {
+    "DRAFT": 3,
+    "ARCHIVED": 3,
+    "DELETED": 3,
+}
+
+# "days" is the real production setting. Switch to "minutes" (and drop the
+# thresholds above to something small, e.g. 3) to verify the rule end to
+# end without an actual multi-day wait -- then switch both back before this
+# goes anywhere near production. Nothing else about the code changes
+# between the two.
+# TESTING: currently set to "minutes" with 3-minute thresholds above.
+# Switch back to "days" with {15, 30, 5} before this goes near production.
+LAYOUT_VISIBILITY_INTERVAL_UNIT: str = "minutes"
 from backend.repositories.user_repository import fetch_admin_notification_emails
 from backend.schemas.floor_layout import (
     CreateFloorLayoutRequest,
@@ -217,11 +246,19 @@ def get_floor_layouts_by_floor(
     floor_id: str,
 ) -> list[FloorLayoutResponse]:
     """Return all layouts for one tenant-scoped floor."""
+    visibility_thresholds = (
+        LAYOUT_VISIBILITY_THRESHOLDS
+        if floor_id in LAYOUT_VISIBILITY_PILOT_FLOOR_IDS
+        else None
+    )
+
     try:
         layouts = fetch_floor_layouts_by_floor(
             conn,
             tenant_id=str(current_user["tenant_id"]),
             floor_id=floor_id,
+            visibility_thresholds=visibility_thresholds,
+            visibility_unit=LAYOUT_VISIBILITY_INTERVAL_UNIT,
         )
     except psycopg2.Error as exc:
         raise HTTPException(
