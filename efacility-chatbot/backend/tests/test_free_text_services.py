@@ -591,6 +591,18 @@ class QuickBookDefaultProfileTests(unittest.IsolatedAsyncioTestCase):
         reset_context.assert_awaited_once_with("session-1", unittest.mock.ANY)
         route_booking.assert_awaited_once()
 
+    async def test_generic_book_intent_resets_draft_even_inside_booking_flow(self):
+        engine = ChatEngine()
+        session = SimpleNamespace(id="session-1", current_node="CONFIRM")
+
+        with patch.object(engine, "_reset_manual_booking_context", AsyncMock()) as reset_context, patch.object(
+            engine, "_route_book_seat_from_entities", AsyncMock(return_value="when-where-card")
+        ):
+            response = await engine._execute_free_text_intent(session, Intent.BOOK_SEAT, {}, db=object())
+
+        self.assertEqual(response, "when-where-card")
+        reset_context.assert_awaited_once()
+
     async def test_numeric_book_a_seat_from_bookings_starts_full_booking_flow(self):
         engine = ChatEngine()
         session = SimpleNamespace(id="session-1")
@@ -696,6 +708,54 @@ class QuickBookDefaultProfileTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, "single-booking-confirmation")
         confirmation.assert_awaited_once_with(session, "cancel", "booking-42", unittest.mock.ANY)
         all_bookings.assert_not_awaited()
+
+    async def test_cancel_rebook_recovers_target_from_selected_date(self):
+        engine = ChatEngine()
+        selected_date = (date.today() + timedelta(days=2)).isoformat()
+        session = SimpleNamespace(id="session-1", current_node="MAIN_MENU")
+        context = {"duplicate_booking_id": "", "date_range_start": selected_date}
+
+        with patch.object(engine, "_get_context", AsyncMock(return_value=context)), patch.object(
+            engine, "_update_node", AsyncMock()
+        ), patch.object(
+            engine, "_external_booking_for_date", AsyncMock(return_value={"booking_id": "booking-42"})
+        ), patch.object(
+            engine, "_build_booking_action_confirmation", AsyncMock(return_value="single-booking-confirmation")
+        ) as confirmation:
+            result = await engine._handle_main_menu(session, "cancel_rebook", None, db=object())
+
+        self.assertEqual(result, "single-booking-confirmation")
+        confirmation.assert_awaited_once_with(session, "cancel", "booking-42", unittest.mock.ANY)
+
+    async def test_empty_upcoming_list_shows_recent_past_and_cancelled(self):
+        engine = ChatEngine()
+        session = SimpleNamespace(id="session-1", current_menu_id=1)
+        past = {"booking_id": "past-1", "booking_date": "2026-08-01", "seat_code": "P-1"}
+        cancelled = {"booking_id": "cancelled-1", "booking_date": "2026-08-02", "seat_code": "C-1", "status": "CANCELLED"}
+
+        with patch.object(engine, "_update_node", AsyncMock()), patch.object(
+            engine, "_set_context_bulk", AsyncMock()
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.my_future_bookings", AsyncMock(return_value=([], False))
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.my_past_bookings", AsyncMock(return_value=([past], False))
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.my_cancelled_bookings", AsyncMock(return_value=([cancelled], False))
+        ):
+            response = await engine._build_external_my_bookings(
+                session, object(), ctx={}, list_mode="upcoming", action=None,
+                show_actions=True, page_size=7, offset=0,
+            )
+
+        self.assertIn("no upcoming bookings", response.messages[0].text.lower())
+        lists = [message.booking_list for message in response.messages if message.booking_list]
+        self.assertEqual([item.mode for item in lists], ["past", "cancelled"])
+
+    def test_backend_seat_aliases_preserve_seat_code(self):
+        nested = {"id": "114", "seat": {"seat_code": "BEG-ROX-F8-D-114"}}
+
+        self.assertEqual(ChatEngine._backend_seat_id(nested), 114)
+        self.assertEqual(ChatEngine._backend_seat_code(nested, 114), "BEG-ROX-F8-D-114")
 
     def test_current_booking_action_blocked_message_uses_action(self):
         message = ChatEngine._current_booking_action_blocked_message(
