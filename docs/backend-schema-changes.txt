@@ -1,0 +1,220 @@
+BACKEND SCHEMA CHANGES — Group-Based Permission Model + Refresh-Token Race Fix
+===============================================================================
+Postgres. Matches the real schema pulled from information_schema (bigint IDs
+with sequences throughout, not uuid — confirmed against roles/permissions/
+app_users/user_sessions). This is DDL only — no data. Run this first; the
+209 permission rows, 16 groups, and their group_permissions/role_groups
+population are a separate, much larger step (ask if you want that generated
+next, e.g. as an export straight from Permission-Groups-Summary.xlsx).
+
+-------------------------------------------------------------------------------
+1. GROUP-BASED PERMISSION MODEL
+   New tables only — roles, permissions, role_permissions are untouched.
+   role_permissions stays in place as a rollback reference; the app just
+   stops reading it once user_groups/group_permissions are live.
+-------------------------------------------------------------------------------
+
+-- group_name_normalized / permission_set_hash / version: confirmed against
+-- the live schema (2026-08-26 information_schema pull) that no citext /
+-- lower()-index precedent exists anywhere else in this DB -- this is a new
+-- but standard pattern, introduced specifically for the case/whitespace-
+-- normalized uniqueness and duplicate-permission-set invariants.
+CREATE TABLE groups (
+    id                     BIGSERIAL PRIMARY KEY,
+    tenant_id              BIGINT NOT NULL REFERENCES tenants(id),
+    group_name             VARCHAR(100) NOT NULL,
+    group_name_normalized  VARCHAR(100) GENERATED ALWAYS AS (
+                              lower(regexp_replace(btrim(group_name), '\s+', ' ', 'g'))
+                            ) STORED,
+    description            TEXT,
+    is_system              BOOLEAN NOT NULL DEFAULT FALSE,   -- true for the 16 base/add-on groups; not tenant-editable
+    is_active              BOOLEAN NOT NULL DEFAULT TRUE,
+    permission_set_hash    VARCHAR(32),                      -- md5 of sorted permission_ids, kept live by a trigger on group_permissions
+    version                INTEGER NOT NULL DEFAULT 1,        -- optimistic locking: UPDATE ... WHERE id=:id AND version=:expected
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_groups_tenant_name_normalized UNIQUE (tenant_id, group_name_normalized)
+);
+
+-- Partial: NULL hash (empty/draft groups) never collides with another
+-- empty group in the same tenant -- only real, identical permission sets
+-- are blocked. Recomputed by a trigger on group_permissions (see Trial_001
+-- for recompute_group_permission_set_hash()) -- kept as a DB-level trigger
+-- rather than a service-layer-only check because two concurrent
+-- "create group" requests with the same permission set is a real race a
+-- pre-insert SELECT can lose.
+CREATE UNIQUE INDEX uq_groups_tenant_permission_set
+  ON groups (tenant_id, permission_set_hash)
+  WHERE permission_set_hash IS NOT NULL;
+
+
+CREATE TABLE group_permissions (
+    id                BIGSERIAL PRIMARY KEY,
+    group_id          BIGINT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    permission_id     BIGINT NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_group_permission UNIQUE (group_id, permission_id)
+);
+
+-- Keeps groups.permission_set_hash live so uq_groups_tenant_permission_set
+-- (above) is always enforceable. md5() is built-in -- no extension needed.
+--
+-- The FOR UPDATE lock below is not optional: without it, two concurrent
+-- transactions inserting different permissions into the SAME group can
+-- each compute their hash from a snapshot that doesn't include the other's
+-- (uncommitted) change, then race to overwrite groups.permission_set_hash
+-- -- the loser's UPDATE wins with a hash that reflects only its own change,
+-- silently leaving the group's hash out of sync with its real permission
+-- set. Locking the group row first forces the second transaction to block
+-- until the first commits, then re-read fresh data.
+CREATE OR REPLACE FUNCTION recompute_group_permission_set_hash() RETURNS TRIGGER AS $$
+DECLARE
+  affected_group_id BIGINT := COALESCE(NEW.group_id, OLD.group_id);
+  new_hash VARCHAR(32);
+BEGIN
+  PERFORM 1 FROM groups WHERE id = affected_group_id FOR UPDATE;
+
+  SELECT md5(string_agg(permission_id::text, ',' ORDER BY permission_id))
+    INTO new_hash
+    FROM group_permissions
+    WHERE group_id = affected_group_id;
+
+  UPDATE groups
+    SET permission_set_hash = new_hash, updated_at = NOW()
+    WHERE id = affected_group_id;
+
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_group_permissions_recompute_hash
+  AFTER INSERT OR UPDATE OR DELETE ON group_permissions
+  FOR EACH ROW EXECUTE FUNCTION recompute_group_permission_set_hash();
+
+CREATE TABLE user_groups (
+    id                    BIGSERIAL PRIMARY KEY,
+    user_id               BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    group_id              BIGINT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    assigned_by_user_id   BIGINT REFERENCES app_users(id),
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_user_group UNIQUE (user_id, group_id)
+);
+
+-- Plain FKs can't stop a user from Tenant A being linked to a group from
+-- Tenant B -- Postgres CHECK constraints can't reference other tables, so
+-- this has to be a trigger. Without it, a bug (or a bad script) assigning
+-- a mismatched (user_id, group_id) pair is a silent cross-tenant privilege
+-- grant that nothing in the schema would catch.
+CREATE OR REPLACE FUNCTION check_user_group_tenant_match() RETURNS TRIGGER AS $$
+DECLARE
+  user_tenant BIGINT;
+  group_tenant BIGINT;
+BEGIN
+  SELECT tenant_id INTO user_tenant FROM app_users WHERE id = NEW.user_id;
+  SELECT tenant_id INTO group_tenant FROM groups WHERE id = NEW.group_id;
+  IF user_tenant IS DISTINCT FROM group_tenant THEN
+    RAISE EXCEPTION 'user_groups: user (tenant %) and group (tenant %) belong to different tenants',
+      user_tenant, group_tenant;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_user_groups_tenant_match
+  BEFORE INSERT OR UPDATE ON user_groups
+  FOR EACH ROW EXECUTE FUNCTION check_user_group_tenant_match();
+
+-- Security constraint, NOT an authorization path: which groups a role
+-- is even allowed to receive. Check this table before every INSERT into
+-- user_groups; reject the assignment if (target user's role_id, group_id)
+-- isn't present here.
+--
+-- Gotcha confirmed against the live schema: app_users has no role_id column
+-- (only role_name VARCHAR, no FK to roles). Resolving "which groups is this
+-- logged-in user eligible for" needs the same join the app must already do
+-- for role_permissions today: app_users.(tenant_id, role_name) ->
+-- roles.(tenant_id, role_name) -> roles.id -> role_groups.
+
+CREATE TABLE role_groups (
+    id                BIGSERIAL PRIMARY KEY,
+    role_id           BIGINT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    group_id          BIGINT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_role_group UNIQUE (role_id, group_id)
+);
+
+-- Same tenant-match problem as user_groups, one difference: roles.tenant_id
+-- is nullable (a genuinely global/shared role), so NULL is allowed to pair
+-- with any tenant's group -- only a real, non-null mismatch is rejected.
+CREATE OR REPLACE FUNCTION check_role_group_tenant_match() RETURNS TRIGGER AS $$
+DECLARE
+  role_tenant BIGINT;
+  group_tenant BIGINT;
+BEGIN
+  SELECT tenant_id INTO role_tenant FROM roles WHERE id = NEW.role_id;
+  SELECT tenant_id INTO group_tenant FROM groups WHERE id = NEW.group_id;
+  IF role_tenant IS NOT NULL AND role_tenant IS DISTINCT FROM group_tenant THEN
+    RAISE EXCEPTION 'role_groups: role (tenant %) and group (tenant %) belong to different tenants',
+      role_tenant, group_tenant;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_role_groups_tenant_match
+  BEFORE INSERT OR UPDATE ON role_groups
+  FOR EACH ROW EXECUTE FUNCTION check_role_group_tenant_match();
+
+-------------------------------------------------------------------------------
+2. UI vs BACKEND PERMISSION DISTINCTION
+   Same permissions table, same group_permissions mechanism — one extra
+   column tells the two kinds apart (ui:* keys get 'frontend_only').
+-------------------------------------------------------------------------------
+
+ALTER TABLE permissions
+  ADD COLUMN enforcement_scope VARCHAR(20) NOT NULL DEFAULT 'backend'
+    CONSTRAINT chk_permissions_enforcement_scope
+    CHECK (enforcement_scope IN ('backend', 'frontend_only'));
+
+-- Optional, can be added later without blocking the rest of this migration.
+-- Lets the group-editing UI validate "you can't grant this UI permission
+-- without its required backend permission(s)" instead of relying on an
+-- admin remembering the dependency by hand.
+CREATE TABLE permission_dependencies (
+    permission_id           BIGINT NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+    requires_permission_id  BIGINT NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+    PRIMARY KEY (permission_id, requires_permission_id),
+    CONSTRAINT chk_permission_dependency_not_self CHECK (permission_id <> requires_permission_id)
+);
+
+-------------------------------------------------------------------------------
+3. REFRESH-TOKEN CONCURRENCY FIX (race condition on token rotation)
+   Two nullable columns on the existing user_sessions table. No new table.
+-------------------------------------------------------------------------------
+
+ALTER TABLE user_sessions
+  ADD COLUMN previous_refresh_token_hash TEXT NULL,
+  ADD COLUMN previous_token_grace_expires_at TIMESTAMPTZ NULL;
+
+-- No index needed on these two — they're only ever read together with the
+-- existing tenant_id/user_id/session_id lookup, which is already covered
+-- by user_sessions_session_id_key.
+
+-------------------------------------------------------------------------------
+NOT included here (data, not schema — separate step):
+  - INSERT rows for the ~209 permissions (131 ui:*, 78 backend) into `permissions`
+  - INSERT rows for the 16 groups into `groups`
+  - INSERT rows for group_permissions (each group's exact permission set)
+  - INSERT rows for role_groups (which of the 16 groups each role is eligible for)
+  - role_permissions is left in place, unmodified, as the rollback path
+    until user_groups/group_permissions are confirmed working in production
+===============================================================================
+
+
+CREATE INDEX idx_groups_tenant_id ON groups (tenant_id); (Ths optional)
+CREATE INDEX idx_group_permissions_group_id ON group_permissions (group_id);
+CREATE INDEX idx_group_permissions_permission_id ON group_permissions (permission_id);
+CREATE INDEX idx_user_groups_user_id ON user_groups (user_id);
+CREATE INDEX idx_user_groups_group_id ON user_groups (group_id);
+CREATE INDEX idx_role_groups_role_id ON role_groups (role_id);
+CREATE INDEX idx_role_groups_group_id ON role_groups (group_id);
