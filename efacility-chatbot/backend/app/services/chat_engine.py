@@ -1534,21 +1534,10 @@ class ChatEngine:
         if not form_data:
             return await self._build_when_where_card(session, db)
 
-        existing_context = await self._get_context(session.id, db)
-        merged_form_data = {
-            key: existing_context.get(key)
-            for key in ("booking_date", "site_id", "building_id", "floor_id")
-            if existing_context.get(key)
-        }
-        merged_form_data.update({key: value for key, value in form_data.items() if value not in (None, "")})
-        if merged_form_data != form_data:
-            logger.info(
-                "WhenWhere merged submitted form with context session_id=%s submitted_keys=%s merged_keys=%s",
-                session.id,
-                sorted(str(key) for key in form_data.keys()),
-                sorted(str(key) for key in merged_form_data.keys()),
-            )
-        form_data = merged_form_data
+        # Treat this submit as the user's current choice set.
+        # Do not backfill missing values from older booking context because that
+        # can silently reuse a stale floor/building and produce unrelated seats.
+        form_data = {key: value for key, value in form_data.items() if value not in (None, "")}
 
         booking_date_str = form_data.get("booking_date")
         site_id = self._safe_int(form_data.get("site_id"))

@@ -458,6 +458,74 @@ class FreeTextServiceTests(unittest.TestCase):
     def test_site_only_prompt_keeps_building_missing_when_multiple_exist(self):
         asyncio.run(self._assert_site_only_prompt_keeps_building_missing_when_multiple_exist())
 
+    async def test_when_where_does_not_backfill_missing_floor_from_context(self):
+        engine = ChatEngine()
+        session = SimpleNamespace(id="session-1")
+        existing_context = {
+            "booking_date": "2026-09-02",
+            "site_id": "8",
+            "building_id": "15",
+            "floor_id": "38",
+        }
+        submitted_form = {
+            "booking_date": "2026-09-02",
+            "site_id": "8",
+            "building_id": "15",
+            "floor_id": "",
+        }
+
+        with patch.object(engine, "_get_context", AsyncMock(return_value=existing_context)), patch.object(
+            engine,
+            "_build_when_where_card",
+            AsyncMock(return_value=ChatResponse(
+                session_id="session-1",
+                current_node=Node.BOOK_WHEN_WHERE,
+                state="BOOKING_WHEN_WHERE",
+                messages=[BotMessage(type=MessageType.FORM_CARD, form_card=None)],
+            )),
+        ) as build_card, patch.object(engine, "_update_node", AsyncMock()), patch.object(
+            engine,
+            "_build_duplicate_booking_response",
+            AsyncMock(return_value=None),
+        ), patch.object(engine, "_continue_to_available_seats", AsyncMock()) as continue_seats:
+            response = await engine._handle_when_where(session, "", submitted_form, db=object())
+
+        self.assertEqual(response.current_node, Node.BOOK_WHEN_WHERE)
+        self.assertEqual(response.messages[0].type, MessageType.ERROR)
+        self.assertIn("floor", response.messages[0].text.lower())
+        build_card.assert_awaited_once()
+        continue_seats.assert_not_awaited()
+
+    async def test_when_where_requires_floor_before_finding_seats(self):
+        engine = ChatEngine()
+        session = SimpleNamespace(id="session-1")
+        submitted_form = {
+            "booking_date": "2026-09-02",
+            "site_id": "8",
+            "building_id": "15",
+        }
+
+        with patch.object(engine, "_get_context", AsyncMock(return_value={})), patch.object(
+            engine,
+            "_build_when_where_card",
+            AsyncMock(side_effect=lambda *_args, **_kwargs: ChatResponse(
+                session_id="session-1",
+                current_node=Node.BOOK_WHEN_WHERE,
+                state="BOOKING_WHEN_WHERE",
+                messages=[],
+            )),
+        ), patch.object(engine, "_update_node", AsyncMock()), patch.object(
+            engine,
+            "_build_duplicate_booking_response",
+            AsyncMock(return_value=None),
+        ), patch.object(engine, "_continue_to_available_seats", AsyncMock()) as continue_seats:
+            response = await engine._handle_when_where(session, "", submitted_form, db=object())
+
+        self.assertEqual(response.current_node, Node.BOOK_WHEN_WHERE)
+        self.assertEqual(response.messages[0].type, MessageType.ERROR)
+        self.assertIn("floor", response.messages[0].text.lower())
+        continue_seats.assert_not_awaited()
+
     async def _assert_site_only_prompt_keeps_building_missing_when_multiple_exist(self):
         engine = ChatEngine()
         ctx = {"site_id": "8"}
