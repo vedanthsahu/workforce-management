@@ -367,7 +367,10 @@ class ChatEngine:
             return await self._start_quick_book_entry(session, db, booking_date_str=entities.get("booking_date"))
         if intent == Intent.BOOK_SEAT:
             telemetry_service.record_booking_event("booking_flow_started", source="free_text")
-            if session.current_node not in {
+            # A generic request such as "need a seat" starts a fresh booking.
+            # Do not let a date/location left by an abandoned flow trigger a
+            # duplicate-booking warning for a date the user did not mention.
+            if not entities or session.current_node not in {
                 Node.BOOK_WHEN_WHERE,
                 Node.BOOK_DETAILS,
                 Node.AVAILABLE_SEATS,
@@ -936,7 +939,19 @@ class ChatEngine:
             await self._update_node(session, Node.MY_BOOKINGS, "NAVIGATING", db)
             if booking_id:
                 return await self._build_booking_action_confirmation(session, "cancel", booking_id, db)
-            return await self._build_my_bookings(session, db)
+            selected_date = str(ctx.get("date_range_start") or ctx.get("booking_date") or "").strip()
+            if selected_date:
+                booking = await self._external_booking_for_date(selected_date)
+                if booking and booking.get("booking_id"):
+                    return await self._build_booking_action_confirmation(
+                        session, "cancel", str(booking["booking_id"]), db
+                    )
+            resp = await self._go_to_main_menu(session, db)
+            resp.messages.insert(0, BotMessage(
+                type=MessageType.ERROR,
+                text=(f"No booking found for {selected_date}." if selected_date else "I could not identify the booking to cancel."),
+            ))
+            return resp
 
         if navigation_service.is_main_menu_command(user_text):
             return await self._go_to_main_menu(session, db)
@@ -1735,14 +1750,14 @@ class ChatEngine:
             preferred_order = {seat_id: index for index, seat_id in enumerate(preferred_ids)}
             preferred_rows = [
                 seat for seat in available_rows
-                if self._safe_int(seat.get("seat_id")) in preferred_order
+                if self._backend_seat_id(seat) in preferred_order
             ]
             if preferred_rows:
-                preferred_rows.sort(key=lambda seat: preferred_order.get(self._safe_int(seat.get("seat_id")) or 0, 9999))
+                preferred_rows.sort(key=lambda seat: preferred_order.get(self._backend_seat_id(seat) or 0, 9999))
                 selected = preferred_rows[0]
-                selected_id = self._safe_int(selected.get("seat_id"))
+                selected_id = self._backend_seat_id(selected)
                 if selected_id:
-                    selected_code = selected.get("seat_code") or selected.get("code") or str(selected_id)
+                    selected_code = self._backend_seat_code(selected, selected_id)
                     await self._set_context_bulk(session.id, {
                         "selected_seat_ids": str(selected_id),
                         "seat_id": str(selected_id),
@@ -1773,14 +1788,14 @@ class ChatEngine:
 
         seat_cards = [
             SeatCard(
-                id=int(seat["seat_id"]),
-                seat_code=seat.get("seat_code") or seat.get("code") or str(seat["seat_id"]),
+                id=seat_id,
+                seat_code=self._backend_seat_code(seat, seat_id),
                 seat_type=seat.get("seat_type") or "STANDARD",
                 seat_neighborhood=seat.get("seat_neighborhood"),
                 amenities=seat.get("matched_amenities") or [],
             )
             for seat in candidate_rows
-            if str(seat.get("seat_id") or "").isdigit()
+            if (seat_id := self._backend_seat_id(seat)) is not None
         ]
         if not seat_cards:
             return None
@@ -1857,6 +1872,27 @@ class ChatEngine:
             return str(booking_date_str) in available_dates
 
         return True
+
+    @staticmethod
+    def _backend_seat_id(seat: Dict[str, Any]) -> Optional[int]:
+        nested = seat.get("seat") if isinstance(seat.get("seat"), dict) else {}
+        return ChatEngine._safe_int(
+            seat.get("seat_id") or seat.get("seatId") or seat.get("id") or nested.get("seat_id") or nested.get("id")
+        )
+
+    @staticmethod
+    def _backend_seat_code(seat: Dict[str, Any], seat_id: int) -> str:
+        nested = seat.get("seat") if isinstance(seat.get("seat"), dict) else {}
+        return str(
+            seat.get("seat_code")
+            or seat.get("seatCode")
+            or seat.get("code")
+            or seat.get("seat_name")
+            or nested.get("seat_code")
+            or nested.get("code")
+            or nested.get("seat_name")
+            or seat_id
+        )
 
     async def _handle_seat_selection(self, session, user_text, form_data, db):
         selected_ids = []
@@ -2335,6 +2371,7 @@ class ChatEngine:
         offset: int,
     ) -> Optional[ChatResponse]:
         page = (offset // page_size) + 1
+        prefetched_past = None
         if list_mode == "past":
             result = await seat_backend_api_service.my_past_bookings(page=page, limit=page_size)
         elif list_mode == "cancelled":
@@ -2349,7 +2386,7 @@ class ChatEngine:
                 # Warm the immutable past-booking view while the first upcoming
                 # page is loading. Both calls share the same request window, so
                 # opening the Past tab avoids another SSM/database round-trip.
-                result, _prefetched_past = await asyncio.gather(
+                result, prefetched_past = await asyncio.gather(
                     seat_backend_api_service.my_future_bookings(page=page, limit=page_size),
                     seat_backend_api_service.my_past_bookings(
                         page=1,
@@ -2366,6 +2403,16 @@ class ChatEngine:
 
         await self._update_node(session, Node.MY_BOOKINGS, "NAVIGATING", db)
         if not rows:
+            if (
+                list_mode == "upcoming"
+                and page == 1
+                and not action
+                and not ctx.get("date_range_start")
+                and not ctx.get("date_range_end")
+            ):
+                history = await self._build_booking_history_fallback(session, db, prefetched_past)
+                if history:
+                    return history
             session.current_menu_id = None
             await self._update_node(session, Node.MAIN_MENU, "NAVIGATING", db)
             menu_resp = await self._build_dynamic_menu(session, None, "", db)
@@ -2426,6 +2473,76 @@ class ChatEngine:
             text="",
             options=self._booking_list_options(list_mode, has_more, action, cards),
         ))
+        return ChatResponse(
+            session_id=str(session.id),
+            current_node=Node.MY_BOOKINGS,
+            state="NAVIGATING",
+            messages=messages,
+        )
+
+    async def _build_booking_history_fallback(
+        self,
+        session,
+        db: AsyncSession,
+        past_result: Optional[tuple[list[Dict[str, Any]], bool]],
+    ) -> Optional[ChatResponse]:
+        """Show recent past and cancelled bookings when upcoming is empty."""
+        cancelled_result = await seat_backend_api_service.my_cancelled_bookings(
+            page=1,
+            limit=self._past_bookings_page_size(),
+        )
+        past_rows = list((past_result or ([], False))[0])
+        cancelled_rows = list((cancelled_result or ([], False))[0])
+        cancelled_ids = {str(row.get("booking_id") or "") for row in cancelled_rows}
+        past_rows = [row for row in past_rows if str(row.get("booking_id") or "") not in cancelled_ids]
+        if not past_rows and not cancelled_rows:
+            return None
+
+        messages: list[BotMessage] = [BotMessage(
+            type=MessageType.TEXT,
+            text="You have no upcoming bookings. Here are your recent past and cancelled bookings.",
+        )]
+        summaries: Dict[str, Dict[str, str]] = {}
+        for mode, rows in (("past", past_rows), ("cancelled", cancelled_rows)):
+            if not rows:
+                continue
+            rows = sorted(rows, key=self._booking_row_sort_key, reverse=True)
+            cards = [
+                self._external_booking_card(row, show_actions=False, can_rebook=mode == "past")
+                for row in rows
+                if row.get("booking_id")
+            ]
+            if not cards:
+                continue
+            messages.append(BotMessage(
+                type=MessageType.BOOKING_LIST,
+                text=f"Recent {mode} bookings:",
+                booking_list=BookingListData(bookings=cards, total=len(cards), mode=mode),
+            ))
+            for row, card in zip((row for row in rows if row.get("booking_id")), cards):
+                summaries[card.booking_id] = {
+                    "booking_ref": card.booking_ref,
+                    "booking_date": card.booking_date,
+                    "site_id": str(row.get("site_id") or ""),
+                    "building_id": str(row.get("building_id") or ""),
+                    "floor_id": str(row.get("floor_id") or ""),
+                    "seat_id": str(row.get("seat_id") or ""),
+                    "seat_code": card.seat_code,
+                    "site_name": card.site_name,
+                    "building_name": card.building_name,
+                    "floor_name": card.floor_name,
+                    "status": card.status,
+                }
+        messages.append(BotMessage(
+            type=MessageType.OPTIONS,
+            text="",
+            options=[ChatOption(number=0, label="Main menu", value="0")],
+        ))
+        await self._set_context_bulk(session.id, {
+            "booking_list_source": "seat_backend_api",
+            "booking_list_summaries": json.dumps(summaries),
+            "booking_list_has_more": "false",
+        }, db)
         return ChatResponse(
             session_id=str(session.id),
             current_node=Node.MY_BOOKINGS,
