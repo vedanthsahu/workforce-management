@@ -437,18 +437,38 @@ export default function Chatbot() {
   }
 
   function setFieldValue(key: string, value: unknown) {
-    setActiveFormCard((current) => current ? { ...current, values: { ...current.values, [key]: value } } : current);
+    setActiveFormCard((current) => {
+      if (!current) return current;
+      const nextErrors = { ...current.errors };
+      delete nextErrors[key];
+      return { ...current, values: { ...current.values, [key]: value }, errors: nextErrors };
+    });
   }
 
   function onDropdownChange(field: FormField, value: string) {
     if (!activeFormCard) return;
     const nextValues = { ...activeFormCard.values, [field.key]: value };
     const nextDropdowns = { ...activeFormCard.dropdownOptions };
-    activeFormCard.card.fields.filter((candidate) => candidate.depends_on === field.key).forEach((dependent) => {
-      nextValues[dependent.key] = '';
-      nextDropdowns[dependent.key] = [];
+    const nextErrors = { ...activeFormCard.errors };
+    const fieldsToClear = new Set<string>();
+    const collectDependents = (parentKey: string) => {
+      activeFormCard.card.fields
+        .filter((candidate) => candidate.depends_on === parentKey)
+        .forEach((dependent) => {
+          if (fieldsToClear.has(dependent.key)) return;
+          fieldsToClear.add(dependent.key);
+          collectDependents(dependent.key);
+        });
+    };
+
+    collectDependents(field.key);
+    delete nextErrors[field.key];
+    fieldsToClear.forEach((dependentKey) => {
+      nextValues[dependentKey] = '';
+      nextDropdowns[dependentKey] = [];
+      delete nextErrors[dependentKey];
     });
-    setActiveFormCard({ ...activeFormCard, values: nextValues, dropdownOptions: nextDropdowns });
+    setActiveFormCard({ ...activeFormCard, values: nextValues, dropdownOptions: nextDropdowns, errors: nextErrors });
     setActiveDropdownKey(null);
 
     activeFormCard.card.fields.filter((candidate) => candidate.depends_on === field.key).forEach((dependent) => {
