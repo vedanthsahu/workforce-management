@@ -795,7 +795,7 @@ class QuickBookDefaultProfileTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, "single-booking-confirmation")
         confirmation.assert_awaited_once_with(session, "cancel", "booking-42", unittest.mock.ANY)
 
-    async def test_empty_upcoming_list_shows_recent_past_and_cancelled(self):
+    async def test_empty_upcoming_list_stays_on_upcoming_tab(self):
         engine = ChatEngine()
         session = SimpleNamespace(id="session-1", current_menu_id=1)
         past = {"booking_id": "past-1", "booking_date": "2026-08-01", "seat_code": "P-1"}
@@ -803,6 +803,8 @@ class QuickBookDefaultProfileTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(engine, "_update_node", AsyncMock()), patch.object(
             engine, "_set_context_bulk", AsyncMock()
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.my_current_bookings", AsyncMock(return_value=[])
         ), patch(
             "app.services.chat_engine.seat_backend_api_service.my_future_bookings", AsyncMock(return_value=([], False))
         ), patch(
@@ -815,9 +817,28 @@ class QuickBookDefaultProfileTests(unittest.IsolatedAsyncioTestCase):
                 show_actions=True, page_size=7, offset=0,
             )
 
-        self.assertIn("no upcoming bookings", response.messages[0].text.lower())
         lists = [message.booking_list for message in response.messages if message.booking_list]
-        self.assertEqual([item.mode for item in lists], ["past", "cancelled"])
+        self.assertEqual(len(lists), 1)
+        self.assertEqual(lists[0].mode, "upcoming")
+        self.assertEqual(lists[0].bookings, [])
+        self.assertIn("no upcoming bookings", response.messages[0].text.lower())
+
+    def test_upcoming_rows_include_today_and_future_without_duplicates(self):
+        today = date.today().isoformat()
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        current = [
+            {"booking_id": "today-1", "booking_date": today},
+            {"booking_id": "old-1", "booking_date": yesterday},
+        ]
+        future = [
+            {"booking_id": "today-1", "booking_date": today},
+            {"booking_id": "future-1", "booking_date": tomorrow},
+        ]
+
+        rows = ChatEngine._merge_upcoming_booking_rows(current, future)
+
+        self.assertEqual([row["booking_id"] for row in rows], ["today-1", "future-1"])
 
     def test_backend_seat_aliases_preserve_seat_code(self):
         nested = {"id": "114", "seat": {"seat_code": "BEG-ROX-F8-D-114"}}
@@ -1280,6 +1301,19 @@ class InputGuardServiceTests(unittest.TestCase):
         result = self.guard.check(normalize_message("book a window seat tomorrow"))
 
         self.assertIsNone(result)
+
+    def test_hotel_seat_booking_is_out_of_scope(self):
+        result = self.guard.check(normalize_message("book a seat at a hotel"))
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.category, "out_of_scope")
+
+    def test_travel_seat_booking_is_out_of_scope(self):
+        for prompt in ("reserve a train seat", "book a bus seat", "need a seat at the cinema"):
+            with self.subTest(prompt=prompt):
+                result = self.guard.check(normalize_message(prompt))
+                self.assertIsNotNone(result)
+                self.assertEqual(result.category, "out_of_scope")
 
     def test_clean_seat_prompt_is_out_of_scope(self):
         result = self.guard.check(normalize_message("i want to clean my seat"))

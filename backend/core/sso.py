@@ -9,17 +9,26 @@ from __future__ import annotations
 
 import logging
 import secrets
+import socket
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode
 
 import requests
+import urllib3.util.connection as urllib3_connection
 from jose import ExpiredSignatureError, JWTError, jwt
 
 from backend.core.app_logging import LOGGER_NAME
 from backend.core.config import get_settings
 
 logger = logging.getLogger(f"{LOGGER_NAME}.sso")
+
+# Some Windows development environments advertise IPv6 routes that cannot
+# reach Microsoft. urllib3 tries each of those routes before IPv4, which can
+# delay the OAuth code exchange until the short-lived code has expired.
+# Microsoft Graph and Entra ID both support IPv4, so prefer it for outbound
+# requests made by this backend process.
+urllib3_connection.allowed_gai_family = lambda: socket.AF_INET
 
 MICROSOFT_GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 MICROSOFT_TOKEN_BASE_URL = "https://login.microsoftonline.com"

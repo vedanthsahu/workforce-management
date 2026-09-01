@@ -52,6 +52,14 @@ function StatCard({ label, value, subLabel, icon, iconBg, accentBorder }: StatCa
   );
 }
 
+function EmptyBookingsCard({ message }: { message: string }) {
+  return (
+    <div className="bg-white border border-[#EBEBF5] rounded-2xl px-5 py-16 text-center text-gray-400 text-[13.5px]">
+      {message}
+    </div>
+  );
+}
+
 function BookingStatsCards({ summary, delegatedCount, showOnBehalf }: { summary: BookingSummary; delegatedCount: number; showOnBehalf: boolean }) {
   const teamInOffice = summary.teamInOffice ?? 0;
   return (
@@ -383,10 +391,6 @@ export default function MyBookingsPage() {
     filteredBookings.filter((b) => b.status !== "cancelled" && isUpcoming(b.date)),
     true,
   );
-  const pastCards = sortByDate(
-    filteredBookings.filter((b) => b.status !== "cancelled" && !isUpcoming(b.date)),
-    false,
-  );
   const sortedDisplayed = sortByDate(
     filteredBookings,
     activeTab !== "past" && activeTab !== "cancelled",
@@ -507,32 +511,14 @@ export default function MyBookingsPage() {
                         />
                       ))
                     ) : (
-                      <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
-                        No upcoming bookings found.
-                      </div>
-                    )}
-                    {pastCards.length > 0 && (
-                      <>
-                        <p className="text-[11px] font-semibold tracking-widest uppercase text-gray-400 mt-2">Past Bookings</p>
-                        {pastCards.map((booking) => (
-                          <BookingCard
-                            key={booking.id}
-                            booking={booking}
-                            onCancelClick={setCancelTarget}
-                            onModifyClick={handleModify}
-                            showActions={false}
-                          />
-                        ))}
-                      </>
+                      <EmptyBookingsCard message="No upcoming bookings." />
                     )}
                   </>
                 )}
 
                 {!isLoading && !error && activeTab !== "upcoming" && (
                   sortedDisplayed.length === 0 ? (
-                    <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
-                      No {activeTab} bookings found.
-                    </div>
+                    <EmptyBookingsCard message={`No ${activeTab} bookings.`} />
                   ) : (
                     sortedDisplayed.map((booking) => (
                       <BookingCard
@@ -565,9 +551,7 @@ export default function MyBookingsPage() {
                 {isLoading ? (
                   <MyBookingsSkeleton />
                 ) : filteredDelegated.length === 0 ? (
-                  <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
-                    No {bfsSubTab} delegated bookings found.
-                  </div>
+                  <EmptyBookingsCard message={`No ${bfsSubTab} delegated bookings.`} />
                 ) : (
                   filteredDelegated.map((booking) => (
                     <BookingCard

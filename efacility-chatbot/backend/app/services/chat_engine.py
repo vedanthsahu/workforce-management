@@ -2372,16 +2372,18 @@ class ChatEngine:
                     result = (self._cancelled_booking_rows(past_rows), past_has_more)
         else:
             if page == 1:
-                # Warm the immutable past-booking view while the first upcoming
-                # page is loading. Both calls share the same request window, so
-                # opening the Past tab avoids another SSM/database round-trip.
-                result, prefetched_past = await asyncio.gather(
+                current_rows, future_result = await asyncio.gather(
+                    seat_backend_api_service.my_current_bookings(),
                     seat_backend_api_service.my_future_bookings(page=page, limit=page_size),
-                    seat_backend_api_service.my_past_bookings(
-                        page=1,
-                        limit=self._past_bookings_page_size(),
-                    ),
                 )
+                if future_result is None and current_rows is None:
+                    result = None
+                else:
+                    future_rows, future_has_more = future_result or ([], False)
+                    result = (
+                        self._merge_upcoming_booking_rows(current_rows or [], future_rows),
+                        future_has_more,
+                    )
             else:
                 result = await seat_backend_api_service.my_future_bookings(page=page, limit=page_size)
         if result is None:
@@ -2475,53 +2477,17 @@ class ChatEngine:
         db: AsyncSession,
         past_result: Optional[tuple[list[Dict[str, Any]], bool]],
     ) -> Optional[ChatResponse]:
-        """Show recent past and cancelled bookings when upcoming is empty."""
-        cancelled_result = await seat_backend_api_service.my_cancelled_bookings(
-            page=1,
-            limit=self._past_bookings_page_size(),
-        )
-        past_rows = list((past_result or ([], False))[0])
-        cancelled_rows = list((cancelled_result or ([], False))[0])
-        cancelled_ids = {str(row.get("booking_id") or "") for row in cancelled_rows}
-        past_rows = [row for row in past_rows if str(row.get("booking_id") or "") not in cancelled_ids]
-        if not past_rows and not cancelled_rows:
-            return None
-
+        """Keep the empty state in the selected Upcoming tab."""
+        del past_result
         messages: list[BotMessage] = [BotMessage(
-            type=MessageType.TEXT,
-            text="You have no upcoming bookings. Here are your recent past and cancelled bookings.",
+            type=MessageType.BOOKING_LIST,
+            text="No upcoming bookings.",
+            booking_list=BookingListData(
+                bookings=[],
+                total=0,
+                mode="upcoming",
+            ),
         )]
-        summaries: Dict[str, Dict[str, str]] = {}
-        for mode, rows in (("past", past_rows), ("cancelled", cancelled_rows)):
-            if not rows:
-                continue
-            rows = sorted(rows, key=self._booking_row_sort_key, reverse=True)
-            cards = [
-                self._external_booking_card(row, show_actions=False, can_rebook=mode == "past")
-                for row in rows
-                if row.get("booking_id")
-            ]
-            if not cards:
-                continue
-            messages.append(BotMessage(
-                type=MessageType.BOOKING_LIST,
-                text=f"Recent {mode} bookings:",
-                booking_list=BookingListData(bookings=cards, total=len(cards), mode=mode),
-            ))
-            for row, card in zip((row for row in rows if row.get("booking_id")), cards):
-                summaries[card.booking_id] = {
-                    "booking_ref": card.booking_ref,
-                    "booking_date": card.booking_date,
-                    "site_id": str(row.get("site_id") or ""),
-                    "building_id": str(row.get("building_id") or ""),
-                    "floor_id": str(row.get("floor_id") or ""),
-                    "seat_id": str(row.get("seat_id") or ""),
-                    "seat_code": card.seat_code,
-                    "site_name": card.site_name,
-                    "building_name": card.building_name,
-                    "floor_name": card.floor_name,
-                    "status": card.status,
-                }
         messages.append(BotMessage(
             type=MessageType.OPTIONS,
             text="",
@@ -2529,7 +2495,7 @@ class ChatEngine:
         ))
         await self._set_context_bulk(session.id, {
             "booking_list_source": "seat_backend_api",
-            "booking_list_summaries": json.dumps(summaries),
+            "booking_list_summaries": "{}",
             "booking_list_has_more": "false",
         }, db)
         return ChatResponse(
@@ -2538,6 +2504,31 @@ class ChatEngine:
             state="NAVIGATING",
             messages=messages,
         )
+
+    @staticmethod
+    def _merge_upcoming_booking_rows(
+        current_rows: list[Dict[str, Any]],
+        future_rows: list[Dict[str, Any]],
+    ) -> list[Dict[str, Any]]:
+        """Combine today's and future bookings without duplicate cards."""
+        today = date.today().isoformat()
+        merged: list[Dict[str, Any]] = []
+        seen: set[str] = set()
+        for row in [*current_rows, *future_rows]:
+            booking_date = ChatEngine._normalize_booking_date(row.get("booking_date"))
+            if not booking_date or booking_date < today:
+                continue
+            identity = str(row.get("booking_id") or row.get("booking_ref") or "").strip()
+            if not identity:
+                identity = "|".join((
+                    booking_date,
+                    str(row.get("seat_id") or row.get("seat_code") or ""),
+                ))
+            if identity in seen:
+                continue
+            seen.add(identity)
+            merged.append(row)
+        return merged
 
     @staticmethod
     def _external_booking_card(row: Dict[str, Any], *, show_actions: bool, can_rebook: bool = False) -> BookingCard:
