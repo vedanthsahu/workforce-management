@@ -17,7 +17,10 @@ class InputGuardService:
         re.IGNORECASE,
     )
     out_of_scope_pattern = re.compile(
-        r"\b(weather|pizza|lunch|dinner|restaurant|movie|flight|salary|payroll|password|joke)\b",
+        r"\b("
+        r"weather|pizza|lunch|dinner|restaurant|hotel|hostel|resort|motel|"
+        r"movie|cinema|theatre|theater|flight|train|bus|salary|payroll|password|joke"
+        r")\b",
         re.IGNORECASE,
     )
     facility_service_pattern = re.compile(
