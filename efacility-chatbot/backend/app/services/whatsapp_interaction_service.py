@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.chatbot import ChatbotSessionContext
+from app.models.chatbot import ChatbotSession
 from app.schemas.chat import ChatResponse, FormCard, FormField, SeatList, UserMessage
 from app.services.chat_adapter_service import chat_adapter_service
 from app.services.memory_service import memory_service
@@ -628,24 +628,14 @@ class WhatsAppInteractionService:
             return
         try:
             session_uuid = uuid.UUID(str(session_id))
-            result = await db.execute(
-                select(ChatbotSessionContext).where(
-                    ChatbotSessionContext.session_id == session_uuid,
-                    ChatbotSessionContext.context_key == key,
-                )
-            )
-            row = result.scalar_one_or_none()
-            if row:
-                row.context_value = value_text
-                row.updated_at = datetime.now(timezone.utc)
-            else:
-                db.add(
-                    ChatbotSessionContext(
-                        session_id=session_uuid,
-                        context_key=str(key),
-                        context_value=value_text,
-                    )
-                )
+            result = await db.execute(select(ChatbotSession).where(ChatbotSession.id == session_uuid))
+            session = result.scalar_one_or_none()
+            if session is None:
+                return
+            context = dict(session.context_data or {})
+            context[str(key)] = value_text
+            session.context_data = context
+            session.updated_at = datetime.now(timezone.utc)
             await db.commit()
         except Exception as exc:
             logger.warning(

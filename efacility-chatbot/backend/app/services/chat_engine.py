@@ -3,7 +3,7 @@ Deterministic Chat Engine for eFACiLiTY Seat Booking.
 
 No AI / LLM involved. Pure rule-based state machine.
 Each node knows exactly what input to expect and where to go next.
-Menus are loaded from the chatbot_menu_items DB table (managed by DB team).
+Menus are defined in the chatbot menu service to avoid a database lookup table.
 """
 from __future__ import annotations
 import asyncio
@@ -15,7 +15,7 @@ from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.models.chatbot import ChatbotSession, ChatbotSessionContext
+from app.models.chatbot import ChatbotSession
 from app.schemas.chat import (
     ChatResponse, BotMessage, MessageType, ChatOption,
     FormCard, FormField, SeatList, SeatCard,
@@ -3243,31 +3243,21 @@ class ChatEngine:
         cached = await memory_service.get_context(session_id)
         if cached is not None:
             return cached
-        result = await db.execute(
-            select(ChatbotSessionContext).where(ChatbotSessionContext.session_id == session_id)
-        )
-        context = {row.context_key: row.context_value for row in result.scalars().all()}
+        result = await db.execute(select(ChatbotSession).where(ChatbotSession.id == session_id))
+        session = result.scalar_one_or_none()
+        context = dict(session.context_data or {}) if session else {}
         await memory_service.set_context(session_id, context)
         return context
 
     async def _set_context_bulk(self, session_id, kv: Dict[str, str], db: AsyncSession):
-        for key, value in kv.items():
-            existing = await db.execute(
-                select(ChatbotSessionContext).where(
-                    ChatbotSessionContext.session_id == session_id,
-                    ChatbotSessionContext.context_key == key,
-                )
-            )
-            row = existing.scalar_one_or_none()
-            if row:
-                row.context_value = value
-                row.updated_at = datetime.now(timezone.utc)
-            else:
-                db.add(ChatbotSessionContext(
-                    session_id=session_id,
-                    context_key=key,
-                    context_value=value,
-                ))
+        result = await db.execute(select(ChatbotSession).where(ChatbotSession.id == session_id))
+        session = result.scalar_one_or_none()
+        if session is None:
+            return
+        context = dict(session.context_data or {})
+        context.update(kv)
+        session.context_data = context
+        session.updated_at = datetime.now(timezone.utc)
         await db.commit()
         await memory_service.merge_context(session_id, kv)
 

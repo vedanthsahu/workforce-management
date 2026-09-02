@@ -1,11 +1,9 @@
 import re
 from dataclasses import dataclass
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.chatbot import ChatbotUserIdentityMap
 
 
 @dataclass(frozen=True)
@@ -30,12 +28,7 @@ class UserIdentityService:
         return self._resolve_from_mapping(normalized_wa_id, wa_id, self._whatsapp_mappings())
 
     async def resolve_whatsapp_user_async(self, wa_id: str, db: AsyncSession) -> ResolvedUserIdentity:
-        normalized_wa_id = self.normalize_phone(wa_id)
-        db_mappings = await self._whatsapp_db_mappings(db)
-        if db_mappings:
-            resolved = self._resolve_from_mapping(normalized_wa_id, wa_id, db_mappings)
-            if resolved.matched:
-                return resolved
+        del db
         return self.resolve_whatsapp_user(wa_id)
 
     @staticmethod
@@ -92,20 +85,5 @@ class UserIdentityService:
             phone_key=normalized_wa_id or original_wa_id,
             matched=False,
         )
-
-    async def _whatsapp_db_mappings(self, db: AsyncSession) -> dict[str, tuple[str, str, str]]:
-        result = await db.execute(
-            select(ChatbotUserIdentityMap).where(
-                ChatbotUserIdentityMap.tenant_id == settings.DEFAULT_TENANT_ID,
-                ChatbotUserIdentityMap.channel == "whatsapp",
-                ChatbotUserIdentityMap.is_active.is_(True),
-            )
-        )
-        return {
-            row.external_id: (str(row.user_id or ""), str(row.tenant_id), row.user_name)
-            for row in result.scalars().all()
-            if row.external_id and row.user_id and row.user_name
-        }
-
 
 user_identity_service = UserIdentityService()

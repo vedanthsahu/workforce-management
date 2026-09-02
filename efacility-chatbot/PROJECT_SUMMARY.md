@@ -49,7 +49,7 @@ The chatbot is intentionally non-LLM. It uses rules, fuzzy matching, normalizati
 | Date-scoped actions | `cancel my booking today` filters bookings to that date |
 | Booking action confirmation | Cancel/Modify always asks confirmation before changing records |
 | Current-day action protection | Today/current ongoing bookings cannot be modified or cancelled; user receives a clear notification |
-| DB-driven menus | Main menu and dynamic menus are loaded from `chatbot_menu_items` |
+| Code-defined menus | The compact main menu is served without a database lookup table |
 | WhatsApp interactivity | Uses native WhatsApp buttons/lists where possible, with optional WhatsApp Flow forms |
 | WhatsApp building labels | Building list rows use short titles plus full-name descriptions to avoid WhatsApp title truncation |
 | WhatsApp message dedupe | Incoming WhatsApp message ids are stored to suppress duplicate webhook deliveries |
@@ -207,7 +207,7 @@ efacility-chatbot/
 | `request_id.py` | Adds `X-Request-ID` response headers and request timing logs |
 | `conversation_log_service.py` | Best-effort Elasticsearch indexing |
 | `telemetry_service.py` | Intent, fallback, menu usage, booking conversion, and latency metrics |
-| `menu_service.py` | DB-driven menu loading and caching |
+| `menu_service.py` | Code-defined menu navigation |
 | `navigation_service.py` | Global navigation command detection |
 | `user_identity_service.py` | Maps WhatsApp phone numbers to app user identities using DB mappings first, then `.env` fallback |
 | `whatsapp_service.py` | WhatsApp payload parsing and Meta Cloud API sends |
@@ -357,18 +357,15 @@ Sites, buildings, floors, seats, amenities, availability, and bookings are not s
 | Table | Purpose |
 |-------|---------|
 | `chatbot_sessions` | Session metadata, user name, node, state, expiry |
-| `chatbot_session_context` | Key/value context for in-progress flows |
+| `chatbot_sessions.context_data` | JSONB context for in-progress flows |
 | `chatbot_messages` | Durable inbound/outbound chat messages |
-| `chatbot_menu_items` | Menu tree and target node configuration |
-| `chatbot_intent_examples` | Optional intent examples and embeddings |
-| `chatbot_user_identity_map` | Channel identity mapping, currently used for WhatsApp phone-to-user resolution |
 
 Important database notes:
 
 - Past and upcoming bookings are fetched from the backend API.
 - Booking action context uses keys like `booking_action`, `booking_list_ids`, `date_range_start`, and `date_range_end`.
 - Menu presets support runtime tokens such as `__TODAY__` and `__TOMORROW__`.
-- Alembic is present for versioned DB changes; the first migration adds `chatbot_user_identity_map`.
+- Alembic is present for versioned DB changes; the latest migration consolidates chatbot storage to sessions and messages.
 
 ---
 
@@ -592,9 +589,9 @@ Recent successful checks:
 | Persistent telemetry | Move telemetry from process memory to Postgres, Prometheus, OpenTelemetry, or Elasticsearch |
 | Admin security | Replace shared admin token with role-based authentication/authorization |
 | WhatsApp flows | Finalize and publish Meta WhatsApp Flow definitions for richer form-like booking UX |
-| User identity | Add an admin UI or import process for `chatbot_user_identity_map` |
+| User identity | Manage WhatsApp identity mappings through deployment configuration |
 | Observability | Propagate request ids across WhatsApp, API logs, and ELK conversation events |
 | Test coverage | Add end-to-end tests for full browser and WhatsApp booking journeys |
-| Intent examples | Keep expanding `chatbot_intent_examples` and synonym dictionaries from real missed prompts |
+| Intent coverage | Keep expanding rule patterns and synonym dictionaries from real missed prompts |
 | Plugin architecture | Convert placeholder plugin registry entries into executable plugin contracts |
 | Production deployment | Add HTTPS, secrets management, and environment-specific config files |
