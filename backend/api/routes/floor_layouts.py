@@ -52,7 +52,7 @@ def create_floor_layout_route(
 
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_permission("layout:upload")),
+        Depends(require_permission("layout:create")),
     ],
 
     conn: Annotated[PGConnection, Depends(get_db)],
@@ -113,7 +113,7 @@ def list_floor_layouts_route(
 
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_permission("layout:upload")),
+        Depends(require_permission("layout:view")),
     ],
 
     conn: Annotated[PGConnection, Depends(get_db)],
@@ -160,7 +160,7 @@ def delete_floor_layout_route(
 
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_permission("layout:publish")),
+        Depends(require_permission("layout:delete")),
     ],
 
     conn: Annotated[PGConnection, Depends(get_db)],
@@ -184,7 +184,7 @@ def get_floor_layout_seats_route(
 
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_permission("layout:upload")),
+        Depends(require_permission("layout:view")),
     ],
 
     conn: Annotated[

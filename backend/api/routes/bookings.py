@@ -13,7 +13,7 @@ from fastapi import (
 )
 from psycopg2.extensions import connection as PGConnection
 
-from backend.api.deps import get_current_user
+from backend.api.deps import get_current_user, require_permission
 from backend.db.connection import get_db
 from backend.schemas.booking import (
     BookingEligibilityRequest,
@@ -59,7 +59,7 @@ def create_booking(
 
 @router.get("/me/past", response_model=list[BookingResponse] | PaginatedBookingResponse)
 def fetch_my_past_bookings(
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("booking:view_own"))],
     conn: Annotated[PGConnection, Depends(get_db)],
     page: Annotated[int | None, Query(ge=1)] = None,
     limit: Annotated[int | None, Query(ge=1, le=100)] = None,
@@ -78,7 +78,7 @@ def fetch_my_past_bookings(
 
 @router.get("/me/current", response_model=list[BookingResponse])
 def fetch_my_current_bookings(
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("booking:view_own"))],
     conn: Annotated[PGConnection, Depends(get_db)],
     seat_id: Annotated[int | None, Query(gt=0)] = None,
     booking_date: Annotated[date | None, Query()] = None,
@@ -93,7 +93,7 @@ def fetch_my_current_bookings(
 
 @router.get("/me/cancelled", response_model=list[BookingResponse] | PaginatedBookingResponse)
 def fetch_my_cancelled_bookings(
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("booking:view_own"))],
     conn: Annotated[PGConnection, Depends(get_db)],
     page: Annotated[int | None, Query(ge=1)] = None,
     limit: Annotated[int | None, Query(ge=1, le=100)] = None,
@@ -112,7 +112,7 @@ def fetch_my_cancelled_bookings(
 
 @router.get("/me/future", response_model=list[BookingResponse] | PaginatedBookingResponse)
 def fetch_my_future_bookings(
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("booking:view_own"))],
     conn: Annotated[PGConnection, Depends(get_db)],
     page: Annotated[int | None, Query(ge=1)] = None,
     limit: Annotated[int | None, Query(ge=1, le=100)] = None,
@@ -167,7 +167,7 @@ def booking_eligibility(
     payload: BookingEligibilityRequest,
     current_user: Annotated[
     dict[str, Any],
-    Depends(get_current_user),
+    Depends(require_permission("booking:eligibility_check")),
     ],
     conn: Annotated[
     PGConnection,

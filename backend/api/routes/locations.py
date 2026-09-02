@@ -15,7 +15,7 @@ from fastapi import (
 )
 from psycopg2.extensions import connection as PGConnection
 
-from backend.api.deps import get_current_user, require_any_permission
+from backend.api.deps import get_current_user, require_permission
 from backend.db.connection import get_db
 from backend.schemas.booking import AvailableSeatListResponse
 from backend.schemas.location import (
@@ -63,7 +63,7 @@ router = APIRouter(tags=["locations"])
 def sites(
     current_user: Annotated[
         dict[str, Any],
-        Depends(get_current_user),
+        Depends(require_permission("office:view")),
     ],
     conn: Annotated[
         PGConnection,
@@ -95,7 +95,7 @@ def create_site_route(
     payload: CreateSiteRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_any_permission(["location:manage"])),
+        Depends(require_permission("office:create")),
     ],
     conn: Annotated[
         PGConnection,
@@ -108,7 +108,7 @@ def site_details(
     site_id: Annotated[int, Path(gt=0)],
     current_user: Annotated[
         dict[str, Any],
-        Depends(get_current_user),
+        Depends(require_permission("office:view")),
     ],
     conn: Annotated[
         PGConnection,
@@ -128,7 +128,7 @@ def update_site_route(
     payload: UpdateSiteRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_any_permission(["location:manage"])),
+        Depends(require_permission("office:update")),
     ],
     conn: Annotated[
         PGConnection,
@@ -142,7 +142,7 @@ def update_site_route(
 def buildings(
     current_user: Annotated[
         dict[str, Any],
-        Depends(get_current_user),
+        Depends(require_permission("building:view")),
     ],
     conn: Annotated[
         PGConnection,
@@ -174,7 +174,7 @@ def create_building_route(
     payload: CreateBuildingRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_any_permission(["location:manage"])),
+        Depends(require_permission("building:create")),
     ],
     conn: Annotated[
         PGConnection,
@@ -190,7 +190,7 @@ def update_building_route(
     payload: UpdateBuildingRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_any_permission(["location:manage"])),
+        Depends(require_permission("building:update")),
     ],
     conn: Annotated[
         PGConnection,
@@ -209,7 +209,7 @@ def floors_by_building(
 
     current_user: Annotated[
         dict[str, Any],
-        Depends(get_current_user),
+        Depends(require_permission("floor:view")),
     ],
 
     conn: Annotated[
@@ -243,7 +243,7 @@ def floors_by_office(
 
     current_user: Annotated[
         dict[str, Any],
-        Depends(get_current_user),
+        Depends(require_permission("floor:view")),
     ],
 
     conn: Annotated[
@@ -276,7 +276,7 @@ def create_floor_route(
     payload: CreateFloorRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_any_permission(["location:manage"])),
+        Depends(require_permission("floor:create")),
     ],
     conn: Annotated[
         PGConnection,
@@ -292,7 +292,7 @@ def update_floor_route(
     payload: UpdateFloorRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_any_permission(["location:manage"])),
+        Depends(require_permission("floor:update")),
     ],
     conn: Annotated[
         PGConnection,
@@ -311,7 +311,7 @@ def update_seat_configuration_route(
     payload: SeatConfigurationUpdateRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_any_permission(["location:manage", "layout:upload"])),
+        Depends(require_permission("layout_seat:update")),
     ],
     conn: Annotated[
         PGConnection,
@@ -329,7 +329,7 @@ def update_seats_bulk_configuration_route(
     payload: BulkSeatConfigurationUpdateRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_any_permission(["location:manage", "layout:upload"])),
+        Depends(require_permission("layout_seat:bulk_update")),
     ],
     conn: Annotated[
         PGConnection,
@@ -462,7 +462,7 @@ def update_layout_seat_configuration_route(
 
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_any_permission(["location:manage", "layout:upload"])),
+        Depends(require_permission("layout_seat:update")),
     ],
 
     conn: Annotated[
@@ -489,7 +489,7 @@ def update_layout_seats_bulk_configuration_route(
     payload: BulkLayoutSeatConfigurationUpdateRequest,
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_any_permission(["location:manage", "layout:upload"])),
+        Depends(require_permission("layout_seat:bulk_update")),
     ],
     conn: Annotated[
         PGConnection,

@@ -7,7 +7,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Path, Query, status
 from psycopg2.extensions import connection as PGConnection
 
-from backend.api.deps import get_current_user
+from backend.api.deps import require_permission
 from backend.db.connection import get_db
 from backend.schemas.guest import (
     CreateGuestRequest,
@@ -31,7 +31,7 @@ router = APIRouter(prefix="/guests", tags=["guests"])
 
 @router.get("", response_model=list[GuestResponse])
 def search_guest_records(
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("guest:view"))],
     conn: Annotated[PGConnection, Depends(get_db)],
     q: Annotated[str, Query(min_length=1)],
     include_inactive: bool = Query(False),
@@ -53,7 +53,7 @@ def search_guest_records(
 )
 def create_guest_record(
     payload: CreateGuestRequest,
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("guest:create"))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> GuestResponse:
     return create_guest_profile(
@@ -66,7 +66,7 @@ def create_guest_record(
 @router.get("/{guest_id}", response_model=GuestResponse)
 def fetch_guest_record(
     guest_id: Annotated[int, Path(gt=0)],
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("guest:view"))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> GuestResponse:
     return get_guest_profile(
@@ -80,7 +80,7 @@ def fetch_guest_record(
 def update_guest_record(
     guest_id: Annotated[int, Path(gt=0)],
     payload: UpdateGuestRequest,
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("guest:update"))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> GuestResponse:
     return update_guest_profile(
@@ -95,7 +95,7 @@ def update_guest_record(
 def update_guest_status_record(
     guest_id: Annotated[int, Path(gt=0)],
     payload: UpdateGuestStatusRequest,
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("guest:terminate"))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> GuestResponse:
     return update_guest_status(
@@ -109,7 +109,7 @@ def update_guest_status_record(
 @router.get("/{guest_id}/visits", response_model=GuestVisitHistoryResponse)
 def fetch_guest_visit_history_record(
     guest_id: Annotated[int, Path(gt=0)],
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("guest_visit:view"))],
     conn: Annotated[PGConnection, Depends(get_db)],
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
