@@ -738,6 +738,7 @@ export default function Chatbot() {
       const displayedMode = message.booking_list.mode || bookingListMode(message.text);
       const mode = bookingTabLoading || displayedMode;
       const total = message.booking_list.total || message.booking_list.bookings.length;
+      const isEmpty = message.booking_list.bookings.length === 0;
       return (
         <div className={`booking-board ${bookingTabLoading ? 'is-tab-loading' : ''}`}>
           <div className="booking-tabs">
@@ -757,7 +758,14 @@ export default function Chatbot() {
               Loading {bookingTabLabel(bookingTabLoading)}...
             </div>
           ) : null}
-          {message.text ? <p className="booking-list-header">{message.text}</p> : null}
+          {message.text && !isEmpty ? <p className="booking-list-header">{message.text}</p> : null}
+          {isEmpty && !bookingTabLoading ? (
+            <div className="booking-empty-state" role="status">
+              <span className="booking-empty-icon"><CalendarMenuIcon /></span>
+              <strong>{message.text || `No ${bookingTabLabel(displayedMode)} found.`}</strong>
+              <span>Select another tab to view your booking history.</span>
+            </div>
+          ) : null}
           <div className={`booking-list ${bookingTabLoading && bookingTabLoading !== displayedMode ? 'booking-list-dimmed' : ''}`}>
             {message.booking_list.bookings.map((booking) => {
               const isPastBooking = displayedMode === 'past';
