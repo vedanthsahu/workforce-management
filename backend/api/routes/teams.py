@@ -3,7 +3,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Query
 from psycopg2.extensions import connection as PGConnection
 
-from backend.api.deps import get_current_user
+from backend.api.deps import require_permission
 from backend.db.connection import get_db
 from backend.schemas.user_management import UserSearchResponse
 from backend.services.team_service import get_my_team_overview, search_my_team_members
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/teams", tags=["teams"])
 
 @router.get("/me")
 def get_my_team(
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("team:view"))],
     conn: Annotated[PGConnection, Depends(get_db)],
     user_id: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -32,7 +32,7 @@ def get_my_team(
 
 @router.get("/members/search", response_model=list[UserSearchResponse])
 def search_team_members_route(
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("teammate:view"))],
     conn: Annotated[PGConnection, Depends(get_db)],
     q: str = Query(..., min_length=1),
     limit: int = Query(20, ge=1, le=100),

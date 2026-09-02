@@ -5,7 +5,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from psycopg2.extensions import connection as PGConnection
 
-from backend.api.deps import get_current_user, require_any_permission
+from backend.api.deps import get_current_user, require_permission
 from backend.core.audit_actions import (
     AMENITY_CATEGORY_CREATED,
     AMENITY_CATEGORY_UPDATED,
@@ -79,7 +79,7 @@ def update_my_preferences_route(
 
 @router.get("/amenities", response_model=AmenityListResponse)
 def amenities(
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("amenity:view"))],
     conn: Annotated[PGConnection, Depends(get_db)],
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
@@ -101,7 +101,7 @@ def amenities(
     response_model=AmenityCategoryListResponse,
 )
 def amenity_categories(
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("amenity_category:view"))],
     conn: Annotated[PGConnection, Depends(get_db)],
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
@@ -124,7 +124,7 @@ def amenity_categories(
 )
 def amenity_category(
     category_id: Annotated[int, Path(gt=0)],
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("amenity_category:view"))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AmenityCategoryResponse:
     return get_amenity_category(
@@ -141,7 +141,7 @@ def amenity_category(
 )
 def create_amenity_category_route(
     payload: CreateAmenityCategoryRequest,
-    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("amenity_category:create"))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AmenityCategoryResponse:
     tenant_id = str(current_user["tenant_id"])
@@ -171,7 +171,7 @@ def create_amenity_category_route(
 def update_amenity_category_route(
     category_id: Annotated[int, Path(gt=0)],
     payload: UpdateAmenityCategoryRequest,
-    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("amenity_category:update"))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AmenityCategoryResponse:
     sent = payload.model_dump(exclude_unset=True)
@@ -196,7 +196,7 @@ def update_amenity_category_route(
 )
 def create_amenity_route(
     payload: CreateAmenityRequest,
-    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("amenity:create"))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AdminAmenityResponse:
     tenant_id = str(current_user["tenant_id"])
@@ -222,7 +222,7 @@ def create_amenity_route(
 @router.get("/amenities/{amenity_id}", response_model=AdminAmenityResponse)
 def amenity_detail(
     amenity_id: Annotated[int, Path(gt=0)],
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("amenity:view"))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AdminAmenityResponse:
     return get_amenity(
@@ -236,7 +236,7 @@ def amenity_detail(
 def update_amenity_route(
     amenity_id: Annotated[int, Path(gt=0)],
     payload: UpdateAmenityRequest,
-    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
+    current_user: Annotated[dict[str, Any], Depends(require_permission("amenity:update"))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AdminAmenityResponse:
     sent = payload.model_dump(exclude_unset=True)

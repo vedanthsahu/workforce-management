@@ -31,7 +31,7 @@ from backend.core.sso import (
     fetch_graph_users_with_department,
 )
 from backend.repositories.audit_repository import safe_write_audit_log
-from backend.repositories.permission_repository import fetch_permissions_for_role
+from backend.repositories.permission_repository import fetch_permissions_for_user
 from backend.repositories.token_repository import (
     create_user_session,
     fetch_active_session,
@@ -334,18 +334,24 @@ def attach_permissions_to_user(
     conn: PGConnection,
     user: dict[str, Any],
 ) -> dict[str, Any]:
-    """Attach tenant-scoped database permissions to a loaded user record."""
+    """Attach tenant-scoped database permissions to a loaded user record.
+
+    Resolved via the user's assigned groups (user_groups -> group_permissions),
+    not their role -- role_permissions is no longer read here. It stays in
+    the database as the rollback reference; the deployed previous version of
+    this service is the actual rollback path if needed.
+    """
     role_name = normalize_role_name(user.get("role_name") or user.get("role"))
 
     user["role_name"] = role_name
     user["role"] = role_name
     user["permissions"] = (
-        fetch_permissions_for_role(
+        fetch_permissions_for_user(
             conn,
             tenant_id=str(user["tenant_id"]),
-            role_name=role_name,
+            user_id=str(user["user_id"]),
         )
-        if role_name
+        if user.get("user_id")
         else []
     )
 
