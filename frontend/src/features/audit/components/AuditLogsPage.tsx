@@ -5,6 +5,7 @@ import AuditLogFilters from "./AuditLogFilters";
 import AuditStatCards from "./AuditStatCards";
 import AuditLogsTable from "./AuditLogsTable";
 import AuditLogDetailSheet from "./AuditLogDetailSheet";
+import { AuditLogsSkeleton } from "./AuditLogsSkeleton";
 import AmenitiesPagination from "@/features/amenities/components/AmenitiesPagination";
 import { useAuditLogs } from "../hooks/useAuditLogs";
 import { auditService } from "../services/audit.service";
@@ -79,6 +80,15 @@ export default function AuditLogsPage() {
     setDetail(null);
     setDetailError(false);
   };
+
+  // Full-page skeleton only for the very first fetch (auto-search on mount
+  // with today's default filters) -- later re-fetches (page change, new
+  // search) keep the filters bar interactive and just show the lighter
+  // inline loading state in the table body below, same split as
+  // AdminBookingsPage/AdminBookingsSkeleton.
+  if (loading && !response) {
+    return <AuditLogsSkeleton />;
+  }
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc]">

@@ -94,9 +94,6 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
                       <UserRowMenu
                         onChangeRole={() => onChangeRole(user)}
                         openUpward={isLastRow}
-                        disabledReason={
-                          user.currentRole === "TENANT_ADMIN" ? "Admin role not able to change" : null
-                        }
                       />
                     </div>
                   </td>

@@ -1,6 +1,7 @@
 "use client";
 
-import { Globe, Monitor } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Globe, GripVertical, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
@@ -35,10 +36,76 @@ function InfoField({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
+// Matches the old sm:max-w-md cap this panel used before it became
+// resizable, so the default look is unchanged.
+const DEFAULT_PANEL_WIDTH = 448;
+const MIN_PANEL_WIDTH = 320;
+
 export default function AuditLogDetailSheet({ open, log, loading, error, onOpenChange }: Props) {
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
+  const dragState = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  // Each open starts fresh at the default width -- a resize during one
+  // viewing shouldn't carry over to the next row's details.
+  useEffect(() => {
+    if (open) setPanelWidth(DEFAULT_PANEL_WIDTH);
+  }, [open]);
+
+  // Dragging the handle on the panel's left edge resizes it -- it opens
+  // from the right, so moving the pointer left (clientX decreasing) should
+  // widen it. Capped at half the viewport (per design ask: "left till
+  // center of the page") so it can never swallow the whole page.
+  const handleDragStart = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      dragState.current = { startX: e.clientX, startWidth: panelWidth };
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        if (!dragState.current) return;
+        const delta = dragState.current.startX - moveEvent.clientX;
+        const maxWidth = window.innerWidth * 0.5;
+        const next = Math.min(maxWidth, Math.max(MIN_PANEL_WIDTH, dragState.current.startWidth + delta));
+        setPanelWidth(next);
+      };
+
+      const handlePointerUp = () => {
+        dragState.current = null;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+      };
+
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp);
+    },
+    [panelWidth]
+  );
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0">
+      <SheetContent
+        side="right"
+        className="w-full flex flex-col p-0"
+        style={{ width: `${panelWidth}px`, maxWidth: "100vw" }}
+      >
+        {/* Drag handle -- left edge, full height. maxWidth:100vw above
+           keeps a drag-resized width from overflowing a narrow viewport. */}
+        <div
+          onPointerDown={handleDragStart}
+          onDoubleClick={() => setPanelWidth(DEFAULT_PANEL_WIDTH)}
+          title="Drag to resize, double-click to reset"
+          className="absolute left-0 top-0 bottom-0 w-2.5 -translate-x-1/2 cursor-col-resize group flex items-center justify-center z-10"
+        >
+          <div className="w-px h-full bg-transparent group-hover:bg-indigo-300 transition-colors" />
+          <GripVertical
+            size={14}
+            className="absolute text-gray-300 group-hover:text-indigo-500 bg-white rounded-sm border border-gray-200 opacity-0 group-hover:opacity-100 transition-opacity"
+          />
+        </div>
+
         {loading && (
           <div className="flex-1 flex items-center justify-center px-5 py-5">
             <p className="text-sm text-gray-400">Loading event details…</p>

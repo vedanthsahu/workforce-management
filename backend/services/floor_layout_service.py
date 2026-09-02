@@ -39,12 +39,17 @@ from backend.repositories.layout_seat_mapping_repository import (
     bulk_insert_layout_seat_mappings,
 )
 
-# Floors currently enrolled in the age-based list-visibility rule (see
-# get_floor_layouts_by_floor). Pilot: Roxana Towers / 7th Floor, Hyderabad
-# Begumpet Office (tenant_id=3, floor_id=9 -- confirmed against the dev DB).
-# Extending the rollout later is just adding more floor_ids here (or
-# swapping this for "all floors") — no DB change either way.
+# Floors enrolled in the age-based list-visibility rule when
+# LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS (below) is False. Pilot: Roxana
+# Towers / 7th Floor, Hyderabad Begumpet Office (tenant_id=3, floor_id=9 --
+# confirmed against the dev DB).
 LAYOUT_VISIBILITY_PILOT_FLOOR_IDS: frozenset[str] = frozenset({"9"})
+
+# Master switch for the rollout. True = every floor gets the rule (ignores
+# the pilot set above); False = only floors in LAYOUT_VISIBILITY_PILOT_FLOOR_IDS
+# do. Flipping this is the whole "pilot on one floor, then everywhere"
+# rollout -- no DB change, no other code change.
+LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS: bool = True
 
 # How long a layout may sit in each status before it drops out of the list
 # for an enrolled floor, in units of LAYOUT_VISIBILITY_INTERVAL_UNIT below.
@@ -54,9 +59,9 @@ LAYOUT_VISIBILITY_PILOT_FLOOR_IDS: frozenset[str] = frozenset({"9"})
 # edit to a DRAFT/ARCHIVED layout's seats can reset its clock — a known,
 # accepted tradeoff, not a bug.
 LAYOUT_VISIBILITY_THRESHOLDS: dict[str, int] = {
-    "DRAFT": 3,
-    "ARCHIVED": 3,
-    "DELETED": 3,
+    "DRAFT": 15,
+    "ARCHIVED": 30,
+    "DELETED": 5,
 }
 
 # "days" is the real production setting. Switch to "minutes" (and drop the
@@ -64,9 +69,7 @@ LAYOUT_VISIBILITY_THRESHOLDS: dict[str, int] = {
 # end without an actual multi-day wait -- then switch both back before this
 # goes anywhere near production. Nothing else about the code changes
 # between the two.
-# TESTING: currently set to "minutes" with 3-minute thresholds above.
-# Switch back to "days" with {15, 30, 5} before this goes near production.
-LAYOUT_VISIBILITY_INTERVAL_UNIT: str = "minutes"
+LAYOUT_VISIBILITY_INTERVAL_UNIT: str = "days"
 from backend.repositories.user_repository import fetch_admin_notification_emails
 from backend.schemas.floor_layout import (
     CreateFloorLayoutRequest,
@@ -175,6 +178,7 @@ def create_floor_layout(
                 conn,
                 tenant_id=tenant_id,
                 floor_id=str(payload.floor_id),
+                archived_by_user_id=user_id,
             )
 
         created_layout = insert_floor_layout(
@@ -246,10 +250,12 @@ def get_floor_layouts_by_floor(
     floor_id: str,
 ) -> list[FloorLayoutResponse]:
     """Return all layouts for one tenant-scoped floor."""
+    layout_visibility_enabled = (
+        LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS
+        or floor_id in LAYOUT_VISIBILITY_PILOT_FLOOR_IDS
+    )
     visibility_thresholds = (
-        LAYOUT_VISIBILITY_THRESHOLDS
-        if floor_id in LAYOUT_VISIBILITY_PILOT_FLOOR_IDS
-        else None
+        LAYOUT_VISIBILITY_THRESHOLDS if layout_visibility_enabled else None
     )
 
     try:
@@ -392,6 +398,7 @@ def activate_floor_layout(
             conn,
             tenant_id=tenant_id,
             floor_id=str(layout["floor_id"]),
+            archived_by_user_id=user_id,
         )
 
         activated_layout = activate_floor_layout_record(
