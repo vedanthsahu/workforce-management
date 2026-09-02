@@ -11,7 +11,13 @@ import {
   defaultAuditLogFilters,
 } from "../types/audit.types";
 import { deriveAuditFilterOptions, initialsOf, mapAuditLogListItemToUi } from "../utils/mapAuditLog";
-import { AUDIT_RELATIVE_TIME_OPTIONS, AUDIT_STATUS_OPTIONS } from "../utils/constants";
+import {
+  AUDIT_RELATIVE_TIME_GROUPS,
+  AUDIT_RELATIVE_TIME_OPTIONS,
+  AUDIT_SELECT_ARROW_STYLE,
+  AUDIT_SELECT_BASE_CLASS,
+  AUDIT_STATUS_OPTIONS,
+} from "../utils/constants";
 
 type Props = {
   filters: AuditLogFiltersType;
@@ -164,16 +170,6 @@ function TimeModeToggle({ mode, onChange }: { mode: AuditTimeMode; onChange: (mo
   );
 }
 
-const selectBaseClass =
-  "h-10 pl-3 pr-8 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors cursor-pointer w-full";
-
-const selectArrowStyle: React.CSSProperties = {
-  backgroundImage:
-    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
-  backgroundRepeat: "no-repeat",
-  backgroundPosition: "right 10px center",
-};
-
 function NativeSelect({
   value,
   onChange,
@@ -184,7 +180,12 @@ function NativeSelect({
   options: { value: string; label: string }[];
 }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className={selectBaseClass} style={selectArrowStyle}>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={AUDIT_SELECT_BASE_CLASS}
+      style={AUDIT_SELECT_ARROW_STYLE}
+    >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}
@@ -194,27 +195,109 @@ function NativeSelect({
   );
 }
 
-function RelativeTimeField({ value, onChange }: { value: number | null; onChange: (seconds: number | null) => void }) {
-  const showClear = value !== null;
+/** Same value/onChange/options contract as NativeSelect, but a custom
+ * click-to-open list instead of a browser-native <select> -- needed only
+ * where the option list is long enough to scroll (Action), since a native
+ * select's popup is OS/browser chrome and its scrollbar can't be restyled
+ * with CSS at all. Module/Entity/Status stay on NativeSelect; their lists
+ * are short enough that this doesn't come up for them. */
+function CustomSelect({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [open]);
+
+  const selectedLabel = options.find((o) => o.value === value)?.label ?? value;
+
   return (
-    <div className="relative">
-      <Clock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-      <select
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
-        className="h-10 pl-9 pr-8 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors cursor-pointer w-full"
-        style={showClear ? { backgroundImage: "none" } : selectArrowStyle}
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="h-10 pl-3 pr-8 relative flex items-center text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors w-full text-left"
       >
-        <option value="" disabled hidden>
-          Select time range
-        </option>
-        {AUDIT_RELATIVE_TIME_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      {showClear && (
+        <span className="flex-1 truncate">{selectedLabel}</span>
+        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+      </button>
+
+      {open && (
+        <ul
+          role="listbox"
+          className="absolute top-full left-0 mt-1 w-full max-h-60 overflow-y-auto bg-white border border-gray-200 shadow-lg z-20 py-1"
+          style={{ scrollbarWidth: "thin", scrollbarColor: "#d1d5db transparent" }}
+        >
+          {options.map((o) => {
+            const active = o.value === value;
+            return (
+              <li key={o.value} role="option" aria-selected={active}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(o.value);
+                    setOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-1 text-sm transition-colors hover:bg-[#767676] hover:text-white ${
+                    active ? "text-gray-900 font-medium" : "text-gray-700"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Relative time trigger + popover -- same trigger/popover shape as
+ * DateRangeField above (untouched), but the popover body is a CloudWatch-
+ * style chip grid instead of the old <select>. Picking a chip applies
+ * immediately and closes the popover, since there's nothing else to
+ * configure (unlike the date range's two inputs + Apply). */
+function RelativeTimeField({ value, onChange }: { value: number | null; onChange: (seconds: number | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [open]);
+
+  const label = AUDIT_RELATIVE_TIME_OPTIONS.find((o) => o.value === value)?.label ?? "Select time range";
+  const showClear = value !== null;
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="h-10 pl-9 pr-8 flex items-center text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors w-full text-left"
+      >
+        <span className="flex-1 truncate">{label}</span>
+      </button>
+      <Clock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+      {showClear ? (
         <button
           type="button"
           onClick={() => onChange(null)}
@@ -222,6 +305,41 @@ function RelativeTimeField({ value, onChange }: { value: number | null; onChange
         >
           <X size={14} />
         </button>
+      ) : (
+        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+      )}
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-3 flex flex-col gap-3">
+          {AUDIT_RELATIVE_TIME_GROUPS.map((group) => (
+            <div key={group.label} className="flex flex-col gap-1.5">
+              <p className="text-xs font-medium text-gray-500">{group.label}</p>
+              <div className="flex flex-wrap gap-2">
+                {group.options.map((o) => {
+                  const active = value === o.value;
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      title={o.label}
+                      onClick={() => {
+                        onChange(o.value);
+                        setOpen(false);
+                      }}
+                      className={`h-8 min-w-8 px-2.5 text-xs font-medium rounded-lg border transition-colors ${
+                        active
+                          ? "bg-indigo-600 border-indigo-600 text-white"
+                          : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      {o.shortLabel}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -444,11 +562,11 @@ export default function AuditLogFilters({ filters, onUpdate, onSearch, onClear, 
         </div>
         <div className="w-41 flex flex-col gap-1">
           <label className="text-xs font-medium text-gray-600">Entity</label>
-          <NativeSelect value={filters.entity} onChange={handleEntityChange} options={entityOptions} />
+          <CustomSelect value={filters.entity} onChange={handleEntityChange} options={entityOptions} />
         </div>
         <div className="w-42 flex flex-col gap-1">
           <label className="text-xs font-medium text-gray-600">Action</label>
-          <NativeSelect value={filters.action} onChange={(v) => onUpdate("action", v)} options={actionOptions} />
+          <CustomSelect value={filters.action} onChange={(v) => onUpdate("action", v)} options={actionOptions} />
         </div>
         <div className="w-42 flex flex-col gap-1">
           <label className="text-xs font-medium text-gray-600">Status</label>

@@ -152,7 +152,17 @@ def archive_existing_published_layouts(
     *,
     tenant_id: str,
     floor_id: str,
+    archived_by_user_id: str,
 ) -> None:
+    """Archive the floor's current PUBLISHED layout as a side effect of
+    publishing a different one.
+
+    Stamps updated_by_user_id with the actor doing the publishing, not just
+    updated_at -- otherwise the archived row's "last updated by" stays
+    whatever it was before (its uploader, or its last seat-config editor,
+    or nobody) while updated_at jumps to now, so the UI would pair a fresh
+    timestamp with a stale/wrong name.
+    """
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -160,6 +170,7 @@ def archive_existing_published_layouts(
             SET
                 status = %s,
                 is_published = FALSE,
+                updated_by_user_id = %s,
                 updated_at = NOW()
             WHERE tenant_id = %s
               AND floor_id = %s
@@ -168,6 +179,7 @@ def archive_existing_published_layouts(
             """,
             (
                 LayoutStatus.ARCHIVED.value,
+                archived_by_user_id,
                 tenant_id,
                 floor_id,
                 LayoutStatus.PUBLISHED.value,

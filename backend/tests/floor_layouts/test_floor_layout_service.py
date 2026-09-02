@@ -10,6 +10,7 @@ from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
+from backend.services import floor_layout_service as floor_layout_service_module
 from backend.services.floor_layout_service import (
     LAYOUT_VISIBILITY_INTERVAL_UNIT,
     LAYOUT_VISIBILITY_PILOT_FLOOR_IDS,
@@ -77,23 +78,28 @@ def _layout_row(*, layout_id: str = "10", status: str = "DRAFT") -> dict:
 
 
 class GetFloorLayoutsByFloorServiceTests(unittest.TestCase):
-    """Only floors enrolled in LAYOUT_VISIBILITY_PILOT_FLOOR_IDS get the
-    age-based visibility filter; every other floor keeps today's behavior
-    (visibility_days=None, all statuses returned regardless of age)."""
+    """With LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS=True (today's setting),
+    every floor gets the age-based visibility filter. Flipping that to
+    False restricts it back down to LAYOUT_VISIBILITY_PILOT_FLOOR_IDS only
+    -- both branches are exercised here since that flag is the entire
+    pilot-vs-everywhere rollout mechanism."""
 
-    def test_enrolled_floor_forwards_visibility_days(self) -> None:
+    def test_apply_to_all_floors_forwards_thresholds_for_any_floor(self) -> None:
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
-        pilot_floor_id = next(iter(LAYOUT_VISIBILITY_PILOT_FLOOR_IDS))
 
         with patch(
             "backend.services.floor_layout_service.fetch_floor_layouts_by_floor",
             return_value=[_layout_row(status="DRAFT")],
-        ) as mock_fetch:
+        ) as mock_fetch, patch.object(
+            floor_layout_service_module,
+            "LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS",
+            True,
+        ):
             get_floor_layouts_by_floor(
                 conn,
                 current_user=current_user,
-                floor_id=pilot_floor_id,
+                floor_id="some-floor-not-in-the-pilot-set",
             )
 
         self.assertEqual(
@@ -105,23 +111,35 @@ class GetFloorLayoutsByFloorServiceTests(unittest.TestCase):
             LAYOUT_VISIBILITY_INTERVAL_UNIT,
         )
 
-    def test_non_enrolled_floor_forwards_no_visibility_filter(self) -> None:
+    def test_restricted_to_pilot_floors_forwards_thresholds_only_for_pilot(
+        self,
+    ) -> None:
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
-        non_pilot_floor_id = "some-other-floor-not-in-the-pilot-set"
-        self.assertNotIn(non_pilot_floor_id, LAYOUT_VISIBILITY_PILOT_FLOOR_IDS)
+        pilot_floor_id = next(iter(LAYOUT_VISIBILITY_PILOT_FLOOR_IDS))
 
         with patch(
             "backend.services.floor_layout_service.fetch_floor_layouts_by_floor",
             return_value=[_layout_row(status="DRAFT")],
-        ) as mock_fetch:
+        ) as mock_fetch, patch.object(
+            floor_layout_service_module,
+            "LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS",
+            False,
+        ):
+            get_floor_layouts_by_floor(
+                conn, current_user=current_user, floor_id=pilot_floor_id,
+            )
+            self.assertEqual(
+                mock_fetch.call_args.kwargs["visibility_thresholds"],
+                LAYOUT_VISIBILITY_THRESHOLDS,
+            )
+
             get_floor_layouts_by_floor(
                 conn,
                 current_user=current_user,
-                floor_id=non_pilot_floor_id,
+                floor_id="some-other-floor-not-in-the-pilot-set",
             )
-
-        self.assertIsNone(mock_fetch.call_args.kwargs["visibility_thresholds"])
+            self.assertIsNone(mock_fetch.call_args.kwargs["visibility_thresholds"])
 
 
 class DeleteFloorLayoutServiceTests(unittest.TestCase):

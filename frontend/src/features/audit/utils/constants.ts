@@ -1,4 +1,19 @@
+import type { CSSProperties } from "react";
 import { AuditEventStatus, AuditRequestMethod } from "../types/audit.types";
+
+// Shared styling for the plain <select>-based filter fields (Module, Status)
+// in AuditLogFilters' NativeSelect -- a hand-drawn chevron replaces the
+// browser-native one so it matches the custom dropdowns (Entity/Action)
+// sitting next to it in the same filter row.
+export const AUDIT_SELECT_BASE_CLASS =
+  "h-10 pl-3 pr-8 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors cursor-pointer w-full";
+
+export const AUDIT_SELECT_ARROW_STYLE: CSSProperties = {
+  backgroundImage:
+    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
+  backgroundRepeat: "no-repeat",
+  backgroundPosition: "right 10px center",
+};
 
 export const AUDIT_STATUS_STYLES: Record<AuditEventStatus, string> = {
   SUCCESS: "bg-emerald-100 text-emerald-700",
@@ -45,19 +60,35 @@ export const AUDIT_STATUS_OPTIONS: { value: string; label: string }[] = [
 
 export const AUDIT_PAGE_SIZES = [10, 25, 50, 75, 100];
 
-// Preset "Last N minutes" quick-time-filter options -- value is seconds,
-// sent to the backend as lastSeconds (see backend/api/routes/admin_audit.py).
-// The backend itself accepts any positive integer of seconds, not just these
-// presets; this is just what the UI currently exposes.
-export const AUDIT_RELATIVE_TIME_OPTIONS: { value: number; label: string }[] = [
-  { value: 5 * 60, label: "Last 5 min" },
-  { value: 10 * 60, label: "Last 10 min" },
-  { value: 20 * 60, label: "Last 20 min" },
-  { value: 30 * 60, label: "Last 30 min" },
-  { value: 45 * 60, label: "Last 45 min" },
-  { value: 60 * 60, label: "Last 60 min" },
-  { value: 120 * 60, label: "Last 120 min" },
+// Preset quick-time-filter options -- value is seconds, sent to the backend
+// as lastSeconds (see backend/api/routes/admin_audit.py). The backend itself
+// accepts any positive integer of seconds, not just these presets; this is
+// just what the UI currently exposes, grouped the way CloudWatch's time
+// picker groups its quick ranges (Minutes / Hours / Days). `shortLabel` is
+// the bare number shown on the chip itself (unit is implied by the group
+// header); `label` is the full "N min/hr/day" text used for the trigger
+// button and any other place the value needs to stand alone.
+type AuditRelativeTimeOption = { value: number; label: string; shortLabel: string };
+
+function minuteOption(minutes: number): AuditRelativeTimeOption {
+  return { value: minutes * 60, label: `${minutes} min`, shortLabel: `${minutes}` };
+}
+function hourOption(hours: number): AuditRelativeTimeOption {
+  return { value: hours * 60 * 60, label: hours === 1 ? "1 hr" : `${hours} hrs`, shortLabel: `${hours}` };
+}
+function dayOption(days: number): AuditRelativeTimeOption {
+  return { value: days * 24 * 60 * 60, label: days === 1 ? "1 day" : `${days} days`, shortLabel: `${days}` };
+}
+
+export const AUDIT_RELATIVE_TIME_GROUPS: { label: string; options: AuditRelativeTimeOption[] }[] = [
+  { label: "Minutes", options: [5, 10, 15, 30, 45].map(minuteOption) },
+  { label: "Hours", options: [1, 2, 3, 6, 8, 12].map(hourOption) },
+  { label: "Days", options: [1, 2, 3, 4, 5, 6].map(dayOption) },
 ];
+
+export const AUDIT_RELATIVE_TIME_OPTIONS: AuditRelativeTimeOption[] = AUDIT_RELATIVE_TIME_GROUPS.flatMap(
+  (group) => group.options
+);
 
 export function moduleBadgeStyle(module: string): string {
   return AUDIT_MODULE_STYLES[module] ?? AUDIT_MODULE_FALLBACK_STYLE;

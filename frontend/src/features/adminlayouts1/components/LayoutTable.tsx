@@ -4,7 +4,7 @@ import { Eye, Download, MoreHorizontal, Settings2, Trash2 } from "lucide-react";
 import { useLayoutsTable } from "@/features/adminlayouts1/hooks/useLayoutsTable";
 import { useLayoutsStore } from "@/store/useLayoutsStore";
 import LayoutPagination from "./LayoutPagination";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutSelection, LayoutApiResponse } from "../types/layout.types";
 import { useRouter } from "next/navigation";
 import { fetchLayoutSeats } from "@/features/managelayout1/services/seatService";
@@ -94,6 +94,44 @@ function statusConfig(status: string, isPublished: boolean, isDiscarded: boolean
   if (status === "DRAFT") return { dot: "bg-blue-500", text: "Draft" };
   if (status === "ARCHIVED") return { dot: "bg-gray-600", text: "Archived" };
   return { dot: "bg-gray-400", text: status };
+}
+
+// ── Auto-hide (by status age) ─────────────────────────────────────────────────
+// Non-published layouts fall out of this list on their own once they've sat
+// untouched (by updated_at) past their status's threshold — otherwise old
+// drafts/archived rows accumulate forever. Published layouts are exempt and
+// never auto-hide.
+const HIDE_AFTER_DAYS: Partial<Record<string, number>> = {
+  DRAFT: 15,
+  ARCHIVED: 30,
+  DELETED: 5,
+};
+
+function daysSince(iso: string): number {
+  return (Date.now() - new Date(iso).getTime()) / 86_400_000;
+}
+
+function hideThresholdDays(row: LayoutApiResponse): number | null {
+  if (row.status === "PUBLISHED") return null;
+  return HIDE_AFTER_DAYS[row.status] ?? null;
+}
+
+function isAutoHidden(row: LayoutApiResponse): boolean {
+  const threshold = hideThresholdDays(row);
+  if (threshold === null) return false;
+  const reference = row.updated_at ?? row.created_at;
+  if (!reference) return false;
+  return daysSince(reference) >= threshold;
+}
+
+function hideCountdownLabel(row: LayoutApiResponse): string | null {
+  const threshold = hideThresholdDays(row);
+  if (threshold === null) return null;
+  const reference = row.updated_at ?? row.created_at;
+  if (!reference) return null;
+  const daysLeft = Math.ceil(threshold - daysSince(reference));
+  if (daysLeft <= 0) return null;
+  return `Visible for ${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
 }
 
 function formatDetailDate(iso: string): string {
@@ -245,7 +283,8 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
     }
   }, [discardTarget, invalidateFloor, fetchLayouts]);
 
-  const { page, rowsPerPage, total, paginated, setPage } = useLayoutsTable(layouts);
+  const visibleLayouts = useMemo(() => layouts.filter((row) => !isAutoHidden(row)), [layouts]);
+  const { page, rowsPerPage, total, paginated, setPage } = useLayoutsTable(visibleLayouts);
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
@@ -318,11 +357,20 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                     <td className="px-3 py-3">
                       {(() => {
                         const { dot, text } = statusConfig(row.status, row.is_published, isDiscarded);
+                        // Suppress only for rows optimistically masked right after
+                        // a Discard click (about to vanish on refetch, not aging
+                        // out) — an actual DELETED-status row still counts down.
+                        const countdown = discardedIds.has(row.layout_id) ? null : hideCountdownLabel(row);
                         return (
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
-                            <span className="text-xs text-gray-700 whitespace-nowrap">{text}</span>
-                          </span>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
+                              <span className="text-xs text-gray-700 whitespace-nowrap">{text}</span>
+                            </span>
+                            {countdown && (
+                              <span className="text-[10px] text-amber-500 whitespace-nowrap">{countdown}</span>
+                            )}
+                          </div>
                         );
                       })()}
                     </td>

@@ -32,23 +32,24 @@ import type {
   DashboardSummary,
   OccupancyTrendPoint,
   TopOffice,
-  WeekFilter,
+  TrendPeriod,
 } from "../types/admin.types";
 import { ceilPercentage } from "../utils/dashboard.utils";
 
 type Props = {
   data: DashboardSummary | null;
   trendData: OccupancyTrendPoint[];
-  selectedWeek: WeekFilter;
-  setSelectedWeek: (week: WeekFilter) => void;
+  selectedPeriod: TrendPeriod;
+  setSelectedPeriod: (period: TrendPeriod) => void;
   topOffices: TopOffice[];
 };
 
 // ---------- COMPONENT ----------
 const OFFICES_PER_PAGE = 5;
 
-export default function AdminCharts({ data, trendData, selectedWeek, setSelectedWeek, topOffices }: Props) {
+export default function AdminCharts({ data, trendData, selectedPeriod, setSelectedPeriod, topOffices }: Props) {
   const [officePage, setOfficePage] = useState(0);
+  const isMonthPeriod = selectedPeriod === "this-month" || selectedPeriod === "last-month";
 
   const totalOfficePages = Math.max(1, Math.ceil(topOffices.length / OFFICES_PER_PAGE));
   const visibleOffices = topOffices.slice(
@@ -169,12 +170,14 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
           </CardTitle>
 
           <select
-            value={selectedWeek}
-            onChange={(e) => setSelectedWeek(e.target.value as WeekFilter)}
+            value={selectedPeriod}
+            onChange={(e) => setSelectedPeriod(e.target.value as TrendPeriod)}
             className="h-8 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="this-week">This Week</option>
             <option value="last-week">Last Week</option>
+            <option value="this-month">This Month</option>
+            <option value="last-month">Last Month</option>
           </select>
         </CardHeader>
 
@@ -188,8 +191,22 @@ export default function AdminCharts({ data, trendData, selectedWeek, setSelected
             }}
             className="h-[240px] w-full"
           >
-            <AreaChart data={trendData} margin={{ left: -19                                                                                                        }}>
-              <XAxis dataKey="day" axisLine={false} tickLine={false} />
+            <AreaChart data={trendData} margin={{ left: -19, right: 12 }}>
+              {/* Month view (up to 31 points) shows fixed day-of-month
+                 labels -- 1/5/10/15/20/25/<last day> -- instead of every
+                 day, so it doesn't matter whether the month has 28-31 days.
+                 Week view (7 points, weekday names) still shows every day. */}
+              <XAxis
+                dataKey="day"
+                axisLine={false}
+                tickLine={false}
+                interval={0}
+                ticks={
+                  isMonthPeriod
+                    ? Array.from(new Set([1, 5, 10, 15, 20, 25, trendData.length])).map(String)
+                    : undefined
+                }
+              />
               <YAxis
                 domain={[0, 25]}
                 ticks={[0, 5, 10, 15, 20, 25]}
