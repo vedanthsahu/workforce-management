@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.models.chatbot import ChatbotSession, ChatbotSessionContext
+from app.models.chatbot import ChatbotSession
 from app.config import settings
 from app.services.conversation_log_service import conversation_log_service
 from app.services.memory_service import memory_service
@@ -24,6 +24,11 @@ class SessionService:
     ) -> ChatbotSession:
         now = _utcnow()
         expires = now + timedelta(minutes=settings.SESSION_TTL_MINUTES)
+        context_data = {}
+        if authenticated_user_id is not None:
+            context_data["authenticated_user_id"] = authenticated_user_id
+        if authenticated_tenant_id is not None:
+            context_data["authenticated_tenant_id"] = authenticated_tenant_id
         session = ChatbotSession(
             id=uuid.uuid4(),
             tenant_id=settings.DEFAULT_TENANT_ID,
@@ -33,22 +38,9 @@ class SessionService:
             created_at=now,
             updated_at=now,
             expires_at=expires,
+            context_data=context_data,
         )
         db.add(session)
-        if authenticated_user_id is not None:
-            db.add(ChatbotSessionContext(
-                session_id=session.id,
-                context_key="authenticated_user_id",
-                context_value=authenticated_user_id,
-                updated_at=now,
-            ))
-        if authenticated_tenant_id is not None:
-            db.add(ChatbotSessionContext(
-                session_id=session.id,
-                context_key="authenticated_tenant_id",
-                context_value=authenticated_tenant_id,
-                updated_at=now,
-            ))
         await db.commit()
         await db.refresh(session)
         await memory_service.set_session(session)
@@ -69,19 +61,7 @@ class SessionService:
         result = await db.execute(select(ChatbotSession).where(ChatbotSession.id == uid))
         session = result.scalar_one_or_none()
         if session and (authenticated_user_id is not None or authenticated_tenant_id is not None):
-            owner_result = await db.execute(
-                select(
-                    ChatbotSessionContext.context_key,
-                    ChatbotSessionContext.context_value,
-                ).where(
-                    ChatbotSessionContext.session_id == uid,
-                    ChatbotSessionContext.context_key.in_((
-                        "authenticated_user_id",
-                        "authenticated_tenant_id",
-                    )),
-                )
-            )
-            ownership = dict(owner_result.all())
+            ownership = session.context_data or {}
             if (
                 ownership.get("authenticated_user_id") != authenticated_user_id
                 or ownership.get("authenticated_tenant_id") != authenticated_tenant_id

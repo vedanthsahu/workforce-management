@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     MY_BOOKINGS_MAX_RESULTS: int = 7
     PAST_BOOKINGS_PAGE_SIZE: int = 5
     ENABLE_FREE_TEXT: bool = True
-    ENABLE_VECTOR_INTENT: bool = True
+    ENABLE_VECTOR_INTENT: bool = False
     ENABLE_TELEMETRY: bool = True
     ENABLE_QUICK_BOOK_EXACT_SEAT: bool = True
     ENABLE_BOOKING_ACTION_CONFIRMATION: bool = True

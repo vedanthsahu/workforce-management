@@ -94,9 +94,8 @@ WHATSAPP_MAX_CONCURRENT_TASKS=10
 ```
 
 Run `alembic upgrade head` from `efacility-chatbot/backend` after pulling this
-version. Database mappings in `chatbot_user_identity_map` must populate
-`external_id`, `user_id`, `tenant_id`, and `user_name`. Unknown senders and
-legacy `phone:name` mappings are rejected.
+version. WhatsApp identities are supplied through `WHATSAPP_USER_MAPPINGS`;
+unknown senders and legacy `phone:name` mappings are rejected.
 
 `WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS=true` is an explicitly logged temporary
 exception. Payload authenticity is not guaranteed until Meta App Secret
@@ -247,11 +246,10 @@ The Docker frontend image installs Chromium through `frontend/Dockerfile`, so th
 Local chatbot-owned tables:
 
 - `chatbot_sessions`
-- `chatbot_session_context`
 - `chatbot_messages`
-- `chatbot_menu_items`
-- `chatbot_user_identity_map`
-- `chatbot_intent_examples`
+
+Session flow context is stored in `chatbot_sessions.context_data` as JSONB.
+Menus are code-defined and WhatsApp identities come from configuration.
 
 Not stored locally:
 

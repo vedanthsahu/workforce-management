@@ -217,7 +217,7 @@ class IntentMatcher:
         rule_result = self.detect_by_rules(message)
         vector_result: Optional[IntentResult] = None
 
-        if _env_bool("ENABLE_VECTOR_INTENT", True) and rule_result.confidence < 0.80:
+        if _env_bool("ENABLE_VECTOR_INTENT", False) and rule_result.confidence < 0.80:
             vector_match = await vector_intent_service.match_intent(db, tenant_id, message)
             vector_result = IntentResult(
                 intent=Intent(vector_match.intent) if vector_match.intent in Intent._value2member_map_ else Intent.UNKNOWN,
