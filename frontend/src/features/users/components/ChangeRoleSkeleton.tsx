@@ -26,19 +26,16 @@ export function ChangeRoleSkeleton() {
               <Skeleton className="h-5 w-20 rounded-full" />
             </div>
           </div>
-          <div className="space-y-3 pt-2">
-            <div className="flex justify-between">
-              <Skeleton className="h-3 w-16" />
-              <Skeleton className="h-3 w-32" />
-            </div>
-            <div className="flex justify-between">
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-3 w-28" />
-            </div>
-            <div className="flex justify-between">
-              <Skeleton className="h-3 w-14" />
-              <Skeleton className="h-3 w-24" />
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 border-t border-gray-100 pt-4">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <Skeleton className="w-8 h-8 rounded-lg shrink-0" />
+                <div className="space-y-1.5 flex-1">
+                  <Skeleton className="h-2.5 w-16" />
+                  <Skeleton className="h-3.5 w-24" />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
