@@ -131,7 +131,7 @@ function hideCountdownLabel(row: LayoutApiResponse): string | null {
   if (!reference) return null;
   const daysLeft = Math.ceil(threshold - daysSince(reference));
   if (daysLeft <= 0) return null;
-  return `Visible for ${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
+  return `Available for ${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
 }
 
 function formatDetailDate(iso: string): string {

@@ -24,6 +24,17 @@ export function formatActionTitle(action: string): string {
     .join(" ");
 }
 
+// AUTH covers every "user.*" action (see _ACTION_PREFIX_TO_MODULE in
+// backend/repositories/audit_repository.py) -- not just login/logout, but
+// also user.profile_updated, user.preferences_updated and
+// user.access_updated, all of which DO carry real old/new field values.
+// Only login/logout genuinely have nothing to show in the Changes section.
+const AUTH_ACTIONS_WITHOUT_CHANGES = new Set(["user.login", "user.logout"]);
+
+export function hasNoChangesData(module: string, action: string): boolean {
+  return module.toUpperCase() === "AUTH" && AUTH_ACTIONS_WITHOUT_CHANGES.has(action.toLowerCase());
+}
+
 function mapListItemFields(raw: AuditLogListItemRaw) {
   return {
     id: raw.id,
