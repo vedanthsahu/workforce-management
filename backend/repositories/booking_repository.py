@@ -795,7 +795,6 @@ def fetch_seat_for_booking(
                 s.floor_id::text AS floor_id,
 
                 s.seat_code,
-
                 si.site_name,
                 bu.building_name,
                 f.floor_name,

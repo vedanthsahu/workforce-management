@@ -1,3 +1,4 @@
+import axios from "axios";
 import { axiosInstance } from "@/lib/http/axios";
 import type {
   ApiUser,
@@ -34,22 +35,13 @@ export const usersService = {
     return data;
   },
 
-  // No single-user GET endpoint yet — fetches up to 100 users at a time (the
-  // backend max) so all 35 current users come back in one request.
-  // Swap for GET /admin/users/{id} when that endpoint exists.
   async getUserById(userId: string): Promise<ApiUser | null> {
-    const limit = 100;
-    let page = 1;
-
-    while (true) {
-      const { items, summary } = await this.getUsers({ page, limit });
-      const found = items.find((u) => u.id === userId);
-      if (found) return found;
-      if (items.length === 0) return null;
-
-      const totalPages = Math.max(1, Math.ceil(summary.totalUsers / limit));
-      if (page >= totalPages) return null;
-      page++;
+    try {
+      const { data } = await axiosInstance.get<ApiUser>(`/users/${userId}`);
+      return data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404) return null;
+      throw error;
     }
   },
 

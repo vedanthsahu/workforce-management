@@ -334,13 +334,20 @@ export default function AdminBookingsPage() {
   };
 
   const handleClear = () => {
-    // Resets the Date Range field back to today, but that's still just a
-    // draft — Clear doesn't re-run the search on its own either.
+    // Resets back to the same default (today, Employee) the page opens
+    // with, and — unlike a plain field reset — applies it immediately, so
+    // the stats/table reappear right away instead of vanishing behind the
+    // "Select at least one filter" message until the admin clicks Search
+    // again. Today's defaults always count as a real filter (bookingType
+    // is non-empty), so this never hits that message; an empty result for
+    // today still renders the (zeroed) stat cards and the table's own "No
+    // bookings found" state rather than disappearing.
     const defaults = defaultAdminBookingFilters();
     setFilters(defaults);
     setAppliedFilters(defaults);
-    setHasApplied(false);
     setSearchError(false);
+    setCurrentPage(1);
+    setHasApplied(true);
   };
 
   const handleSearch = () => {
@@ -363,6 +370,18 @@ export default function AdminBookingsPage() {
     }
     setSearchError(false);
     setAppliedFilters(filters);
+    setCurrentPage(1);
+    setHasApplied(true);
+  };
+
+  // Clicking a stat card is a shortcut for "pick this Status and Search" --
+  // applies immediately instead of just populating the dropdown, so the
+  // table always lands on the same rows the clicked count summarizes.
+  const handleStatCardFilter = (status: string) => {
+    const nextFilters = { ...filters, status };
+    setFilters(nextFilters);
+    setSearchError(false);
+    setAppliedFilters(nextFilters);
     setCurrentPage(1);
     setHasApplied(true);
   };
@@ -448,7 +467,7 @@ export default function AdminBookingsPage() {
       {hasApplied && (
         <>
           {/* STATS */}
-          <BookingStatCards stats={stats} />
+          <BookingStatCards stats={stats} onFilterClick={handleStatCardFilter} />
 
           {/* TABLE */}
           <div className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">

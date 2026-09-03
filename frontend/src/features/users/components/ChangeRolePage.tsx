@@ -62,7 +62,7 @@ export default function ChangeRolePage({ userId }: { userId: string }) {
             <p className="text-xs sm:text-sm text-gray-500 mt-1">View user details, current permissions and change role.</p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6 items-stretch">
             <UserProfileCard user={user} />
             <ChangeRolePanel
               roles={roles}

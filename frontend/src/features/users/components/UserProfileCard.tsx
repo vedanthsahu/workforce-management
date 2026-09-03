@@ -1,4 +1,4 @@
-
+import { Briefcase, Building2, Hash, MapPin, Phone, type LucideIcon } from "lucide-react";
 import { getRoleBadgeClass } from "../utils/users.utils";
 import type { User } from "../types/users.types";
 
@@ -8,7 +8,7 @@ export default function UserProfileCard({ user }: { user: User }) {
 
       {/* Avatar + name */}
       <div className="flex items-center gap-4">
-        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-linear-to-br from-blue-500 to-blue-600 flex items-center justify-center text-base font-bold text-white shrink-0 shadow-sm">
+        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-linear-to-br from-indigo-500 to-indigo-600 flex items-center justify-center text-base font-bold text-white shrink-0 shadow-sm">
           {initialsFor(user.fullName)}
         </div>
         <div className="min-w-0">
@@ -19,10 +19,11 @@ export default function UserProfileCard({ user }: { user: User }) {
 
       {/* Details grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 border-t border-gray-100 pt-5">
-        <Field label="Department" value={user.department} />
-        <Field label="Employee ID" value={user.employeeId ?? "—"} />
-        <Field label="Job Title" value={user.jobTitle} />
-        <Field label="Mobile Phone" value={user.mobilePhone} />
+        <Field icon={Building2} label="Department" value={user.department} />
+        <Field icon={Hash} label="Employee ID" value={user.employeeId ?? "—"} />
+        <Field icon={Briefcase} label="Job Title" value={user.jobTitle} />
+        <Field icon={Phone} label="Mobile Phone" value={user.mobilePhone} />
+        <Field icon={MapPin} label="Work Location" value={user.officeLocation ?? "—"} />
       </div>
 
       {/* Status + Current Role — pushed to bottom */}
@@ -45,11 +46,16 @@ export default function UserProfileCard({ user }: { user: User }) {
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
-    <div>
-      <p className="text-xs text-gray-400 mb-1">{label}</p>
-      <p className="text-sm font-medium text-gray-800 leading-snug">{value}</p>
+    <div className="flex items-start gap-3">
+      <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+        <Icon className="w-4 h-4 text-indigo-500" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs text-gray-400">{label}</p>
+        <p className="text-sm font-medium text-gray-800 leading-snug truncate" title={value}>{value}</p>
+      </div>
     </div>
   );
 }
