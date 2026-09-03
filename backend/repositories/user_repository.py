@@ -1481,6 +1481,7 @@ def fetch_admin_user_directory(
                 au.department,
                 au.job_title,
                 au.mobile_phone,
+                au.office_location,
                 au.status,
                 au.email
             FROM app_users au
