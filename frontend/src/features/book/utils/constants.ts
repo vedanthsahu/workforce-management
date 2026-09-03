@@ -5,6 +5,17 @@ import type {
   PreferenceMatchConfig,
 } from "../types/Bookingform.types";
 
+// ── Booking policy ────────────────────────────────────────────────────────────
+export const MAX_ADVANCE_BOOKING_DAYS = 30;
+export const BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE =
+  "Bookings can only be made up to 30 days in advance. Please select a date within the next 30 days.";
+
+export function maxBookableDateIso(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + MAX_ADVANCE_BOOKING_DAYS);
+  return d.toISOString().slice(0, 10);
+}
+
 // ── Floor map SVG dimensions ───────────────────────────────────────────────────
 export const SVG_W = 2466;
 export const SVG_H = 2039;

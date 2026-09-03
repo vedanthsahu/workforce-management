@@ -38,6 +38,8 @@ export interface AdminBooking {
   booked_by: BookedByType;
   booked_on: string;
   check_in_time?: string;
+  /** Set only when this row is Cancelled/Modified by someone other than its own owner. */
+  cancelled_by?: string;
   /** Not available from GET /admin/activities; always empty until a real source exists. */
   amenities: AdminBookingAmenity[];
   /** Not available from GET /admin/activities. */
@@ -168,6 +170,9 @@ export interface AdminBookingRaw {
   checked_out_at: string | null;
   cancelled_at: string | null;
   cancellation_reason: string | null;
+  updated_user_id?: string | null;
+  updated_by_name?: string | null;
+  updated_by_email?: string | null;
 
   // Server-derived (modified_from_booking_id is not null) — the authoritative
   // signal for whether this row is a modification, independent of whatever

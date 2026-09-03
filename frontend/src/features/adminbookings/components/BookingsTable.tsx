@@ -256,6 +256,9 @@ export default function BookingsTable({ data, selectedRowKey, onView, onModifySe
                   >
                     {booking.status}
                   </span>
+                  {booking.cancelled_by && (
+                    <p className="mt-1 text-xs font-bold text-gray-500 whitespace-nowrap">by {booking.cancelled_by}</p>
+                  )}
                 </td>
                 <td className="px-3 py-3 text-gray-700 text-center">{booking.booked_by}</td>
                 <td className="px-3 py-3">
