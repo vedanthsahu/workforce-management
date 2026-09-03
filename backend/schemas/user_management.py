@@ -40,6 +40,10 @@ class AdminUserAccessUpdateRequest(BaseModel):
         "MANAGER",
         "FACILITATOR",
         "FRONT_OFFICE",
+        # A Tenant Admin can assign this to anyone (promoting a new admin,
+        # managing an existing one, or their own access) -- PRODUCT_ADMIN
+        # is deliberately not offered here; see admin_update_user_access_service.
+        "TENANT_ADMIN",
     ] | None = None
 
     status: Literal[

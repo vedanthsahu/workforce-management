@@ -35,8 +35,13 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
     status: "ACTIVE",
   });
 
+  // Re-sync from the source office every time the modal opens — not just
+  // when `office` changes — so a Cancel discards any unsaved status/field
+  // edits instead of leaving them staged for the next open. The modal stays
+  // mounted between opens (parent only toggles `open`), so an
+  // `[office]`-only effect would only run once per office.
   useEffect(() => {
-    if (office) {
+    if (open && office) {
       setFormData({
         site_name: office.site_name || "",
         city: office.city || "",
@@ -47,7 +52,7 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
         status: office.status || "ACTIVE",
       });
     }
-  }, [office]);
+  }, [open, office]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -65,6 +70,15 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
       setLoading(false);
     }
   };
+
+  const hasChanges =
+    formData.site_name !== (office.site_name || "") ||
+    formData.city !== (office.city || "") ||
+    formData.country !== (office.country || "") ||
+    formData.timezone !== (office.timezone || "") ||
+    formData.address_line1 !== (office.address_line1 || "") ||
+    formData.address_line2 !== (office.address_line2 || "") ||
+    formData.status !== (office.status || "ACTIVE");
 
   return (
     <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
@@ -116,7 +130,7 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={loading}>
+          <Button onClick={handleSubmit} disabled={loading || !hasChanges}>
             {loading ? "Saving..." : "Save Changes"}
           </Button>
         </DialogFooter>

@@ -407,21 +407,32 @@ export default function FindTeammatePage() {
     (phase.status === "idle" || phase.status === "not_found");
 
   const q = query.trim().toLowerCase();
+  const matchesQuery = (m: ApiTeamMember) => {
+    const nameWords = m.full_name.toLowerCase().split(" ");
+    return nameWords.some((w) => w.startsWith(q)) || m.email.toLowerCase().startsWith(q);
+  };
   const suggestions = showSuggestions
     ? teamGroups
       .flatMap((g) =>
         g.members
-          .filter((m) => {
-            const nameWords = m.full_name.toLowerCase().split(" ");
-            return (
-              nameWords.some((w) => w.startsWith(q)) ||
-              m.email.toLowerCase().startsWith(q)
-            );
-          })
+          .filter(matchesQuery)
           .map((m) => ({ member: m, teamName: g.team_name }))
       )
       .slice(0, 6)
     : [];
+
+  // True once teams have loaded and the typed query matches no known teammate —
+  // used to block firing a search for a name that can't possibly exist.
+  const noLocalMatch =
+    !teamsLoading &&
+    q.length > 0 &&
+    !teamGroups.some((g) => g.members.some(matchesQuery));
+
+  const trySearch = () => {
+    if (noLocalMatch) return;
+    setDropdownOpen(false);
+    handleSearch();
+  };
 
   return (
     <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#F7F8FC]">
@@ -446,7 +457,7 @@ export default function FindTeammatePage() {
                 onChange={(e) => { setQuery(e.target.value); setDropdownOpen(true); }}
                 onFocus={() => { if (query.trim().length >= 1) setDropdownOpen(true); }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") { setDropdownOpen(false); handleSearch(); }
+                  if (e.key === "Enter") { trySearch(); }
                   else if (e.key === "Escape") { setDropdownOpen(false); }
                 }}
                 placeholder="Search by name or email"
@@ -498,8 +509,9 @@ export default function FindTeammatePage() {
               )}
             </div>
             <button
-              onClick={handleSearch}
-              disabled={!query.trim() || teamsLoading || phase.status === "searching"}
+              onClick={trySearch}
+              disabled={!query.trim() || teamsLoading || phase.status === "searching" || noLocalMatch}
+              title={noLocalMatch ? `No teammate matches "${query.trim()}"` : undefined}
               className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-[13px] font-semibold rounded-lg hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               {phase.status === "searching"
@@ -510,7 +522,11 @@ export default function FindTeammatePage() {
             </button>
           </div>
           <p className="text-[11px] text-gray-400 mt-2">
-            {teamsLoading ? "Loading team data…" : "Search by name or email — or click any teammate below"}
+            {teamsLoading
+              ? "Loading team data…"
+              : noLocalMatch
+                ? `No teammate matches "${query.trim()}"`
+                : "Search by name or email — or click any teammate below"}
           </p>
         </div>
       </div>

@@ -82,8 +82,10 @@ export function TeamInOffice({
             <span className="text-indigo-600 font-medium">{topFloor}</span> today.{" "}
             {canBookSelf && (
               <Link
-                href="/find-teammates"
+                href="" 
+                // "/find-teammates"   in future we can link to a page that shows the floor and seat of teammates in office
                 className="text-indigo-600 hover:underline hover:text-indigo-800 transition-colors"
+                title="Comming soon "
               >
                 Book nearby →
               </Link>

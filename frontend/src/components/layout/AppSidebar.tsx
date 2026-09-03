@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
+import { useNavigationGuardStore } from "@/store/useNavigationGuardStore";
 import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
@@ -177,7 +178,7 @@ const ADMIN_OPERATIONS_NAV: NavItem[] = [
 const ADMIN_REPORTS_NAV: NavItem[] = [
   { id: "occupancy", label: "Occupancy", icon: BarChart3, disabled: true },
   { id: "utilization", label: "Utilization", icon: BarChart3, disabled: true },
-  { id: "audit", label: "Audit Logs", icon: ShieldCheck, disabled: true },
+  { id: "audit", label: "Audit Logs", icon: ShieldCheck },
 ];
 
 const ADMIN_SETTINGS_NAV: NavItem[] = [
@@ -291,7 +292,7 @@ function NavSection({
 
               {item.disabled ? (
                 <Badge className="text-[10px] h-[18px] px-1.5 rounded-full leading-none font-medium border-0 shrink-0 bg-gray-100 text-gray-400 hover:bg-gray-100">
-                  Soon
+                  Coming Soon
                 </Badge>
               ) : item.badge !== undefined && (
                 <Badge className={cn(
@@ -350,9 +351,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
   const handleNav = (id: string) => {
     const path = ROUTE_MAP[id];
     if (!path) return;
-    if (id === "team") useBookForSomeoneStore.getState().resetFormState();
-    if (id === "users") useUsersFilterStore.getState().reset();
-    router.push(path);
+    useNavigationGuardStore.getState().requestNavigation(() => {
+      if (id === "team") useBookForSomeoneStore.getState().resetFormState();
+      if (id === "users") useUsersFilterStore.getState().reset();
+      router.push(path);
+    });
   };
 
   const handleLogoutConfirm = () => {
@@ -546,7 +549,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
                 <DropdownMenuItem
                   onMouseEnter={() => router.prefetch("/profile")}
-                  onClick={() => router.push("/profile")}
+                  onClick={() => useNavigationGuardStore.getState().requestNavigation(() => router.push("/profile"))}
                   className="gap-2.5 px-2 py-2 text-[12.5px] cursor-pointer"
                 >
                   <UserRound className="w-4 h-4 text-gray-400" />
@@ -554,9 +557,10 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 </DropdownMenuItem>
 
                 <DropdownMenuItem
-                  onMouseEnter={() => router.prefetch("/notifications")}
-                  onClick={() => router.push("/notifications")}
-                  className="gap-2.5 px-2 py-2 text-[12.5px] cursor-pointer"
+                  disabled
+                  aria-disabled
+                  title="Notifications (coming soon)"
+                  className="gap-2.5 px-2 py-2 text-[12.5px] opacity-50 cursor-not-allowed"
                 >
                   <Bell className="w-4 h-4 text-gray-400" />
                   Notifications

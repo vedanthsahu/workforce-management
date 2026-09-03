@@ -238,7 +238,7 @@ export default function BookingsTable({ data, selectedRowKey, onView, onModifySe
                       <p className="text-[11px] text-gray-400">{booking.seat_type}</p>
                     </>
                   ) : (
-                    <p className="pl-4 pr-1 py-3 text-gray-400 italic">Visit only</p>
+                    <p className="pl-1 pr-10 text-gray-900 font-medium text-center">Visit only</p>
                   )}
                 </td>
                 <td className="pr-3 py-3 text-gray-700 max-w-[80px] break-words">{booking.site_name}</td>
@@ -256,6 +256,9 @@ export default function BookingsTable({ data, selectedRowKey, onView, onModifySe
                   >
                     {booking.status}
                   </span>
+                  {booking.cancelled_by && (
+                    <p className="mt-1 text-xs font-bold text-gray-500 whitespace-nowrap">by {booking.cancelled_by}</p>
+                  )}
                 </td>
                 <td className="px-3 py-3 text-gray-700 text-center">{booking.booked_by}</td>
                 <td className="px-3 py-3">

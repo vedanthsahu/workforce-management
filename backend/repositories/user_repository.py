@@ -840,6 +840,34 @@ def update_user_profile(
     return dict(row) if row else None
 
 
+def count_active_tenant_admins(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    exclude_user_id: str,
+) -> int:
+    """Count active TENANT_ADMIN users for a tenant, excluding one user.
+
+    Used to guard against a role/status change leaving a tenant with zero
+    active admins -- pass the user being changed as exclude_user_id to get
+    the count of *other* active admins that would remain.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COUNT(*)
+            FROM app_users
+            WHERE tenant_id = %s
+              AND role_name = 'TENANT_ADMIN'
+              AND status = 'ACTIVE'
+              AND id::text <> %s
+            """,
+            (tenant_id, exclude_user_id),
+        )
+        row = cur.fetchone()
+    return int(row[0]) if row else 0
+
+
 def admin_update_user_access(
     conn: PGConnection,
     *,

@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from backend.api.routes import teams
+from backend.api.routes.admin_audit import router as admin_audit_router
 from backend.api.routes.admin_bookings import router as admin_bookings_router
 from backend.api.routes.admin_dashboard import router as admin_dashboard_router
 from backend.api.routes.auth import router as auth_router
@@ -99,6 +100,7 @@ app.include_router(teams.router)
 app.include_router(dashboard_router)
 app.include_router(admin_dashboard_router)
 app.include_router(admin_bookings_router)
+app.include_router(admin_audit_router)
 app.include_router(preferences_router)
 app.include_router(floor_layout_router)
 app.include_router(user_management_router)

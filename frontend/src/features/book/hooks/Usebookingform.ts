@@ -29,6 +29,7 @@ import {
   fetchSites,
 } from "../services/Bookingform.service";
 import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
+import { BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE, maxBookableDateIso } from "../utils/constants";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -553,32 +554,57 @@ export function useBookingForm() {
 
   // ── Field setters ─────────────────────────────────────────────────────────
 
-  const setSiteId = (v: string | null) =>
+  // A stale conflict/error banner from a previous action (e.g. "seat already
+  // booked" from confirmBooking) has no reason to stay on screen once the
+  // user has actually changed something about the request — clear it on
+  // every field change below, not just on the next "Find Available Seats"/
+  // retry submit.
+  const setSiteId = (v: string | null) => {
+    setError(null);
     setForm((f) => ({ ...f, siteId: v ?? "", buildingId: "", floorId: "", selectedSeatId: null }));
+  };
 
-  const setBuildingId = (v: string | null) =>
+  const setBuildingId = (v: string | null) => {
+    setError(null);
     setForm((f) => ({ ...f, buildingId: v ?? "", floorId: "", selectedSeatId: null }));
+  };
 
-  const setFloorId = (v: string | null) =>
+  const setFloorId = (v: string | null) => {
+    setError(null);
     setForm((f) => ({ ...f, floorId: v ?? "", selectedSeatId: null }));
+  };
 
-  const setFromDate = (v: string) =>
+  const setFromDate = (v: string) => {
+    if (v > maxBookableDateIso()) {
+      setError(BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE);
+      return;
+    }
+    setError(null);
     setForm((f) => ({
       ...f,
       fromDate: v,
       toDate: v,
     }));
+  };
 
-  const setToDate = (v: string) =>
+  const setToDate = (v: string) => {
+    if (v > maxBookableDateIso()) {
+      setError(BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE);
+      return;
+    }
+    setError(null);
     setForm((f) => ({ ...f, toDate: v }));
+  };
 
-  const togglePreference = (key: string) =>
+  const togglePreference = (key: string) => {
+    setError(null);
     setForm((f) => ({
       ...f,
       preferences: f.preferences.includes(key)
         ? f.preferences.filter((p) => p !== key)
         : [...f.preferences, key],
     }));
+  };
 
   const clearAll = () => setForm((f) => ({ ...f, preferences: [] }));
 
@@ -623,8 +649,10 @@ export function useBookingForm() {
 
   // ── Step 2: select seat ───────────────────────────────────────────────────
 
-  const selectSeat = (seatId: string | null) =>
+  const selectSeat = (seatId: string | null) => {
+    setError(null);
     setForm((f) => ({ ...f, selectedSeatId: seatId }));
+  };
 
   // ── Step 2 → Step 3 ───────────────────────────────────────────────────────
 
@@ -724,6 +752,7 @@ export function useBookingForm() {
       router.push("/dashboard?openFavDialog=1");
       return;
     }
+    setError(null);
     const prevStep = (step > 1 ? step - 1 : 1) as BookingStep;
     const clearedForm = prevStep < 2 ? { ...form, selectedSeatId: null } : form;
     setForm(clearedForm);
@@ -816,6 +845,7 @@ export function useBookingForm() {
     dayCount,
     step1Valid,
     hasBookingChanges,
+    maxBookableDate: maxBookableDateIso(),
     isModifyMode,
     isAdminFlow,
     isBookingForSomeone,

@@ -7,7 +7,7 @@ export type DashboardSummary = {
   occupancy_percentage: number;
 };
 
-export type WeekFilter = "this-week" | "last-week";
+export type TrendPeriod = "this-week" | "last-week" | "this-month" | "last-month";
 
 export type DashboardFilters = {
   date?: string;

@@ -9,6 +9,7 @@ import {
   getLayoutsByFloor,
 } from "../services/layoutService";
 import { useSeatsStore } from "@/store/seatStore";
+import { bulkConfigureSeats, SeatBulkEntry } from "@/features/managelayout1/services/seatService";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // useLayoutSeatStats
@@ -65,7 +66,7 @@ export function usePublishLayout(
   const [publishing,   setPublishing]   = useState(false);
   const [publishError, setPublishError] = useState(false);
 
-  const { isDirty, clearDirty } = useSeatsStore();
+  const { isDirty, dirtyMappingIds, seats, clearDirty, fetchSeats } = useSeatsStore();
 
   const allConfigured =
     stats != null &&
@@ -86,7 +87,38 @@ export function usePublishLayout(
     setPublishing(true);
     setPublishError(false);
     try {
-      await activateLayout(layout.layout_id);
+      if (layout.is_published && dirtyMappingIds.size > 0) {
+        // Already the live layout: PATCH /layout-seats/bulk-configuration
+        // itself cascades every edited mapping into the live `seats` table
+        // in the same transaction when the parent layout is PUBLISHED (see
+        // dev-notes/backend/CURRENT.md) — there is no separate "push these
+        // edits live" call, and activateLayout is a no-op for an
+        // already-published layout, so it's not called at all here. One
+        // request, each dirty seat carrying its own fields (no more
+        // grouping-by-identical-payload — the new payload shape allows
+        // per-seat overrides in a single call).
+        const dirtySeats = seats.filter((s) => dirtyMappingIds.has(s.layout_seat_mapping_id));
+        const entries: SeatBulkEntry[] = dirtySeats.map((seat) => ({
+          layout_seat_mapping_id: Number(seat.layout_seat_mapping_id),
+          seat_type:   seat.seat_type   ?? "STANDARD",
+          status:      seat.status      ?? "ACTIVE",
+          is_bookable: seat.is_bookable ?? true,
+          is_reserved: seat.is_reserved,
+          amenity_ids: seat.amenity_ids.map(Number),
+        }));
+
+        await bulkConfigureSeats({ seats: entries });
+
+        // Pull canonical server state now that layout_seat_mappings/seats
+        // have been synced, rather than trusting the local optimistic values.
+        await fetchSeats(layout.layout_id);
+      } else {
+        // First (or re-)promotion of a DRAFT/ARCHIVED layout to PUBLISHED.
+        // Seat data was already written immediately while the layout was a
+        // draft, so this call carries no seat payload of its own.
+        await activateLayout(layout.layout_id);
+      }
+
       clearDirty();
       onPublishSuccess();
     } catch (err) {
@@ -95,7 +127,7 @@ export function usePublishLayout(
     } finally {
       setPublishing(false);
     }
-  }, [layout?.layout_id, onPublishSuccess, clearDirty]);
+  }, [layout, dirtyMappingIds, seats, onPublishSuccess, clearDirty, fetchSeats]);
 
   return { publishing, publishError, canPublish, allConfigured, publishLayout };
 }

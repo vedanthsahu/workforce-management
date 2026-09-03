@@ -39,6 +39,8 @@ export interface ApiUser {
   mobilePhone: string;
   status: ApiUserStatus;
   email: string;
+  /** Only present on the GET /users/{id} response, not GET /admin/users. */
+  officeLocation?: string | null;
 }
 
 export interface ApiUsersPagination {
@@ -72,6 +74,7 @@ export interface User {
   mobilePhone: string;
   status: UserStatus;
   currentRole: RoleKey;
+  officeLocation: string | null;
 }
 
 export interface GetUsersParams {

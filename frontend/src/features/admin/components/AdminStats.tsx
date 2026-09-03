@@ -1,3 +1,7 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+
 import {
   Card,
   CardContent,
@@ -22,6 +26,7 @@ type Props = {
 };
 
 export default function AdminStats({ data, selectedDate }: Props) {
+  const router = useRouter();
   const formattedSelectedDate = new Date(selectedDate).toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "short",
@@ -35,6 +40,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
       subtitle: "All locations",
       icon: Building2,
       color: "bg-blue-100 text-blue-600",
+      href: "/admin/offices",
     },
     {
       title: "Total Floors",
@@ -42,6 +48,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
       subtitle: "Across all offices",
       icon: Layers,
       color: "bg-green-100 text-green-600",
+      href: "/admin/floors",
     },
     {
       title: "Total Seats",
@@ -49,6 +56,9 @@ export default function AdminStats({ data, selectedDate }: Props) {
       subtitle: "Active seats",
       icon: Armchair,
       color: "bg-orange-100 text-orange-600",
+      // No dedicated seats management page yet -- wire this up once one
+      // exists. Not clickable until then.
+      href: null,
     },
     {
       title: "Bookings",
@@ -56,13 +66,15 @@ export default function AdminStats({ data, selectedDate }: Props) {
       subtitle: `For ${formattedSelectedDate}`,
       icon: CalendarCheck,
       color: "bg-blue-100 text-blue-600",
+      href: "/admin/bookings",
     },
     {
-      title: "Blocked",
+      title: "Blocked Seats",
       value: data?.blocked_seats ?? "-",
       subtitle: `For ${formattedSelectedDate}`,
       icon: Ban,
       color: "bg-purple-100 text-purple-600",
+      href: null,
     },
   ];
 
@@ -75,9 +87,30 @@ export default function AdminStats({ data, selectedDate }: Props) {
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
       {stats.map((item, index) => {
         const Icon = item.icon;
+        const clickable = !!item.href;
 
         return (
-          <Card key={index}>
+          <Card
+            key={index}
+            onClick={clickable ? () => router.push(item.href!) : undefined}
+            role={clickable ? "button" : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            onKeyDown={
+              clickable
+                ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      router.push(item.href!);
+                    }
+                  }
+                : undefined
+            }
+            className={
+              clickable
+                ? "cursor-pointer transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-[0.97] active:duration-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40"
+                : undefined
+            }
+          >
 
             {/* HEADER */}
             <CardHeader className="flex flex-row items-center justify-between pb-2">
