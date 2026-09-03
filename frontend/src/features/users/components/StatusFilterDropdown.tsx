@@ -18,7 +18,7 @@ export default function StatusFilterDropdown({ value, onChange }: Props) {
     <select
       value={value}
       onChange={(e) => onChange(e.target.value as ApiUserStatus | "ALL")}
-      className="h-10 w-44 px-4 border border-gray-200 rounded-lg text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      className="h-10 w-full md:w-44 px-4 border border-gray-200 rounded-lg text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
     >
       {OPTIONS.map((opt) => (
         <option key={opt.key} value={opt.key}>{opt.label}</option>
