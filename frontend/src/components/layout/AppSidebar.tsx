@@ -188,7 +188,7 @@ const ADMIN_SETTINGS_NAV: NavItem[] = [
 ];
 
 const ADMIN_CONFIGURATION_NAV: NavItem[] = [
-  { id: "all_configurations", label: "Configuration", icon: SlidersHorizontal },
+  { id: "all_configurations", label: "Configuration", icon: SlidersHorizontal , disabled: true },
 ];
 //--------security nav config----------------------------------------------------
 const FRONT_OFFICE_DASHBOARD: NavItem[] = [
