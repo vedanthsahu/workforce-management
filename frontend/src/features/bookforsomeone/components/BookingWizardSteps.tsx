@@ -14,7 +14,12 @@ import {
   IconSearch,
   inputStyle,
 } from "./BookForSomeone";
-import { GUEST_TYPES, PURPOSE_OF_VISIT } from "../constants/booking.constants";
+import {
+  GUEST_TYPES,
+  GUEST_VISIT_TOO_FAR_IN_ADVANCE_MESSAGE,
+  maxGuestVisitDateIso,
+  PURPOSE_OF_VISIT,
+} from "../constants/booking.constants";
 import { useGuestSearch } from "../hooks/useBooking";
 import { createGuestSchema, sanitizePhoneNumber } from "../schemas/guest.schema";
 import {
@@ -655,6 +660,9 @@ function LockedTooltip({ children, locked, message }: { children: React.ReactNod
 
 export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildings, floors, isLoadingBuildings, isLoadingFloors, readOnlyLocation = false }: VisitDetailsStepProps) {
   const lockedMessage = "This field cannot be changed because a seat booking is linked to this visit. To change location or dates, use 'Edit Booking' instead.";
+  const maxVisitDate = maxGuestVisitDateIso();
+  const visitDateTooFar = visitDetails.visitDate > maxVisitDate;
+  const endDateTooFar = visitDetails.endDate > maxVisitDate;
   return (
     <div>
       <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Visit Details</h2>
@@ -787,15 +795,20 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
             style={{ ...inputStyle(), cursor: readOnlyLocation ? "not-allowed" : undefined, opacity: readOnlyLocation ? 0.6 : 1 }}
             value={visitDetails.visitDate}
             min={new Date().toISOString().split("T")[0]}
+            max={maxVisitDate}
             disabled={readOnlyLocation}
             onKeyDown={(e) => e.preventDefault()}
             onChange={(e) => {
               const val = e.target.value;
+              if (val > maxVisitDate) return;
               const updates: Partial<VisitDetails> = { visitDate: val };
               if (!visitDetails.endDate || visitDetails.endDate < val) updates.endDate = val;
               onChange(updates);
             }}
           />
+          {visitDateTooFar && (
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{GUEST_VISIT_TOO_FAR_IN_ADVANCE_MESSAGE}</p>
+          )}
         </LockedTooltip>
         <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="endDate" required>End Date</FieldLabel>
@@ -805,10 +818,17 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
             style={{ ...inputStyle(), cursor: readOnlyLocation ? "not-allowed" : undefined, opacity: readOnlyLocation ? 0.6 : 1 }}
             value={visitDetails.endDate}
             min={visitDetails.visitDate || new Date().toISOString().split("T")[0]}
+            max={maxVisitDate}
             disabled={readOnlyLocation}
             onKeyDown={(e) => e.preventDefault()}
-            onChange={(e) => onChange({ endDate: e.target.value })}
+            onChange={(e) => {
+              if (e.target.value > maxVisitDate) return;
+              onChange({ endDate: e.target.value });
+            }}
           />
+          {endDateTooFar && (
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{GUEST_VISIT_TOO_FAR_IN_ADVANCE_MESSAGE}</p>
+          )}
         </LockedTooltip>
       </div>
 

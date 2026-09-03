@@ -48,6 +48,8 @@ export interface Booking {
   guestVisitId?: string;
   activitySource?: "BOOKING" | "GUEST_VISIT";
   createdAt?: string;
+  updatedByUserId?: string;
+  updatedByName?: string;
 }
 
 export interface BookingSummary {
@@ -81,6 +83,18 @@ export interface RawBooking {
   checked_out_at:       string | null;
   cancelled_at:         string | null;
   cancellation_reason:  string | null;
+  updated_user_id?:     string | null;
+  updated_by_name?:     string | null;
+  updated_by_email?:    string | null;
+
+  // Server-derived (modified_from_booking_id / modified_from_guest_visit_id
+  // is not null) -- the authoritative signal for whether this row is a
+  // modification, independent of the literal booking_status it carries
+  // (a modified row's successor is still literally CONFIRMED/SCHEDULED).
+  is_modified?:         boolean;
+  modified_from_booking_id?: string | null;
+  modified_from_guest_visit_id?: string | null;
+
   created_at:           string;
   updated_at:           string;
   is_full_day?:         boolean;

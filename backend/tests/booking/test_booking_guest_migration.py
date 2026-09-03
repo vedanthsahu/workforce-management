@@ -684,6 +684,7 @@ class ModificationAuditRepositoryTests(unittest.TestCase):
             tenant_id="1",
             booking_id="100",
             modification_reason="Seat changed",
+            updated_by_user_id="7",
         )
 
         sql, params = conn.executed[-1]
@@ -691,7 +692,8 @@ class ModificationAuditRepositoryTests(unittest.TestCase):
         self.assertIn("cancelled_at = NOW()", sql)
         self.assertIn("cancellation_reason = %s", sql)
         self.assertIn("modification_reason = %s", sql)
-        self.assertEqual(params, ("Seat changed", "Seat changed", "100", "1"))
+        self.assertIn("updated_by_user_id = %s", sql)
+        self.assertEqual(params, ("Seat changed", "Seat changed", "7", "100", "1"))
 
     def test_guest_visit_mark_modified_writes_reason_on_old_row(self) -> None:
         conn = RecordingConnection()

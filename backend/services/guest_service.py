@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import date
+from datetime import date, timedelta
 from enum import Enum
 from typing import Any
 
@@ -730,6 +730,7 @@ def update_guest_status(
                 tenant_id=tenant_id,
                 guest_id=guest_id,
                 cancellation_reason="Guest deactivated",
+                updated_by_user_id=_current_user_id(current_user),
             )
             cancel_future_guest_visits_for_guest(
                 conn,
@@ -849,6 +850,14 @@ def create_guest_visit(
             detail={
                 "code": "visit_date_in_past",
                 "message": "Guest visits cannot be created for a past date.",
+            },
+        )
+    if payload.visit_date > date.today() + timedelta(days=15):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "visit_date_too_far_in_advance",
+                "message": "Guest visits can only be booked up to 15 days in advance. Please select a date within the next 15 days.",
             },
         )
     tenant_id = str(current_user["tenant_id"])
@@ -973,6 +982,14 @@ def create_guest_booking(
             detail={
                 "code": "visit_date_in_past",
                 "message": "Guest bookings cannot be created for a past date.",
+            },
+        )
+    if payload.visit_date > date.today() + timedelta(days=15):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "visit_date_too_far_in_advance",
+                "message": "Guest visits can only be booked up to 15 days in advance. Please select a date within the next 15 days.",
             },
         )
     tenant_id = str(current_user["tenant_id"])
@@ -1225,6 +1242,7 @@ def cancel_guest_booking(
             cancellation_reason=_normalize_cancellation_reason(
                 cancellation_reason,
             ),
+            updated_by_user_id=_current_user_id(current_user),
         )
         recalculate_guest_visit_requires_seat(
             conn,
@@ -1407,6 +1425,7 @@ def modify_guest_booking(
                 if payload.modification_reason is not None
                 else "USER_REQUEST"
             ),
+            updated_by_user_id=_current_user_id(current_user),
         )
         new_booking = insert_guest_booking(
             conn,
@@ -2145,6 +2164,7 @@ def cancel_guest_visit_record(
                     or
                     "Guest visit cancelled."
                 ),
+                updated_by_user_id=_current_user_id(current_user),
             )
 
         recalculate_guest_visit_requires_seat(
@@ -2310,6 +2330,7 @@ def modify_guest_visit(
                 modification_reason=_booking_modification_reason(
                     payload.modification_reason
                 ),
+                updated_by_user_id=_current_user_id(current_user),
             )
 
         mark_guest_visit_modified(
@@ -2816,6 +2837,7 @@ def execute_guest_visit_workflow(
                 modification_reason=_booking_modification_reason(
                     payload.modification_reason
                 ),
+                updated_by_user_id=_current_user_id(current_user),
             )
             mark_guest_visit_modified(
                 conn,
@@ -3029,6 +3051,7 @@ def execute_guest_visit_workflow(
                 tenant_id=tenant_id,
                 booking_id=str(booking["booking_id"]),
                 cancellation_reason=_booking_cancellation_reason,
+                updated_by_user_id=_current_user_id(current_user),
             )
             recalculate_guest_visit_requires_seat(
                 conn,
@@ -3095,6 +3118,7 @@ def execute_guest_visit_workflow(
                     cancellation_reason=(
                         cancellation_reason or "Guest visit cancelled."
                     ),
+                    updated_by_user_id=_current_user_id(current_user),
                 )
             cancel_guest_visit(
                 conn,
