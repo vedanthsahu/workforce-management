@@ -96,6 +96,14 @@ export function mapAdminBookingRawToUiBooking(raw: AdminBookingRaw): AdminBookin
         : raw.booked_by_name || "—",
     booked_on: raw.created_at ? formatDateTime(raw.created_at) : "",
     check_in_time: raw.check_in_at ? formatTimeOnly(raw.check_in_at) : undefined,
+    // Only surfaced for Cancelled/Modified rows where the actor differs from
+    // the booking's own owner — self cancellations don't need the callout.
+    cancelled_by:
+      (raw.booking_status === "CANCELLED" || raw.booking_status === "MODIFIED") &&
+      raw.updated_by_name &&
+      raw.updated_user_id !== raw.booked_for_user_id
+        ? raw.updated_by_name
+        : undefined,
     amenities: [],
     notes: raw.notes ?? undefined,
 

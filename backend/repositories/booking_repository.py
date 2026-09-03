@@ -124,6 +124,10 @@ BOOKING_SELECT_FIELDS = """
 
     b.cancellation_reason,
 
+    b.updated_by_user_id::text AS updated_user_id,
+    updated_by.full_name AS updated_by_name,
+    updated_by.email AS updated_by_email,
+
     b.modified_from_booking_id::text AS modified_from_booking_id,
     b.modification_reason,
 
@@ -190,6 +194,10 @@ BOOKING_SELECT_FROM = """
     LEFT JOIN app_users AS host
         ON host.id = gv.host_user_id
        AND host.tenant_id = b.tenant_id
+
+    LEFT JOIN app_users AS updated_by
+        ON updated_by.id = b.updated_by_user_id
+       AND updated_by.tenant_id = b.tenant_id
 """
 
 def fetch_future_delegated_guest_visits_without_booking(
@@ -1274,6 +1282,7 @@ def cancel_booking(
     tenant_id: str,
     booking_id: str,
     cancellation_reason: str,
+    updated_by_user_id: str,
 ) -> None:
     """Soft-cancel one booking."""
     with conn.cursor() as cur:
@@ -1284,12 +1293,14 @@ def cancel_booking(
                 booking_status = 'CANCELLED',
                 cancelled_at = NOW(),
                 cancellation_reason = %s,
+                updated_by_user_id = %s,
                 updated_at = NOW()
             WHERE id = %s
               AND tenant_id = %s
             """,
             (
                 cancellation_reason,
+                updated_by_user_id,
                 booking_id,
                 tenant_id,
             ),
@@ -1304,6 +1315,7 @@ def mark_booking_modified(
     tenant_id: str,
     booking_id: str,
     modification_reason: str | None,
+    updated_by_user_id: str,
 ) -> None:
     """Retain a replaced booking as history without cancelling it.
 
@@ -1319,6 +1331,7 @@ def mark_booking_modified(
                 cancelled_at = NOW(),
                 cancellation_reason = %s,
                 modification_reason = %s,
+                updated_by_user_id = %s,
                 updated_at = NOW()
             WHERE id = %s
               AND tenant_id = %s
@@ -1326,6 +1339,7 @@ def mark_booking_modified(
             (
                 modification_reason,
                 modification_reason,
+                updated_by_user_id,
                 booking_id,
                 tenant_id,
             ),
@@ -1339,6 +1353,7 @@ def cancel_future_guest_bookings_for_guest(
     *,
     tenant_id: str,
     guest_id: str,
+    updated_by_user_id: str,
     cancellation_reason: str = "Guest deactivated",
 ) -> int:
     """Cancel one guest's future CONFIRMED bookings. Does not touch active/past bookings."""
@@ -1350,6 +1365,7 @@ def cancel_future_guest_bookings_for_guest(
                 booking_status = 'CANCELLED',
                 cancelled_at = NOW(),
                 cancellation_reason = %s,
+                updated_by_user_id = %s,
                 updated_at = NOW()
             WHERE tenant_id = %s
               AND booking_type = 'GUEST'
@@ -1357,7 +1373,7 @@ def cancel_future_guest_bookings_for_guest(
               AND booking_date >= CURRENT_DATE
               AND booking_status = 'CONFIRMED'
             """,
-            (cancellation_reason, tenant_id, guest_id),
+            (cancellation_reason, updated_by_user_id, tenant_id, guest_id),
         )
         return cur.rowcount
 
