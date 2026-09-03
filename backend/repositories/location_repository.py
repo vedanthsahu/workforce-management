@@ -837,7 +837,7 @@ def fetch_layout_seat_mappings_by_ids(
                 ON fl.id = lsm.layout_id
                AND fl.tenant_id = lsm.tenant_id
             WHERE lsm.tenant_id = %s
-              AND lsm.id = ANY(%s)
+              AND lsm.id = ANY(%s::bigint[])
               AND fl.status = ANY(%s)
             """,
             (
@@ -1264,7 +1264,7 @@ def replace_seat_amenities_bulk(
             """
             DELETE FROM seat_amenities
             WHERE tenant_id = %s
-              AND seat_id = ANY(%s)
+              AND seat_id = ANY(%s::bigint[])
             """,
             (
                 tenant_id,

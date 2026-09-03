@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import psycopg2
@@ -409,6 +409,21 @@ def book_seat(
             detail={
                 "code": "booking_date_in_past",
                 "message": "Bookings cannot be created for a past date.",
+            },
+        )
+    if payload.booking_date > date.today() + timedelta(days=30):
+        safe_write_audit_log(
+            conn, action=BOOKING_CREATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=None,
+            event_status="FAILURE",
+            failure_code="booking_date_too_far_in_advance",
+            failure_reason="Bookings can only be made up to 30 days in advance.",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "booking_date_too_far_in_advance",
+                "message": "Bookings can only be made up to 30 days in advance. Please select a date within the next 30 days.",
             },
         )
     booked_by_user_id = _current_user_id(current_user)
@@ -910,6 +925,7 @@ def cancel_booking_by_id(
             cancellation_reason=_normalize_cancellation_reason(
                 cancellation_reason,
             ),
+            updated_by_user_id=_current_user_id(current_user),
         )
 
         conn.commit()
@@ -1206,6 +1222,7 @@ def modify_booking(
                 if payload.modification_reason is not None
                 else "USER_REQUEST"
             ),
+            updated_by_user_id=_current_user_id(current_user),
         )
 
         new_booking = insert_booking(

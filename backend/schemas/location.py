@@ -346,8 +346,8 @@ class BulkLayoutSeatConfigurationUpdateRequest(BaseModel):
     @field_validator("seats")
     @classmethod
     def _reject_duplicate_mapping_ids(
-        cls, entries: list["LayoutSeatBulkConfigurationEntry"]
-    ) -> list["LayoutSeatBulkConfigurationEntry"]:
+        cls, entries: list[LayoutSeatBulkConfigurationEntry]
+    ) -> list[LayoutSeatBulkConfigurationEntry]:
         seen = {entry.layout_seat_mapping_id for entry in entries}
         if len(seen) != len(entries):
             raise ValueError("Duplicate layout_seat_mapping_id in seats.")

@@ -19,6 +19,10 @@ export interface Seat {
   amenity_ids:            string[];
   layout_id:              string;
   notes:                  string;
+  // Set client-side only, for a seat edited locally on an already-published
+  // layout that hasn't been flushed to the server yet (see Usemanageseats).
+  // Never present on server-fetched data — a fresh fetch naturally clears it.
+  has_unpublished_changes?: boolean;
 }
 
 export interface SeatFilters {

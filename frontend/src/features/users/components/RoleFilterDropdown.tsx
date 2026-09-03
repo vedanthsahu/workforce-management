@@ -103,7 +103,16 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setPendingRoles([])}
+                onClick={() => {
+                  // Clear is immediate -- unlike checking/unchecking boxes,
+                  // it doesn't wait for Apply. Unticks the draft AND resets
+                  // the actually-applied filter back to "All Roles" in one
+                  // click, but (unlike Apply) doesn't close the dropdown --
+                  // it's a reset the admin can keep picking roles after, not
+                  // a confirm-and-done action.
+                  setPendingRoles([]);
+                  onChange([]);
+                }}
                 className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
               >
                 Clear

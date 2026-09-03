@@ -19,6 +19,7 @@ from backend.repositories.token_repository import (
 )
 from backend.repositories.user_repository import (
     admin_update_user_access,
+    count_active_tenant_admins,
     fetch_admin_user_directory,
     fetch_user_by_id,
     fetch_user_details_by_id,
@@ -41,13 +42,21 @@ ASSIGNABLE_ROLE_NAMES = {
     "MANAGER",
     "FACILITATOR",
     "FRONT_OFFICE",
+    # A Tenant Admin can promote any user straight to TENANT_ADMIN through
+    # this endpoint too, not just manage an existing admin's access.
+    # PRODUCT_ADMIN is deliberately not here -- see PROTECTED_TARGET_ROLE_NAMES.
+    "TENANT_ADMIN",
 }
 
-# Targets holding one of these roles cannot have their role/status changed via
-# admin_update_user_access_service, regardless of who the caller is — otherwise
-# any TENANT_ADMIN could silently demote or deactivate another admin.
+# Targets holding one of these roles can never have their role/status changed
+# via admin_update_user_access_service, regardless of who the caller is —
+# there's no in-app flow for managing PRODUCT_ADMIN. TENANT_ADMIN used to be
+# protected the same way, but a Tenant Admin can now manage another Tenant
+# Admin's (or their own) access — see the target_role == "TENANT_ADMIN"
+# handling below for the safeguards that replace this blanket block for them
+# (no promoting a non-admin straight to TENANT_ADMIN, and never leaving the
+# tenant with zero active admins).
 PROTECTED_TARGET_ROLE_NAMES = {
-    "TENANT_ADMIN",
     "PRODUCT_ADMIN",
 }
 
@@ -158,22 +167,7 @@ def admin_update_user_access_service(
 ) -> UserResponse:
 
     tenant_id = str(current_user["tenant_id"])
-
-    if str(current_user["user_id"]) == str(target_user_id):
-        safe_write_audit_log(
-            conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="user", resource_id=str(target_user_id),
-            event_status="DENIED",
-            failure_code="self_modification_not_allowed",
-            failure_reason="Users cannot modify their own access.",
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "self_modification_not_allowed",
-                "message": "Users cannot modify their own access.",
-            },
-        )
+    is_self = str(current_user["user_id"]) == str(target_user_id)
 
     target_user = fetch_user_by_id(
         conn,
@@ -197,7 +191,28 @@ def admin_update_user_access_service(
             },
         )
 
-    if _user_role(target_user) in PROTECTED_TARGET_ROLE_NAMES:
+    target_role = _user_role(target_user)
+
+    # Self-modification stays blocked for everyone except a Tenant Admin
+    # managing their own admin access -- that's the one case now allowed to
+    # be self-directed, same as managing another admin.
+    if is_self and target_role != "TENANT_ADMIN":
+        safe_write_audit_log(
+            conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+            event_status="DENIED",
+            failure_code="self_modification_not_allowed",
+            failure_reason="Users cannot modify their own access.",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "self_modification_not_allowed",
+                "message": "Users cannot modify their own access.",
+            },
+        )
+
+    if target_role in PROTECTED_TARGET_ROLE_NAMES:
         safe_write_audit_log(
             conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
             current_user=current_user, resource_type="user", resource_id=str(target_user_id),
@@ -228,6 +243,36 @@ def admin_update_user_access_service(
                 "message": "Requested role cannot be assigned.",
             },
         )
+
+    # Never allow a change that would leave the tenant with zero active
+    # Tenant Admins -- e.g. demoting or deactivating the last one.
+    if target_role == "TENANT_ADMIN" and target_user.get("status") == "ACTIVE":
+        losing_admin_access = (
+            payload.role_name is not None and payload.role_name != "TENANT_ADMIN"
+        ) or (
+            payload.status is not None and payload.status != "ACTIVE"
+        )
+        if losing_admin_access:
+            remaining_admins = count_active_tenant_admins(
+                conn,
+                tenant_id=tenant_id,
+                exclude_user_id=target_user_id,
+            )
+            if remaining_admins == 0:
+                safe_write_audit_log(
+                    conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
+                    current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+                    event_status="DENIED",
+                    failure_code="last_admin_required",
+                    failure_reason="Cannot remove the tenant's last active Tenant Admin.",
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "last_admin_required",
+                        "message": "This tenant must have at least one active Tenant Admin.",
+                    },
+                )
 
     updated_user = admin_update_user_access(
         conn,

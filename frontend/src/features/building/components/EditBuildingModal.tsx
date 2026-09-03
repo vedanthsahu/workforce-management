@@ -30,8 +30,13 @@ export default function EditBuildingModal({
 }: Props) {
   const { loading, formData, handleChange, handleUpdate } = useEditBuilding(
     building,
-    onSuccess
+    onSuccess,
+    open
   );
+
+  const hasChanges =
+    formData.building_name !== building.building_name ||
+    formData.status !== building.status;
 
   return (
     <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
@@ -73,7 +78,7 @@ export default function EditBuildingModal({
               await handleUpdate();
               onClose();
             }}
-            disabled={loading}
+            disabled={loading || !hasChanges}
           >
             {loading ? "Saving..." : "Save Changes"}
           </Button>

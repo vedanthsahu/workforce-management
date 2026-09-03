@@ -155,7 +155,7 @@ function UserManagementPage() {
                 onChange={setStatusFilter}
               />
             </div>
-            <div className="relative w-full sm:w-44">
+            <div className="relative w-full sm:w-60">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 value={search}
@@ -163,7 +163,7 @@ function UserManagementPage() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="Search by name ..."
+                placeholder="Search by name or email..."
                 className="h-10 w-full pl-9 pr-3 text-sm border border-gray-200 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
               />
             </div>

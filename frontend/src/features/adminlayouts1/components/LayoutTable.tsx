@@ -4,7 +4,7 @@ import { Eye, Download, MoreHorizontal, Settings2, Trash2 } from "lucide-react";
 import { useLayoutsTable } from "@/features/adminlayouts1/hooks/useLayoutsTable";
 import { useLayoutsStore } from "@/store/useLayoutsStore";
 import LayoutPagination from "./LayoutPagination";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutSelection, LayoutApiResponse } from "../types/layout.types";
 import { useRouter } from "next/navigation";
 import { fetchLayoutSeats } from "@/features/managelayout1/services/seatService";
@@ -36,12 +36,27 @@ function isRoomSvgId(svgId: string): boolean {
   return ROOM_SVG_ID_PATTERN.test(svgId);
 }
 
+// Escapes regex metacharacters so seat ids containing them (e.g. "F9.1",
+// "Group (2)") can be safely interpolated into a RegExp instead of being
+// misinterpreted as pattern syntax.
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function recolorGroup(svgText: string, id: string, fill: string): string {
-  const re = new RegExp(`(<g[^>]*\\bid="${id}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "m");
+  // "g" flag: some exported floor plans reuse the same <g id="..."> more than
+  // once (e.g. a duplicated furniture block that wasn't re-keyed). Without
+  // it, String.replace only recolors the first occurrence, leaving whichever
+  // copy actually renders on screen untouched.
+  const re = new RegExp(`(<g[^>]*\\bid="${escapeRegExp(id)}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "gm");
   return svgText.replace(re, (_m, open, inner, close) => {
+    // fill="none" (and fill:none) are deliberately transparent — outlines,
+    // cutouts, gaps between an icon's parts. Overwriting those too flattens
+    // the whole group into one solid-color block, erasing the icon's shape
+    // instead of just recoloring its visible parts.
     const colored = inner
-      .replace(/fill="[^"]*"/g, `fill="${fill}"`)
-      .replace(/fill:[^;"}\s]*/g, `fill:${fill}`);
+      .replace(/fill="(?!none")[^"]*"/g, `fill="${fill}"`)
+      .replace(/fill:(?!none)[^;"}\s]*/g, `fill:${fill}`);
     return `${open}${colored}${close}`;
   });
 }
@@ -51,19 +66,13 @@ function applyColors(svgText: string, seats: Seat[]): string {
   for (const seat of seats) {
     const id = seat.seat_svg_id;
 
-    // Unconfigured — leave the original artwork colors, desk or room, until
-    // an admin actually configures it.
-    if (!seat.is_configured) continue;
+    // Cabins/conference/meeting rooms are never recolored on the admin
+    // side — they always keep the floor plan's original artwork colors.
+    if (isRoomSvgId(id)) continue;
 
-    if (isRoomSvgId(id)) {
-      // Configured rooms only recolor when explicitly non-bookable/inactive,
-      // and just a flat grey rather than the red/amber distinction used for
-      // desks — a bookable room still keeps its original artwork colors.
-      const isNotBookable = seat.status === "INACTIVE" || !seat.is_bookable;
-      if (!isNotBookable) continue;
-      result = recolorGroup(result, id, "#D1D5DB");
-      continue;
-    }
+    // Unconfigured — leave the original artwork colors until an admin
+    // actually configures it.
+    if (!seat.is_configured) continue;
 
     result = recolorGroup(result, id, resolveSeatFill(seat));
   }
@@ -85,6 +94,44 @@ function statusConfig(status: string, isPublished: boolean, isDiscarded: boolean
   if (status === "DRAFT") return { dot: "bg-blue-500", text: "Draft" };
   if (status === "ARCHIVED") return { dot: "bg-gray-600", text: "Archived" };
   return { dot: "bg-gray-400", text: status };
+}
+
+// ── Auto-hide (by status age) ─────────────────────────────────────────────────
+// Non-published layouts fall out of this list on their own once they've sat
+// untouched (by updated_at) past their status's threshold — otherwise old
+// drafts/archived rows accumulate forever. Published layouts are exempt and
+// never auto-hide.
+const HIDE_AFTER_DAYS: Partial<Record<string, number>> = {
+  DRAFT: 15,
+  ARCHIVED: 30,
+  DELETED: 5,
+};
+
+function daysSince(iso: string): number {
+  return (Date.now() - new Date(iso).getTime()) / 86_400_000;
+}
+
+function hideThresholdDays(row: LayoutApiResponse): number | null {
+  if (row.status === "PUBLISHED") return null;
+  return HIDE_AFTER_DAYS[row.status] ?? null;
+}
+
+function isAutoHidden(row: LayoutApiResponse): boolean {
+  const threshold = hideThresholdDays(row);
+  if (threshold === null) return false;
+  const reference = row.updated_at ?? row.created_at;
+  if (!reference) return false;
+  return daysSince(reference) >= threshold;
+}
+
+function hideCountdownLabel(row: LayoutApiResponse): string | null {
+  const threshold = hideThresholdDays(row);
+  if (threshold === null) return null;
+  const reference = row.updated_at ?? row.created_at;
+  if (!reference) return null;
+  const daysLeft = Math.ceil(threshold - daysSince(reference));
+  if (daysLeft <= 0) return null;
+  return `Available for ${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
 }
 
 function formatDetailDate(iso: string): string {
@@ -236,7 +283,8 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
     }
   }, [discardTarget, invalidateFloor, fetchLayouts]);
 
-  const { page, rowsPerPage, total, paginated, setPage } = useLayoutsTable(layouts);
+  const visibleLayouts = useMemo(() => layouts.filter((row) => !isAutoHidden(row)), [layouts]);
+  const { page, rowsPerPage, total, paginated, setPage } = useLayoutsTable(visibleLayouts);
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
@@ -309,11 +357,20 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                     <td className="px-3 py-3">
                       {(() => {
                         const { dot, text } = statusConfig(row.status, row.is_published, isDiscarded);
+                        // Suppress only for rows optimistically masked right after
+                        // a Discard click (about to vanish on refetch, not aging
+                        // out) — an actual DELETED-status row still counts down.
+                        const countdown = discardedIds.has(row.layout_id) ? null : hideCountdownLabel(row);
                         return (
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
-                            <span className="text-xs text-gray-700 whitespace-nowrap">{text}</span>
-                          </span>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
+                              <span className="text-xs text-gray-700 whitespace-nowrap">{text}</span>
+                            </span>
+                            {countdown && (
+                              <span className="text-[10px] text-amber-500 whitespace-nowrap">{countdown}</span>
+                            )}
+                          </div>
                         );
                       })()}
                     </td>
@@ -330,8 +387,37 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                     <td className="px-3 py-3">
                       {(() => {
                         const isPublished = row.status === "PUBLISHED" && row.is_published;
-                        const name = isPublished ? (row.published_by_name ?? "—") : (row.updated_by_name ?? "—");
-                        const date = isPublished ? row.published_at : row.updated_at;
+                        // A published row's "last updated" must reflect
+                        // whichever happened more recently: the original
+                        // publish, or a later edit made through the
+                        // bulk-configuration endpoint. That endpoint stamps
+                        // updated_at/updated_by on every save but never
+                        // touches published_at/published_by — activate is
+                        // no longer called at all when republishing an
+                        // already-published layout's edits (see
+                        // dev-notes/frontend/CHANGELOG.md, 2026-08-12 17:00),
+                        // so published_at alone would go stale after any
+                        // post-publish edit.
+                        const updatedTime = row.updated_at ? new Date(row.updated_at).getTime() : null;
+                        const publishedTime = row.published_at ? new Date(row.published_at).getTime() : null;
+                        const useUpdated =
+                          !isPublished ||
+                          (updatedTime !== null && (publishedTime === null || updatedTime > publishedTime));
+                        // If the row has never actually been updated/published
+                        // (e.g. a fresh DRAFT no one has touched yet), fall
+                        // back to the same Created info shown in the column to
+                        // its left rather than showing a bare dash — there's
+                        // real info to show, it's just the same as "created."
+                        // Gate the fallback on the NAME being present, not the
+                        // date: updated_at defaults to the row's creation time
+                        // at insert (so it's never actually null), while
+                        // updated_by_user_id/name stay genuinely null until a
+                        // real edit happens — checking the date here would
+                        // never trigger the fallback at all.
+                        const primaryName = useUpdated ? row.updated_by_name : row.published_by_name;
+                        const primaryDate = useUpdated ? row.updated_at : row.published_at;
+                        const name = primaryName ?? row.uploaded_by_name ?? "—";
+                        const date = primaryName ? primaryDate : row.created_at;
                         return (
                           <div className="flex flex-col gap-0.5">
                             <span className="text-xs font-medium text-gray-800">{name}</span>

@@ -109,6 +109,10 @@ export function BookingCard({
   variant = "my",
 }: BookingCardProps) {
   const isCancelled = booking.status === "cancelled";
+  const cancelledBySomeoneElse =
+    isCancelled &&
+    !!booking.updatedByName &&
+    booking.updatedByUserId !== booking.bookedForUserId;
   const bType = booking.bookingType ?? "self";
   const isVisitOnly = bType === "visit";
   const isGuest = bType === "guest";
@@ -267,6 +271,12 @@ export function BookingCard({
             )}
             <BookingTypeBadge type={bType} />
           </div>
+
+          {cancelledBySomeoneElse && (
+            <p className="text-[13px] font-medium text-gray-500 mt-1.5">
+              Cancelled by <span className="font-bold text-gray-600">{booking.updatedByName}</span>
+            </p>
+          )}
         </div>
 
         {/* Person column */}

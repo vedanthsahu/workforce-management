@@ -1,5 +1,18 @@
 import { z } from "zod";
 
+export const sanitizePhoneNumber = (value: string) => {
+  if (/^(?:\d{10}|\+91 \d{10})$/.test(value)) return value;
+
+  const cleaned = value.replace(/[^\d+ ]/g, "");
+  if (cleaned.startsWith("+") && cleaned.length <= 3) return cleaned;
+  if (cleaned.startsWith("+91")) {
+    const digits = cleaned.slice(3).replace(/\D/g, "").slice(0, 10);
+    if (!digits) return cleaned.length > 3 ? "+91 " : "+91";
+    return `+91 ${digits}`;
+  }
+  return cleaned.replace(/\D/g, "").slice(0, 10);
+};
+
 export const createGuestSchema = z.object({
   firstName: z.string().trim().min(1, "First name is required"),
   lastName: z.string().trim().min(1, "Last name is required"),
@@ -9,20 +22,11 @@ export const createGuestSchema = z.object({
     .min(1, "Email is required")
     .email("Enter a valid email address"),
   phone: z
-  .string()
-  .trim()
-  .refine((val) => !val || /^[\d\s+\-()]*$/.test(val), {
-    message: "Only digits, spaces, +, -, (, ) are allowed",
-  })
-  .refine((val) => {
-    if (!val) return true;
-    const digits = val.replace(/\D/g, "");
-    if (digits.startsWith("91")) return digits.length === 12;
-    return digits.length === 10;
-  }, {
-    message: "Phone number must be exactly 10 digits (or 91 + 10 digits)",
-  })
-  .optional(),
+    .string()
+    .refine((val) => !val || /^(?:\d{10}|\+91 \d{10})$/.test(val), {
+      message: "Enter 10 digits or +91 followed by one space and 10 digits",
+    })
+    .optional(),
   organization: z
     .string()
     .trim()
