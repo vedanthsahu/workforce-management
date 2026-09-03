@@ -63,6 +63,7 @@ import {
   CalendarSearch,
   History,
   UserPlus,
+  SlidersHorizontal,
 } from "lucide-react";
 
 import { getInitials, type User } from "@/features/auth/types/auth.types";
@@ -124,6 +125,7 @@ const ROUTE_MAP: Record<string, string> = {
   utilization: "/admin/utilization",
   audit: "/admin/audit",
   settings: "/admin/settings",
+  all_configurations: "/admin/configuration",
 
   front_office_dashboard: "/dashboard",
   today_visitors: "/front_office/today-visitors",
@@ -183,6 +185,10 @@ const ADMIN_REPORTS_NAV: NavItem[] = [
 
 const ADMIN_SETTINGS_NAV: NavItem[] = [
   { id: "settings", label: "Settings", icon: Settings, disabled: true },
+];
+
+const ADMIN_CONFIGURATION_NAV: NavItem[] = [
+  { id: "all_configurations", label: "Configuration", icon: SlidersHorizontal },
 ];
 //--------security nav config----------------------------------------------------
 const FRONT_OFFICE_DASHBOARD: NavItem[] = [
@@ -337,7 +343,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
   const isSecurity = role === "FRONT_OFFICE";
 
   const relevantItems = isAdmin
-    ? [...ADMIN_DASHBOARD, ...ADMIN_MANAGE_NAV, ...ADMIN_OPERATIONS_NAV, ...ADMIN_REPORTS_NAV, ...ADMIN_SETTINGS_NAV]
+    ? [...ADMIN_DASHBOARD, ...ADMIN_MANAGE_NAV, ...ADMIN_OPERATIONS_NAV, ...ADMIN_REPORTS_NAV, ...ADMIN_SETTINGS_NAV, ...ADMIN_CONFIGURATION_NAV]
     : isSecurity
       ? [...FRONT_OFFICE_DASHBOARD, ...FRONT_OFFICE_VISITOR_NAV, ...FRONT_OFFICE_ACTIONS_NAV]
       : [...MAIN_NAV, ...OFFICE_NAV, ...PERSONAL_NAV];
@@ -436,6 +442,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 <SidebarGroupLabel>Settings</SidebarGroupLabel>
                 <SidebarMenu>
                   <NavSection items={ADMIN_SETTINGS_NAV} activeItem={activeItem} onNavigate={handleNav} />
+                </SidebarMenu>
+              </SidebarGroup>
+              <SidebarGroup>
+                <SidebarGroupLabel>Configuration</SidebarGroupLabel>
+                <SidebarMenu>
+                  <NavSection items={ADMIN_CONFIGURATION_NAV} activeItem={activeItem} onNavigate={handleNav} />
                 </SidebarMenu>
               </SidebarGroup>
             </>
