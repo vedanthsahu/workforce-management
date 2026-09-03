@@ -29,6 +29,8 @@ _ACTION_PREFIX_TO_MODULE: dict[str, str] = {
     "seat": "LOCATION",
     "amenity_category": "AMENITY",
     "amenity": "AMENITY",
+    "group": "GROUP_ADMINISTRATION",
+    "role_group": "GROUP_ADMINISTRATION",
 }
 
 

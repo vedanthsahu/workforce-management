@@ -33,6 +33,9 @@ from backend.api.routes.dashboard import router as dashboard_router
 from backend.api.routes.floor_layouts import router as floor_layout_router
 from backend.api.routes.guest_bookings import router as guest_bookings_router
 from backend.api.routes.guest_visits import router as guest_visits_router
+from backend.api.routes.groups import router as groups_router
+from backend.api.routes.groups import user_groups_router
+from backend.api.routes.roles import router as roles_router
 from backend.api.routes.guests import router as guests_router
 from backend.api.routes.locations import router as locations_router
 from backend.api.routes.preferences import router as preferences_router
@@ -86,6 +89,9 @@ app.include_router(auth_router)
 app.include_router(sso_router)
 app.include_router(bookings_router)
 app.include_router(guests_router)
+app.include_router(groups_router)
+app.include_router(user_groups_router)
+app.include_router(roles_router)
 app.include_router(guest_visits_router)
 app.include_router(guest_bookings_router)
 app.include_router(locations_router)

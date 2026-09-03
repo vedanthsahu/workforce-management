@@ -17,6 +17,16 @@ USER_PROFILE_UPDATED = "user.profile_updated"
 USER_PREFERENCES_UPDATED = "user.preferences_updated"
 USER_ACCESS_UPDATED = "user.access_updated"
 
+# ── Group administration events ───────────────────────────────────────────────
+GROUP_ASSIGNED = "group.assigned"
+GROUP_REMOVED = "group.removed"
+GROUP_CREATED = "group.created"
+GROUP_UPDATED = "group.updated"
+GROUP_DEACTIVATED = "group.deactivated"
+GROUP_PERMISSIONS_UPDATED = "group.permissions_updated"
+ROLE_GROUP_ASSIGNED = "role_group.assigned"
+ROLE_GROUP_REMOVED = "role_group.removed"
+
 # ── Auth events ───────────────────────────────────────────────────────────────
 USER_LOGIN = "user.login"
 USER_LOGOUT = "user.logout"
