@@ -30,14 +30,62 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
         .users-tbody-scroll::-webkit-scrollbar-track { background: transparent; }
       `}</style>
 
-      <div className="w-full h-full overflow-x-auto flex flex-col">
-        <table className="w-full flex-1 min-h-0 flex flex-col text-left border-collapse" style={{ tableLayout: "fixed" }}>
+      {/* ── Mobile card list ──────────────────────────────── */}
+      <div className="md:hidden h-full overflow-y-auto divide-y divide-gray-100">
+        {users.map((user, index) => {
+          const isHighlighted = user.id === highlightedUserId;
+          return (
+            <div
+              key={user.id}
+              className={`px-4 py-3 flex items-center justify-between gap-3 ${isHighlighted ? "row-highlight" : ""}`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 shrink-0 rounded-full bg-indigo-100 flex items-center justify-center text-[11px] font-semibold text-indigo-700">
+                  {initialsFor(user.fullName)}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium text-sm text-gray-900 line-clamp-2">{user.fullName}</p>
+                  <p className="text-xs text-gray-400 line-clamp-2">{user.email}</p>
+                  {user.officeLocation && (
+                    <p className="text-xs text-gray-400 line-clamp-2">{user.officeLocation}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <span
+                      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold ring-1 ${getRoleBadgeClass(
+                        user.currentRole
+                      )}`}
+                    >
+                      {user.currentRole}
+                    </span>
+                    <span
+                      className={`inline-flex items-center gap-1 text-xs font-medium ${user.status === "active" ? "text-emerald-600" : "text-gray-400"
+                        }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                      {user.status === "active" ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <UserRowMenu
+                onChangeRole={() => onChangeRole(user)}
+                openUpward={index === users.length - 1}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Desktop table ─────────────────────────────────── */}
+      <div className="hidden md:flex md:flex-col w-full h-full overflow-x-auto">
+        <table className="w-full min-w-220 flex-1 min-h-0 flex flex-col text-left border-collapse" style={{ tableLayout: "fixed" }}>
           {/* pr-2 reserves the same 8px the tbody's scrollbar takes, so header and body columns line up */}
           <thead className="block w-full shrink-0 pr-2 text-xs text-blue-600 bg-blue-100 border-b">
             <tr className="table w-full" style={{ tableLayout: "fixed" }}>
-              <th className="pl-15 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[22%]">Name</th>
-              <th className="pl-15 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[34%]">Email</th>
-              <th className="pl-6 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[18%]">Current Role</th>
+              <th className="pl-15 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[18%]">Name</th>
+              <th className="pl-15 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[24%]">Email</th>
+              <th className="pl-6 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[16%]">Work Location</th>
+              <th className="pl-10 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[16%]">Current Role</th>
               <th className="py-2.5 pl-10 pr-4 font-bold whitespace-nowrap text-left w-[14%]">Status</th>
               <th className="pl-8 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[12%]">Action</th>
             </tr>
@@ -55,16 +103,27 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
                   className={`table w-full ${isHighlighted ? "row-highlight" : "hover:bg-gray-50/60 transition-colors"}`}
                   style={{ tableLayout: "fixed" }}
                 >
-                  <td className="py-3 px-4 w-[22%]">
+                  <td className="py-3 px-4 w-[18%] max-w-0">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-[11px] font-semibold text-indigo-700 shrink-0">
                         {initialsFor(user.fullName)}
                       </div>
-                      <span className="text-sm font-medium  text-gray-900 truncate">{user.fullName}</span>
+                      <span title={user.fullName} className="text-sm font-medium text-gray-900 line-clamp-2 min-w-0">
+                        {user.fullName}
+                      </span>
                     </div>
                   </td>
-                  <td className="py-3 px-6 text-sm text-black w-[34%] truncate">{user.email}</td>
-                  <td className="pl-3 py-2 px-4 w-[18%]">
+                  <td className="py-2 px-1 text-sm text-black w-[24%] max-w-0">
+                    <span title={user.email} className="block line-clamp-2">
+                      {user.email}
+                    </span>
+                  </td>
+                  <td className="pl-5 py-3 px-4 text-sm text-black w-[16%] max-w-0">
+                    <span title={user.officeLocation ?? undefined} className="block line-clamp-2">
+                      {user.officeLocation ?? "—"}
+                    </span>
+                  </td>
+                  <td className="pl-8 py-2 px-4 w-[16%]">
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ring-1 ${getRoleBadgeClass(
                         user.currentRole

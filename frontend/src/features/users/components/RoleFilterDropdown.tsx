@@ -78,14 +78,14 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
       <button
         type="button"
         onClick={openDropdown}
-        className="flex items-center justify-between gap-2 h-10 w-44 px-4 border border-gray-200 rounded-lg text-sm bg-white hover:bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="flex items-center justify-between gap-2 h-10 w-full md:w-44 px-4 border border-gray-200 rounded-lg text-sm bg-white hover:bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
         <span className="truncate">{label}</span>
         <ChevronDown size={14} className="text-gray-400 shrink-0" />
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-1 w-64 rounded-lg border border-gray-200 bg-white py-1.5 shadow-lg">
+        <div className="absolute left-0 right-0 md:left-auto md:right-0 z-20 mt-1 w-auto md:w-64 rounded-lg border border-gray-200 bg-white py-1.5 shadow-lg">
           <div className="flex items-center justify-between gap-2 px-3 py-1">
             <button
               type="button"

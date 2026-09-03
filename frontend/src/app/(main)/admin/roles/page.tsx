@@ -25,9 +25,12 @@ export default function RoleManagementPage() {
           </p>
         </div>
         <div className="self-start sm:self-auto shrink-0">
+          {/* Not wired up yet -- no create-role flow exists. */}
           <button
             type="button"
-            className="inline-flex items-center gap-2 h-9 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium shadow-sm"
+            disabled
+            title="Coming soon"
+            className="inline-flex items-center gap-2 h-9 px-4 bg-indigo-600 text-white rounded-xl text-sm font-medium shadow-sm opacity-50 cursor-not-allowed"
           >
             <Plus size={15} />
             Create Role

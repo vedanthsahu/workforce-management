@@ -55,6 +55,13 @@ export default function UsersPagination({ currentPage, totalPages, onPageChange 
         )}
       </div>
 
+      {/* Page number buttons are hidden below sm: (too cramped) -- this
+         keeps the current position visible on mobile instead of just the
+         two arrows with no indication of where you are. */}
+      <span className="sm:hidden text-xs text-gray-500 px-1 whitespace-nowrap">
+        {currentPage} / {totalPages}
+      </span>
+
       <button
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}

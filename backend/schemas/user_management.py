@@ -83,6 +83,7 @@ class AdminUserDirectoryItem(CamelModel):
     department: str | None = None
     job_title: str | None = Field(default=None, alias="jobTitle")
     mobile_phone: str | None = Field(default=None, alias="mobilePhone")
+    office_location: str | None = Field(default=None, alias="officeLocation")
     status: str
     email: str | None = None
 
