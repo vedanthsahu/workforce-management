@@ -35,6 +35,7 @@ from backend.repositories.permission_repository import fetch_permissions_for_use
 from backend.repositories.token_repository import (
     create_user_session,
     fetch_active_session,
+    fetch_session_by_previous_refresh_token,
     fetch_session_by_refresh_token,
     record_auth_event,
     revoke_all_user_sessions,
@@ -494,41 +495,61 @@ def refresh_auth_tokens(
             refresh_token_hash=token_hash,
         )
         if session is None:
-            # The hash didn't match any row for this session_id. That's
-            # either a wholly bogus token, or reuse of a refresh token that
-            # was already rotated past -- distinguish the two by checking
-            # whether the session itself is still active. A stale-but-once
-            # valid token being replayed means it leaked; kill the session
-            # immediately rather than just rejecting this one request.
-            reused_session = fetch_active_session(
+            # The hash didn't match any row for this session_id. Before
+            # treating this as reuse/theft, check whether it's actually a
+            # legitimate concurrent request that arrived just after another
+            # request already rotated this same token (e.g. a page firing
+            # several API calls that each independently trigger a refresh).
+            # A match here means this token was valid until moments ago --
+            # rotate again for this caller too, same as an uncontended
+            # refresh, using the session's current (already-rotated) hash
+            # as the base rather than this caller's now-stale token_hash.
+            session = fetch_session_by_previous_refresh_token(
                 conn,
                 tenant_id=refresh_scope["tenant_id"],
                 user_id=refresh_scope["user_id"],
                 session_id=refresh_scope["session_id"],
+                refresh_token_hash=token_hash,
             )
-            if reused_session is not None:
-                revoke_user_session(
+            if session is not None:
+                token_hash = session["refresh_token_hash"]
+            else:
+                # Neither the current nor the just-replaced hash matched --
+                # this is either a wholly bogus token, or real reuse of a
+                # token well outside any legitimate rotation window.
+                # Distinguish the two by checking whether the session is
+                # still active; a stale-but-once-valid token being replayed
+                # means it leaked, so kill the session immediately rather
+                # than just rejecting this one request.
+                reused_session = fetch_active_session(
                     conn,
                     tenant_id=refresh_scope["tenant_id"],
                     user_id=refresh_scope["user_id"],
                     session_id=refresh_scope["session_id"],
                 )
-                record_auth_event(
-                    conn,
-                    tenant_id=refresh_scope["tenant_id"],
-                    user_id=refresh_scope["user_id"],
-                    session_id=refresh_scope["session_id"],
-                    event_type="REFRESH_TOKEN_REUSE_DETECTED",
+                if reused_session is not None:
+                    revoke_user_session(
+                        conn,
+                        tenant_id=refresh_scope["tenant_id"],
+                        user_id=refresh_scope["user_id"],
+                        session_id=refresh_scope["session_id"],
+                    )
+                    record_auth_event(
+                        conn,
+                        tenant_id=refresh_scope["tenant_id"],
+                        user_id=refresh_scope["user_id"],
+                        session_id=refresh_scope["session_id"],
+                        event_type="REFRESH_TOKEN_REUSE_DETECTED",
+                    )
+                    if commit:
+                        conn.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={
+                        "code": "invalid_refresh_token",
+                        "message": "Refresh token is invalid.",
+                    },
                 )
-                if commit:
-                    conn.commit()
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail={
-                    "code": "invalid_refresh_token",
-                    "message": "Refresh token is invalid.",
-                },
-            )
         if session["is_revoked"]:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
