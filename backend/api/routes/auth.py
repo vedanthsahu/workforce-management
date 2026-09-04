@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from pydantic import BaseModel
-
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from psycopg2.extensions import connection as PGConnection
+from pydantic import BaseModel
 
 from backend.api.deps import get_current_user
 from backend.core.config import get_settings
