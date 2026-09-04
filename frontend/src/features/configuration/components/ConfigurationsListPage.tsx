@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, ChevronLeft, Plus, Pencil, MoreVertical, CheckCircle2, X } from "lucide-react";
-import { INITIAL_CONFIGURATIONS } from "../utils/configurationData";
+import { ChevronRight, Pencil, CalendarDays, UserRound, Info, CheckCircle2, X } from "lucide-react";
+import { CONFIGURATION_SECTIONS, INITIAL_CONFIGURATIONS } from "../utils/configurationData";
 import type { ConfigurationField, ConfigurationItem } from "../types/configuration.types";
 import ConfigurationDetailPanel from "./ConfigurationDetailPanel";
 
@@ -17,21 +17,144 @@ function formatDateTime(iso: string): string {
   });
 }
 
-const PAGE_SIZES = [10, 25, 50];
+function EditButton({ onClick, className = "" }: { onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 h-9 px-4 border border-indigo-200 text-indigo-600 rounded-lg text-xs font-semibold hover:bg-indigo-50 transition-colors shrink-0 ${className}`}
+    >
+      <Pencil size={13} />
+      Edit
+    </button>
+  );
+}
+
+function StatBlock({ statLabel, value, unit }: { statLabel: string; value: number; unit: string }) {
+  return (
+    <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 min-w-[110px]">
+      <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">{statLabel}</p>
+      <p className="text-lg font-bold text-gray-900 mt-0.5">{value}</p>
+      <p className="text-[10px] text-gray-400">{unit}</p>
+    </div>
+  );
+}
+
+function MetaInfo({ lastUpdatedAt, lastUpdatedBy }: { lastUpdatedAt: string; lastUpdatedBy: string }) {
+  return (
+    <div className="flex flex-col gap-1.5 text-xs">
+      <div className="flex items-center gap-1.5">
+        <CalendarDays size={13} className="text-gray-400 shrink-0" />
+        <div>
+          <p className="text-[10px] text-gray-400">Last Updated</p>
+          <p className="font-medium text-gray-600 whitespace-nowrap">{formatDateTime(lastUpdatedAt)}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <UserRound size={13} className="text-gray-400 shrink-0" />
+        <div>
+          <p className="text-[10px] text-gray-400">Updated By</p>
+          <p className="font-medium text-gray-600">{lastUpdatedBy}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Standard single-configuration card: icon+name+description, its stat
+ * block(s), Last Updated/Updated By, and an Edit button -- wraps onto
+ * multiple lines on its own when the card is narrow (e.g. two side by side
+ * in Employee Booking) instead of needing separate mobile/desktop layouts. */
+function ItemCard({ item, onEdit }: { item: ConfigurationItem; onEdit: () => void }) {
+  const Icon = item.icon;
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 flex flex-wrap items-center gap-5">
+      <div className="flex items-start gap-3 min-w-[220px] flex-1">
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${item.iconBg}`}>
+          <Icon className={`w-5 h-5 ${item.iconColor}`} />
+        </div>
+        <div className="min-w-0">
+          <h4 className="font-semibold text-gray-900 text-sm">{item.name}</h4>
+          <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        {item.fields.map((f) => (
+          <StatBlock key={f.key} statLabel={f.statLabel} value={f.value} unit={f.unit} />
+        ))}
+      </div>
+
+      <MetaInfo lastUpdatedAt={item.lastUpdatedAt} lastUpdatedBy={item.lastUpdatedBy} />
+
+      <EditButton onClick={onEdit} className="ml-auto" />
+    </div>
+  );
+}
+
+/** Layout Visibility is the one exception: a single configuration whose
+ * three fields (Draft/Archived/Discarded) each get their own mini card with
+ * their own icon and blurb, sharing one Edit action at the section header
+ * instead of a per-field one. */
+function LayoutVisibilityCards({ item }: { item: ConfigurationItem }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {item.fields.map((f) => {
+        const FieldIcon = f.icon;
+        return (
+          <div key={f.key} className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              {FieldIcon && (
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${f.iconBg}`}>
+                  <FieldIcon className={`w-4.5 h-4.5 ${f.iconColor}`} />
+                </div>
+              )}
+              <h4 className="font-semibold text-gray-900 text-sm">{f.cardTitle}</h4>
+            </div>
+            <p className="text-xs text-gray-500">{f.cardDescription}</p>
+            <div>
+              <span className="text-xl font-bold text-gray-900">{f.value}</span>
+              <span className="text-xs text-gray-400 ml-1">{f.unit}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Section({
+  title,
+  subtitle,
+  onEdit,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  onEdit?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+          <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
+        </div>
+        {onEdit && <EditButton onClick={onEdit} />}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 export default function ConfigurationsListPage() {
   const [configurations, setConfigurations] = useState<ConfigurationItem[]>(INITIAL_CONFIGURATIONS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
   const selectedItem = configurations.find((c) => c.id === selectedId) ?? null;
-
-  const totalPages = Math.max(1, Math.ceil(configurations.length / pageSize));
-  const startIndex = (page - 1) * pageSize;
-  const paginated = configurations.slice(startIndex, startIndex + pageSize);
+  const getItem = (id: string) => configurations.find((c) => c.id === id);
 
   const handleSave = (id: string, description: string, fields: ConfigurationField[]) => {
     const nowIso = new Date().toISOString();
@@ -48,15 +171,8 @@ export default function ConfigurationsListPage() {
   };
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc]">
-      {/* BREADCRUMB */}
-      <div className="flex items-center gap-1.5 text-xs text-gray-400">
-        <span>Settings</span>
-        <ChevronRight size={12} />
-        <span>Configuration</span>
-        <ChevronRight size={12} />
-        <span className="text-gray-700 font-medium">All Configurations</span>
-      </div>
+    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-5 sm:space-y-6 bg-[#f8fafc]">
+     
 
       {savedMessage && (
         <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-green-200 bg-green-50 text-sm font-medium text-green-700">
@@ -71,163 +187,50 @@ export default function ConfigurationsListPage() {
       )}
 
       {/* HEADER */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">All Configurations</h1>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1">
-            Manage all application configuration settings from one place.
-          </p>
-        </div>
-        {/* Not wired up yet -- creating new configuration types isn't part of
-           this pass, this is just here to match the design. */}
-        <button
-          type="button"
-          disabled
-          title="Coming soon"
-          className="inline-flex items-center gap-2 h-9 px-4 bg-indigo-600 text-white rounded-xl text-sm font-medium shadow-sm opacity-50 cursor-not-allowed shrink-0 self-start sm:self-auto"
-        >
-          <Plus size={16} />
-          Add Configuration
-        </button>
+      <div>
+        <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">All Configurations</h1>
+        <p className="text-xs sm:text-sm text-gray-500 mt-1">
+          Manage application configuration settings. Update values as per your organization&apos;s requirements.
+        </p>
       </div>
 
-      {/* TABLE CARD */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
-        <div className="w-full overflow-x-auto">
-          <table className="w-full min-w-220 text-xs table-fixed">
-            <colgroup>
-              <col style={{ width: "24%" }} />
-              <col style={{ width: "28%" }} />
-              <col style={{ width: "18%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "6%" }} />
-            </colgroup>
-            <thead className="text-xs text-blue-600 bg-blue-100 border-b">
-              <tr>
-                <th className="pl-6 px-3 py-3 text-left font-bold">Configuration Name</th>
-                <th className="px-3 py-3 text-left font-bold">Description</th>
-                <th className="px-3 py-3 text-left font-bold">Current Value</th>
-                <th className="px-3 py-3 text-left font-bold">Last Updated</th>
-                <th className="px-3 py-3 text-left font-bold">Updated By</th>
-                <th className="px-3 py-3 text-center font-bold">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {paginated.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${item.iconBg}`}>
-                          <Icon className={`w-4 h-4 ${item.iconColor}`} />
-                        </div>
-                        <span className="font-medium text-gray-900">{item.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 text-gray-600 max-w-0">
-                      <span className="block line-clamp-3">{item.description}</span>
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="flex flex-col gap-1 items-start">
-                        {item.valuePills(item.fields).map((pill) => (
-                          <span
-                            key={pill.label}
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${pill.className}`}
-                          >
-                            {pill.label}: {pill.value}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 text-gray-500 whitespace-nowrap">{formatDateTime(item.lastUpdatedAt)}</td>
-                    <td className="px-3 py-3 text-gray-700">{item.lastUpdatedBy}</td>
-                    <td className="px-3 py-3">
-                      <div className="relative flex items-center justify-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedId(item.id)}
-                          className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 transition-colors"
-                          title="Edit configuration"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setOpenMenuId((prev) => (prev === item.id ? null : item.id))}
-                          className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 transition-colors"
-                        >
-                          <MoreVertical size={14} />
-                        </button>
+      {/* SECTIONS */}
+      {CONFIGURATION_SECTIONS.map((section) => {
+        const items = section.itemIds.map(getItem).filter((i): i is ConfigurationItem => !!i);
+        if (items.length === 0) return null;
+        const isMultiField = items.length === 1 && items[0].multiField;
 
-                        {openMenuId === item.id && (
-                          <div className="absolute right-0 top-8 z-20 w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-1 text-left">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedId(item.id);
-                                setOpenMenuId(null);
-                              }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
-                            >
-                              <Pencil size={13} className="text-gray-400" />
-                              Edit
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        return (
+          <Section
+            key={section.id}
+            title={section.title}
+            subtitle={section.subtitle}
+            onEdit={isMultiField ? () => setSelectedId(items[0].id) : undefined}
+          >
+            {isMultiField ? (
+              <LayoutVisibilityCards item={items[0]} />
+            ) : items.length > 1 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {items.map((item) => (
+                  <ItemCard key={item.id} item={item} onEdit={() => setSelectedId(item.id)} />
+                ))}
+              </div>
+            ) : (
+              <ItemCard item={items[0]} onEdit={() => setSelectedId(items[0].id)} />
+            )}
+          </Section>
+        );
+      })}
 
-        {/* FOOTER */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t text-xs sm:text-sm text-gray-500">
-          <span>
-            {configurations.length > 0 &&
-              `Showing ${startIndex + 1} to ${Math.min(startIndex + pageSize, configurations.length)} of ${configurations.length} entries`}
-          </span>
-          <div className="flex items-center gap-3 self-center sm:self-auto">
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="p-1.5 border rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <span className="px-2.5 py-1 text-xs rounded-md border border-indigo-300 bg-indigo-50 text-indigo-700 font-semibold">
-                {page}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="p-1.5 border rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
-            <select
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setPage(1);
-              }}
-              className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
-            >
-              {PAGE_SIZES.map((n) => (
-                <option key={n} value={n}>
-                  {n} / page
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* NOTE */}
+      <div className="flex items-start gap-3 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
+        <Info size={16} className="text-indigo-500 mt-0.5 shrink-0" />
+        <div>
+          <p className="text-sm font-semibold text-indigo-900">Note</p>
+          <p className="text-xs text-indigo-700 mt-0.5">
+            These configuration settings control key application behaviors. Changes will be applied across the
+            system based on the defined rules.
+          </p>
         </div>
       </div>
 

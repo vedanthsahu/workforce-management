@@ -217,7 +217,7 @@ export default function BookingsTable({ data, selectedRowKey, onView, onModifySe
             <th className="pl-3 pr-1 py-3 text-left font-bold">Building</th>
             <th className="pl-5 pr-1 py-3 text-left font-bold">Floor</th>
             <th className="pl-8 px-3 py-3 text-left font-bold">Date</th>
-            <th className="pl-10 px-3 py-3 text-left font-bold">Status</th>
+            <th className="pl-16 px-3 py-3 text-left font-bold">Status</th>
             <th className="px-3 py-3 text-center font-bold">Booked By</th>
             <th className="px-3 py-3 text-center font-bold">Actions</th>
           </tr>
