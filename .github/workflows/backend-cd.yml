@@ -84,12 +84,13 @@ jobs:
         DbName=${{ secrets.DB_NAME }} 
         MicrosoftClientId=${{ secrets.MICROSOFT_CLIENT_ID }} 
         MicrosoftTenantId=${{ secrets.MICROSOFT_TENANT_ID }} 
-        RedirectUri=${{ secrets.REDIRECT_URI }} 
-        FrontendUrl=${{ secrets.FRONTEND_URL }} 
-        S3BucketName=${{ secrets.S3_BUCKET_NAME }} 
-        S3PublicBaseUrl=${{ secrets.S3_PUBLIC_BASE_URL }} 
-        SesSenderEmail=${{ secrets.SES_SENDER_EMAIL }} 
-        PrivateSubnetIds=${{ secrets.PRIVATE_SUBNET_IDS }} 
+        RedirectUri=${{ secrets.REDIRECT_URI }}
+        FrontendUrl=${{ secrets.FRONTEND_URL }}
+        AdditionalFrontendUrls="${{ secrets.ADDITIONAL_FRONTEND_URLS }}"
+        S3BucketName=${{ secrets.S3_BUCKET_NAME }}
+        S3PublicBaseUrl=${{ secrets.S3_PUBLIC_BASE_URL }}
+        SesSenderEmail=${{ secrets.SES_SENDER_EMAIL }}
+        PrivateSubnetIds=${{ secrets.PRIVATE_SUBNET_IDS }}
         LambdaSecurityGroupIds=${{ secrets.LAMBDA_SECURITY_GROUP_IDS }}
 
     - name: Post-Deployment Health Check
@@ -172,12 +173,13 @@ jobs:
         DbName=${{ secrets.DB_NAME }} 
         MicrosoftClientId=${{ secrets.MICROSOFT_CLIENT_ID }} 
         MicrosoftTenantId=${{ secrets.MICROSOFT_TENANT_ID }} 
-        RedirectUri=${{ secrets.REDIRECT_URI }} 
-        FrontendUrl=${{ secrets.FRONTEND_URL }} 
-        S3BucketName=${{ secrets.S3_BUCKET_NAME }} 
-        S3PublicBaseUrl=${{ secrets.S3_PUBLIC_BASE_URL }} 
-        SesSenderEmail=${{ secrets.SES_SENDER_EMAIL }} 
-        PrivateSubnetIds=${{ secrets.PRIVATE_SUBNET_IDS }} 
+        RedirectUri=${{ secrets.REDIRECT_URI }}
+        FrontendUrl=${{ secrets.FRONTEND_URL }}
+        AdditionalFrontendUrls="${{ secrets.ADDITIONAL_FRONTEND_URLS }}"
+        S3BucketName=${{ secrets.S3_BUCKET_NAME }}
+        S3PublicBaseUrl=${{ secrets.S3_PUBLIC_BASE_URL }}
+        SesSenderEmail=${{ secrets.SES_SENDER_EMAIL }}
+        PrivateSubnetIds=${{ secrets.PRIVATE_SUBNET_IDS }}
         LambdaSecurityGroupIds=${{ secrets.LAMBDA_SECURITY_GROUP_IDS }}
 
     - name: Post-Deployment Health Check
