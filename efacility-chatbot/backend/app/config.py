@@ -1,10 +1,33 @@
-from pydantic_settings import BaseSettings
+from pathlib import Path
 from typing import List
+from urllib.parse import quote_plus
+
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+REPOSITORY_ENV = Path(__file__).resolve().parents[3] / ".env"
+CHATBOT_ENV = Path(__file__).resolve().parents[1] / ".env"
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql+asyncpg://efacility:efacility123@localhost:5432/efacility_chatbot"
-    SYNC_DATABASE_URL: str = "postgresql://efacility:efacility123@localhost:5432/efacility_chatbot"
+    model_config = SettingsConfigDict(
+        env_file=(REPOSITORY_ENV, CHATBOT_ENV),
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # Use the same AWS RDS settings as the main application. URL settings are
+    # retained only as backward-compatible overrides for existing deployments.
+    DB_HOST: str = ""
+    DB_PORT: int = 5432
+    DB_NAME: str = ""
+    DB_USER: str = ""
+    DB_PASSWORD: str = ""
+    DB_SSLMODE: str = "require"
+    DATABASE_URL: str = ""
+    SYNC_DATABASE_URL: str = ""
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
     MAIN_APP_JWT_SECRET: str = ""
@@ -58,12 +81,26 @@ class Settings(BaseSettings):
     WHATSAPP_BOOKING_FLOW_CTA: str = "Open booking form"
     NGROK_AUTHTOKEN: str = ""
 
+    @model_validator(mode="after")
+    def configure_database_urls(self) -> "Settings":
+        db_values = (self.DB_HOST, self.DB_NAME, self.DB_USER, self.DB_PASSWORD)
+        if all(db_values):
+            user = quote_plus(self.DB_USER)
+            password = quote_plus(self.DB_PASSWORD)
+            database = quote_plus(self.DB_NAME)
+            sslmode = quote_plus(self.DB_SSLMODE)
+            base = f"{user}:{password}@{self.DB_HOST}:{self.DB_PORT}/{database}"
+            self.DATABASE_URL = f"postgresql+asyncpg://{base}?ssl={sslmode}"
+            self.SYNC_DATABASE_URL = f"postgresql://{base}?sslmode={sslmode}"
+        elif not self.DATABASE_URL or not self.SYNC_DATABASE_URL:
+            raise ValueError(
+                "Configure DB_HOST, DB_NAME, DB_USER and DB_PASSWORD, or provide "
+                "both DATABASE_URL and SYNC_DATABASE_URL."
+            )
+        return self
+
     @property
     def allowed_origins_list(self) -> List[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",")]
-
-    class Config:
-        env_file = ".env"
-
 
 settings = Settings()
