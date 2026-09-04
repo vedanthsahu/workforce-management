@@ -54,6 +54,11 @@ Parameters:
     Description: HTTPS frontend origin for this environment
     AllowedPattern: "^https://.+$"
 
+  AdditionalFrontendUrls:
+    Type: String
+    Description: Optional comma-separated additional HTTPS frontend origins allowed for CORS (e.g. other Amplify branch URLs)
+    Default: ""
+
   S3BucketName:
     Type: String
     Description: Existing private floor-layout bucket
@@ -99,6 +104,9 @@ Parameters:
     MinValue: 1
     MaxValue: 100
 
+Conditions:
+  HasAdditionalFrontendUrls: !Not [!Equals [!Ref AdditionalFrontendUrls, ""]]
+
 Globals:
   Function:
     Runtime: python3.14
@@ -125,8 +133,10 @@ Resources:
         paths: {}
       CorsConfiguration:
         AllowCredentials: true
-        AllowOrigins:
-          - !Ref FrontendUrl
+        AllowOrigins: !If
+          - HasAdditionalFrontendUrls
+          - !Split [",", !Sub "${FrontendUrl},${AdditionalFrontendUrls}"]
+          - - !Ref FrontendUrl
         AllowHeaders:
           - authorization
           - content-type
@@ -192,6 +202,7 @@ Resources:
           TENANT_ID: !Ref MicrosoftTenantId
           REDIRECT_URI: !Ref RedirectUri
           FRONTEND_URL: !Ref FrontendUrl
+          ADDITIONAL_FRONTEND_URLS: !Ref AdditionalFrontendUrls
           SESSION_TTL: "3600"
 
           AWS_S3_BUCKET_NAME: !Ref S3BucketName
