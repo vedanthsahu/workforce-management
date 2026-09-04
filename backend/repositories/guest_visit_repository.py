@@ -659,6 +659,7 @@ def cancel_guest_visit(
     tenant_id: str,
     guest_visit_id: str,
     cancellation_reason: str | None = None,
+    updated_by_user_id: str | None = None,
 ) -> None:
 
     with conn.cursor() as cur:
@@ -669,12 +670,14 @@ def cancel_guest_visit(
                 visit_status = 'CANCELLED',
                 cancelled_at = NOW(),
                 cancellation_reason = %s,
+                updated_by_user_id = COALESCE(%s, updated_by_user_id),
                 updated_at = NOW()
             WHERE id = %s
               AND tenant_id = %s
             """,
             (
                 cancellation_reason,
+                updated_by_user_id,
                 guest_visit_id,
                 tenant_id,
             ),
