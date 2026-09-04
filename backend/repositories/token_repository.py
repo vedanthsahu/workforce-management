@@ -173,6 +173,9 @@ def fetch_session_by_refresh_token(
     return dict(result) if result else None
 
 
+REFRESH_TOKEN_GRACE_SECONDS = 10
+
+
 def rotate_refresh_token(
     conn: PGConnection,
     *,
@@ -185,12 +188,21 @@ def rotate_refresh_token(
     ip_address: str | None,
     expires_at: datetime,
 ) -> dict[str, Any] | None:
-    """Rotate the hashed refresh token for one active session."""
+    """Rotate the hashed refresh token for one active session.
+
+    Also stashes the hash being replaced into previous_refresh_token_hash
+    with a short grace window (REFRESH_TOKEN_GRACE_SECONDS) -- this is what
+    lets a legitimate concurrent request that presents the just-replaced
+    token be recognized as a race, not token reuse/theft. See
+    fetch_session_by_previous_refresh_token.
+    """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
             UPDATE user_sessions
-            SET refresh_token_hash = %s,
+            SET previous_refresh_token_hash = refresh_token_hash,
+                previous_token_grace_expires_at = NOW() + (%s || ' seconds')::interval,
+                refresh_token_hash = %s,
                 user_agent = %s,
                 ip_address = %s,
                 expires_at = %s,
@@ -216,6 +228,7 @@ def rotate_refresh_token(
                 last_used_at
             """,
             (
+                str(REFRESH_TOKEN_GRACE_SECONDS),
                 new_refresh_token_hash,
                 user_agent,
                 ip_address,
@@ -225,6 +238,51 @@ def rotate_refresh_token(
                 session_id,
                 current_refresh_token_hash,
             ),
+        )
+        result = cur.fetchone()
+    return dict(result) if result else None
+
+
+def fetch_session_by_previous_refresh_token(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    session_id: str,
+    refresh_token_hash: str,
+) -> dict[str, Any] | None:
+    """Find a session whose refresh token was JUST rotated past, within the
+    grace window, by a concurrent request -- distinguishes a legitimate
+    concurrent refresh from real token reuse/theft. Returns the session's
+    CURRENT row (i.e. the winner's already-rotated hash), not a match on
+    refresh_token_hash itself.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                session_id::text AS session_id,
+                tenant_id::text AS tenant_id,
+                user_id::text AS user_id,
+                refresh_token_hash,
+                user_agent,
+                ip_address::text AS ip_address,
+                revoked_at,
+                (revoked_at IS NOT NULL) AS is_revoked,
+                created_at,
+                updated_at,
+                expires_at,
+                last_used_at
+            FROM user_sessions
+            WHERE tenant_id = %s
+              AND user_id = %s
+              AND session_id = %s
+              AND previous_refresh_token_hash = %s
+              AND previous_token_grace_expires_at IS NOT NULL
+              AND previous_token_grace_expires_at > NOW()
+              AND revoked_at IS NULL
+            """,
+            (tenant_id, user_id, session_id, refresh_token_hash),
         )
         result = cur.fetchone()
     return dict(result) if result else None
