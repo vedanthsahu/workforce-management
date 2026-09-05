@@ -123,10 +123,12 @@ function UserManagementPage() {
           </p>
         </div>
         <div className="self-start sm:self-auto shrink-0">
+          {/* Not wired up yet -- /admin/users/add doesn't exist. */}
           <button
-            onClick={() => router.push("/admin/users/add")}
-            onMouseEnter={() => router.prefetch("/admin/users/add")}
-            className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm"
+            type="button"
+            disabled
+            title="Coming soon"
+            className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 text-white rounded-xl text-sm font-medium shadow-sm opacity-50 cursor-not-allowed"
           >
             <Plus size={15} />
             Add User
@@ -136,15 +138,20 @@ function UserManagementPage() {
 
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col flex-1 min-h-0">
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-b shrink-0">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between px-4 sm:px-6 py-4 border-b shrink-0">
           <h2 className="text-sm sm:text-base font-semibold text-gray-800 flex items-center gap-2">
             User Management
             <span className="text-[11px] font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
               {summary?.filteredUsers ?? 0}
             </span>
           </h2>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center w-full sm:w-auto">
-            <div className="flex items-center gap-2">
+          {/* Stays stacked/full-width until md: -- matches the breakpoint
+             UsersTable itself switches from its mobile card list to the
+             fixed-width desktop table at, so the filter row's fixed
+             dropdown widths never appear on a viewport still showing the
+             mobile table. */}
+          <div className="flex flex-col gap-2 md:flex-row md:items-center w-full md:w-auto">
+            <div className="grid grid-cols-2 gap-2 md:flex md:items-center">
               <RoleFilterDropdown
                 roleCounts={roles}
                 selectedRoles={selectedRoles}
@@ -155,7 +162,7 @@ function UserManagementPage() {
                 onChange={setStatusFilter}
               />
             </div>
-            <div className="relative w-full sm:w-60">
+            <div className="relative w-full md:w-60">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 value={search}

@@ -8,7 +8,7 @@ import { getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
 import AuditChangesSection from "./AuditChangesSection";
 import { AuditLog } from "../types/audit.types";
 import { AUDIT_STATUS_STYLES } from "../utils/constants";
-import { describeAuditAction, formatAuditDateTime, initialsOf } from "../utils/mapAuditLog";
+import { describeAuditAction, formatAuditDateTime, hasNoChangesData, initialsOf } from "../utils/mapAuditLog";
 
 type Props = {
   open: boolean;
@@ -185,9 +185,11 @@ export default function AuditLogDetailSheet({ open, log, loading, error, onOpenC
 
               {/* Changes — CREATE/UPDATE/DELETE/AUTH/FAILED-aware, driven
                  entirely by old_values/new_values/changed_fields from the
-                 backend. AUTH module events (login/logout/etc.) have no
-                 before/after field values, so the section is hidden. */}
-              {log.module.toUpperCase() !== "AUTH" && <AuditChangesSection log={log} />}
+                 backend. Only login/logout genuinely have no before/after
+                 field values -- every other AUTH-module event (profile
+                 updates, access/role changes, etc.) does, so those still
+                 show this section like everything else. */}
+              {!hasNoChangesData(log.module, log.action) && <AuditChangesSection log={log} />}
 
               {/* Additional Info */}
               <Section title="Additional Information">

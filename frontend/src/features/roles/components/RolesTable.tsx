@@ -55,11 +55,11 @@ export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) 
                     {role.name}
                   </span>
                 </td>
-                <td className="py-3 px-4 text-sm text-gray-600 w-[38%] ">
+                <td className="py-3 px-4 text-sm text-black w-[38%] ">
                   {role.description}
                 </td>
-                <td className="py-3 px-1 text-sm text-gray-700 w-[10%]">{role.userCount}</td>
-                <td className="py-3 pl-8 pr-4 text-sm text-gray-700 w-[16%]">{role.permissionCount}</td>
+                <td className="py-3 px-1 text-sm text-black w-[10%]">{role.userCount}</td>
+                <td className="py-3 pl-8 pr-4 text-sm text-black w-[16%]">{role.permissionCount}</td>
                 <td className="py-3 px-4 w-[10%]">
                   <button
                     type="button"
