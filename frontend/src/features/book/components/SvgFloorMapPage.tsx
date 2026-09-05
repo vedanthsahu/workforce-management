@@ -4,7 +4,6 @@ import { Seat, Preference } from "../types/Bookingform.types";
 import {
   SVG_W,
   SVG_H,
-  ZOOM_MIN,
   ZOOM_MAX,
   ZOOM_BUTTON_FACTOR,
   ZOOM_WHEEL_FACTOR,
@@ -78,14 +77,15 @@ const FALLBACK_FILL: Record<string, string> = {
   unloaded: "#9CA3AF",
 };
 
-// Cabin/conference/meeting room seats are grouped under one svg id containing
-// a "CBN"/"CFR"/"MR" segment (e.g. "HYD-PRV-F11-CBN-04", "HYD-PRV-F11-CFR-02",
-// "HYD-PRV-F11-MR-01"), not a dedicated field. When available, best/partial
-// match, or selected, they keep the floor plan's original artwork colors
-// instead of being flooded with a solid status fill (while staying
-// clickable, and while selected still showing the pulse/glow highlight);
-// when booked/unavailable they still recolor like any other seat.
-const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr)([-_]|$)/i;
+// Cabin/conference/meeting/training room seats are grouped under one svg id
+// containing a "CBN"/"CFR"/"MR"/"TR" segment (e.g. "HYD-PRV-F11-CBN-04",
+// "HYD-PRV-F11-CFR-02", "HYD-PRV-F11-MR-01", "HYD-PRV-F11-TR-01"), not a
+// dedicated field. When available, best/partial match, or selected, they
+// keep the floor plan's original artwork colors instead of being flooded
+// with a solid status fill (while staying clickable, and while selected
+// still showing the pulse/glow highlight); when booked/unavailable they
+// still recolor like any other seat.
+const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr|tr)([-_]|$)/i;
 
 function isRoomSvgId(svgId: string): boolean {
   return ROOM_SVG_ID_PATTERN.test(svgId);
@@ -174,6 +174,28 @@ function recolorSeat(svg: string, svgId: string, paletteKey: string): string {
     if (block === beforeRecolor) {
       const fallbackFill = FALLBACK_FILL[paletteKey] ?? p.body;
       block = block.replace(/fill="(?!none")[^"]*"/g, `fill="${fallbackFill}"`);
+
+      // Seats sit flush against their neighbors with zero gap. An outer glow
+      // (CSS filter/drop-shadow) gets painted over on the touching side by
+      // whichever neighbor is drawn later in the SVG's document order, so it
+      // only ever shows on edges facing open space. A `stroke` painted
+      // directly on each shape is part of the same paint step as its fill,
+      // so it can't be erased by a later sibling — giving a complete border
+      // on every side, including shared edges. Applied to every status (not
+      // just best/partial match) for a consistent look across the map.
+      const borderColor = "#000000";
+      const borderWidth = "32";
+      // `stroke` and `stroke-width` are added independently: many real
+      // exports set stroke="none" with no stroke-width at all, so
+      // "already has a stroke attribute" is not a reliable signal that a
+      // usable width exists too — checking each attribute separately
+      // guarantees every shape ends up with both, instead of some shapes
+      // getting recolored to black but keeping the default 1-unit width
+      // (invisible against a canvas tens of thousands of units wide).
+      block = block.replace(/<(path|rect|polygon|circle|ellipse)\b(?![^>]*\sstroke=)/g, `<$1 stroke="${borderColor}"`);
+      block = block.replace(/<(path|rect|polygon|circle|ellipse)\b(?![^>]*\sstroke-width=)/g, `<$1 stroke-width="${borderWidth}"`);
+      block = block.replace(/stroke="[^"]*"/g, `stroke="${borderColor}"`);
+      block = block.replace(/stroke-width="[^"]*"/g, `stroke-width="${borderWidth}"`);
     }
   }
 
@@ -690,12 +712,20 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
   const containerRectRef = useRef<DOMRect | null>(null);
   const tooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const coloredSvg =
-    rawSvg && !loading && seats.length > 0 && svgSeatIds.length > 0
-      ? buildColoredSvg(rawSvg, svgSeatIds, seats, selectedSeatId)
-      : rawSvg && !loading && svgSeatIds.length > 0
-        ? rawSvg  // show uncolored SVG while seats are still loading
-        : null;
+  // buildColoredSvg runs a chain of regex replacements per seat over the
+  // full raw SVG text — on a ~30MB floor plan that's real, synchronous CPU
+  // work. Without memoization this ran on every render, including renders
+  // triggered by state that has nothing to do with seat coloring (zoomDisplay
+  // from every wheel tick/button click, tooltip from every mousemove over
+  // the map), which is what made zoom/pan/hover feel heavy. Scoping the
+  // dependency list to just what buildColoredSvg's output actually depends
+  // on — rawSvg, loading, seats, selectedSeatId, svgSeatIds — means it now
+  // only recomputes when the seat data or the loaded SVG itself changes.
+  const coloredSvg = React.useMemo(() => {
+    if (!rawSvg || loading || svgSeatIds.length === 0) return null;
+    if (seats.length === 0) return rawSvg; // show uncolored SVG while seats are still loading
+    return buildColoredSvg(rawSvg, svgSeatIds, seats, selectedSeatId);
+  }, [rawSvg, loading, seats, selectedSeatId, svgSeatIds]);
 
   // ── Fetch SVG from dynamic URL ────────────────────────────────────────────
   useEffect(() => {
@@ -726,9 +756,14 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
   }, [svgUrl]);
 
   // ── applyTransform ────────────────────────────────────────────────────────
-  const applyTransform = useCallback(() => {
+  // `animate` adds a short CSS transition for discrete, user-initiated steps
+  // (zoom buttons) so they ease instead of jump-cutting. Continuous
+  // interactions (wheel zoom, drag-pan, pinch) must stay untransitioned —
+  // animating those would make them lag behind the cursor/fingers.
+  const applyTransform = useCallback((animate = false) => {
     const el = transformRef.current;
     if (!el) return;
+    el.style.transition = animate ? "transform 120ms ease-out" : "none";
     el.style.transform = `translate(${translateRef.current.x}px,${translateRef.current.y}px) scale(${scaleRef.current})`;
   }, []);
 
@@ -785,46 +820,89 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
   }, [loading]);
 
   // ── Zoom ─────────────────────────────────────────────────────────────────
+  // The zoom-out floor is the "fit to view" scale for whatever SVG is
+  // currently loaded, not a fixed constant — a fixed floor either blocks
+  // reaching fit-to-view on an oversized canvas (too high) or, on a normal-
+  // sized floor plan, lets you zoom out past fit-to-view into a tiny shape
+  // surrounded by empty gray space (too low). Clamping to the fit scale
+  // means "fully zoomed out" always means the original fitted framing.
   const zoomStep = useCallback((factor: number) => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
     const { width: wW, height: wH } = wrapper.getBoundingClientRect();
+    const zoomFloor = Math.min(wW / svgDims.w, wH / svgDims.h);
     const oldScale = scaleRef.current;
-    const newScale = Math.min(Math.max(oldScale * factor, ZOOM_MIN), ZOOM_MAX);
+    const newScale = Math.min(Math.max(oldScale * factor, zoomFloor), ZOOM_MAX);
     const cx = wW / 2, cy = wH / 2;
     translateRef.current = {
       x: cx - (cx - translateRef.current.x) * (newScale / oldScale),
       y: cy - (cy - translateRef.current.y) * (newScale / oldScale),
     };
     scaleRef.current = newScale;
-    applyTransform();
+    // Both directions animate the same way now — making zoom-out snap
+    // instantly while zoom-in eased created a jarring inconsistency (a
+    // smooth zoom followed by an abrupt jump reads as a glitch, especially
+    // when clicking zoom-out while a zoom-in transition is still settling).
+    // Zooming out does reveal more of the oversized floor-plan canvas per
+    // frame than zooming in, so the transition is kept short (120ms, see
+    // applyTransform) rather than removed for one direction only — enough
+    // frames to feel smooth without repainting that much geometry for long.
+    applyTransform(true);
     setZoomDisplay(Math.round(newScale * 100));
-  }, [applyTransform]);
+  }, [applyTransform, svgDims]);
 
   const zoomIn = useCallback(() => zoomStep(ZOOM_BUTTON_FACTOR), [zoomStep]);
   const zoomOut = useCallback(() => zoomStep(1 / ZOOM_BUTTON_FACTOR), [zoomStep]);
 
   // ── Wheel zoom ────────────────────────────────────────────────────────────
+  // A trackpad or a fast mouse wheel can fire many "wheel" events within a
+  // single animation frame. Doing a full transform + React state update per
+  // event (the old behavior) does redundant work the browser can't even
+  // paint in time, which reads as stutter — especially on this floor plan's
+  // oversized SVG canvas, which is already expensive to re-rasterize on any
+  // scale change. Instead, accumulate the zoom factor from every event that
+  // arrives before the next frame and apply it once, right before paint.
   useEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
-    const handler = (e: WheelEvent) => {
-      e.preventDefault();
-      const factor = e.deltaY < 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR;
+    let rafId: number | null = null;
+    let pending: { factor: number; clientX: number; clientY: number } | null = null;
+
+    const flush = () => {
+      rafId = null;
+      if (!pending) return;
+      const { factor, clientX, clientY } = pending;
+      pending = null;
       const oldScale = scaleRef.current;
-      const newScale = Math.min(Math.max(oldScale * factor, ZOOM_MIN), ZOOM_MAX);
       const rect = el.getBoundingClientRect();
+      // Same fit-scale floor as zoomStep — see the comment there.
+      const zoomFloor = Math.min(rect.width / svgDims.w, rect.height / svgDims.h);
+      const newScale = Math.min(Math.max(oldScale * factor, zoomFloor), ZOOM_MAX);
       translateRef.current = {
-        x: e.clientX - rect.left - (e.clientX - rect.left - translateRef.current.x) * (newScale / oldScale),
-        y: e.clientY - rect.top - (e.clientY - rect.top - translateRef.current.y) * (newScale / oldScale),
+        x: clientX - rect.left - (clientX - rect.left - translateRef.current.x) * (newScale / oldScale),
+        y: clientY - rect.top - (clientY - rect.top - translateRef.current.y) * (newScale / oldScale),
       };
       scaleRef.current = newScale;
       applyTransform();
       setZoomDisplay(Math.round(newScale * 100));
     };
+
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR;
+      pending = {
+        factor: (pending?.factor ?? 1) * factor,
+        clientX: e.clientX,
+        clientY: e.clientY,
+      };
+      if (rafId === null) rafId = requestAnimationFrame(flush);
+    };
     el.addEventListener("wheel", handler, { passive: false });
-    return () => el.removeEventListener("wheel", handler);
-  }, [applyTransform]);
+    return () => {
+      el.removeEventListener("wheel", handler);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, [applyTransform, svgDims]);
 
   // ── Tooltip helpers ───────────────────────────────────────────────────────
   const hideTooltip = useCallback(() => {
