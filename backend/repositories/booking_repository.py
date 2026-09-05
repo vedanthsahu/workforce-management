@@ -1633,7 +1633,10 @@ def fetch_cancelled_delegated_bookings(
             b.cancellation_reason,
 
             b.created_at,
-            b.updated_at
+            b.updated_at,
+            b.updated_by_user_id::text AS updated_user_id,
+            updated_by.full_name AS updated_by_name,
+            updated_by.email AS updated_by_email
 
         FROM bookings b
 
@@ -1644,6 +1647,10 @@ def fetch_cancelled_delegated_bookings(
         LEFT JOIN app_users creator
             ON creator.id = b.booked_by_user_id
             AND creator.tenant_id = b.tenant_id
+
+        LEFT JOIN app_users updated_by
+            ON updated_by.id = b.updated_by_user_id
+            AND updated_by.tenant_id = b.tenant_id
 
         LEFT JOIN seats s
             ON s.id = b.seat_id
