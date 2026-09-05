@@ -1215,6 +1215,8 @@ def fetch_cancelled_guest_visits(
 
             gv.created_at,
             gv.updated_at,
+            COALESCE(gv.updated_by_user_id, gvb.updated_by_user_id)::text AS updated_user_id,
+            updated_by.full_name AS updated_by_name,
 
             g.full_name AS guest_name,
             g.email AS guest_email,
@@ -1246,6 +1248,26 @@ def fetch_cancelled_guest_visits(
         LEFT JOIN app_users host
             ON host.id = gv.host_user_id
            AND host.tenant_id = gv.tenant_id
+
+        -- Older cancellations only stamped the linked booking's
+        -- updated_by_user_id, not the visit's own (that started later) —
+        -- fall back to it so historical rows still show an attribution.
+        -- A visit can have more than one CANCELLED booking (e.g. modified
+        -- then cancelled again), so this picks just the latest one via
+        -- LATERAL + LIMIT 1 rather than a plain join, which could fan out.
+        LEFT JOIN LATERAL (
+            SELECT b2.updated_by_user_id
+            FROM bookings b2
+            WHERE b2.guest_visit_id = gv.id
+              AND b2.tenant_id = gv.tenant_id
+              AND b2.booking_status = 'CANCELLED'
+            ORDER BY b2.updated_at DESC NULLS LAST
+            LIMIT 1
+        ) AS gvb ON true
+
+        LEFT JOIN app_users updated_by
+            ON updated_by.id = COALESCE(gv.updated_by_user_id, gvb.updated_by_user_id)
+           AND updated_by.tenant_id = gv.tenant_id
 
         LEFT JOIN sites si
             ON si.id = gv.site_id
