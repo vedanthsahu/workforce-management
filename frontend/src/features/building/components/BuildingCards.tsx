@@ -38,8 +38,8 @@ function Stat({
   sub,
 }: StatProps) {
   return (
-    <div className="flex items-center gap-3 p-3 sm:p-5 bg-white border rounded-2xl shadow-sm">
-      <div className={`p-2 sm:p-3 rounded-xl shrink-0 ${bg}`}>{icon}</div>
+    <div className="group flex items-center gap-3 p-3 sm:p-5 bg-white border rounded-2xl shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-gray-300">
+      <div className={`p-2 sm:p-3 rounded-xl shrink-0 transition-transform duration-200 group-hover:scale-110 ${bg}`}>{icon}</div>
       <div>
         <p className="text-xs sm:text-sm text-gray-500">{label}</p>
         <p className="text-lg sm:text-xl font-semibold text-gray-900">{value}</p>
