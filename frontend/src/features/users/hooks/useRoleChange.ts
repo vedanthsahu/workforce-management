@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
+import axios from "axios";
 import { usersService } from "../services/usersService";
 import { mapApiUserToUser, toApiStatus } from "../utils/users.utils";
 import type { RoleKey, User, UserStatus } from "../types/users.types";
 
-// Admin-only roles the PATCH /admin/users/{id}/access endpoint will not accept.
-const NON_ASSIGNABLE_ROLES = new Set(["TENANT_ADMIN", "PRODUCT_ADMIN"]);
+// Kept out of the assignable-role dropdown list entirely -- PRODUCT_ADMIN
+// can never be assigned via this endpoint, and has no in-app management
+// flow at all. TENANT_ADMIN is deliberately NOT in this set: a Tenant Admin
+// can promote any user straight to TENANT_ADMIN, manage an existing admin's
+// access, or their own -- see admin_update_user_access_service.
+const NON_ASSIGNABLE_ROLES = new Set(["PRODUCT_ADMIN"]);
 
 export const useRoleChange = (userId: string) => {
   const [user, setUser] = useState<User | null>(null);
@@ -27,18 +32,25 @@ export const useRoleChange = (userId: string) => {
         setNotFound(false);
         setErrorMessage(null);
 
-        // One request gets all users + roles — no second round-trip needed.
-        const { items, roles: apiRoles } = await usersService.getUsers({ limit: 100 });
+        // The target user comes from the dedicated single-user endpoint
+        // (GET /users/{id}) instead of paging through the whole directory
+        // to find it. The assignable-roles list still has no endpoint of
+        // its own — it only exists as a side-channel of GET /admin/users
+        // (see rolesService.getRoles) — so that call stays, but at the
+        // smallest possible page size: its `roles` field is a tenant-wide
+        // summary, not scoped to the page, so `limit: 1` is enough.
+        const [apiUser, { roles: apiRoles }] = await Promise.all([
+          usersService.getUserById(userId),
+          usersService.getUsers({ limit: 1 }),
+        ]);
         if (!active) return;
 
-        // Populate assignable roles from the API — excludes admin-only roles.
+        // Populate assignable roles from the API — excludes PRODUCT_ADMIN only.
         const assignable = apiRoles
           .filter(({ roleName }) => !NON_ASSIGNABLE_ROLES.has(roleName))
           .map(({ roleName }) => roleName as RoleKey);
         setRoles(assignable);
 
-        // Find the target user in the returned items.
-        const apiUser = items.find((u) => u.id === userId) ?? null;
         if (apiUser) {
           const mapped = mapApiUserToUser(apiUser);
           setUser(mapped);
@@ -83,7 +95,13 @@ export const useRoleChange = (userId: string) => {
       return true;
     } catch (error) {
       console.error("Error updating access", error);
-      setErrorMessage("Could not update role/status. Please try again.");
+      // Surface the backend's actual reason when there is one (e.g. the
+      // last-admin guard, or a protected-role rejection) instead of a
+      // generic message that reads like a transient failure.
+      const serverMessage = axios.isAxiosError(error)
+        ? error.response?.data?.error?.message
+        : undefined;
+      setErrorMessage(serverMessage ?? "Could not update role/status. Please try again.");
       return false;
     } finally {
       setSubmitting(false);

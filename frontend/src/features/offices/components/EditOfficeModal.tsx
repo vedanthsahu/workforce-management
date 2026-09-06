@@ -71,6 +71,15 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
     }
   };
 
+  const hasChanges =
+    formData.site_name !== (office.site_name || "") ||
+    formData.city !== (office.city || "") ||
+    formData.country !== (office.country || "") ||
+    formData.timezone !== (office.timezone || "") ||
+    formData.address_line1 !== (office.address_line1 || "") ||
+    formData.address_line2 !== (office.address_line2 || "") ||
+    formData.status !== (office.status || "ACTIVE");
+
   return (
     <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
       <DialogContent className="sm:max-w-2xl">
@@ -121,7 +130,7 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={loading}>
+          <Button onClick={handleSubmit} disabled={loading || !hasChanges}>
             {loading ? "Saving..." : "Save Changes"}
           </Button>
         </DialogFooter>

@@ -73,6 +73,21 @@ export function resolveStatus(raw: AdminBookingRaw): BookingStatus {
 }
 
 export function mapAdminBookingRawToUiBooking(raw: AdminBookingRaw): AdminBooking {
+  const isCancelledOrModified =
+    raw.booking_status === "CANCELLED" || raw.booking_status === "MODIFIED";
+  // "(self)" only applies to a genuine self-booking (booked by and for the
+  // same person) that its own owner then cancelled/modified themselves.
+  // Guests have no user account, so booked_for_user_id is always null for
+  // guest/visit rows — they can never match here, and always show the
+  // actual actor's name instead (admin/facilitator/host/employee alike).
+  const isGenuineSelfBooking =
+    !!raw.booked_for_user_id && raw.booked_for_user_id === raw.booked_by_user_id;
+  const isSelfActed =
+    isCancelledOrModified &&
+    isGenuineSelfBooking &&
+    !!raw.updated_user_id &&
+    raw.updated_user_id === raw.booked_for_user_id;
+
   return {
     booking_id: raw.booking_id ?? "",
     person_name: raw.booked_for_name ?? "",
@@ -96,6 +111,14 @@ export function mapAdminBookingRawToUiBooking(raw: AdminBookingRaw): AdminBookin
         : raw.booked_by_name || "—",
     booked_on: raw.created_at ? formatDateTime(raw.created_at) : "",
     check_in_time: raw.check_in_at ? formatTimeOnly(raw.check_in_at) : undefined,
+    // Only surfaced for Cancelled/Modified rows. Always the actor's name;
+    // suffixed with "(self)" only for a genuine self-booking cancelled by
+    // its own owner (see isGenuineSelfBooking above).
+    cancelled_by: !isCancelledOrModified || !raw.updated_by_name
+      ? undefined
+      : isSelfActed
+        ? `${raw.updated_by_name} (self)`
+        : raw.updated_by_name,
     amenities: [],
     notes: raw.notes ?? undefined,
 

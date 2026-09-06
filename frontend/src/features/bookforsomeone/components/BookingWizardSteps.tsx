@@ -14,9 +14,14 @@ import {
   IconSearch,
   inputStyle,
 } from "./BookForSomeone";
-import { GUEST_TYPES, PURPOSE_OF_VISIT } from "../constants/booking.constants";
+import {
+  GUEST_TYPES,
+  GUEST_VISIT_TOO_FAR_IN_ADVANCE_MESSAGE,
+  maxGuestVisitDateIso,
+  PURPOSE_OF_VISIT,
+} from "../constants/booking.constants";
 import { useGuestSearch } from "../hooks/useBooking";
-import { createGuestSchema } from "../schemas/guest.schema";
+import { createGuestSchema, sanitizePhoneNumber } from "../schemas/guest.schema";
 import {
   Building,
   CreateGuestInput,
@@ -364,7 +369,7 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
   const handleChange = (field: keyof typeof form) => (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const value = e.target.value;
+    const value = field === "phone" ? sanitizePhoneNumber(e.target.value) : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
     if (!touched[field]) setTouched((prev) => ({ ...prev, [field]: true }));
     validateField(field, value);
@@ -375,15 +380,11 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value;
-    const newDigits = raw.replace(/\D/g, "");
-    const maxDigits = newDigits.startsWith("91") ? 12 : 10;
+    const value = sanitizePhoneNumber(e.target.value);
 
-    if (newDigits.length > maxDigits) return;
-
-    setForm((prev) => ({ ...prev, phone: raw }));
+    setForm((prev) => ({ ...prev, phone: value }));
     if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
-    validateField("phone", raw);
+    validateField("phone", value);
   };
 
   const handleSave = async () => {
@@ -488,14 +489,14 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
           )}
         </div>
 
-        {/* Phone — blocks input beyond 10 digits */}
+        {/* Phone */}
         <div>
           <FieldLabel htmlFor="g-phone" required>Phone Number</FieldLabel>
           <input
             id="g-phone"
             type="tel"
             style={inputStyle()}
-            placeholder="+91 550000000"
+            placeholder="+91 1111111111"
             value={form.phone}
             onChange={handlePhoneChange}
             onBlur={handleBlur("phone")}
@@ -659,6 +660,9 @@ function LockedTooltip({ children, locked, message }: { children: React.ReactNod
 
 export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildings, floors, isLoadingBuildings, isLoadingFloors, readOnlyLocation = false }: VisitDetailsStepProps) {
   const lockedMessage = "This field cannot be changed because a seat booking is linked to this visit. To change location or dates, use 'Edit Booking' instead.";
+  const maxVisitDate = maxGuestVisitDateIso();
+  const visitDateTooFar = visitDetails.visitDate > maxVisitDate;
+  const endDateTooFar = visitDetails.endDate > maxVisitDate;
   return (
     <div>
       <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Visit Details</h2>
@@ -791,15 +795,20 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
             style={{ ...inputStyle(), cursor: readOnlyLocation ? "not-allowed" : undefined, opacity: readOnlyLocation ? 0.6 : 1 }}
             value={visitDetails.visitDate}
             min={new Date().toISOString().split("T")[0]}
+            max={maxVisitDate}
             disabled={readOnlyLocation}
             onKeyDown={(e) => e.preventDefault()}
             onChange={(e) => {
               const val = e.target.value;
+              if (val > maxVisitDate) return;
               const updates: Partial<VisitDetails> = { visitDate: val };
               if (!visitDetails.endDate || visitDetails.endDate < val) updates.endDate = val;
               onChange(updates);
             }}
           />
+          {visitDateTooFar && (
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{GUEST_VISIT_TOO_FAR_IN_ADVANCE_MESSAGE}</p>
+          )}
         </LockedTooltip>
         <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
           <FieldLabel htmlFor="endDate" required>End Date</FieldLabel>
@@ -809,10 +818,17 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
             style={{ ...inputStyle(), cursor: readOnlyLocation ? "not-allowed" : undefined, opacity: readOnlyLocation ? 0.6 : 1 }}
             value={visitDetails.endDate}
             min={visitDetails.visitDate || new Date().toISOString().split("T")[0]}
+            max={maxVisitDate}
             disabled={readOnlyLocation}
             onKeyDown={(e) => e.preventDefault()}
-            onChange={(e) => onChange({ endDate: e.target.value })}
+            onChange={(e) => {
+              if (e.target.value > maxVisitDate) return;
+              onChange({ endDate: e.target.value });
+            }}
           />
+          {endDateTooFar && (
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{GUEST_VISIT_TOO_FAR_IN_ADVANCE_MESSAGE}</p>
+          )}
         </LockedTooltip>
       </div>
 
@@ -976,7 +992,7 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
   const [apiError, setApiError] = useState<string | null>(null);
 
   const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+    const value = field === "phone" ? sanitizePhoneNumber(e.target.value) : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
     if (touched[field]) validateField(field, value);
   };

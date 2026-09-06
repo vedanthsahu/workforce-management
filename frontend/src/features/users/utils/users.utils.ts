@@ -15,6 +15,8 @@ export function mapApiUserToUser(item: ApiUser): User {
     mobilePhone: item.mobilePhone,
     status: item.status === "ACTIVE" ? "active" : "inactive",
     currentRole: item.roleName,
+    // Only GET /users/{id} returns this -- GET /admin/users doesn't.
+    officeLocation: item.officeLocation ?? null,
   };
 }
 
@@ -29,6 +31,7 @@ export function mapSearchResultToUser(item: ApiUserSearchResult): User {
     mobilePhone: "",
     status: item.status === "ACTIVE" ? "active" : "inactive",
     currentRole: item.role_name,
+    officeLocation: null,
   };
 }
 

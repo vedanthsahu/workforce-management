@@ -88,10 +88,11 @@ function resolveSeatFill(seat: Seat): string {
   return "#22C55E";                                 // Bookable     — green
 }
 
-// Cabin/conference/meeting room seats are grouped under one svg id containing
-// a "CBN"/"CFR"/"MR" segment (e.g. "HYD-PRV-F11-CBN-04", "HYD-PRV-F11-CFR-02",
-// "HYD-PRV-F11-MR-01"), not a dedicated field.
-const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr)([-_]|$)/i;
+// Cabin/conference/meeting/training room seats are grouped under one svg id
+// containing a "CBN"/"CFR"/"MR"/"TR" segment (e.g. "HYD-PRV-F11-CBN-04",
+// "HYD-PRV-F11-CFR-02", "HYD-PRV-F11-MR-01", "HYD-PRV-F11-TR-01"), not a
+// dedicated field.
+const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr|tr)([-_]|$)/i;
 
 function isRoomSvgId(svgId: string): boolean {
   return ROOM_SVG_ID_PATTERN.test(svgId);
@@ -122,29 +123,100 @@ function recolorGroup(svgText: string, id: string, fill: string): string {
   });
 }
 
+// Paints a solid black stroke directly on every shape inside a seat's <g>,
+// mirroring the booking-side floor map's seat border (see recolorSeat's
+// fallback branch in features/book/components/SvgFloorMapPage.tsx). Seats sit
+// flush against their neighbors with zero gap, so an outer glow (CSS
+// filter/drop-shadow) gets painted over on the touching side by whichever
+// neighbor is drawn later in the SVG's document order — it only ever shows on
+// edges facing open space. A `stroke` painted directly on each shape is part
+// of the same paint step as its fill, so it can't be erased by a later
+// sibling, giving a complete border on every side including shared edges.
+function addFlatBorder(svgText: string, id: string, color = "#000000", width = "32"): string {
+  const groupRegex = new RegExp(`(<g[^>]*id="${escapeRegExp(id)}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "gm");
+  return svgText.replace(groupRegex, (_match, open, inner, close) => {
+    // `stroke` and `stroke-width` are added independently: many real exports
+    // set stroke="none" with no stroke-width at all, so "already has a
+    // stroke attribute" isn't a reliable signal that a usable width exists
+    // too — checking each attribute separately guarantees every shape ends
+    // up with both, instead of some shapes getting recolored to black but
+    // keeping the default 1-unit width (invisible against a canvas tens of
+    // thousands of units wide).
+    const bordered = inner
+      .replace(/<(path|rect|polygon|circle|ellipse)\b(?![^>]*\sstroke=)/g, `<$1 stroke="${color}"`)
+      .replace(/<(path|rect|polygon|circle|ellipse)\b(?![^>]*\sstroke-width=)/g, `<$1 stroke-width="${width}"`)
+      .replace(/stroke="[^"]*"/g, `stroke="${color}"`)
+      .replace(/stroke-width="[^"]*"/g, `stroke-width="${width}"`);
+    return `${open}${bordered}${close}`;
+  });
+}
+
+// Outlines a highlighted seat's silhouette in black by stacking four 1px
+// drop-shadows (one per direction) on its <g>, instead of overriding its
+// fill — so the seat's own status color (green/amber/red, or the floor
+// plan's original artwork color when unconfigured) stays visible under the
+// highlight rather than being hidden by a solid highlight block.
+function addSeatBorder(svgText: string, id: string, color = "#000000"): string {
+  const openTagRegex = new RegExp(`<g\\b[^>]*\\sid="${escapeRegExp(id)}"[^>]*>`, "g");
+  const border = `drop-shadow(1px 0 0 ${color}) drop-shadow(-1px 0 0 ${color}) drop-shadow(0 1px 0 ${color}) drop-shadow(0 -1px 0 ${color})`;
+  return svgText.replace(openTagRegex, (openTag) => {
+    if (/\sstyle="/.test(openTag)) {
+      return openTag.replace(/\sstyle="([^"]*)"/, (_m, existing) =>
+        ` style="${existing}${existing && !existing.trim().endsWith(";") ? ";" : ""}filter:${border}"`
+      );
+    }
+    return openTag.replace(/>$/, ` style="filter:${border}">`);
+  });
+}
+
+// Dims and desaturates a room's <g> (cabin/conference/meeting/training) in
+// place, without touching its inner artwork — the CSS filter/opacity on the
+// outer group cascades to every nested shape regardless of how deeply the
+// room's furniture/table icons are grouped, so this only needs to add a
+// style attribute to the opening tag, unlike recolorGroup's per-shape fill
+// rewrite. Matches the grey/desaturated treatment already used for
+// booked/unavailable rooms on the booking-side floor map.
+function greyOutRoom(svgText: string, id: string): string {
+  const openTagRegex = new RegExp(`<g\\b[^>]*\\sid="${escapeRegExp(id)}"[^>]*>`);
+  const match = svgText.match(openTagRegex);
+  if (!match || match.index === undefined) return svgText;
+  const openTag = match[0];
+  const overlay = "opacity:0.45;filter:grayscale(1) saturate(0.5);";
+  const newTag = /\sstyle="/.test(openTag)
+    ? openTag.replace(/\sstyle="([^"]*)"/, (_m, existing) =>
+        ` style="${existing}${existing && !existing.trim().endsWith(";") ? ";" : ""}${overlay}"`
+      )
+    : openTag.replace(/>$/, ` style="${overlay}">`);
+  return svgText.slice(0, match.index) + newTag + svgText.slice(match.index + openTag.length);
+}
+
 function colorSeats(svgText: string, seats: Seat[], filteredIds: Set<string> | undefined, isFilterActive: boolean): string {
   let result = svgText;
   const hasFilter = isFilterActive && filteredIds !== undefined;
+  const highlightedIds: string[] = [];
 
   seats.forEach((seat) => {
     const id = seat.seat_svg_id;
 
-    // Cabins/conference/meeting rooms are never recolored on the admin
-    // side — no status/bookable grey, no filter highlight — they always
-    // keep the floor plan's original artwork colors.
-    if (isRoomSvgId(id)) return;
-
-    const isHighlighted = hasFilter && filteredIds!.has(id);
-
-    if (isHighlighted) {
-      result = recolorGroup(result, id, "#FACC15"); // Highlight matching seats — vivid yellow
+    // Cabins/conference/meeting/training rooms keep the floor plan's
+    // original artwork colors — no status/bookable flood-fill, no filter
+    // highlight — with one exception: an INACTIVE room gets a grey,
+    // desaturated overlay so it still reads as unavailable, same as any
+    // other seat's INACTIVE state does.
+    if (isRoomSvgId(id)) {
+      if (seat.is_configured && seat.status === "INACTIVE") {
+        result = greyOutRoom(result, id);
+      }
       return;
     }
+
+    if (hasFilter && filteredIds!.has(id)) highlightedIds.push(id);
 
     // Edited locally on an already-published layout but not yet published —
     // flag it distinctly so the admin can see at a glance what will change.
     if (seat.has_unpublished_changes) {
       result = recolorGroup(result, id, "#FB923C"); // Pending — orange
+      result = addFlatBorder(result, id);
       return;
     }
 
@@ -153,6 +225,13 @@ function colorSeats(svgText: string, seats: Seat[], filteredIds: Set<string> | u
     if (!seat.is_configured) return;
 
     result = recolorGroup(result, id, resolveSeatFill(seat));
+    result = addFlatBorder(result, id);
+  });
+
+  // Applied last, after every fill recolor above, so the border sits on top
+  // of whatever status color the seat ended up with.
+  highlightedIds.forEach((id) => {
+    result = addSeatBorder(result, id);
   });
 
   return result;
@@ -518,9 +597,18 @@ export default function LayoutPreview({
   }, [coloredSvg, clickedSeat, dialogOpen]);
 
   // ── Transform helpers ──────────────────────────────────────────────────
-  const applyTransform = useCallback(() => {
+  // `animate` adds a short CSS transition for discrete, user-initiated steps
+  // (zoom buttons) so they ease instead of jump-cutting. Continuous
+  // interactions (wheel zoom, drag-pan) stay untransitioned — animating
+  // those would make them lag behind the cursor. Both zoom directions use
+  // the same short transition (120ms) rather than one direction being
+  // instant — an asymmetric instant/eased split reads as a glitchy jump,
+  // and 120ms keeps the number of repainted frames low on this floor plan's
+  // oversized canvas without the visual inconsistency.
+  const applyTransform = useCallback((animate = false) => {
     const el = transformRef.current;
     if (!el) return;
+    el.style.transition = animate ? "transform 120ms ease-out" : "none";
     el.style.transform = `translate(${translateRef.current.x}px,${translateRef.current.y}px) scale(${scaleRef.current})`;
   }, []);
 
@@ -551,46 +639,81 @@ export default function LayoutPreview({
   }, [rawSvg, loading, fitView]);
 
   // ── Zoom ───────────────────────────────────────────────────────────────
+  // The zoom-out floor is the "fit to view" scale for whatever SVG is
+  // currently loaded, not a fixed constant — a fixed floor either blocks
+  // reaching fit-to-view on an oversized canvas (too high) or, on a normal-
+  // sized floor plan, lets you zoom out past fit-to-view into a tiny shape
+  // surrounded by empty gray space (too low). Clamping to the fit scale
+  // means "fully zoomed out" always means the original fitted framing.
   const zoomStep = useCallback((factor: number) => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
     const { width: wW, height: wH } = wrapper.getBoundingClientRect();
+    const zoomFloor = Math.min(wW / svgDims.w, wH / svgDims.h);
     const oldScale = scaleRef.current;
-    const newScale = Math.min(Math.max(oldScale * factor, 0.05), 4);
+    const newScale = Math.min(Math.max(oldScale * factor, zoomFloor), 4);
     const cx = wW / 2, cy = wH / 2;
     translateRef.current = {
       x: cx - (cx - translateRef.current.x) * (newScale / oldScale),
       y: cy - (cy - translateRef.current.y) * (newScale / oldScale),
     };
     scaleRef.current = newScale;
-    applyTransform();
+    applyTransform(true);
     setZoomDisplay(Math.round(newScale * 100));
-  }, [applyTransform]);
+  }, [applyTransform, svgDims]);
 
   const zoomIn = useCallback(() => zoomStep(1.25), [zoomStep]);
   const zoomOut = useCallback(() => zoomStep(1 / 1.25), [zoomStep]);
 
   // ── Wheel zoom ─────────────────────────────────────────────────────────
+  // A trackpad or a fast mouse wheel can fire many "wheel" events within a
+  // single animation frame. Doing a full transform + React state update per
+  // event does redundant work the browser can't even paint in time, which
+  // reads as stutter — especially on this floor plan's oversized SVG canvas,
+  // which is already expensive to re-rasterize on any scale change. Instead,
+  // accumulate the zoom factor from every event that arrives before the
+  // next frame and apply it once, right before paint.
   useEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
-    const handler = (e: WheelEvent) => {
-      e.preventDefault();
-      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    let rafId: number | null = null;
+    let pending: { factor: number; clientX: number; clientY: number } | null = null;
+
+    const flush = () => {
+      rafId = null;
+      if (!pending) return;
+      const { factor, clientX, clientY } = pending;
+      pending = null;
       const oldScale = scaleRef.current;
-      const newScale = Math.min(Math.max(oldScale * factor, 0.05), 4);
       const rect = el.getBoundingClientRect();
+      // Same fit-scale floor as zoomStep — see the comment there.
+      const zoomFloor = Math.min(rect.width / svgDims.w, rect.height / svgDims.h);
+      const newScale = Math.min(Math.max(oldScale * factor, zoomFloor), 4);
       translateRef.current = {
-        x: e.clientX - rect.left - (e.clientX - rect.left - translateRef.current.x) * (newScale / oldScale),
-        y: e.clientY - rect.top - (e.clientY - rect.top - translateRef.current.y) * (newScale / oldScale),
+        x: clientX - rect.left - (clientX - rect.left - translateRef.current.x) * (newScale / oldScale),
+        y: clientY - rect.top - (clientY - rect.top - translateRef.current.y) * (newScale / oldScale),
       };
       scaleRef.current = newScale;
       applyTransform();
       setZoomDisplay(Math.round(newScale * 100));
     };
+
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      pending = {
+        factor: (pending?.factor ?? 1) * factor,
+        clientX: e.clientX,
+        clientY: e.clientY,
+      };
+      if (rafId === null) rafId = requestAnimationFrame(flush);
+    };
     el.addEventListener("wheel", handler, { passive: false });
-    return () => el.removeEventListener("wheel", handler);
-  }, [applyTransform]);
+    return () => {
+      el.removeEventListener("wheel", handler);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, [applyTransform, svgDims]);
 
   // ── Mouse pan handlers ─────────────────────────────────────────────────
   const onMouseDown = (e: React.MouseEvent) => {
@@ -693,12 +816,14 @@ export default function LayoutPreview({
 
       const wrapper = wrapperRef.current;
       if (!wrapper) return;
-      const { left, top } = wrapper.getBoundingClientRect();
+      const { left, top, width, height } = wrapper.getBoundingClientRect();
       const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - left;
       const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - top;
 
       const oldScale = scaleRef.current;
-      const newScale = Math.min(Math.max(oldScale * factor, 0.05), 4);
+      // Same fit-scale floor as zoomStep — see the comment there.
+      const zoomFloor = Math.min(width / svgDims.w, height / svgDims.h);
+      const newScale = Math.min(Math.max(oldScale * factor, zoomFloor), 4);
       translateRef.current = {
         x: cx - (cx - translateRef.current.x) * (newScale / oldScale),
         y: cy - (cy - translateRef.current.y) * (newScale / oldScale),

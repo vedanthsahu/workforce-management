@@ -70,6 +70,82 @@ class FloorLayoutRepositoryFilterTests(unittest.TestCase):
             ("1", "2", ["DRAFT", "PUBLISHED", "ARCHIVED", "DELETED"]),
         )
 
+    def test_fetch_layouts_by_floor_omits_visibility_clause_by_default(self) -> None:
+        """No visibility_thresholds passed = today's behavior, unchanged:
+        every status shown regardless of age, for every floor outside the
+        pilot."""
+        cursor = FakeCursor(fetchall_values=[[]])
+        conn = FakeConnection(cursor)
+
+        fetch_floor_layouts_by_floor(conn, tenant_id="1", floor_id="2")
+
+        sql, params = cursor.executions[0]
+        self.assertNotIn("updated_at >=", sql)
+        self.assertEqual(params, ("1", "2", ["DRAFT", "PUBLISHED", "ARCHIVED", "DELETED"]))
+
+    def test_fetch_layouts_by_floor_applies_visibility_clause_when_enrolled(self) -> None:
+        """A floor enrolled in the visibility rule gets the extra age
+        condition, with PUBLISHED always exempt and the per-status
+        thresholds passed through as params, using the given unit."""
+        cursor = FakeCursor(fetchall_values=[[]])
+        conn = FakeConnection(cursor)
+
+        fetch_floor_layouts_by_floor(
+            conn,
+            tenant_id="1",
+            floor_id="2",
+            visibility_thresholds={"DRAFT": 15, "ARCHIVED": 30, "DELETED": 5},
+        )
+
+        sql, params = cursor.executions[0]
+        self.assertIn("fl.status = 'PUBLISHED'", sql)
+        self.assertIn("fl.status = 'DRAFT' AND fl.updated_at >= NOW() - (%s || ' days')::interval", sql)
+        self.assertIn("fl.status = 'ARCHIVED' AND fl.updated_at >= NOW() - (%s || ' days')::interval", sql)
+        self.assertIn("fl.status = 'DELETED' AND fl.updated_at >= NOW() - (%s || ' days')::interval", sql)
+        self.assertEqual(
+            params,
+            (
+                "1",
+                "2",
+                ["DRAFT", "PUBLISHED", "ARCHIVED", "DELETED"],
+                "15",
+                "30",
+                "5",
+            ),
+        )
+
+    def test_fetch_layouts_by_floor_honors_a_custom_visibility_unit(self) -> None:
+        """visibility_unit swaps the interval unit used in the SQL (e.g.
+        "minutes" for quick manual testing) without changing anything else
+        about the query shape."""
+        cursor = FakeCursor(fetchall_values=[[]])
+        conn = FakeConnection(cursor)
+
+        fetch_floor_layouts_by_floor(
+            conn,
+            tenant_id="1",
+            floor_id="2",
+            visibility_thresholds={"DRAFT": 3, "ARCHIVED": 3, "DELETED": 3},
+            visibility_unit="minutes",
+        )
+
+        sql, _params = cursor.executions[0]
+        self.assertIn("NOW() - (%s || ' minutes')::interval", sql)
+        self.assertNotIn("days", sql)
+
+    def test_fetch_layouts_by_floor_rejects_an_unknown_visibility_unit(self) -> None:
+        cursor = FakeCursor(fetchall_values=[[]])
+        conn = FakeConnection(cursor)
+
+        with self.assertRaises(ValueError):
+            fetch_floor_layouts_by_floor(
+                conn,
+                tenant_id="1",
+                floor_id="2",
+                visibility_thresholds={"DRAFT": 3, "ARCHIVED": 3, "DELETED": 3},
+                visibility_unit="'; DROP TABLE floor_layouts; --",
+            )
+
     def test_fetch_layout_by_id_excludes_deleted(self) -> None:
         cursor = FakeCursor(fetchone_values=[None])
         conn = FakeConnection(cursor)

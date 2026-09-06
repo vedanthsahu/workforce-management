@@ -83,9 +83,10 @@ const DateInput: React.FC<{
   label: string;
   value: string;
   min?: string;
+  max?: string;
   disabled?: boolean;
   onChange: (v: string) => void;
-}> = ({ label, value, min, disabled, onChange }) => (
+}> = ({ label, value, min, max, disabled, onChange }) => (
   <div className="flex-1 min-w-0">
     <p className="text-[11px] font-medium text-gray-500 mb-1.5">{label}</p>
     <div className="relative">
@@ -97,6 +98,7 @@ const DateInput: React.FC<{
         type="date"
         value={value}
         min={min}
+        max={max}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => e.preventDefault()}
@@ -135,6 +137,7 @@ const BookASeatPage: React.FC = () => {
     dayCount,
     step1Valid,
     hasBookingChanges,
+    maxBookableDate,
     isModifyMode,
     isAdminFlow,
     isBookingForSomeone,
@@ -337,9 +340,9 @@ const BookASeatPage: React.FC = () => {
               <div className="flex flex-col md:flex-row gap-3 md:gap-4 md:items-end">
 
                 <div className="flex gap-2 sm:gap-3 flex-1 items-center">
-                  <DateInput label="From" value={form.fromDate} min={todayIso} onChange={setFromDate} />
+                  <DateInput label="From" value={form.fromDate} min={todayIso} max={maxBookableDate} onChange={setFromDate} />
                   <ChevronRight size={14} className="text-gray-300 shrink-0 mt-5" />
-                  <DateInput label="To" value={form.toDate} min={form.fromDate} onChange={setToDate} />
+                  <DateInput label="To" value={form.toDate} min={form.fromDate} max={maxBookableDate} onChange={setToDate} />
                 </div>
 
                 {dayCount > 0 && (

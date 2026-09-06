@@ -11,6 +11,7 @@ import axios from "axios";
 import { cn } from "@/lib/utils";
 import type { FavouriteSeat } from "../types/dashboard.types";
 import { fetchAvailability } from "@/features/book/services/Bookingform.service";
+import { BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE, maxBookableDateIso } from "@/features/book/utils/constants";
 import { axiosInstance } from "@/lib/http/axios";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -117,6 +118,7 @@ interface CalendarProps {
 
 function BookingCalendar({ selected, onSelect, month, onMonthChange, dayStatuses, loading }: CalendarProps) {
   const today = todayDate();
+  const maxDate = maxBookableDateIso();
   const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
   const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0);
 
@@ -167,6 +169,7 @@ function BookingCalendar({ selected, onSelect, month, onMonthChange, dayStatuses
 
           const dateStr = toDateStr(date);
           const isPast = date < today;
+          const isTooFarAhead = dateStr > maxDate;
           const isToday = date.getTime() === today.getTime();
           const isSelected = selected ? toDateStr(selected) === dateStr : false;
           const status = dayStatuses.get(dateStr);
@@ -174,7 +177,7 @@ function BookingCalendar({ selected, onSelect, month, onMonthChange, dayStatuses
           const isBooked = status === "booked";
           const isBlocked = status === "blocked";
           // Booked = fav seat taken, but user can still pick the date to try 2nd fav / browse all
-          const isDisabled = isPast || isBlocked;
+          const isDisabled = isPast || isBlocked || isTooFarAhead;
 
           return (
             <button
@@ -189,16 +192,17 @@ function BookingCalendar({ selected, onSelect, month, onMonthChange, dayStatuses
                     ? "cursor-not-allowed"
                     : "hover:bg-indigo-50 cursor-pointer",
                 !isSelected && isToday && "ring-1 ring-indigo-400",
-                !isSelected && isPast && "text-gray-300",
-                !isSelected && isAvail && "text-emerald-700 font-semibold",
-                !isSelected && isBooked && "text-red-300",
-                !isSelected && isBlocked && "text-gray-300",
-                !isSelected && !isPast && !isAvail && !isBooked && !isBlocked && "text-gray-700",
+                !isSelected && (isPast || isTooFarAhead) && "text-gray-300",
+                !isSelected && !isTooFarAhead && isAvail && "text-emerald-700 font-semibold",
+                !isSelected && !isTooFarAhead && isBooked && "text-red-300",
+                !isSelected && !isTooFarAhead && isBlocked && "text-gray-300",
+                !isSelected && !isPast && !isTooFarAhead && !isAvail && !isBooked && !isBlocked && "text-gray-700",
               )}
+              title={isTooFarAhead ? BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE : undefined}
             >
               {date.getDate()}
               {/* Status dot */}
-              {!isPast && !isSelected && (isAvail || isBooked) && (
+              {!isPast && !isTooFarAhead && !isSelected && (isAvail || isBooked) && (
                 <span
                   className={cn(
                     "absolute bottom-[2px] left-1/2 -translate-x-1/2 w-1 h-1 rounded-full",
@@ -226,6 +230,7 @@ function BookingCalendar({ selected, onSelect, month, onMonthChange, dayStatuses
           Selected
         </span>
       </div>
+      <p className="text-[9.5px] text-gray-400 mt-1 px-1">Bookings can only be made up to 30 days in advance.</p>
     </div>
   );
 }

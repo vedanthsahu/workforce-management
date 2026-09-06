@@ -63,6 +63,7 @@ import {
   CalendarSearch,
   History,
   UserPlus,
+  SlidersHorizontal,
 } from "lucide-react";
 
 import { getInitials, type User } from "@/features/auth/types/auth.types";
@@ -124,6 +125,7 @@ const ROUTE_MAP: Record<string, string> = {
   utilization: "/admin/utilization",
   audit: "/admin/audit",
   settings: "/admin/settings",
+  all_configurations: "/admin/configuration",
 
   front_office_dashboard: "/dashboard",
   today_visitors: "/front_office/today-visitors",
@@ -178,11 +180,15 @@ const ADMIN_OPERATIONS_NAV: NavItem[] = [
 const ADMIN_REPORTS_NAV: NavItem[] = [
   { id: "occupancy", label: "Occupancy", icon: BarChart3, disabled: true },
   { id: "utilization", label: "Utilization", icon: BarChart3, disabled: true },
-  { id: "audit", label: "Audit Logs", icon: ShieldCheck, disabled: true },
+  { id: "audit", label: "Audit Logs", icon: ShieldCheck },
 ];
 
 const ADMIN_SETTINGS_NAV: NavItem[] = [
   { id: "settings", label: "Settings", icon: Settings, disabled: true },
+];
+
+const ADMIN_CONFIGURATION_NAV: NavItem[] = [
+  { id: "all_configurations", label: "Configuration", icon: SlidersHorizontal ,disabled: true},
 ];
 //--------security nav config----------------------------------------------------
 const FRONT_OFFICE_DASHBOARD: NavItem[] = [
@@ -337,7 +343,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
   const isSecurity = role === "FRONT_OFFICE";
 
   const relevantItems = isAdmin
-    ? [...ADMIN_DASHBOARD, ...ADMIN_MANAGE_NAV, ...ADMIN_OPERATIONS_NAV, ...ADMIN_REPORTS_NAV, ...ADMIN_SETTINGS_NAV]
+    ? [...ADMIN_DASHBOARD, ...ADMIN_MANAGE_NAV, ...ADMIN_OPERATIONS_NAV, ...ADMIN_REPORTS_NAV, ...ADMIN_SETTINGS_NAV, ...ADMIN_CONFIGURATION_NAV]
     : isSecurity
       ? [...FRONT_OFFICE_DASHBOARD, ...FRONT_OFFICE_VISITOR_NAV, ...FRONT_OFFICE_ACTIONS_NAV]
       : [...MAIN_NAV, ...OFFICE_NAV, ...PERSONAL_NAV];
@@ -436,6 +442,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 <SidebarGroupLabel>Settings</SidebarGroupLabel>
                 <SidebarMenu>
                   <NavSection items={ADMIN_SETTINGS_NAV} activeItem={activeItem} onNavigate={handleNav} />
+                </SidebarMenu>
+              </SidebarGroup>
+              <SidebarGroup>
+                <SidebarGroupLabel>Configuration</SidebarGroupLabel>
+                <SidebarMenu>
+                  <NavSection items={ADMIN_CONFIGURATION_NAV} activeItem={activeItem} onNavigate={handleNav} />
                 </SidebarMenu>
               </SidebarGroup>
             </>
@@ -557,9 +569,10 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 </DropdownMenuItem>
 
                 <DropdownMenuItem
-                  onMouseEnter={() => router.prefetch("/notifications")}
-                  onClick={() => useNavigationGuardStore.getState().requestNavigation(() => router.push("/notifications"))}
-                  className="gap-2.5 px-2 py-2 text-[12.5px] cursor-pointer"
+                  disabled
+                  aria-disabled
+                  title="Notifications (coming soon)"
+                  className="gap-2.5 px-2 py-2 text-[12.5px] opacity-50 cursor-not-allowed"
                 >
                   <Bell className="w-4 h-4 text-gray-400" />
                   Notifications
