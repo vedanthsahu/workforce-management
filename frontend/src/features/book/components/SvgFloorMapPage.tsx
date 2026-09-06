@@ -4,7 +4,6 @@ import { Seat, Preference } from "../types/Bookingform.types";
 import {
   SVG_W,
   SVG_H,
-  ZOOM_MIN,
   ZOOM_MAX,
   ZOOM_BUTTON_FACTOR,
   ZOOM_WHEEL_FACTOR,
@@ -78,17 +77,62 @@ const FALLBACK_FILL: Record<string, string> = {
   unloaded: "#9CA3AF",
 };
 
-// Cabin/conference/meeting room seats are grouped under one svg id containing
-// a "CBN"/"CFR"/"MR" segment (e.g. "HYD-PRV-F11-CBN-04", "HYD-PRV-F11-CFR-02",
-// "HYD-PRV-F11-MR-01"), not a dedicated field. When available, best/partial
-// match, or selected, they keep the floor plan's original artwork colors
-// instead of being flooded with a solid status fill (while staying
-// clickable, and while selected still showing the pulse/glow highlight);
-// when booked/unavailable they still recolor like any other seat.
-const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr)([-_]|$)/i;
+// Cabin/conference/meeting/training room seats are grouped under one svg id
+// containing a "CBN"/"CFR"/"MR"/"TR" segment (e.g. "HYD-PRV-F11-CBN-04",
+// "HYD-PRV-F11-CFR-02", "HYD-PRV-F11-MR-01", "HYD-PRV-F11-TR-01"), not a
+// dedicated field. When available, best/partial match, or selected, they
+// keep the floor plan's original artwork colors instead of being flooded
+// with a solid status fill (while staying clickable, and while selected
+// still showing the pulse/glow highlight); when booked/unavailable they
+// still recolor like any other seat.
+const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr|tr)([-_]|$)/i;
 
 function isRoomSvgId(svgId: string): boolean {
   return ROOM_SVG_ID_PATTERN.test(svgId);
+}
+
+// Escapes regex metacharacters so seat/room ids containing them (e.g. "F9.1")
+// can be safely interpolated into a RegExp instead of being misinterpreted as
+// pattern syntax.
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Locates a seat/room's opening <g> tag by its `id` attribute regardless of
+// what other attributes the tag carries or what order they're in. Different
+// floor-plan exports (e.g. rooms whose group already carries a `transform`
+// from the design tool, unlike simple chair icons) don't reliably produce the
+// exact literal `<g id="X">` a naive indexOf search assumes — when that
+// assumption fails for a given id, recolorSeat silently no-ops for it (no
+// fill, no border, no selection glow), which is what made rooms miss their
+// selection border on some uploaded layouts but not others.
+function findGroupOpenTag(svg: string, svgId: string): { start: number; openTag: string } | null {
+  const regex = new RegExp(`<g\\b[^>]*\\bid=["']${escapeRegExp(svgId)}["'][^>]*>`);
+  const match = svg.match(regex);
+  if (!match || match.index === undefined) return null;
+  return { start: match.index, openTag: match[0] };
+}
+
+// Merges a class name and extra CSS declarations into an existing opening
+// tag's `class`/`style` attributes (creating them if absent) instead of
+// assuming the tag has neither yet — needed now that the tag being modified
+// may be the original export's tag (which can already carry its own
+// attributes), not always the bare `<g id="X">` this code used to assume.
+function withAddedAttrs(openTag: string, className: string, extraStyle: string): string {
+  let tag = openTag;
+  if (className) {
+    tag = /\sclass="/.test(tag)
+      ? tag.replace(/\sclass="([^"]*)"/, (_m, existing) => ` class="${existing}${existing ? " " : ""}${className}"`)
+      : tag.replace(/>$/, ` class="${className}">`);
+  }
+  if (extraStyle) {
+    tag = /\sstyle="/.test(tag)
+      ? tag.replace(/\sstyle="([^"]*)"/, (_m, existing) =>
+          ` style="${existing}${existing && !existing.trim().endsWith(";") ? ";" : ""}${extraStyle}"`
+        )
+      : tag.replace(/>$/, ` style="${extraStyle}">`);
+  }
+  return tag;
 }
 
 function getPaletteKey(seat: SeatWithSvgId, isSelected: boolean): string {
@@ -128,9 +172,9 @@ function findMatchingGroupEnd(svg: string, start: number): number {
 
 function recolorSeat(svg: string, svgId: string, paletteKey: string): string {
   const p = SEAT_PALETTES[paletteKey] ?? SEAT_PALETTES.unloaded;
-  const openTag = `<g id="${svgId}">`;
-  const start = svg.indexOf(openTag);
-  if (start === -1) return svg;
+  const found = findGroupOpenTag(svg, svgId);
+  if (!found) return svg;
+  const { start, openTag } = found;
   const end = findMatchingGroupEnd(svg, start);
   if (end === -1) return svg;
   const before = svg.slice(0, start);
@@ -174,48 +218,220 @@ function recolorSeat(svg: string, svgId: string, paletteKey: string): string {
     if (block === beforeRecolor) {
       const fallbackFill = FALLBACK_FILL[paletteKey] ?? p.body;
       block = block.replace(/fill="(?!none")[^"]*"/g, `fill="${fallbackFill}"`);
+
+      // Seats sit flush against their neighbors with zero gap. An outer glow
+      // (CSS filter/drop-shadow) gets painted over on the touching side by
+      // whichever neighbor is drawn later in the SVG's document order, so it
+      // only ever shows on edges facing open space. A `stroke` painted
+      // directly on each shape is part of the same paint step as its fill,
+      // so it can't be erased by a later sibling — giving a complete border
+      // on every side, including shared edges. Applied to every status (not
+      // just best/partial match) for a consistent look across the map.
+      const borderColor = "#000000";
+      const borderWidth = "32";
+      // `stroke` and `stroke-width` are added independently: many real
+      // exports set stroke="none" with no stroke-width at all, so
+      // "already has a stroke attribute" is not a reliable signal that a
+      // usable width exists too — checking each attribute separately
+      // guarantees every shape ends up with both, instead of some shapes
+      // getting recolored to black but keeping the default 1-unit width
+      // (invisible against a canvas tens of thousands of units wide).
+      block = block.replace(/<(path|rect|polygon|circle|ellipse)\b(?![^>]*\sstroke=)/g, `<$1 stroke="${borderColor}"`);
+      block = block.replace(/<(path|rect|polygon|circle|ellipse)\b(?![^>]*\sstroke-width=)/g, `<$1 stroke-width="${borderWidth}"`);
+      block = block.replace(/stroke="[^"]*"/g, `stroke="${borderColor}"`);
+      block = block.replace(/stroke-width="[^"]*"/g, `stroke-width="${borderWidth}"`);
     }
   }
 
   const isClickable = ["available", "best_match", "partial_match", "yours", "selected"].includes(paletteKey);
   const isSelected = paletteKey === "selected";
-  // Rooms (cabin/conference/meeting) get a darker selection glow than
-  // individual seats — a large room filled with original artwork reads as
-  // washed-out under the same lighter indigo used for small seat icons, so
-  // it gets its own (darker) pulse class instead of reusing "_sel-pulse".
-  const pulseClass = isSelected ? (isRoom ? "_sel-pulse-room" : "_sel-pulse") : "";
+  // A regular seat's own selection glow stays a CSS class/filter directly on
+  // its (small, simple, unrotated, unmasked) group — that's cheap, was never
+  // the thing that misbehaved, and a chair icon is small/simple enough that
+  // the "filter buried inside a huge document" quirk doesn't apply the way
+  // it did for rooms. A room's selection border is rendered separately, as a
+  // plain React-owned <rect> in its own small sibling <svg> overlay (see
+  // selectionHighlightBox / the JSX render below), for two reasons specific
+  // to rooms: (1) some rooms' groups carry a `transform="rotate(...)"` from
+  // the original export, which swaps width/height and moves the origin, so
+  // a border sized from this raw pre-transform markup lands wrong for
+  // exactly those rooms; only getBBox()+getCTM() on the live rendered
+  // element gets that right. (2) a room's `filter: drop-shadow(...)` was
+  // found to intermittently stop rendering on ordinary mouse movement
+  // (likely a paint/compositing quirk tied to a room group's complexity —
+  // nested masks/clip-paths, large size), which a completely separate
+  // sibling SVG sidesteps. A rectangular bounding-box overlay isn't used for
+  // seats at all (not just left as a class) because on a small chair icon it
+  // reads as an awkward floating square rather than a highlight on the
+  // chair — the seat's own solid blue fill (FALLBACK_FILL.selected above)
+  // already makes selection unambiguous without one.
+  const pulseClass = isSelected && !isRoom ? "_sel-pulse" : "";
   const groupOpacity = isGreyedRoom ? "0.45" : p.opacity;
   const roomGreyFilter = isGreyedRoom ? "filter:grayscale(1) saturate(0.5);" : "";
-  block = block.replace(
-    `<g id="${svgId}">`,
-    `<g id="${svgId}"${pulseClass ? ` class="${pulseClass}"` : ""} style="opacity:${groupOpacity};cursor:${isClickable ? "pointer" : "default"};${roomGreyFilter}">`
+  const newOpenTag = withAddedAttrs(
+    openTag,
+    pulseClass,
+    `opacity:${groupOpacity};cursor:${isClickable ? "pointer" : "default"};${roomGreyFilter}`
   );
+  block = block.replace(openTag, newOpenTag);
   return before + block + after;
+}
+
+// ─── Selection border (transform-aware overlay, rooms only) ───────────────────
+//
+// Rooms keep their original artwork colors when selected (no flood-fill), so
+// unlike a regular seat's flat blue selected-fill there's no other signal
+// that a room is selected — only this rendered overlay border. Some rooms'
+// <g>/<rect> carry a `transform="rotate(...)"` from the original export (a
+// 90° rotation swaps width/height and moves the origin); any border computed
+// from raw markup (a CSS `outline`, or math done on the string before the
+// SVG is even in the DOM) gets the wrong box for exactly those rooms while
+// looking fine for unrotated ones. getBBox() + getCTM(), read from the live
+// rendered element, give the correct on-screen box either way.
+//
+// The box is only COMPUTED here; it's rendered as a normal React <rect> in
+// its own small sibling <svg> overlay (see selectionHighlightBox state and
+// the JSX render), not appended imperatively into the multi-megabyte
+// floor-plan SVG. An earlier version did exactly that (a `filter:
+// drop-shadow(...)` on a node inside the document) and it was found to
+// intermittently stop rendering on ordinary mouse movement with no error and
+// no state change behind it — most likely a paint/compositing quirk tied to
+// a room's complexity (nested masks/clip-paths, large size) inside such a
+// large document. A separate sibling SVG sidesteps that entirely. Regular
+// seats don't have this problem (small, simple, unrotated, unmasked groups)
+// and keep their glow as a plain CSS class instead — see the "_sel-pulse"
+// pulseClass in recolorSeat above.
+const SELECTION_OVERLAY_DEBUG = true;
+
+interface SelectionHighlightBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  strokeWidth: number;
+  haloNear: number;
+  haloFar: number;
+}
+
+function computeTransformedBBox(
+  svgRoot: SVGSVGElement,
+  el: SVGGraphicsElement
+): { x: number; y: number; width: number; height: number } | null {
+  let bbox: DOMRect;
+  try {
+    bbox = el.getBBox();
+  } catch (e) {
+    if (SELECTION_OVERLAY_DEBUG) console.warn("[selection-highlight] getBBox() threw:", e);
+    return null;
+  }
+
+  const ctm = el.getCTM();
+  if (!ctm) {
+    if (SELECTION_OVERLAY_DEBUG) {
+      console.warn(
+        "[selection-highlight] getCTM() returned null — element is likely inside a <defs>/<clipPath>/<mask>/<symbol> " +
+          "(never directly rendered) or has display:none, not that it's simply unrotated."
+      );
+    }
+    return null;
+  }
+
+  const corners = [
+    [bbox.x, bbox.y],
+    [bbox.x + bbox.width, bbox.y],
+    [bbox.x, bbox.y + bbox.height],
+    [bbox.x + bbox.width, bbox.y + bbox.height],
+  ].map(([x, y]) => {
+    const pt = svgRoot.createSVGPoint();
+    pt.x = x;
+    pt.y = y;
+    return pt.matrixTransform(ctm);
+  });
+
+  const xs = corners.map((c) => c.x);
+  const ys = corners.map((c) => c.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const width = maxX - minX;
+  const height = maxY - minY;
+  if (!isFinite(width) || !isFinite(height) || width <= 0 || height <= 0) {
+    if (SELECTION_OVERLAY_DEBUG) console.warn("[selection-highlight] computed box has zero/invalid size — bailing.");
+    return null;
+  }
+
+  return { x: minX, y: minY, width, height };
+}
+
+// Resolves the given seat or room's current on-screen box (padded and with a
+// canvas-scaled stroke/halo size baked in) from the live rendered SVG, or
+// null if it can't currently be located/measured. Pure — the caller (a
+// useLayoutEffect) is responsible for putting the result into React state so
+// it renders as a normal <rect>.
+function resolveSelectionHighlightBox(svgRoot: SVGSVGElement, targetSvgId: string): SelectionHighlightBox | null {
+  const matches = svgRoot.querySelectorAll(`#${CSS.escape(targetSvgId)}`);
+  if (SELECTION_OVERLAY_DEBUG && matches.length !== 1) {
+    console.warn(
+      `[selection-highlight] expected exactly 1 element with id="${targetSvgId}", found ${matches.length}` +
+        (matches.length > 1 ? " — duplicate ids in this SVG, using the first match." : " — no element with this id exists in the rendered DOM.")
+    );
+  }
+  const target = matches[0] as SVGGraphicsElement | undefined;
+  if (!target) return null;
+
+  const box = computeTransformedBBox(svgRoot, target);
+  if (!box) return null;
+
+  // A fixed stroke width in absolute units is meaningless across this file's
+  // full size range — rooms run from a few thousand to tens of thousands of
+  // units wide, on a canvas that's itself ~100,000 units. Scaling both the
+  // stroke and the halo/padding to a percentage of the room's own box keeps
+  // the border visually proportionate whether the room is small or large,
+  // instead of a fixed number being too thin on a big room. This is rooms-
+  // only (see the isRoomSvgId gate where this is called), so there's no
+  // flush-neighbor bleed concern the way there would be sizing this for a
+  // seat — rooms have open space around them, so a bold, generous border and
+  // halo reads as intentional emphasis rather than spilling onto anything.
+  const minDim = Math.min(box.width, box.height);
+  const strokeWidth = Math.max(minDim * 0.05, 45);
+  const pad = strokeWidth * 0.6;
+
+  return {
+    x: box.x - pad,
+    y: box.y - pad,
+    width: box.width + pad * 2,
+    height: box.height + pad * 2,
+    strokeWidth,
+    haloNear: strokeWidth * 1.8,
+    haloFar: strokeWidth * 4.5,
+  };
 }
 
 // Moves the given svgId's <g> block to just before </svg> so it always
 // paints last — on top of every sibling — regardless of its original
-// position in the file. Needed because adjacent rooms/seats are frequently
-// drawn as flush, zero-gap shapes sharing a wall edge; whichever one is
-// earlier in source order has its selection glow (a drop-shadow filter)
-// overdrawn along that shared edge by whatever neighbor comes after it in
-// paint order, making the glow look like it's missing on one or more sides
-// instead of fully surrounding the room. Relocating the selected element's
-// markup guarantees it's always the topmost thing drawn.
+// position in the file. Needed because adjacent seats are frequently drawn
+// as flush, zero-gap shapes sharing an edge; whichever one is earlier in
+// source order has its selection glow (a drop-shadow filter) overdrawn along
+// that shared edge by whatever neighbor comes after it in paint order,
+// making the glow look like it's missing on one or more sides instead of
+// fully surrounding the seat. Relocating the selected element's markup
+// guarantees it's always the topmost thing drawn. Only used for regular
+// seats' CSS-class glow — rooms get their border from the separate sibling
+// SVG overlay, which doesn't care about z-order inside this document at all.
 //
 // This only repositions the element in paint order, not on screen: it's
 // safe as long as no ancestor <g> between the element and the root carries
 // a `transform` the element depends on for its position (a clip-path alone
 // is fine, since clipping to the full canvas is a no-op for content already
-// inside it). If your SVG source ever adds transforms on wrapper groups,
-// this function would need to account for them (e.g. by reading and
-// re-applying the cumulative transform to the moved block).
+// inside it).
 function bringToFront(svg: string, svgId: string): string {
-  // Match by the `id="..."` attribute rather than the exact original
-  // `<g id="X">` string, since recolorSeat has already rewritten this
-  // opening tag to add `class`/`style` attributes by this point.
-  const start = svg.indexOf(`<g id="${svgId}"`);
-  if (start === -1) return svg;
+  // Match by the `id="..."` attribute regardless of what other attributes
+  // the tag carries or what order they're in (recolorSeat has usually added
+  // `class`/`style` to this opening tag by this point).
+  const found = findGroupOpenTag(svg, svgId);
+  if (!found) return svg;
+  const { start } = found;
   const end = findMatchingGroupEnd(svg, start);
   if (end === -1) return svg;
 
@@ -227,17 +443,29 @@ function bringToFront(svg: string, svgId: string): string {
   return withoutBlock.slice(0, closeSvgIdx) + block + withoutBlock.slice(closeSvgIdx);
 }
 
+// The blur radius in a CSS `drop-shadow()` here resolves in this SVG's own
+// user-unit coordinate system, not literal screen pixels — the same thing
+// that made the room border invisible before it was scaled to the room's own
+// size (see resolveSelectionHighlightBox above). A seat icon is only ~700-
+// 1500 units wide on this ~100,000-unit canvas, so the original 4-24 unit
+// blur was a rounding error: technically animating, but with no visible
+// spill outside the chair's own outline. These values are sized to actually
+// be visible at a seat's scale instead. Unlike the room's overlay, this
+// stays a `filter` applied directly to the seat's own group rather than a
+// separate <rect> — `drop-shadow()` blurs around the element's actual alpha
+// silhouette (the chair's real outline), not a bounding box, which is
+// exactly why this reads as a glow around the chair rather than the
+// "floating square" a rectangular overlay looked like on a non-rectangular
+// icon. Colors match the room overlay's three-tone violet halo (#4C1D95 /
+// #7C3AED / #A78BFA in the JSX render below) so seat and room selection read
+// as the same highlight language, even though the shape naturally differs —
+// a chair-hugging glow here vs. a bordered rectangle there.
 const SELECTED_PULSE_STYLE = `<style>
 @keyframes _selGlow{
-  0%,100%{filter:drop-shadow(0 0 4px #6366f1) drop-shadow(0 0 8px #818cf8);}
-  50%{filter:drop-shadow(0 0 12px #6366f1) drop-shadow(0 0 24px #818cf8) brightness(1.12);}
+  0%,100%{filter:drop-shadow(0 0 40px #4C1D95) drop-shadow(0 0 90px #7C3AED) drop-shadow(0 0 150px #A78BFA);}
+  50%{filter:drop-shadow(0 0 75px #4C1D95) drop-shadow(0 0 160px #7C3AED) drop-shadow(0 0 260px #A78BFA) brightness(1.15);}
 }
 ._sel-pulse{animation:_selGlow 1.6s ease-in-out infinite;}
-@keyframes _selGlowRoom{
-  0%,100%{filter:drop-shadow(0 0 4px #3730a3) drop-shadow(0 0 8px #4338ca);}
-  50%{filter:drop-shadow(0 0 12px #3730a3) drop-shadow(0 0 24px #4338ca) brightness(1.06);}
-}
-._sel-pulse-room{animation:_selGlowRoom 1.6s ease-in-out infinite;}
 </style>`;
 
 // svgSeatIds: dynamically extracted from the fetched SVG, not hardcoded
@@ -256,16 +484,17 @@ function buildColoredSvg(
     svg = recolorSeat(svg, svgId, key);
   });
 
-  if (selectedSeatId) {
-    // Inject pulse keyframes
-    const firstClose = svg.indexOf('>');
+  // Regular seats' glow is a CSS class/filter living in this document (see
+  // pulseClass in recolorSeat) — it needs its keyframes injected and needs
+  // to be brought to the front of paint order. Rooms don't use this path at
+  // all (their border is the separate sibling <svg> overlay), so skip both
+  // for a selected room — it doesn't have the "_sel-pulse" class to animate,
+  // and reordering its markup would be pointless work.
+  const selectedSeat = selectedSeatId ? seats.find((s) => s.id === selectedSeatId) : null;
+  if (selectedSeat && !isRoomSvgId(selectedSeat.svgId)) {
+    const firstClose = svg.indexOf(">");
     if (firstClose !== -1) svg = svg.slice(0, firstClose + 1) + SELECTED_PULSE_STYLE + svg.slice(firstClose + 1);
-
-    // Bring the selected element's group to the very end of the document so
-    // its glow always paints on top of every neighboring room/seat — see
-    // bringToFront for why this is necessary.
-    const selectedSeat = seats.find((s) => s.id === selectedSeatId);
-    if (selectedSeat) svg = bringToFront(svg, selectedSeat.svgId);
+    svg = bringToFront(svg, selectedSeat.svgId);
   }
 
   return svg;
@@ -690,12 +919,66 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
   const containerRectRef = useRef<DOMRect | null>(null);
   const tooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const coloredSvg =
-    rawSvg && !loading && seats.length > 0 && svgSeatIds.length > 0
-      ? buildColoredSvg(rawSvg, svgSeatIds, seats, selectedSeatId)
-      : rawSvg && !loading && svgSeatIds.length > 0
-        ? rawSvg  // show uncolored SVG while seats are still loading
-        : null;
+  // The currently-selected seat or room's on-screen highlight box, rendered
+  // as a plain React <rect> in its own sibling <svg> overlay — see the
+  // comment on resolveSelectionHighlightBox for why this isn't appended
+  // directly into the (huge) floor-plan SVG.
+  const [selectionHighlightBox, setSelectionHighlightBox] = useState<SelectionHighlightBox | null>(null);
+
+  // buildColoredSvg runs a chain of regex replacements per seat over the
+  // full raw SVG text — on a ~30MB floor plan that's real, synchronous CPU
+  // work. Without memoization this ran on every render, including renders
+  // triggered by state that has nothing to do with seat coloring (zoomDisplay
+  // from every wheel tick/button click, tooltip from every mousemove over
+  // the map), which is what made zoom/pan/hover feel heavy. Scoping the
+  // dependency list to just what buildColoredSvg's output actually depends
+  // on — rawSvg, loading, seats, selectedSeatId, svgSeatIds — means it now
+  // only recomputes when the seat data or the loaded SVG itself changes.
+  const coloredSvg = React.useMemo(() => {
+    if (!rawSvg || loading || svgSeatIds.length === 0) return null;
+    if (seats.length === 0) return rawSvg; // show uncolored SVG while seats are still loading
+    return buildColoredSvg(rawSvg, svgSeatIds, seats, selectedSeatId);
+  }, [rawSvg, loading, seats, selectedSeatId, svgSeatIds]);
+
+  // Resolves the selected seat/room's on-screen box (see
+  // resolveSelectionHighlightBox) once `coloredSvg` has actually been
+  // committed by the dangerouslySetInnerHTML below — getBBox()/getCTM() only
+  // return real numbers once the element is rendered, so this can't be done
+  // as part of the buildColoredSvg string transform above. The box is stored
+  // in React state and rendered as a normal <rect> further down — nothing
+  // here touches the DOM directly.
+  useLayoutEffect(() => {
+    // Regular seats already turn solid blue on selection (see
+    // FALLBACK_FILL.selected in recolorSeat) — a clear, unambiguous signal
+    // on its own. This box overlay is a bounding rectangle, not a shape
+    // outline, so on a small chair icon it reads as an awkward rounded
+    // square floating around the chair rather than a highlight on it. Rooms
+    // don't get a fill change when selected (skipRoomColor keeps their
+    // original artwork), so this overlay is the only signal they have and
+    // is worth it there — restrict it to rooms.
+    const selectedSeat = selectedSeatId ? seats.find((s) => s.id === selectedSeatId) : null;
+    const targetSvgId = selectedSeat && isRoomSvgId(selectedSeat.svgId) ? selectedSeat.svgId : null;
+
+    if (SELECTION_OVERLAY_DEBUG) {
+      console.log("[selection-highlight] effect fired", {
+        coloredSvgLength: coloredSvg?.length ?? 0,
+        selectedSeatId,
+        targetSvgId,
+        seatsLength: seats.length,
+      });
+    }
+
+    if (!targetSvgId) {
+      setSelectionHighlightBox(null);
+      return;
+    }
+    const svgEl = transformRef.current?.querySelector("svg") as SVGSVGElement | null;
+    if (!svgEl) {
+      setSelectionHighlightBox(null);
+      return;
+    }
+    setSelectionHighlightBox(resolveSelectionHighlightBox(svgEl, targetSvgId));
+  }, [coloredSvg, selectedSeatId, seats]);
 
   // ── Fetch SVG from dynamic URL ────────────────────────────────────────────
   useEffect(() => {
@@ -726,9 +1009,14 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
   }, [svgUrl]);
 
   // ── applyTransform ────────────────────────────────────────────────────────
-  const applyTransform = useCallback(() => {
+  // `animate` adds a short CSS transition for discrete, user-initiated steps
+  // (zoom buttons) so they ease instead of jump-cutting. Continuous
+  // interactions (wheel zoom, drag-pan, pinch) must stay untransitioned —
+  // animating those would make them lag behind the cursor/fingers.
+  const applyTransform = useCallback((animate = false) => {
     const el = transformRef.current;
     if (!el) return;
+    el.style.transition = animate ? "transform 120ms ease-out" : "none";
     el.style.transform = `translate(${translateRef.current.x}px,${translateRef.current.y}px) scale(${scaleRef.current})`;
   }, []);
 
@@ -785,46 +1073,89 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
   }, [loading]);
 
   // ── Zoom ─────────────────────────────────────────────────────────────────
+  // The zoom-out floor is the "fit to view" scale for whatever SVG is
+  // currently loaded, not a fixed constant — a fixed floor either blocks
+  // reaching fit-to-view on an oversized canvas (too high) or, on a normal-
+  // sized floor plan, lets you zoom out past fit-to-view into a tiny shape
+  // surrounded by empty gray space (too low). Clamping to the fit scale
+  // means "fully zoomed out" always means the original fitted framing.
   const zoomStep = useCallback((factor: number) => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
     const { width: wW, height: wH } = wrapper.getBoundingClientRect();
+    const zoomFloor = Math.min(wW / svgDims.w, wH / svgDims.h);
     const oldScale = scaleRef.current;
-    const newScale = Math.min(Math.max(oldScale * factor, ZOOM_MIN), ZOOM_MAX);
+    const newScale = Math.min(Math.max(oldScale * factor, zoomFloor), ZOOM_MAX);
     const cx = wW / 2, cy = wH / 2;
     translateRef.current = {
       x: cx - (cx - translateRef.current.x) * (newScale / oldScale),
       y: cy - (cy - translateRef.current.y) * (newScale / oldScale),
     };
     scaleRef.current = newScale;
-    applyTransform();
+    // Both directions animate the same way now — making zoom-out snap
+    // instantly while zoom-in eased created a jarring inconsistency (a
+    // smooth zoom followed by an abrupt jump reads as a glitch, especially
+    // when clicking zoom-out while a zoom-in transition is still settling).
+    // Zooming out does reveal more of the oversized floor-plan canvas per
+    // frame than zooming in, so the transition is kept short (120ms, see
+    // applyTransform) rather than removed for one direction only — enough
+    // frames to feel smooth without repainting that much geometry for long.
+    applyTransform(true);
     setZoomDisplay(Math.round(newScale * 100));
-  }, [applyTransform]);
+  }, [applyTransform, svgDims]);
 
   const zoomIn = useCallback(() => zoomStep(ZOOM_BUTTON_FACTOR), [zoomStep]);
   const zoomOut = useCallback(() => zoomStep(1 / ZOOM_BUTTON_FACTOR), [zoomStep]);
 
   // ── Wheel zoom ────────────────────────────────────────────────────────────
+  // A trackpad or a fast mouse wheel can fire many "wheel" events within a
+  // single animation frame. Doing a full transform + React state update per
+  // event (the old behavior) does redundant work the browser can't even
+  // paint in time, which reads as stutter — especially on this floor plan's
+  // oversized SVG canvas, which is already expensive to re-rasterize on any
+  // scale change. Instead, accumulate the zoom factor from every event that
+  // arrives before the next frame and apply it once, right before paint.
   useEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
-    const handler = (e: WheelEvent) => {
-      e.preventDefault();
-      const factor = e.deltaY < 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR;
+    let rafId: number | null = null;
+    let pending: { factor: number; clientX: number; clientY: number } | null = null;
+
+    const flush = () => {
+      rafId = null;
+      if (!pending) return;
+      const { factor, clientX, clientY } = pending;
+      pending = null;
       const oldScale = scaleRef.current;
-      const newScale = Math.min(Math.max(oldScale * factor, ZOOM_MIN), ZOOM_MAX);
       const rect = el.getBoundingClientRect();
+      // Same fit-scale floor as zoomStep — see the comment there.
+      const zoomFloor = Math.min(rect.width / svgDims.w, rect.height / svgDims.h);
+      const newScale = Math.min(Math.max(oldScale * factor, zoomFloor), ZOOM_MAX);
       translateRef.current = {
-        x: e.clientX - rect.left - (e.clientX - rect.left - translateRef.current.x) * (newScale / oldScale),
-        y: e.clientY - rect.top - (e.clientY - rect.top - translateRef.current.y) * (newScale / oldScale),
+        x: clientX - rect.left - (clientX - rect.left - translateRef.current.x) * (newScale / oldScale),
+        y: clientY - rect.top - (clientY - rect.top - translateRef.current.y) * (newScale / oldScale),
       };
       scaleRef.current = newScale;
       applyTransform();
       setZoomDisplay(Math.round(newScale * 100));
     };
+
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR;
+      pending = {
+        factor: (pending?.factor ?? 1) * factor,
+        clientX: e.clientX,
+        clientY: e.clientY,
+      };
+      if (rafId === null) rafId = requestAnimationFrame(flush);
+    };
     el.addEventListener("wheel", handler, { passive: false });
-    return () => el.removeEventListener("wheel", handler);
-  }, [applyTransform]);
+    return () => {
+      el.removeEventListener("wheel", handler);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, [applyTransform, svgDims]);
 
   // ── Tooltip helpers ───────────────────────────────────────────────────────
   const hideTooltip = useCallback(() => {
@@ -836,10 +1167,23 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     (svgId: string, x: number, y: number) => {
       const seat = seats.find((s) => s.svgId === svgId);
       if (!seat) return;
+      // The tooltip card is wide enough (TOOLTIP_WIDTH) to land right on top
+      // of the seat/room it describes — including the selection border/glow
+      // drawn around it. Hovering the seat you just selected would otherwise
+      // pop a solid white card over that highlight, making it look like the
+      // selection was lost the moment the mouse moved, when really it was
+      // just hidden underneath the tooltip. The tooltip is redundant here
+      // anyway (you already know you selected it), so skip it for exactly
+      // the currently-selected seat.
+      if (seat.id === selectedSeatId) {
+        if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
+        tooltipTimeoutRef.current = setTimeout(hideTooltip, 0);
+        return;
+      }
       if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
       setTooltip({ visible: true, x, y, seat });
     },
-    [seats]
+    [seats, selectedSeatId, hideTooltip]
   );
 
   // ── Pan handlers ──────────────────────────────────────────────────────────
@@ -990,14 +1334,52 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
             <div
               ref={transformRef}
               style={{
+                position: "relative",
                 transformOrigin: "top left",
                 width: `${svgDims.w}px`,
                 height: `${svgDims.h}px`,
                 willChange: "transform",
                 visibility: mapReady ? "visible" : "hidden",
               }}
-              dangerouslySetInnerHTML={{ __html: coloredSvg }}
-            />
+            >
+              <div
+                style={{ width: "100%", height: "100%" }}
+                dangerouslySetInnerHTML={{ __html: coloredSvg }}
+              />
+              {/* Selection border/glow (any selected seat or room) — a plain
+                  React-owned <rect> in its own tiny sibling SVG, sharing the
+                  same coordinate space (viewBox) as the floor plan above so
+                  its box lines up exactly, but otherwise entirely decoupled
+                  from that (huge, heavily masked/clipped) document. See
+                  resolveSelectionHighlightBox for why it isn't drawn inside
+                  that document instead. */}
+              {selectionHighlightBox && (
+                <svg
+                  width={svgDims.w}
+                  height={svgDims.h}
+                  viewBox={`0 0 ${svgDims.w} ${svgDims.h}`}
+                  style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+                >
+                  <style>{`
+                    @keyframes _selectionBorderPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.75; } }
+                  `}</style>
+                  <rect
+                    x={selectionHighlightBox.x}
+                    y={selectionHighlightBox.y}
+                    width={selectionHighlightBox.width}
+                    height={selectionHighlightBox.height}
+                    rx={selectionHighlightBox.strokeWidth * 0.5}
+                    fill="none"
+                    stroke="#4C1D95"
+                    strokeWidth={selectionHighlightBox.strokeWidth}
+                    style={{
+                      filter: `drop-shadow(0 0 ${selectionHighlightBox.haloNear}px #4C1D95) drop-shadow(0 0 ${selectionHighlightBox.haloFar}px #7C3AED) drop-shadow(0 0 ${selectionHighlightBox.haloFar * 1.8}px #A78BFA)`,
+                      animation: "_selectionBorderPulse 1.3s ease-in-out infinite",
+                    }}
+                  />
+                </svg>
+              )}
+            </div>
           )}
 
           {tooltip.visible && tooltip.seat && containerRectRef.current && (

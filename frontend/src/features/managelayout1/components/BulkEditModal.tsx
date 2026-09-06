@@ -88,7 +88,7 @@ export default function BulkEditModal({
           <div>
             <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Seat Type</label>
             <select value={seatType} onChange={(e) => setSeatType(e.target.value)} className={selectClass} style={dropdownStyle}>
-              <option value="" disabled hidden>Select a seat type</option>
+              <option value="" disabled hidden>Select seat type</option>
               {SEAT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>

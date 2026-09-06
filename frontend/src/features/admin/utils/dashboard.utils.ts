@@ -6,17 +6,35 @@ import type {
   OccupancyTrendPoint,
   RecentBooking,
   TopOffice,
-  WeekFilter,
+  TrendPeriod,
 } from "../types/admin.types";
 
-export function getWeekRange(
-  week: WeekFilter,
+function isMonthPeriod(period: TrendPeriod): boolean {
+  return period === "this-month" || period === "last-month";
+}
+
+export function getTrendRange(
+  period: TrendPeriod,
   centerDate?: string
 ): { startDate: string; endDate: string; targetDate: Date } {
   const base = centerDate ? new Date(centerDate) : new Date();
-  const targetDate = new Date(base);
 
-  if (week === "last-week") {
+  if (isMonthPeriod(period)) {
+    const target = new Date(base.getFullYear(), base.getMonth(), 1);
+    if (period === "last-month") target.setMonth(target.getMonth() - 1);
+
+    const start = new Date(target.getFullYear(), target.getMonth(), 1);
+    const end = new Date(target.getFullYear(), target.getMonth() + 1, 0); // last day of month
+
+    return {
+      startDate: start.toISOString().split("T")[0],
+      endDate: end.toISOString().split("T")[0],
+      targetDate: target,
+    };
+  }
+
+  const targetDate = new Date(base);
+  if (period === "last-week") {
     targetDate.setDate(targetDate.getDate() - 7);
   }
 
@@ -41,9 +59,35 @@ export function ceilPercentage(value: number): number {
 
 export function mapOccupancyRangeToTrend(
   items: OccupancyRangeItem[],
+  period: TrendPeriod,
   targetDate: Date
 ): OccupancyTrendPoint[] {
   const allDays: OccupancyTrendPoint[] = [];
+
+  if (isMonthPeriod(period)) {
+    const year = targetDate.getFullYear();
+    const month = targetDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const d = new Date(year, month, day);
+      const isoDate = d.toISOString().split("T")[0];
+      const found = items.find((x) => x.date.split("T")[0] === isoDate);
+
+      allDays.push({
+        day: String(day),
+        date: d.toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }),
+        occupancy: ceilPercentage(found?.occupancyRate ?? 0),
+        bookedSeats: found?.bookedSeats ?? 0,
+      });
+    }
+
+    return allDays;
+  }
 
   for (let i = -3; i <= 3; i++) {
     const d = new Date(targetDate);

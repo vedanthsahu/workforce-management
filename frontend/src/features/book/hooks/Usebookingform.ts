@@ -29,6 +29,7 @@ import {
   fetchSites,
 } from "../services/Bookingform.service";
 import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
+import { BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE, maxBookableDateIso } from "../utils/constants";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -574,6 +575,10 @@ export function useBookingForm() {
   };
 
   const setFromDate = (v: string) => {
+    if (v > maxBookableDateIso()) {
+      setError(BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE);
+      return;
+    }
     setError(null);
     setForm((f) => ({
       ...f,
@@ -583,6 +588,10 @@ export function useBookingForm() {
   };
 
   const setToDate = (v: string) => {
+    if (v > maxBookableDateIso()) {
+      setError(BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE);
+      return;
+    }
     setError(null);
     setForm((f) => ({ ...f, toDate: v }));
   };
@@ -836,6 +845,7 @@ export function useBookingForm() {
     dayCount,
     step1Valid,
     hasBookingChanges,
+    maxBookableDate: maxBookableDateIso(),
     isModifyMode,
     isAdminFlow,
     isBookingForSomeone,
