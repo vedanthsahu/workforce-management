@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, Pencil, CalendarDays, UserRound, Info, CheckCircle2, X } from "lucide-react";
+import { Pencil, CalendarDays, UserRound, Info, CheckCircle2, X } from "lucide-react";
 import { CONFIGURATION_SECTIONS, INITIAL_CONFIGURATIONS } from "../utils/configurationData";
 import type { ConfigurationField, ConfigurationItem } from "../types/configuration.types";
 import ConfigurationDetailPanel from "./ConfigurationDetailPanel";

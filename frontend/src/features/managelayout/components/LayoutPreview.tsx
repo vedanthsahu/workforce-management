@@ -123,6 +123,34 @@ function recolorGroup(svgText: string, id: string, fill: string): string {
   });
 }
 
+// Paints a solid black stroke directly on every shape inside a seat's <g>,
+// mirroring the booking-side floor map's seat border (see recolorSeat's
+// fallback branch in features/book/components/SvgFloorMapPage.tsx). Seats sit
+// flush against their neighbors with zero gap, so an outer glow (CSS
+// filter/drop-shadow) gets painted over on the touching side by whichever
+// neighbor is drawn later in the SVG's document order — it only ever shows on
+// edges facing open space. A `stroke` painted directly on each shape is part
+// of the same paint step as its fill, so it can't be erased by a later
+// sibling, giving a complete border on every side including shared edges.
+function addFlatBorder(svgText: string, id: string, color = "#000000", width = "32"): string {
+  const groupRegex = new RegExp(`(<g[^>]*id="${escapeRegExp(id)}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "gm");
+  return svgText.replace(groupRegex, (_match, open, inner, close) => {
+    // `stroke` and `stroke-width` are added independently: many real exports
+    // set stroke="none" with no stroke-width at all, so "already has a
+    // stroke attribute" isn't a reliable signal that a usable width exists
+    // too — checking each attribute separately guarantees every shape ends
+    // up with both, instead of some shapes getting recolored to black but
+    // keeping the default 1-unit width (invisible against a canvas tens of
+    // thousands of units wide).
+    const bordered = inner
+      .replace(/<(path|rect|polygon|circle|ellipse)\b(?![^>]*\sstroke=)/g, `<$1 stroke="${color}"`)
+      .replace(/<(path|rect|polygon|circle|ellipse)\b(?![^>]*\sstroke-width=)/g, `<$1 stroke-width="${width}"`)
+      .replace(/stroke="[^"]*"/g, `stroke="${color}"`)
+      .replace(/stroke-width="[^"]*"/g, `stroke-width="${width}"`);
+    return `${open}${bordered}${close}`;
+  });
+}
+
 // Outlines a highlighted seat's silhouette in black by stacking four 1px
 // drop-shadows (one per direction) on its <g>, instead of overriding its
 // fill — so the seat's own status color (green/amber/red, or the floor
@@ -188,6 +216,7 @@ function colorSeats(svgText: string, seats: Seat[], filteredIds: Set<string> | u
     // flag it distinctly so the admin can see at a glance what will change.
     if (seat.has_unpublished_changes) {
       result = recolorGroup(result, id, "#FB923C"); // Pending — orange
+      result = addFlatBorder(result, id);
       return;
     }
 
@@ -196,6 +225,7 @@ function colorSeats(svgText: string, seats: Seat[], filteredIds: Set<string> | u
     if (!seat.is_configured) return;
 
     result = recolorGroup(result, id, resolveSeatFill(seat));
+    result = addFlatBorder(result, id);
   });
 
   // Applied last, after every fill recolor above, so the border sits on top
