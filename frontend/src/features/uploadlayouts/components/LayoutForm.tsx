@@ -246,11 +246,9 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
     setFileError(null);
     if (file.type !== "image/svg+xml") {
       setFileError("Only SVG files are allowed.");
-      setFileError("Only SVG files are allowed.");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setFileError("Maximum file size is 10 MB.");
+    if (file.size > 50 * 1024 * 1024) {
       setFileError("Maximum file size is 10 MB.");
       return;
     }

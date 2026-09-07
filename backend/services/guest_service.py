@@ -2149,6 +2149,7 @@ def cancel_guest_visit_record(
             tenant_id=tenant_id,
             guest_visit_id=guest_visit_id,
             cancellation_reason=cancellation_reason,
+            updated_by_user_id=_current_user_id(current_user),
         )
 
         if active_booking:
@@ -3125,6 +3126,7 @@ def execute_guest_visit_workflow(
                 tenant_id=tenant_id,
                 guest_visit_id=guest_visit_id,
                 cancellation_reason=cancellation_reason,
+                updated_by_user_id=_current_user_id(current_user),
             )
             recalculate_guest_visit_requires_seat(
                 conn,

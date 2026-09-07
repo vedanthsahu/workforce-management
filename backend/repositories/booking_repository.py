@@ -266,6 +266,8 @@ def fetch_future_delegated_guest_visits_without_booking(
 
                 gv.created_at,
                 gv.updated_at,
+                gv.updated_by_user_id::text AS updated_user_id,
+                updated_by.full_name AS updated_by_name,
 
                 g.full_name AS guest_name,
                 g.email AS guest_email,
@@ -303,6 +305,10 @@ def fetch_future_delegated_guest_visits_without_booking(
             LEFT JOIN app_users host
                 ON host.id = gv.host_user_id
             AND host.tenant_id = gv.tenant_id
+
+            LEFT JOIN app_users updated_by
+                ON updated_by.id = gv.updated_by_user_id
+            AND updated_by.tenant_id = gv.tenant_id
 
             LEFT JOIN sites si
                 ON si.id = gv.site_id
@@ -399,6 +405,8 @@ def fetch_current_delegated_guest_visits_without_booking(
 
                 gv.created_at,
                 gv.updated_at,
+                gv.updated_by_user_id::text AS updated_user_id,
+                updated_by.full_name AS updated_by_name,
 
                 g.full_name AS guest_name,
                 g.email AS guest_email,
@@ -435,6 +443,10 @@ def fetch_current_delegated_guest_visits_without_booking(
             LEFT JOIN app_users host
                 ON host.id = gv.host_user_id
                AND host.tenant_id = gv.tenant_id
+
+            LEFT JOIN app_users updated_by
+                ON updated_by.id = gv.updated_by_user_id
+               AND updated_by.tenant_id = gv.tenant_id
 
             LEFT JOIN sites si
                 ON si.id = gv.site_id
@@ -533,6 +545,8 @@ def fetch_past_delegated_guest_visits_without_booking(
 
                 gv.created_at,
                 gv.updated_at,
+                gv.updated_by_user_id::text AS updated_user_id,
+                updated_by.full_name AS updated_by_name,
 
                 g.full_name AS guest_name,
                 g.email AS guest_email,
@@ -569,6 +583,10 @@ def fetch_past_delegated_guest_visits_without_booking(
             LEFT JOIN app_users host
                 ON host.id = gv.host_user_id
                AND host.tenant_id = gv.tenant_id
+
+            LEFT JOIN app_users updated_by
+                ON updated_by.id = gv.updated_by_user_id
+               AND updated_by.tenant_id = gv.tenant_id
 
             LEFT JOIN sites si
                 ON si.id = gv.site_id
@@ -713,6 +731,8 @@ def fetch_admin_guest_visits_without_booking(
 
                 gv.created_at,
                 gv.updated_at,
+                gv.updated_by_user_id::text AS updated_user_id,
+                updated_by.full_name AS updated_by_name,
 
                 g.full_name AS guest_name,
                 g.email AS guest_email,
@@ -750,6 +770,10 @@ def fetch_admin_guest_visits_without_booking(
             LEFT JOIN app_users host
                 ON host.id = gv.host_user_id
                AND host.tenant_id = gv.tenant_id
+
+            LEFT JOIN app_users updated_by
+                ON updated_by.id = gv.updated_by_user_id
+               AND updated_by.tenant_id = gv.tenant_id
 
             LEFT JOIN sites si
                 ON si.id = gv.site_id
@@ -1609,7 +1633,10 @@ def fetch_cancelled_delegated_bookings(
             b.cancellation_reason,
 
             b.created_at,
-            b.updated_at
+            b.updated_at,
+            b.updated_by_user_id::text AS updated_user_id,
+            updated_by.full_name AS updated_by_name,
+            updated_by.email AS updated_by_email
 
         FROM bookings b
 
@@ -1620,6 +1647,10 @@ def fetch_cancelled_delegated_bookings(
         LEFT JOIN app_users creator
             ON creator.id = b.booked_by_user_id
             AND creator.tenant_id = b.tenant_id
+
+        LEFT JOIN app_users updated_by
+            ON updated_by.id = b.updated_by_user_id
+            AND updated_by.tenant_id = b.tenant_id
 
         LEFT JOIN seats s
             ON s.id = b.seat_id

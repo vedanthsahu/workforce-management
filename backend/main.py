@@ -81,7 +81,7 @@ _graph_team_sync_thread: threading.Thread | None = None
 app = FastAPI(title="Seat Management Backend")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url],
+    allow_origins=list(settings.cors_allowed_origins),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
