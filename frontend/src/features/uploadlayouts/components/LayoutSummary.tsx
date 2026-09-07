@@ -20,10 +20,11 @@ function resolveSeatFill(seat: Seat): string {
   return "#22C55E";
 }
 
-// Cabin/conference/meeting room seats are grouped under one svg id containing
-// a "CBN"/"CFR"/"MR" segment (e.g. "HYD-PRV-F11-CBN-04", "HYD-PRV-F11-CFR-02",
-// "HYD-PRV-F11-MR-01"), not a dedicated field.
-const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr)([-_]|$)/i;
+// Cabin/conference/meeting/training room seats are grouped under one svg id
+// containing a "CBN"/"CFR"/"MR"/"TR" segment (e.g. "HYD-PRV-F11-CBN-04",
+// "HYD-PRV-F11-CFR-02", "HYD-PRV-F11-MR-01", "HYD-PRV-F11-TR-01"), not a
+// dedicated field.
+const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr|tr)([-_]|$)/i;
 
 function isRoomSvgId(svgId: string): boolean {
   return ROOM_SVG_ID_PATTERN.test(svgId);

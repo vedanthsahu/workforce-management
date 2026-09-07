@@ -128,9 +128,9 @@ export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps
       {cards.map((card) => (
         <div
           key={card.label}
-          className="bg-white rounded-xl border border-gray-100 px-3 py-3 sm:px-4 sm:py-4 flex items-center gap-2 sm:gap-3"
+          className="group bg-white rounded-xl border border-gray-100 px-3 py-3 sm:px-4 sm:py-4 flex items-center gap-2 sm:gap-3 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-gray-300"
         >
-          <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0 ${card.iconBg}`}>
+          <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110 ${card.iconBg}`}>
             {card.icon}
           </div>
           <div className="min-w-0">

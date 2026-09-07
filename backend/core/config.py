@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     tenant_id: str
     redirect_uri: str
     frontend_url: str
+    additional_frontend_urls: str | tuple[str, ...] = ()
     session_ttl: int = 3600
 
     aws_region: str
@@ -152,6 +153,15 @@ class Settings(BaseSettings):
             _parse_optional_csv(self.notification_admin_emails),
         )
 
+        object.__setattr__(
+            self,
+            "additional_frontend_urls",
+            tuple(
+                url.rstrip("/")
+                for url in _parse_optional_csv(self.additional_frontend_urls)
+            ),
+        )
+
         if self.aws_s3_max_retries < 0:
             raise ValueError("aws_s3_max_retries must be greater than or equal to zero")
         if self.aws_ses_max_retries < 0:
@@ -191,6 +201,15 @@ class Settings(BaseSettings):
     @property
     def jwks_url(self) -> str:
         return f"https://login.microsoftonline.com/{self.tenant_id}/discovery/v2.0/keys"
+
+    @property
+    def cors_allowed_origins(self) -> tuple[str, ...]:
+        """Return every frontend origin allowed to call this API."""
+        origins = (self.frontend_url, *self.additional_frontend_urls)
+        seen: dict[str, None] = {}
+        for origin in origins:
+            seen.setdefault(origin, None)
+        return tuple(seen)
 
     @property
     def db_config(self) -> dict[str, object]:

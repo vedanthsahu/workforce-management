@@ -21,7 +21,10 @@ export const SVG_W = 2466;
 export const SVG_H = 2039;
 
 // ── Zoom limits & steps ─────────────────────────────────────────────────────────
-export const ZOOM_MIN = 0.05;
+// No fixed ZOOM_MIN: the zoom-out floor is computed per-SVG as the
+// "fit to view" scale (see SvgFloorMapPage's zoomStep/wheel handler), so
+// zooming out always bottoms out at the original fitted framing rather than
+// a constant that's wrong for either an oversized or a normal-sized canvas.
 export const ZOOM_MAX = 4;
 export const ZOOM_BUTTON_FACTOR = 1.25;
 export const ZOOM_WHEEL_FACTOR = 1.1;
