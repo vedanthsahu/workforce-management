@@ -9,6 +9,7 @@ Parameters:
     AllowedValues:
       - dev
       - qa
+      - uat
       - prod
 
   PrivateSubnetIds:
