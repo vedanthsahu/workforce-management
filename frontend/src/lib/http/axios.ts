@@ -63,6 +63,7 @@ axiosInstance.interceptors.response.use(
         typeof window !== "undefined" &&
         !window.location.pathname.includes("/login")
       ) {
+        try { await axios.post(`${BACKEND_URL}/auth/logout`, {}, { withCredentials: true }); } catch {}
         window.location.href = "/login";
       }
     }

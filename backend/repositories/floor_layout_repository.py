@@ -2,18 +2,48 @@
 Repository helpers for floor layout persistence.
 """
 from __future__ import annotations
-from psycopg2.extras import Json
 
 from typing import Any
 
-from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
+from psycopg2.extras import Json, RealDictCursor
 
-from backend.core.enums import LayoutStatus
-from backend.repositories.location_repository import (
-    upsert_operational_seat,
-    replace_seat_amenities,
+from backend.core.enums import (
+    ALL_LAYOUT_STATUSES,
+    NON_DELETED_LAYOUT_STATUSES,
+    LayoutStatus,
 )
+from backend.repositories.location_repository import (
+    replace_seat_amenities,
+    upsert_operational_seat,
+)
+
+# Distinct advisory-lock class from the booking locks in
+# booking_repository.py (1=seat/date, 2=subject/date) so the two lock
+# families can never collide with each other's hashed key.
+_FLOOR_PUBLISH_LOCK_CLASS = 3
+
+
+def acquire_floor_publish_lock(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+) -> None:
+    """Serialize concurrent publish/activate attempts for the same floor.
+
+    No unique index enforces "at most one PUBLISHED layout per floor" at
+    the database level today, so two concurrent activate requests could
+    otherwise both archive-then-activate and leave two floor_layouts rows
+    marked PUBLISHED for the same floor. Advisory lock, same rationale as
+    acquire_booking_slot_locks: no schema change, no special privilege.
+    """
+    key = f"{tenant_id}:floor:{floor_id}"
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT pg_advisory_xact_lock(%s::int, hashtext(%s))",
+            (_FLOOR_PUBLISH_LOCK_CLASS, key),
+        )
 
 FLOOR_LAYOUT_SELECT_FIELDS = """
     fl.id::text AS layout_id,
@@ -34,10 +64,21 @@ FLOOR_LAYOUT_SELECT_FIELDS = """
     fl.uploaded_by_user_id::text AS uploaded_by_user_id,
     au.full_name AS uploaded_by_name,
     au.email AS uploaded_by_email,
-    au.role_name AS uploaded_by_role,
+    UPPER(REPLACE(au.role_name, ' ', '_')) AS uploaded_by_role,
     au.department AS uploaded_by_department,
     au.job_title AS uploaded_by_job_title,
+    fl.updated_by_user_id::text AS updated_by_user_id,
+    upd.full_name AS updated_by_name,
+    upd.email AS updated_by_email,
+    UPPER(REPLACE(upd.role_name, ' ', '_')) AS updated_by_role,
+    upd.department AS updated_by_department,
+    upd.job_title AS updated_by_job_title,
     fl.published_by_user_id::text AS published_by_user_id,
+    pub.full_name AS published_by_name,
+    pub.email AS published_by_email,
+    UPPER(REPLACE(pub.role_name, ' ', '_')) AS published_by_role,
+    pub.department AS published_by_department,
+    pub.job_title AS published_by_job_title,
     fl.published_at,
     fl.status,
     fl.created_at,
@@ -45,10 +86,16 @@ FLOOR_LAYOUT_SELECT_FIELDS = """
 """
 
 
-FLOOR_LAYOUT_UPLOADER_JOIN = """
+FLOOR_LAYOUT_USER_JOINS = """
     LEFT JOIN app_users AS au
         ON au.id = fl.uploaded_by_user_id
        AND au.tenant_id = fl.tenant_id
+    LEFT JOIN app_users AS pub
+        ON pub.id = fl.published_by_user_id
+       AND pub.tenant_id = fl.tenant_id
+    LEFT JOIN app_users AS upd
+        ON upd.id = fl.updated_by_user_id
+       AND upd.tenant_id = fl.tenant_id
 """
 
 
@@ -100,25 +147,22 @@ def fetch_floor_for_layout(
     return dict(row) if row else None
 
 
-def archive_existing_published_layout(
-    conn: PGConnection,
-    *,
-    tenant_id: str,
-    floor_id: str,
-) -> None:
-    archive_existing_published_layouts(
-        conn,
-        tenant_id=tenant_id,
-        floor_id=floor_id,
-    )
-
-
 def archive_existing_published_layouts(
     conn: PGConnection,
     *,
     tenant_id: str,
     floor_id: str,
+    archived_by_user_id: str,
 ) -> None:
+    """Archive the floor's current PUBLISHED layout as a side effect of
+    publishing a different one.
+
+    Stamps updated_by_user_id with the actor doing the publishing, not just
+    updated_at -- otherwise the archived row's "last updated by" stays
+    whatever it was before (its uploader, or its last seat-config editor,
+    or nobody) while updated_at jumps to now, so the UI would pair a fresh
+    timestamp with a stale/wrong name.
+    """
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -126,6 +170,7 @@ def archive_existing_published_layouts(
             SET
                 status = %s,
                 is_published = FALSE,
+                updated_by_user_id = %s,
                 updated_at = NOW()
             WHERE tenant_id = %s
               AND floor_id = %s
@@ -134,6 +179,7 @@ def archive_existing_published_layouts(
             """,
             (
                 LayoutStatus.ARCHIVED.value,
+                archived_by_user_id,
                 tenant_id,
                 floor_id,
                 LayoutStatus.PUBLISHED.value,
@@ -168,29 +214,87 @@ def get_next_layout_version(
     return current_version + 1
 
 
+# Units allowed for visibility_unit below. Kept to a fixed allow-list since
+# the unit is interpolated directly into the SQL (not bound as a param) --
+# safe only because it's always one of these, never caller/user input.
+_VISIBILITY_INTERVAL_UNITS = frozenset({"days", "hours", "minutes"})
+
+
 def fetch_floor_layouts_by_floor(
     conn: PGConnection,
     *,
     tenant_id: str,
     floor_id: str,
+    visibility_thresholds: dict[str, int] | None = None,
+    visibility_unit: str = "days",
 ) -> list[dict[str, Any]]:
-    """Fetch all layouts for a tenant-scoped floor, newest version first."""
+    """
+    Fetch all layouts for a tenant-scoped floor, including deleted ones.
+
+    Deleted layouts are included as view-only historical entries — the UI
+    shows them but blocks every action (configure, activate/recover) other
+    than viewing. Ordered PUBLISHED, then DRAFT, then ARCHIVED, then DELETED;
+    within each group, most recently updated first.
+
+    visibility_thresholds, when provided, hides DRAFT/ARCHIVED/DELETED rows
+    whose updated_at is older than their status's allowed age, measured in
+    visibility_unit ("days" in production; "minutes" is useful for testing
+    the rule without an actual multi-day wait -- see
+    LAYOUT_VISIBILITY_INTERVAL_UNIT in floor_layout_service.py). PUBLISHED
+    is never hidden. Rows are never deleted by this -- it's a display
+    filter only, scoped per-floor by the caller. Pass
+    visibility_thresholds=None to keep today's behavior (every status
+    shown, regardless of age).
+    """
+    if visibility_unit not in _VISIBILITY_INTERVAL_UNITS:
+        raise ValueError(f"Unsupported visibility_unit: {visibility_unit!r}")
+
+    visibility_clause = ""
+    params: tuple[Any, ...] = (
+        tenant_id,
+        floor_id,
+        list(ALL_LAYOUT_STATUSES),
+    )
+
+    if visibility_thresholds is not None:
+        visibility_clause = f"""
+              AND (
+                  fl.status = 'PUBLISHED'
+                  OR (fl.status = 'DRAFT' AND fl.updated_at >= NOW() - (%s || ' {visibility_unit}')::interval)
+                  OR (fl.status = 'ARCHIVED' AND fl.updated_at >= NOW() - (%s || ' {visibility_unit}')::interval)
+                  OR (fl.status = 'DELETED' AND fl.updated_at >= NOW() - (%s || ' {visibility_unit}')::interval)
+              )
+        """
+        params += (
+            str(visibility_thresholds["DRAFT"]),
+            str(visibility_thresholds["ARCHIVED"]),
+            str(visibility_thresholds["DELETED"]),
+        )
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
             SELECT
                 {FLOOR_LAYOUT_SELECT_FIELDS}
             FROM floor_layouts AS fl
-            {FLOOR_LAYOUT_UPLOADER_JOIN}
+            {FLOOR_LAYOUT_USER_JOINS}
             {FLOOR_LAYOUT_LOCATION_JOINS}
             WHERE fl.tenant_id = %s
               AND fl.floor_id = %s
-            ORDER BY fl.version_no DESC, fl.created_at DESC, fl.id DESC
+              AND fl.status = ANY(%s)
+            {visibility_clause}
+            ORDER BY
+                CASE fl.status
+                    WHEN 'PUBLISHED' THEN 0
+                    WHEN 'DRAFT' THEN 1
+                    WHEN 'ARCHIVED' THEN 2
+                    WHEN 'DELETED' THEN 3
+                    ELSE 4
+                END,
+                fl.updated_at DESC,
+                fl.id DESC
             """,
-            (
-                tenant_id,
-                floor_id,
-            ),
+            params,
         )
 
         rows = cur.fetchall()
@@ -198,33 +302,58 @@ def fetch_floor_layouts_by_floor(
     return [dict(row) for row in rows]
 
 
-def fetch_floor_layout_by_id(
+def _fetch_floor_layout_row(
     conn: PGConnection,
     *,
     tenant_id: str,
     layout_id: str,
+    include_deleted: bool = False,
 ) -> dict[str, Any] | None:
-    """Fetch one layout by id within a tenant."""
+    status_filter = "" if include_deleted else "AND fl.status = ANY(%s)"
+    params: tuple[Any, ...] = (tenant_id, layout_id)
+    if not include_deleted:
+        params += (list(NON_DELETED_LAYOUT_STATUSES),)
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
             SELECT
                 {FLOOR_LAYOUT_SELECT_FIELDS}
             FROM floor_layouts AS fl
-            {FLOOR_LAYOUT_UPLOADER_JOIN}
+            {FLOOR_LAYOUT_USER_JOINS}
             {FLOOR_LAYOUT_LOCATION_JOINS}
             WHERE fl.tenant_id = %s
               AND fl.id = %s
+              {status_filter}
             """,
-            (
-                tenant_id,
-                layout_id,
-            ),
+            params,
         )
 
         row = cur.fetchone()
 
     return dict(row) if row else None
+
+
+def fetch_floor_layout_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    include_deleted: bool = False,
+) -> dict[str, Any] | None:
+    """Fetch one layout by id within a tenant.
+
+    By default a deleted layout behaves as if it does not exist — used by
+    every action consumer (activate, configure, delete). Callers backing a
+    view-only surface (e.g. viewing a deleted layout's seats as a historical
+    entry) should pass include_deleted=True.
+    """
+    return _fetch_floor_layout_row(
+        conn,
+        tenant_id=tenant_id,
+        layout_id=layout_id,
+        include_deleted=include_deleted,
+    )
 
 
 def activate_floor_layout(
@@ -267,6 +396,80 @@ def activate_floor_layout(
         conn,
         tenant_id=tenant_id,
         layout_id=str(row["layout_id"]),
+    )
+
+
+def touch_floor_layout_updated_by(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    updated_by_user_id: str,
+) -> None:
+    """Stamp who last edited this layout's seat configuration.
+
+    The only writers of floor_layouts today are create/activate/archive/
+    delete -- none of which represent "an admin edited this layout's
+    seats." Bulk layout-seat-configuration saves call this directly so
+    updated_by_user_id/updated_at reflect the real last editor instead of
+    staying NULL forever.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE floor_layouts
+            SET
+                updated_by_user_id = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            """,
+            (updated_by_user_id, tenant_id, layout_id),
+        )
+
+
+def soft_delete_floor_layout(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+) -> dict[str, Any] | None:
+    """Soft delete one tenant-scoped DRAFT/ARCHIVED layout.
+
+    Rows are never removed; PUBLISHED and already-DELETED layouts are
+    excluded here so an out-of-band transition can never sneak through.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            UPDATE floor_layouts
+            SET
+                status = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+              AND status = ANY(%s)
+            RETURNING
+                id::text AS layout_id
+            """,
+            (
+                LayoutStatus.DELETED.value,
+                tenant_id,
+                layout_id,
+                [LayoutStatus.DRAFT.value, LayoutStatus.ARCHIVED.value],
+            ),
+        )
+
+        row = cur.fetchone()
+
+    if row is None:
+        return None
+
+    return _fetch_floor_layout_row(
+        conn,
+        tenant_id=tenant_id,
+        layout_id=str(row["layout_id"]),
+        include_deleted=True,
     )
 
 
@@ -422,6 +625,7 @@ def fetch_layout_seats_by_layout_id(
             LEFT JOIN seats AS s
                 ON s.tenant_id = lsm.tenant_id
                AND s.floor_id = lsm.floor_id
+               AND s.layout_id = lsm.layout_id
                AND s.seat_code = lsm.seat_code
 
             WHERE lsm.tenant_id = %s
@@ -443,32 +647,44 @@ def fetch_layout_seats_by_layout_id(
         for row in rows
     ]
 
-def sync_published_layout_seats(
+def reconcile_published_layout_seats(
     conn: PGConnection,
     *,
     tenant_id: str,
     floor_id: str,
     layout_id: str,
 ) -> None:
+    """Retire every still-live seat on this floor that isn't part of the
+    layout that was just published.
 
+    `seats` is append-only per layout version: unique key is (floor_id,
+    seat_code, layout_id), so publish_layout_seat_configurations's upsert
+    already created fresh rows under the new `layout_id` for everything it
+    configured -- it never touches a previous version's rows. Whatever is
+    still marked live (`live_until IS NULL`) under any other layout_id on
+    this floor is, by definition, superseded. Retiring (never deleting)
+    keeps bookings/audit_logs pointing at the exact historical seat row
+    they were made against, and keeps every layout_id-scoped stats/
+    availability query (which already excludes non-live seats) correct
+    with no query changes needed there.
+    """
     with conn.cursor() as cur:
-
         cur.execute(
             """
             UPDATE seats
             SET
                 status = 'INACTIVE',
+                is_bookable = FALSE,
+                is_reserved = FALSE,
+                live_until = NOW(),
+                retired_reason = 'LAYOUT_REPUBLISHED',
                 updated_at = NOW()
             WHERE tenant_id = %s
               AND floor_id = %s
-              AND layout_id IS NOT NULL
               AND layout_id <> %s
+              AND live_until IS NULL
             """,
-            (
-                tenant_id,
-                floor_id,
-                layout_id,
-            ),
+            (tenant_id, floor_id, layout_id),
         )
 
 def publish_layout_seat_configurations(
@@ -508,10 +724,13 @@ def publish_layout_seat_configurations(
             building_id=str(mapping["building_id"]),
             floor_id=str(mapping["floor_id"]),
             seat_code=str(mapping["seat_code"]),
+            seat_name=mapping.get("seat_name"),
             seat_type=mapping["seat_type"],
             status=mapping["status"],
             is_bookable=mapping["is_bookable"],
+            is_reserved=mapping.get("is_reserved"),
             svg_element_id=str(mapping["svg_element_id"]),
+            source_layout_mapping_id=str(mapping["id"]),
         )
 
         replace_seat_amenities(

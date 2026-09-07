@@ -73,4 +73,5 @@ export interface LayoutSeatStats {
   unconfigured_seats: number;
   non_bookable_seats: number;
   bookable_seats: number;
+  inactive_seats?: number;
 }

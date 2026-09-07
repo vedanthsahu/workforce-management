@@ -1,7 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { Card } from "@/components/ui/card";
 
 import {
   UploadCloud,
@@ -13,8 +14,6 @@ import {
 } from "lucide-react";
 
 export default function AdminQuickActions() {
-  const router = useRouter();
-
   const actions = [
     {
       title: "Upload Floor Layout",
@@ -71,27 +70,23 @@ export default function AdminQuickActions() {
           const Icon = item.icon;
 
           return (
-            <div
-              key={index}
-              onClick={() => router.push(item.route)}
-              className={cn(
-                "p-5 rounded-xl border cursor-pointer transition hover:shadow-md"
-              )}
-            >
-              <div
-                className={cn(
-                  "w-10 h-10 rounded-lg flex items-center justify-center mb-3",
-                  item.color
-                )}
-              >
-                <Icon className="w-5 h-5" />
-              </div>
+            <Link key={index} href={item.route}>
+              <Card className="p-5 rounded-xl cursor-pointer transition hover:shadow-md gap-0 border">
+                <div
+                  className={cn(
+                    "w-10 h-10 rounded-lg flex items-center justify-center mb-3",
+                    item.color
+                  )}
+                >
+                  <Icon className="w-5 h-5" />
+                </div>
 
-              <p className="font-medium">{item.title}</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {item.desc}
-              </p>
-            </div>
+                <p className="font-medium">{item.title}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {item.desc}
+                </p>
+              </Card>
+            </Link>
           );
         })}
       </div>

@@ -41,21 +41,23 @@ class FakeConnection:
 
 
 class BookingDelegationResponseTests(unittest.TestCase):
-    def test_booking_response_keeps_user_id_and_adds_delegation_fields(self) -> None:
+    def test_booking_response_exposes_schema_native_ownership_fields(self) -> None:
         response = BookingResponse(
             booking_id="100",
             tenant_id="1",
-            user_id="20",
             booked_for_user_id="20",
             booked_by_user_id="10",
+            booking_type="EMPLOYEE",
             seat_id="30",
+            site_id="2",
+            building_id="3",
             floor_id="40",
             booking_date=date(2026, 5, 22),
             booking_status="CONFIRMED",
         )
 
         payload = response.model_dump()
-        self.assertEqual(payload["user_id"], "20")
+        self.assertNotIn("user_id", payload)
         self.assertEqual(payload["booked_for_user_id"], "20")
         self.assertEqual(payload["booked_by_user_id"], "10")
 

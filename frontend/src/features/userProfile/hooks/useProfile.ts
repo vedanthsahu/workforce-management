@@ -7,7 +7,12 @@ import type {
   EditProfileForm,
   EditPreferencesForm,
 } from "../types/profile.types";
-import { getProfileData, updatePreferences, updateProfile, uploadAvatar } from "../services/profile.service.";
+import {
+  getProfileData,
+  updatePreferences,
+  updateProfile,
+  uploadAvatar,
+} from "../services/profile.service.";
 
 interface UseProfileState {
   data:                ProfilePageData | null;
@@ -25,10 +30,6 @@ export interface UseProfileReturn extends UseProfileState {
   handleUpdateProfile:     (form: EditProfileForm)     => Promise<void>;
   handleUpdatePreferences: (form: EditPreferencesForm) => Promise<void>;
   handleUploadAvatar:      (file: File)                => Promise<void>;
-}
-
-function parseCommaSeparated(val: string): string[] {
-  return val.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
 export function useProfile(): UseProfileReturn {
@@ -61,11 +62,8 @@ export function useProfile(): UseProfileReturn {
     setState((s) => ({ ...s, isSavingProfile: true }));
     try {
       const updated = await updateProfile({
-        display_name:   form.displayName   || undefined,
-        phone:          form.phone         || undefined,
-        personal_email: form.personalEmail || undefined,
-        bio:            form.bio           || undefined,
-        skills:         form.skills.length ? form.skills : undefined,
+        bio:    form.bio    || undefined,
+        skills: form.skills.length ? form.skills : undefined,
       });
       setState((s) => ({
         ...s,
@@ -81,14 +79,14 @@ export function useProfile(): UseProfileReturn {
   const handleUpdatePreferences = useCallback(async (form: EditPreferencesForm) => {
     setState((s) => ({ ...s, isSavingPreferences: true }));
     try {
+      // POST /preferences/me replaces the whole saved row, so every field
+      // must be resent — carry forward seat_type since there's no UI for it yet.
       const updated = await updatePreferences({
-        preferred_office:  form.preferredOffice  || undefined,
-        preferred_floor:   form.preferredFloor   || undefined,
-        seat_type:         form.seatType         || undefined,
-        near_teammates:    parseCommaSeparated(form.nearTeammates),
-        away_from:         parseCommaSeparated(form.awayFrom),
-        noise_preference:  form.noisePreference  || undefined,
-        other_preferences: parseCommaSeparated(form.otherPreferences),
+        site_id:     form.preferredOfficeId   ? Number(form.preferredOfficeId)   : null,
+        building_id: form.preferredBuildingId ? Number(form.preferredBuildingId) : null,
+        floor_id:    form.preferredFloorId    ? Number(form.preferredFloorId)    : null,
+        seat_type:   state.data?.preferences.preferredSeatType ?? null,
+        amenity_ids: form.preferredAmenityIds.map(Number),
       });
       setState((s) => ({
         ...s,
@@ -99,7 +97,7 @@ export function useProfile(): UseProfileReturn {
       setState((s) => ({ ...s, isSavingPreferences: false }));
       throw new Error("Failed to update preferences. Please try again.");
     }
-  }, []);
+  }, [state.data]);
 
   const handleUploadAvatar = useCallback(async (file: File) => {
     setState((s) => ({ ...s, isUploadingAvatar: true }));

@@ -13,8 +13,8 @@ from botocore.client import BaseClient
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import HTTPException, UploadFile, status
 
+from backend.core.app_logging import LOGGER_NAME
 from backend.core.config import get_settings
-from backend.core.logging import LOGGER_NAME
 from backend.core.retry import aws_retry
 
 logger = logging.getLogger(f"{LOGGER_NAME}.storage")
@@ -26,9 +26,26 @@ def get_s3_client() -> BaseClient:
     return boto3.client(
         "s3",
         region_name=settings.aws_region,
-        aws_access_key_id=settings.aws_access_key_id,
-        aws_secret_access_key=settings.aws_secret_access_key,
     )
+
+
+
+# SVG is rendered inline by the frontend viewer, so any of these constructs
+# would execute in the context of an authenticated user's session (stored
+# XSS). A legitimate floor-plan export from a design tool never needs them.
+_DISALLOWED_SVG_PATTERNS: tuple[bytes, ...] = (
+    b"<script",
+    b"javascript:",
+    b"<foreignobject",
+    b"<iframe",
+    b"<embed",
+    b"<object",
+    b"onload=",
+    b"onerror=",
+    b"onclick=",
+    b"onmouseover=",
+    b"onfocus=",
+)
 
 
 def validate_svg_file(file: UploadFile) -> None:
@@ -52,6 +69,20 @@ def validate_svg_file(file: UploadFile) -> None:
             detail={
                 "code": "invalid_content_type",
                 "message": "Invalid SVG content type.",
+            },
+        )
+
+    file.file.seek(0)
+    content = file.file.read()
+    file.file.seek(0)
+
+    lowered = content.lower()
+    if any(pattern in lowered for pattern in _DISALLOWED_SVG_PATTERNS):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "unsafe_svg_content",
+                "message": "The uploaded SVG contains disallowed executable content.",
             },
         )
 

@@ -30,3 +30,21 @@ export interface UpdateFloorPayload {
   floor_name: string;
   status: string;
 }
+
+export interface FloorSite {
+  site_id: string;
+  site_name: string;
+  status: string;
+}
+
+export interface FloorBuilding {
+  building_id: string;
+  building_name: string;
+}
+
+export interface FloorStatsSummary {
+  total_floors: number;
+  active_floors: number;
+  inactive_floors: number;
+  total_seats: number;
+}

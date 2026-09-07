@@ -1,0 +1,57 @@
+import { useCallback, useEffect, useState } from "react";
+import { auditService } from "../services/audit.service";
+import { AuditLogFilters, AuditLogListResponse } from "../types/audit.types";
+import { AUDIT_PAGE_SIZES } from "../utils/constants";
+
+// The table has no sort-by-column UI -- always newest first.
+const SORT_BY = "occurred_at";
+const SORT_DIR = "desc";
+
+export function useAuditLogs(appliedFilters: AuditLogFilters) {
+  const [response, setResponse] = useState<AuditLogListResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(AUDIT_PAGE_SIZES[0]);
+
+  const fetchLogs = useCallback(async () => {
+    try {
+      setLoading(true);
+      // Date Range and the relative "Last N min" filter are a toggle in the
+      // UI, not two independent filters -- only send the one that's active,
+      // same rule the backend itself falls back on if both were ever sent.
+      const isRelative = appliedFilters.timeMode === "relative";
+
+      const res = await auditService.list({
+        search: appliedFilters.search.trim() || undefined,
+        action: appliedFilters.action !== "All" ? appliedFilters.action : undefined,
+        module: appliedFilters.module !== "All" ? appliedFilters.module : undefined,
+        entity: appliedFilters.entity !== "All" ? appliedFilters.entity : undefined,
+        status: appliedFilters.status !== "All" ? appliedFilters.status : undefined,
+        startDate: !isRelative ? appliedFilters.dateFrom || undefined : undefined,
+        endDate: !isRelative ? appliedFilters.dateTo || undefined : undefined,
+        lastSeconds: isRelative ? appliedFilters.lastSeconds ?? undefined : undefined,
+        sortBy: SORT_BY,
+        sortDir: SORT_DIR,
+        page,
+        limit: pageSize,
+      });
+      setResponse(res);
+    } catch (error) {
+      console.error("Error fetching audit logs", error);
+      setResponse(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [appliedFilters, page, pageSize]);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
+
+  // Any filter change (not page/pageSize) should snap back to page 1.
+  useEffect(() => {
+    setPage(1);
+  }, [appliedFilters]);
+
+  return { response, loading, page, setPage, pageSize, setPageSize, refetch: fetchLogs };
+}

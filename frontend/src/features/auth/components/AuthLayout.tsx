@@ -21,6 +21,7 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
             width={36}
             height={36}
             className="rounded-lg"
+            unoptimized
           />
           <span className="text-lg font-semibold tracking-tight text-gray-900">
             Solugenix Seat Book

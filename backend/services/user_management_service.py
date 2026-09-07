@@ -1,27 +1,105 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
+import psycopg2
 from fastapi import HTTPException, status
 from psycopg2.extensions import connection as PGConnection
 
+from backend.core.audit_actions import USER_ACCESS_UPDATED, USER_PROFILE_UPDATED
+from backend.repositories.audit_repository import safe_write_audit_log
+from backend.repositories.booking_repository import (
+    fetch_all_confirmed_bookings_for_user,
+)
+from backend.repositories.location_repository import fetch_seat_amenity_names
 from backend.repositories.token_repository import (
     record_auth_event,
     revoke_all_user_sessions,
 )
 from backend.repositories.user_repository import (
     admin_update_user_access,
+    count_active_tenant_admins,
+    fetch_admin_user_directory,
     fetch_user_by_id,
+    fetch_user_details_by_id,
+    search_users,
     update_user_profile,
 )
 from backend.schemas.auth import UserResponse
+from backend.schemas.booking import BookingResponse
+from backend.schemas.user_management import (
+    AdminDirectoryRole,
+    AdminDirectoryStatus,
+    AdminUserDirectoryResponse,
+    UserBookingHistoryResponse,
+    UserBookingsSummary,
+    UserDetailsResponse,
+)
 
 ASSIGNABLE_ROLE_NAMES = {
     "EMPLOYEE",
     "MANAGER",
-    "TALENT",
-    "SECURITY",
+    "FACILITATOR",
+    "FRONT_OFFICE",
+    # A Tenant Admin can promote any user straight to TENANT_ADMIN through
+    # this endpoint too, not just manage an existing admin's access.
+    # PRODUCT_ADMIN is deliberately not here -- see PROTECTED_TARGET_ROLE_NAMES.
+    "TENANT_ADMIN",
 }
+
+# Targets holding one of these roles can never have their role/status changed
+# via admin_update_user_access_service, regardless of who the caller is —
+# there's no in-app flow for managing PRODUCT_ADMIN. TENANT_ADMIN used to be
+# protected the same way, but a Tenant Admin can now manage another Tenant
+# Admin's (or their own) access — see the target_role == "TENANT_ADMIN"
+# handling below for the safeguards that replace this blanket block for them
+# (no promoting a non-admin straight to TENANT_ADMIN, and never leaving the
+# tenant with zero active admins).
+PROTECTED_TARGET_ROLE_NAMES = {
+    "PRODUCT_ADMIN",
+}
+
+ADMIN_DIRECTORY_ROLES = {
+    "EMPLOYEE",
+    "MANAGER",
+    "FACILITATOR",
+    "FRONT_OFFICE",
+    "TENANT_ADMIN",
+    "FACILITATOR_GUEST_COORDINATOR",
+}
+
+ADMIN_DIRECTORY_STATUSES = {"ACTIVE", "INACTIVE", "LOCKED"}
+
+
+def _current_user_id(current_user: dict[str, Any]) -> str:
+    return str(current_user.get("user_id") or current_user.get("id") or "")
+
+
+def _user_role(user: dict[str, Any]) -> str:
+    return str(user.get("role_name") or user.get("role") or "").strip().upper()
+
+
+def _can_view_user_resource(
+    *,
+    current_user: dict[str, Any],
+    target_user: dict[str, Any],
+) -> bool:
+    """Same delegation rule used for dashboards/bookings: self, TENANT_ADMIN,
+    FACILITATOR, or the target's own MANAGER."""
+    current_user_id = _current_user_id(current_user)
+
+    if current_user_id == str(target_user.get("id") or target_user.get("user_id") or ""):
+        return True
+
+    role = _user_role(current_user)
+    if role in {"TENANT_ADMIN", "FACILITATOR"}:
+        return True
+
+    return (
+        role == "MANAGER"
+        and str(target_user.get("manager_user_id") or "") == current_user_id
+    )
 
 
 def update_my_profile(
@@ -42,6 +120,17 @@ def update_my_profile(
     )
 
     if updated_user is None:
+        safe_write_audit_log(
+            conn,
+            action=USER_PROFILE_UPDATED,
+            tenant_id=str(current_user["tenant_id"]),
+            current_user=current_user,
+            resource_type="user",
+            resource_id=str(current_user["user_id"]),
+            event_status="FAILURE",
+            failure_code="user_not_found",
+            failure_reason="User not found.",
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
@@ -51,6 +140,20 @@ def update_my_profile(
         )
 
     conn.commit()
+
+    sent = payload.model_dump(exclude_unset=True)
+    actually_changed = [k for k in sent if current_user.get(k) != sent[k]]
+    safe_write_audit_log(
+        conn,
+        action=USER_PROFILE_UPDATED,
+        tenant_id=str(current_user["tenant_id"]),
+        current_user=current_user,
+        resource_type="user",
+        resource_id=str(current_user["user_id"]),
+        old_values={k: current_user.get(k) for k in sent},
+        new_values=sent,
+        changed_fields=actually_changed or None,
+    )
 
     return UserResponse(**updated_user)
 
@@ -63,22 +166,23 @@ def admin_update_user_access_service(
     payload,
 ) -> UserResponse:
 
-    if str(current_user["user_id"]) == str(target_user_id):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "self_modification_not_allowed",
-                "message": "Users cannot modify their own access.",
-            },
-        )
+    tenant_id = str(current_user["tenant_id"])
+    is_self = str(current_user["user_id"]) == str(target_user_id)
 
     target_user = fetch_user_by_id(
         conn,
-        tenant_id=str(current_user["tenant_id"]),
+        tenant_id=tenant_id,
         user_id=target_user_id,
     )
 
     if target_user is None:
+        safe_write_audit_log(
+            conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+            event_status="FAILURE",
+            failure_code="user_not_found",
+            failure_reason="Target user not found.",
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
@@ -87,7 +191,51 @@ def admin_update_user_access_service(
             },
         )
 
+    target_role = _user_role(target_user)
+
+    # Self-modification stays blocked for everyone except a Tenant Admin
+    # managing their own admin access -- that's the one case now allowed to
+    # be self-directed, same as managing another admin.
+    if is_self and target_role != "TENANT_ADMIN":
+        safe_write_audit_log(
+            conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+            event_status="DENIED",
+            failure_code="self_modification_not_allowed",
+            failure_reason="Users cannot modify their own access.",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "self_modification_not_allowed",
+                "message": "Users cannot modify their own access.",
+            },
+        )
+
+    if target_role in PROTECTED_TARGET_ROLE_NAMES:
+        safe_write_audit_log(
+            conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+            event_status="DENIED",
+            failure_code="protected_target_role",
+            failure_reason="This user's access cannot be changed through this endpoint.",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "protected_target_role",
+                "message": "This user's access cannot be changed through this endpoint.",
+            },
+        )
+
     if payload.role_name and payload.role_name not in ASSIGNABLE_ROLE_NAMES:
+        safe_write_audit_log(
+            conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
+            current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+            event_status="DENIED",
+            failure_code="protected_role",
+            failure_reason="Requested role cannot be assigned.",
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -96,9 +244,39 @@ def admin_update_user_access_service(
             },
         )
 
+    # Never allow a change that would leave the tenant with zero active
+    # Tenant Admins -- e.g. demoting or deactivating the last one.
+    if target_role == "TENANT_ADMIN" and target_user.get("status") == "ACTIVE":
+        losing_admin_access = (
+            payload.role_name is not None and payload.role_name != "TENANT_ADMIN"
+        ) or (
+            payload.status is not None and payload.status != "ACTIVE"
+        )
+        if losing_admin_access:
+            remaining_admins = count_active_tenant_admins(
+                conn,
+                tenant_id=tenant_id,
+                exclude_user_id=target_user_id,
+            )
+            if remaining_admins == 0:
+                safe_write_audit_log(
+                    conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
+                    current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+                    event_status="DENIED",
+                    failure_code="last_admin_required",
+                    failure_reason="Cannot remove the tenant's last active Tenant Admin.",
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "last_admin_required",
+                        "message": "This tenant must have at least one active Tenant Admin.",
+                    },
+                )
+
     updated_user = admin_update_user_access(
         conn,
-        tenant_id=str(current_user["tenant_id"]),
+        tenant_id=tenant_id,
         user_id=target_user_id,
         role_name=payload.role_name,
         status=payload.status,
@@ -106,18 +284,248 @@ def admin_update_user_access_service(
 
     revoke_all_user_sessions(
         conn,
-        tenant_id=str(current_user["tenant_id"]),
+        tenant_id=tenant_id,
         user_id=target_user_id,
     )
 
     record_auth_event(
         conn,
-        tenant_id=str(current_user["tenant_id"]),
+        tenant_id=tenant_id,
         user_id=target_user_id,
-        session_id="ALL",
         event_type="ACCESS_CHANGED",
     )
 
     conn.commit()
 
-    return UserResponse(**updated_user)
+    _old = {
+        "role_name": _user_role(target_user),
+        "status": target_user.get("status"),
+    }
+    _new_data = {k: v for k, v in {
+        "role_name": payload.role_name,
+        "status": payload.status,
+    }.items() if v is not None}
+    _actually_changed = [k for k in _new_data if _old.get(k) != _new_data[k]]
+
+    safe_write_audit_log(
+        conn,
+        action=USER_ACCESS_UPDATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="user",
+        resource_id=str(target_user_id),
+        old_values=_old,
+        new_values={
+            **_new_data,
+            "target_user_id": str(target_user_id),
+            "target_email": target_user.get("email"),
+        },
+        changed_fields=_actually_changed if _actually_changed else None,
+        # metadata={
+        #     "operation": "admin_update_user_access",
+        #     "done_by_email": current_user.get("email"),
+        #     "done_by_name": current_user.get("full_name"),
+        # },
+    )
+
+    return UserResponse(**(updated_user or {}))
+
+
+def search_user_profiles(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    search_text: str,
+    include_inactive: bool = False,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+
+    return search_users(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        search_text=search_text,
+        include_inactive=include_inactive,
+        limit=limit,
+    )
+
+
+def get_admin_user_directory(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    role_name: AdminDirectoryRole | None = None,
+    role_names: list[str] | None = None,
+    user_status: AdminDirectoryStatus | None = None,
+    page: int | None = None,
+    limit: int | None = None,
+) -> AdminUserDirectoryResponse:
+    normalized_roles = _normalize_admin_directory_roles(
+        role_name=role_name,
+        role_names=role_names,
+    )
+
+    unsupported_roles = [
+        role
+        for role in normalized_roles
+        if role not in ADMIN_DIRECTORY_ROLES
+    ]
+    if unsupported_roles:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_user_role",
+                "message": "role is not supported.",
+            },
+        )
+
+    if user_status is not None and user_status not in ADMIN_DIRECTORY_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_user_status",
+                "message": "status is not supported.",
+            },
+        )
+
+    try:
+        result = fetch_admin_user_directory(
+            conn,
+            tenant_id=str(current_user["tenant_id"]),
+            role_names=normalized_roles or None,
+            status=user_status,
+            page=page,
+            limit=limit,
+        )
+    except psycopg2.Error as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "admin_user_directory_failed",
+                "message": "Failed to fetch admin user directory.",
+            },
+        ) from exc
+
+    return AdminUserDirectoryResponse(**result)
+
+
+def _normalize_admin_directory_roles(
+    *,
+    role_name: str | None,
+    role_names: list[str] | None,
+) -> list[str]:
+    roles: list[str] = []
+    if role_name is not None:
+        roles.append(str(role_name))
+    for raw_role in role_names or []:
+        for part in str(raw_role).split(","):
+            normalized = part.strip().upper()
+            if normalized and normalized not in roles:
+                roles.append(normalized)
+    return roles
+
+def get_user_by_id_service(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    user_id: str,
+) -> UserDetailsResponse:
+
+    user = fetch_user_details_by_id(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        user_id=user_id,
+    )
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "user_not_found",
+                "message": "User not found.",
+            },
+        )
+
+    if not _can_view_user_resource(current_user=current_user, target_user=user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "user_view_forbidden",
+                "message": "You are not allowed to view this user's details.",
+            },
+        )
+
+    return UserDetailsResponse(**user)
+
+
+def get_user_booking_history(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    user_id: str,
+) -> UserBookingHistoryResponse:
+    """Return one user's profile plus today's booking (if any) and history.
+
+    `today_booking` is pulled out of the confirmed-booking list so the UI
+    can render "today" state without scanning `bookings.items`; the same
+    booking is not duplicated into `items`.
+    """
+
+    tenant_id = str(current_user["tenant_id"])
+
+    user = fetch_user_details_by_id(
+        conn,
+        tenant_id=tenant_id,
+        user_id=user_id,
+    )
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "user_not_found",
+                "message": "User not found.",
+            },
+        )
+
+    if not _can_view_user_resource(current_user=current_user, target_user=user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "user_bookings_forbidden",
+                "message": "You are not allowed to view this user's bookings.",
+            },
+        )
+
+    bookings = fetch_all_confirmed_bookings_for_user(
+        conn,
+        tenant_id=tenant_id,
+        user_id=user_id,
+    )
+
+    today = date.today()
+    today_booking_row = next(
+        (row for row in bookings if row.get("booking_date") == today),
+        None,
+    )
+    other_rows = [row for row in bookings if row is not today_booking_row]
+
+    if today_booking_row is not None and today_booking_row.get("seat_id"):
+        amenity_names = fetch_seat_amenity_names(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=today_booking_row["seat_id"],
+        )
+        today_booking_row = {**today_booking_row, "amenities": amenity_names}
+
+    return UserBookingHistoryResponse(
+        user=UserDetailsResponse(**user),
+        has_today_booking=today_booking_row is not None,
+        today_booking=(
+            BookingResponse(**today_booking_row)
+            if today_booking_row is not None
+            else None
+        ),
+        bookings=UserBookingsSummary(
+            items=[BookingResponse(**row) for row in other_rows],
+        ),
+    )

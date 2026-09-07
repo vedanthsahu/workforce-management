@@ -6,11 +6,21 @@ import {
   getBuildings,
   getFloors,
 } from "@/features/adminlayouts1/services/locationService";
+import { Site, Building, Floor } from "@/features/adminlayouts1/types/layout.types";
 
-export default function LayoutFilters({ onChange }: any) {
-  const [sites, setSites] = useState([]);
-  const [buildings, setBuildings] = useState([]);
-  const [floors, setFloors] = useState([]);
+type Props = {
+  onChange: (filters: {
+    siteId: string;
+    buildingId: string;
+    floorId: string;
+    status: string;
+  }) => void;
+};
+
+export default function LayoutFilters({ onChange }: Props) {
+  const [sites, setSites] = useState<Site[]>([]);
+  const [buildings, setBuildings] = useState<Building[]>([]);
+  const [floors, setFloors] = useState<Floor[]>([]);
 
   const [selectedSite, setSelectedSite] = useState("");
   const [selectedBuilding, setSelectedBuilding] = useState("");
@@ -73,19 +83,17 @@ export default function LayoutFilters({ onChange }: any) {
   };
 
   return (
-    <div className="bg-white border rounded-lg p-4 grid grid-cols-4 gap-4">
-      
+    <div className="bg-white border rounded-lg p-4 flex flex-wrap gap-3">
+
       {/* SITE */}
       <select
         value={selectedSite}
         onChange={(e) => handleSiteChange(e.target.value)}
-        className="h-10 border rounded-md px-3 text-sm"
+        className="h-9 w-44 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <option value="">All Sites</option>
-        {sites.map((s: any) => (
-          <option key={s.site_id} value={s.site_id}>
-            {s.site_name}
-          </option>
+        <option value="" disabled hidden>All Sites</option>
+        {sites.map((s) => (
+          <option key={s.site_id} value={s.site_id}>{s.site_name}</option>
         ))}
       </select>
 
@@ -93,13 +101,11 @@ export default function LayoutFilters({ onChange }: any) {
       <select
         value={selectedBuilding}
         onChange={(e) => handleBuildingChange(e.target.value)}
-        className="h-10 border rounded-md px-3 text-sm"
+        className="h-9 w-44 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <option value="">All Buildings</option>
-        {buildings.map((b: any) => (
-          <option key={b.building_id} value={b.building_id}>
-            {b.building_name}
-          </option>
+        <option value="" disabled hidden>All Buildings</option>
+        {buildings.map((b) => (
+          <option key={b.building_id} value={b.building_id}>{b.building_name}</option>
         ))}
       </select>
 
@@ -107,13 +113,11 @@ export default function LayoutFilters({ onChange }: any) {
       <select
         value={selectedFloor}
         onChange={(e) => handleFloorChange(e.target.value)}
-        className="h-10 border rounded-md px-3 text-sm"
+        className="h-9 w-44 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <option value="">All Floors</option>
-        {floors.map((f: any) => (
-          <option key={f.floor_id} value={f.floor_id}>
-            {f.floor_name}
-          </option>
+        <option value="" disabled hidden>All Floors</option>
+        {floors.map((f) => (
+          <option key={f.floor_id} value={f.floor_id}>{f.floor_name}</option>
         ))}
       </select>
 
@@ -121,9 +125,9 @@ export default function LayoutFilters({ onChange }: any) {
       <select
         value={status}
         onChange={(e) => handleStatusChange(e.target.value)}
-        className="h-10 border rounded-md px-3 text-sm"
+        className="h-9 w-44 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <option value="">All Status</option>
+        <option value="" disabled hidden>All Status</option>
         <option value="DRAFT">Draft</option>
         <option value="PUBLISHED">Published</option>
         <option value="ARCHIVED">Archived</option>

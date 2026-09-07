@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Seat, SeatStatus, SeatType, SeatUpdatePayload } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 
 interface Props {
   seat: Seat | null;
@@ -12,8 +13,6 @@ interface Props {
   onClose: () => void;
 }
 
-// const SEAT_TYPES: SeatType[] = ["Workstation", "Meeting Room", "Cabin", "Phone Booth"];
-// const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
 const SEAT_TYPES: SeatType[] = ["STANDARD" , "WINDOW" , "CABIN" ,"ACCESSIBLE", "HOT_DESK"];
 const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
 
@@ -27,26 +26,16 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
   const [saveError,   setSaveError]   = useState(false);
   const [saved,       setSaved]       = useState(false);
 
-  // useEffect(() => {
-  //   if (!seat) return;
-  //   setSeatType(seat.seat_type as SeatType);
-  //   setBookable(seat.is_bookable);
-  //   setStatus(seat.status);
-  //   setAmenityIds([...seat.amenity_ids]);
-  //   setNotes(seat.notes ?? "");
-  //   setSaved(false);
-  //   setSaveError(false);
-  // }, [seat]);
   useEffect(() => {
-  if (!seat) return;
-  setSeatType((seat.seat_type as SeatType) ?? "STANDARD");  // ← fallback for null
-  setBookable(seat.is_bookable ?? true);                     // ← fallback for null
-  setStatus((seat.status as SeatStatus) ?? "ACTIVE");       // ← also null-safe
-  setAmenityIds([...seat.amenity_ids]);
-  setNotes(seat.notes ?? "");
-  setSaved(false);
-  setSaveError(false);
-}, [seat]);
+    if (!seat) return;
+    setSeatType((seat.seat_type as SeatType) ?? "STANDARD");
+    setBookable(seat.is_bookable ?? true);
+    setStatus((seat.status as SeatStatus) ?? "ACTIVE");
+    setAmenityIds([...seat.amenity_ids]);
+    setNotes(seat.notes ?? "");
+    setSaved(false);
+    setSaveError(false);
+  }, [seat]);
 
   const toggleAmenity = (id: string) => {
     setSaved(false);
@@ -177,6 +166,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
             <div className="space-y-1.5">
               {preferences.map((p) => {
                 const on = amenityIds.includes(p.preference_id);
+                const color = getAmenityColor(p.preference_name, p.preference_type);
                 return (
                   <label
                     key={p.preference_id}
@@ -199,6 +189,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
                       checked={on}
                       onChange={() => toggleAmenity(p.preference_id)}
                     />
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${color.dot}`} />
                     <span className={`text-xs font-medium flex-1 ${on ? "text-indigo-700" : "text-gray-700"}`}>
                       {p.preference_name}
                     </span>

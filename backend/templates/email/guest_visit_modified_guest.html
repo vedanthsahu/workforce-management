@@ -1,0 +1,19 @@
+{% extends "_base.html" %}
+{% from "_macros.html" import heading, lead, details_open, details_close, row %}
+{% block title %}Your visit was updated{% endblock %}
+{% block preheader %}Your visit to {{ site }} has changed — now {{ visit_date }}.{% endblock %}
+{% block content %}
+{% set time_window = (start_time ~ " – " ~ end_time) if (start_time and end_time) else (start_time or end_time) %}
+{% set purpose = purpose_of_visit.replace("_", " ")|title if purpose_of_visit else "" %}
+{{ heading("Your visit was updated") }}
+{{ lead("Hello " ~ recipient_name ~ ", the details of your upcoming visit have changed. Please review the current details below.") }}
+{{ details_open() }}
+{{ row("Date", visit_date) }}
+{{ row("Time", time_window) }}
+{{ row("Host", host_name) }}
+{{ row("Purpose", purpose) }}
+{{ row("Floor", floor) }}
+{{ row("Building", building) }}
+{{ row("Site", site) }}
+{{ details_close() }}
+{% endblock %}

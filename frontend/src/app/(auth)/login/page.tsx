@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { AuthLayout } from "@/features/auth/components/AuthLayout";
 import { LoginForm }  from "@/features/auth/components/LoginForm";
 
@@ -7,7 +8,9 @@ export default function LoginPage() {
       title="Welcome back"
       subtitle="Enter your work email to sign in."
     >
-      <LoginForm />
+      <Suspense>
+        <LoginForm />
+      </Suspense>
     </AuthLayout>
   );
 }

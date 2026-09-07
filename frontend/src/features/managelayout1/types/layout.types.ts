@@ -1,20 +1,3 @@
-// // Re-exported from existing layout.types — keep in sync with your layout.types file
-// export interface Layout {
-//   layout_id: string;
-//   floor_id: string;
-//   layout_name: string;
-//   layout_file_url: string;
-//   is_published: boolean;
-//   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
-// }
-
-// export interface LayoutSeatStats {
-//   total_seats: number;
-//   configured_seats: number;
-//   unconfigured_seats: number;
-//   non_bookable_seats: number;
-// }
-
 export interface Preference {
   preference_id: string;
   preference_name: string;

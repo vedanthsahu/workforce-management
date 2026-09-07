@@ -1,0 +1,17 @@
+{% extends "_base.html" %}
+{% from "_macros.html" import heading, lead, details_open, details_close, row, reason_note %}
+{% block title %}Your visit was cancelled{% endblock %}
+{% block preheader %}Your visit on {{ visit_date }} has been cancelled.{% endblock %}
+{% block content %}
+{% set time_window = (start_time ~ " – " ~ end_time) if (start_time and end_time) else (start_time or end_time) %}
+{{ heading("Your visit was cancelled") }}
+{{ lead("Hello " ~ recipient_name ~ ", your upcoming visit has been cancelled. If you believe this is a mistake, please contact your host.") }}
+{{ details_open() }}
+{{ row("Date", visit_date) }}
+{{ row("Time", time_window) }}
+{{ row("Host", host_name) }}
+{{ row("Building", building) }}
+{{ row("Site", site) }}
+{{ details_close() }}
+{{ reason_note(cancellation_reason) }}
+{% endblock %}
