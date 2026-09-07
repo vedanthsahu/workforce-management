@@ -5,8 +5,8 @@ the backend and the FastAPI dependency wrapper that yields one connection per
 request scope.
 """
 
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
-from typing import Generator, Iterator
 
 import psycopg2
 from psycopg2.extensions import connection as PGConnection
@@ -29,14 +29,14 @@ def get_db_connection() -> Iterator[PGConnection]:
         Propagates connection errors raised by ``psycopg2.connect``.
     """
     settings = get_settings()
-    conn = psycopg2.connect(**settings.db_config)
+    conn = psycopg2.connect(**settings.db_config, application_name="seat-management-api")
     try:
         yield conn
     finally:
         conn.close()
 
 
-def get_db() -> Generator[PGConnection, None, None]:
+def get_db() -> Generator[PGConnection]:
     """Yield a database connection for FastAPI dependency injection.
 
     Returns:

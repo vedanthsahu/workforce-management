@@ -1,48 +1,17 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <title>Seat Booking Updated</title>
-</head>
-<body style="font-family: Arial, sans-serif; color: #222; line-height: 1.5;">
-    <h2 style="margin-bottom: 16px;">Booking updated</h2>
-
-    <p>Hello {{ user_name }},</p>
-
-    <p>Your booking has been updated. The previous booking was cancelled and a new booking was created.</p>
-
-    <h3 style="margin-top: 20px;">Previous booking</h3>
-    <table cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
-        <tr>
-            <td><strong>Seat</strong></td>
-            <td>{{ old_booking.seat_name }}</td>
-        </tr>
-        <tr>
-            <td><strong>Date</strong></td>
-            <td>{{ old_booking.booking_date }}</td>
-        </tr>
-        <tr>
-            <td><strong>Location</strong></td>
-            <td>{{ old_booking.location }}</td>
-        </tr>
-    </table>
-
-    <h3 style="margin-top: 20px;">New booking</h3>
-    <table cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
-        <tr>
-            <td><strong>Seat</strong></td>
-            <td>{{ new_booking.seat_name }}</td>
-        </tr>
-        <tr>
-            <td><strong>Date</strong></td>
-            <td>{{ new_booking.booking_date }}</td>
-        </tr>
-        <tr>
-            <td><strong>Location</strong></td>
-            <td>{{ new_booking.location }}</td>
-        </tr>
-    </table>
-
-    <p>Thank you,<br />Seat Management Team</p>
-</body>
-</html>
+{% extends "_base.html" %}
+{% from "_macros.html" import heading, lead, details_open, details_close, row, row_change %}
+{% block title %}Booking updated{% endblock %}
+{% block preheader %}Your booking is now {{ new_booking.seat }} on {{ new_booking.booking_date }}.{% endblock %}
+{% block content %}
+{{ heading("Your booking was updated") }}
+{{ lead("Hello " ~ user_name ~ ", your seat booking has changed. Updated details are highlighted below.") }}
+{{ details_open() }}
+{{ row_change("Date", old_booking.booking_date, new_booking.booking_date) }}
+{{ row_change("Seat", old_booking.seat, new_booking.seat) }}
+{{ row_change("Floor", old_booking.floor, new_booking.floor) }}
+{{ row_change("Building", old_booking.building, new_booking.building) }}
+{{ row_change("Site", old_booking.site, new_booking.site) }}
+{% if new_booking.booked_by and new_booking.booked_by != new_booking.booked_for %}{{ row("Updated by", new_booking.booked_by) }}{% endif %}
+{{ details_close() }}
+<p style="margin:14px 0 0 0;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#6a7377;">All other booking details remain unchanged.</p>
+{% endblock %}
