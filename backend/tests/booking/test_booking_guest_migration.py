@@ -253,12 +253,16 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
             "insert_booking",
             return_value=new_booking,
         ) as insert_booking:
+            # Actor (99, TENANT_ADMIN) is deliberately NOT the original
+            # delegate (booked_by_user_id "10" on old_booking) -- this is
+            # the regression guard for the bug where a modify replaced the
+            # delegate identity with whoever performed the edit.
             response = booking_service.modify_booking(
                 conn,
                 current_user={
                     "tenant_id": "1",
-                    "user_id": "10",
-                    "role_name": "MANAGER",
+                    "user_id": "99",
+                    "role_name": "TENANT_ADMIN",
                 },
                 booking_id="100",
                 payload=payload,
@@ -272,6 +276,9 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
         self.assertEqual(
             insert_booking.call_args.kwargs["modified_from_booking_id"], "100"
         )
+        # The delegate is preserved from the old row, not reassigned to the
+        # actor who performed this modification.
+        self.assertEqual(insert_booking.call_args.kwargs["booked_by_user_id"], "10")
         self.assertNotIn("modification_reason", insert_booking.call_args.kwargs)
         self.assertEqual(response.booking_id, "101")
         self.assertEqual(conn.commits, 1)
@@ -575,7 +582,10 @@ class GuestBookingMigrationTests(unittest.TestCase):
 
     def test_guest_modify_preserves_visit_and_marks_old_booking_modified(self) -> None:
         conn = FakeConnection()
-        old_booking = _guest_booking()
+        # booked_by_user_id ("77") deliberately differs from self.current_user
+        # ("10") -- regression guard for the bug where a modify replaced the
+        # delegate identity with whoever performed the edit.
+        old_booking = _guest_booking(booked_by_user_id="77")
         new_booking = _guest_booking(
             booking_id="201",
             seat_id="31",
@@ -670,6 +680,9 @@ class GuestBookingMigrationTests(unittest.TestCase):
         self.assertEqual(
             insert_booking.call_args.kwargs["modified_from_booking_id"], "200"
         )
+        # The delegate is preserved from the old row ("77"), not reassigned
+        # to self.current_user ("10") who performed this modification.
+        self.assertEqual(insert_booking.call_args.kwargs["booked_by_user_id"], "77")
         self.assertNotIn("modification_reason", insert_booking.call_args.kwargs)
         self.assertEqual(response.booking_id, "201")
         self.assertEqual(conn.commits, 1)

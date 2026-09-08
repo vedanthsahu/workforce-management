@@ -1432,7 +1432,9 @@ def modify_guest_booking(
             tenant_id=tenant_id,
             guest_id=guest_id,
             guest_visit_id=guest_visit_id,
-            booked_by_user_id=_current_user_id(current_user),
+            # Preserve the original delegate across the modify-replace chain
+            # -- see the matching comment in booking_service.modify_booking.
+            booked_by_user_id=str(booking["booked_by_user_id"]),
             seat=target_seat,
             booking_date=payload.booking_date,
             modified_from_booking_id=booking_id,
@@ -2323,16 +2325,14 @@ def modify_guest_visit(
         )
 
         if active_booking is not None:
+            # Unlike modify_booking/modify_guest_booking, this booking is
+            # carried forward in place by sync_booking_from_guest_visit
+            # below rather than replaced with a new row (this endpoint has
+            # no seat_id to re-resolve a fresh booking against). Marking it
+            # MODIFIED here would flip its status before that UPDATE runs,
+            # making sync_booking_from_guest_visit's WHERE clause match zero
+            # rows and silently orphan the guest's seat reservation.
             _validate_mutable_guest_booking(active_booking, action="modify")
-            mark_booking_modified(
-                conn,
-                tenant_id=tenant_id,
-                booking_id=str(active_booking["booking_id"]),
-                modification_reason=_booking_modification_reason(
-                    payload.modification_reason
-                ),
-                updated_by_user_id=_current_user_id(current_user),
-            )
 
         mark_guest_visit_modified(
             conn,
@@ -2358,7 +2358,10 @@ def modify_guest_visit(
             end_time=payload.end_time,
             notes=_clean_optional(payload.notes),
             requires_seat=bool(visit["requires_seat"]),
-            created_by_user_id=_current_user_id(current_user),
+            # Preserve the original delegate/creator across the modify-
+            # replace chain -- see the matching comment in
+            # booking_service.modify_booking.
+            created_by_user_id=str(visit["created_by_user_id"]),
             modified_from_guest_visit_id=guest_visit_id,
         )
 
@@ -2366,6 +2369,7 @@ def modify_guest_visit(
             conn,
             tenant_id=tenant_id,
             guest_visit_id=guest_visit_id,
+            new_guest_visit_id=str(new_visit["guest_visit_id"]),
             site_id=str(payload.site_id),
             building_id=str(payload.building_id),
             floor_id=floor_id,
@@ -2720,7 +2724,10 @@ def execute_guest_visit_workflow(
                 end_time=payload.end_time,
                 notes=_clean_optional(payload.notes),
                 requires_seat=bool(visit["requires_seat"]),
-                created_by_user_id=_current_user_id(current_user),
+                # Preserve the original delegate/creator across the modify-
+                # replace chain -- see the matching comment in
+                # booking_service.modify_booking.
+                created_by_user_id=str(visit["created_by_user_id"]),
                 modified_from_guest_visit_id=guest_visit_id,
             )
             result = _build_guest_workflow_response(
@@ -2862,7 +2869,10 @@ def execute_guest_visit_workflow(
                 end_time=payload.end_time,
                 notes=_clean_optional(payload.notes),
                 requires_seat=True,
-                created_by_user_id=_current_user_id(current_user),
+                # Preserve the original delegate/creator across the modify-
+                # replace chain -- see the matching comment in
+                # booking_service.modify_booking.
+                created_by_user_id=str(visit["created_by_user_id"]),
                 modified_from_guest_visit_id=guest_visit_id,
             )
             new_visit_id = str(new_visit["guest_visit_id"])
@@ -2871,7 +2881,7 @@ def execute_guest_visit_workflow(
                 tenant_id=tenant_id,
                 guest_id=str(visit["guest_id"]),
                 guest_visit_id=new_visit_id,
-                booked_by_user_id=_current_user_id(current_user),
+                booked_by_user_id=str(booking["booked_by_user_id"]),
                 seat=seat,
                 booking_date=payload.visit_date,
                 modified_from_booking_id=old_booking_id,

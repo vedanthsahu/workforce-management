@@ -740,6 +740,7 @@ def fetch_active_booking_for_guest_visit(
                 id::text AS booking_id,
                 tenant_id::text AS tenant_id,
                 booked_for_guest_id::text AS booked_for_guest_id,
+                booked_by_user_id::text AS booked_by_user_id,
                 guest_visit_id::text AS guest_visit_id,
                 booking_type,
                 seat_id::text AS seat_id,
@@ -944,11 +945,19 @@ def sync_booking_from_guest_visit(
     *,
     tenant_id: str,
     guest_visit_id: str,
+    new_guest_visit_id: str,
     site_id: str,
     building_id: str,
     floor_id: str | None,
     booking_date: date,
 ) -> None:
+    """Carry the visit's still-active booking forward onto its replacement
+    visit row, in place (same booking_id, same seat) -- not a modify-replace
+    like insert_booking/insert_guest_booking use elsewhere, since the caller
+    has no seat_id to re-resolve a fresh booking against. Relinks
+    guest_visit_id to the new row so the booking doesn't stay pointing at
+    the now-superseded visit; the caller must NOT have already marked this
+    booking MODIFIED, or this WHERE clause will match zero rows."""
 
     with conn.cursor() as cur:
 
@@ -956,6 +965,7 @@ def sync_booking_from_guest_visit(
             """
             UPDATE bookings
             SET
+                guest_visit_id = %s,
                 site_id = %s,
                 building_id = %s,
                 floor_id = %s,
@@ -970,6 +980,7 @@ def sync_booking_from_guest_visit(
               )
             """,
             (
+                new_guest_visit_id,
                 site_id,
                 building_id,
                 floor_id,
