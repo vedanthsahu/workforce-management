@@ -49,6 +49,10 @@ class AdminDashboardSummaryResponse(BaseModel):
     occupancy_percentage: float = 0.0
 
     total_bookings: int = 0
+    employee_bookings_today: int = 0
+    guest_bookings_today: int = 0
+    guest_visit_today: int = 0
+    guest_visit_booking_with_seat_today: int = 0
     unique_users_booked: int = 0
     booking_utilization_percentage: float = 0.0
 

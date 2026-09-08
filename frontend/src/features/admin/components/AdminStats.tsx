@@ -14,8 +14,9 @@ import {
   Building2,
   Layers,
   Armchair,
-  CalendarCheck,
   Ban,
+  UserRound,
+  UserRoundPlus,
 } from "lucide-react";
 
 import type { DashboardSummary } from "../types/admin.types";
@@ -61,11 +62,19 @@ export default function AdminStats({ data, selectedDate }: Props) {
       href: null,
     },
     {
-      title: "Bookings",
-      value: data?.booked_today ?? "-",
+      title: "Employee Bookings",
+      value: data?.employee_bookings_today ?? "-",
       subtitle: `For ${formattedSelectedDate}`,
-      icon: CalendarCheck,
+      icon: UserRound,
       color: "bg-blue-100 text-blue-600",
+      href: "/admin/bookings",
+    },
+    {
+      title: "Guest Bookings",
+      value: data?.guest_bookings_today ?? "-",
+      subtitle: `For ${formattedSelectedDate}`,
+      icon: UserRoundPlus,
+      color: "bg-rose-100 text-rose-600",
       href: "/admin/bookings",
     },
     {
@@ -84,7 +93,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
       {stats.map((item, index) => {
         const Icon = item.icon;
         const clickable = !!item.href;

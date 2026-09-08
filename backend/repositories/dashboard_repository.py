@@ -254,6 +254,28 @@ def fetch_admin_dashboard_summary(
                   )
             ),
 
+                        -- Count only bookings that reserve an actual seat. Guest visits
+                        -- without a linked booking remain in all_bookings_for_date but
+                        -- must not inflate booked_seats_today. Do not join the current
+                        -- bookable-seat snapshot here: historical seat metadata changes
+                        -- must not erase a valid seat booking from this day's count.
+            seat_bookings_for_date AS (
+                                SELECT DISTINCT b.seat_id
+                FROM bookings AS b
+                WHERE b.tenant_id = %(tenant_id)s
+                                AND b.seat_id IS NOT NULL
+                AND b.booking_date = %(selected_date)s
+                AND b.booking_status NOT IN ('MODIFIED', 'CANCELLED')
+                AND (
+                    %(site_id)s IS NULL
+                    OR b.site_id = %(site_id)s::bigint
+                )
+                AND (
+                    %(floor_id)s IS NULL
+                    OR b.floor_id = %(floor_id)s::bigint
+                )
+            ),
+
             -- How many people are actually expected in the office for the
             -- selected date: every active booking/guest-visit -- unlike the
             -- Admin Bookings screen's own total (GET /admin/bookings), which
@@ -267,7 +289,9 @@ def fetch_admin_dashboard_summary(
             -- is the "how many are expected in" metric shown on the
             -- Bookings stat card.
             all_bookings_for_date AS (
-                SELECT b.id
+                SELECT
+                    b.id,
+                    CASE WHEN b.booking_type = 'EMPLOYEE' THEN 'EMPLOYEE' ELSE 'GUEST' END AS booking_category
                 FROM bookings AS b
                 WHERE b.tenant_id = %(tenant_id)s
                   AND b.booking_date = %(selected_date)s
@@ -283,7 +307,9 @@ def fetch_admin_dashboard_summary(
 
                 UNION ALL
 
-                SELECT gv.id
+                SELECT
+                    gv.id,
+                    'GUEST' AS booking_category
                 FROM guest_visits AS gv
                 LEFT JOIN bookings AS gvb
                     ON gvb.guest_visit_id = gv.id
@@ -302,6 +328,26 @@ def fetch_admin_dashboard_summary(
                   )
             ),
 
+            visit_only_for_date AS (
+                SELECT gv.id
+                FROM guest_visits AS gv
+                LEFT JOIN bookings AS gvb
+                  ON gvb.guest_visit_id = gv.id
+                 AND gvb.tenant_id = gv.tenant_id
+                WHERE gv.tenant_id = %(tenant_id)s
+                AND gv.visit_date = %(selected_date)s
+                AND gv.visit_status NOT IN ('MODIFIED', 'CANCELLED')
+                AND gvb.id IS NULL
+                AND (
+                    %(site_id)s IS NULL
+                    OR gv.site_id = %(site_id)s::bigint
+                )
+                AND (
+                    %(floor_id)s IS NULL
+                    OR gv.floor_id = %(floor_id)s::bigint
+                )
+            ),
+
             blocked_seat_counts AS (
                 SELECT COUNT(DISTINCT bs.seat_id) AS blocked_seats
                 FROM blocked_seats AS bs
@@ -318,6 +364,25 @@ def fetch_admin_dashboard_summary(
                         %(floor_id)s IS NULL
                         OR bs.floor_id = %(floor_id)s::bigint
                   )
+            ),
+
+            guest_visit_bookings_with_seat_for_date AS (
+                SELECT DISTINCT b.id
+                FROM bookings AS b
+                WHERE b.tenant_id = %(tenant_id)s
+                AND b.booking_date = %(selected_date)s
+                AND b.booking_type = 'GUEST'
+                AND b.guest_visit_id IS NOT NULL
+                AND b.seat_id IS NOT NULL
+                AND b.booking_status NOT IN ('MODIFIED', 'CANCELLED')
+                AND (
+                    %(site_id)s IS NULL
+                    OR b.site_id = %(site_id)s::bigint
+                )
+                AND (
+                    %(floor_id)s IS NULL
+                    OR b.floor_id = %(floor_id)s::bigint
+                )
             ),
 
             summary_counts AS (
@@ -410,6 +475,33 @@ def fetch_admin_dashboard_summary(
                     ) AS total_bookings,
 
                     (
+                        SELECT COUNT(*)
+                        FROM seat_bookings_for_date
+                    ) AS actual_booked_seats_today,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM all_bookings_for_date
+                        WHERE booking_category = 'EMPLOYEE'
+                    ) AS employee_bookings_today,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM all_bookings_for_date
+                        WHERE booking_category = 'GUEST'
+                    ) AS guest_bookings_today,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM visit_only_for_date
+                    ) AS guest_visit_today,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM guest_visit_bookings_with_seat_for_date
+                    ) AS guest_visit_booking_with_seat_today,
+
+                    (
                         SELECT COUNT(DISTINCT booked_for_user_id)
                         FROM booked_seats
                     ) AS unique_users_booked
@@ -439,11 +531,15 @@ def fetch_admin_dashboard_summary(
                 total_floors,
                 total_seats,
                 booked_seats_count AS booked_today,
-                booked_seats_count AS booked_seats_today,
+                actual_booked_seats_today AS booked_seats_today,
                 blocked_seats,
                 blocked_seats AS blocked_seats_today,
                 booking_utilization_percentage AS occupancy_percentage,
                 total_bookings,
+                employee_bookings_today,
+                guest_bookings_today,
+                guest_visit_today,
+                guest_visit_booking_with_seat_today,
                 unique_users_booked,
                 booking_utilization_percentage,
                 active_sites,

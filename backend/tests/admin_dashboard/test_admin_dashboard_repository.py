@@ -87,7 +87,11 @@ class AdminDashboardRepositoryTests(unittest.TestCase):
         params = cursor.executions[0][1]
         self.assertIn("active_sites", sql)
         self.assertIn("inactive_buildings", sql)
-        self.assertIn("booked_seats_count AS booked_seats_today", sql)
+        self.assertIn("actual_booked_seats_today AS booked_seats_today", sql)
+        self.assertIn("guest_visit_today", sql)
+        self.assertIn("guest_visit_booking_with_seat_today", sql)
+        self.assertIn("SELECT DISTINCT b.seat_id", sql)
+        self.assertIn("b.seat_id IS NOT NULL", sql)
         self.assertIn("blocked_seats AS blocked_seats_today", sql)
         self.assertEqual(params["tenant_id"], "1")
         self.assertEqual(result["booked_today"], 3)
