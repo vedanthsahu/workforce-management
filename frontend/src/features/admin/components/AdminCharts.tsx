@@ -75,12 +75,9 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
 
   // BACKEND DATA
   const totalSeats = data.total_seats;
-  const booked = data.booked_today;
-  // "booked" now counts every booking for the day (any status, with or
-  // without a seat), so it's no longer guaranteed to be <= totalSeats --
-  // clamp so the donut never gets a negative "available" slice.
+  const booked = data.booked_seats_today;
   const available = Math.max(totalSeats - booked, 0);
-  const occupancy = ceilPercentage(data.occupancy_percentage);
+  const occupancy = ceilPercentage((booked / Math.max(totalSeats, 1)) * 100);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
