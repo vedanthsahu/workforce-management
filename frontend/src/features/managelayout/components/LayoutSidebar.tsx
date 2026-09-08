@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useCallback, useState, ReactNode } from "react";
 import { Layout } from "../types/layout.types";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 interface LayoutSidebarProps {
   layout: Layout | null;
@@ -139,6 +140,9 @@ export default function LayoutSidebar({
   selectedSiteId = "",
 }: LayoutSidebarProps) {
   const router = useRouter();
+  const { can } = usePermissions();
+  const canDownload = can("layout:download");
+  const canManageSeats = can("layout_seat:update");
   const [downloading, setDownloading] = useState(false);
 
   const handleDownloadSvg = useCallback(async () => {
@@ -185,15 +189,19 @@ export default function LayoutSidebar({
   }, [router]);
 
   const quickActions = [
-    {
-      icon: <SeatIcon />,
-      label: "Manage Seats",
-      sub: "Configure seat details and settings",
-      color: "text-indigo-600 bg-indigo-50",
-      // Static base path — query added at click time
-      basePath: "/admin/layouts/manage-seats",
-      href: `/admin/layouts/manage-seats${buildQuery()}`,
-    },
+    ...(canManageSeats
+      ? [
+          {
+            icon: <SeatIcon />,
+            label: "Manage Seats",
+            sub: "Configure seat details and settings",
+            color: "text-indigo-600 bg-indigo-50",
+            // Static base path — query added at click time
+            basePath: "/admin/layouts/manage-seats",
+            href: `/admin/layouts/manage-seats${buildQuery()}`,
+          },
+        ]
+      : []),
     {
       icon: <AmenityIcon />,
       label: "Manage Amenities",
@@ -254,7 +262,8 @@ export default function LayoutSidebar({
                 </span>
                 <button
                   onClick={handleDownloadSvg}
-                  disabled={downloading}
+                  disabled={downloading || !canDownload}
+                  hidden={!canDownload}
                   className="flex-shrink-0 text-indigo-500 hover:text-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Download file"
                 >

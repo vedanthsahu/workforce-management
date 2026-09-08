@@ -11,6 +11,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { CheckCircle2, XCircle, X, Plus } from "lucide-react";
 import { Office } from "@/features/offices/types/office.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 type BannerState = {
   type: "success" | "error";
@@ -19,6 +20,8 @@ type BannerState = {
 
 function OfficesPage() {
   const { offices, loading, error, fetchStats, fetchOffices, stats } = useOffices();
+  const { can } = usePermissions();
+  const canCreate = can("office:create");
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -92,15 +95,17 @@ function OfficesPage() {
             View, add, edit and manage all offices across the organization.
           </p>
         </div>
-        <div className="self-start sm:self-auto shrink-0">
-          <button
-            onClick={() => router.push("/admin/offices/addoffice")}
-            className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm"
-          >
-            <Plus size={16} />
-            Add Office
-          </button>
-        </div>
+        {canCreate && (
+          <div className="self-start sm:self-auto shrink-0">
+            <button
+              onClick={() => router.push("/admin/offices/addoffice")}
+              className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm"
+            >
+              <Plus size={16} />
+              Add Office
+            </button>
+          </div>
+        )}
       </div>
 
       {/* PAGE-LEVEL BANNER */}

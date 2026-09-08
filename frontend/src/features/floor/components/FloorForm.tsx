@@ -4,9 +4,11 @@ import Link from "next/link";
 import { AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useFloorForm } from "../hooks/useFloorForm";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 export default function FloorForm() {
   const router = useRouter();
+  const { can } = usePermissions();
 
   const {
     loading,
@@ -42,6 +44,17 @@ export default function FloorForm() {
 
   const labelClass =
     "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
+
+  if (!can("floor:create")) {
+    return (
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 bg-[#f8fafc]">
+        <div className="max-w-lg mx-auto mt-12 bg-white border border-gray-200 rounded-2xl shadow-sm p-6 flex flex-col items-center justify-center text-center gap-2">
+          <p className="text-sm font-medium text-gray-900">You don&apos;t have permission to add a floor.</p>
+          <p className="text-xs text-gray-400 max-w-xs">Contact your Tenant Admin if you believe this is a mistake.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc]">

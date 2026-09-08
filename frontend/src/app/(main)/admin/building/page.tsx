@@ -12,6 +12,7 @@ import EditBuildingModal from "@/features/building/components/EditBuildingModal"
 import { useBuildings } from "@/features/building/hooks/useBuildings";
 import { Building } from "@/features/building/types/building.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 type BannerState = { type: "success" | "error"; message: string } | null;
 
@@ -21,6 +22,8 @@ function BuildingsPage() {
     search, setSearch, selectedSiteId, setSelectedSiteId, fetchBuildings, fetchStats,
     
   } = useBuildings();
+  const { can } = usePermissions();
+  const canCreate = can("building:create");
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -96,15 +99,17 @@ function BuildingsPage() {
             View, add, edit and manage all buildings across the organization.
           </p>
         </div>
-        <div className="self-start sm:self-auto shrink-0">
-          <Link
-            href="/admin/building/add"
-            className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm"
-          >
-            <Plus size={16} />
-            Add Building
-          </Link>
-        </div>
+        {canCreate && (
+          <div className="self-start sm:self-auto shrink-0">
+            <Link
+              href="/admin/building/add"
+              className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm"
+            >
+              <Plus size={16} />
+              Add Building
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* BANNER */}

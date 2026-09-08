@@ -24,7 +24,7 @@ export default function DashboardPage() {
   const currentUser = user ?? data?.user ?? null;
 
   const { can } = usePermissions();
-  const canBookSelf = can("seat:book_self");
+  const canBookSelf = can("booking:create_own");
   const canCancelOwn = can("booking:cancel_own");
   const canViewOwn = can("booking:view_own");
   const canViewTeammates = can("teammate:view");

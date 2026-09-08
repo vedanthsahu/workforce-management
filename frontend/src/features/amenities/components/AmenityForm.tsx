@@ -4,9 +4,11 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 import { useAmenityForm } from "../hooks/useAmenityForm";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 export default function AmenityForm() {
   const router = useRouter();
+  const { can } = usePermissions();
 
   useEffect(() => {
     router.prefetch("/admin/amenities");
@@ -44,6 +46,15 @@ export default function AmenityForm() {
 
   const labelClass =
     "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
+
+  if (!can("amenity:create")) {
+    return (
+      <div className="max-w-lg bg-white border border-gray-200 rounded-2xl shadow-sm p-6 flex flex-col items-center justify-center text-center gap-2">
+        <p className="text-sm font-medium text-gray-900">You don&apos;t have permission to add an amenity.</p>
+        <p className="text-xs text-gray-400 max-w-xs">Contact your Tenant Admin if you believe this is a mistake.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl">

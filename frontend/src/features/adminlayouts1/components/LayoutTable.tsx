@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { fetchLayoutSeats } from "@/features/managelayout1/services/seatService";
 import { deleteLayout } from "@/features/adminlayouts1/services/locationService";
 import type { Seat } from "@/features/managelayout1/types/seat.types";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 type Props = {
   selection: LayoutSelection;
@@ -149,6 +150,10 @@ function formatDetailDate(iso: string): string {
 export default function LayoutTable({ selection, selectedLayoutId }: Props) {
   const { layouts, loading, fetchLayouts, invalidateFloor } = useLayoutsStore();
   const router = useRouter();
+  const { can } = usePermissions();
+  const canManage = can("layout_seat:update");
+  const canDelete = can("layout:delete");
+  const canDownload = can("layout:download");
 
   // ── Preview state ─────────────────────────────────────────────────────────
   const [previewLayout, setPreviewLayout] = useState<LayoutApiResponse | null>(null);
@@ -455,17 +460,19 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                               </button>
 
                               {/* Manage Layout */}
-                              <button
-                                onClick={() => handleManage(row)}
-                                onMouseEnter={() => router.prefetch("/admin/layouts/manage-layout")}
-                                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
-                              >
-                                <Settings2 className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-                                Manage Layout
-                              </button>
+                              {canManage && (
+                                <button
+                                  onClick={() => handleManage(row)}
+                                  onMouseEnter={() => router.prefetch("/admin/layouts/manage-layout")}
+                                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+                                >
+                                  <Settings2 className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                                  Manage Layout
+                                </button>
+                              )}
 
                               {/* Discard — DRAFT only */}
-                              {isDraft && (
+                              {isDraft && canDelete && (
                                 <>
                                   <div className="my-1 border-t border-gray-100" />
                                   <button
@@ -515,17 +522,19 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                 {previewLayout.layout_name ?? "Layout Preview"}
               </h2>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={handleDownloadSvg}
-                  disabled={downloading || !coloredSvg}
-                  className="p-2 border rounded-md hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="Download SVG with seat colors"
-                >
-                  {downloading
-                    ? <span className="w-4 h-4 block border-2 border-gray-400 border-t-gray-600 rounded-full animate-spin" />
-                    : <Download className="w-4 h-4 text-gray-600" />
-                  }
-                </button>
+                {canDownload && (
+                  <button
+                    onClick={handleDownloadSvg}
+                    disabled={downloading || !coloredSvg}
+                    className="p-2 border rounded-md hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Download SVG with seat colors"
+                  >
+                    {downloading
+                      ? <span className="w-4 h-4 block border-2 border-gray-400 border-t-gray-600 rounded-full animate-spin" />
+                      : <Download className="w-4 h-4 text-gray-600" />
+                    }
+                  </button>
+                )}
                 <button onClick={handleClose} className="p-2 border rounded-md hover:bg-gray-100 text-gray-500">
                   ✕
                 </button>

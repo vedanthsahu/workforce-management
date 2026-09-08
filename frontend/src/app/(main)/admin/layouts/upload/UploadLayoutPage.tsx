@@ -8,10 +8,12 @@ import LayoutSummary from "@/features/uploadlayouts/components/LayoutSummary";
 import { useLayoutForm } from "@/features/uploadlayouts/hooks/useLayoutForm";
 import { FloorLayoutInfo } from "@/features/uploadlayouts/types/layout.types";
 import Link from "next/link";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 export default function UploadLayoutPage() {
   const router = useRouter();
   const params = useSearchParams();
+  const { can } = usePermissions();
 
   const siteId = params.get("siteId") ? Number(params.get("siteId")) : null;
   const buildingId = params.get("buildingId") ? Number(params.get("buildingId")) : null;
@@ -29,6 +31,17 @@ export default function UploadLayoutPage() {
   useEffect(() => {
     router.prefetch("/admin/layouts");
   }, [router]);
+
+  if (!can("layout:create")) {
+    return (
+      <main className="flex-1 p-6 bg-gray-50 flex items-center justify-center overflow-y-auto">
+        <div className="max-w-lg bg-white border border-gray-200 rounded-2xl shadow-sm p-6 flex flex-col items-center justify-center text-center gap-2">
+          <p className="text-sm font-medium text-gray-900">You don&apos;t have permission to upload a layout.</p>
+          <p className="text-xs text-gray-400 max-w-xs">Contact your Tenant Admin if you believe this is a mistake.</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="flex-1 p-6 bg-gray-50 space-y-6 overflow-y-auto">

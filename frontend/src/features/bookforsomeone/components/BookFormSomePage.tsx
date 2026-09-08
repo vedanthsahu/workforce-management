@@ -49,8 +49,8 @@ export default function BookForSomeonePage() {
   const { sites, buildings, floors, isLoadingBuildings, isLoadingFloors } = useSiteBuildingOptions(visitDetails.siteId, visitDetails.buildingId);
 
   const { can, hasRole } = usePermissions();
-  const canBookEmployee = can("booking:book_for_employee");
-  const canBookGuest = can("booking:book_for_guest");
+  const canBookEmployee = can("booking:create_for_employee");
+  const canBookGuest = can("booking:create_for_guest");
 
   // ── Prefill from URL when editing a visit ──
   const editVisitId = searchParams.get("editVisitId");

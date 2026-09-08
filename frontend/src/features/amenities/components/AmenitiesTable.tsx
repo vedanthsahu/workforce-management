@@ -4,6 +4,7 @@ import { Pencil } from "lucide-react";
 
 import { Amenity } from "../types/amenities.types";
 import { getCategoryColor } from "../utils/amenityColors";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 type Props = {
   data: Amenity[];
@@ -12,6 +13,9 @@ type Props = {
 };
 
 export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: Props) {
+  const { can } = usePermissions();
+  const canEdit = can("amenity:update");
+
   if (data.length === 0) {
     return <p className="px-6 py-12 text-center text-gray-400 text-sm">No amenities found.</p>;
   }
@@ -56,12 +60,14 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
                   <span className="text-xs text-gray-500">{amenity.assigned_seat_count} seats</span>
                 </div>
               </div>
-              <button
-                onClick={() => onEdit(amenity)}
-                className="p-1.5 border rounded-lg hover:bg-gray-100 transition shrink-0"
-              >
-                <Pencil size={13} className="text-blue-600" />
-              </button>
+              {canEdit && (
+                <button
+                  onClick={() => onEdit(amenity)}
+                  className="p-1.5 border rounded-lg hover:bg-gray-100 transition shrink-0"
+                >
+                  <Pencil size={13} className="text-blue-600" />
+                </button>
+              )}
             </div>
           );
         })}
@@ -122,12 +128,14 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
                     {amenity.assigned_seat_count.toLocaleString()}
                   </td>
                   <td className="px-3 py-3 text-center">
-                    <button
-                      onClick={() => onEdit(amenity)}
-                      className="p-1.5 border rounded-lg hover:bg-gray-100 transition"
-                    >
-                      <Pencil size={13} className="text-blue-600" />
-                    </button>
+                    {canEdit && (
+                      <button
+                        onClick={() => onEdit(amenity)}
+                        className="p-1.5 border rounded-lg hover:bg-gray-100 transition"
+                      >
+                        <Pencil size={13} className="text-blue-600" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

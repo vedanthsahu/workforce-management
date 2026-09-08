@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/combobox";
 import useCreateSite from "../hooks/useCreateSite";
 import { Country } from "country-state-city";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 const TIMEZONES = [
   "Asia/Kolkata",
@@ -28,6 +29,7 @@ const COUNTRIES = Country.getAllCountries()
 export default function OfficeForm() {
   const router = useRouter();
   const { createSite, loading } = useCreateSite();
+  const { can } = usePermissions();
 
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -74,6 +76,17 @@ export default function OfficeForm() {
       }
     }
   };
+
+  if (!can("office:create")) {
+    return (
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 bg-[#f7f8fa]">
+        <div className="max-w-lg mx-auto mt-12 bg-white border border-gray-200 rounded-2xl shadow-sm p-6 flex flex-col items-center justify-center text-center gap-2">
+          <p className="text-sm font-medium text-gray-900">You don&apos;t have permission to add an office.</p>
+          <p className="text-xs text-gray-400 max-w-xs">Contact your Tenant Admin if you believe this is a mistake.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 bg-[#f7f8fa]">
