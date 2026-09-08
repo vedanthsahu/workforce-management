@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
@@ -26,6 +26,7 @@ import {
   fetchMyWorkPreferences,
   fetchPreferences,
   fetchSeatsWithAvailability,
+  fetchSiteStatus,
   fetchSites,
 } from "../services/Bookingform.service";
 import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
@@ -208,6 +209,13 @@ export function useBookingForm() {
   }));
 
   const [sites, setSites] = useState<Site[]>([]);
+  // The id of a site that's currently filled into the form (from a saved
+  // preference/prefill) but confirmed INACTIVE — kept separate from `sites`
+  // itself so the office select can keep *displaying* this office's name
+  // (clearing the selection to blank alongside "this office is inactive"
+  // told the user nothing about which office that was) while still being
+  // excluded from the list of choices offered when the dropdown is opened.
+  const [inactiveSiteId, setInactiveSiteId] = useState<string | null>(null);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [floors, setFloors] = useState<Floor[]>([]);
   const [seats, setSeats] = useState<Seat[]>([]);
@@ -372,10 +380,19 @@ export function useBookingForm() {
 
   // ── Data fetching ─────────────────────────────────────────────────────────
 
+  // The ids actually returned by the real (ACTIVE-only) fetch, tracked
+  // separately from `sites` state — `sites` also ends up holding synthetic
+  // entries injected below, so it can't be used on its own to tell "genuinely
+  // active" apart from "we made up a placeholder for this id".
+  const realSiteIdsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     setLoadingSites(true);
     fetchSites()
-      .then(setSites)
+      .then((data) => {
+        realSiteIdsRef.current = new Set(data.map((s) => s.id));
+        setSites(data);
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoadingSites(false));
   }, []);
@@ -420,17 +437,57 @@ export function useBookingForm() {
   // Guest bookings (and any flow that skips the preferences fetch) simply
   // wait for the real fetched list to resolve the name instead.
 
+  // checkedSiteIdsRef guards against re-running this for the same missing
+  // id on every render its deps happen to touch (e.g. once fetchSiteStatus
+  // resolves and setSites/setForm below fire, `sites`/`form.siteId` change
+  // again and would otherwise re-trigger the same check indefinitely).
+  const checkedSiteIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (loadingSites || !form.siteId || !savedPreferenceNames.siteName) return;
+    if (loadingSites || !form.siteId) return;
+    // realSiteIdsRef (not `sites`) is the source of truth for "genuinely in
+    // the ACTIVE list" — `sites` also holds synthetic entries this same
+    // effect injects below, so checking `sites` itself would immediately
+    // (and permanently) look "found" the moment the very first synthetic
+    // entry for this id was added, before its status was ever confirmed.
+    if (realSiteIdsRef.current.has(form.siteId)) return;
+    if (checkedSiteIdsRef.current.has(form.siteId)) return;
+    checkedSiteIdsRef.current.add(form.siteId);
+
+    const missingSiteId = form.siteId;
     const siteName = savedPreferenceNames.siteName;
-    setSites((prev) => {
-      if (prev.some((s) => s.id === form.siteId)) return prev;
-      return [
-        ...prev,
-        { id: form.siteId, name: siteName, city: "", country: "", timezone: "" },
-      ];
-    });
-  }, [sites, loadingSites, form.siteId, savedPreferenceNames.siteName]);
+    const injectPlaceholder = () => {
+      if (!siteName) return;
+      setSites((prev) =>
+        prev.some((s) => s.id === missingSiteId)
+          ? prev
+          : [...prev, { id: missingSiteId, name: siteName, city: "", country: "", timezone: "" }]
+      );
+    };
+
+    fetchSiteStatus(missingSiteId)
+      .then((siteStatus) => {
+        if (siteStatus === "INACTIVE") {
+          // Keep the selection and inject the placeholder as usual — so the
+          // office field still shows this office's name, giving the message
+          // below something concrete to refer to — but flag its id so the
+          // dropdown can hide it from the list of choices without clearing
+          // the field, matching how the select is rendered in
+          // Bookaseatpage.tsx (this option gets the `hidden` attribute
+          // there, which removes it from the opened list while still
+          // letting a `<select>` display its label as the current value).
+          injectPlaceholder();
+          setInactiveSiteId(missingSiteId);
+          setError("This office is currently inactive and unavailable for booking. Please select a different office.");
+          return;
+        }
+        // Not confirmed inactive (deleted, a transient lookup failure, or
+        // some other reason it's missing) — fall back to the previous
+        // behavior: show *something* labeled, rather than leave the select
+        // bound to a value that matches no option.
+        injectPlaceholder();
+      })
+      .catch(injectPlaceholder);
+  }, [loadingSites, form.siteId, savedPreferenceNames.siteName]);
 
   useEffect(() => {
     if (loadingBuildings || !form.buildingId || !savedPreferenceNames.buildingName) return;
@@ -825,6 +882,7 @@ export function useBookingForm() {
     step,
     form,
     sites,
+    inactiveSiteId,
     buildings,
     floors,
     seats,
