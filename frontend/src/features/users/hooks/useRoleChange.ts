@@ -4,12 +4,14 @@ import { usersService } from "../services/usersService";
 import { mapApiUserToUser, toApiStatus } from "../utils/users.utils";
 import type { RoleKey, User, UserStatus } from "../types/users.types";
 
-// Kept out of the assignable-role dropdown list entirely -- PRODUCT_ADMIN
-// can never be assigned via this endpoint, and has no in-app management
-// flow at all. TENANT_ADMIN is deliberately NOT in this set: a Tenant Admin
-// can promote any user straight to TENANT_ADMIN, manage an existing admin's
-// access, or their own -- see admin_update_user_access_service.
-const NON_ASSIGNABLE_ROLES = new Set(["PRODUCT_ADMIN"]);
+// Kept out of the assignable-role dropdown entirely, matching the backend's
+// ASSIGNABLE_ROLE_NAMES / PROTECTED_TARGET_ROLE_NAMES in
+// user_management_service.py exactly: TENANT_ADMIN and PRODUCT_ADMIN can
+// never be assigned or targeted through this endpoint, no exceptions --
+// there is no in-app flow for managing either. (A different branch briefly
+// allowed a Tenant Admin to manage other admins' access; that was reverted
+// on the backend, so this list must stay in sync with it.)
+const NON_ASSIGNABLE_ROLES = new Set(["PRODUCT_ADMIN", "TENANT_ADMIN"]);
 
 export const useRoleChange = (userId: string) => {
   const [user, setUser] = useState<User | null>(null);

@@ -18,6 +18,7 @@ import { ManageSeatsSkeleton } from "@/features/managelayout1/components/ManageS
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { useNavigationGuardStore } from "@/store/useNavigationGuardStore";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 // Effective date must be at least 15 days out — e.g. today the 14th means
 // the 14th-28th are unavailable and the 29th is the earliest pickable date.
@@ -29,6 +30,8 @@ function minEffectiveDateIso(): string {
 
 function ManageSeatsPage() {
   const router = useRouter();
+  const { can } = usePermissions();
+  const canPublishLayout = can("layout:publish");
   const panelRef = useRef<HTMLDivElement>(null);
   const [tableHeight, setTableHeight] = useState<number | undefined>(undefined);
   const [isMobile, setIsMobile] = useState(false);
@@ -150,6 +153,17 @@ function ManageSeatsPage() {
     return <ManageSeatsSkeleton />;
   }
 
+  if (!can("layout_seat:update")) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-gray-50 p-6">
+        <div className="max-w-lg bg-white border border-gray-200 rounded-2xl shadow-sm p-6 flex flex-col items-center justify-center text-center gap-2">
+          <p className="text-sm font-medium text-gray-900">You don&apos;t have permission to manage seats.</p>
+          <p className="text-xs text-gray-400 max-w-xs">Contact your Tenant Admin if you believe this is a mistake.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen w-full">
       <div className="flex flex-col flex-1 min-w-0">
@@ -179,21 +193,23 @@ function ManageSeatsPage() {
                 <ArrowLeft className="w-4 h-4" />
                 Back to Layout
               </button>
-              <button
-                onClick={openPublishConfirm}
-                disabled={!canPublish || publishing}
-                title={!allConfigured ? `Configure all seats before publishing` : undefined}
-                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {publishing ? (
-                  <>
-                    <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Publishing...
-                  </>
-                ) : (
-                  "Publish Layout"
-                )}
-              </button>
+              {canPublishLayout && (
+                <button
+                  onClick={openPublishConfirm}
+                  disabled={!canPublish || publishing}
+                  title={!allConfigured ? `Configure all seats before publishing` : undefined}
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {publishing ? (
+                    <>
+                      <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Publishing...
+                    </>
+                  ) : (
+                    "Publish Layout"
+                  )}
+                </button>
+              )}
             </div>
           </div>
 

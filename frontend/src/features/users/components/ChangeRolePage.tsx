@@ -62,21 +62,31 @@ export default function ChangeRolePage({ userId }: { userId: string }) {
             <p className="text-xs sm:text-sm text-gray-500 mt-1">View user details, current permissions and change role.</p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6 items-stretch">
-            <UserProfileCard user={user} />
-            <ChangeRolePanel
-              roles={roles}
-              currentRole={user.currentRole}
-              selectedRole={selectedRole}
-              setSelectedRole={setSelectedRole}
-              currentStatus={user.status}
-              selectedStatus={selectedStatus}
-              setSelectedStatus={setSelectedStatus}
-              hasChanged={hasChanged}
-              onSave={openConfirm}
-              onCancel={() => router.push("/admin/users")}
-            />
-          </div>
+          {user.currentRole === "TENANT_ADMIN" ? (
+            <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6 items-stretch">
+              <UserProfileCard user={user} />
+              <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 flex flex-col items-center justify-center text-center gap-2">
+                <p className="text-sm font-medium text-gray-900">Tenant Admin access can&apos;t be changed here.</p>
+                <p className="text-xs text-gray-400 max-w-xs">This role has no in-app management flow, by design.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6 items-stretch">
+              <UserProfileCard user={user} />
+              <ChangeRolePanel
+                roles={roles}
+                currentRole={user.currentRole}
+                selectedRole={selectedRole}
+                setSelectedRole={setSelectedRole}
+                currentStatus={user.status}
+                selectedStatus={selectedStatus}
+                setSelectedStatus={setSelectedStatus}
+                hasChanged={hasChanged}
+                onSave={openConfirm}
+                onCancel={() => router.push("/admin/users")}
+              />
+            </div>
+          )}
 
           <ConfirmRoleChangeModal
             open={confirmOpen}

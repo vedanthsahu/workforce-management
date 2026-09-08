@@ -22,27 +22,43 @@ import { useCallback, useMemo } from "react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+// Real backend permission catalog lives in docs/Permission-Groups-Summary.xlsx
+// ("Backend Permissions" sheet) and backend/db/migrations/Trial_003_seed_permissions.sql.
+// This union is a DX aid for autocomplete on the most-used keys, not an
+// exhaustive list -- `can`/`canAny` work against any real key via `| string`.
 export type AppPermission =
-  | "booking:book_for_someone"
-  | "booking:cancel_own"
+  | "booking:create_own"
   | "booking:view_own"
+  | "booking:cancel_own"
+  | "booking:update_own"
+  | "booking:create_for_employee"
+  | "booking:create_for_guest"
+  | "booking:view_any_employee"
+  | "booking:view_any_guest"
   | "dashboard:view"
-  | "seat:book_self"
+  | "admin_dashboard:view"
   | "teammate:view"
-  | "report:view"
-  | "user:manage"
-  | "space:manage"
-  | "admin:panel"
-  | "facility:manage"
+  | "team:view"
+  | "office:view"
+  | "building:view"
+  | "floor:view"
+  | "layout:view"
+  | "amenity:view"
+  | "user:view"
+  | "user:view_any"
+  | "role:view"
+  | "audit:view"
+  | "guest:view"
+  | "guest_visit:view"
   | string; // forward-compatible — don't narrow away future permissions
 
+// MANAGER and PRODUCT_ADMIN are deliberately out of scope for the group
+// model work so far -- see the permission-model conversation history.
 export type AppRole =
-  | "ADMIN"
-  | "MANAGER"
+  | "TENANT_ADMIN"
   | "EMPLOYEE"
   | "FACILITATOR"
   | "FRONT_OFFICE"
-  | "FACILITIES"
   | string;
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────

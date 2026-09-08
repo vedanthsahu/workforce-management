@@ -7,6 +7,7 @@ import { useLayoutsStore }    from "@/store/useLayoutsStore";
 import Link        from "next/link";
 import { useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 const DEFAULT_SELECTION: LayoutSelection = {
   siteId: "", buildingId: "", floorId: "",
@@ -16,6 +17,8 @@ const DEFAULT_SELECTION: LayoutSelection = {
 export default function FloorLayoutsPage() {
   const router       = useRouter();
   const searchParams = useSearchParams();
+  const { can } = usePermissions();
+  const canUpload = can("layout:create");
 
   const siteIdParam     = searchParams.get("siteId")     ?? "";
   const buildingIdParam = searchParams.get("buildingId") ?? "";
@@ -87,14 +90,16 @@ export default function FloorLayoutsPage() {
             Upload, manage and publish floor layouts.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/admin/layouts/upload"
-            className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700 transition-colors"
-          >
-            ⬆ Upload New Layout
-          </Link>
-        </div>
+        {canUpload && (
+          <div className="flex items-center gap-3">
+            <Link
+              href="/admin/layouts/upload"
+              className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700 transition-colors"
+            >
+              ⬆ Upload New Layout
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-12 gap-6">

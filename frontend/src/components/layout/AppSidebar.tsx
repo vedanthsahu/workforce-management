@@ -139,9 +139,9 @@ const ROUTE_MAP: Record<string, string> = {
 
 const MAIN_NAV: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "book", label: "Book a seat", icon: CalendarDays, permission: "seat:book_self" },
+  { id: "book", label: "Book a seat", icon: CalendarDays, permission: "booking:create_own" },
   { id: "mybookings", label: "My bookings", icon: BookOpen, badge: 3, badgeRed: true, permission: "booking:view_own" },
-  { id: "team", label: "Book for someone", icon: Monitor, badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
+  { id: "team", label: "Book for someone", icon: Monitor, badge: "New", badgeGreen: true, anyPermission: ["booking:create_for_employee", "booking:create_for_guest"] },
   { id: "schedule", label: "My schedule", icon: CalendarCheck, permission: "booking:view_own", disabled: true },
 ];
 
@@ -160,27 +160,27 @@ const ADMIN_DASHBOARD: NavItem[] = [
 ];
 
 const ADMIN_MANAGE_NAV: NavItem[] = [
-  { id: "offices", label: "Offices", icon: Building2 },
-  { id: "buildings", label: "Buildings", icon: Building },
-  { id: "floors", label: "Floors", icon: MapPin },
-  { id: "layouts", label: "Floor Layouts", icon: ClipboardList },
+  { id: "offices", label: "Offices", icon: Building2, permission: "office:view" },
+  { id: "buildings", label: "Buildings", icon: Building, permission: "building:view" },
+  { id: "floors", label: "Floors", icon: MapPin, permission: "floor:view" },
+  { id: "layouts", label: "Floor Layouts", icon: ClipboardList, permission: "layout:view" },
   { id: "seats", label: "Seats", icon: CalendarDays, disabled: true },
-  { id: "amenities", label: "Amenities", icon: Star },
+  { id: "amenities", label: "Amenities", icon: Star, permission: "amenity:view" },
   { id: "seatstatus", label: "Seat Status", icon: Settings, disabled: true },
 ];
 
 const ADMIN_OPERATIONS_NAV: NavItem[] = [
-  { id: "bookings", label: "Bookings", icon: CalendarDays },
-  { id: "team", label: "Book for someone", icon: Monitor, badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
-  { id: "users", label: "Users", icon: Users },
-  { id: "roles", label: "Role Management", icon: ShieldCheck },
+  { id: "bookings", label: "Bookings", icon: CalendarDays, anyPermission: ["booking:view_any_employee", "booking:view_any_guest"] },
+  { id: "team", label: "Book for someone", icon: Monitor, badge: "New", badgeGreen: true, anyPermission: ["booking:create_for_employee", "booking:create_for_guest"] },
+  { id: "users", label: "Users", icon: Users, anyPermission: ["user:view_any", "user:view"] },
+  { id: "roles", label: "Role Management", icon: ShieldCheck, permission: "role:view" },
   { id: "notifications", label: "Notifications", icon: Bell, disabled: true },
 ];
 
 const ADMIN_REPORTS_NAV: NavItem[] = [
   { id: "occupancy", label: "Occupancy", icon: BarChart3, disabled: true },
   { id: "utilization", label: "Utilization", icon: BarChart3, disabled: true },
-  { id: "audit", label: "Audit Logs", icon: ShieldCheck },
+  { id: "audit", label: "Audit Logs", icon: ShieldCheck, permission: "audit:view" },
 ];
 
 const ADMIN_SETTINGS_NAV: NavItem[] = [

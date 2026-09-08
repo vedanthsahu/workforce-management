@@ -15,10 +15,12 @@ import LayoutSidebar      from "@/features/managelayout/components/LayoutSidebar
 import ManageLayoutHeader from "@/features/managelayout/components/ManageLayoutHeader";
 import LayoutFilters      from "@/features/managelayout/components/LayoutFilters";
 import LayoutStatCards    from "@/features/managelayout/components/Layoutstatcards";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 function ManageLayoutPage() {
   const params = useSearchParams();
   const router = useRouter();
+  const { can } = usePermissions();
 
   const initialSiteId     = params.get("siteId")     ?? "";
   const initialBuildingId = params.get("buildingId") ?? "";
@@ -116,6 +118,17 @@ function ManageLayoutPage() {
     setSelectedLayoutId(id);
     syncUrl({ layoutId: id });
   };
+
+  if (!can("layout_seat:update")) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-gray-50 p-6">
+        <div className="max-w-lg bg-white border border-gray-200 rounded-2xl shadow-sm p-6 flex flex-col items-center justify-center text-center gap-2">
+          <p className="text-sm font-medium text-gray-900">You don&apos;t have permission to manage this layout.</p>
+          <p className="text-xs text-gray-400 max-w-xs">Contact your Tenant Admin if you believe this is a mistake.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-full">

@@ -338,7 +338,7 @@ export function BookingTypeSelector({ selected, onChange, disabledType }: Bookin
     { type: "internal" as BookingType, label: "Internal Employee", sub: "Book a seat for an employee in your organization", Icon: IconUser },
     { type: "visitor" as BookingType, label: "Visitor / Guest", sub: "Book a seat for a visitor or guest", Icon: IconBadge },
   ].filter(({ type }) =>
-    type === "internal" ? can("booking:book_for_employee") : can("booking:book_for_guest")
+    type === "internal" ? can("booking:create_for_employee") : can("booking:create_for_guest")
   );
 
   return (

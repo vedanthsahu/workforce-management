@@ -334,7 +334,7 @@ function applyBfsFilters(
 
 export default function MyBookingsPage() {
   const { canAny } = usePermissions();
-  const canBookForSomeone = canAny("booking:book_for_employee", "booking:book_for_guest");
+  const canBookForSomeone = canAny("booking:create_for_employee", "booking:create_for_guest");
 
   const {
     displayedBookings,

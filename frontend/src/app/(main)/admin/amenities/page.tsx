@@ -11,6 +11,7 @@ import AmenitiesPagination from "@/features/amenities/components/AmenitiesPagina
 import { useAmenities } from "@/features/amenities/hooks/useAmenities";
 import { Amenity } from "@/features/amenities/types/amenities.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 const PIN_DURATION = 4000;
 
@@ -20,6 +21,8 @@ function AmenitiesPage() {
 
   const { data, loading, search, setSearch, status, setStatus, fetchAmenities } =
     useAmenities();
+  const { can } = usePermissions();
+  const canCreate = can("amenity:create");
 
   const [selectedAmenity, setSelectedAmenity] = useState<Amenity | null>(null);
   const [openModal, setOpenModal] = useState(false);
@@ -114,16 +117,18 @@ function AmenitiesPage() {
             Create, edit and manage all amenities available in your workspace.
           </p>
         </div>
-        <div className="self-start sm:self-auto shrink-0">
-          <button
-            onClick={() => router.push("/admin/amenities/add")}
-            onMouseEnter={() => router.prefetch("/admin/amenities/add")}
-            className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm"
-          >
-            <Plus size={15} />
-            Add Amenity
-          </button>
-        </div>
+        {canCreate && (
+          <div className="self-start sm:self-auto shrink-0">
+            <button
+              onClick={() => router.push("/admin/amenities/add")}
+              onMouseEnter={() => router.prefetch("/admin/amenities/add")}
+              className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm"
+            >
+              <Plus size={15} />
+              Add Amenity
+            </button>
+          </div>
+        )}
       </div>
 
       {/* STATS CARDS */}

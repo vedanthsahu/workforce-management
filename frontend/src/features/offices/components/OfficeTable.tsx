@@ -3,6 +3,7 @@
 import { Pencil, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Office } from "../types/office.types";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 interface OfficeTableProps {
   data: Office[];
@@ -11,6 +12,9 @@ interface OfficeTableProps {
 }
 
 export default function OfficeTable({ data, onEdit, highlightedId }: OfficeTableProps) {
+  const { can } = usePermissions();
+  const canEdit = can("office:update");
+
   if (data.length === 0) {
     return <p className="px-6 py-12 text-center text-gray-400 text-sm">No offices found.</p>;
   }
@@ -47,9 +51,11 @@ export default function OfficeTable({ data, onEdit, highlightedId }: OfficeTable
                   </div>
                 </div>
               </div>
-              <button onClick={() => onEdit(o)} className="p-1.5 border rounded-lg hover:bg-gray-100 transition shrink-0">
-                <Pencil size={13} className="text-blue-600" />
-              </button>
+              {canEdit && (
+                <button onClick={() => onEdit(o)} className="p-1.5 border rounded-lg hover:bg-gray-100 transition shrink-0">
+                  <Pencil size={13} className="text-blue-600" />
+                </button>
+              )}
             </div>
           );
         })}
@@ -105,14 +111,16 @@ export default function OfficeTable({ data, onEdit, highlightedId }: OfficeTable
                     </span>
                   </td>
                   <td className="px-3 py-3 text-center">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => onEdit(o)}
-                    >
-                      <Pencil size={13} className="text-blue-600" />
-                    </Button>
+                    {canEdit && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => onEdit(o)}
+                      >
+                        <Pencil size={13} className="text-blue-600" />
+                      </Button>
+                    )}
                   </td>
                 </tr>
               );

@@ -2,6 +2,7 @@
 
 import { Building2, Pencil } from "lucide-react";
 import { Building } from "../types/building.types";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 type Props = {
   data: Building[];
@@ -10,6 +11,9 @@ type Props = {
 };
 
 export default function BuildingTable({ data, onEdit, highlightedId }: Props) {
+  const { can } = usePermissions();
+  const canEdit = can("building:update");
+
   if (data.length === 0) {
     return <p className="px-6 py-12 text-center text-gray-400 text-sm">No buildings found.</p>;
   }
@@ -48,9 +52,11 @@ export default function BuildingTable({ data, onEdit, highlightedId }: Props) {
                   </div>
                 </div>
               </div>
-              <button onClick={() => onEdit(building)} className="p-1.5 border rounded-lg hover:bg-gray-100 transition shrink-0">
-                <Pencil size={13} className="text-blue-600" />
-              </button>
+              {canEdit && (
+                <button onClick={() => onEdit(building)} className="p-1.5 border rounded-lg hover:bg-gray-100 transition shrink-0">
+                  <Pencil size={13} className="text-blue-600" />
+                </button>
+              )}
             </div>
           );
         })}
@@ -106,9 +112,11 @@ export default function BuildingTable({ data, onEdit, highlightedId }: Props) {
                     </span>
                   </td>
                   <td className="px-3 py-3 text-center">
-                    <button onClick={() => onEdit(building)} className="p-1.5 border rounded-lg hover:bg-gray-100 transition">
-                      <Pencil size={13} className="text-blue-600" />
-                    </button>
+                    {canEdit && (
+                      <button onClick={() => onEdit(building)} className="p-1.5 border rounded-lg hover:bg-gray-100 transition">
+                        <Pencil size={13} className="text-blue-600" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

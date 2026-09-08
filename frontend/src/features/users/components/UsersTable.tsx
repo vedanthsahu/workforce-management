@@ -4,6 +4,7 @@ import { Eye } from "lucide-react";
 import { getRoleBadgeClass } from "../utils/users.utils";
 import UserRowMenu from "./UserRowMenu";
 import type { User } from "../types/users.types";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 type Props = {
   users: User[];
@@ -12,6 +13,26 @@ type Props = {
 };
 
 export default function UsersTable({ users, highlightedUserId, onChangeRole }: Props) {
+  const { canAny } = usePermissions();
+  // Both role and status changes go through the same panel, gated by either
+  // permission on the backend (admin_update_user_access_service).
+  const canChangeAccess = canAny("user:change_role", "user:update_status");
+
+  // Mirrors the backend's PROTECTED_TARGET_ROLE_NAMES: Tenant Admin (and
+  // Product Admin, not exposed in this UI) can never have their role/status
+  // changed through this endpoint, regardless of the actor's permissions --
+  // so the menu item should say why up front rather than let the request
+  // round-trip to a 403.
+  function disabledReasonFor(user: User): string | null {
+    if (user.currentRole === "TENANT_ADMIN") {
+      return "Tenant Admin access can't be changed here.";
+    }
+    if (!canChangeAccess) {
+      return "You don't have permission to change user access.";
+    }
+    return null;
+  }
+
   if (users.length === 0) {
     return <p className="px-6 py-12 text-center text-gray-400 text-sm">No users found.</p>;
   }
@@ -70,6 +91,7 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
               <UserRowMenu
                 onChangeRole={() => onChangeRole(user)}
                 openUpward={index === users.length - 1}
+                disabledReason={disabledReasonFor(user)}
               />
             </div>
           );
@@ -153,6 +175,7 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
                       <UserRowMenu
                         onChangeRole={() => onChangeRole(user)}
                         openUpward={isLastRow}
+                        disabledReason={disabledReasonFor(user)}
                       />
                     </div>
                   </td>

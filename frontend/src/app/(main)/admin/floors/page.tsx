@@ -14,6 +14,7 @@ import EditFloorModal from "@/features/floor/components/EditFloorModal";
 import { useFloors } from "@/features/floor/hooks/useFloors";
 import { Floor } from "@/features/floor/types/floor.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
+import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 
 function FloorsPage() {
   const {
@@ -29,6 +30,8 @@ function FloorsPage() {
     handleBuildingChange,
     refreshFloors,
   } = useFloors();
+  const { can } = usePermissions();
+  const canCreate = can("floor:create");
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -102,13 +105,15 @@ function FloorsPage() {
             View, add, edit and manage all floors.
           </p>
         </div>
-        <Link
-          href="/admin/floors/add"
-          className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm self-start sm:self-auto"
-        >
-          <Plus size={16} />
-          Add Floor
-        </Link>
+        {canCreate && (
+          <Link
+            href="/admin/floors/add"
+            className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm self-start sm:self-auto"
+          >
+            <Plus size={16} />
+            Add Floor
+          </Link>
+        )}
       </div>
 
       {/* CARDS */}
