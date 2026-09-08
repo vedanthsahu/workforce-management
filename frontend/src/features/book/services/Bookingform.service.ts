@@ -62,6 +62,18 @@ export async function fetchSites(): Promise<Site[]> {
   }));
 }
 
+// fetchSites above only ever returns ACTIVE sites, so a saved work
+// preference (or a modify-booking/prefill deep link) pointing at a site
+// that's since gone INACTIVE silently disappears from that list with no way
+// to tell "inactive" apart from "no longer exists". GET /sites/{id} returns
+// every site regardless of status, so this is used specifically to check
+// whether a missing site id is inactive (vs. genuinely gone) so the UI can
+// show an appropriate message instead of a silent empty seat map.
+export async function fetchSiteStatus(siteId: string): Promise<string | null> {
+  const { data } = await axiosInstance.get<{ status?: string | null }>(`/sites/${siteId}`);
+  return data.status ?? null;
+}
+
 // ── Buildings ─────────────────────────────────────────────────────────────────
 
 export async function fetchBuildings(siteId: string): Promise<Building[]> {
