@@ -13,6 +13,7 @@ import { layoutService } from "../services/layout.service";
 import SVGPreviewModal from "./Svgpreviewmodal";
 import { Building, Floor, FloorLayoutInfo, LayoutFormState, Site } from "../types/layout.types";
 import { extractSeatIds } from "@/lib/svg/extractSeatIds";
+import { formatSeatCategorySummary } from "@/lib/svg/seatCategories";
 
 interface LayoutFormProps {
   formData: LayoutFormState;
@@ -515,7 +516,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                       </span>
                     ) : seatIds.length > 0 ? (
                       <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full font-medium">
-                        {seatIds.length} seat{seatIds.length !== 1 ? "s" : ""} detected
+                        {formatSeatCategorySummary(seatIds)} detected
                       </span>
                     ) : (
                       <span className="flex items-center gap-1.5 px-2.5 py-1 bg-red-50 text-red-600 border border-red-200 rounded-full text-xs font-medium">
@@ -643,7 +644,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
           badge={
             seatIds.length > 0 ? (
               <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs font-medium">
-                {seatIds.length} seat{seatIds.length !== 1 ? "s" : ""}
+                {formatSeatCategorySummary(seatIds)}
               </span>
             ) : undefined
           }
