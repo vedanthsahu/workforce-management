@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
 import {
@@ -34,6 +34,23 @@ import {
   VisitDetails,
 } from "../types/booking";
 import { updateGuest } from "../services/booking.service";
+
+// Backend errors from the guest endpoints raise FastAPI's HTTPException with
+// a dict `detail` (e.g. `{code: "guest_phone_exists", message: "..."}`), not
+// a plain string — so `err.response.data.detail` alone is the raw object,
+// not display text. Reading `.detail.message` first (falling back to
+// `.detail` only when it's already a string) is what actually surfaces the
+// backend's message instead of rendering "[object Object]"/crashing React.
+function extractGuestApiErrorMessage(err: unknown): string | null {
+  if (!axios.isAxiosError(err)) return null;
+  const data = err.response?.data;
+  return (
+    data?.error?.message ||
+    data?.message ||
+    (typeof data?.detail === "string" ? data.detail : data?.detail?.message) ||
+    null
+  );
+}
 
 // ─── StepProgressBar ────────────────────────────────────────────────────────
 
@@ -412,10 +429,7 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
         organization: v.organization || undefined,
       });
     } catch (err) {
-      const serverMsg = axios.isAxiosError(err)
-        ? err.response?.data?.error?.message || err.response?.data?.message || err.response?.data?.detail
-        : null;
-      setApiError(serverMsg ?? "Failed to save guest. Please try again.");
+      setApiError(extractGuestApiErrorMessage(err) ?? "Failed to save guest. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -979,17 +993,25 @@ interface EditGuestFormProps {
 
 function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
   const spaceIdx = guest.fullName.indexOf(" ");
-  const [form, setForm] = useState({
+  // Captured once (ref, not state) as the "nothing changed yet" snapshot —
+  // compared against the live `form` below to decide whether Save should be
+  // enabled at all, so the button isn't clickable for a no-op update.
+  const initialFormRef = useRef({
     firstName:    spaceIdx >= 0 ? guest.fullName.slice(0, spaceIdx) : guest.fullName,
     lastName:     spaceIdx >= 0 ? guest.fullName.slice(spaceIdx + 1) : "",
     email:        guest.email ?? "",
     phone:        guest.phone ?? "",
     organization: guest.organization ?? "",
   });
+  const [form, setForm] = useState(initialFormRef.current);
   const [errors,   setErrors]   = useState<Record<string, string>>({});
   const [touched,  setTouched]  = useState<Record<string, boolean>>({});
   const [saving,   setSaving]   = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+
+  const isDirty = (Object.keys(initialFormRef.current) as (keyof typeof form)[]).some(
+    (key) => form[key] !== initialFormRef.current[key]
+  );
 
   const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = field === "phone" ? sanitizePhoneNumber(e.target.value) : e.target.value;
@@ -1038,10 +1060,7 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
       });
       onSave(updated);
     } catch (err) {
-      const serverMsg = axios.isAxiosError(err)
-        ? err.response?.data?.error?.message || err.response?.data?.message || err.response?.data?.detail
-        : null;
-      setApiError(serverMsg ?? "Failed to update guest. Please try again.");
+      setApiError(extractGuestApiErrorMessage(err) ?? "Failed to update guest. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -1110,8 +1129,8 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
           style={{ padding: "0.5rem 1.25rem", fontSize: "0.875rem", fontWeight: 500, color: "#374151", background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 8, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1, fontFamily: "inherit" }}>
           Cancel
         </button>
-        <button type="button" onClick={handleSave} disabled={saving}
-          style={{ padding: "0.5rem 1.25rem", fontSize: "0.875rem", fontWeight: 600, color: "#fff", background: "#4f46e5", border: "none", borderRadius: 8, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <button type="button" onClick={handleSave} disabled={saving || !isDirty}
+          style={{ padding: "0.5rem 1.25rem", fontSize: "0.875rem", fontWeight: 600, color: "#fff", background: "#4f46e5", border: "none", borderRadius: 8, cursor: saving || !isDirty ? "not-allowed" : "pointer", opacity: saving || !isDirty ? 0.6 : 1, fontFamily: "inherit", display: "flex", alignItems: "center", gap: "0.5rem" }}>
           {saving && <span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />}
           {saving ? "Saving…" : "Save Changes"}
         </button>
