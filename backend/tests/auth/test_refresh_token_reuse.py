@@ -48,6 +48,13 @@ class RefreshTokenReuseDetectionTests(unittest.TestCase):
                 "backend.services.auth_service.fetch_session_by_refresh_token",
                 return_value=None,
             ),
+            # No concurrent-rotation grace-window match either -- this really
+            # is reuse, not a race with another request that already rotated
+            # past this token.
+            patch(
+                "backend.services.auth_service.fetch_session_by_previous_refresh_token",
+                return_value=None,
+            ),
             patch(
                 "backend.services.auth_service.fetch_active_session",
                 return_value={"session_id": "session-abc", "revoked_at": None},
@@ -78,6 +85,10 @@ class RefreshTokenReuseDetectionTests(unittest.TestCase):
         with (
             patch(
                 "backend.services.auth_service.fetch_session_by_refresh_token",
+                return_value=None,
+            ),
+            patch(
+                "backend.services.auth_service.fetch_session_by_previous_refresh_token",
                 return_value=None,
             ),
             patch(

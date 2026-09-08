@@ -587,8 +587,22 @@ def fetch_amenity_by_id(
                     OR ac.tenant_id IS NULL
                )
             LEFT JOIN LATERAL (
+                -- Only seats on their floor's currently published layout
+                -- count -- a seat retired by a later republish (see
+                -- reconcile_published_layout_seats) leaves its
+                -- seat_amenities row behind, which would otherwise inflate
+                -- this count with amenities assigned on a superseded layout.
                 SELECT COUNT(DISTINCT sa.seat_id)::integer AS assigned_seat_count
                 FROM seat_amenities AS sa
+                INNER JOIN seats AS s
+                    ON s.id = sa.seat_id
+                   AND s.tenant_id = sa.tenant_id
+                INNER JOIN floor_layouts AS fl
+                    ON fl.floor_id = s.floor_id
+                   AND fl.tenant_id = s.tenant_id
+                   AND fl.is_published = TRUE
+                   AND fl.status = 'PUBLISHED'
+                   AND fl.id = s.layout_id
                 WHERE sa.tenant_id = a.tenant_id
                   AND sa.amenity_id = a.id
             ) AS assignments ON TRUE
@@ -750,8 +764,20 @@ def fetch_amenities(
                 OR ac.tenant_id IS NULL
            )
         LEFT JOIN LATERAL (
+            -- Only seats on their floor's currently published layout count
+            -- -- see fetch_amenity_by_id for why (retired seats leave their
+            -- seat_amenities row behind).
             SELECT COUNT(DISTINCT sa.seat_id)::integer AS assigned_seat_count
             FROM seat_amenities AS sa
+            INNER JOIN seats AS s
+                ON s.id = sa.seat_id
+               AND s.tenant_id = sa.tenant_id
+            INNER JOIN floor_layouts AS fl
+                ON fl.floor_id = s.floor_id
+               AND fl.tenant_id = s.tenant_id
+               AND fl.is_published = TRUE
+               AND fl.status = 'PUBLISHED'
+               AND fl.id = s.layout_id
             WHERE sa.tenant_id = a.tenant_id
               AND sa.amenity_id = a.id
         ) AS assignments ON TRUE
@@ -809,6 +835,15 @@ def fetch_amenities(
                 (
                     SELECT COUNT(DISTINCT sa.amenity_id)::integer
                     FROM seat_amenities AS sa
+                    INNER JOIN seats AS s
+                        ON s.id = sa.seat_id
+                       AND s.tenant_id = sa.tenant_id
+                    INNER JOIN floor_layouts AS fl
+                        ON fl.floor_id = s.floor_id
+                       AND fl.tenant_id = s.tenant_id
+                       AND fl.is_published = TRUE
+                       AND fl.status = 'PUBLISHED'
+                       AND fl.id = s.layout_id
                     WHERE sa.tenant_id = %(tenant_id)s
                 ) AS assigned_amenities
             FROM amenities

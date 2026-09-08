@@ -45,6 +45,7 @@ def _visit(**overrides):
         "tenant_id": "1",
         "guest_id": "50",
         "host_user_id": "20",
+        "created_by_user_id": "10",
         "site_id": "2",
         "building_id": "3",
         "floor_id": "4",
@@ -63,6 +64,7 @@ def _booking(**overrides):
         "booking_id": "200",
         "tenant_id": "1",
         "booked_for_guest_id": "50",
+        "booked_by_user_id": "10",
         "guest_visit_id": "60",
         "booking_type": "GUEST",
         "seat_id": "30",
@@ -179,6 +181,7 @@ class GuestWorkflowTests(unittest.TestCase):
             insert_visit.call_args.kwargs["visit_date"],
             _future_date(20),
         )
+        self.assertEqual(insert_visit.call_args.kwargs["created_by_user_id"], "10")
         self.assertNotIn("modification_reason", insert_visit.call_args.kwargs)
         fetch_booking.assert_not_called()
         cancel_booking.assert_not_called()
@@ -295,7 +298,9 @@ class GuestWorkflowTests(unittest.TestCase):
         )
         self.assertNotIn("modification_reason", insert_visit.call_args.kwargs)
         self.assertEqual(insert_visit.call_args.kwargs["guest_id"], "50")
+        self.assertEqual(insert_visit.call_args.kwargs["created_by_user_id"], "10")
         self.assertEqual(insert_booking.call_args.kwargs["guest_visit_id"], "61")
+        self.assertEqual(insert_booking.call_args.kwargs["booked_by_user_id"], "10")
         self.assertNotEqual(old_visit["guest_visit_id"], new_visit["guest_visit_id"])
         self.assertNotEqual(old_booking["booking_id"], new_booking["booking_id"])
         self.assertEqual(response.guest_visit.guest_visit_id, "61")
@@ -376,14 +381,11 @@ class GuestWorkflowTests(unittest.TestCase):
                 payload=payload,
             )
 
-        self.assertEqual(mark_booking.call_args.kwargs["booking_id"], "200")
-        self.assertEqual(
-            # LOCATION_CHANGED is valid for guest_visits.modification_reason
-            # but not bookings.modification_reason (chk_booking_modification_reason),
-            # so the booking side falls back to OTHER.
-            mark_booking.call_args.kwargs["modification_reason"],
-            "OTHER",
-        )
+        # The booking is carried forward in place by sync_booking_from_guest_visit
+        # rather than replaced -- mark_booking_modified must NOT run here, or it
+        # would flip the booking's status before that UPDATE, making it match
+        # zero rows and silently orphan the guest's seat reservation.
+        mark_booking.assert_not_called()
         mark_visit.assert_called_once_with(
             conn,
             tenant_id="1",
@@ -391,8 +393,10 @@ class GuestWorkflowTests(unittest.TestCase):
             modification_reason="LOCATION_CHANGED",
         )
         self.assertEqual(insert_visit.call_args.kwargs["modified_from_guest_visit_id"], "60")
+        self.assertEqual(insert_visit.call_args.kwargs["created_by_user_id"], "10")
         self.assertNotIn("modification_reason", insert_visit.call_args.kwargs)
         self.assertEqual(sync_booking.call_args.kwargs["guest_visit_id"], "60")
+        self.assertEqual(sync_booking.call_args.kwargs["new_guest_visit_id"], "61")
         self.assertEqual(sync_booking.call_args.kwargs["site_id"], "5")
         self.assertEqual(sync_booking.call_args.kwargs["building_id"], "6")
         self.assertEqual(sync_booking.call_args.kwargs["floor_id"], "7")

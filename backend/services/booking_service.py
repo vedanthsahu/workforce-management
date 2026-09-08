@@ -1229,7 +1229,15 @@ def modify_booking(
             conn,
             tenant_id=tenant_id,
             booked_for_user_id=str(booked_for_user_id),
-            booked_by_user_id=_current_user_id(current_user),
+            # Preserve the original delegate/creator across the modify-replace
+            # chain instead of reassigning it to whoever performed this edit --
+            # otherwise a booking a facilitator made for someone else silently
+            # looks self-booked (and vanishes from the facilitator's delegated-
+            # bookings views) the moment anyone else modifies it. Who actually
+            # performed this edit is already captured correctly on the
+            # superseded row via mark_booking_modified's updated_by_user_id,
+            # and in the audit log below.
+            booked_by_user_id=str(booking["booked_by_user_id"]),
             seat=target_seat,
             booking_date=payload.booking_date,
             modified_from_booking_id=booking_id,

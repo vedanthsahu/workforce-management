@@ -94,33 +94,41 @@ class AdminManagementRouteTests(unittest.TestCase):
 
 class LocationMutationsRequirePermissionTests(unittest.TestCase):
     """Regression coverage for the broken-access-control fix: every
-    structural-mutation route in locations.py must require location:manage
-    (or layout:upload for seat/layout-seat configuration), not just an
-    authenticated session. Read (GET) routes remain open to any user."""
+    structural-mutation route in locations.py must require its resource's
+    specific granular permission (office/building/floor/seat), not just an
+    authenticated session. Superseded the old "location:manage" coarse
+    permission once the granular catalog rolled out -- see
+    Trial_003_seed_permissions.sql. GET /floors/{floor_id}/seats (seat
+    availability for booking) deliberately stays open to any authenticated
+    user; every other route, including the other reads, now requires its
+    own :view permission -- reads were deliberately gated too."""
 
     MUTATING_ROUTES = [
-        ("POST", "/sites"),
-        ("PATCH", "/sites/{site_id}"),
-        ("POST", "/buildings"),
-        ("PATCH", "/buildings/{building_id}"),
-        ("POST", "/floors"),
-        ("PATCH", "/floors/{floor_id}"),
-        ("PATCH", "/seats/{seat_id}/configuration"),
-        ("PATCH", "/seats/bulk-configuration"),
-        ("PATCH", "/layout-seats/{layout_seat_mapping_id}/configuration"),
-        ("PATCH", "/layout-seats/bulk-configuration"),
+        ("POST", "/sites", "office:create"),
+        ("PATCH", "/sites/{site_id}", "office:update"),
+        ("POST", "/buildings", "building:create"),
+        ("PATCH", "/buildings/{building_id}", "building:update"),
+        ("POST", "/floors", "floor:create"),
+        ("PATCH", "/floors/{floor_id}", "floor:update"),
+        ("PATCH", "/seats/{seat_id}/configuration", "layout_seat:update"),
+        ("PATCH", "/seats/bulk-configuration", "layout_seat:bulk_update"),
+        ("PATCH", "/layout-seats/{layout_seat_mapping_id}/configuration", "layout_seat:update"),
+        ("PATCH", "/layout-seats/bulk-configuration", "layout_seat:bulk_update"),
     ]
 
     READ_ROUTES = [
-        ("GET", "/sites"),
-        ("GET", "/sites/{site_id}"),
-        ("GET", "/buildings"),
-        ("GET", "/buildings/{building_id}/floors"),
+        ("GET", "/sites", "office:view"),
+        ("GET", "/sites/{site_id}", "office:view"),
+        ("GET", "/buildings", "building:view"),
+        ("GET", "/buildings/{building_id}/floors", "floor:view"),
+    ]
+
+    OPEN_READ_ROUTES = [
         ("GET", "/floors/{floor_id}/seats"),
     ]
 
     def test_every_mutating_route_requires_a_permission(self) -> None:
-        for method, path in self.MUTATING_ROUTES:
+        for method, path, expected_permission in self.MUTATING_ROUTES:
             with self.subTest(route=f"{method} {path}"):
                 route = _route(locations_router, method, path)
                 required = _required_permissions(route)
@@ -130,25 +138,30 @@ class LocationMutationsRequirePermissionTests(unittest.TestCase):
                     "require_any_permission dependency -- any authenticated "
                     "user could call it.",
                 )
-                self.assertIn("location:manage", required)
+                self.assertIn(expected_permission, required)
 
-    def test_seat_and_layout_seat_configuration_also_accept_layout_upload(
-        self,
-    ) -> None:
-        for method, path in (
-            ("PATCH", "/seats/{seat_id}/configuration"),
-            ("PATCH", "/seats/bulk-configuration"),
-            ("PATCH", "/layout-seats/{layout_seat_mapping_id}/configuration"),
-            ("PATCH", "/layout-seats/bulk-configuration"),
-        ):
+    # PENDING DECISION (not fixed): whether PATCH /seats/*configuration and
+    # /layout-seats/*configuration should ALSO accept layout:upload as an
+    # alternate permission (i.e. require_any_permission rather than the
+    # single require_permission they use today) -- someone who can upload a
+    # whole new layout currently cannot also configure individual seats
+    # through these routes unless they separately hold layout_seat:update/
+    # layout_seat:bulk_update. Left unimplemented pending a decision on
+    # whether that's the intended relationship between the two permissions.
+
+    def test_read_routes_require_their_view_permission(self) -> None:
+        for method, path, expected_permission in self.READ_ROUTES:
             with self.subTest(route=f"{method} {path}"):
-                required = _required_permissions(
-                    _route(locations_router, method, path)
+                route = _route(locations_router, method, path)
+                required = _required_permissions(route)
+                self.assertIsNotNone(
+                    required,
+                    f"{method} {path} has no permission dependency.",
                 )
-                self.assertIn("layout:upload", required)
+                self.assertIn(expected_permission, required)
 
-    def test_read_routes_do_not_require_a_permission(self) -> None:
-        for method, path in self.READ_ROUTES:
+    def test_seat_availability_route_stays_open_to_any_authenticated_user(self) -> None:
+        for method, path in self.OPEN_READ_ROUTES:
             with self.subTest(route=f"{method} {path}"):
                 route = _route(locations_router, method, path)
                 self.assertIsNone(
@@ -161,24 +174,26 @@ class LocationMutationsRequirePermissionTests(unittest.TestCase):
 class AmenityMutationsRequirePermissionTests(unittest.TestCase):
     """Regression coverage for the amenity-taxonomy authorization gap: any
     authenticated employee could previously create/update amenities and
-    amenity categories."""
+    amenity categories. Uses the granular per-resource permissions from the
+    group-permission catalog (amenities:manage was the pre-rollout coarse
+    name); reads are gated too, not left open."""
 
     MUTATING_ROUTES = [
-        ("POST", "/amenity-categories"),
-        ("PATCH", "/amenity-categories/{category_id}"),
-        ("POST", "/amenities"),
-        ("PATCH", "/amenities/{amenity_id}"),
+        ("POST", "/amenity-categories", "amenity_category:create"),
+        ("PATCH", "/amenity-categories/{category_id}", "amenity_category:update"),
+        ("POST", "/amenities", "amenity:create"),
+        ("PATCH", "/amenities/{amenity_id}", "amenity:update"),
     ]
 
     READ_ROUTES = [
-        ("GET", "/amenities"),
-        ("GET", "/amenities/{amenity_id}"),
-        ("GET", "/amenity-categories"),
-        ("GET", "/amenity-categories/{category_id}"),
+        ("GET", "/amenities", "amenity:view"),
+        ("GET", "/amenities/{amenity_id}", "amenity:view"),
+        ("GET", "/amenity-categories", "amenity_category:view"),
+        ("GET", "/amenity-categories/{category_id}", "amenity_category:view"),
     ]
 
-    def test_every_mutating_route_requires_amenities_manage(self) -> None:
-        for method, path in self.MUTATING_ROUTES:
+    def test_every_mutating_route_requires_its_permission(self) -> None:
+        for method, path, expected_permission in self.MUTATING_ROUTES:
             with self.subTest(route=f"{method} {path}"):
                 route = _route(preferences_router, method, path)
                 required = _required_permissions(route)
@@ -187,13 +202,18 @@ class AmenityMutationsRequirePermissionTests(unittest.TestCase):
                     f"{method} {path} has no permission dependency -- any "
                     "authenticated user could edit the amenity catalog.",
                 )
-                self.assertIn("amenities:manage", required)
+                self.assertIn(expected_permission, required)
 
-    def test_read_routes_do_not_require_a_permission(self) -> None:
-        for method, path in self.READ_ROUTES:
+    def test_read_routes_require_their_view_permission(self) -> None:
+        for method, path, expected_permission in self.READ_ROUTES:
             with self.subTest(route=f"{method} {path}"):
                 route = _route(preferences_router, method, path)
-                self.assertIsNone(_required_permissions(route))
+                required = _required_permissions(route)
+                self.assertIsNotNone(
+                    required,
+                    f"{method} {path} has no permission dependency.",
+                )
+                self.assertIn(expected_permission, required)
 
 
 if __name__ == "__main__":
