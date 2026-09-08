@@ -189,13 +189,20 @@ def fetch_guest_by_phone(
     tenant_id: str,
     phone: str,
 ) -> dict[str, Any] | None:
+    # Compares the last 10 digits on both sides (via REGEXP_REPLACE stripping
+    # everything but digits) rather than the raw stored string — "9876543210"
+    # and "+91 9876543210" are the same number but were never equal as plain
+    # strings, which let the same phone number be registered twice under a
+    # different +91 formatting. This also self-heals existing rows that were
+    # stored inconsistently before this fix, since nothing is rewritten in
+    # the table — only how the comparison reads it.
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
             SELECT {GUEST_SELECT_FIELDS}
             FROM guests AS g
             WHERE g.tenant_id = %s
-              AND g.phone = %s
+              AND RIGHT(REGEXP_REPLACE(g.phone, '\\D', '', 'g'), 10) = RIGHT(REGEXP_REPLACE(%s, '\\D', '', 'g'), 10)
               AND g.status = 'ACTIVE'
             ORDER BY g.id
             LIMIT 1
@@ -283,13 +290,15 @@ def fetch_guest_by_phone_excluding_guest(
     exclude_guest_id: str,
 ) -> dict[str, Any] | None:
     """Check phone uniqueness across ACTIVE and INACTIVE guests, excluding one guest."""
+    # See fetch_guest_by_phone above — same last-10-digits normalization so a
+    # number re-entered with/without the +91 prefix is still caught here.
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
             SELECT {GUEST_SELECT_FIELDS}
             FROM guests AS g
             WHERE g.tenant_id = %s
-              AND g.phone = %s
+              AND RIGHT(REGEXP_REPLACE(g.phone, '\\D', '', 'g'), 10) = RIGHT(REGEXP_REPLACE(%s, '\\D', '', 'g'), 10)
               AND g.id <> %s
             ORDER BY g.id
             LIMIT 1
