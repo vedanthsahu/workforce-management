@@ -290,11 +290,7 @@ function ManageSeatsPage() {
       <ConfirmDialog
         open={showPublishConfirm}
         title={hasUnpublishedEdits ? "Publish pending seat changes?" : "Publish this layout?"}
-        description={
-          hasUnpublishedEdits
-            ? "This will publish your recent configuration changes and make them available to users on the selected effective date."
-            : "This will make this layout the live layout for its floor."
-        }
+        description="This will publish your recent configuration changes and make them available to users on the selected effective date."
         confirmLabel={publishing ? "Publishing…" : "Yes, Publish"}
         loading={publishing}
         onConfirm={handleConfirmPublish}

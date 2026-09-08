@@ -237,6 +237,36 @@ def fetch_user_by_email(
     return dict(result) if result else None
 
 
+def fetch_user_by_phone(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    phone: str,
+) -> dict[str, Any] | None:
+    """Fetch one ACTIVE user whose mobile_phone matches by last-10-digits.
+
+    mobile_phone has no format convention enforced anywhere (populated from
+    Microsoft Graph's mobilePhone claim or free-typed via profile self-edit),
+    so this normalizes both sides down to their last 10 digits — the same
+    approach guest_repository.fetch_guest_by_phone uses — rather than an
+    exact string match that a "+91" prefix or spacing difference would defeat.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {USER_SELECT_FIELDS}
+            {USER_SELECT_FROM}
+            WHERE au.tenant_id = %s
+              AND au.mobile_phone IS NOT NULL
+              AND RIGHT(REGEXP_REPLACE(au.mobile_phone, '\\D', '', 'g'), 10) = RIGHT(REGEXP_REPLACE(%s, '\\D', '', 'g'), 10)
+              AND au.status = 'ACTIVE'
+            """,
+            (tenant_id, phone),
+        )
+        result = cur.fetchone()
+    return dict(result) if result else None
+
+
 def fetch_user_by_id(
     conn: PGConnection,
     *,
