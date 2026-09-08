@@ -18,6 +18,11 @@ export interface ConfigurationField {
   iconColor?: string;
   cardTitle?: string;
   cardDescription?: string;
+  // Per-field metadata, shown alongside cardTitle/cardDescription on
+  // Layout Visibility's mini stat-cards -- other fields are edited as part
+  // of their item and rely on the item's own lastUpdatedAt/lastUpdatedBy.
+  lastUpdatedAt?: string;
+  lastUpdatedBy?: string;
 }
 
 export interface ConfigurationItem {
