@@ -6,6 +6,8 @@ export type DashboardSummary = {
   booked_seats_today: number;
   employee_bookings_today: number;
   guest_bookings_today: number;
+  guest_visit_today: number;
+  guest_visit_booking_with_seat_today: number;
   blocked_seats: number;
   occupancy_percentage: number;
 };
