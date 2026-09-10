@@ -83,6 +83,8 @@ export function mapOccupancyRangeToTrend(
         }),
         occupancy: ceilPercentage(found?.occupancyRate ?? 0),
         bookedSeats: found?.bookedSeats ?? 0,
+        employeeBookedSeats: found?.employeeBookedSeats ?? 0,
+        guestBookedSeats: found?.guestBookedSeats ?? 0,
       });
     }
 
@@ -105,6 +107,8 @@ export function mapOccupancyRangeToTrend(
       }),
       occupancy: ceilPercentage(found?.occupancyRate ?? 0),
       bookedSeats: found?.bookedSeats ?? 0,
+      employeeBookedSeats: found?.employeeBookedSeats ?? 0,
+      guestBookedSeats: found?.guestBookedSeats ?? 0,
     });
   }
 
@@ -117,6 +121,8 @@ export function mapHierarchyToTopOffices(items: OccupancyHierarchyItem[]): TopOf
       name: item.siteName,
       value: ceilPercentage(item.occupancyRate),
       bookedSeats: item.bookedSeats,
+      employeeBookedSeats: item.employeeBookedSeats,
+      guestBookedSeats: item.guestBookedSeats,
       totalSeats: item.totalSeats,
     }))
     .sort((a, b) => b.value - a.value);
