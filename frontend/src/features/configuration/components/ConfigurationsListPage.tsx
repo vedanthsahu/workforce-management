@@ -138,7 +138,8 @@ const ACCENT_BAR_BY_ICON_COLOR: Record<string, string> = {
   "text-emerald-600": "bg-emerald-200",
   "text-orange-600": "bg-orange-200",
   "text-violet-600": "bg-violet-200",
-  "text-gray-600": "bg-gray-200",
+  
+  "text-gray-600":  "bg-gray-200",
 };
 
 /** Layout Visibility is the one exception: a single configuration whose
