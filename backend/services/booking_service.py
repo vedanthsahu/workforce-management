@@ -80,6 +80,7 @@ from backend.schemas.booking import (
     PaginatedBookingResponse,
 )
 from backend.schemas.pagination import PaginationMetadata
+from backend.services.business_rule_service import resolve_booking_advance_days
 from backend.services.notification_service import (
     booking_notification_details,
     queue_booking_cancelled_notification,
@@ -411,19 +412,25 @@ def book_seat(
                 "message": "Bookings cannot be created for a past date.",
             },
         )
-    if payload.booking_date > date.today() + timedelta(days=30):
+    employee_max_advance_days = resolve_booking_advance_days(
+        conn, tenant_id=tenant_id,
+    )["employee_max_advance_days"]
+    if payload.booking_date > date.today() + timedelta(days=employee_max_advance_days):
         safe_write_audit_log(
             conn, action=BOOKING_CREATED, tenant_id=tenant_id,
             current_user=current_user, resource_type="booking", resource_id=None,
             event_status="FAILURE",
             failure_code="booking_date_too_far_in_advance",
-            failure_reason="Bookings can only be made up to 30 days in advance.",
+            failure_reason=f"Bookings can only be made up to {employee_max_advance_days} days in advance.",
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "booking_date_too_far_in_advance",
-                "message": "Bookings can only be made up to 30 days in advance. Please select a date within the next 30 days.",
+                "message": (
+                    f"Bookings can only be made up to {employee_max_advance_days} days "
+                    f"in advance. Please select a date within the next {employee_max_advance_days} days."
+                ),
             },
         )
     booked_by_user_id = _current_user_id(current_user)
@@ -451,6 +458,7 @@ def book_seat(
             building_id=str(payload.building_id),
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
+            booking_date=payload.booking_date,
         )
         if seat is None:
             raise HTTPException(
@@ -1150,8 +1158,9 @@ def modify_booking(
             building_id=str(payload.building_id),
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
+            booking_date=payload.booking_date,
         )
- 
+
         if target_seat is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -1601,6 +1610,7 @@ def book_guest_seat(
             building_id=str(payload.building_id),
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
+            booking_date=payload.visit_date,
         )
 
         if seat is None:
@@ -1950,11 +1960,14 @@ payload: BookingEligibilityRequest,
             )
 
     if payload.seat_id is not None:
+        # Start date only, per the established rule for date-range
+        # bookings -- no ambiguity about which day in the range decides
+        # which layout applies.
         seat = fetch_seat_configuration(
             conn,
             tenant_id=tenant_id,
             seat_id=str(payload.seat_id),
-            require_current_layout=True,
+            booking_date=payload.start_date,
         )
         if seat is None:
             raise HTTPException(

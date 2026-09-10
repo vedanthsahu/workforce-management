@@ -1,5 +1,5 @@
 import { axiosInstance } from "@/lib/http/axios";
-import { Building, Floor, Layout, LayoutSeatStats, Site } from "../types/layout.types";
+import { Building, Floor, Layout, LayoutPolicy, LayoutSeatStats, Site } from "../types/layout.types";
 
 interface RawSite {
   site_id: number | string;
@@ -71,10 +71,22 @@ export async function getLayoutsByFloor(floorId: string): Promise<Layout[]> {
   return data;
 }
 
-export async function activateLayout(layoutId: string): Promise<Layout> {
+export async function activateLayout(
+  layoutId: string,
+  effectiveDate?: string,
+): Promise<Layout> {
+  // Omitted (or a today/past date, though this UI never offers one) =
+  // publish immediately. A future date schedules the layout instead of
+  // publishing it now -- see backend/services/floor_layout_service.py.
   const { data } = await axiosInstance.post<Layout>(
-    `/admin/floor-layouts/${layoutId}/activate`
+    `/admin/floor-layouts/${layoutId}/activate`,
+    effectiveDate ? { effective_date: effectiveDate } : undefined,
   );
+  return data;
+}
+
+export async function fetchLayoutPolicy(): Promise<LayoutPolicy> {
+  const { data } = await axiosInstance.get<LayoutPolicy>("/business-rules/layout-policy");
   return data;
 }
 

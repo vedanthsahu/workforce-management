@@ -50,6 +50,9 @@ AMENITY_UPDATED = "amenity.updated"
 FLOOR_LAYOUT_UPLOADED = "floor_layout.uploaded"
 FLOOR_LAYOUT_PUBLISHED = "floor_layout.published"
 FLOOR_LAYOUT_DELETED = "floor_layout.deleted"
+FLOOR_LAYOUT_SCHEDULED = "floor_layout.scheduled"
+FLOOR_LAYOUT_SCHEDULE_CANCELLED = "floor_layout.schedule_cancelled"
+FLOOR_LAYOUT_CUTOVER_PROMOTED = "floor_layout.cutover_promoted"
 
 # ── Guest booking lifecycle events ────────────────────────────────────────────
 GUEST_BOOKING_CANCELLED = "guest_booking.cancelled"

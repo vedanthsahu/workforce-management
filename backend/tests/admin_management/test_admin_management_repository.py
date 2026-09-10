@@ -126,7 +126,10 @@ class AdminManagementRepositoryTests(unittest.TestCase):
         self.assertIn("f.floor_name ILIKE %s", sql)
         self.assertEqual(
             params[:2],
-            [["DRAFT", "ARCHIVED", "PUBLISHED"], ["DRAFT", "ARCHIVED", "PUBLISHED"]],
+            [
+                ["DRAFT", "SCHEDULED", "ARCHIVED", "PUBLISHED"],
+                ["DRAFT", "SCHEDULED", "ARCHIVED", "PUBLISHED"],
+            ],
         )
         self.assertEqual(params[2:4], ["3", "1"])
 

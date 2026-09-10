@@ -188,13 +188,13 @@ const ADMIN_SETTINGS_NAV: NavItem[] = [
 ];
 
 const ADMIN_CONFIGURATION_NAV: NavItem[] = [
-  { id: "all_configurations", label: "Configuration", icon: SlidersHorizontal ,disabled: true},
+  { id: "all_configurations", label: "Configuration", icon: SlidersHorizontal ,disabled: false},
 ];
 //--------security nav config----------------------------------------------------
 const FRONT_OFFICE_DASHBOARD: NavItem[] = [
   { id: "front_office_dashboard", label: "Dashboard", icon: LayoutDashboard },
 ];
-
+  
 const FRONT_OFFICE_VISITOR_NAV: NavItem[] = [
   { id: "today_visitors", label: "Today's Visitors", icon: CalendarCheck, disabled: true },
   { id: "checked_in", label: "Checked-in Visitors", icon: UserCheck, disabled: true },
