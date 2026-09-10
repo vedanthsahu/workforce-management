@@ -125,6 +125,7 @@ from backend.services.booking_service import (
     _normalize_cancellation_reason,
     _user_role,
 )
+from backend.services.business_rule_service import resolve_booking_advance_days
 from backend.services.notification_service import (
     booking_notification_details,
     format_notification_value,
@@ -333,6 +334,7 @@ def _resolve_seat(
     building_id: str,
     floor_id: str,
     seat_id: str,
+    booking_date: date,
 ) -> dict[str, Any]:
     seat = fetch_seat_for_booking(
         conn,
@@ -341,6 +343,7 @@ def _resolve_seat(
         building_id=building_id,
         floor_id=floor_id,
         seat_id=seat_id,
+        booking_date=booking_date,
     )
     if seat is None:
         raise HTTPException(
@@ -844,6 +847,7 @@ def create_guest_visit(
     background_tasks: BackgroundTasks | None = None,
 ) -> GuestVisitResponse:
     _require_guest_operator(current_user)
+    tenant_id = str(current_user["tenant_id"])
     if payload.visit_date < date.today():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -852,15 +856,20 @@ def create_guest_visit(
                 "message": "Guest visits cannot be created for a past date.",
             },
         )
-    if payload.visit_date > date.today() + timedelta(days=15):
+    guest_max_advance_days = resolve_booking_advance_days(
+        conn, tenant_id=tenant_id,
+    )["guest_max_advance_days"]
+    if payload.visit_date > date.today() + timedelta(days=guest_max_advance_days):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "visit_date_too_far_in_advance",
-                "message": "Guest visits can only be booked up to 15 days in advance. Please select a date within the next 15 days.",
+                "message": (
+                    f"Guest visits can only be booked up to {guest_max_advance_days} days "
+                    f"in advance. Please select a date within the next {guest_max_advance_days} days."
+                ),
             },
         )
-    tenant_id = str(current_user["tenant_id"])
     floor_id = str(payload.floor_id) if payload.floor_id is not None else None
 
     try:
@@ -976,6 +985,7 @@ def create_guest_booking(
     background_tasks: BackgroundTasks | None = None,
 ) -> BookingResponse:
     _require_guest_operator(current_user)
+    tenant_id = str(current_user["tenant_id"])
     if payload.visit_date < date.today():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -984,15 +994,20 @@ def create_guest_booking(
                 "message": "Guest bookings cannot be created for a past date.",
             },
         )
-    if payload.visit_date > date.today() + timedelta(days=15):
+    guest_max_advance_days = resolve_booking_advance_days(
+        conn, tenant_id=tenant_id,
+    )["guest_max_advance_days"]
+    if payload.visit_date > date.today() + timedelta(days=guest_max_advance_days):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "visit_date_too_far_in_advance",
-                "message": "Guest visits can only be booked up to 15 days in advance. Please select a date within the next 15 days.",
+                "message": (
+                    f"Guest visits can only be booked up to {guest_max_advance_days} days "
+                    f"in advance. Please select a date within the next {guest_max_advance_days} days."
+                ),
             },
         )
-    tenant_id = str(current_user["tenant_id"])
     guest_id = str(payload.guest_id)
 
     try:
@@ -1015,6 +1030,7 @@ def create_guest_booking(
             building_id=str(payload.building_id),
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
+            booking_date=payload.visit_date,
         )
 
         # Same seat/date race as employee bookings -- no DB constraint
@@ -1375,6 +1391,7 @@ def modify_guest_booking(
             building_id=str(payload.building_id),
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
+            booking_date=payload.booking_date,
         )
 
         acquire_booking_slot_locks(
@@ -2074,6 +2091,7 @@ def create_booking_for_existing_guest_visit(
             building_id=str(payload.building_id),
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
+            booking_date=visit["visit_date"],
         )
 
         if has_active_booking_conflict(
@@ -2502,6 +2520,7 @@ def attach_seat_to_guest_visit(
             building_id=str(payload.building_id),
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
+            booking_date=visit["visit_date"],
         )
 
         if has_active_booking_conflict(
@@ -2819,6 +2838,7 @@ def execute_guest_visit_workflow(
                 building_id=str(payload.building_id),
                 floor_id=str(payload.floor_id),
                 seat_id=seat_id,
+                booking_date=payload.visit_date,
             )
             if guest_has_active_booking_on_date(
                 conn,
@@ -2978,6 +2998,7 @@ def execute_guest_visit_workflow(
                 site_id=str(payload.site_id),
                 building_id=str(payload.building_id),
                 floor_id=str(payload.floor_id),
+                booking_date=payload.visit_date,
                 seat_id=seat_id,
             )
             if guest_has_active_booking_on_date(

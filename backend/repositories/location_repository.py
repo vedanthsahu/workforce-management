@@ -1443,15 +1443,17 @@ def fetch_seat_configuration(
     *,
     tenant_id: str,
     seat_id: str,
-    require_current_layout: bool = False,
+    booking_date: date | None = None,
 ) -> dict[str, Any] | None:
     """Fetch one tenant-scoped seat for configuration updates.
 
-    Admin seat-configuration callers intentionally leave
-    ``require_current_layout`` False -- they must still be able to find and
-    fix a seat left over from a superseded layout. Callers validating
-    booking-time eligibility should pass True so a stale seat is treated as
-    not found, matching the booking/availability queries.
+    Admin seat-configuration callers intentionally leave ``booking_date``
+    unset -- they must still be able to find and fix a seat left over from
+    a superseded layout. Callers validating booking-time eligibility should
+    pass the requested date so a seat that doesn't belong to whichever
+    layout covers that date (the current PUBLISHED one, or a SCHEDULED one
+    if the date is on/after its effective_from) is treated as not found,
+    matching the booking/availability queries.
     """
     query = """
         SELECT
@@ -1467,20 +1469,23 @@ def fetch_seat_configuration(
         WHERE tenant_id = %s
           AND id = %s
     """
-    if require_current_layout:
+    params: list[Any] = [tenant_id, seat_id]
+    if booking_date is not None:
         query += """
           AND layout_id = (
               SELECT id
               FROM floor_layouts
               WHERE floor_id = seats.floor_id
                 AND tenant_id = seats.tenant_id
-                AND is_published = TRUE
-                AND status = 'PUBLISHED'
+                AND status IN ('PUBLISHED', 'SCHEDULED')
+                AND effective_from <= %s
+                AND (effective_till IS NULL OR effective_till > %s)
           )
         """
+        params.extend([booking_date, booking_date])
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(query, (tenant_id, seat_id))
+        cur.execute(query, params)
         row = cur.fetchone()
     return dict(row) if row else None
 

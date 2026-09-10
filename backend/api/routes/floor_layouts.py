@@ -25,6 +25,7 @@ from backend.core.audit_actions import FLOOR_LAYOUT_UPLOADED
 from backend.db.connection import get_db
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.schemas.floor_layout import (
+    ActivateFloorLayoutRequest,
     CreateFloorLayoutRequest,
     FloorLayoutResponse,
     LayoutSeatListResponse,
@@ -141,6 +142,10 @@ def activate_floor_layout_route(
     ],
 
     conn: Annotated[PGConnection, Depends(get_db)],
+
+    # Optional and defaulted so existing callers that send no body at all
+    # keep publishing immediately, exactly as before this field existed.
+    payload: ActivateFloorLayoutRequest | None = None,
 ) -> FloorLayoutResponse:
 
     result = activate_floor_layout(
@@ -148,6 +153,7 @@ def activate_floor_layout_route(
         current_user=current_user,
         layout_id=str(layout_id),
         background_tasks=background_tasks,
+        effective_date=payload.effective_date if payload is not None else None,
     )
     return result
 
