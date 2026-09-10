@@ -4,10 +4,17 @@ Schemas for floor layout upload and persistence.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+
+class ActivateFloorLayoutRequest(BaseModel):
+    # Omitted or a past/today date = publish immediately, exactly like
+    # before this field existed. A future date schedules the layout
+    # instead -- see floor_layout_service.activate_floor_layout.
+    effective_date: date | None = None
 
 
 class CreateFloorLayoutRequest(BaseModel):
@@ -82,6 +89,9 @@ class FloorLayoutResponse(BaseModel):
     published_at: datetime | None = None
 
     status: str
+
+    effective_from: datetime | None = None
+    effective_till: datetime | None = None
 
     created_at: datetime
     updated_at: datetime

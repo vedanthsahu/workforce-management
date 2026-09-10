@@ -14,12 +14,16 @@ from backend.services import floor_layout_service as floor_layout_service_module
 from backend.services.floor_layout_service import (
     LAYOUT_VISIBILITY_INTERVAL_UNIT,
     LAYOUT_VISIBILITY_PILOT_FLOOR_IDS,
-    LAYOUT_VISIBILITY_THRESHOLDS,
     activate_floor_layout,
     delete_floor_layout,
     get_floor_layout_seats,
     get_floor_layouts_by_floor,
 )
+
+# Same shape/values as the old hardcoded LAYOUT_VISIBILITY_THRESHOLDS
+# constant this superseded -- now sourced from business rules, so tests
+# mock resolve_layout_visibility_days instead of importing a constant.
+_VISIBILITY_DAYS = {"DRAFT": 15, "ARCHIVED": 30, "DELETED": 5}
 
 
 class FakeConnection:
@@ -91,7 +95,10 @@ class GetFloorLayoutsByFloorServiceTests(unittest.TestCase):
         with patch(
             "backend.services.floor_layout_service.fetch_floor_layouts_by_floor",
             return_value=[_layout_row(status="DRAFT")],
-        ) as mock_fetch, patch.object(
+        ) as mock_fetch, patch(
+            "backend.services.floor_layout_service.resolve_layout_visibility_days",
+            return_value=_VISIBILITY_DAYS,
+        ), patch.object(
             floor_layout_service_module,
             "LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS",
             True,
@@ -104,7 +111,7 @@ class GetFloorLayoutsByFloorServiceTests(unittest.TestCase):
 
         self.assertEqual(
             mock_fetch.call_args.kwargs["visibility_thresholds"],
-            LAYOUT_VISIBILITY_THRESHOLDS,
+            _VISIBILITY_DAYS,
         )
         self.assertEqual(
             mock_fetch.call_args.kwargs["visibility_unit"],
@@ -121,7 +128,10 @@ class GetFloorLayoutsByFloorServiceTests(unittest.TestCase):
         with patch(
             "backend.services.floor_layout_service.fetch_floor_layouts_by_floor",
             return_value=[_layout_row(status="DRAFT")],
-        ) as mock_fetch, patch.object(
+        ) as mock_fetch, patch(
+            "backend.services.floor_layout_service.resolve_layout_visibility_days",
+            return_value=_VISIBILITY_DAYS,
+        ), patch.object(
             floor_layout_service_module,
             "LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS",
             False,
@@ -131,7 +141,7 @@ class GetFloorLayoutsByFloorServiceTests(unittest.TestCase):
             )
             self.assertEqual(
                 mock_fetch.call_args.kwargs["visibility_thresholds"],
-                LAYOUT_VISIBILITY_THRESHOLDS,
+                _VISIBILITY_DAYS,
             )
 
             get_floor_layouts_by_floor(

@@ -55,7 +55,7 @@ interface UsePublishLayoutReturn {
   publishError:  boolean;
   canPublish:    boolean;
   allConfigured: boolean;
-  publishLayout: () => Promise<void>;
+  publishLayout: (effectiveDate?: string) => Promise<void>;
 }
 
 export function usePublishLayout(
@@ -82,7 +82,7 @@ export function usePublishLayout(
       (layout.is_published && isDirty)
     );
 
-  const publishLayout = useCallback(async () => {
+  const publishLayout = useCallback(async (effectiveDate?: string) => {
     if (!layout?.layout_id) return;
     setPublishing(true);
     setPublishError(false);
@@ -97,6 +97,14 @@ export function usePublishLayout(
         // request, each dirty seat carrying its own fields (no more
         // grouping-by-identical-payload — the new payload shape allows
         // per-seat overrides in a single call).
+        //
+        // NOTE: effectiveDate is deliberately NOT sent here.
+        // bulk-configuration has no scheduling concept at all -- it edits
+        // the live layout's seats immediately, regardless of what's picked
+        // in the dialog. The confirm dialog's copy for this case ("...make
+        // them available to users on the selected effective date") is not
+        // actually true today; either the copy needs correcting or this
+        // path needs its own scheduling support, which doesn't exist yet.
         const dirtySeats = seats.filter((s) => dirtyMappingIds.has(s.layout_seat_mapping_id));
         const entries: SeatBulkEntry[] = dirtySeats.map((seat) => ({
           layout_seat_mapping_id: Number(seat.layout_seat_mapping_id),
@@ -116,7 +124,11 @@ export function usePublishLayout(
         // First (or re-)promotion of a DRAFT/ARCHIVED layout to PUBLISHED.
         // Seat data was already written immediately while the layout was a
         // draft, so this call carries no seat payload of its own.
-        await activateLayout(layout.layout_id);
+        // effectiveDate, if in the future, schedules the layout instead of
+        // publishing it immediately -- the backend validates it against the
+        // tenant's minimum scheduling gap (see GET /business-rules/layout-
+        // policy) and rejects anything too soon.
+        await activateLayout(layout.layout_id, effectiveDate);
       }
 
       clearDirty();
