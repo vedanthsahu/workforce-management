@@ -125,6 +125,7 @@ from backend.services.booking_service import (
     _normalize_cancellation_reason,
     _user_role,
 )
+from backend.services.business_rule_service import resolve_booking_advance_days
 from backend.services.notification_service import (
     booking_notification_details,
     format_notification_value,
@@ -333,6 +334,7 @@ def _resolve_seat(
     building_id: str,
     floor_id: str,
     seat_id: str,
+    booking_date: date,
 ) -> dict[str, Any]:
     seat = fetch_seat_for_booking(
         conn,
@@ -341,6 +343,7 @@ def _resolve_seat(
         building_id=building_id,
         floor_id=floor_id,
         seat_id=seat_id,
+        booking_date=booking_date,
     )
     if seat is None:
         raise HTTPException(
@@ -844,6 +847,7 @@ def create_guest_visit(
     background_tasks: BackgroundTasks | None = None,
 ) -> GuestVisitResponse:
     _require_guest_operator(current_user)
+    tenant_id = str(current_user["tenant_id"])
     if payload.visit_date < date.today():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -852,15 +856,20 @@ def create_guest_visit(
                 "message": "Guest visits cannot be created for a past date.",
             },
         )
-    if payload.visit_date > date.today() + timedelta(days=15):
+    guest_max_advance_days = resolve_booking_advance_days(
+        conn, tenant_id=tenant_id,
+    )["guest_max_advance_days"]
+    if payload.visit_date > date.today() + timedelta(days=guest_max_advance_days):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "visit_date_too_far_in_advance",
-                "message": "Guest visits can only be booked up to 15 days in advance. Please select a date within the next 15 days.",
+                "message": (
+                    f"Guest visits can only be booked up to {guest_max_advance_days} days "
+                    f"in advance. Please select a date within the next {guest_max_advance_days} days."
+                ),
             },
         )
-    tenant_id = str(current_user["tenant_id"])
     floor_id = str(payload.floor_id) if payload.floor_id is not None else None
 
     try:
@@ -976,6 +985,7 @@ def create_guest_booking(
     background_tasks: BackgroundTasks | None = None,
 ) -> BookingResponse:
     _require_guest_operator(current_user)
+    tenant_id = str(current_user["tenant_id"])
     if payload.visit_date < date.today():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -984,15 +994,20 @@ def create_guest_booking(
                 "message": "Guest bookings cannot be created for a past date.",
             },
         )
-    if payload.visit_date > date.today() + timedelta(days=15):
+    guest_max_advance_days = resolve_booking_advance_days(
+        conn, tenant_id=tenant_id,
+    )["guest_max_advance_days"]
+    if payload.visit_date > date.today() + timedelta(days=guest_max_advance_days):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "visit_date_too_far_in_advance",
-                "message": "Guest visits can only be booked up to 15 days in advance. Please select a date within the next 15 days.",
+                "message": (
+                    f"Guest visits can only be booked up to {guest_max_advance_days} days "
+                    f"in advance. Please select a date within the next {guest_max_advance_days} days."
+                ),
             },
         )
-    tenant_id = str(current_user["tenant_id"])
     guest_id = str(payload.guest_id)
 
     try:
@@ -1015,6 +1030,7 @@ def create_guest_booking(
             building_id=str(payload.building_id),
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
+            booking_date=payload.visit_date,
         )
 
         # Same seat/date race as employee bookings -- no DB constraint
@@ -1375,6 +1391,7 @@ def modify_guest_booking(
             building_id=str(payload.building_id),
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
+            booking_date=payload.booking_date,
         )
 
         acquire_booking_slot_locks(
@@ -1432,7 +1449,9 @@ def modify_guest_booking(
             tenant_id=tenant_id,
             guest_id=guest_id,
             guest_visit_id=guest_visit_id,
-            booked_by_user_id=_current_user_id(current_user),
+            # Preserve the original delegate across the modify-replace chain
+            # -- see the matching comment in booking_service.modify_booking.
+            booked_by_user_id=str(booking["booked_by_user_id"]),
             seat=target_seat,
             booking_date=payload.booking_date,
             modified_from_booking_id=booking_id,
@@ -2072,6 +2091,7 @@ def create_booking_for_existing_guest_visit(
             building_id=str(payload.building_id),
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
+            booking_date=visit["visit_date"],
         )
 
         if has_active_booking_conflict(
@@ -2323,16 +2343,14 @@ def modify_guest_visit(
         )
 
         if active_booking is not None:
+            # Unlike modify_booking/modify_guest_booking, this booking is
+            # carried forward in place by sync_booking_from_guest_visit
+            # below rather than replaced with a new row (this endpoint has
+            # no seat_id to re-resolve a fresh booking against). Marking it
+            # MODIFIED here would flip its status before that UPDATE runs,
+            # making sync_booking_from_guest_visit's WHERE clause match zero
+            # rows and silently orphan the guest's seat reservation.
             _validate_mutable_guest_booking(active_booking, action="modify")
-            mark_booking_modified(
-                conn,
-                tenant_id=tenant_id,
-                booking_id=str(active_booking["booking_id"]),
-                modification_reason=_booking_modification_reason(
-                    payload.modification_reason
-                ),
-                updated_by_user_id=_current_user_id(current_user),
-            )
 
         mark_guest_visit_modified(
             conn,
@@ -2358,7 +2376,10 @@ def modify_guest_visit(
             end_time=payload.end_time,
             notes=_clean_optional(payload.notes),
             requires_seat=bool(visit["requires_seat"]),
-            created_by_user_id=_current_user_id(current_user),
+            # Preserve the original delegate/creator across the modify-
+            # replace chain -- see the matching comment in
+            # booking_service.modify_booking.
+            created_by_user_id=str(visit["created_by_user_id"]),
             modified_from_guest_visit_id=guest_visit_id,
         )
 
@@ -2366,6 +2387,7 @@ def modify_guest_visit(
             conn,
             tenant_id=tenant_id,
             guest_visit_id=guest_visit_id,
+            new_guest_visit_id=str(new_visit["guest_visit_id"]),
             site_id=str(payload.site_id),
             building_id=str(payload.building_id),
             floor_id=floor_id,
@@ -2498,6 +2520,7 @@ def attach_seat_to_guest_visit(
             building_id=str(payload.building_id),
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
+            booking_date=visit["visit_date"],
         )
 
         if has_active_booking_conflict(
@@ -2720,7 +2743,10 @@ def execute_guest_visit_workflow(
                 end_time=payload.end_time,
                 notes=_clean_optional(payload.notes),
                 requires_seat=bool(visit["requires_seat"]),
-                created_by_user_id=_current_user_id(current_user),
+                # Preserve the original delegate/creator across the modify-
+                # replace chain -- see the matching comment in
+                # booking_service.modify_booking.
+                created_by_user_id=str(visit["created_by_user_id"]),
                 modified_from_guest_visit_id=guest_visit_id,
             )
             result = _build_guest_workflow_response(
@@ -2812,6 +2838,7 @@ def execute_guest_visit_workflow(
                 building_id=str(payload.building_id),
                 floor_id=str(payload.floor_id),
                 seat_id=seat_id,
+                booking_date=payload.visit_date,
             )
             if guest_has_active_booking_on_date(
                 conn,
@@ -2862,7 +2889,10 @@ def execute_guest_visit_workflow(
                 end_time=payload.end_time,
                 notes=_clean_optional(payload.notes),
                 requires_seat=True,
-                created_by_user_id=_current_user_id(current_user),
+                # Preserve the original delegate/creator across the modify-
+                # replace chain -- see the matching comment in
+                # booking_service.modify_booking.
+                created_by_user_id=str(visit["created_by_user_id"]),
                 modified_from_guest_visit_id=guest_visit_id,
             )
             new_visit_id = str(new_visit["guest_visit_id"])
@@ -2871,7 +2901,7 @@ def execute_guest_visit_workflow(
                 tenant_id=tenant_id,
                 guest_id=str(visit["guest_id"]),
                 guest_visit_id=new_visit_id,
-                booked_by_user_id=_current_user_id(current_user),
+                booked_by_user_id=str(booking["booked_by_user_id"]),
                 seat=seat,
                 booking_date=payload.visit_date,
                 modified_from_booking_id=old_booking_id,
@@ -2968,6 +2998,7 @@ def execute_guest_visit_workflow(
                 site_id=str(payload.site_id),
                 building_id=str(payload.building_id),
                 floor_id=str(payload.floor_id),
+                booking_date=payload.visit_date,
                 seat_id=seat_id,
             )
             if guest_has_active_booking_on_date(

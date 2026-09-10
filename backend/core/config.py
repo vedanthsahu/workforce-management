@@ -98,6 +98,9 @@ class Settings(BaseSettings):
     graph_team_sync_enabled: bool = False
     graph_team_sync_interval_minutes: int = 60
 
+    layout_cutover_enabled: bool = True
+    layout_cutover_interval_minutes: int = 5
+
     app_log_level: str = "INFO"
     app_trace_functions: bool = False
 
@@ -180,6 +183,8 @@ class Settings(BaseSettings):
             raise ValueError("graph_role_sync_interval_minutes must be greater than zero")
         if self.graph_team_sync_interval_minutes <= 0:
             raise ValueError("graph_team_sync_interval_minutes must be greater than zero")
+        if self.layout_cutover_interval_minutes <= 0:
+            raise ValueError("layout_cutover_interval_minutes must be greater than zero")
 
         graph_group_id = str(self.graph_facilitator_group_id or "").strip()
         object.__setattr__(

@@ -30,6 +30,7 @@ from backend.api.routes.admin_bookings import router as admin_bookings_router
 from backend.api.routes.admin_dashboard import router as admin_dashboard_router
 from backend.api.routes.auth import router as auth_router
 from backend.api.routes.bookings import router as bookings_router
+from backend.api.routes.business_rules import router as business_rules_router
 from backend.api.routes.dashboard import router as dashboard_router
 from backend.api.routes.floor_layouts import router as floor_layout_router
 from backend.api.routes.guest_bookings import router as guest_bookings_router
@@ -56,6 +57,7 @@ from backend.services.auth_service import (
     sync_department_teams,
     sync_graph_managed_roles,
 )
+from backend.services.floor_layout_service import promote_scheduled_floor_layouts
 
 settings = get_settings()
 configure_logging(
@@ -73,6 +75,10 @@ graph_team_sync_logger = logging.getLogger(f"{LOGGER_NAME}.graph_team_sync")
 _graph_team_sync_stop = threading.Event()
 _graph_team_sync_thread: threading.Thread | None = None
 
+layout_cutover_logger = logging.getLogger(f"{LOGGER_NAME}.layout_cutover")
+_layout_cutover_stop = threading.Event()
+_layout_cutover_thread: threading.Thread | None = None
+
 # The application exposes a single frontend origin and composes feature routers
 # from the authentication, SSO, booking, and location modules.
 app = FastAPI(title="Seat Management Backend")
@@ -86,6 +92,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(sso_router)
 app.include_router(bookings_router)
+app.include_router(business_rules_router)
 app.include_router(guests_router)
 app.include_router(guest_visits_router)
 app.include_router(guest_bookings_router)
@@ -218,6 +225,7 @@ def startup() -> None:
         conn.commit()
     _start_graph_role_sync_scheduler()
     _start_graph_team_sync_scheduler()
+    _start_layout_cutover_scheduler()
 
 
 @app.on_event("shutdown")
@@ -225,6 +233,7 @@ def shutdown() -> None:
     """Stop optional background workers before process shutdown."""
     _stop_graph_role_sync_scheduler()
     _stop_graph_team_sync_scheduler()
+    _stop_layout_cutover_scheduler()
 
 
 @app.get("/")
@@ -510,6 +519,49 @@ def _graph_team_sync_loop() -> None:
             graph_team_sync_logger.exception("graph_team_sync.failed")
 
         if _graph_team_sync_stop.wait(interval_seconds):
+            break
+
+
+def _start_layout_cutover_scheduler() -> None:
+    global _layout_cutover_thread
+    if not settings.layout_cutover_enabled:
+        return
+    if _layout_cutover_thread and _layout_cutover_thread.is_alive():
+        return
+
+    _layout_cutover_stop.clear()
+    _layout_cutover_thread = threading.Thread(
+        target=_layout_cutover_loop,
+        name="layout-cutover",
+        daemon=True,
+    )
+    _layout_cutover_thread.start()
+
+
+def _stop_layout_cutover_scheduler() -> None:
+    if _layout_cutover_thread is None:
+        return
+    _layout_cutover_stop.set()
+    _layout_cutover_thread.join(timeout=5)
+
+
+def _layout_cutover_loop() -> None:
+    interval_seconds = settings.layout_cutover_interval_minutes * 60
+    while not _layout_cutover_stop.is_set():
+        try:
+            with get_db_connection() as conn:
+                result = promote_scheduled_floor_layouts(conn)
+            if result.scanned:
+                layout_cutover_logger.info(
+                    "layout_cutover.complete scanned=%s promoted=%s failed=%s",
+                    result.scanned,
+                    result.promoted,
+                    result.failed,
+                )
+        except Exception:
+            layout_cutover_logger.exception("layout_cutover.failed")
+
+        if _layout_cutover_stop.wait(interval_seconds):
             break
 
 

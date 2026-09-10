@@ -5,7 +5,10 @@ Service layer for floor layout workflows.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import psycopg2
 from boto3.exceptions import S3UploadFailedError
@@ -14,7 +17,13 @@ from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from psycopg2.extensions import connection as PGConnection
 
 from backend.core.app_logging import LOGGER_NAME
-from backend.core.audit_actions import FLOOR_LAYOUT_DELETED, FLOOR_LAYOUT_PUBLISHED
+from backend.core.audit_actions import (
+    FLOOR_LAYOUT_CUTOVER_PROMOTED,
+    FLOOR_LAYOUT_DELETED,
+    FLOOR_LAYOUT_PUBLISHED,
+    FLOOR_LAYOUT_SCHEDULE_CANCELLED,
+    FLOOR_LAYOUT_SCHEDULED,
+)
 from backend.core.config import get_settings
 from backend.core.enums import LayoutStatus
 from backend.core.storage import upload_svg_to_s3
@@ -26,10 +35,16 @@ from backend.repositories.floor_layout_repository import (
     fetch_floor_layout_by_id,
     fetch_floor_layouts_by_floor,
     fetch_layout_seats_by_layout_id,
+    fetch_published_layout_for_floor,
+    fetch_scheduled_layout_for_floor,
+    fetch_scheduled_layouts_due,
+    fetch_site_timezone,
     get_next_layout_version,
     insert_floor_layout,
     publish_layout_seat_configurations,
     reconcile_published_layout_seats,
+    schedule_floor_layout as schedule_floor_layout_record,
+    set_published_layout_effective_till,
     soft_delete_floor_layout,
 )
 from backend.repositories.floor_layout_repository import (
@@ -37,6 +52,10 @@ from backend.repositories.floor_layout_repository import (
 )
 from backend.repositories.layout_seat_mapping_repository import (
     bulk_insert_layout_seat_mappings,
+)
+from backend.services.business_rule_service import (
+    resolve_layout_scheduling_gap,
+    resolve_layout_visibility_days,
 )
 
 # Floors enrolled in the age-based list-visibility rule when
@@ -52,22 +71,19 @@ LAYOUT_VISIBILITY_PILOT_FLOOR_IDS: frozenset[str] = frozenset({"9"})
 LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS: bool = True
 
 # How long a layout may sit in each status before it drops out of the list
-# for an enrolled floor, in units of LAYOUT_VISIBILITY_INTERVAL_UNIT below.
-# This does not delete data — rows stay in the database and are still
-# reachable outside this filtered list. PUBLISHED is never hidden. Based on
-# updated_at (no dedicated status-timestamp column today), so an unrelated
-# edit to a DRAFT/ARCHIVED layout's seats can reset its clock — a known,
-# accepted tradeoff, not a bug.
-LAYOUT_VISIBILITY_THRESHOLDS: dict[str, int] = {
-    "DRAFT": 15,
-    "ARCHIVED": 30,
-    "DELETED": 5,
-}
+# for an enrolled floor. Tenant-configurable -- see resolve_layout_
+# visibility_days (business_rule_service.py), keys floor_layouts.
+# visibility_days.{draft,archived,deleted}. This does not delete data —
+# rows stay in the database and are still reachable outside this filtered
+# list. PUBLISHED is never hidden. Based on updated_at (no dedicated
+# status-timestamp column today), so an unrelated edit to a DRAFT/ARCHIVED
+# layout's seats can reset its clock — a known, accepted tradeoff, not a
+# bug.
 
-# "days" is the real production setting. Switch to "minutes" (and drop the
-# thresholds above to something small, e.g. 3) to verify the rule end to
-# end without an actual multi-day wait -- then switch both back before this
-# goes anywhere near production. Nothing else about the code changes
+# "days" is the real production setting. Switch to "minutes" (and the
+# business rule values to something small, e.g. 3) to verify the rule end
+# to end without an actual multi-day wait -- then switch both back before
+# this goes anywhere near production. Nothing else about the code changes
 # between the two.
 LAYOUT_VISIBILITY_INTERVAL_UNIT: str = "days"
 from backend.repositories.user_repository import fetch_admin_notification_emails
@@ -250,18 +266,20 @@ def get_floor_layouts_by_floor(
     floor_id: str,
 ) -> list[FloorLayoutResponse]:
     """Return all layouts for one tenant-scoped floor."""
+    tenant_id = str(current_user["tenant_id"])
     layout_visibility_enabled = (
         LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS
         or floor_id in LAYOUT_VISIBILITY_PILOT_FLOOR_IDS
     )
     visibility_thresholds = (
-        LAYOUT_VISIBILITY_THRESHOLDS if layout_visibility_enabled else None
+        resolve_layout_visibility_days(conn, tenant_id=tenant_id)
+        if layout_visibility_enabled else None
     )
 
     try:
         layouts = fetch_floor_layouts_by_floor(
             conn,
-            tenant_id=str(current_user["tenant_id"]),
+            tenant_id=tenant_id,
             floor_id=floor_id,
             visibility_thresholds=visibility_thresholds,
             visibility_unit=LAYOUT_VISIBILITY_INTERVAL_UNIT,
@@ -343,16 +361,147 @@ def get_floor_layout_seats(
         items=items,
     )
 
+def _resolve_admin_min_advance_days(conn: PGConnection, *, tenant_id: str) -> int:
+    """The minimum number of days out an admin must schedule a new layout,
+    so it can never take effect before every booking a user could already
+    have made against the old layout has passed. Employee window + buffer,
+    both live business rules -- see resolve_layout_scheduling_gap."""
+    return resolve_layout_scheduling_gap(conn, tenant_id=tenant_id)["min_advance_days"]
+
+
+def _resolve_employee_max_advance_days(conn: PGConnection, *, tenant_id: str) -> int:
+    return resolve_layout_scheduling_gap(conn, tenant_id=tenant_id)["employee_max_advance_days"]
+
+
+def _site_local_today(tz_name: str | None) -> date:
+    if not tz_name:
+        return datetime.now().date()
+    return datetime.now(ZoneInfo(tz_name)).date()
+
+
+def _effective_instant_for_date(effective_date: date, tz_name: str | None) -> datetime:
+    """Midnight on `effective_date`, in the target site's own timezone --
+    not the server's. "26 Aug" means midnight in Jakarta for a Jakarta
+    floor, not midnight UTC."""
+    naive_midnight = datetime.combine(effective_date, time.min)
+    if not tz_name:
+        return naive_midnight.replace(tzinfo=ZoneInfo("UTC"))
+    return naive_midnight.replace(tzinfo=ZoneInfo(tz_name))
+
+
+def _schedule_floor_layout(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    layout: dict[str, Any],
+    effective_date: date,
+) -> FloorLayoutResponse:
+    """Schedule a DRAFT layout to take over automatically once its
+    effective date arrives, instead of publishing it immediately.
+
+    Does not touch seats or run publish_layout_seat_configurations /
+    reconcile_published_layout_seats -- those only run at actual cutover
+    (see promote_scheduled_floor_layouts), whether that's driven by the
+    background job or, one day, pg_cron.
+    """
+    tenant_id = str(current_user["tenant_id"])
+    user_id = str(current_user["user_id"])
+    layout_id = str(layout["layout_id"])
+    floor_id = str(layout["floor_id"])
+
+    tz_name = fetch_site_timezone(conn, tenant_id=tenant_id, site_id=str(layout["site_id"]))
+    site_today = _site_local_today(tz_name)
+    min_advance_days = _resolve_admin_min_advance_days(conn, tenant_id=tenant_id)
+
+    if effective_date < site_today + timedelta(days=min_advance_days):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "effective_date_too_soon",
+                "message": (
+                    f"Effective date must be at least {min_advance_days} days out, "
+                    "so no user booking can ever land on a layout that's about to "
+                    "be replaced."
+                ),
+            },
+        )
+
+    existing_scheduled = fetch_scheduled_layout_for_floor(
+        conn, tenant_id=tenant_id, floor_id=floor_id,
+    )
+    if existing_scheduled is not None and existing_scheduled["layout_id"] != layout_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "floor_already_has_scheduled_layout",
+                "message": (
+                    "This floor already has a layout scheduled. Discard it "
+                    "first, or wait for it to take effect, before scheduling "
+                    "another one."
+                ),
+            },
+        )
+
+    acquire_floor_publish_lock(conn, tenant_id=tenant_id, floor_id=floor_id)
+
+    effective_instant = _effective_instant_for_date(effective_date, tz_name)
+
+    # Must close the current PUBLISHED layout's window BEFORE writing the
+    # new SCHEDULED row -- excl_floor_layouts_no_overlap is checked per
+    # statement, not deferred, so doing this in the other order would
+    # reject the new row as overlapping the old one's still-open window.
+    published = fetch_published_layout_for_floor(conn, tenant_id=tenant_id, floor_id=floor_id)
+    if published is not None:
+        set_published_layout_effective_till(
+            conn,
+            tenant_id=tenant_id,
+            layout_id=published["layout_id"],
+            effective_till=effective_instant,
+            updated_by_user_id=user_id,
+        )
+
+    scheduled_layout = schedule_floor_layout_record(
+        conn,
+        tenant_id=tenant_id,
+        layout_id=layout_id,
+        effective_from=effective_instant,
+        scheduled_by_user_id=user_id,
+    )
+
+    conn.commit()
+
+    safe_write_audit_log(
+        conn,
+        action=FLOOR_LAYOUT_SCHEDULED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="floor_layout",
+        resource_id=layout_id,
+        old_values={"status": layout["status"]},
+        new_values={
+            "status": scheduled_layout["status"],
+            "effective_from": effective_instant.isoformat(),
+        },
+        changed_fields=["status", "effective_from"],
+    )
+
+    return FloorLayoutResponse(**scheduled_layout)
+
+
 def activate_floor_layout(
     conn: PGConnection,
     *,
     current_user: dict[str, Any],
     layout_id: str,
     background_tasks: BackgroundTasks | None = None,
+    effective_date: date | None = None,
 ) -> FloorLayoutResponse:
-    """Publish one layout and archive any currently active layout on the floor."""
+    """Publish one layout and archive any currently active layout on the
+    floor -- or, if `effective_date` is a future date, schedule it to take
+    over automatically once that date arrives instead of publishing now."""
     tenant_id = str(current_user["tenant_id"])
     user_id = str(current_user["user_id"])
+    failure_audit_action = FLOOR_LAYOUT_PUBLISHED
 
     try:
         layout = fetch_floor_layout_by_id(
@@ -384,6 +533,21 @@ def activate_floor_layout(
             # publish/reconcile sync here on every activate call would be
             # redundant with that and is deliberately not done.
             return FloorLayoutResponse(**layout)
+
+        if effective_date is not None:
+            tz_name = fetch_site_timezone(
+                conn, tenant_id=tenant_id, site_id=str(layout["site_id"]),
+            )
+            if effective_date > _site_local_today(tz_name):
+                failure_audit_action = FLOOR_LAYOUT_SCHEDULED
+                return _schedule_floor_layout(
+                    conn,
+                    current_user=current_user,
+                    layout=layout,
+                    effective_date=effective_date,
+                )
+            # effective_date is today or in the past: fall through and
+            # publish immediately, exactly as if no date had been given.
 
         # No unique index enforces "one published layout per floor" at the
         # DB level today -- serialize concurrent activate attempts for
@@ -447,7 +611,7 @@ def activate_floor_layout(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=FLOOR_LAYOUT_PUBLISHED, tenant_id=tenant_id,
+            conn, action=failure_audit_action, tenant_id=tenant_id,
             current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
             event_status="FAILURE",
             failure_code=_d.get("code"),
@@ -458,7 +622,7 @@ def activate_floor_layout(
     except psycopg2.Error as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=FLOOR_LAYOUT_PUBLISHED, tenant_id=tenant_id,
+            conn, action=failure_audit_action, tenant_id=tenant_id,
             current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
             event_status="FAILURE",
             failure_code="floor_layout_activate_failed",
@@ -475,6 +639,121 @@ def activate_floor_layout(
     return FloorLayoutResponse(**activated_layout)
 
 
+@dataclass
+class LayoutCutoverResult:
+    """Summary returned by promote_scheduled_floor_layouts."""
+
+    scanned: int = 0
+    promoted: int = 0
+    failed: int = 0
+
+
+def promote_scheduled_floor_layouts(conn: PGConnection) -> LayoutCutoverResult:
+    """Cutover job: find every SCHEDULED layout (any tenant, any floor)
+    whose effective_from has arrived, and promote it -- archive the
+    floor's current PUBLISHED layout, activate the SCHEDULED one, and run
+    the same seat publish/reconcile steps activate_floor_layout runs for
+    an immediate publish. One floor's failure does not block the others.
+
+    Intended to run on a recurring background schedule (see
+    _start_layout_cutover_scheduler in main.py); can equally be called
+    on demand or wired to pg_cron later -- the SQL/transition logic here
+    doesn't care what triggered it.
+
+    Uses each layout's own uploaded_by_user_id to stamp the *_by_user_id
+    columns (those are NOT NULL in practice / expected to be a real user),
+    while the audit log records the actor as the system, not that person
+    -- see actor_role="SYSTEM" below.
+    """
+    due = fetch_scheduled_layouts_due(conn)
+    result = LayoutCutoverResult(scanned=len(due))
+
+    for entry in due:
+        tenant_id = entry["tenant_id"]
+        floor_id = entry["floor_id"]
+        layout_id = entry["layout_id"]
+
+        try:
+            layout = fetch_floor_layout_by_id(
+                conn, tenant_id=tenant_id, layout_id=layout_id,
+            )
+            if layout is None or layout["status"] != LayoutStatus.SCHEDULED.value:
+                # Raced with a manual discard/re-schedule between the scan
+                # above and now -- nothing to do, not a failure.
+                continue
+
+            actor_user_id = str(layout["uploaded_by_user_id"])
+
+            acquire_floor_publish_lock(conn, tenant_id=tenant_id, floor_id=floor_id)
+
+            archive_existing_published_layouts(
+                conn,
+                tenant_id=tenant_id,
+                floor_id=floor_id,
+                archived_by_user_id=actor_user_id,
+            )
+
+            activated_layout = activate_floor_layout_record(
+                conn,
+                tenant_id=tenant_id,
+                layout_id=layout_id,
+                published_by_user_id=actor_user_id,
+            )
+
+            publish_layout_seat_configurations(
+                conn,
+                tenant_id=tenant_id,
+                layout_id=layout_id,
+                published_by_user_id=actor_user_id,
+            )
+
+            reconcile_published_layout_seats(
+                conn,
+                tenant_id=tenant_id,
+                floor_id=floor_id,
+                layout_id=layout_id,
+            )
+
+            conn.commit()
+
+            safe_write_audit_log(
+                conn,
+                action=FLOOR_LAYOUT_CUTOVER_PROMOTED,
+                tenant_id=tenant_id,
+                actor_user_id=None,
+                actor_role="SYSTEM",
+                actor_email="system@layout-cutover",
+                resource_type="floor_layout",
+                resource_id=layout_id,
+                old_values={"status": LayoutStatus.SCHEDULED.value},
+                new_values={
+                    "status": activated_layout["status"],
+                    "effective_from": str(entry["effective_from"]),
+                },
+                changed_fields=["status"],
+            )
+
+            result.promoted += 1
+
+        except Exception:
+            conn.rollback()
+            result.failed += 1
+            safe_write_audit_log(
+                conn,
+                action=FLOOR_LAYOUT_CUTOVER_PROMOTED,
+                tenant_id=tenant_id,
+                actor_role="SYSTEM",
+                actor_email="system@layout-cutover",
+                resource_type="floor_layout",
+                resource_id=layout_id,
+                event_status="FAILURE",
+                failure_code="layout_cutover_failed",
+                failure_reason="Scheduled layout promotion failed.",
+            )
+
+    return result
+
+
 def delete_floor_layout(
     conn: PGConnection,
     *,
@@ -487,6 +766,7 @@ def delete_floor_layout(
     layouts are treated as already gone (404), never as a distinct state.
     """
     tenant_id = str(current_user["tenant_id"])
+    audit_action = FLOOR_LAYOUT_DELETED
 
     try:
         layout = fetch_floor_layout_by_id(
@@ -513,6 +793,48 @@ def delete_floor_layout(
                 },
             )
 
+        if layout["status"] == LayoutStatus.SCHEDULED.value:
+            audit_action = FLOOR_LAYOUT_SCHEDULE_CANCELLED
+
+            # Once an employee's booking window could already reach the
+            # scheduled layout's effective date, real bookings may already
+            # exist against it -- discarding it now would strand them.
+            # Before that point, it's still guaranteed unreachable and can
+            # be freely cancelled.
+            employee_max_advance_days = _resolve_employee_max_advance_days(
+                conn, tenant_id=tenant_id,
+            )
+            danger_window_start = layout["effective_from"] - timedelta(
+                days=employee_max_advance_days,
+            )
+            if datetime.now(timezone.utc) >= danger_window_start:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "floor_layout_schedule_locked",
+                        "message": (
+                            "This layout is too close to its effective date to "
+                            "cancel -- employees may already have bookings "
+                            "against it."
+                        ),
+                    },
+                )
+
+            # Reopen the currently-published layout's window that was
+            # closed when this one was scheduled -- it's the active layout
+            # again, indefinitely, now that its replacement is cancelled.
+            published = fetch_published_layout_for_floor(
+                conn, tenant_id=tenant_id, floor_id=str(layout["floor_id"]),
+            )
+            if published is not None:
+                set_published_layout_effective_till(
+                    conn,
+                    tenant_id=tenant_id,
+                    layout_id=published["layout_id"],
+                    effective_till=None,
+                    updated_by_user_id=str(current_user["user_id"]),
+                )
+
         deleted_layout = soft_delete_floor_layout(
             conn,
             tenant_id=tenant_id,
@@ -532,7 +854,7 @@ def delete_floor_layout(
 
         safe_write_audit_log(
             conn,
-            action=FLOOR_LAYOUT_DELETED,
+            action=audit_action,
             tenant_id=tenant_id,
             current_user=current_user,
             resource_type="floor_layout",
@@ -546,7 +868,7 @@ def delete_floor_layout(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=FLOOR_LAYOUT_DELETED, tenant_id=tenant_id,
+            conn, action=audit_action, tenant_id=tenant_id,
             current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
             event_status="FAILURE",
             failure_code=_d.get("code"),
@@ -557,7 +879,7 @@ def delete_floor_layout(
     except psycopg2.Error as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=FLOOR_LAYOUT_DELETED, tenant_id=tenant_id,
+            conn, action=audit_action, tenant_id=tenant_id,
             current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
             event_status="FAILURE",
             failure_code="floor_layout_delete_failed",
