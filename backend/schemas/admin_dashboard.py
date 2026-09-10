@@ -121,6 +121,8 @@ class AdminDateOccupancyResponse(CamelModel):
     blocked_seats: int = Field(alias="blockedSeats")
     available_seats: int = Field(alias="availableSeats")
     booked_seats: int = Field(alias="bookedSeats")
+    employee_booked_seats: int = Field(alias="employeeBookedSeats")
+    guest_booked_seats: int = Field(alias="guestBookedSeats")
     occupancy_rate: float = Field(alias="occupancyRate")
 
     model_config = ConfigDict(
@@ -132,6 +134,8 @@ class AdminDateOccupancyResponse(CamelModel):
                 "blockedSeats": 5,
                 "availableSeats": 95,
                 "bookedSeats": 72,
+                "employeeBookedSeats": 50,
+                "guestBookedSeats": 22,
                 "occupancyRate": 75.79,
             }
         },
@@ -148,6 +152,8 @@ class AdminHierarchyOccupancyResponse(CamelModel):
     blocked_seats: int = Field(alias="blockedSeats")
     available_seats: int = Field(alias="availableSeats")
     booked_seats: int = Field(alias="bookedSeats")
+    employee_booked_seats: int = Field(alias="employeeBookedSeats")
+    guest_booked_seats: int = Field(alias="guestBookedSeats")
     occupancy_rate: float = Field(alias="occupancyRate")
 
     model_config = ConfigDict(
@@ -161,6 +167,8 @@ class AdminHierarchyOccupancyResponse(CamelModel):
                     "blockedSeats": 20,
                     "availableSeats": 480,
                     "bookedSeats": 350,
+                    "employeeBookedSeats": 300,
+                    "guestBookedSeats": 50,
                     "occupancyRate": 72.91,
                 },
                 {
@@ -170,6 +178,8 @@ class AdminHierarchyOccupancyResponse(CamelModel):
                     "blockedSeats": 10,
                     "availableSeats": 190,
                     "bookedSeats": 120,
+                    "employeeBookedSeats": 100,
+                    "guestBookedSeats": 20,
                     "occupancyRate": 63.15,
                 },
                 {
@@ -179,6 +189,8 @@ class AdminHierarchyOccupancyResponse(CamelModel):
                     "blockedSeats": 5,
                     "availableSeats": 75,
                     "bookedSeats": 61,
+                    "employeeBookedSeats": 55,
+                    "guestBookedSeats": 6,
                     "occupancyRate": 81.33,
                 },
             ]

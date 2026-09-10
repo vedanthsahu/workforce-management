@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Download, MoreHorizontal } from "lucide-react";
 import BookingManagementFilters from "./BookingManagementFilters";
 import BookingStatCards from "./BookingStatCards";
@@ -32,13 +32,26 @@ type PersistedSearchState = {
 
 export default function AdminBookingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Landing here from a link like /admin/bookings?type=guest (e.g. the
+  // dashboard's Guest Visits card) pre-selects that Employee/Guest tab
+  // instead of always starting on the Employee default.
+  const initialFilters = useMemo(() => {
+    const defaults = defaultAdminBookingFilters();
+    const type = searchParams.get("type");
+    if (type === "guest") return { ...defaults, bookingType: "Guest" };
+    if (type === "employee") return { ...defaults, bookingType: "Employee" };
+    return defaults;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // `filters` is the draft state the filter form is bound to — editing it
   // (typing, picking a dropdown) never fetches or refilters anything.
   // `appliedFilters` is only replaced on an explicit Search click (or Clear),
   // and it alone drives the data fetch + table/card filtering below.
-  const [filters, setFilters] = useState(defaultAdminBookingFilters());
-  const [appliedFilters, setAppliedFilters] = useState(defaultAdminBookingFilters());
+  const [filters, setFilters] = useState(initialFilters);
+  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(BOOKING_PAGE_SIZES[0]);
   const [selectedBooking, setSelectedBooking] = useState<AdminBooking | null>(null);

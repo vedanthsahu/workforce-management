@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { ComponentProps } from "react";
 
 import {
   PieChart,
@@ -25,8 +26,9 @@ import {
   CardContent,
 } from "@/components/ui/card";
 
-import { ChevronLeft, ChevronRight, Info } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 import type {
   DashboardSummary,
@@ -42,6 +44,19 @@ type Props = {
   selectedPeriod: TrendPeriod;
   setSelectedPeriod: (period: TrendPeriod) => void;
   topOffices: TopOffice[];
+};
+
+const PERIOD_OPTIONS: { value: TrendPeriod; label: string }[] = [
+  { value: "this-week", label: "This Week" },
+  { value: "last-week", label: "Last Week" },
+  { value: "this-month", label: "This Month" },
+  { value: "last-month", label: "Last Month" },
+];
+
+const DONUT_META: Record<string, { label: string; color: string }> = {
+  booked: { label: "Reserved seats", color: "#4F46E5" },
+  blocked: { label: "Blocked seats", color: "#F59E0B" },
+  available: { label: "Available seats", color: "#10B981" },
 };
 
 // ---------- COMPONENT ----------
@@ -76,109 +91,184 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
   // BACKEND DATA
   const totalSeats = data.total_seats;
   const booked = data.booked_seats_today;
-  const available = Math.max(totalSeats - booked, 0);
+  const blocked = data.blocked_seats;
+  const available = Math.max(totalSeats - booked - blocked, 0);
   const occupancy = ceilPercentage((booked / Math.max(totalSeats, 1)) * 100);
+
+  // Booked/blocked percentages are each rounded independently, so the
+  // available share is the remainder rather than its own independent
+  // rounding -- otherwise the three slices could visibly add up to more
+  // than 100% (e.g. 1% + 1% + 100%).
+  const bookedPct = ceilPercentage((booked / Math.max(totalSeats, 1)) * 100);
+  const blockedPct = ceilPercentage((blocked / Math.max(totalSeats, 1)) * 100);
+  const availablePct = Math.max(100 - bookedPct - blockedPct, 0);
+  const donutPctByName: Record<string, number> = {
+    booked: bookedPct,
+    blocked: blockedPct,
+    available: availablePct,
+  };
+
+  const donutLegend = [
+    { label: "Reserved seats", value: booked, dot: "bg-indigo-500" },
+    { label: "Employees", value: data.employee_bookings_today, dot: "bg-purple-400" },
+    { label: "Guests", value: data.guest_visit_booking_with_seat_today, dot: "bg-pink-400" },
+    { label: "Blocked seats", value: blocked, dot: "bg-amber-400" },
+    { label: "Available seats", value: available, dot: "bg-emerald-500" },
+  ];
+
+  const renderDonutTooltip: NonNullable<ComponentProps<typeof ChartTooltip>["content"]> = ({
+    active,
+    payload,
+  }) => {
+    if (!active || !payload?.length) return null;
+
+    const item = payload[0];
+    const name = String(item.name);
+    const value = Number(item.value);
+    const meta = DONUT_META[name];
+    const pct = donutPctByName[name] ?? ceilPercentage((value / Math.max(totalSeats, 1)) * 100);
+
+    return (
+      <div className="rounded-lg border border-border/50 bg-background px-3 py-2 text-xs shadow-xl">
+        <div className="flex items-center gap-2">
+          <span
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ backgroundColor: meta?.color }}
+          />
+          <span className="text-muted-foreground">{meta?.label ?? name}</span>
+        </div>
+        <div className="mt-1 font-mono font-medium tabular-nums text-foreground">
+          {value} seats <span className="text-muted-foreground">({pct}%)</span>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
 
       {/* ---------------- DONUT ---------------- */}
-      <Card>
+      <Card className="transition-shadow duration-200 hover:shadow-md">
         <CardHeader>
           <CardTitle className="text-sm font-semibold">
-            Today&apos;s Overview
+            Today&apos;s Seat Overview
           </CardTitle>
         </CardHeader>
 
         <CardContent className="flex flex-col sm:flex-row items-center justify-center gap-6">
 
-          <div className="relative w-[160px] h-[160px] sm:w-[160px] sm:h-[160px] shrink-0">
+          <div className="relative w-40 h-40 shrink-0">
             <ChartContainer
               config={{
-                booked: { label: "Booked", color: "#4F46E5" },
+                booked: { label: "Reserved", color: "#6366F1" },
+                blocked: { label: "Blocked", color: "#FBBF24" },
                 available: { label: "Available", color: "#E5E7EB" },
               }}
               className="h-full w-full"
             >
               <PieChart>
+                <defs>
+                  <linearGradient id="donut-booked" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#818CF8" />
+                    <stop offset="100%" stopColor="#4F46E5" />
+                  </linearGradient>
+                  <linearGradient id="donut-blocked" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#FCD34D" />
+                    <stop offset="100%" stopColor="#F59E0B" />
+                  </linearGradient>
+                </defs>
+                <ChartTooltip
+                  content={renderDonutTooltip}
+                  wrapperStyle={{ transform: "translate(12px, -100%)", pointerEvents: "none", zIndex: 50 }}
+                  isAnimationActive={false}
+                />
                 <Pie
                   data={[
                     { name: "booked", value: booked },
+                    { name: "blocked", value: blocked },
                     { name: "available", value: available },
                   ]}
                   dataKey="value"
-                  innerRadius={55}
-                  outerRadius={75}
+                  startAngle={90}
+                  endAngle={-270}
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={booked && blocked ? 3 : 0}
+                  cornerRadius={0}
                   stroke="none"
                 >
-                  <Cell fill="var(--color-booked)" />
-                  <Cell fill="var(--color-available)" />
+                  <Cell className="cursor-pointer transition-opacity hover:opacity-80" fill="url(#donut-booked)" />
+                  <Cell className="cursor-pointer transition-opacity hover:opacity-80" fill="url(#donut-blocked)" />
+                  <Cell className="cursor-pointer transition-opacity hover:opacity-80" fill="#10B981" />
                 </Pie>
               </PieChart>
             </ChartContainer>
 
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <p className="text-2xl font-semibold">
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <p className="text-3xl font-bold tracking-tight text-black">
                 {occupancy}%
               </p>
-              <p className="text-xs text-muted-foreground">
-                Occupancy
+              <p className="text-xs font-medium text-black">
+                Seat occupancy
               </p>
             </div>
           </div>
 
-          <div className="space-y-4 text-sm">
-            <div>
-              <p className="text-xs text-muted-foreground">
-                Booked Seats
-              </p>
-              <p className="font-medium">
-                {occupancy}% ({booked})
-              </p>
-            </div>
+          <div className="w-full space-y-2.5 text-sm">
+            {donutLegend.map((row) => (
+              <div key={row.label} className="flex items-center justify-between gap-3">
+                <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                  <span className={cn("h-2 w-2 shrink-0 rounded-full", row.dot)} />
+                  <span className="truncate">{row.label}</span>
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 tabular-nums text-gray-900",
+                    row.label === "Reserved seats"
+                      ? "text-base font-extrabold text-black"
+                      : "text-sm font-medium"
+                  )}
+                >
+                  {row.value}
+                </span>
+              </div>
+            ))}
 
-            <div>
-              <p className="text-xs text-muted-foreground">
-                Available Seats
-              </p>
-              <p className="font-medium">
-                {available}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-xs text-muted-foreground">
-                Total Seats
-              </p>
-              <p className="font-medium">{totalSeats}</p>
+            <div className="mt-1 flex items-center justify-between gap-3 border-t border-dashed border-gray-200 pt-2.5">
+              <span className="text-xs font-medium text-muted-foreground">Total seats</span>
+              <span className="font-semibold tabular-nums text-gray-900">{totalSeats}</span>
             </div>
           </div>
 
         </CardContent>
 
-        <div className="mx-6 mb-5 mt-2 flex items-center gap-2 rounded-md  bg-blue-100 px-3 py-2 text-xs text-blue-600">
-          <Info className="w-4 h-4" />
+        <div className="mx-6 mb-5 mt-2 flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-600 ring-1 ring-inset ring-blue-100">
+          <Info className="w-4 h-4 shrink-0" />
           Occupancy rate is calculated based on all bookable seats.
         </div>
       </Card>
 
       {/* ---------------- LINE CHART ---------------- */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+      <Card className="transition-shadow duration-200 hover:shadow-md">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-sm font-semibold">
             Occupancy Trend
           </CardTitle>
 
-          <select
-            value={selectedPeriod}
-            onChange={(e) => setSelectedPeriod(e.target.value as TrendPeriod)}
-            className="h-8 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="this-week">This Week</option>
-            <option value="last-week">Last Week</option>
-            <option value="this-month">This Month</option>
-            <option value="last-month">Last Month</option>
-          </select>
+          <div className="relative">
+            <select
+              value={selectedPeriod}
+              onChange={(e) => setSelectedPeriod(e.target.value as TrendPeriod)}
+              className="h-8 cursor-pointer appearance-none rounded-lg border border-blue-500 bg-white pl-3 pr-8 text-xs font-medium text-gray-900 shadow-none transition-colors hover:bg-white focus:border-blue-500 focus:outline-none"
+            >
+              {PERIOD_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value} className="bg-white text-gray-900">
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-blue-500" />
+          </div>
         </CardHeader>
 
         <CardContent>
@@ -186,16 +276,22 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
             config={{
               occupancy: {
                 label: "Occupancy %",
-                color: "#4F46E5",
+                color: "#6366F1",
               },
             }}
-            className="h-[240px] w-full"
+            className="h-60 w-full"
           >
             <AreaChart data={trendData} margin={{ left: -19, right: 12 }}>
               {/* Month view (up to 31 points) shows fixed day-of-month
                  labels -- 1/5/10/15/20/25/<last day> -- instead of every
                  day, so it doesn't matter whether the month has 28-31 days.
                  Week view (7 points, weekday names) still shows every day. */}
+              <defs>
+                <linearGradient id="trend-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#818CF8" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#818CF8" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
               <XAxis
                 dataKey="day"
                 axisLine={false}
@@ -210,13 +306,14 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
               <YAxis
                 domain={[0, 25]}
                 ticks={[0, 5, 10, 15, 20, 25]}
-                axisLine={true}
-                tickLine={true}
+                axisLine={false}
+                tickLine={false}
                 width={40}
               />
 
               <ChartTooltip
-                content={                                                                                                       
+                cursor={{ stroke: "#818CF8", strokeWidth: 1, strokeDasharray: "4 4" }}
+                content={
                   <ChartTooltipContent
                     labelFormatter={(_, payload) => {
                       if (!payload?.length) return "";
@@ -226,8 +323,17 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
                       return `${item.day} (${item.date})`;
                     }}
                     formatter={(value, _name, item) => {
-                      const bookedSeats = item.payload.bookedSeats;
-                      return `Occupancy: ${value}% (${bookedSeats})`;
+                      const { bookedSeats, employeeBookedSeats, guestBookedSeats } = item.payload;
+                      return (
+                        <div className="flex w-full flex-col gap-0.5">
+                          <span>
+                            Occupancy: {value}% ({bookedSeats} seats)
+                          </span>
+                          <span className="text-muted-foreground">
+                            Employees: {employeeBookedSeats} · Guests: {guestBookedSeats}
+                          </span>
+                        </div>
+                      );
                     }}
                   />
                 }
@@ -236,8 +342,10 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
               <Area
                 type="monotone"
                 dataKey="occupancy"
-                stroke="#4F46E5"
-                fillOpacity={0.3}
+                stroke="#818CF8"
+                strokeWidth={2.5}
+                fill="url(#trend-fill)"
+                activeDot={{ r: 5, strokeWidth: 2, stroke: "#fff" }}
               />
             </AreaChart>
           </ChartContainer>
@@ -245,40 +353,44 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
       </Card>
 
       {/* ---------------- TOP OFFICES ---------------- */}
-      <Card>
-        <CardHeader>
+      <Card className="transition-shadow duration-200 hover:shadow-md">
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-sm font-semibold">
             Top Offices by Occupancy
           </CardTitle>
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {visibleOffices.map((item, i) => (
-            <div key={i}>
-              <div className="flex justify-between items-baseline gap-2 text-sm">
-                <span className="min-w-0 flex-1 truncate text-xs">{item.name}</span>
-                <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
-                  {item.value}% ({item.bookedSeats} out of {item.totalSeats})
-                </span>
-              </div>
+          {visibleOffices.map((item) => {
+            return (
+              <div key={item.name} className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex justify-between items-baseline gap-2 text-sm">
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium text-gray-700">{item.name}</span>
+                    <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+                      {item.value}% ({item.bookedSeats} out of {item.totalSeats})
+                    </span>
+                  </div>
 
-              <div className="w-full h-2 bg-gray-200 rounded-full mt-1">
-                <div
-                  className="h-2 bg-indigo-500 rounded-full"
-                  style={{ width: `${item.value}%` }}
-                />
+                  <div className="w-full h-2 bg-gray-100 rounded-full mt-1.5 overflow-hidden">
+                    <div
+                      className="h-2 rounded-full bg-gradient-to-r from-indigo-400 to-indigo-600 transition-[width] duration-500 ease-out"
+                      style={{ width: `${item.value}%` }}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {topOffices.length > OFFICES_PER_PAGE && (
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between pt-1">
               <button
                 type="button"
                 onClick={() => setOfficePage((p) => Math.max(0, p - 1))}
                 disabled={officePage === 0}
                 aria-label="Previous offices"
-                className="rounded-md border border-gray-200 p-1 text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-gray-200 p-1 text-gray-500 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -292,7 +404,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
                 onClick={() => setOfficePage((p) => Math.min(totalOfficePages - 1, p + 1))}
                 disabled={officePage >= totalOfficePages - 1}
                 aria-label="Next offices"
-                className="rounded-md border border-gray-200 p-1 text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-gray-200 p-1 text-gray-500 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>

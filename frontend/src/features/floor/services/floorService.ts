@@ -30,6 +30,17 @@ export const floorService = {
     return data;
   },
 
+  async getAllFloors(params?: { site_id?: string; building_id?: string }): Promise<Floor[]> {
+    const { data } = await axiosInstance.get("/floors", {
+      params: {
+        site_id: params?.site_id || undefined,
+        building_id: params?.building_id || undefined,
+      },
+    });
+
+    return data;
+  },
+
   async createFloor(payload: CreateFloorPayload): Promise<Floor> {
     const { data } = await axiosInstance.post("/floors", payload);
 
