@@ -167,13 +167,18 @@ def fetch_floors_by_building(
     conn: PGConnection,
     *,
     tenant_id: str,
-    building_id: str,
+    building_id: str | None = None,
+    site_id: str | None = None,
     page: int | None = None,
     limit: int | None = None,
     search: str | None = None,
     status_filter: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Fetch floors under given building for one tenant-scoped site."""
+    """Fetch tenant-scoped floors, optionally narrowed to one building and/or site.
+
+    With both `building_id` and `site_id` omitted, returns every floor across
+    every office/building for the tenant.
+    """
     query = f"""
         SELECT
             f.id::text AS floor_id,
@@ -259,15 +264,19 @@ def fetch_floors_by_building(
         LEFT JOIN app_users AS pub
             ON pub.id = fl.published_by_user_id
            AND pub.tenant_id = f.tenant_id
-        WHERE b.id = %s
-          AND f.tenant_id = %s
+        WHERE f.tenant_id = %s
     """
     params: list[Any] = [
         list(NON_DELETED_LAYOUT_STATUSES),
         list(NON_DELETED_LAYOUT_STATUSES),
-        building_id,
         tenant_id,
     ]
+    if building_id is not None:
+        query += " AND b.id = %s"
+        params.append(building_id)
+    if site_id is not None:
+        query += " AND f.site_id = %s"
+        params.append(site_id)
     query, params = _apply_status_filter(query, params, "f.status", status_filter)
     query, params = _apply_search_filter(
         query,
@@ -462,6 +471,79 @@ def update_site(
     if row is None:
         return None
     return fetch_site_by_id(conn, tenant_id=tenant_id, site_id=str(row["site_id"]))
+
+
+def deactivate_buildings_by_site(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+) -> int:
+    """Cascade-deactivate every currently-ACTIVE building under one site.
+
+    Called when the site itself is deactivated, so a building never stays
+    ACTIVE under an inactive office. Never runs the other direction --
+    reactivating a site must not resurrect buildings that were already
+    inactive for their own reasons.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE buildings
+            SET status = 'INACTIVE', updated_at = NOW()
+            WHERE tenant_id = %s
+              AND site_id = %s
+              AND status = 'ACTIVE'
+            """,
+            (tenant_id, site_id),
+        )
+        return cur.rowcount
+
+
+def deactivate_floors_by_site(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+) -> int:
+    """Cascade-deactivate every currently-ACTIVE floor under one site.
+
+    Floors carry their own site_id, so this reaches every floor in the
+    site directly without joining through buildings.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE floors
+            SET status = 'INACTIVE', updated_at = NOW()
+            WHERE tenant_id = %s
+              AND site_id = %s
+              AND status = 'ACTIVE'
+            """,
+            (tenant_id, site_id),
+        )
+        return cur.rowcount
+
+
+def deactivate_floors_by_building(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    building_id: str,
+) -> int:
+    """Cascade-deactivate every currently-ACTIVE floor under one building."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE floors
+            SET status = 'INACTIVE', updated_at = NOW()
+            WHERE tenant_id = %s
+              AND building_id = %s
+              AND status = 'ACTIVE'
+            """,
+            (tenant_id, building_id),
+        )
+        return cur.rowcount
 
 
 

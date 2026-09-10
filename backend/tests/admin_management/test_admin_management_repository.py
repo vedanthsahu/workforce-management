@@ -8,6 +8,9 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from backend.repositories.location_repository import (
+    deactivate_buildings_by_site,
+    deactivate_floors_by_building,
+    deactivate_floors_by_site,
     fetch_buildings_by_site,
     fetch_floors_by_building,
     fetch_sites,
@@ -22,10 +25,12 @@ class FakeCursor:
         *,
         fetchone_values: list[dict[str, Any]] | None = None,
         fetchall_values: list[list[dict[str, Any]]] | None = None,
+        rowcount: int = 0,
     ) -> None:
         self.fetchone_values = fetchone_values or []
         self.fetchall_values = fetchall_values or []
         self.executions: list[tuple[str, Any]] = []
+        self.rowcount = rowcount
 
     def __enter__(self) -> FakeCursor:
         return self
@@ -128,7 +133,49 @@ class AdminManagementRepositoryTests(unittest.TestCase):
             params[:2],
             [["DRAFT", "ARCHIVED", "PUBLISHED"], ["DRAFT", "ARCHIVED", "PUBLISHED"]],
         )
-        self.assertEqual(params[2:4], ["3", "1"])
+        self.assertEqual(params[2:4], ["1", "3"])
+
+    def test_deactivate_buildings_by_site_only_touches_active_rows_in_scope(self) -> None:
+        cursor = FakeCursor(rowcount=2)
+        conn = FakeConnection(cursor)
+
+        result = deactivate_buildings_by_site(conn, tenant_id="1", site_id="5")
+
+        sql, params = cursor.executions[0]
+        self.assertIn("UPDATE buildings", sql)
+        self.assertIn("SET status = 'INACTIVE'", sql)
+        self.assertIn("site_id = %s", sql)
+        self.assertIn("status = 'ACTIVE'", sql)
+        self.assertEqual(params, ("1", "5"))
+        self.assertEqual(result, 2)
+
+    def test_deactivate_floors_by_site_filters_on_floors_own_site_id(self) -> None:
+        cursor = FakeCursor(rowcount=4)
+        conn = FakeConnection(cursor)
+
+        result = deactivate_floors_by_site(conn, tenant_id="1", site_id="5")
+
+        sql, params = cursor.executions[0]
+        self.assertIn("UPDATE floors", sql)
+        self.assertIn("SET status = 'INACTIVE'", sql)
+        self.assertIn("site_id = %s", sql)
+        self.assertIn("status = 'ACTIVE'", sql)
+        self.assertEqual(params, ("1", "5"))
+        self.assertEqual(result, 4)
+
+    def test_deactivate_floors_by_building_only_touches_active_rows_in_scope(self) -> None:
+        cursor = FakeCursor(rowcount=1)
+        conn = FakeConnection(cursor)
+
+        result = deactivate_floors_by_building(conn, tenant_id="1", building_id="3")
+
+        sql, params = cursor.executions[0]
+        self.assertIn("UPDATE floors", sql)
+        self.assertIn("SET status = 'INACTIVE'", sql)
+        self.assertIn("building_id = %s", sql)
+        self.assertIn("status = 'ACTIVE'", sql)
+        self.assertEqual(params, ("1", "3"))
+        self.assertEqual(result, 1)
 
     def test_amenity_listing_returns_metrics_and_assignment_counts(self) -> None:
         cursor = FakeCursor(

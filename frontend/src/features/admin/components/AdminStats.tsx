@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 
+import { cn } from "@/lib/utils";
+
 import {
   Card,
   CardContent,
@@ -18,40 +20,31 @@ import {
   UserRound,
   UserRoundPlus,
   Info,
-  ArrowUpRight,
 } from "lucide-react";
 
 import type { DashboardSummary } from "../types/admin.types";
 
 type Accent = "blue" | "green" | "orange" | "rose" | "purple";
 
-const ACCENTS: Record<
-  Accent,
-  { icon: string; border: string; glow: string }
-> = {
+const ACCENTS: Record<Accent, { icon: string; glow: string }> = {
   blue: {
     icon: "bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600 ring-1 ring-inset ring-blue-200/70",
-    border: "border-l-blue-400",
     glow: "hover:shadow-blue-500/10",
   },
   green: {
     icon: "bg-gradient-to-br from-green-50 to-green-100 text-green-600 ring-1 ring-inset ring-green-200/70",
-    border: "border-l-green-400",
     glow: "hover:shadow-green-500/10",
   },
   orange: {
     icon: "bg-gradient-to-br from-orange-50 to-orange-100 text-orange-600 ring-1 ring-inset ring-orange-200/70",
-    border: "border-l-orange-400",
     glow: "hover:shadow-orange-500/10",
   },
   rose: {
     icon: "bg-gradient-to-br from-rose-50 to-rose-100 text-rose-600 ring-1 ring-inset ring-rose-200/70",
-    border: "border-l-rose-400",
     glow: "hover:shadow-rose-500/10",
   },
   purple: {
     icon: "bg-gradient-to-br from-purple-50 to-purple-100 text-purple-600 ring-1 ring-inset ring-purple-200/70",
-    border: "border-l-purple-400",
     glow: "hover:shadow-purple-500/10",
   },
 };
@@ -110,12 +103,12 @@ export default function AdminStats({ data, selectedDate }: Props) {
       subtitle: `${data?.guest_visit_booking_with_seat_today ?? 0} with seats • ${data?.guest_visit_today ?? 0} invite only`,
       icon: UserRoundPlus,
       accent: "rose" as Accent,
-      href: "/admin/bookings",
+      href: "/admin/bookings?type=guest",
     },
     {
       title: "Blocked Seats",
       value: data?.blocked_seats ?? "-",
-      subtitle: `For ${formattedSelectedDate}`,
+      subtitle: `Unavailable today`,
       icon: Ban,
       accent: "purple" as Accent,
       href: null,
@@ -128,7 +121,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-[1fr_1fr_1fr_1fr_1.2fr_0.8fr] gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
       {stats.map((item, index) => {
         const Icon = item.icon;
         const clickable = !!item.href;
@@ -151,8 +144,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
                 : undefined
             }
             className={cn(
-              "group relative border-l-4",
-              accent.border,
+              "group relative",
               clickable
                 ? cn(
                     "cursor-pointer transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.97] active:duration-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40",
@@ -164,13 +156,13 @@ export default function AdminStats({ data, selectedDate }: Props) {
 
             {/* HEADER */}
             <CardHeader className="flex h-[50px] flex-row items-center justify-between pb-2">
-              <CardTitle className={`text-sm font-semibold text-gray-700 ${item.title === "Employee Seats Reserved" ? "-ml-1" : ""}`}>
+              <CardTitle className={`min-w-0 text-sm font-semibold text-gray-700 ${item.title === "Employee Seats Reserved" ? "-ml-1" : ""}`}>
   {item.title}
 </CardTitle>
 
               <div
                 className={cn(
-                  "w-10 h-10 rounded-full flex items-center justify-center transition-transform duration-200 group-hover:scale-105",
+                  "w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-transform duration-200 group-hover:scale-105",
                   accent.icon
                 )}
               >
@@ -180,25 +172,27 @@ export default function AdminStats({ data, selectedDate }: Props) {
 
             {/* CONTENT */}
             <CardContent>
-              <div className="flex items-end justify-between gap-2">
-                <div className="text-2xl sm:text-3xl xl:text-4xl font-semibold tracking-tight tabular-nums text-gray-900">
-                  {item.value}
-                </div>
-
-                {clickable && (
-                  <ArrowUpRight className="mb-1 h-4 w-4 shrink-0 text-gray-300 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-gray-400" />
-                )}
+              <div className="text-2xl sm:text-3xl xl:text-4xl font-semibold tracking-tight tabular-nums text-gray-900">
+                {item.value}
               </div>
 
-              <CardDescription className="text-sm text-gray-600 mt-1">
-                {item.subtitle}
-              </CardDescription>
+              {item.title === "Guest Visits" ? (
+                <div className="group/guest">
+                  <CardDescription className="text-sm text-gray-600 mt-1 cursor-help">
+                    {item.subtitle}
+                  </CardDescription>
 
-              {item.title === "Guest Visits" && (
-                <div className="mt-2 flex items-start gap-1.5 text-[10px] leading-tight text-gray-500">
-                  <Info className="mt-px h-3 w-3 shrink-0" />
-                  <span>Invite-only visitors do not affect seat occupancy.</span>
+                  <div
+                    className="pointer-events-none invisible absolute inset-x-1 bottom-4 z-20 flex items-start gap-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-600 opacity-0 ring-1 ring-inset ring-blue-100 transition-opacity duration-150 group-hover/guest:visible group-hover/guest:opacity-100"
+                  >
+                    <Info className="mt-px h-3.5 w-3.5 shrink-0" />
+                    <span>Invite-only visitors do not affect seat occupancy.</span>
+                  </div>
                 </div>
+              ) : (
+                <CardDescription className="text-sm text-gray-600 mt-1">
+                  {item.subtitle}
+                </CardDescription>
               )}
             </CardContent>
 

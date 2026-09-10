@@ -26,6 +26,8 @@ export interface OccupancyRangeItem {
   date: string;
   occupancyRate: number;
   bookedSeats: number;
+  employeeBookedSeats: number;
+  guestBookedSeats: number;
 }
 
 export interface OccupancyTrendPoint {
@@ -33,6 +35,8 @@ export interface OccupancyTrendPoint {
   date: string;
   occupancy: number;
   bookedSeats: number;
+  employeeBookedSeats: number;
+  guestBookedSeats: number;
 }
 
 // ── Top offices (occupancy hierarchy) ───────────────────────────────────────
@@ -41,6 +45,8 @@ export interface OccupancyHierarchyItem {
   siteName: string;
   occupancyRate: number;
   bookedSeats: number;
+  employeeBookedSeats: number;
+  guestBookedSeats: number;
   totalSeats: number;
 }
 
@@ -48,6 +54,8 @@ export interface TopOffice {
   name: string;
   value: number;
   bookedSeats: number;
+  employeeBookedSeats: number;
+  guestBookedSeats: number;
   totalSeats: number;
 }
 
