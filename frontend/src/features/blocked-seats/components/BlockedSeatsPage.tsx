@@ -1,0 +1,182 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
+import SummaryCard from "./SummaryCard";
+import FilterPanel from "./FilterPanel";
+import BlockedSeatsTable from "./BlockedSeatsTable";
+import { useBlockedSeatLocations } from "../hooks/useBlockedSeatLocations";
+import { blockedSeatsService } from "../services/blockedSeatsService";
+import type {
+  BlockCategory,
+  BlockedSeat,
+  BlockedSeatFilters,
+  BlockedSeatListResponse,
+} from "../types/blockedSeats.types";
+import {
+  CATEGORY_LABELS,
+  EMPTY_FILTERS,
+  SUMMARY_CARDS,
+} from "../utils/constants";
+
+const EMPTY_RESPONSE: BlockedSeatListResponse = {
+  items: [],
+  summary: {
+    active_blocks: 0,
+    seats_blocked_today: 0,
+    upcoming_blocks: 0,
+    expiring_soon: 0,
+    expired: 0,
+  },
+  pagination: { total: 0, page: 1, limit: 20, total_pages: 0 },
+};
+export default function BlockedSeatsPage() {
+  const router = useRouter();
+  const [category, setCategory] = useState<BlockCategory>("active");
+  const [filters, setFilters] = useState<BlockedSeatFilters>(EMPTY_FILTERS);
+  const [appliedFilters, setAppliedFilters] =
+    useState<BlockedSeatFilters>(EMPTY_FILTERS);
+  const [response, setResponse] = useState(EMPTY_RESPONSE);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const {
+    sites,
+    buildings,
+    floors,
+    loadBuildings,
+    loadFloors,
+    setBuildings,
+    setFloors,
+  } = useBlockedSeatLocations();
+  const hasCriteria = Object.values(filters).some(Boolean);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    blockedSeatsService
+      .list(category, appliedFilters, page)
+      .then((data) => {
+        if (!cancelled) setResponse(data);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setResponse(EMPTY_RESPONSE);
+          setError("Unable to load blocked seats.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [category, appliedFilters, page, refreshKey]);
+  const updateFilter = (key: keyof BlockedSeatFilters, value: string) => {
+    if (key === "siteId") {
+      setFilters((current) => ({
+        ...current,
+        siteId: value,
+        buildingId: "",
+        floorId: "",
+      }));
+      setBuildings([]);
+      setFloors([]);
+      void loadBuildings(value);
+      return;
+    }
+    if (key === "buildingId") {
+      setFilters((current) => ({ ...current, buildingId: value, floorId: "" }));
+      setFloors([]);
+      void loadFloors(value);
+      return;
+    }
+    setFilters((current) => ({ ...current, [key]: value }));
+  };
+  const cancelBlock = async (row: BlockedSeat) => {
+    const reason = window.prompt(
+      `Reason for unblocking seat ${row.seat_code}:`,
+    );
+    if (!reason?.trim()) return;
+    try {
+      await blockedSeatsService.cancel(row.block_id, reason.trim());
+      setRefreshKey((value) => value + 1);
+    } catch {
+      setError("Unable to unblock the selected seat.");
+    }
+  };
+  return (
+    <main className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6">
+      <div className="mx-auto max-w-[1500px] space-y-4">
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="mb-2 text-xs text-slate-500">
+              Dashboard <span className="px-1">/</span>{" "}
+              <span className="font-semibold text-slate-700">
+                Blocked Seats
+              </span>
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-950">
+              Blocked Seats
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Block and manage seats that are unavailable for booking.
+            </p>
+          </div>
+          <button
+            onClick={() => router.push("/admin/blocked-seats/block")}
+            className="inline-flex h-10 items-center justify-center gap-2 self-start rounded-md bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-violet-700 sm:self-auto"
+          >
+            <Plus size={17} />
+            Block Seats
+          </button>
+        </header>
+        <div className="flex gap-3 overflow-x-auto pb-1">
+          {SUMMARY_CARDS.map((card) => (
+            <SummaryCard
+              key={card.id}
+              label={card.label}
+              icon={card.icon}
+              iconClass={card.iconClass}
+              count={response.summary[card.summaryKey]}
+              selected={category === card.id}
+              onClick={() => {
+                setCategory(card.id);
+                setPage(1);
+              }}
+            />
+          ))}
+        </div>
+        <FilterPanel
+          filters={filters}
+          sites={sites}
+          buildings={buildings}
+          floors={floors}
+          onChange={updateFilter}
+          enabled={hasCriteria}
+          onSearch={() => {
+            setAppliedFilters(filters);
+            setPage(1);
+          }}
+        />
+        {error && (
+          <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+        <BlockedSeatsTable
+          title={CATEGORY_LABELS[category]}
+          rows={response.items}
+          total={response.pagination.total}
+          page={page}
+          totalPages={Math.max(1, response.pagination.total_pages)}
+          loading={loading}
+          onPageChange={setPage}
+          onCancel={(row) => void cancelBlock(row)}
+        />
+      </div>
+    </main>
+  );
+}
