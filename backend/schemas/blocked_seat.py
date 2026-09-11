@@ -1,0 +1,117 @@
+"""Request and response contracts for blocked-seat administration."""
+
+from __future__ import annotations
+
+from datetime import date, datetime
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from backend.schemas.pagination import PaginationMetadata
+
+BlockedSeatCategory = Literal["active", "today", "upcoming", "expiring", "expired"]
+BlockedSeatType = Literal["MAINTENANCE", "RESERVED", "ADMIN_BLOCK"]
+BlockedSeatDisplayStatus = Literal["ACTIVE", "UPCOMING", "EXPIRED"]
+
+
+class BlockedSeatListQuery(BaseModel):
+    category: BlockedSeatCategory = "active"
+    search: str | None = None
+    site_id: int | None = Field(default=None, gt=0)
+    building_id: int | None = Field(default=None, gt=0)
+    floor_id: int | None = Field(default=None, gt=0)
+    block_type: BlockedSeatType | None = None
+    selected_date: date | None = None
+
+
+class BlockedSeatActorResponse(BaseModel):
+    user_id: str | None = None
+    name: str | None = None
+
+
+class BlockedSeatResponse(BaseModel):
+    block_id: str
+    seat_id: str
+    seat_code: str
+    site_id: str
+    site_name: str
+    building_id: str
+    building_name: str
+    floor_id: str
+    floor_name: str
+    blocked_from: date
+    blocked_to: date
+    block_type: BlockedSeatType
+    reason: str
+    display_status: BlockedSeatDisplayStatus
+    blocked_by: BlockedSeatActorResponse
+    created_at: datetime
+
+
+class BlockedSeatSummaryResponse(BaseModel):
+    active_blocks: int = 0
+    seats_blocked_today: int = 0
+    upcoming_blocks: int = 0
+    expiring_soon: int = 0
+    expired: int = 0
+
+
+class BlockedSeatListResponse(BaseModel):
+    items: list[BlockedSeatResponse]
+    summary: BlockedSeatSummaryResponse
+    pagination: PaginationMetadata
+
+
+class CreateBlockedSeatsRequest(BaseModel):
+    seat_ids: list[int] = Field(min_length=1, max_length=200)
+    block_type: BlockedSeatType
+    blocked_from: date
+    blocked_to: date
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("seat_ids")
+    @classmethod
+    def reject_duplicate_seats(cls, value: list[int]) -> list[int]:
+        if any(seat_id <= 0 for seat_id in value):
+            raise ValueError("seat_ids must contain positive IDs.")
+        if len(set(value)) != len(value):
+            raise ValueError("seat_ids must not contain duplicates.")
+        return value
+
+    @field_validator("reason")
+    @classmethod
+    def trim_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("reason is required.")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_date_range(self) -> CreateBlockedSeatsRequest:
+        if self.blocked_to < self.blocked_from:
+            raise ValueError("blocked_to must be on or after blocked_from.")
+        return self
+
+
+class CreateBlockedSeatsResponse(BaseModel):
+    message: str
+    created_count: int
+    items: list[BlockedSeatResponse]
+
+
+class CancelBlockedSeatRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def trim_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("reason is required.")
+        return normalized
+
+
+class CancelBlockedSeatResponse(BaseModel):
+    message: str
+    block_id: str
+    status: Literal["CANCELLED"]
