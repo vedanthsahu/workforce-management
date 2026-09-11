@@ -11,11 +11,20 @@ from psycopg2.extensions import connection as PGConnection
 from backend.api.deps import require_any_permission, require_permission
 from backend.db.connection import get_db
 from backend.schemas.blocked_seat import (
-    BlockedSeatCategory, BlockedSeatListQuery, BlockedSeatListResponse,
-    BlockedSeatType, CancelBlockedSeatRequest, CancelBlockedSeatResponse,
-    CreateBlockedSeatsRequest, CreateBlockedSeatsResponse,
+    BlockedSeatCategory,
+    BlockedSeatListQuery,
+    BlockedSeatListResponse,
+    BlockedSeatType,
+    CancelBlockedSeatRequest,
+    CancelBlockedSeatResponse,
+    CreateBlockedSeatsRequest,
+    CreateBlockedSeatsResponse,
 )
-from backend.services.blocked_seat_service import cancel_seat_block, create_blocked_seats, get_blocked_seats
+from backend.services.blocked_seat_service import (
+    cancel_seat_block,
+    create_blocked_seats,
+    get_blocked_seats,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin-blocked-seats"])
 

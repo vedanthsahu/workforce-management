@@ -26,8 +26,8 @@ from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from backend.api.routes import teams
 from backend.api.routes.admin_audit import router as admin_audit_router
-from backend.api.routes.admin_bookings import router as admin_bookings_router
 from backend.api.routes.admin_blocked_seats import router as admin_blocked_seats_router
+from backend.api.routes.admin_bookings import router as admin_bookings_router
 from backend.api.routes.admin_dashboard import router as admin_dashboard_router
 from backend.api.routes.auth import router as auth_router
 from backend.api.routes.bookings import router as bookings_router
