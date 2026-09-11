@@ -21,6 +21,7 @@ from backend.core.audit_actions import (
     FLOOR_LAYOUT_CUTOVER_PROMOTED,
     FLOOR_LAYOUT_DELETED,
     FLOOR_LAYOUT_PUBLISHED,
+    FLOOR_LAYOUT_RESCHEDULED,
     FLOOR_LAYOUT_SCHEDULE_CANCELLED,
     FLOOR_LAYOUT_SCHEDULED,
 )
@@ -43,6 +44,7 @@ from backend.repositories.floor_layout_repository import (
     insert_floor_layout,
     publish_layout_seat_configurations,
     reconcile_published_layout_seats,
+    retire_layout_seats,
     schedule_floor_layout as schedule_floor_layout_record,
     set_published_layout_effective_till,
     soft_delete_floor_layout,
@@ -399,10 +401,20 @@ def _schedule_floor_layout(
     """Schedule a DRAFT layout to take over automatically once its
     effective date arrives, instead of publishing it immediately.
 
-    Does not touch seats or run publish_layout_seat_configurations /
-    reconcile_published_layout_seats -- those only run at actual cutover
-    (see promote_scheduled_floor_layouts), whether that's driven by the
-    background job or, one day, pg_cron.
+    Publishes the new layout's seat configurations right away (not just
+    at cutover): date-aware reads (fetch_available_seats_by_range etc.)
+    resolve which layout applies to a date purely from
+    floor_layouts.status/effective_from/effective_till, so the moment
+    effective_from arrives that layout must already have real rows in
+    `seats` -- otherwise every booking/availability query for that date
+    finds a layout but no seats and 404s. Deliberately does NOT call
+    reconcile_published_layout_seats here, though -- that retires the
+    *other* layout's seats on the floor, and the currently PUBLISHED
+    layout is still genuinely live until cutover actually happens;
+    retiring its seats now would break today's bookings early.
+    promote_scheduled_floor_layouts re-runs publish_layout_seat_configurations
+    at cutover (idempotent upsert -- picks up any seat-mapping edits made
+    between scheduling and cutover) and only then runs reconcile.
     """
     tenant_id = str(current_user["tenant_id"])
     user_id = str(current_user["user_id"])
@@ -468,6 +480,13 @@ def _schedule_floor_layout(
         scheduled_by_user_id=user_id,
     )
 
+    publish_layout_seat_configurations(
+        conn,
+        tenant_id=tenant_id,
+        layout_id=layout_id,
+        published_by_user_id=user_id,
+    )
+
     conn.commit()
 
     safe_write_audit_log(
@@ -486,6 +505,197 @@ def _schedule_floor_layout(
     )
 
     return FloorLayoutResponse(**scheduled_layout)
+
+
+def reschedule_floor_layout(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    layout_id: str,
+    effective_date: date,
+) -> FloorLayoutResponse:
+    """Change the effective_date of a layout that's already SCHEDULED,
+    without cancelling and re-scheduling it from scratch.
+
+    Seat-configuration edits on a SCHEDULED layout go through the normal
+    layout-seat-configuration endpoints instead (see
+    update_layout_seat_configurations_bulk, which now cascades into
+    `seats` for SCHEDULED the same way it already does for PUBLISHED) --
+    those are allowed at any time, since they only touch this layout's own
+    seats and can't strand anyone else's booking. Only the *date* carries
+    the risk this function guards against.
+
+    Guarded the same way delete_floor_layout guards discarding a SCHEDULED
+    layout: once today could already reach the *current* effective_from
+    within an employee's booking window, real bookings may already exist
+    against it -- moving the boundary now could strand them. Past that
+    point, nothing about this layout may change; the admin must wait for
+    cutover and schedule a fresh layout afterward instead.
+    """
+    tenant_id = str(current_user["tenant_id"])
+    user_id = str(current_user["user_id"])
+    audit_action = FLOOR_LAYOUT_RESCHEDULED
+
+    try:
+        layout = fetch_floor_layout_by_id(
+            conn, tenant_id=tenant_id, layout_id=layout_id,
+        )
+        if layout is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "floor_layout_not_found",
+                    "message": "Floor layout was not found.",
+                },
+            )
+        if layout["status"] != LayoutStatus.SCHEDULED.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "floor_layout_not_scheduled",
+                    "message": "Only a SCHEDULED layout's effective date can be changed.",
+                },
+            )
+
+        floor_id = str(layout["floor_id"])
+        tz_name = fetch_site_timezone(conn, tenant_id=tenant_id, site_id=str(layout["site_id"]))
+        site_today = _site_local_today(tz_name)
+        min_advance_days = _resolve_admin_min_advance_days(conn, tenant_id=tenant_id)
+
+        if effective_date < site_today + timedelta(days=min_advance_days):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "effective_date_too_soon",
+                    "message": (
+                        f"Effective date must be at least {min_advance_days} days out, "
+                        "so no user booking can ever land on a layout that's about to "
+                        "be replaced."
+                    ),
+                },
+            )
+
+        acquire_floor_publish_lock(conn, tenant_id=tenant_id, floor_id=floor_id)
+
+        # Re-fetch under the lock -- a concurrent cutover could have
+        # promoted this layout to PUBLISHED a moment ago.
+        layout = fetch_floor_layout_by_id(
+            conn, tenant_id=tenant_id, layout_id=layout_id,
+        )
+        if layout is None or layout["status"] != LayoutStatus.SCHEDULED.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "floor_layout_not_scheduled",
+                    "message": (
+                        "This layout is no longer scheduled -- it may have "
+                        "already taken effect. Refresh and try again."
+                    ),
+                },
+            )
+
+        current_effective_from = layout["effective_from"]
+        employee_max_advance_days = _resolve_employee_max_advance_days(
+            conn, tenant_id=tenant_id,
+        )
+        danger_window_start = current_effective_from - timedelta(
+            days=employee_max_advance_days,
+        )
+        if datetime.now(timezone.utc) >= danger_window_start:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "floor_layout_schedule_locked",
+                    "message": (
+                        "This layout is too close to its effective date to "
+                        "modify -- employees may already have bookings "
+                        "against it. Handle those bookings first, or wait "
+                        "for it to take effect and schedule a new change "
+                        "afterward."
+                    ),
+                },
+            )
+
+        new_instant = _effective_instant_for_date(effective_date, tz_name)
+        published = fetch_published_layout_for_floor(
+            conn, tenant_id=tenant_id, floor_id=floor_id,
+        )
+
+        # excl_floor_layouts_no_overlap is checked per statement, not
+        # deferred, so which row gets updated first depends on which way
+        # the date is moving -- get it backwards and the second UPDATE in
+        # the pair momentarily overlaps the other row's still-old window:
+        #   moving LATER: widen this SCHEDULED row's effective_from first
+        #     (its own window can only shrink the gap, never overlap
+        #     PUBLISHED's still-open-until-the-old-date window), then
+        #     extend PUBLISHED's effective_till out to match.
+        #   moving EARLIER: shrink PUBLISHED's effective_till first, then
+        #     pull this row's effective_from back to match.
+        if new_instant >= current_effective_from:
+            rescheduled = schedule_floor_layout_record(
+                conn, tenant_id=tenant_id, layout_id=layout_id,
+                effective_from=new_instant, scheduled_by_user_id=user_id,
+            )
+            if published is not None:
+                set_published_layout_effective_till(
+                    conn, tenant_id=tenant_id, layout_id=published["layout_id"],
+                    effective_till=new_instant, updated_by_user_id=user_id,
+                )
+        else:
+            if published is not None:
+                set_published_layout_effective_till(
+                    conn, tenant_id=tenant_id, layout_id=published["layout_id"],
+                    effective_till=new_instant, updated_by_user_id=user_id,
+                )
+            rescheduled = schedule_floor_layout_record(
+                conn, tenant_id=tenant_id, layout_id=layout_id,
+                effective_from=new_instant, scheduled_by_user_id=user_id,
+            )
+
+        conn.commit()
+
+        safe_write_audit_log(
+            conn,
+            action=FLOOR_LAYOUT_RESCHEDULED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="floor_layout",
+            resource_id=layout_id,
+            old_values={"effective_from": current_effective_from.isoformat()},
+            new_values={"effective_from": new_instant.isoformat()},
+            changed_fields=["effective_from"],
+        )
+
+    except HTTPException as he:
+        conn.rollback()
+        _d = he.detail if isinstance(he.detail, dict) else {}
+        safe_write_audit_log(
+            conn, action=audit_action, tenant_id=tenant_id,
+            current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
+            event_status="FAILURE",
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
+        )
+        raise
+
+    except psycopg2.Error as exc:
+        conn.rollback()
+        safe_write_audit_log(
+            conn, action=audit_action, tenant_id=tenant_id,
+            current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
+            event_status="FAILURE",
+            failure_code="floor_layout_reschedule_failed",
+            failure_reason="Failed to reschedule floor layout.",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "floor_layout_reschedule_failed",
+                "message": "Failed to reschedule floor layout.",
+            },
+        ) from exc
+
+    return FloorLayoutResponse(**rescheduled)
 
 
 def activate_floor_layout(
@@ -570,6 +780,12 @@ def activate_floor_layout(
             tenant_id=tenant_id,
             layout_id=layout_id,
             published_by_user_id=user_id,
+            # Asserts "live as of right now" -- overwrites any stale
+            # effective_from left on this row from a prior publish/archive
+            # cycle (or the NULL every layout starts with). Without this,
+            # date-aware reads (fl.effective_from <= booking_date) exclude
+            # the row forever, since NULL <= anything is never true.
+            effective_from=datetime.now(timezone.utc),
         )
 
         publish_layout_seat_configurations(
@@ -653,7 +869,13 @@ def promote_scheduled_floor_layouts(conn: PGConnection) -> LayoutCutoverResult:
     whose effective_from has arrived, and promote it -- archive the
     floor's current PUBLISHED layout, activate the SCHEDULED one, and run
     the same seat publish/reconcile steps activate_floor_layout runs for
-    an immediate publish. One floor's failure does not block the others.
+    an immediate publish. publish_layout_seat_configurations was already
+    run once at schedule time (see _schedule_floor_layout), so this call
+    is normally a no-op upsert -- it only picks up seat-mapping edits made
+    between scheduling and cutover. reconcile_published_layout_seats, in
+    contrast, only runs here: it retires the old layout's seats, which
+    would have been premature to do before the old layout was actually
+    superseded. One floor's failure does not block the others.
 
     Intended to run on a recurring background schedule (see
     _start_layout_cutover_scheduler in main.py); can equally be called
@@ -834,6 +1056,16 @@ def delete_floor_layout(
                     effective_till=None,
                     updated_by_user_id=str(current_user["user_id"]),
                 )
+
+            # Scheduling this layout published its seats immediately (see
+            # _schedule_floor_layout), so discarding it must retire them
+            # too -- otherwise they'd sit "live" under a DELETED layout_id
+            # indefinitely.
+            retire_layout_seats(
+                conn,
+                tenant_id=tenant_id,
+                layout_id=layout_id,
+            )
 
         deleted_layout = soft_delete_floor_layout(
             conn,

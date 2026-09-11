@@ -374,13 +374,23 @@ def update_layout_seat_configuration(
         # as update_layout_seat_configurations_bulk), so this single-mapping
         # edit must cascade into seats/seat_amenities too -- otherwise an
         # admin editing one already-live seat gets a 200 while the seat
-        # bookings actually read from stays stale.
+        # bookings actually read from stays stale. A SCHEDULED layout's
+        # seats are likewise already materialized in `seats` the moment
+        # it's scheduled (see floor_layout_service._schedule_floor_layout),
+        # so it needs the same cascade -- editing its seat configuration is
+        # always allowed regardless of how close effective_from is, since
+        # it only touches this layout's own seats and can't strand anyone
+        # else's booking (unlike changing the effective_date itself, which
+        # reschedule_floor_layout gates separately).
         layout = fetch_floor_layout_by_id(
             conn,
             tenant_id=tenant_id,
             layout_id=str(mapping["layout_id"]),
         )
-        if layout is not None and layout["status"] == LayoutStatus.PUBLISHED.value:
+        if layout is not None and layout["status"] in (
+            LayoutStatus.PUBLISHED.value,
+            LayoutStatus.SCHEDULED.value,
+        ):
             seat = upsert_operational_seat(
                 conn,
                 tenant_id=tenant_id,
@@ -556,13 +566,16 @@ def update_layout_seat_configurations_bulk(
                 tenant_id=tenant_id,
                 layout_id=layout_id,
             )
-            if layout is not None and layout["status"] == LayoutStatus.PUBLISHED.value:
-                # Published layout: no separate publish step exists for a
-                # post-publish edit, so push straight into the live
-                # projection alongside the draft table, in this same
-                # transaction. Scoped to just the edited mappings, not a
-                # full reconcile -- nothing is being removed from the
-                # layout here, only reconfigured.
+            if layout is not None and layout["status"] in (
+                LayoutStatus.PUBLISHED.value,
+                LayoutStatus.SCHEDULED.value,
+            ):
+                # Published (or SCHEDULED, already-materialized) layout: no
+                # separate publish step exists for a post-publish edit, so
+                # push straight into the live projection alongside the
+                # draft table, in this same transaction. Scoped to just
+                # the edited mappings, not a full reconcile -- nothing is
+                # being removed from the layout here, only reconfigured.
                 seats_payload = [
                     {
                         "layout_id": str(updated_mappings_by_id[mapping_id]["layout_id"]),
@@ -1259,8 +1272,19 @@ def _build_floor_response(floor: dict[str, object]) -> FloorResponse:
             "layout_file_url": floor.get("layout_file_url"),
         }
 
+    scheduled_layout = None
+    scheduled_layout_id = floor.get("scheduled_layout_id")
+    if scheduled_layout_id is not None:
+        scheduled_layout = {
+            "layout_id": scheduled_layout_id,
+            "layout_name": floor.get("scheduled_layout_name"),
+            "layout_file_url": floor.get("scheduled_layout_file_url"),
+            "effective_from": floor.get("scheduled_layout_effective_from"),
+        }
+
     response_data = dict(floor)
     response_data["active_layout"] = active_layout
+    response_data["scheduled_layout"] = scheduled_layout
 
     return FloorResponse(**response_data)
 

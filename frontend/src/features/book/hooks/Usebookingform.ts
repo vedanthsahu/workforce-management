@@ -27,6 +27,7 @@ import {
   fetchPreferences,
   fetchSeatsWithAvailability,
   fetchSites,
+  resolveFloorLayoutUrl,
 } from "../services/Bookingform.service";
 import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
 import { BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE, maxBookableDateIso } from "../utils/constants";
@@ -460,8 +461,10 @@ export function useBookingForm() {
 
   useEffect(() => {
     const floor = floors.find((f) => f.id === form.floorId);
-    setFloorLayoutUrl(floor?.layoutFileUrl ?? null);
-  }, [floors, form.floorId]);
+    setFloorLayoutUrl(
+      floor ? resolveFloorLayoutUrl(floor, form.fromDate) ?? null : null,
+    );
+  }, [floors, form.floorId, form.fromDate]);
 
   // ── Prefill resolution: display names → IDs ──────────────────────────────
 

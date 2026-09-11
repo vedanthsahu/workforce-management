@@ -119,6 +119,71 @@ def update_layout_scheduling_buffer_days(
     conn.commit()
 
 
+def update_guest_max_advance_days(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    new_value: int,
+    updated_by_user_id: str,
+) -> None:
+    """Update a tenant's guest booking-advance-window rule."""
+    if new_value < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_business_rule_value",
+                "message": "Booking advance window cannot be negative.",
+            },
+        )
+
+    _upsert_or_500(
+        conn,
+        tenant_id=tenant_id,
+        business_rule_key=GUEST_MAX_ADVANCE_DAYS_KEY,
+        value=str(new_value),
+        updated_by_user_id=updated_by_user_id,
+    )
+    conn.commit()
+
+
+def update_layout_visibility_days(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    status_key: str,
+    new_value: int,
+    updated_by_user_id: str,
+) -> None:
+    """Update how long a DRAFT/ARCHIVED/DELETED layout stays listed before
+    dropping out of the admin list. `status_key` is one of
+    LAYOUT_VISIBILITY_DAYS_KEYS's keys ("DRAFT"/"ARCHIVED"/"DELETED")."""
+    if status_key not in LAYOUT_VISIBILITY_DAYS_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_business_rule_value",
+                "message": f"Unknown layout visibility status: {status_key}",
+            },
+        )
+    if new_value < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_business_rule_value",
+                "message": "Visibility window cannot be negative.",
+            },
+        )
+
+    _upsert_or_500(
+        conn,
+        tenant_id=tenant_id,
+        business_rule_key=LAYOUT_VISIBILITY_DAYS_KEYS[status_key],
+        value=str(new_value),
+        updated_by_user_id=updated_by_user_id,
+    )
+    conn.commit()
+
+
 def resolve_layout_scheduling_gap(conn: PGConnection, *, tenant_id: str) -> dict[str, Any]:
     """Return the employee booking window, the safety buffer, and their
     sum -- the minimum number of days out an admin must schedule a new

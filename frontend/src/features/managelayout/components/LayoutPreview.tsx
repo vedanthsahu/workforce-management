@@ -1036,8 +1036,26 @@ export default function LayoutPreview({
           </div>
         )}
 
+        {/* ── Scheduled banner ─────────────────────────────────────────────
+            Checked before the draft banner below -- a SCHEDULED layout
+            also has is_published=false, so without this it fell into the
+            "this is a draft, publish it" banner, which is both wrong (it's
+            already scheduled, not sitting undecided) and actively
+            misleading (there's no "Publish" action to take here; seat
+            edits are already live via the reschedule/edit endpoints). */}
+        {layout && layout.status === "SCHEDULED" && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-sky-50 border border-sky-200 rounded-lg text-xs text-sky-700 flex-shrink-0">
+            <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+            </svg>
+            {layout.effective_from
+              ? `Scheduled to take over on ${new Date(layout.effective_from).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}. Seat changes made now apply immediately; changing the date is still allowed until bookings exist against it.`
+              : "This layout is scheduled to take over automatically. Seat changes made now apply immediately."}
+          </div>
+        )}
+
         {/* ── Draft banner ──────────────────────────────────────────────── */}
-        {layout && !layout.is_published && layout.status !== "ARCHIVED" && (
+        {layout && !layout.is_published && layout.status !== "ARCHIVED" && layout.status !== "SCHEDULED" && (
           <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 flex-shrink-0">
             <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />

@@ -1,10 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pencil, CalendarDays, UserRound, Info, CheckCircle2, X } from "lucide-react";
 import { CONFIGURATION_SECTIONS, INITIAL_CONFIGURATIONS } from "../utils/configurationData";
 import type { ConfigurationField, ConfigurationItem } from "../types/configuration.types";
 import ConfigurationDetailPanel from "./ConfigurationDetailPanel";
+import {
+  fetchBookingPolicy,
+  fetchLayoutPolicy,
+  updateBookingPolicy,
+  updateLayoutPolicy,
+} from "../services/configuration.service";
+
+// Only these items/fields are backed by a real tenant business rule (see
+// backend/services/business_rule_service.py). Everything else in
+// INITIAL_CONFIGURATIONS (activity-table-record-count, and the
+// "maxBookings" field on booking-calendar-employee/visitor-booking) has no
+// server-side rule yet -- it stays a local-only mock value until one exists.
+const BACKED_ITEM_IDS = new Set([
+  "new-layout-publishing",
+  "booking-calendar-employee",
+  "visitor-booking",
+  "layout-visibility",
+]);
+
+function withFieldValue(fields: ConfigurationField[], key: string, value: number): ConfigurationField[] {
+  return fields.map((f) => (f.key === key ? { ...f, value } : f));
+}
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
@@ -152,22 +174,114 @@ export default function ConfigurationsListPage() {
   const [configurations, setConfigurations] = useState<ConfigurationItem[]>(INITIAL_CONFIGURATIONS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Replace the hardcoded mock values for backend-backed items with the
+  // tenant's real, currently-effective ones as soon as they load -- until
+  // then the page still renders instantly with the mock defaults instead
+  // of a blank/loading state.
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([fetchBookingPolicy(), fetchLayoutPolicy()])
+      .then(([booking, layout]) => {
+        if (cancelled) return;
+        setConfigurations((prev) =>
+          prev.map((c) => {
+            if (c.id === "new-layout-publishing") {
+              return { ...c, fields: withFieldValue(c.fields, "days", layout.buffer_days) };
+            }
+            if (c.id === "booking-calendar-employee") {
+              return { ...c, fields: withFieldValue(c.fields, "durationDays", booking.employee_max_advance_days) };
+            }
+            if (c.id === "visitor-booking") {
+              return { ...c, fields: withFieldValue(c.fields, "durationDays", booking.guest_max_advance_days) };
+            }
+            if (c.id === "layout-visibility") {
+              let fields = withFieldValue(c.fields, "draftDays", layout.visibility_days.draft);
+              fields = withFieldValue(fields, "archivedDays", layout.visibility_days.archived);
+              fields = withFieldValue(fields, "discardedDays", layout.visibility_days.deleted);
+              return { ...c, fields };
+            }
+            return c;
+          }),
+        );
+      })
+      .catch(() => {
+        // Real values failed to load -- the mock defaults stay on screen
+        // rather than the page breaking; Save still round-trips to the
+        // backend and will surface its own error if that's still down.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const selectedItem = configurations.find((c) => c.id === selectedId) ?? null;
   const getItem = (id: string) => configurations.find((c) => c.id === id);
 
-  const handleSave = (id: string, description: string, fields: ConfigurationField[]) => {
-    const nowIso = new Date().toISOString();
-    setConfigurations((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? { ...c, description, fields, lastUpdatedAt: nowIso, lastUpdatedBy: "Admin User" }
-          : c
-      )
-    );
-    setSelectedId(null);
-    setSavedMessage("Configuration updated successfully.");
-    setTimeout(() => setSavedMessage(null), 4000);
+  const handleSave = async (id: string, description: string, fields: ConfigurationField[]) => {
+    setErrorMessage(null);
+
+    if (!BACKED_ITEM_IDS.has(id)) {
+      // No server-side rule for this one yet -- keep the previous
+      // local-only behavior.
+      const nowIso = new Date().toISOString();
+      setConfigurations((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, description, fields, lastUpdatedAt: nowIso, lastUpdatedBy: "You" } : c)),
+      );
+      setSelectedId(null);
+      setSavedMessage("Configuration updated successfully.");
+      setTimeout(() => setSavedMessage(null), 4000);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      let resolvedFields = fields;
+
+      if (id === "new-layout-publishing") {
+        const days = fields.find((f) => f.key === "days")?.value;
+        const result = await updateLayoutPolicy({ buffer_days: days });
+        resolvedFields = withFieldValue(fields, "days", result.buffer_days);
+      } else if (id === "booking-calendar-employee") {
+        const durationDays = fields.find((f) => f.key === "durationDays")?.value;
+        const result = await updateBookingPolicy({ employee_max_advance_days: durationDays });
+        resolvedFields = withFieldValue(fields, "durationDays", result.employee_max_advance_days);
+      } else if (id === "visitor-booking") {
+        const durationDays = fields.find((f) => f.key === "durationDays")?.value;
+        const result = await updateBookingPolicy({ guest_max_advance_days: durationDays });
+        resolvedFields = withFieldValue(fields, "durationDays", result.guest_max_advance_days);
+      } else if (id === "layout-visibility") {
+        const draft = fields.find((f) => f.key === "draftDays")?.value;
+        const archived = fields.find((f) => f.key === "archivedDays")?.value;
+        const deleted = fields.find((f) => f.key === "discardedDays")?.value;
+        const result = await updateLayoutPolicy({
+          visibility_days: { draft, archived, deleted },
+        });
+        resolvedFields = withFieldValue(fields, "draftDays", result.visibility_days.draft);
+        resolvedFields = withFieldValue(resolvedFields, "archivedDays", result.visibility_days.archived);
+        resolvedFields = withFieldValue(resolvedFields, "discardedDays", result.visibility_days.deleted);
+      }
+
+      const nowIso = new Date().toISOString();
+      setConfigurations((prev) =>
+        prev.map((c) =>
+          c.id === id
+            ? { ...c, description, fields: resolvedFields, lastUpdatedAt: nowIso, lastUpdatedBy: "You" }
+            : c,
+        ),
+      );
+      setSelectedId(null);
+      setSavedMessage("Configuration updated successfully.");
+      setTimeout(() => setSavedMessage(null), 4000);
+    } catch {
+      setErrorMessage("Failed to save this configuration. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -181,6 +295,18 @@ export default function ConfigurationsListPage() {
             {savedMessage}
           </div>
           <button onClick={() => setSavedMessage(null)} className="p-1 rounded hover:opacity-70">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-sm font-medium text-red-700">
+          <div className="flex items-center gap-2">
+            <Info size={16} />
+            {errorMessage}
+          </div>
+          <button onClick={() => setErrorMessage(null)} className="p-1 rounded hover:opacity-70">
             <X size={14} />
           </button>
         </div>
@@ -234,7 +360,12 @@ export default function ConfigurationsListPage() {
         </div>
       </div>
 
-      <ConfigurationDetailPanel item={selectedItem} onClose={() => setSelectedId(null)} onSave={handleSave} />
+      <ConfigurationDetailPanel
+        item={selectedItem}
+        onClose={() => setSelectedId(null)}
+        onSave={handleSave}
+        saving={saving}
+      />
     </div>
   );
 }

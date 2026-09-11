@@ -196,7 +196,11 @@ def fetch_floors_by_building(
             fl.is_published AS layout_is_published,
             fl.version_no AS layout_version_no,
             fl.updated_at AS layout_last_updated,
-            pub.full_name AS published_by_name
+            pub.full_name AS published_by_name,
+            sched.id::text AS scheduled_layout_id,
+            sched.layout_name AS scheduled_layout_name,
+            sched.layout_file_url AS scheduled_layout_file_url,
+            sched.effective_from AS scheduled_layout_effective_from
         FROM floors AS f
         JOIN buildings AS b
             ON f.building_id = b.id
@@ -259,6 +263,25 @@ def fetch_floors_by_building(
         LEFT JOIN app_users AS pub
             ON pub.id = fl.published_by_user_id
            AND pub.tenant_id = f.tenant_id
+        -- The `fl` lateral above always prefers a PUBLISHED layout when one
+        -- exists, so a floor mid-transition (PUBLISHED live, another layout
+        -- SCHEDULED to take over) would never surface the SCHEDULED one
+        -- anywhere in this response. Surfaced separately here instead of
+        -- changing `fl`'s own selection, since callers still need "the
+        -- currently live layout" to keep meaning exactly that.
+        LEFT JOIN LATERAL (
+            SELECT
+                sfl.id,
+                sfl.layout_name,
+                sfl.layout_file_url,
+                sfl.effective_from
+            FROM floor_layouts AS sfl
+            WHERE sfl.tenant_id = f.tenant_id
+              AND sfl.floor_id = f.id
+              AND sfl.status = 'SCHEDULED'
+            ORDER BY sfl.effective_from ASC NULLS LAST, sfl.id DESC
+            LIMIT 1
+        ) AS sched ON TRUE
         WHERE b.id = %s
           AND f.tenant_id = %s
     """
@@ -672,7 +695,11 @@ def fetch_floor_by_id(
                 fl.layout_file_url,
                 fl.status AS layout_status,
                 fl.is_published AS layout_is_published,
-                fl.version_no AS layout_version_no
+                fl.version_no AS layout_version_no,
+                sched.id::text AS scheduled_layout_id,
+                sched.layout_name AS scheduled_layout_name,
+                sched.layout_file_url AS scheduled_layout_file_url,
+                sched.effective_from AS scheduled_layout_effective_from
             FROM floors AS f
             INNER JOIN buildings AS b
                 ON b.id = f.building_id

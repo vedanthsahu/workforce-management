@@ -364,8 +364,20 @@ def activate_floor_layout(
     tenant_id: str,
     layout_id: str,
     published_by_user_id: str,
+    effective_from: Any = None,
 ) -> dict[str, Any] | None:
-    """Mark one tenant-scoped layout as the published floor layout."""
+    """Mark one tenant-scoped layout as the published floor layout.
+
+    `effective_from`: pass a concrete instant for an immediate publish (the
+    caller is asserting "this layout is live as of right now", regardless
+    of whatever stale value the row might already carry -- e.g. from a
+    prior publish/archive cycle). Leave it None when this is a cutover
+    promotion of an already-SCHEDULED layout -- COALESCE then preserves
+    the effective_from that was set at schedule time, which must NOT be
+    overwritten here. effective_till is always reset to NULL: a layout
+    that's now PUBLISHED is open-ended until something else gets
+    scheduled against it.
+    """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
@@ -375,6 +387,8 @@ def activate_floor_layout(
                 is_published = TRUE,
                 published_at = NOW(),
                 published_by_user_id = %s,
+                effective_from = COALESCE(%s, effective_from),
+                effective_till = NULL,
                 updated_at = NOW()
             WHERE tenant_id = %s
               AND id = %s
@@ -384,6 +398,7 @@ def activate_floor_layout(
             (
                 LayoutStatus.PUBLISHED.value,
                 published_by_user_id,
+                effective_from,
                 tenant_id,
                 layout_id,
             ),
@@ -885,6 +900,40 @@ def reconcile_published_layout_seats(
               AND live_until IS NULL
             """,
             (tenant_id, floor_id, layout_id),
+        )
+
+def retire_layout_seats(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+) -> None:
+    """Retire every still-live seat row under one specific layout_id.
+
+    Used when a SCHEDULED layout is discarded before cutover: scheduling
+    now materializes that layout's seats immediately (see
+    publish_layout_seat_configurations at schedule time in
+    floor_layout_service._schedule_floor_layout) so date-aware reads find
+    them the moment effective_from arrives. Discarding the layout must
+    undo that, or its seat rows would sit "live" (live_until IS NULL)
+    under a DELETED layout_id indefinitely.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE seats
+            SET
+                status = 'INACTIVE',
+                is_bookable = FALSE,
+                is_reserved = FALSE,
+                live_until = NOW(),
+                retired_reason = 'LAYOUT_DISCARDED',
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND layout_id = %s
+              AND live_until IS NULL
+            """,
+            (tenant_id, layout_id),
         )
 
 def publish_layout_seat_configurations(

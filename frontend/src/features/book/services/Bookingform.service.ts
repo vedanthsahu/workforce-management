@@ -36,6 +36,10 @@ interface RawFloor {
   floor_code?: string;
   layout_file_url?: string | null;
   active_layout?: { layout_file_url?: string | null };
+  scheduled_layout?: {
+    layout_file_url?: string | null;
+    effective_from?: string | null;
+  } | null;
 }
 
 interface RawPreference {
@@ -93,7 +97,31 @@ export async function fetchFloors(buildingId: string): Promise<Floor[]> {
     // Prefer active_layout URL; fall back to top-level layout_file_url
     layoutFileUrl:
       f.active_layout?.layout_file_url ?? f.layout_file_url ?? undefined,
+    scheduledLayoutFileUrl: f.scheduled_layout?.layout_file_url ?? undefined,
+    scheduledLayoutEffectiveFrom: f.scheduled_layout?.effective_from ?? undefined,
   }));
+}
+
+// A floor mid-transition can have a currently-live layout (layoutFileUrl)
+// and a separate one queued to take over on a future date
+// (scheduledLayoutFileUrl / scheduledLayoutEffectiveFrom). The floors API
+// itself doesn't resolve "which layout applies on date X" -- it just
+// reports both, same as the backend's own date-window checks -- so pick
+// here, the same way, instead of always rendering whichever one happens
+// to be PUBLISHED right now regardless of the date actually being booked.
+export function resolveFloorLayoutUrl(
+  floor: Pick<Floor, "layoutFileUrl" | "scheduledLayoutFileUrl" | "scheduledLayoutEffectiveFrom">,
+  bookingDate: string | null | undefined,
+): string | undefined {
+  if (
+    bookingDate &&
+    floor.scheduledLayoutFileUrl &&
+    floor.scheduledLayoutEffectiveFrom &&
+    new Date(bookingDate) >= new Date(floor.scheduledLayoutEffectiveFrom)
+  ) {
+    return floor.scheduledLayoutFileUrl;
+  }
+  return floor.layoutFileUrl;
 }
 
 // ── Seat Code → SVG id mapping ────────────────────────────────────────────────
