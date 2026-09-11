@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import unittest
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
-from backend.schemas.blocked_seat import BlockedSeatListQuery, CreateBlockedSeatsRequest
-from backend.services.blocked_seat_service import create_blocked_seats, get_blocked_seats
 from backend.api.routes.admin_blocked_seats import router
+from backend.schemas.blocked_seat import BlockedSeatListQuery, CreateBlockedSeatsRequest
+from backend.services.blocked_seat_service import (
+    create_blocked_seats,
+    get_blocked_seats,
+)
 
 
 def _row(block_id: str = "10") -> dict[str, object]:
@@ -22,7 +25,7 @@ def _row(block_id: str = "10") -> dict[str, object]:
         "blocked_from": date(2026, 9, 10), "blocked_to": date(2026, 9, 12),
         "block_type": "MAINTENANCE", "reason": "Cable repair",
         "display_status": "ACTIVE", "blocked_by_user_id": "7",
-        "blocked_by_name": "Admin User", "created_at": datetime(2026, 9, 10, tzinfo=timezone.utc),
+        "blocked_by_name": "Admin User", "created_at": datetime(2026, 9, 10, tzinfo=UTC),
     }
 
 
