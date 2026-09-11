@@ -7,7 +7,9 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from backend.core.storage import resolve_layout_file_url
 
 
 class ActivateFloorLayoutRequest(BaseModel):
@@ -15,6 +17,12 @@ class ActivateFloorLayoutRequest(BaseModel):
     # before this field existed. A future date schedules the layout
     # instead -- see floor_layout_service.activate_floor_layout.
     effective_date: date | None = None
+
+
+class RescheduleFloorLayoutRequest(BaseModel):
+    """Change the effective_date of a layout that's already SCHEDULED."""
+
+    effective_date: date
 
 
 class CreateFloorLayoutRequest(BaseModel):
@@ -96,7 +104,12 @@ class FloorLayoutResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    
+    @field_validator("layout_file_url", mode="after")
+    @classmethod
+    def _presign_layout_file_url(cls, value: str) -> str:
+        return resolve_layout_file_url(value) or value
+
+
 # class LayoutSeatResponse(BaseModel):
 
 #     layout_seat_mapping_id: str

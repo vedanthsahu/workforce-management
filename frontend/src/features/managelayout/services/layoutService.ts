@@ -90,6 +90,31 @@ export async function fetchLayoutPolicy(): Promise<LayoutPolicy> {
   return data;
 }
 
+// Change the effective_date of a layout that's already SCHEDULED (not a
+// new schedule, not a publish) -- see PATCH /admin/floor-layouts/{id}/schedule.
+// The backend rejects this once bookings could already exist against the
+// current effective_from (409 floor_layout_schedule_locked).
+export async function rescheduleLayout(
+  layoutId: string,
+  effectiveDate: string,
+): Promise<Layout> {
+  const { data } = await axiosInstance.patch<Layout>(
+    `/admin/floor-layouts/${layoutId}/schedule`,
+    { effective_date: effectiveDate },
+  );
+  return data;
+}
+
+// Cancel a SCHEDULED layout (or discard a DRAFT/ARCHIVED one). Same
+// 409 floor_layout_schedule_locked guard as reschedule for a SCHEDULED
+// layout too close to its effective date.
+export async function discardLayout(layoutId: string): Promise<Layout> {
+  const { data } = await axiosInstance.delete<Layout>(
+    `/admin/floor-layouts/${layoutId}`,
+  );
+  return data;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Preferences / Amenities
 // ─────────────────────────────────────────────────────────────────────────────

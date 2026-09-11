@@ -8,6 +8,7 @@ type Props = {
   item: ConfigurationItem | null;
   onClose: () => void;
   onSave: (id: string, description: string, fields: ConfigurationField[]) => void;
+  saving?: boolean;
 };
 
 function formatDateTime(iso: string): string {
@@ -21,7 +22,7 @@ function formatDateTime(iso: string): string {
   });
 }
 
-export default function ConfigurationDetailPanel({ item, onClose, onSave }: Props) {
+export default function ConfigurationDetailPanel({ item, onClose, onSave, saving = false }: Props) {
   const [description, setDescription] = useState("");
   const [fields, setFields] = useState<ConfigurationField[]>([]);
 
@@ -156,11 +157,11 @@ export default function ConfigurationDetailPanel({ item, onClose, onSave }: Prop
           </button>
           <button
             type="button"
-            disabled={!hasChanged}
+            disabled={!hasChanged || saving}
             onClick={handleSave}
             className="flex-1 h-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-sm font-medium text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
-            Save Changes
+            {saving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </div>

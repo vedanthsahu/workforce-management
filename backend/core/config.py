@@ -80,6 +80,11 @@ class Settings(BaseSettings):
     aws_s3_bucket_name: str
     aws_s3_public_base_url: str
     aws_s3_max_retries: int = 3
+    # How long a presigned floor-layout SVG URL stays valid, generated
+    # fresh on every read (see storage.resolve_layout_file_url) -- not a
+    # session length, just how long that one link keeps working if saved
+    # or reloaded from a cached page.
+    s3_presigned_url_ttl_seconds: int = 3600
 
     aws_ses_sender_email: str
     aws_ses_max_retries: int = 3
@@ -167,6 +172,8 @@ class Settings(BaseSettings):
 
         if self.aws_s3_max_retries < 0:
             raise ValueError("aws_s3_max_retries must be greater than or equal to zero")
+        if self.s3_presigned_url_ttl_seconds <= 0:
+            raise ValueError("s3_presigned_url_ttl_seconds must be greater than zero")
         if self.aws_ses_max_retries < 0:
             raise ValueError("aws_ses_max_retries must be greater than or equal to zero")
         if self.aws_retry_initial_delay_seconds <= 0:

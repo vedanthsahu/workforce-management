@@ -29,6 +29,10 @@ export interface Floor {
   name: string;
   number: number;
   layoutFileUrl?: string;
+  // A floor mid-scheduling-transition has a second layout queued to take
+  // over on scheduledLayoutEffectiveFrom -- see resolveFloorLayoutUrl.
+  scheduledLayoutFileUrl?: string;
+  scheduledLayoutEffectiveFrom?: string;
 }
 
 // ── Booking form state ────────────────────────────────────────────────────────

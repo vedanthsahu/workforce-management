@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import axios from "axios";
 import { Building, Floor, Layout, LayoutSeatStats, Site } from "../types/layout.types";
 import {
   activateLayout,
+  discardLayout,
   fetchBuildings,
   fetchFloors,
   fetchLayoutSeatStats,
   fetchSites,
   getLayoutsByFloor,
+  rescheduleLayout,
 } from "../services/layoutService";
 import { useSeatsStore } from "@/store/seatStore";
 import { bulkConfigureSeats, SeatBulkEntry } from "@/features/managelayout1/services/seatService";
@@ -142,6 +145,72 @@ export function usePublishLayout(
   }, [layout, dirtyMappingIds, seats, onPublishSuccess, clearDirty, fetchSeats]);
 
   return { publishing, publishError, canPublish, allConfigured, publishLayout };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// useScheduledLayoutActions
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface UseScheduledLayoutActionsReturn {
+  rescheduling:   boolean;
+  cancelling:     boolean;
+  actionError:    string | null;
+  reschedule:     (effectiveDate: string) => Promise<void>;
+  cancelSchedule: () => Promise<void>;
+}
+
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (axios.isAxiosError(err)) {
+    const detail = (err.response?.data as { detail?: { message?: string } } | undefined)?.detail;
+    if (detail?.message) return detail.message;
+  }
+  return fallback;
+}
+
+// Modify or cancel a layout that's already SCHEDULED -- see
+// PATCH/DELETE /admin/floor-layouts/{id}/schedule /{id} and the business
+// rules in floor_layout_service.reschedule_floor_layout /
+// delete_floor_layout: both are refused (409) once bookings could already
+// exist against the current effective_from.
+export function useScheduledLayoutActions(
+  layout:    Layout | null,
+  onSuccess: () => void,
+): UseScheduledLayoutActionsReturn {
+  const [rescheduling, setRescheduling] = useState(false);
+  const [cancelling,   setCancelling]   = useState(false);
+  const [actionError,  setActionError]  = useState<string | null>(null);
+
+  const reschedule = useCallback(async (effectiveDate: string) => {
+    if (!layout?.layout_id) return;
+    setRescheduling(true);
+    setActionError(null);
+    try {
+      await rescheduleLayout(layout.layout_id, effectiveDate);
+      onSuccess();
+    } catch (err) {
+      console.error("[reschedule]", err);
+      setActionError(extractErrorMessage(err, "Failed to change the effective date."));
+    } finally {
+      setRescheduling(false);
+    }
+  }, [layout, onSuccess]);
+
+  const cancelSchedule = useCallback(async () => {
+    if (!layout?.layout_id) return;
+    setCancelling(true);
+    setActionError(null);
+    try {
+      await discardLayout(layout.layout_id);
+      onSuccess();
+    } catch (err) {
+      console.error("[cancelSchedule]", err);
+      setActionError(extractErrorMessage(err, "Failed to cancel the schedule."));
+    } finally {
+      setCancelling(false);
+    }
+  }, [layout, onSuccess]);
+
+  return { rescheduling, cancelling, actionError, reschedule, cancelSchedule };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

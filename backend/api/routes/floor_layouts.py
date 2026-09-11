@@ -29,6 +29,7 @@ from backend.schemas.floor_layout import (
     CreateFloorLayoutRequest,
     FloorLayoutResponse,
     LayoutSeatListResponse,
+    RescheduleFloorLayoutRequest,
 )
 from backend.services.floor_layout_service import (
     activate_floor_layout,
@@ -36,6 +37,7 @@ from backend.services.floor_layout_service import (
     delete_floor_layout,
     get_floor_layout_seats,
     get_floor_layouts_by_floor,
+    reschedule_floor_layout,
 )
 
 router = APIRouter(
@@ -53,7 +55,7 @@ def create_floor_layout_route(
 
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_permission("layout:create")),
+        Depends(require_permission("layout:upload")),
     ],
 
     conn: Annotated[PGConnection, Depends(get_db)],
@@ -114,7 +116,7 @@ def list_floor_layouts_route(
 
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_permission("layout:view")),
+        Depends(require_permission("layout:upload")),
     ],
 
     conn: Annotated[PGConnection, Depends(get_db)],
@@ -157,6 +159,32 @@ def activate_floor_layout_route(
     )
     return result
 
+
+@router.patch(
+    "/{layout_id}/schedule",
+    response_model=FloorLayoutResponse,
+)
+def reschedule_floor_layout_route(
+    layout_id: Annotated[int, Path(gt=0)],
+
+    payload: RescheduleFloorLayoutRequest,
+
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_permission("layout:publish")),
+    ],
+
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> FloorLayoutResponse:
+
+    return reschedule_floor_layout(
+        conn,
+        current_user=current_user,
+        layout_id=str(layout_id),
+        effective_date=payload.effective_date,
+    )
+
+
 @router.delete(
     "/{layout_id}",
     response_model=FloorLayoutResponse,
@@ -166,7 +194,7 @@ def delete_floor_layout_route(
 
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_permission("layout:delete")),
+        Depends(require_permission("layout:publish")),
     ],
 
     conn: Annotated[PGConnection, Depends(get_db)],
@@ -190,7 +218,7 @@ def get_floor_layout_seats_route(
 
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_permission("layout:view")),
+        Depends(require_permission("layout:upload")),
     ],
 
     conn: Annotated[
