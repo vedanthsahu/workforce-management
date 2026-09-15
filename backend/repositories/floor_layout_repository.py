@@ -259,9 +259,15 @@ def fetch_floor_layouts_by_floor(
     )
 
     if visibility_thresholds is not None:
+        # PUBLISHED and SCHEDULED are never hidden by age -- both are
+        # operationally live (a SCHEDULED layout is a pending change an
+        # admin needs to keep seeing, act on, modify, or cancel, not
+        # something that should silently age out of the list the way an
+        # abandoned DRAFT should).
         visibility_clause = f"""
               AND (
                   fl.status = 'PUBLISHED'
+                  OR fl.status = 'SCHEDULED'
                   OR (fl.status = 'DRAFT' AND fl.updated_at >= NOW() - (%s || ' {visibility_unit}')::interval)
                   OR (fl.status = 'ARCHIVED' AND fl.updated_at >= NOW() - (%s || ' {visibility_unit}')::interval)
                   OR (fl.status = 'DELETED' AND fl.updated_at >= NOW() - (%s || ' {visibility_unit}')::interval)
@@ -288,10 +294,11 @@ def fetch_floor_layouts_by_floor(
             ORDER BY
                 CASE fl.status
                     WHEN 'PUBLISHED' THEN 0
-                    WHEN 'DRAFT' THEN 1
-                    WHEN 'ARCHIVED' THEN 2
-                    WHEN 'DELETED' THEN 3
-                    ELSE 4
+                    WHEN 'SCHEDULED' THEN 1
+                    WHEN 'DRAFT' THEN 2
+                    WHEN 'ARCHIVED' THEN 3
+                    WHEN 'DELETED' THEN 4
+                    ELSE 5
                 END,
                 fl.updated_at DESC,
                 fl.id DESC
