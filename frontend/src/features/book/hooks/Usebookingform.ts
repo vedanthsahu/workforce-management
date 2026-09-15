@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
@@ -31,6 +31,7 @@ import {
 } from "../services/Bookingform.service";
 import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
 import { BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE, maxBookableDateIso } from "../utils/constants";
+import { amenityAppliesTo, BookingSpaceType } from "../utils/spaceType";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ const DEFAULT_STATE: BookingFormState = {
   toDate: todayIso(),
   preferences: [],
   selectedSeatId: null,
+  spaceType: "ALL",
 };
 
 // ── URL builder ───────────────────────────────────────────────────────────────
@@ -88,6 +90,7 @@ function buildUrl(
   if (form.toDate) params.set("toDate", form.toDate);
   if (form.selectedSeatId) params.set("seatId", form.selectedSeatId);
   if (form.preferences.length > 0) params.set("preferences", form.preferences.join(","));
+  if (form.spaceType && form.spaceType !== "ALL") params.set("spaceType", form.spaceType);
   if (guestParams?.guestId) params.set("guestId", guestParams.guestId);
   if (guestParams?.hostUserId) params.set("hostUserId", guestParams.hostUserId);
   if (guestParams?.guestType) params.set("guestType", guestParams.guestType);
@@ -180,6 +183,7 @@ export function useBookingForm() {
       toDate: initialToDate,
       selectedSeatId: searchParams.get("seatId") ?? null,
       preferences: prefillPreferences,
+      spaceType: (searchParams.get("spaceType") as BookingSpaceType | null) ?? "ALL",
     };
   });
 
@@ -437,57 +441,50 @@ export function useBookingForm() {
   // Guest bookings (and any flow that skips the preferences fetch) simply
   // wait for the real fetched list to resolve the name instead.
 
-  // checkedSiteIdsRef guards against re-running this for the same missing
-  // id on every render its deps happen to touch (e.g. once fetchSiteStatus
-  // resolves and setSites/setForm below fire, `sites`/`form.siteId` change
-  // again and would otherwise re-trigger the same check indefinitely).
+  useEffect(() => {
+    if (loadingSites || !form.siteId || !savedPreferenceNames.siteName) return;
+    const siteName = savedPreferenceNames.siteName;
+    setSites((prev) => {
+      if (prev.some((s) => s.id === form.siteId)) return prev;
+      return [
+        ...prev,
+        { id: form.siteId, name: siteName, city: "", country: "", timezone: "" },
+      ];
+    });
+  }, [sites, loadingSites, form.siteId, savedPreferenceNames.siteName]);
+
+  // Separate from the name display above on purpose — the office's real
+  // name should show immediately (same as building/floor just above), not
+  // wait on this network round-trip. This only confirms whether a missing
+  // site is genuinely INACTIVE, and updates the message/hides it from the
+  // dropdown list once that resolves, without ever blocking what's shown in
+  // the meantime. checkedSiteIdsRef guards against re-checking the same id
+  // on every render this effect's deps happen to touch.
   const checkedSiteIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (loadingSites || !form.siteId) return;
     // realSiteIdsRef (not `sites`) is the source of truth for "genuinely in
-    // the ACTIVE list" — `sites` also holds synthetic entries this same
-    // effect injects below, so checking `sites` itself would immediately
-    // (and permanently) look "found" the moment the very first synthetic
-    // entry for this id was added, before its status was ever confirmed.
+    // the ACTIVE list" — `sites` also holds the synthetic entry the effect
+    // above injects, so checking `sites` itself would immediately (and
+    // permanently) look "found" the moment that entry appears, before its
+    // status was ever confirmed.
     if (realSiteIdsRef.current.has(form.siteId)) return;
     if (checkedSiteIdsRef.current.has(form.siteId)) return;
     checkedSiteIdsRef.current.add(form.siteId);
 
     const missingSiteId = form.siteId;
-    const siteName = savedPreferenceNames.siteName;
-    const injectPlaceholder = () => {
-      if (!siteName) return;
-      setSites((prev) =>
-        prev.some((s) => s.id === missingSiteId)
-          ? prev
-          : [...prev, { id: missingSiteId, name: siteName, city: "", country: "", timezone: "" }]
-      );
-    };
-
     fetchSiteStatus(missingSiteId)
       .then((siteStatus) => {
         if (siteStatus === "INACTIVE") {
-          // Keep the selection and inject the placeholder as usual — so the
-          // office field still shows this office's name, giving the message
-          // below something concrete to refer to — but flag its id so the
-          // dropdown can hide it from the list of choices without clearing
-          // the field, matching how the select is rendered in
-          // Bookaseatpage.tsx (this option gets the `hidden` attribute
-          // there, which removes it from the opened list while still
-          // letting a `<select>` display its label as the current value).
-          injectPlaceholder();
           setInactiveSiteId(missingSiteId);
           setError("This office is currently inactive and unavailable for booking. Please select a different office.");
-          return;
         }
-        // Not confirmed inactive (deleted, a transient lookup failure, or
-        // some other reason it's missing) — fall back to the previous
-        // behavior: show *something* labeled, rather than leave the select
-        // bound to a value that matches no option.
-        injectPlaceholder();
       })
-      .catch(injectPlaceholder);
-  }, [loadingSites, form.siteId, savedPreferenceNames.siteName]);
+      .catch(() => {
+        // Best-effort — a failed status check shouldn't itself alarm the
+        // user; the office's name is already showing regardless.
+      });
+  }, [loadingSites, form.siteId]);
 
   useEffect(() => {
     if (loadingBuildings || !form.buildingId || !savedPreferenceNames.buildingName) return;
@@ -576,6 +573,15 @@ export function useBookingForm() {
     [availablePreferences],
   );
 
+  // Scoped to the currently-selected space type for the checklist UI —
+  // resolveAmenityIds above deliberately keeps using the full unfiltered
+  // list, since a preference already selected before a type switch still
+  // needs to resolve to its amenity id right up until setSpaceType prunes it.
+  const visiblePreferences = useMemo(
+    () => availablePreferences.filter((p) => amenityAppliesTo(p.applicable_seat_types, form.spaceType as BookingSpaceType)),
+    [availablePreferences, form.spaceType],
+  );
+
   // ── Re-fetch seats on step 2 page refresh ────────────────────────────────
 
   useEffect(() => {
@@ -601,6 +607,7 @@ export function useBookingForm() {
         bookedForUserId: bookedForUserId ?? null,
         isGuestBooking: isGuestBooking,
         bookedForGuestId: guestId ?? null,
+        spaceType: form.spaceType,
       })
         .then(setSeats)
         .catch((e) => setError(e instanceof Error ? e.message : "Failed to load seats"))
@@ -665,10 +672,35 @@ export function useBookingForm() {
 
   const clearAll = () => setForm((f) => ({ ...f, preferences: [] }));
 
+  // Switching space type drops any already-selected preference that no
+  // longer applies under the new type (e.g. a Cabin-only amenity like "Desk
+  // Phone" selected while Cabin was active shouldn't silently keep filtering
+  // the search after switching to Conference Room, where it's not even
+  // shown as an option anymore).
+  const setSpaceType = (next: BookingSpaceType) => {
+    setError(null);
+    setForm((f) => ({
+      ...f,
+      spaceType: next,
+      preferences: f.preferences.filter((key) => {
+        const pref = availablePreferences.find((p) => p.key === key);
+        return amenityAppliesTo(pref?.applicable_seat_types, next);
+      }),
+    }));
+  };
+
   // ── Step 1 → Step 2 ───────────────────────────────────────────────────────
 
   const findAvailableSeats = useCallback(async () => {
     if (!form.floorId || !form.fromDate || !form.toDate) return;
+    // No local "is this office inactive" guard here on purpose — the
+    // backend's own availability check (get_available_seats_by_range in
+    // booking_service.py) now rejects an inactive office with its own
+    // accurate message ("office_inactive"), the same way it already does
+    // for "no_available_seats". Re-implementing that check here would just
+    // be a second, duplicated copy of backend logic that could drift out of
+    // sync with it; the catch block below already surfaces whatever message
+    // the backend sends back.
     setLoadingSeats(true);
     setError(null);
     try {
@@ -684,6 +716,7 @@ export function useBookingForm() {
         bookedForUserId: bookedForUserId ?? null,
         isGuestBooking: isGuestBooking,
         bookedForGuestId: guestId ?? null,
+        spaceType: form.spaceType,
       });
       setSeats(data);
       navigateTo(2, form);
@@ -887,6 +920,7 @@ export function useBookingForm() {
     floors,
     seats,
     availablePreferences,
+    visiblePreferences,
     confirmation,
     error,
     setError,
@@ -919,6 +953,7 @@ export function useBookingForm() {
     setToDate,
     togglePreference,
     clearAll,
+    setSpaceType,
     findAvailableSeats,
     selectSeat,
     goToReview,
