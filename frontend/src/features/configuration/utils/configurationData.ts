@@ -78,18 +78,17 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
   {
     id: "booking-calendar-employee",
     name: "Booking Calendar (Employee)",
-    description: "Set the maximum number of bookings an employee can make within a configurable future duration.",
+    description: "Set how far in advance an employee can make bookings.",
     icon: CalendarRange,
     iconBg: "bg-orange-100",
     iconColor: "text-orange-600",
     fields: [
-      field("maxBookings", "Maximum Bookings", "Max Bookings", 7, "bookings", "Maximum number of bookings an employee can make."),
       field("durationDays", "Future Duration (Days)", "Duration", 30, "days", "Bookings are allowed within this number of days from today."),
     ],
     lastUpdatedAt: "2026-05-02T10:30:00Z",
     lastUpdatedBy: "Admin User",
     describeRule: (fields) =>
-      `Employees will be able to create up to ${getField(fields, "maxBookings")} bookings within the next ${getField(fields, "durationDays")} days from the current date.`,
+      `Employees will be able to create bookings within the next ${getField(fields, "durationDays")} days from the current date.`,
   },
   {
     id: "visitor-booking",
@@ -110,7 +109,7 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
   {
     id: "layout-visibility",
     name: "Layout Visibility",
-    description: "Configure how long layouts with different statuses remain visible in the UI before being automatically hidden.",
+    description: "Configure how long layouts with different statuses remain available in the UI before being automatically hidden.",
     icon: FileText,
     iconBg: "bg-gray-100",
     iconColor: "text-gray-600",
@@ -129,7 +128,7 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
         iconBg: "bg-amber-100",
         iconColor: "text-amber-600",
         cardTitle: "Draft",
-        cardDescription: "Layouts in draft state will be hidden from the UI after the configured number of days.",
+        cardDescription: "Layouts in draft state will remain available in the UI for the configured number of days.",
         lastUpdatedAt: "2026-05-02T10:30:00Z",
         lastUpdatedBy: "Admin User",
       },
@@ -144,7 +143,7 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
         iconBg: "bg-blue-100",
         iconColor: "text-blue-600",
         cardTitle: "Archived",
-        cardDescription: "Archived layouts will be hidden from the UI after the configured number of days.",
+        cardDescription: "Archived layouts will remain available in the UI for the configured number of days.",
         lastUpdatedAt: "2026-05-02T10:30:00Z",
         lastUpdatedBy: "Admin User",
       },
@@ -159,7 +158,7 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
         iconBg: "bg-red-100",
         iconColor: "text-red-600",
         cardTitle: "Discarded",
-        cardDescription: "Discarded layouts will be hidden from the UI after the configured number of days.",
+        cardDescription: "Discarded layouts will remain available in the UI for the configured number of days.",
         lastUpdatedAt: "2026-05-02T10:30:00Z",
         lastUpdatedBy: "Admin User",
       },
@@ -175,7 +174,7 @@ export const CONFIGURATION_SECTIONS: ConfigurationSection[] = [
   {
     id: "activity",
     title: "Activity",
-    subtitle: "Control the data displayed in activity tables across the application.",
+    subtitle: "Control the data displayed in the Activity table on the Admin Dashboard.",
     itemIds: ["activity-table-record-count"],
   },
   {
@@ -199,7 +198,21 @@ export const CONFIGURATION_SECTIONS: ConfigurationSection[] = [
   {
     id: "layout-visibility",
     title: "Layout Visibility",
-    subtitle: "Configure how long layouts with different statuses remain visible in the UI before being automatically hidden.",
+    subtitle: "Configure how long layouts with different statuses remain available in the UI before being automatically hidden.",
     itemIds: ["layout-visibility"],
   },
 ];
+
+// Tailwind needs literal class strings to scan -- can't derive "bg-X" from
+// the "text-X" values above at runtime, so the accent bar color is looked
+// up from a static map keyed by that same iconColor string.
+export const ACCENT_BAR_BY_ICON_COLOR: Record<string, string> = {
+  "text-amber-600": "bg-amber-200",
+  "text-blue-600": "bg-blue-200",
+  "text-red-600": "bg-red-200",
+  "text-indigo-600": "bg-indigo-200",
+  "text-emerald-600": "bg-emerald-200",
+  "text-orange-600": "bg-orange-200",
+  "text-violet-600": "bg-violet-200",
+  "text-gray-600": "bg-gray-200",
+};
