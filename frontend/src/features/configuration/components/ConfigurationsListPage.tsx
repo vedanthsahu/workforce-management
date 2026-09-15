@@ -12,11 +12,13 @@ import {
   updateLayoutPolicy,
 } from "../services/configuration.service";
 
-// Only these items/fields are backed by a real tenant business rule (see
-// backend/services/business_rule_service.py). Everything else in
-// INITIAL_CONFIGURATIONS (activity-table-record-count, and the
-// "maxBookings" field on booking-calendar-employee/visitor-booking) has no
-// server-side rule yet -- it stays a local-only mock value until one exists.
+// Only these items are backed by a real tenant business rule (see
+// backend/services/business_rule_service.py). "Max future bookings" /
+// "max bookings within N days" concepts were removed from this page
+// entirely -- nothing in the booking flow actually enforces either of
+// them, they were mock-only placeholders with no server-side counterpart
+// (see the Configuration-page audit that found this). Only
+// activity-table-record-count remains an unbacked, local-only mock.
 const BACKED_ITEM_IDS = new Set([
   "new-layout-publishing",
   "booking-calendar-employee",
@@ -190,7 +192,9 @@ export default function ConfigurationsListPage() {
         setConfigurations((prev) =>
           prev.map((c) => {
             if (c.id === "new-layout-publishing") {
-              return { ...c, fields: withFieldValue(c.fields, "days", layout.buffer_days) };
+              let fields = withFieldValue(c.fields, "days", layout.buffer_days);
+              fields = withFieldValue(fields, "totalDays", layout.min_advance_days);
+              return { ...c, fields };
             }
             if (c.id === "booking-calendar-employee") {
               return { ...c, fields: withFieldValue(c.fields, "durationDays", booking.employee_max_advance_days) };
@@ -246,10 +250,26 @@ export default function ConfigurationsListPage() {
         const days = fields.find((f) => f.key === "days")?.value;
         const result = await updateLayoutPolicy({ buffer_days: days });
         resolvedFields = withFieldValue(fields, "days", result.buffer_days);
+        resolvedFields = withFieldValue(resolvedFields, "totalDays", result.min_advance_days);
       } else if (id === "booking-calendar-employee") {
         const durationDays = fields.find((f) => f.key === "durationDays")?.value;
         const result = await updateBookingPolicy({ employee_max_advance_days: durationDays });
         resolvedFields = withFieldValue(fields, "durationDays", result.employee_max_advance_days);
+        // The layout card's "Effective After (Total)" is derived from this
+        // same window -- refetch it too so it doesn't go stale until the
+        // admin happens to open that card next.
+        try {
+          const layoutResult = await fetchLayoutPolicy();
+          setConfigurations((prev) =>
+            prev.map((c) =>
+              c.id === "new-layout-publishing"
+                ? { ...c, fields: withFieldValue(c.fields, "totalDays", layoutResult.min_advance_days) }
+                : c,
+            ),
+          );
+        } catch {
+          // Non-fatal -- the booking window save itself already succeeded.
+        }
       } else if (id === "visitor-booking") {
         const durationDays = fields.find((f) => f.key === "durationDays")?.value;
         const result = await updateBookingPolicy({ guest_max_advance_days: durationDays });

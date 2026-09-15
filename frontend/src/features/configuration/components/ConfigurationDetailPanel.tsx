@@ -44,7 +44,11 @@ export default function ConfigurationDetailPanel({ item, onClose, onSave, saving
   const handleFieldChange = (key: string, raw: string) => {
     const parsed = Number(raw);
     setFields((prev) =>
-      prev.map((f) => (f.key === key ? { ...f, value: Number.isFinite(parsed) ? Math.max(0, parsed) : 0 } : f))
+      prev.map((f) =>
+        f.key === key && !f.readOnly
+          ? { ...f, value: Number.isFinite(parsed) ? Math.max(0, parsed) : 0 }
+          : f
+      )
     );
   };
 
@@ -103,13 +107,20 @@ export default function ConfigurationDetailPanel({ item, onClose, onSave, saving
             <h3 className="text-sm font-semibold text-gray-900 pt-4">Configuration Values</h3>
             {fields.map((f) => (
               <div key={f.key}>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">{f.label}</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                  {f.label}
+                  {f.readOnly && <span className="ml-1.5 text-[10px] text-gray-400 font-normal">(calculated)</span>}
+                </label>
                 <input
                   type="number"
                   min={0}
                   value={f.value}
-                  onChange={(e) => handleFieldChange(f.key, e.target.value)}
-                  className="w-full h-10 px-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors"
+                  readOnly={f.readOnly}
+                  onChange={(e) => !f.readOnly && handleFieldChange(f.key, e.target.value)}
+                  className={`w-full h-10 px-3 text-sm border rounded-lg transition-colors ${f.readOnly
+                    ? "border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed"
+                    : "border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+                    }`}
                 />
                 <p className="text-xs text-gray-400 mt-1">{f.helperText}</p>
               </div>
