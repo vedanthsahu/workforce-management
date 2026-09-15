@@ -1,6 +1,7 @@
 import { axiosInstance } from "@/lib/http/axios";
 import type {
   BlockCategory,
+  BlockableFloorLayout,
   BlockedSeatFilters,
   BlockedSeatListResponse,
   CreateBlockedSeatsPayload,
@@ -121,5 +122,16 @@ export const blockedSeatsService = {
         };
       },
     );
+  },
+  async getBlockableLayout(
+    floorId: string,
+    blockedFrom: string,
+    blockedTo: string,
+  ): Promise<BlockableFloorLayout> {
+    const { data } = await axiosInstance.get(
+      `/admin/blocked-seats/floors/${floorId}/layout-resources`,
+      { params: { blockedFrom, blockedTo } },
+    );
+    return data;
   },
 };

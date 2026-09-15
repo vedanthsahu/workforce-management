@@ -16,14 +16,16 @@ import {
 import { blockedSeatsService } from "../services/blockedSeatsService";
 import type {
   BlockType,
+  BlockableFloorLayout,
   LocationOption,
   SeatOption,
 } from "../types/blockedSeats.types";
 import { BLOCK_TYPE_OPTIONS } from "../utils/constants";
+import BlockableFloorMap from "./BlockableFloorMap";
 
 const today = () => new Date().toLocaleDateString("en-CA");
 const inputClass =
-  "mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-violet-400 disabled:bg-slate-50";
+  "mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/10 disabled:bg-muted disabled:text-muted-foreground";
 const apiErrorMessage = (error: unknown, fallback: string) => {
   const data = (error as {
     response?: { data?: { detail?: { message?: string }; error?: { message?: string } } };
@@ -50,6 +52,7 @@ export default function BlockSeatsPage() {
     [seats, setSeats] = useState<SeatOption[]>([]),
     [selected, setSelected] = useState<string[]>([]),
     [bookings, setBookings] = useState<AdminBookingRaw[]>([]);
+  const [layout, setLayout] = useState<BlockableFloorLayout | null>(null);
   const [loading, setLoading] = useState(false),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
@@ -103,8 +106,8 @@ export default function BlockSeatsPage() {
     setLoading(true);
     setError("");
     try {
-      const [seatRows, firstBookingPage] = await Promise.all([
-        blockedSeatsService.getSeats(floorId, from, to),
+      const [floorLayout, firstBookingPage] = await Promise.all([
+        blockedSeatsService.getBlockableLayout(floorId, from, to),
         adminBookingsService.list({
           floorId,
           startDate: from,
@@ -125,14 +128,38 @@ export default function BlockSeatsPage() {
             }),
         ),
       );
-      setSeats(seatRows);
+      setLayout(floorLayout);
+      setSeats(
+        floorLayout.resources.map((resource) => ({
+          seat_id: String(resource.resource_id),
+          seat_code: resource.resource_code,
+          resource_name: resource.resource_name,
+          resource_type: resource.resource_type,
+          svg_element_id: resource.svg_element_id,
+          capacity: resource.capacity,
+          hasBooking: resource.has_booking,
+          hasBlock: resource.has_block,
+          isUnavailable: !resource.is_active || !resource.is_bookable,
+          selectable:
+            resource.is_active && resource.is_bookable && !resource.has_block,
+        })),
+      );
       setBookings([
         ...firstBookingPage.items,
         ...remainingBookingPages.flatMap((page) => page.items),
       ]);
       setSelected([]);
-    } catch {
-      setError("Unable to load seats and bookings for this period.");
+    } catch (requestError: unknown) {
+      setLayout(null);
+      setSeats([]);
+      setBookings([]);
+      setSelected([]);
+      setError(
+        apiErrorMessage(
+          requestError,
+          "Unable to load the floor layout and bookings for this period.",
+        ),
+      );
     } finally {
       setLoading(false);
     }
@@ -203,39 +230,44 @@ export default function BlockSeatsPage() {
       setSaving(false);
     }
   };
-  const alternatives = (b: AdminBookingRaw) =>
-    seats
+  const alternatives = (b: AdminBookingRaw) => {
+    const blockedResource = seats.find(
+      (resource) => resource.seat_id === String(b.seat_id),
+    );
+    return seats
       .filter(
         (s) =>
           s.selectable &&
           !s.hasBooking &&
           !selected.includes(s.seat_id) &&
-          s.seat_id !== b.seat_id,
+          s.seat_id !== String(b.seat_id) &&
+          s.resource_type === blockedResource?.resource_type,
       )
       .slice(0, 3);
+  };
   return (
-    <main className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6">
-      <div className="mx-auto max-w-[1500px] space-y-4">
+    <main className="flex-1 overflow-y-auto bg-muted/30 p-4 sm:p-6">
+      <div className="mx-auto max-w-[1500px] space-y-4 sm:space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               Dashboard / Blocked Seats / <b>Block Seats</b>
             </p>
-            <h1 className="mt-2 text-2xl font-bold">Block Seats</h1>
-            <p className="text-sm text-slate-500">
+            <h1 className="mt-2 text-xl font-semibold text-foreground sm:text-2xl">Block Seats</h1>
+            <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
               Select location, view available and booked seats, resolve
               conflicts and block seats.
             </p>
           </div>
           <button
             onClick={() => router.push("/admin/blocked-seats")}
-            className="flex h-10 items-center gap-2 rounded-md border bg-white px-4 text-sm font-semibold"
+            className="flex h-9 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
           >
             <ArrowLeft size={16} />
             Back to Blocked Seats
           </button>
         </header>
-        <section className="rounded-xl border bg-white p-4 shadow-sm">
+        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
           <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-7">
             {[
               {
@@ -247,6 +279,9 @@ export default function BlockSeatsPage() {
                   setSiteId(id);
                   setBuildingId("");
                   setFloorId("");
+                  setLayout(null);
+                  setSeats([]);
+                  setSelected([]);
                   setBuildings(
                     id ? await blockedSeatsService.getBuildings(id) : [],
                   );
@@ -260,6 +295,9 @@ export default function BlockSeatsPage() {
                 onChange: async (id: string) => {
                   setBuildingId(id);
                   setFloorId("");
+                  setLayout(null);
+                  setSeats([]);
+                  setSelected([]);
                   setFloors(id ? await blockedSeatsService.getFloors(id) : []);
                 },
               },
@@ -268,7 +306,12 @@ export default function BlockSeatsPage() {
                 value: floorId,
                 items: floors,
                 disabled: !buildingId,
-                onChange: async (id: string) => setFloorId(id),
+                onChange: async (id: string) => {
+                  setFloorId(id);
+                  setLayout(null);
+                  setSeats([]);
+                  setSelected([]);
+                },
               },
             ].map((f) => (
               <label key={f.label} className="text-xs font-semibold">
@@ -308,7 +351,12 @@ export default function BlockSeatsPage() {
                 className={inputClass}
                 type="date"
                 value={from}
-                onChange={(e) => setFrom(e.target.value)}
+                onChange={(e) => {
+                  setFrom(e.target.value);
+                  setLayout(null);
+                  setSeats([]);
+                  setSelected([]);
+                }}
               />
             </label>
             <label className="text-xs font-semibold">
@@ -317,25 +365,30 @@ export default function BlockSeatsPage() {
                 className={inputClass}
                 type="date"
                 value={to}
-                onChange={(e) => setTo(e.target.value)}
+                onChange={(e) => {
+                  setTo(e.target.value);
+                  setLayout(null);
+                  setSeats([]);
+                  setSelected([]);
+                }}
               />
             </label>
             <button
               disabled={!floorId || invalid || loading}
               onClick={() => void load()}
-              className="mt-5 h-10 rounded-md bg-violet-600 px-3 text-sm font-semibold text-white disabled:bg-violet-300"
+              className="mt-5 h-10 rounded-xl bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {loading ? (
                 <Loader2 className="mx-auto animate-spin" size={18} />
               ) : (
-                "Load Seats"
+                "Load Layout"
               )}
             </button>
           </div>
           <label className="mt-3 block text-xs font-semibold">
             Reason *
             <textarea
-              className="mt-1 min-h-16 w-full rounded-md border p-3 text-sm"
+              className="mt-1 min-h-16 w-full rounded-md border border-input bg-background p-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
@@ -351,57 +404,47 @@ export default function BlockSeatsPage() {
             {error}
           </p>
         )}
-        {!!seats.length && (
-          <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
-            <section className="rounded-xl border bg-white p-4">
-              <h2 className="font-semibold">Floor Seats</h2>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {seats.map((s) => {
-                  const chosen = selected.includes(s.seat_id);
-                  return (
-                    <button
-                      key={s.seat_id}
-                      disabled={!s.selectable}
-                      onClick={() =>
-                        setSelected((ids) =>
-                          chosen
-                            ? ids.filter((id) => id !== s.seat_id)
-                            : [...ids, s.seat_id],
-                        )
-                      }
-                      className={`min-w-28 rounded-lg border p-3 text-xs font-semibold ${chosen ? "bg-violet-600 text-white" : s.hasBooking ? "bg-amber-50 text-amber-800" : s.selectable ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}
-                    >
-                      {s.seat_code}
-                      <small className="block">
-                        {s.hasBlock
-                          ? "Blocked"
-                          : s.hasBooking
-                            ? "Booked"
-                            : s.isUnavailable
-                              ? "Unavailable"
-                              : "Available"}
-                      </small>
-                    </button>
-                  );
-                })}
+        {layout && (
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_320px]">
+            <section className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h2 className="font-semibold">Floor Layout</h2>
+                  <p className="text-xs text-muted-foreground">{layout.layout_name}</p>
+                </div>
+                <span className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
+                  {seats.length} spaces
+                </span>
               </div>
+              <BlockableFloorMap
+                layoutUrl={layout.layout_file_url}
+                resources={seats}
+                selectedIds={selected}
+                onToggle={(resourceId) =>
+                  setSelected((ids) =>
+                    ids.includes(resourceId)
+                      ? ids.filter((id) => id !== resourceId)
+                      : [...ids, resourceId],
+                  )
+                }
+              />
             </section>
-            <section className="rounded-xl border bg-white p-4">
+            <section className="rounded-2xl border border-border bg-card p-4 shadow-sm lg:sticky lg:top-4">
               <div className="flex justify-between">
                 <h2 className="font-semibold">
-                  Selected Seats ({selected.length})
+                  Selected Spaces ({selected.length})
                 </h2>
                 <button
                   onClick={() => setSelected([])}
-                  className="text-xs text-violet-600"
+                  className="text-xs font-medium text-primary hover:underline"
                 >
                   Clear All
                 </button>
               </div>
               {!!selected.length && (
                 <div className="mt-3 overflow-hidden rounded-lg border">
-                  <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_44px] items-center gap-2 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
-                    <span>Seat</span>
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto_36px] items-center gap-2 bg-muted/50 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
+                    <span>Space</span>
                     <span>Status</span>
                     <span className="text-center">Action</span>
                   </div>
@@ -414,10 +457,14 @@ export default function BlockSeatsPage() {
                         return (
                           <div
                             key={s.seat_id}
-                            className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_44px] items-center gap-2 px-3 py-3 text-xs"
+                            className="grid grid-cols-[minmax(0,1fr)_auto_36px] items-center gap-2 px-3 py-3 text-[11px]"
                           >
-                            <span className="truncate font-semibold text-slate-900">
+                            <span className="truncate font-semibold text-foreground">
                               {s.seat_code}
+                              <small className="block truncate font-normal text-muted-foreground">
+                                {(s.resource_type ?? "STANDARD").replaceAll("_", " ")}
+                                {s.capacity ? ` · Capacity ${s.capacity}` : ""}
+                              </small>
                             </span>
                             <span
                               className={
@@ -432,13 +479,13 @@ export default function BlockSeatsPage() {
                             </span>
                             <button
                               type="button"
-                              aria-label={`Remove seat ${s.seat_code}`}
+                              aria-label={`Remove space ${s.seat_code}`}
                               onClick={() =>
                                 setSelected((ids) =>
                                   ids.filter((id) => id !== s.seat_id),
                                 )
                               }
-                              className="mx-auto rounded p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600"
+                              className="mx-auto rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                             >
                               <Trash2 size={15} />
                             </button>
@@ -452,13 +499,13 @@ export default function BlockSeatsPage() {
           </div>
         )}
         {!!unresolvedConflictCount && (
-          <section className="overflow-x-auto rounded-xl border bg-white">
+          <section className="overflow-x-auto rounded-2xl border border-border bg-card shadow-sm">
             <h2 className="p-4 font-semibold">
               Conflicting Bookings ({unresolvedConflictCount} seats,{" "}
               {conflicts.length} bookings)
             </h2>
             <table className="w-full min-w-[800px] text-left text-xs">
-              <thead className="bg-slate-50">
+              <thead className="bg-muted/50">
                 <tr>
                   {[
                     "Seat",
@@ -488,7 +535,7 @@ export default function BlockSeatsPage() {
                           Cancel
                         </button>
                       ) : (
-                        <span className="text-slate-400">Not mutable today</span>
+                        <span className="text-muted-foreground">Not mutable today</span>
                       )}
                     </td>
                     <td className="p-3">
@@ -496,14 +543,14 @@ export default function BlockSeatsPage() {
                         alternatives(b).map((s) => (
                           <button
                             key={s.seat_id}
-                            className="mr-2 rounded border px-2 py-1 text-violet-700"
+                            className="mr-2 rounded-md border border-border px-2 py-1 text-primary hover:bg-primary/10"
                             onClick={() => void move(b, s)}
                           >
                             Move to {s.seat_code}
                           </button>
                         ))
                       ) : (
-                        <span className="text-slate-500">
+                        <span className="text-muted-foreground">
                           Existing booking rules allow changes only for future dates.
                         </span>
                       )}
@@ -513,10 +560,10 @@ export default function BlockSeatsPage() {
                 {missingConflictSeats.map((seat) => (
                   <tr key={`missing-${seat.seat_id}`} className="border-t bg-amber-50/50">
                     <td className="p-3 font-semibold">{seat.seat_code}</td>
-                    <td className="p-3 text-slate-500">Booking details unavailable</td>
+                    <td className="p-3 text-muted-foreground">Booking details unavailable</td>
                     <td className="p-3">{from} – {to}</td>
                     <td className="p-3 text-amber-700">Resolution required</td>
-                    <td className="p-3 text-slate-500">
+                    <td className="p-3 text-muted-foreground">
                       Reload seats to retrieve the conflicting booking details.
                     </td>
                   </tr>
@@ -525,7 +572,7 @@ export default function BlockSeatsPage() {
             </table>
           </section>
         )}
-        <footer className="sticky bottom-0 flex items-center justify-between rounded-xl border bg-white p-4 shadow">
+        <footer className="sticky bottom-0 flex items-center justify-between rounded-2xl border border-border bg-card p-4 shadow-sm">
           <p
             className={
               unresolvedConflictCount
@@ -534,8 +581,8 @@ export default function BlockSeatsPage() {
             }
           >
             {unresolvedConflictCount
-              ? `${unresolvedConflictCount} seat conflict(s) must be resolved.`
-              : `All conflicts resolved. ${selected.length} seats are ready to block.`}
+              ? `${unresolvedConflictCount} space conflict(s) must be resolved.`
+              : `All conflicts resolved. ${selected.length} spaces are ready to block.`}
           </p>
           <button
             disabled={
@@ -545,9 +592,9 @@ export default function BlockSeatsPage() {
               saving
             }
             onClick={() => void submit()}
-            className="h-10 rounded-md bg-violet-600 px-5 text-sm font-semibold text-white disabled:bg-violet-300"
+            className="h-10 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Block {selected.length} Seats
+            Block {selected.length} {selected.length === 1 ? "Space" : "Spaces"}
           </button>
         </footer>
       </div>
