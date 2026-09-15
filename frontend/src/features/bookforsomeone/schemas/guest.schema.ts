@@ -1,16 +1,6 @@
 import { z } from "zod";
-
 export const sanitizePhoneNumber = (value: string) => {
-  if (/^(?:\d{10}|\+91 \d{10})$/.test(value)) return value;
-
-  const cleaned = value.replace(/[^\d+ ]/g, "");
-  if (cleaned.startsWith("+") && cleaned.length <= 3) return cleaned;
-  if (cleaned.startsWith("+91")) {
-    const digits = cleaned.slice(3).replace(/\D/g, "").slice(0, 10);
-    if (!digits) return cleaned.length > 3 ? "+91 " : "+91";
-    return `+91 ${digits}`;
-  }
-  return cleaned.replace(/\D/g, "").slice(0, 10);
+  return value.replace(/[^\d+ ]/g, "").replace(/(?!^)\+/g, "").replace(/\s+/g, " ").slice(0, 20);
 };
 
 export const createGuestSchema = z.object({
@@ -23,15 +13,18 @@ export const createGuestSchema = z.object({
     .email("Enter a valid email address"),
   phone: z
     .string()
-    .refine((val) => !val || /^(?:\d{10}|\+91 \d{10})$/.test(val), {
-      message: "Enter 10 digits or +91 followed by one space and 10 digits",
+    .refine((val) => !val || /^\+\d{1,3} \d{10}$/.test(val), {
+      message: "Enter exactly 10 digits after the country code",
     })
     .optional(),
   organization: z
     .string()
     .trim()
-    .refine((val) => !val || /^[a-zA-Z0-9\s]+$/.test(val), {
+    .refine((val) => !val || /^[a-zA-Z\s.,&'-]+$/.test(val), {
       message: "Organization name must not contain special characters",
+    })
+    .refine((val) => !val || !/\d/.test(val), {
+      message: "Organization name must not contain numbers",
     })
     .optional(),
 });

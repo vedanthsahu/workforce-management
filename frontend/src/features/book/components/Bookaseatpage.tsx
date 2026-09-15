@@ -119,6 +119,7 @@ const BookASeatPage: React.FC = () => {
     step,
     form,
     sites,
+    inactiveSiteId,
     buildings,
     floors,
     seats,
@@ -170,6 +171,23 @@ const BookASeatPage: React.FC = () => {
   }, [error]);
 
   const todayIso = new Date().toISOString().slice(0, 10);
+
+  // A native <select> falls back to displaying its FIRST option whenever
+  // the bound `value` doesn't match any <option> currently rendered. When a
+  // saved preference/prefill sets `form.siteId` to an office not yet in
+  // `sites` (fetchSites only returns ACTIVE ones), there's an unavoidable
+  // gap before the hook can inject either a synthetic placeholder or the
+  // inactive-office entry for it — usually just a render or two, but the
+  // hook's own inactive-status check is a real network round-trip, making
+  // that gap long enough to visibly flash an unrelated office (whatever
+  // happened to be sites[0]) before settling on the real one. Deriving the
+  // rendered option list here guarantees a matching (neutral, unnamed)
+  // option exists the *instant* form.siteId changes, closing that gap
+  // regardless of how long the hook's own resolution takes.
+  const officeOptions = React.useMemo(() => {
+    if (!form.siteId || sites.some((s) => s.id === form.siteId)) return sites;
+    return [...sites, { id: form.siteId, name: "…", city: "", country: "", timezone: "" }];
+  }, [sites, form.siteId]);
 
   const seatsWithSvgId = seats as unknown as SeatWithSvgId[];
 
@@ -286,9 +304,34 @@ const BookASeatPage: React.FC = () => {
                     disabled={loadingSites}
                     className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <option value="" disabled hidden>{loadingSites ? "Loading…" : "Select office"}</option>
-                    {sites.map((s) => (
-                      <option key={s.id} value={s.id} style={{ color: '#111827' }}>{s.name}</option>
+                    {/* No `hidden` here (just `disabled`) — with `value=""`
+                        this is what the select is actually supposed to
+                        match and display while nothing real is chosen yet
+                        (still loading, or a saved preference hasn't
+                        resolved). Some browsers mishandle a *hidden*
+                        selected option when it's the first child of the
+                        select, falling back to silently displaying whatever
+                        real office happens to be first in the fetched list
+                        instead — which is exactly what made the field
+                        flash an unrelated, wrong office name before
+                        settling on the real (possibly inactive) one. */}
+                    <option value="" disabled>{loadingSites ? "Loading…" : "Select office"}</option>
+                    {officeOptions.map((s) => (
+                      // An inactive office stays as the current value (so the
+                      // field still shows its name, matching the "this
+                      // office is inactive" message above it) but is hidden
+                      // from the dropdown's own list of choices — `hidden`
+                      // on the currently-selected <option> keeps it out of
+                      // the opened list while a <select> still displays a
+                      // hidden option's label as its current value.
+                      <option
+                        key={s.id}
+                        value={s.id}
+                        hidden={s.id === inactiveSiteId}
+                        style={{ color: '#111827' }}
+                      >
+                        {s.name}
+                      </option>
                     ))}
                   </select>
                 </div>
