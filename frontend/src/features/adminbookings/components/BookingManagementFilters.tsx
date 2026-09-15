@@ -11,7 +11,7 @@ import {
   AdminBookingBuildingOption,
   AdminBookingFloorOption,
 } from "../types/adminBooking.types";
-import { BOOKING_STATUS_OPTIONS } from "../utils/constants";
+import { BOOKING_STATUS_OPTIONS, SELECT_BASE_CLASS, SELECT_ARROW_STYLE } from "../utils/constants";
 
 type Props = {
   filters: AdminBookingFilters;
@@ -171,16 +171,6 @@ function Field({
   );
 }
 
-const selectBaseClass =
-  "h-10 pr-8 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors cursor-pointer w-full";
-
-const selectArrowStyle: React.CSSProperties = {
-  backgroundImage:
-    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
-  backgroundRepeat: "no-repeat",
-  backgroundPosition: "right 10px center",
-};
-
 function NativeSelect({
   value,
   onChange,
@@ -218,8 +208,8 @@ function NativeSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className={`${selectBaseClass} ${icon ? "pl-8" : "pl-3"} disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400`}
-        style={showClear ? { backgroundImage: "none" } : selectArrowStyle}
+        className={`${SELECT_BASE_CLASS} ${icon ? "pl-8" : "pl-3"} disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400`}
+        style={showClear ? { backgroundImage: "none" } : SELECT_ARROW_STYLE}
       >
         {placeholder && (
           <option value="" disabled hidden>

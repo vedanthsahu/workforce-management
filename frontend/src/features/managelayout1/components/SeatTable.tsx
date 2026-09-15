@@ -5,6 +5,7 @@ import { Pencil, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from "lucide-re
 import { Seat } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
+import { SEAT_TABLE_PAGE_SIZES as PAGE_SIZES } from "../utils/seatOptions.utils";
 
 interface Props {
   seats: Seat[];
@@ -18,8 +19,6 @@ interface Props {
   onEditSeat: (seat: Seat) => void;
   onBulkEdit: () => void;
 }
-
-const PAGE_SIZES = [10, 25, 50];
 
 type SortKey = "seat_code" | "is_configured";
 type SortOrder = "asc" | "desc";

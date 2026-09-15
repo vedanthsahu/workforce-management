@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { X, CheckCircle2 } from "lucide-react";
-import { getRoleBadgeClass } from "../utils/roles.utils";
+import { getRoleBadgeClass, ROLE_DETAIL_MODAL_USERS_PREVIEW_COUNT as USERS_PREVIEW_COUNT } from "../utils/roles.utils";
 import type { Role } from "../types/roles.types";
 import { useUsersFilterStore } from "@/store/useUsersFilterStore";
 
@@ -11,8 +11,6 @@ type Props = {
   role: Role | null;
   onClose: () => void;
 };
-
-const USERS_PREVIEW_COUNT = 2;
 
 export default function RoleDetailModal({ role, onClose }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null);

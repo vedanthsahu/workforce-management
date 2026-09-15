@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { Seat, SeatStatus, SeatType, SeatUpdatePayload } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
+import { SEAT_TYPES, SEAT_STATUSES } from "../utils/seatOptions.utils";
 
 interface Props {
   seat: Seat | null;
@@ -12,9 +13,6 @@ interface Props {
   onSave: (payload: SeatUpdatePayload) => Promise<unknown>;
   onClose: () => void;
 }
-
-const SEAT_TYPES: SeatType[] = ["STANDARD" , "WINDOW" , "CABIN" ,"ACCESSIBLE", "HOT_DESK"];
-const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
 
 export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Props) {
   const [seatType,    setSeatType]    = useState<SeatType>("STANDARD");
