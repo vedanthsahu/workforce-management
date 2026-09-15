@@ -15,22 +15,22 @@ from backend.core.audit_actions import SEAT_BLOCK_CANCELLED, SEAT_BLOCK_CREATED
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.blocked_seat_repository import (
     cancel_blocked_seat,
+    fetch_blockable_floor_layout,
     fetch_blocked_seat_summary,
     fetch_blocked_seats,
     fetch_blocked_seats_by_ids,
     fetch_conflicting_booking_seat_codes,
-    fetch_blockable_floor_layout,
     fetch_seats_for_block,
     insert_blocked_seat,
 )
 from backend.schemas.blocked_seat import (
+    BlockableFloorLayoutResponse,
+    BlockableResourceResponse,
     BlockedSeatActorResponse,
     BlockedSeatListQuery,
     BlockedSeatListResponse,
     BlockedSeatResponse,
     BlockedSeatSummaryResponse,
-    BlockableFloorLayoutResponse,
-    BlockableResourceResponse,
     CancelBlockedSeatResponse,
     CreateBlockedSeatsRequest,
     CreateBlockedSeatsResponse,
