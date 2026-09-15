@@ -89,7 +89,7 @@ from backend.repositories.location_repository import (
     fetch_floor_by_id,
     fetch_site_by_id,
 )
-from backend.repositories.user_repository import fetch_user_by_id
+from backend.repositories.user_repository import fetch_user_by_id, fetch_user_by_phone
 from backend.schemas.booking import (
     BookingResponse,
     ModifyBookingRequest,
@@ -460,6 +460,19 @@ def create_guest_profile(
                     "message": "An ACTIVE guest already uses this phone number.",
                 },
             )
+        # A guest sharing a phone number with an internal employee was
+        # previously allowed through — nothing checked the app_users table at
+        # all, only other guests. Same last-10-digits normalization as the
+        # guest-vs-guest check above, since employee mobile_phone has no
+        # enforced format either.
+        if phone and fetch_user_by_phone(conn, tenant_id=tenant_id, phone=phone):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "guest_phone_matches_employee",
+                    "message": "This phone number belongs to an employee and cannot be used for a guest.",
+                },
+            )
 
         guest = create_guest(
             conn,
@@ -642,6 +655,14 @@ def update_guest_profile(
                     detail={
                         "code": "guest_phone_exists",
                         "message": "A guest already exists with this phone number.",
+                    },
+                )
+            if fetch_user_by_phone(conn, tenant_id=tenant_id, phone=phone):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "guest_phone_matches_employee",
+                        "message": "This phone number belongs to an employee and cannot be used for a guest.",
                     },
                 )
             updates["phone"] = phone
