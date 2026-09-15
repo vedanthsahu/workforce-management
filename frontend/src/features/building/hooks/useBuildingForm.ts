@@ -45,10 +45,21 @@ export const useBuildingForm = () => {
     field: keyof CreateBuildingPayload,
     value: string | number
   ) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+    setFormData((prev) => {
+      if (field === "site_id") {
+        // Default the status field to match the chosen office so a new
+        // building under an inactive office doesn't default to ACTIVE
+        // (the backend rejects that combination anyway) -- still
+        // overridable by hand afterwards.
+        const site = sites.find((s) => s.site_id === String(value));
+        return {
+          ...prev,
+          site_id: value as number,
+          status: site?.status ?? prev.status,
+        };
+      }
+      return { ...prev, [field]: value };
+    });
   };
 
  const handleSubmit = async () => {

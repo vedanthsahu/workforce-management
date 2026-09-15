@@ -138,10 +138,6 @@ function FloorsPage() {
             <TableBodySkeleton columns={5} rows={4} />
           ) : error ? (
             <div className="p-6 text-sm text-red-500">{error}</div>
-          ) : !selectedBuilding ? (
-            <div className="p-10 text-center text-gray-500">
-              
-            </div>
           ) : (
             <FloorTable
               data={paginatedFloors}

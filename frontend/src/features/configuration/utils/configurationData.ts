@@ -123,6 +123,8 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
         iconColor: "text-amber-600",
         cardTitle: "Draft",
         cardDescription: "Layouts in draft state will be hidden from the UI after the configured number of days.",
+        lastUpdatedAt: "2026-05-02T10:30:00Z",
+        lastUpdatedBy: "Admin User",
       },
       {
         key: "archivedDays",
@@ -136,6 +138,8 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
         iconColor: "text-blue-600",
         cardTitle: "Archived",
         cardDescription: "Archived layouts will be hidden from the UI after the configured number of days.",
+        lastUpdatedAt: "2026-05-02T10:30:00Z",
+        lastUpdatedBy: "Admin User",
       },
       {
         key: "discardedDays",
@@ -149,6 +153,8 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
         iconColor: "text-red-600",
         cardTitle: "Discarded",
         cardDescription: "Discarded layouts will be hidden from the UI after the configured number of days.",
+        lastUpdatedAt: "2026-05-02T10:30:00Z",
+        lastUpdatedBy: "Admin User",
       },
     ],
     lastUpdatedAt: "2026-05-02T10:30:00Z",
