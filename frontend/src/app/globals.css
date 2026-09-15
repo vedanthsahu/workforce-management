@@ -138,6 +138,17 @@
   display: none;
 }
 
+.country-code-menu-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.country-code-menu-scroll::-webkit-scrollbar-thumb {
+  background-color: #e2e8f0;
+  border-radius: 9999px;
+}
+.country-code-menu-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }

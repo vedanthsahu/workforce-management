@@ -99,8 +99,24 @@ export function useManageSeats() {
 
   const resetFilters = useCallback(() => setFilters(DEFAULT_FILTERS), []);
 
+  // The search box stays bound directly to `filters.search` (see
+  // SeatFiltersBar) so every keystroke shows up immediately — debouncing
+  // that would make typing itself feel laggy. What actually needs debouncing
+  // is downstream of it: filteredSeats feeds LayoutPreview's colorSeats,
+  // which runs a chain of regex passes over the full floor-plan SVG text,
+  // so re-filtering (and re-coloring the map) on every single keystroke
+  // instead of once the user pauses is real, wasted work and a flickery map.
+  // Only `search` is debounced — the dropdown filters (seat_type/status/
+  // bookable/amenity) already only fire once per discrete selection, not
+  // per keystroke, so they don't have this problem.
+  const [debouncedSearch, setDebouncedSearch] = useState(filters.search);
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(filters.search), 350);
+    return () => clearTimeout(id);
+  }, [filters.search]);
+
   const filteredSeats = useMemo(() => {
-    const query = filters.search.trim().toLowerCase();
+    const query = debouncedSearch.trim().toLowerCase();
     return seats.filter((s) => {
       if (query && !s.seat_code.toLowerCase().includes(query))                                                    return false;
       if (filters.seat_type !== "All" && (s.seat_type ?? "").toUpperCase() !== filters.seat_type.toUpperCase()) return false;
@@ -109,7 +125,7 @@ export function useManageSeats() {
       if (filters.amenity   !== "All" && !s.amenity_ids.includes(filters.amenity))                              return false;
       return true;
     });
-  }, [seats, filters]);
+  }, [seats, debouncedSearch, filters.seat_type, filters.status, filters.bookable, filters.amenity]);
 
   // Whether a filter is actually narrowing the seat list — driven by the
   // filter inputs themselves, not by comparing filteredSeats.length to
@@ -118,8 +134,13 @@ export function useManageSeats() {
   // or if `seats` and the matched subset happen to be the same size), and
   // that shouldn't be read as "no filter applied" — doing so was silently
   // skipping the map's yellow highlight for genuine filter matches.
+  //
+  // Uses debouncedSearch, not filters.search, so this flips in lockstep with
+  // filteredSeats — otherwise, mid-debounce, this would go true on the very
+  // first keystroke while filteredSeats still reflected the previous
+  // (possibly empty) query, briefly highlighting every seat as "matched".
   const hasActiveFilters =
-    filters.search.trim() !== "" ||
+    debouncedSearch.trim() !== "" ||
     filters.seat_type !== "All" ||
     filters.status    !== "All" ||
     filters.bookable  !== "All" ||

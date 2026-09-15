@@ -27,6 +27,9 @@ from backend.repositories.floor_layout_repository import (
     touch_floor_layout_updated_by,
 )
 from backend.repositories.location_repository import (
+    deactivate_buildings_by_site,
+    deactivate_floors_by_building,
+    deactivate_floors_by_site,
     fetch_building_by_id,
     fetch_building_duplicates,
     fetch_buildings_by_site,
@@ -295,6 +298,16 @@ def update_site_metadata(
         )
         if updated_site is None:
             _raise_not_found("site")
+
+        # Deactivating an office cascades down: a building (and its floors)
+        # can never stay ACTIVE under an inactive office. Reactivating a
+        # site is deliberately NOT cascaded back up -- each building/floor
+        # must be reactivated on its own, so nothing that was already
+        # inactive for an unrelated reason gets silently resurrected.
+        if updates.get("status") == "INACTIVE":
+            deactivate_buildings_by_site(conn, tenant_id=tenant_id, site_id=site_id)
+            deactivate_floors_by_site(conn, tenant_id=tenant_id, site_id=site_id)
+
         conn.commit()
     except HTTPException as he:
         conn.rollback()
@@ -721,6 +734,10 @@ def create_building(
         site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=site_id)
         if site is None:
             _raise_not_found("site")
+        if payload.status == "ACTIVE" and site.get("status") != "ACTIVE":
+            _raise_invalid_hierarchy(
+                "Cannot create an ACTIVE building under an INACTIVE office.",
+            )
 
         _raise_building_duplicate_if_needed(
             fetch_building_duplicates(
@@ -836,6 +853,12 @@ def update_building_metadata(
         )
         if updated_building is None:
             _raise_not_found("building")
+
+        # Deactivating a building cascades down to its floors, same rule
+        # and same reactivation exception as the site cascade above.
+        if updates.get("status") == "INACTIVE":
+            deactivate_floors_by_building(conn, tenant_id=tenant_id, building_id=building_id)
+
         conn.commit()
     except HTTPException as he:
         conn.rollback()
@@ -878,19 +901,21 @@ def get_floors_by_building(
     conn: PGConnection,
     *,
     tenant_id: str,
-    building_id: str,
+    building_id: str | None = None,
+    site_id: str | None = None,
     page: int | None = None,
     limit: int | None = None,
     search: str | None = None,
     status_filter: str | None = None,
 ) -> list[FloorResponse]:
-    """Return tenant-scoped floors for one site through the full hierarchy."""
+    """Return tenant-scoped floors, optionally narrowed to one building and/or site."""
     status_filter = _normalize_status_filter(status_filter)
     try:
         floors = fetch_floors_by_building(
             conn,
             tenant_id=tenant_id,
             building_id=building_id,
+            site_id=site_id,
             page=page,
             limit=limit,
             search=search,
@@ -930,6 +955,10 @@ def create_floor(
         if str(building["site_id"]) != site_id:
             _raise_invalid_hierarchy(
                 "building_id does not belong to the supplied site_id.",
+            )
+        if payload.status == "ACTIVE" and building.get("status") != "ACTIVE":
+            _raise_invalid_hierarchy(
+                "Cannot create an ACTIVE floor under an INACTIVE building.",
             )
 
         _raise_floor_duplicate_if_needed(

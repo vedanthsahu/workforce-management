@@ -151,21 +151,25 @@ function addFlatBorder(svgText: string, id: string, color = "#000000", width = "
   });
 }
 
-// Outlines a highlighted seat's silhouette in black by stacking four 1px
-// drop-shadows (one per direction) on its <g>, instead of overriding its
-// fill — so the seat's own status color (green/amber/red, or the floor
-// plan's original artwork color when unconfigured) stays visible under the
-// highlight rather than being hidden by a solid highlight block.
-function addSeatBorder(svgText: string, id: string, color = "#000000"): string {
-  const openTagRegex = new RegExp(`<g\\b[^>]*\\sid="${escapeRegExp(id)}"[^>]*>`, "g");
-  const border = `drop-shadow(1px 0 0 ${color}) drop-shadow(-1px 0 0 ${color}) drop-shadow(0 1px 0 ${color}) drop-shadow(0 -1px 0 ${color})`;
-  return svgText.replace(openTagRegex, (openTag) => {
-    if (/\sstyle="/.test(openTag)) {
-      return openTag.replace(/\sstyle="([^"]*)"/, (_m, existing) =>
-        ` style="${existing}${existing && !existing.trim().endsWith(";") ? ";" : ""}filter:${border}"`
-      );
-    }
-    return openTag.replace(/>$/, ` style="filter:${border}">`);
+// Outlines a search/filter-matched seat by painting a solid stroke directly
+// on every shape inside its <g> — the same per-shape technique addFlatBorder
+// uses for the base status border, not a CSS `filter: drop-shadow`. A
+// drop-shadow's offset is resolved in this SVG's own coordinate units, and a
+// fixed "1px" offset is a rounding error against a canvas this size (see
+// addFlatBorder's comment on the same issue) — it never actually rendered
+// visibly. A `stroke` avoids that scaling problem entirely, and being wider
+// than addFlatBorder's own 32-unit base border (which every configured seat
+// already has, in black) makes this highlight visibly override it instead
+// of being swallowed underneath.
+function addSeatBorder(svgText: string, id: string, color = "#FACC15", width = "60"): string {
+  const groupRegex = new RegExp(`(<g[^>]*id="${escapeRegExp(id)}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "gm");
+  return svgText.replace(groupRegex, (_match, open, inner, close) => {
+    const bordered = inner
+      .replace(/<(path|rect|polygon|circle|ellipse)\b(?![^>]*\sstroke=)/g, `<$1 stroke="${color}"`)
+      .replace(/<(path|rect|polygon|circle|ellipse)\b(?![^>]*\sstroke-width=)/g, `<$1 stroke-width="${width}"`)
+      .replace(/stroke="[^"]*"/g, `stroke="${color}"`)
+      .replace(/stroke-width="[^"]*"/g, `stroke-width="${width}"`);
+    return `${open}${bordered}${close}`;
   });
 }
 
@@ -228,10 +232,13 @@ function colorSeats(svgText: string, seats: Seat[], filteredIds: Set<string> | u
     result = addFlatBorder(result, id);
   });
 
-  // Applied last, after every fill recolor above, so the border sits on top
-  // of whatever status color the seat ended up with.
+  // Applied last, after every fill/border above, so a search/filter match
+  // overrides whatever status color and (black) border the seat already
+  // got — a solid yellow fill plus a matching border reads as "this seat,
+  // completely," not just a thin outline traced on top of its old color.
   highlightedIds.forEach((id) => {
-    result = addSeatBorder(result, id);
+    result = recolorGroup(result, id, "#FACC15");
+    result = addSeatBorder(result, id, "#EAB308");
   });
 
   return result;

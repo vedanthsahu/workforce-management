@@ -311,6 +311,13 @@ interface SelectionHighlightBox {
   strokeWidth: number;
   haloNear: number;
   haloFar: number;
+  // The room's own actual (unpadded) box — used to mask out the highlight's
+  // interior so its glow/stroke never visually washes over the room's own
+  // artwork, however far the blur reaches (see the JSX render's <mask>).
+  innerX: number;
+  innerY: number;
+  innerWidth: number;
+  innerHeight: number;
 }
 
 function computeTransformedBBox(
@@ -405,6 +412,10 @@ function resolveSelectionHighlightBox(svgRoot: SVGSVGElement, targetSvgId: strin
     strokeWidth,
     haloNear: strokeWidth * 1.8,
     haloFar: strokeWidth * 4.5,
+    innerX: box.x,
+    innerY: box.y,
+    innerWidth: box.width,
+    innerHeight: box.height,
   };
 }
 
@@ -1167,23 +1178,10 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
     (svgId: string, x: number, y: number) => {
       const seat = seats.find((s) => s.svgId === svgId);
       if (!seat) return;
-      // The tooltip card is wide enough (TOOLTIP_WIDTH) to land right on top
-      // of the seat/room it describes — including the selection border/glow
-      // drawn around it. Hovering the seat you just selected would otherwise
-      // pop a solid white card over that highlight, making it look like the
-      // selection was lost the moment the mouse moved, when really it was
-      // just hidden underneath the tooltip. The tooltip is redundant here
-      // anyway (you already know you selected it), so skip it for exactly
-      // the currently-selected seat.
-      if (seat.id === selectedSeatId) {
-        if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
-        tooltipTimeoutRef.current = setTimeout(hideTooltip, 0);
-        return;
-      }
       if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
       setTooltip({ visible: true, x, y, seat });
     },
-    [seats, selectedSeatId, hideTooltip]
+    [seats]
   );
 
   // ── Pan handlers ──────────────────────────────────────────────────────────
@@ -1361,20 +1359,53 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
                   style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
                 >
                   <style>{`
-                    @keyframes _selectionBorderPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.75; } }
+                    @keyframes _selectionBorderPulse {
+                      0%, 100% { opacity: 1; }
+                      50% { opacity: 0.2; }
+                    }
                   `}</style>
+                  <defs>
+                    {/* Punches the room's own actual box out of the highlight
+                        layer below, so the glow/stroke — however far its blur
+                        reaches — can only ever render outside the room, never
+                        wash color over its own artwork. White = shown, black
+                        = hidden, standard SVG luminance mask. */}
+                    <mask id="_selection-outside-mask" maskUnits="userSpaceOnUse" x={0} y={0} width={svgDims.w} height={svgDims.h}>
+                      <rect x={0} y={0} width={svgDims.w} height={svgDims.h} fill="white" />
+                      <rect
+                        x={selectionHighlightBox.innerX}
+                        y={selectionHighlightBox.innerY}
+                        width={selectionHighlightBox.innerWidth}
+                        height={selectionHighlightBox.innerHeight}
+                        fill="black"
+                      />
+                    </mask>
+                  </defs>
+                  {/* A crisp stroked outline reads as a hard-edged "box" no
+                      matter how much drop-shadow blur is layered around it —
+                      the line itself stays a solid, sharply-defined shape.
+                      Using a semi-transparent FILL instead (masked down to
+                      just the ring between the room's real edge and this
+                      padded box) plus a `blur()` on top gives a source shape
+                      that's already soft before any glow is added, so the
+                      whole thing diffuses outward from the room rather than
+                      looking like a square drawn around it. The mask still
+                      keeps the inner cutoff at the room's real boundary
+                      crisp, which is what actually prevents color bleeding
+                      onto the room's own artwork — it's the outer edge that
+                      needed to soften, not the inner one. */}
                   <rect
                     x={selectionHighlightBox.x}
                     y={selectionHighlightBox.y}
                     width={selectionHighlightBox.width}
                     height={selectionHighlightBox.height}
                     rx={selectionHighlightBox.strokeWidth * 0.5}
-                    fill="none"
-                    stroke="#4C1D95"
-                    strokeWidth={selectionHighlightBox.strokeWidth}
+                    fill="#7C3AED"
+                    fillOpacity={0.55}
+                    mask="url(#_selection-outside-mask)"
                     style={{
-                      filter: `drop-shadow(0 0 ${selectionHighlightBox.haloNear}px #4C1D95) drop-shadow(0 0 ${selectionHighlightBox.haloFar}px #7C3AED) drop-shadow(0 0 ${selectionHighlightBox.haloFar * 1.8}px #A78BFA)`,
-                      animation: "_selectionBorderPulse 1.3s ease-in-out infinite",
+                      filter: `blur(${selectionHighlightBox.strokeWidth * 0.6}px) drop-shadow(0 0 ${selectionHighlightBox.haloNear}px #7C3AED) drop-shadow(0 0 ${selectionHighlightBox.haloFar}px #A78BFA)`,
+                      animation: "_selectionBorderPulse 1s ease-in-out infinite",
                     }}
                   />
                 </svg>
