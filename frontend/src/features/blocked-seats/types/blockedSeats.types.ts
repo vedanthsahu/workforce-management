@@ -18,6 +18,30 @@ export interface SeatOption {
   hasBooking: boolean;
   hasBlock: boolean;
   isUnavailable: boolean;
+  resource_name?: string | null;
+  resource_type?: string;
+  svg_element_id?: string;
+  capacity?: number | null;
+}
+
+export interface BlockableFloorLayout {
+  layout_id: string;
+  layout_name: string;
+  layout_file_url: string;
+  effective_from: string | null;
+  effective_till: string | null;
+  resources: Array<{
+    resource_id: string;
+    resource_code: string;
+    resource_name: string | null;
+    resource_type: string;
+    svg_element_id: string;
+    capacity: number | null;
+    is_bookable: boolean;
+    is_active: boolean;
+    has_booking: boolean;
+    has_block: boolean;
+  }>;
 }
 
 export interface BlockedSeat {
