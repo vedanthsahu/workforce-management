@@ -180,6 +180,7 @@ export async function fetchAvailability(params: {
   isGuestBooking?: boolean;
   bookedForGuestId?: string | null;
   calendarMode?: boolean;
+  spaceType?: string;
 }): Promise<AvailableSeatResponse[]> {
   const { data } = await axiosInstance.get<
     AvailableSeatResponse[] | { items: AvailableSeatResponse[] }
@@ -206,6 +207,9 @@ export async function fetchAvailability(params: {
           : {}),
         ...(params.calendarMode
           ? { calendar_mode: true }
+          : {}),
+        ...(params.spaceType && params.spaceType !== "ALL"
+          ? { space_type: params.spaceType }
           : {}),
       },
       paramsSerializer: (p) => {
@@ -241,6 +245,7 @@ export async function fetchSeatsWithAvailability(
     bookedForUserId: params.bookedForUserId ?? null,
     isGuestBooking: params.isGuestBooking ?? false,
     bookedForGuestId: params.bookedForGuestId ?? null,
+    spaceType: params.spaceType,
   });
 
   const selectedPrefs = (params.preferences ?? []).map((p) => p.toLowerCase());

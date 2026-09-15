@@ -616,6 +616,8 @@ def fetch_layout_seats_by_layout_id(
                     '{}'
                 ) AS amenity_ids,
 
+                lsm.capacity,
+
                 lsm.created_at,
 
                 lsm.updated_at
@@ -731,6 +733,7 @@ def publish_layout_seat_configurations(
             is_reserved=mapping.get("is_reserved"),
             svg_element_id=str(mapping["svg_element_id"]),
             source_layout_mapping_id=str(mapping["id"]),
+            capacity=mapping.get("capacity"),
         )
 
         replace_seat_amenities(
