@@ -19,6 +19,7 @@ from backend.repositories.blocked_seat_repository import (
     fetch_blocked_seats,
     fetch_blocked_seats_by_ids,
     fetch_conflicting_booking_seat_codes,
+    fetch_blockable_floor_layout,
     fetch_seats_for_block,
     insert_blocked_seat,
 )
@@ -28,6 +29,8 @@ from backend.schemas.blocked_seat import (
     BlockedSeatListResponse,
     BlockedSeatResponse,
     BlockedSeatSummaryResponse,
+    BlockableFloorLayoutResponse,
+    BlockableResourceResponse,
     CancelBlockedSeatResponse,
     CreateBlockedSeatsRequest,
     CreateBlockedSeatsResponse,
@@ -70,27 +73,94 @@ def get_blocked_seats(
     reference_date = date.today()
     try:
         rows, total = fetch_blocked_seats(
-            conn, tenant_id=tenant_id, query=query,
-            reference_date=reference_date, page=page, limit=limit,
+            conn,
+            tenant_id=tenant_id,
+            query=query,
+            reference_date=reference_date,
+            page=page,
+            limit=limit,
         )
         # Summary cards represent tenant-wide totals. Search and location/type/date
         # filters apply only to the result table and its pagination.
         summary_query = BlockedSeatListQuery(category=query.category)
         summary = fetch_blocked_seat_summary(
-            conn, tenant_id=tenant_id, query=summary_query, reference_date=reference_date,
+            conn,
+            tenant_id=tenant_id,
+            query=summary_query,
+            reference_date=reference_date,
         )
     except psycopg2.Error as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"code": "blocked_seat_list_failed", "message": "Failed to fetch blocked seats."},
+            detail={
+                "code": "blocked_seat_list_failed",
+                "message": "Failed to fetch blocked seats.",
+            },
         ) from exc
     return BlockedSeatListResponse(
         items=[_response(row) for row in rows],
         summary=BlockedSeatSummaryResponse(**summary),
         pagination=PaginationMetadata(
-            total=total, page=page, limit=limit,
+            total=total,
+            page=page,
+            limit=limit,
             total_pages=math.ceil(total / limit) if total else 0,
         ),
+    )
+
+
+def get_blockable_floor_layout(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: int,
+    blocked_from: date,
+    blocked_to: date,
+) -> BlockableFloorLayoutResponse:
+    if blocked_to < blocked_from:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_date_range",
+                "message": "Block To must be on or after Block From.",
+            },
+        )
+    try:
+        layout = fetch_blockable_floor_layout(
+            conn,
+            tenant_id=tenant_id,
+            floor_id=floor_id,
+            blocked_from=blocked_from,
+            blocked_to=blocked_to,
+        )
+    except psycopg2.Error as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "blockable_layout_lookup_failed",
+                "message": "Failed to load the floor layout.",
+            },
+        ) from exc
+    if layout is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "layout_effective_period_crossed",
+                "message": (
+                    "The selected period crosses a floor-layout effective-date boundary "
+                    "or has no effective layout. Select dates within one layout period."
+                ),
+            },
+        )
+    return BlockableFloorLayoutResponse(
+        layout_id=str(layout["layout_id"]),
+        layout_name=layout["layout_name"],
+        layout_file_url=layout["layout_file_url"],
+        effective_from=layout.get("effective_from"),
+        effective_till=layout.get("effective_till"),
+        resources=[
+            BlockableResourceResponse(**resource) for resource in layout["resources"]
+        ],
     )
 
 
@@ -110,17 +180,68 @@ def create_blocked_seats(
         if missing_ids:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail={"code": "seat_not_found", "message": f"Seats not found: {', '.join(map(str, missing_ids))}."},
+                detail={
+                    "code": "seat_not_found",
+                    "message": f"Seats not found: {', '.join(map(str, missing_ids))}.",
+                },
             )
-        unavailable = [seat["seat_code"] for seat in seats if seat["status"] != "ACTIVE" or not seat["is_bookable"]]
+        floor_ids = {int(seat["floor_id"]) for seat in seats}
+        if len(floor_ids) != 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "resources_must_share_floor",
+                    "message": "All selected resources must belong to the same floor.",
+                },
+            )
+        layout = fetch_blockable_floor_layout(
+            conn,
+            tenant_id=tenant_id,
+            floor_id=next(iter(floor_ids)),
+            blocked_from=payload.blocked_from,
+            blocked_to=payload.blocked_to,
+        )
+        if layout is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "layout_effective_period_crossed",
+                    "message": (
+                        "The selected period crosses a floor-layout effective-date boundary "
+                        "or has no effective layout. Select dates within one layout period."
+                    ),
+                },
+            )
+        layout_resource_ids = {
+            int(resource["resource_id"]) for resource in layout["resources"]
+        }
+        if any(seat_id not in layout_resource_ids for seat_id in seat_ids):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "resource_not_in_effective_layout",
+                    "message": "One or more resources are not part of the effective floor layout.",
+                },
+            )
+        unavailable = [
+            seat["seat_code"]
+            for seat in seats
+            if seat["status"] != "ACTIVE" or not seat["is_bookable"]
+        ]
         if unavailable:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={"code": "seat_not_bookable", "message": f"Seats are not active and bookable: {', '.join(unavailable)}."},
+                detail={
+                    "code": "seat_not_bookable",
+                    "message": f"Seats are not active and bookable: {', '.join(unavailable)}.",
+                },
             )
         booking_conflicts = fetch_conflicting_booking_seat_codes(
-            conn, tenant_id=tenant_id, seat_ids=seat_ids,
-            blocked_from=payload.blocked_from, blocked_to=payload.blocked_to,
+            conn,
+            tenant_id=tenant_id,
+            seat_ids=seat_ids,
+            blocked_from=payload.blocked_from,
+            blocked_to=payload.blocked_to,
         )
         if booking_conflicts:
             raise HTTPException(
@@ -135,9 +256,13 @@ def create_blocked_seats(
             )
         block_ids = [
             insert_blocked_seat(
-                conn, tenant_id=tenant_id, seat=seat,
-                block_type=payload.block_type, blocked_from=payload.blocked_from,
-                blocked_to=payload.blocked_to, reason=payload.reason,
+                conn,
+                tenant_id=tenant_id,
+                seat=seat,
+                block_type=payload.block_type,
+                blocked_from=payload.blocked_from,
+                blocked_to=payload.blocked_to,
+                reason=payload.reason,
                 blocked_by_user_id=str(current_user["user_id"]),
             )
             for seat in seats
@@ -147,37 +272,64 @@ def create_blocked_seats(
         conn.rollback()
         detail = exc.detail if isinstance(exc.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=SEAT_BLOCK_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="blocked_seat", resource_id=resource_id,
-            event_status="FAILURE", failure_code=detail.get("code"), failure_reason=detail.get("message"),
+            conn,
+            action=SEAT_BLOCK_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="blocked_seat",
+            resource_id=resource_id,
+            event_status="FAILURE",
+            failure_code=detail.get("code"),
+            failure_reason=detail.get("message"),
         )
         raise
     except psycopg2.Error as exc:
         conn.rollback()
         conflict = exc.pgcode == errorcodes.EXCLUSION_VIOLATION
         code = "seat_already_blocked" if conflict else "blocked_seat_create_failed"
-        message = "One or more seats already have an overlapping active block." if conflict else "Failed to block seats."
+        message = (
+            "One or more seats already have an overlapping active block."
+            if conflict
+            else "Failed to block seats."
+        )
         safe_write_audit_log(
-            conn, action=SEAT_BLOCK_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="blocked_seat", resource_id=resource_id,
-            event_status="FAILURE", failure_code=code, failure_reason=message,
+            conn,
+            action=SEAT_BLOCK_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="blocked_seat",
+            resource_id=resource_id,
+            event_status="FAILURE",
+            failure_code=code,
+            failure_reason=message,
         )
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT if conflict else status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_409_CONFLICT
+            if conflict
+            else status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"code": code, "message": message},
         ) from exc
 
     rows = fetch_blocked_seats_by_ids(
-        conn, tenant_id=tenant_id, block_ids=block_ids, reference_date=date.today(),
+        conn,
+        tenant_id=tenant_id,
+        block_ids=block_ids,
+        reference_date=date.today(),
     )
     safe_write_audit_log(
-        conn, action=SEAT_BLOCK_CREATED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="blocked_seat", resource_id=",".join(block_ids),
-        new_values=payload.model_dump(mode="json"), metadata={"seat_ids": seat_ids, "block_ids": block_ids},
+        conn,
+        action=SEAT_BLOCK_CREATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="blocked_seat",
+        resource_id=",".join(block_ids),
+        new_values=payload.model_dump(mode="json"),
+        metadata={"seat_ids": seat_ids, "block_ids": block_ids},
     )
     return CreateBlockedSeatsResponse(
         message=f"{len(rows)} seat{'s' if len(rows) != 1 else ''} blocked successfully.",
-        created_count=len(rows), items=[_response(row) for row in rows],
+        created_count=len(rows),
+        items=[_response(row) for row in rows],
     )
 
 
@@ -194,7 +346,10 @@ def cancel_seat_block(
         if old is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail={"code": "blocked_seat_not_found", "message": "Active blocked seat was not found."},
+                detail={
+                    "code": "blocked_seat_not_found",
+                    "message": "Active blocked seat was not found.",
+                },
             )
         conn.commit()
     except HTTPException:
@@ -204,13 +359,27 @@ def cancel_seat_block(
         conn.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"code": "blocked_seat_cancel_failed", "message": "Failed to cancel the seat block."},
+            detail={
+                "code": "blocked_seat_cancel_failed",
+                "message": "Failed to cancel the seat block.",
+            },
         ) from exc
     safe_write_audit_log(
-        conn, action=SEAT_BLOCK_CANCELLED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="blocked_seat", resource_id=block_id,
-        old_values={key: value.isoformat() if hasattr(value, "isoformat") else value for key, value in old.items()},
+        conn,
+        action=SEAT_BLOCK_CANCELLED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="blocked_seat",
+        resource_id=block_id,
+        old_values={
+            key: value.isoformat() if hasattr(value, "isoformat") else value
+            for key, value in old.items()
+        },
         new_values={"status": "CANCELLED", "reason": reason},
         changed_fields=["status"],
     )
-    return CancelBlockedSeatResponse(message="Seat block cancelled successfully.", block_id=block_id, status="CANCELLED")
+    return CancelBlockedSeatResponse(
+        message="Seat block cancelled successfully.",
+        block_id=block_id,
+        status="CANCELLED",
+    )

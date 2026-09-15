@@ -65,7 +65,11 @@ def fetch_blocked_seats(
 ) -> tuple[list[dict[str, Any]], int]:
     base, filter_params = _filtered_base(query)
     category_sql = _category_condition(query.category)
-    category_params = [reference_date, reference_date] if query.category == "expiring" else [reference_date]
+    category_params = (
+        [reference_date, reference_date]
+        if query.category == "expiring"
+        else [reference_date]
+    )
     select = """
         SELECT bs.id::text AS block_id, bs.seat_id::text AS seat_id,
                st.seat_code, bs.site_id::text AS site_id, si.site_name,
@@ -79,8 +83,18 @@ def fetch_blocked_seats(
                bs.blocked_by_user_id::text AS blocked_by_user_id,
                au.full_name AS blocked_by_name, bs.created_at
     """
-    params: list[Any] = [reference_date, reference_date, tenant_id, *filter_params, *category_params]
-    sql = select + base + f" AND {category_sql} ORDER BY bs.blocked_from DESC, bs.id DESC LIMIT %s OFFSET %s"
+    params: list[Any] = [
+        reference_date,
+        reference_date,
+        tenant_id,
+        *filter_params,
+        *category_params,
+    ]
+    sql = (
+        select
+        + base
+        + f" AND {category_sql} ORDER BY bs.blocked_from DESC, bs.id DESC LIMIT %s OFFSET %s"
+    )
     params.extend([limit, (page - 1) * limit])
     count_sql = "SELECT COUNT(*)::integer AS total " + base + f" AND {category_sql}"
     count_params: list[Any] = [tenant_id, *filter_params, *category_params]
@@ -100,14 +114,17 @@ def fetch_blocked_seat_summary(
     reference_date: date,
 ) -> dict[str, int]:
     base, filter_params = _filtered_base(query)
-    sql = """
+    sql = (
+        """
         SELECT
           COUNT(*) FILTER (WHERE bs.status = 'ACTIVE' AND %s BETWEEN bs.blocked_from AND bs.blocked_to)::integer AS active_blocks,
           COUNT(*) FILTER (WHERE bs.status = 'ACTIVE' AND (bs.created_at AT TIME ZONE COALESCE(si.timezone, 'UTC'))::date = %s)::integer AS seats_blocked_today,
           COUNT(*) FILTER (WHERE bs.status = 'ACTIVE' AND bs.blocked_from > %s)::integer AS upcoming_blocks,
           COUNT(*) FILTER (WHERE bs.status = 'ACTIVE' AND bs.blocked_to BETWEEN %s AND (%s + 3))::integer AS expiring_soon,
           COUNT(*) FILTER (WHERE bs.blocked_to < %s)::integer AS expired
-    """ + base
+    """
+        + base
+    )
     params: list[Any] = [reference_date] * 6 + [tenant_id, *filter_params]
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(sql, params)
@@ -131,8 +148,97 @@ def fetch_seats_for_block(
         return [dict(row) for row in cur.fetchall()]
 
 
+def fetch_blockable_floor_layout(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: int,
+    blocked_from: date,
+    blocked_to: date,
+) -> dict[str, Any] | None:
+    """Return the one layout and its resources valid for the entire block range."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT fl.id::text AS layout_id, fl.layout_name,
+                   fl.layout_file_url, fl.effective_from, fl.effective_till
+            FROM floor_layouts AS fl
+            INNER JOIN sites AS si
+              ON si.id = fl.site_id AND si.tenant_id = fl.tenant_id
+            WHERE fl.tenant_id = %s
+              AND fl.floor_id = %s
+              AND (
+                    fl.status IN ('PUBLISHED', 'SCHEDULED')
+                    OR (fl.status = 'ARCHIVED' AND fl.effective_till IS NOT NULL)
+                  )
+              AND COALESCE(
+                    (fl.effective_from AT TIME ZONE COALESCE(si.timezone, 'UTC'))::date,
+                    '-infinity'::date
+                  ) <= %s
+              AND (
+                    fl.effective_till IS NULL
+                    OR (fl.effective_till AT TIME ZONE COALESCE(si.timezone, 'UTC'))::date > %s
+                  )
+            ORDER BY fl.effective_from DESC NULLS LAST, fl.version_no DESC
+            LIMIT 1
+            """,
+            (tenant_id, floor_id, blocked_from, blocked_to),
+        )
+        layout = cur.fetchone()
+        if layout is None:
+            return None
+
+        cur.execute(
+            """
+            SELECT st.id::text AS resource_id, st.seat_code AS resource_code,
+                   st.seat_name AS resource_name,
+                   COALESCE(st.seat_type, 'STANDARD') AS resource_type,
+                   COALESCE(st.svg_element_id, st.seat_code) AS svg_element_id,
+                   st.capacity, st.is_bookable,
+                   st.status = 'ACTIVE' AS is_active,
+                   EXISTS (
+                     SELECT 1 FROM bookings AS b
+                     WHERE b.tenant_id = st.tenant_id
+                       AND b.seat_id = st.id
+                       AND b.booking_date BETWEEN %s AND %s
+                       AND b.booking_status IN ('CONFIRMED', 'CHECKED_IN')
+                   ) AS has_booking,
+                   EXISTS (
+                     SELECT 1 FROM blocked_seats AS bs
+                     WHERE bs.tenant_id = st.tenant_id
+                       AND bs.seat_id = st.id
+                       AND bs.status = 'ACTIVE'
+                       AND bs.blocked_from <= %s
+                       AND bs.blocked_to >= %s
+                   ) AS has_block
+            FROM seats AS st
+            WHERE st.tenant_id = %s
+              AND st.floor_id = %s
+              AND st.layout_id = %s
+            ORDER BY st.seat_code, st.id
+            """,
+            (
+                blocked_from,
+                blocked_to,
+                blocked_to,
+                blocked_from,
+                tenant_id,
+                floor_id,
+                layout["layout_id"],
+            ),
+        )
+        result = dict(layout)
+        result["resources"] = [dict(row) for row in cur.fetchall()]
+        return result
+
+
 def fetch_conflicting_booking_seat_codes(
-    conn: PGConnection, *, tenant_id: str, seat_ids: list[int], blocked_from: date, blocked_to: date
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seat_ids: list[int],
+    blocked_from: date,
+    blocked_to: date,
 ) -> list[str]:
     with conn.cursor() as cur:
         cur.execute(
@@ -170,8 +276,18 @@ def insert_blocked_seat(
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'ACTIVE', %s)
             RETURNING id::text
             """,
-            (tenant_id, seat["id"], seat["site_id"], seat["building_id"], seat["floor_id"],
-             blocked_from, blocked_to, reason, block_type, blocked_by_user_id),
+            (
+                tenant_id,
+                seat["id"],
+                seat["site_id"],
+                seat["building_id"],
+                seat["floor_id"],
+                blocked_from,
+                blocked_to,
+                reason,
+                block_type,
+                blocked_by_user_id,
+            ),
         )
         return str(cur.fetchone()[0])
 
@@ -181,7 +297,8 @@ def fetch_blocked_seats_by_ids(
 ) -> list[dict[str, Any]]:
     query = BlockedSeatListQuery(category="active")
     base, _ = _filtered_base(query)
-    sql = """
+    sql = (
+        """
         SELECT bs.id::text AS block_id, bs.seat_id::text AS seat_id,
                st.seat_code, bs.site_id::text AS site_id, si.site_name,
                bs.building_id::text AS building_id, bu.building_name,
@@ -193,7 +310,10 @@ def fetch_blocked_seats_by_ids(
                     ELSE 'ACTIVE' END AS display_status,
                bs.blocked_by_user_id::text AS blocked_by_user_id,
                au.full_name AS blocked_by_name, bs.created_at
-    """ + base + " AND bs.id = ANY(%s::bigint[]) ORDER BY bs.id"
+    """
+        + base
+        + " AND bs.id = ANY(%s::bigint[]) ORDER BY bs.id"
+    )
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(sql, (reference_date, reference_date, tenant_id, block_ids))
         return [dict(row) for row in cur.fetchall()]

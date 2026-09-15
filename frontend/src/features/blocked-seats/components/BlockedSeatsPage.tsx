@@ -108,26 +108,26 @@ export default function BlockedSeatsPage() {
     }
   };
   return (
-    <main className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6">
-      <div className="mx-auto max-w-[1500px] space-y-4">
+    <main className="min-h-0 flex-1 overflow-y-auto bg-muted/30 p-4 sm:p-6">
+      <div className="mx-auto max-w-[1500px] space-y-4 sm:space-y-6">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="mb-2 text-xs text-slate-500">
+            <div className="mb-2 text-xs text-muted-foreground">
               Dashboard <span className="px-1">/</span>{" "}
-              <span className="font-semibold text-slate-700">
+              <span className="font-semibold text-foreground">
                 Blocked Seats
               </span>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-950">
+            <h1 className="text-xl font-semibold text-foreground sm:text-2xl">
               Blocked Seats
             </h1>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
               Block and manage seats that are unavailable for booking.
             </p>
           </div>
           <button
             onClick={() => router.push("/admin/blocked-seats/block")}
-            className="inline-flex h-10 items-center justify-center gap-2 self-start rounded-md bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-violet-700 sm:self-auto"
+            className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 sm:self-auto"
           >
             <Plus size={17} />
             Block Seats

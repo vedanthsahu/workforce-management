@@ -99,6 +99,28 @@ class CreateBlockedSeatsResponse(BaseModel):
     items: list[BlockedSeatResponse]
 
 
+class BlockableResourceResponse(BaseModel):
+    resource_id: str
+    resource_code: str
+    resource_name: str | None = None
+    resource_type: str
+    svg_element_id: str
+    capacity: int | None = None
+    is_bookable: bool
+    is_active: bool
+    has_booking: bool
+    has_block: bool
+
+
+class BlockableFloorLayoutResponse(BaseModel):
+    layout_id: str
+    layout_name: str
+    layout_file_url: str
+    effective_from: datetime | None = None
+    effective_till: datetime | None = None
+    resources: list[BlockableResourceResponse]
+
+
 class CancelBlockedSeatRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
 
