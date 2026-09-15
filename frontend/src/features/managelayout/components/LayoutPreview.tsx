@@ -6,7 +6,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Layout } from "../types/layout.types";
-import { Preference, Seat, SeatStatus, SeatType, SeatUpdatePayload } from "@/features/managelayout1";
+import {
+  Preference, Seat, SeatStatus, SeatType, SeatUpdatePayload,
+  ALL_SPACE_TYPES, SPACE_TYPE_LABELS, categoryOf, suggestSeatType,
+} from "@/features/managelayout1";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 import { extractSeatIds } from "@/lib/svg/extractSeatIds";
 
@@ -265,14 +268,6 @@ function highlightSeat(svgText: string, svgId: string): string {
 
 // ─── Seat Config Dialog ───────────────────────────────────────────────────────
 
-const SEAT_TYPES: SeatType[] = ["STANDARD", "WINDOW", "CABIN", "ACCESSIBLE", "HOT_DESK"];
-const SEAT_TYPE_LABELS: Record<string, string> = {
-  STANDARD: "STANDARD",
-  WINDOW: "WINDOW",
-  CABIN: "CABIN",
-  ACCESSIBLE: "ACCESSIBLE",
-  HOT_DESK: "HOT_DESK",
-};
 const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
 
 interface SeatConfigDialogProps {
@@ -289,17 +284,25 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
   const [status, setStatus] = useState<SeatStatus>("ACTIVE");
   const [amenityIds, setAmenityIds] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
+  const [capacity, setCapacity] = useState<number | null>(null);
+  const [wasSuggested, setWasSuggested] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const isConferenceRoom = seatType === "CONFERENCE_ROOM";
+  const capacityInvalid = isConferenceRoom && (capacity == null || capacity < 1);
+
   useEffect(() => {
     if (!seat) return;
-    setSeatType((seat.seat_type as SeatType) ?? "STANDARD");
+    const suggested = !seat.seat_type;
+    setSeatType((seat.seat_type as SeatType) ?? (suggestSeatType(seat.seat_svg_id) as SeatType));
+    setWasSuggested(suggested);
     setBookable(seat.is_bookable ?? true);
     setStatus((seat.status as SeatStatus) ?? "ACTIVE");
     setAmenityIds([...seat.amenity_ids]);
     setNotes(seat.notes ?? "");
+    setCapacity(seat.capacity ?? null);
     setSaved(false);
     setSaveError(false);
   }, [seat]);
@@ -313,6 +316,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
 
   const handleSave = async () => {
     if (!seat) return;
+    if (capacityInvalid) { setSaved(false); return; }
     setSaving(true); setSaveError(false);
     try {
       await onSave({
@@ -323,6 +327,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
         status,
         amenity_ids: amenityIds,
         notes: notes || undefined,
+        capacity: isConferenceRoom ? capacity : null,
       });
       setSaved(true);
       setTimeout(() => onClose(), 800);
@@ -346,29 +351,62 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md rounded-xl p-0 overflow-hidden gap-0 [&>button:last-child]:hidden">
         <DialogHeader className="px-5 pt-5 pb-4 border-b">
-          <p className="text-xs text-gray-400 mb-0.5 font-medium">Configure Seat</p>
+          <p className="text-xs text-gray-400 mb-0.5 font-medium">
+            Configure {categoryOf(seat.seat_type) === "SEATS" ? "Seat" : categoryOf(seat.seat_type) === "CABINS" ? "Cabin" : "Conference Room"}
+          </p>
           <DialogTitle className="text-base font-bold text-indigo-600">
             {seat.seat_code}
           </DialogTitle>
         </DialogHeader>
 
         <div className="px-5 py-5 space-y-4 overflow-y-auto max-h-[60vh]">
-          {/* Seat Type */}
+          {/* Space Type */}
           <div>
             <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">
-              Seat Type <span className="text-red-500">*</span>
+              Space Type <span className="text-red-500">*</span>
             </label>
             <select
               value={seatType}
-              onChange={(e) => { setSeatType(e.target.value as SeatType); setSaved(false); }}
+              onChange={(e) => { setSeatType(e.target.value as SeatType); setWasSuggested(false); setSaved(false); }}
               className={selectCls}
               style={{ backgroundImage: chevron, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
             >
-              {SEAT_TYPES.map((t) => (
-                <option key={t} value={t}>{SEAT_TYPE_LABELS[t]}</option>
+              {ALL_SPACE_TYPES.map((t) => (
+                <option key={t} value={t}>{SPACE_TYPE_LABELS[t]}</option>
               ))}
             </select>
+            {wasSuggested && (
+              <p className="text-[10.5px] text-indigo-500 mt-1">
+                Suggested from the floor-plan ID ({seat.seat_svg_id}) — confirm or change it.
+              </p>
+            )}
           </div>
+
+          {/* Capacity — Conference Rooms only */}
+          {isConferenceRoom && (
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">
+                Capacity <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={1000}
+                value={capacity ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCapacity(v === "" ? null : Number(v));
+                  setSaved(false);
+                }}
+                placeholder="e.g. 12"
+                className={`${selectCls} ${capacityInvalid ? "border-red-300 focus:border-red-400" : ""}`}
+              />
+              <p className="text-[10.5px] text-gray-400 mt-1">Number of people this room seats.</p>
+              {capacityInvalid && (
+                <p className="text-[10.5px] text-red-500 mt-1">Capacity is required for a conference room.</p>
+              )}
+            </div>
+          )}
 
           {/* Bookable */}
           <div>
@@ -474,7 +512,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
             </button>
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || capacityInvalid}
               className="px-4 py-1.5 text-xs font-semibold bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors"
             >
               {saving ? "Saving…" : "Save Changes"}

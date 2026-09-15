@@ -187,10 +187,12 @@ export default function LayoutSidebar({
   const quickActions = [
     {
       icon: <SeatIcon />,
-      label: "Manage Seats",
-      sub: "Configure seat details and settings",
+      label: "Manage Spaces",
+      sub: "Configure seats, cabins and conference rooms",
       color: "text-indigo-600 bg-indigo-50",
-      // Static base path — query added at click time
+      // Static base path — query added at click time. URL/folder name
+      // intentionally kept as "manage-seats" (bookmarks, prefetch list,
+      // query-param plumbing) — only the visible label changed.
       basePath: "/admin/layouts/manage-seats",
       href: `/admin/layouts/manage-seats${buildQuery()}`,
     },

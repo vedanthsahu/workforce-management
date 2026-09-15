@@ -21,6 +21,11 @@ import {
   bulkConfigureSeats,
 } from "../services/seatService";
 import { useSeatsStore } from "@/store/seatStore";
+import {
+  categoryOf,
+  SEAT_TYPES,
+  SpaceCategory,
+} from "../utils/spaceCategory";
 
 const DEFAULT_FILTERS: SeatFilters = {
   search:    "",
@@ -87,6 +92,16 @@ export function useManageSeats() {
     fetchAllPreferences().then(setPreferences).catch(console.error);
   }, []);
 
+  // ── Space category (Manage Spaces tabs) ───────────────────────────────────
+  // A seat's category is driven entirely by its real, configured seat_type —
+  // never inferred from its SVG id (that's a prefill suggestion only, see
+  // spaceCategory.ts). An unconfigured seat always falls under Seats. "ALL"
+  // is a view-only tab (everything combined, matching the original flat
+  // list this page had before category tabs existed) — it's the default
+  // landing tab for exactly that reason, so opening the page still looks
+  // like what it always did until an admin narrows to one category.
+  const [activeCategory, setActiveCategoryState] = useState<SpaceCategory>("ALL");
+
   // ── Filters ────────────────────────────────────────────────────────────
   const [filters, setFilters] = useState<SeatFilters>(DEFAULT_FILTERS);
 
@@ -98,6 +113,20 @@ export function useManageSeats() {
   }, []);
 
   const resetFilters = useCallback(() => setFilters(DEFAULT_FILTERS), []);
+
+  // Switching tabs resets everything that only makes sense within the
+  // previous tab: the sub-type filter (Cabins/Conference Rooms have none —
+  // carrying e.g. seat_type="WINDOW" across would silently empty the table
+  // with no visible cause), the current selection (svg-id based; a
+  // selection spanning tabs would bulk-edit rows the admin can no longer
+  // see), and the edit panel (editing a seat that just scrolled out of view
+  // is confusing).
+  const setActiveCategory = useCallback((next: SpaceCategory) => {
+    setActiveCategoryState(next);
+    setFilters((prev) => ({ ...prev, seat_type: "All" }));
+    setSelected(new Set());
+    setEditingSeat(null);
+  }, []);
 
   // The search box stays bound directly to `filters.search` (see
   // SeatFiltersBar) so every keystroke shows up immediately — debouncing
@@ -115,9 +144,20 @@ export function useManageSeats() {
     return () => clearTimeout(id);
   }, [filters.search]);
 
+  // Stage 1 — every seat belonging to the active tab, before any filter is
+  // applied. Drives the tab's stat cards and the table's "N Cabins" heading.
+  // "ALL" shows every seat regardless of category — categoryOf never
+  // returns "ALL" itself (it only classifies a seat into one of the 3 real
+  // categories), so this has to special-case it rather than compare against it.
+  const categorySeats = useMemo(
+    () => activeCategory === "ALL" ? seats : seats.filter((s) => categoryOf(s.seat_type) === activeCategory),
+    [seats, activeCategory]
+  );
+
+  // Stage 2 — the filter predicate, scoped to the active tab's seats only.
   const filteredSeats = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase();
-    return seats.filter((s) => {
+    return categorySeats.filter((s) => {
       if (query && !s.seat_code.toLowerCase().includes(query))                                                    return false;
       if (filters.seat_type !== "All" && (s.seat_type ?? "").toUpperCase() !== filters.seat_type.toUpperCase()) return false;
       if (filters.status    !== "All" && (s.status    ?? "").toUpperCase() !== filters.status.toUpperCase())    return false;
@@ -125,7 +165,30 @@ export function useManageSeats() {
       if (filters.amenity   !== "All" && !s.amenity_ids.includes(filters.amenity))                              return false;
       return true;
     });
-  }, [seats, debouncedSearch, filters.seat_type, filters.status, filters.bookable, filters.amenity]);
+  }, [categorySeats, debouncedSearch, filters.seat_type, filters.status, filters.bookable, filters.amenity]);
+
+  // Tab badge counts — always over ALL seats, never scoped to the currently
+  // active tab, or every tab but the active one would show 0. ALL's count
+  // is the total; the other three are populated per-seat below.
+  const categoryCounts = useMemo(() => {
+    const counts: Record<SpaceCategory, number> = { ALL: seats.length, SEATS: 0, CABINS: 0, CONFERENCE_ROOMS: 0 };
+    for (const s of seats) counts[categoryOf(s.seat_type)] += 1;
+    return counts;
+  }, [seats]);
+
+  // The stat-card numbers for the active tab — same five metrics the page
+  // showed for the whole layout before, now scoped to categorySeats, plus a
+  // capacity total shown only for Conference Rooms.
+  const categoryStats = useMemo(() => ({
+    total:         categorySeats.length,
+    configured:    categorySeats.filter((s) => s.is_configured).length,
+    unconfigured:  categorySeats.filter((s) => !s.is_configured).length,
+    nonBookable:   categorySeats.filter((s) => s.is_bookable === false).length,
+    inactive:      categorySeats.filter((s) => s.status === "INACTIVE").length,
+    totalCapacity: activeCategory === "CONFERENCE_ROOMS"
+      ? categorySeats.reduce((sum, s) => sum + (s.capacity ?? 0), 0)
+      : null,
+  }), [categorySeats, activeCategory]);
 
   // Whether a filter is actually narrowing the seat list — driven by the
   // filter inputs themselves, not by comparing filteredSeats.length to
@@ -146,8 +209,19 @@ export function useManageSeats() {
     filters.bookable  !== "All" ||
     filters.amenity   !== "All";
 
-  // Static list — always show all types regardless of what's configured
-  const seatTypes = ["All", "STANDARD", "WINDOW", "CABIN", "ACCESSIBLE", "HOT_DESK"];
+  // A tab that narrows to one real category (Cabins/Conference Rooms) is
+  // itself a narrowing, even with no filters set — without this, switching
+  // to the Cabins tab with nothing else filtered would leave the map
+  // completely unhighlighted, reading as "the tab did nothing." ALL and
+  // Seats are both "show everything normally" baseline states (ALL always
+  // was; Seats is the largest/default-feeling category), so neither forces
+  // a highlight on their own.
+  const isMapHighlightActive = hasActiveFilters || (activeCategory !== "SEATS" && activeCategory !== "ALL");
+
+  // Sub-type filter only exists under Seats — the original list, unchanged.
+  // null signals "this tab has no sub-types, hide the dropdown" (also true
+  // for ALL, since a mixed list has no single sub-type set to filter by).
+  const subTypeOptions = activeCategory === "SEATS" ? ["All", ...SEAT_TYPES] : null;
 
   // ── Selection ──────────────────────────────────────────────────────────
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -164,11 +238,19 @@ export function useManageSeats() {
     });
   }, []);
 
-  const selectAll      = useCallback(() => setSelected(new Set(filteredSeats.filter((s) => !s.is_configured).map((s) => s.seat_svg_id))), [filteredSeats]);
+  // Selection is no longer restricted to unconfigured seats — Cabins and
+  // Conference Rooms only ever contain already-configured rows (an
+  // unconfigured seat always shows under Seats, see categoryOf), so
+  // excluding configured seats from selection would leave those two tabs
+  // with nothing bulk-selectable at all. Any row in the active tab's
+  // filtered list can now be selected, letting Bulk Edit both configure
+  // fresh Seats rows and re-edit a batch of existing Cabins/Conference
+  // Rooms together (see saveBulk's per-seat field resolution below, which
+  // is what makes re-editing a mix of differing existing seats safe).
+  const selectAll      = useCallback(() => setSelected(new Set(filteredSeats.map((s) => s.seat_svg_id))), [filteredSeats]);
   const clearSelection = useCallback(() => setSelected(new Set()), []);
 
-  const unconfiguredSeats = filteredSeats.filter((s) => !s.is_configured);
-  const isAllSelected   = unconfiguredSeats.length > 0 && unconfiguredSeats.every((s) => selected.has(s.seat_svg_id));
+  const isAllSelected   = filteredSeats.length > 0 && filteredSeats.every((s) => selected.has(s.seat_svg_id));
   const isIndeterminate = selected.size > 0 && !isAllSelected;
 
   // ── Edit panel ─────────────────────────────────────────────────────────
@@ -198,6 +280,7 @@ export function useManageSeats() {
         is_bookable: payload.is_bookable,
         is_reserved: seat.is_reserved,
         amenity_ids: payload.amenity_ids.map(Number),
+        capacity:    payload.capacity,
       });
     }
 
@@ -209,6 +292,7 @@ export function useManageSeats() {
       is_configured: true,
       amenity_ids:   payload.amenity_ids,
       notes:         payload.notes ?? seat.notes,
+      capacity:      payload.capacity !== undefined ? payload.capacity : seat.capacity,
     };
 
     if (isPublished) {
@@ -238,17 +322,27 @@ export function useManageSeats() {
     const affectedSeats = seats.filter((s) => payload.seat_svg_ids.includes(s.seat_svg_id));
     if (affectedSeats.length === 0) return;
 
-    const mappingIds  = affectedSeats.map((s) => s.layout_seat_mapping_id);
-    const first        = affectedSeats[0];
-    const isPublished  = layout?.is_published === true;
+    const isPublished = layout?.is_published === true;
 
-    const resolvedPayload = {
-      seat_type:   payload.seat_type   ?? first.seat_type   ?? "STANDARD",
-      status:      payload.status      ?? first.status      ?? "ACTIVE",
-      is_bookable: payload.is_bookable ?? first.is_bookable ?? true,
-      is_reserved: first.is_reserved,
-      amenity_ids: (payload.amenity_ids ?? first.amenity_ids).map(Number),
-    };
+    // Resolved PER SEAT — not from one shared "first selected seat"
+    // snapshot. A field left blank in the bulk-edit form means "keep this
+    // seat's own existing value," which only holds if each seat's own
+    // current value is the fallback used for it. Falling back to a single
+    // `first` seat's values for everyone was invisible while bulk edit only
+    // ever targeted freshly-unconfigured seats (all sharing the same null
+    // defaults) — but now that already-configured, possibly-differing
+    // Cabins/Conference Rooms can be bulk-selected too (see selectAll
+    // above), that shared fallback would silently overwrite every other
+    // selected seat's untouched fields with whichever seat happened to be
+    // first in the array.
+    const resolveFor = (seat: Seat) => ({
+      seat_type:   payload.seat_type   ?? seat.seat_type   ?? "STANDARD",
+      status:      payload.status      ?? seat.status      ?? "ACTIVE",
+      is_bookable: payload.is_bookable ?? seat.is_bookable ?? true,
+      is_reserved: seat.is_reserved,
+      amenity_ids: (payload.amenity_ids ?? seat.amenity_ids).map(Number),
+      capacity:    payload.capacity !== undefined ? payload.capacity : seat.capacity,
+    });
 
     if (isPublished) {
       // Local-only: apply to every affected seat's in-memory state and stage
@@ -258,21 +352,33 @@ export function useManageSeats() {
       // seat against its original fetched value, so any seat this bulk edit
       // happens to land back on its original config is un-marked as pending.
       affectedSeats.forEach((seat) => {
+        const resolved = resolveFor(seat);
         applyLocalEdit({
           ...seat,
-          seat_type:     resolvedPayload.seat_type,
-          status:        resolvedPayload.status,
-          is_bookable:   resolvedPayload.is_bookable,
+          seat_type:     resolved.seat_type,
+          status:        resolved.status,
+          is_bookable:   resolved.is_bookable,
           is_configured: true,
-          amenity_ids:   resolvedPayload.amenity_ids.map(String),
+          amenity_ids:   resolved.amenity_ids.map(String),
+          capacity:      resolved.capacity,
         });
       });
     } else {
-      // All affected seats share one config, so it goes in `defaults` and
-      // each entry only needs to carry its own mapping id.
+      // Each entry now carries its own fully-resolved fields (resolution
+      // already happened above), so no shared `defaults` merge is needed.
       await bulkConfigureSeats({
-        defaults: resolvedPayload,
-        seats: mappingIds.map((id) => ({ layout_seat_mapping_id: Number(id) })),
+        seats: affectedSeats.map((seat) => {
+          const resolved = resolveFor(seat);
+          return {
+            layout_seat_mapping_id: Number(seat.layout_seat_mapping_id),
+            seat_type:   resolved.seat_type,
+            status:      resolved.status,
+            is_bookable: resolved.is_bookable,
+            is_reserved: resolved.is_reserved,
+            amenity_ids: resolved.amenity_ids,
+            capacity:    resolved.capacity,
+          };
+        }),
       });
       await fetchSeats(layoutId);
       markDirty();
@@ -319,14 +425,22 @@ export function useManageSeats() {
     statsLoading,
     seatsError,
 
+    // space category (Manage Spaces tabs)
+    activeCategory,
+    setActiveCategory,
+    categoryCounts,
+    categoryStats,
+
     // seats
     seats,
+    categorySeats,
     filteredSeats,
     hasActiveFilters,
+    isMapHighlightActive,
     filters,
     updateFilter,
     resetFilters,
-    seatTypes,
+    subTypeOptions,
 
     // unpublished (local-only) edits on an already-published layout
     isDirty,

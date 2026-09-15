@@ -367,6 +367,7 @@ def update_layout_seat_configuration(
                 is_reserved=payload.is_reserved,
                 amenity_ids=amenity_ids,
                 updated_by=str(current_user["user_id"]),
+                capacity=payload.capacity,
             )
 
         # Draft isolation only holds for DRAFT/ARCHIVED layouts. A PUBLISHED
@@ -396,6 +397,7 @@ def update_layout_seat_configuration(
                 is_reserved=updated_mapping.get("is_reserved"),
                 svg_element_id=str(updated_mapping["svg_element_id"]),
                 source_layout_mapping_id=str(updated_mapping["id"]),
+                capacity=updated_mapping.get("capacity"),
             )
             replace_seat_amenities(
                 conn,
@@ -428,6 +430,7 @@ def update_layout_seat_configuration(
             is_configured=True,
             configuration_status="COMPLETED",
             amenity_ids=updated_mapping.get("amenity_ids") or [],
+            capacity=updated_mapping.get("capacity"),
         )
 
     except HTTPException:
@@ -520,6 +523,7 @@ def update_layout_seat_configurations_bulk(
                 "amenity_ids": _resolve_bulk_field(
                     entry.amenity_ids, defaults.amenity_ids if defaults else None
                 ),
+                "capacity": _resolve_bulk_field(entry.capacity, defaults.capacity if defaults else None),
             }
             for entry in payload.seats
         ]
@@ -546,6 +550,7 @@ def update_layout_seat_configurations_bulk(
                 is_configured=True,
                 configuration_status="COMPLETED",
                 amenity_ids=updated_mappings_by_id[mapping_id].get("amenity_ids") or [],
+                capacity=updated_mappings_by_id[mapping_id].get("capacity"),
             )
             for mapping_id in mapping_ids
         ]
@@ -577,6 +582,7 @@ def update_layout_seat_configurations_bulk(
                         "is_reserved": updated_mappings_by_id[mapping_id].get("is_reserved"),
                         "svg_element_id": str(updated_mappings_by_id[mapping_id]["svg_element_id"]),
                         "source_layout_mapping_id": str(updated_mappings_by_id[mapping_id]["id"]),
+                        "capacity": updated_mappings_by_id[mapping_id].get("capacity"),
                     }
                     for mapping_id in mapping_ids
                 ]
