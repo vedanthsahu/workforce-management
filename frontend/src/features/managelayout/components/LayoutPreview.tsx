@@ -9,6 +9,15 @@ import { Layout } from "../types/layout.types";
 import { Preference, Seat, SeatStatus, SeatType, SeatUpdatePayload } from "@/features/managelayout1";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 import { extractSeatIds } from "@/lib/svg/extractSeatIds";
+import {
+  SVG_W,
+  SVG_H,
+  ROOM_SVG_ID_PATTERN,
+  SEAT_TYPES,
+  SEAT_TYPE_LABELS,
+  SEAT_STATUSES,
+  LEGEND_ITEMS,
+} from "../utils/layoutPreview.utils";
 
 interface LayoutPreviewProps {
   layout: Layout | null;
@@ -87,12 +96,6 @@ function resolveSeatFill(seat: Seat): string {
   if (!seat.is_bookable) return "#F59E0B"; // Non-bookable — amber
   return "#22C55E";                                 // Bookable     — green
 }
-
-// Cabin/conference/meeting/training room seats are grouped under one svg id
-// containing a "CBN"/"CFR"/"MR"/"TR" segment (e.g. "HYD-PRV-F11-CBN-04",
-// "HYD-PRV-F11-CFR-02", "HYD-PRV-F11-MR-01", "HYD-PRV-F11-TR-01"), not a
-// dedicated field.
-const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr|tr)([-_]|$)/i;
 
 function isRoomSvgId(svgId: string): boolean {
   return ROOM_SVG_ID_PATTERN.test(svgId);
@@ -264,16 +267,6 @@ function highlightSeat(svgText: string, svgId: string): string {
 }
 
 // ─── Seat Config Dialog ───────────────────────────────────────────────────────
-
-const SEAT_TYPES: SeatType[] = ["STANDARD", "WINDOW", "CABIN", "ACCESSIBLE", "HOT_DESK"];
-const SEAT_TYPE_LABELS: Record<string, string> = {
-  STANDARD: "STANDARD",
-  WINDOW: "WINDOW",
-  CABIN: "CABIN",
-  ACCESSIBLE: "ACCESSIBLE",
-  HOT_DESK: "HOT_DESK",
-};
-const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
 
 interface SeatConfigDialogProps {
   open: boolean;
@@ -488,13 +481,6 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
 
 // ─── Legend ───────────────────────────────────────────────────────────────────
 
-const LEGEND_ITEMS = [
-  { label: "Bookable", color: "#22C55E" },
-  { label: "Non-bookable", color: "#F59E0B" },
-  { label: "Inactive", color: "#EF4444" },
-  { label: "Unconfigured", color: "#000000ff" },
-] as const;
-
 // FIX: flex-wrap + gap-y so items wrap on narrow screens instead of overflowing
 function PreviewLegend() {
   return (
@@ -510,9 +496,6 @@ function PreviewLegend() {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-
-const SVG_W = 2466;
-const SVG_H = 2039;
 
 export default function LayoutPreview({
   layout,

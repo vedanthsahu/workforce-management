@@ -10,11 +10,12 @@ import StatusFilterDropdown from "@/features/users/components/StatusFilterDropdo
 import { useUsers } from "@/features/users/hooks/useUsers";
 import type { User } from "@/features/users/types/users.types";
 import { TableSkeleton, TableBodySkeleton } from "@/components/ui/table-skeleton";
-import { normalizeRoleKey } from "@/features/users/utils/users.utils";
+import {
+  normalizeRoleKey,
+  USERS_PIN_DURATION as PIN_DURATION,
+  USERS_PAGE_SIZES as PAGE_SIZES,
+} from "@/features/users/utils/users.utils";
 import { useUsersFilterStore } from "@/store/useUsersFilterStore";
-
-const PIN_DURATION = 4000;
-const PAGE_SIZES = [10, 25, 50, 75, 100];
 
 function UserManagementPage() {
   const router = useRouter();

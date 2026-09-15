@@ -14,16 +14,7 @@ import {
   ComboboxItem,
 } from "@/components/ui/combobox";
 import useCreateSite from "../hooks/useCreateSite";
-import { Country } from "country-state-city";
-
-const TIMEZONES = [
-  "Asia/Kolkata",
-  ...Intl.supportedValuesOf("timeZone"),
-].filter((value, index, self) => self.indexOf(value) === index).sort();
-
-const COUNTRIES = Country.getAllCountries()
-  .map((c) => c.name)
-  .sort();
+import { TIMEZONES, COUNTRIES } from "../utils/office.utils";
 
 export default function OfficeForm() {
   const router = useRouter();
