@@ -25,6 +25,7 @@ import { SvgFloorMapPage, SeatWithSvgId } from "./SvgFloorMapPage";
 import { fmtDate } from "../utils/bookingFormHelpers";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 import { BookaSeatSkeleton } from "./BookaSeatSkeleton";
+import { BOOKING_SPACE_TYPES, BOOKING_SPACE_TYPE_LABELS } from "../utils/spaceType";
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 
@@ -152,6 +153,7 @@ const BookASeatPage: React.FC = () => {
     setFromDate,
     setToDate,
     togglePreference,
+    setSpaceType,
     findAvailableSeats,
     selectSeat,
     goToReview,
@@ -159,6 +161,7 @@ const BookASeatPage: React.FC = () => {
     goBack,
     resetForm,
     availablePreferences,
+    visiblePreferences,
     loadingPreferences,
   } = useBookingForm();
 
@@ -413,12 +416,39 @@ const BookASeatPage: React.FC = () => {
 
             {/* 3. Preferences */}
             <section>
-              <SectionHeader icon={<Settings2 size={14} />} title="3. Preferences" subtitle="Choose features that are important to you" />
-              <div className="flex gap-2 sm:gap-3 flex-wrap">
+              <SectionHeader icon={<Settings2 size={14} />} title="3. Preferences" subtitle="Choose a space type and the features that are important to you" />
+
+              {/* Space type — narrows both the amenity list below and the
+                  actual search. "All" (default) preserves today's behavior:
+                  every amenity shown, search unfiltered by type. */}
+              <div className="flex gap-1.5 sm:gap-2 mb-3 sm:mb-4">
+                {BOOKING_SPACE_TYPES.map((t) => {
+                  const active = form.spaceType === t;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setSpaceType(t)}
+                      className={cn(
+                        "px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-[11.5px] sm:text-[12.5px] font-semibold border transition-colors",
+                        active
+                          ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                          : "border-[#EBEBF5] bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50"
+                      )}
+                    >
+                      {BOOKING_SPACE_TYPE_LABELS[t]}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
                 {loadingPreferences ? (
-                  <p className="text-[12.5px] text-gray-400">Loading preferences…</p>
+                  <p className="text-[12.5px] text-gray-400 col-span-full">Loading preferences…</p>
+                ) : visiblePreferences.length === 0 ? (
+                  <p className="text-[12.5px] text-gray-400 col-span-full">No preferences available for this space type.</p>
                 ) : (
-                  availablePreferences.map(({ key, name, category }) => {
+                  visiblePreferences.map(({ key, name, category }) => {
                     const checked = form.preferences.includes(key);
                     const color = getAmenityColor(name, category);
                     return (
@@ -426,8 +456,7 @@ const BookASeatPage: React.FC = () => {
                         key={key}
                         onClick={() => togglePreference(key)}
                         className={cn(
-                          "flex flex-col items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-3 sm:py-4 rounded-xl border transition-all duration-150",
-                          "w-[calc(50%-4px)] sm:w-[130px] lg:w-[140px]",
+                          "flex flex-col items-center gap-1.5 sm:gap-2 px-3 py-3 sm:py-4 rounded-xl border transition-all duration-150",
                           checked
                             ? "border-indigo-300 bg-indigo-50 shadow-sm"
                             : "border-[#EBEBF5] bg-white hover:border-gray-300 hover:bg-gray-50"
@@ -440,15 +469,15 @@ const BookASeatPage: React.FC = () => {
                     );
                   })
                 )}
+              </div>
 
-                <div className="flex-1 min-w-[160px] bg-amber-50 border border-amber-100 rounded-xl px-3 sm:px-4 py-3 flex flex-col gap-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-base">💡</span>
-                    <span className="text-[11.5px] sm:text-[12px] font-semibold text-amber-700">Tip</span>
-                  </div>
-                  <p className="text-[11px] sm:text-[11.5px] text-amber-600 leading-relaxed">
+              <div className="mt-2.5 sm:mt-3 bg-amber-50 border border-amber-100 rounded-xl px-3 sm:px-4 py-3 flex items-start gap-1.5">
+                <span className="text-base">💡</span>
+                <div>
+                  <span className="text-[11.5px] sm:text-[12px] font-semibold text-amber-700">Tip </span>
+                  <span className="text-[11px] sm:text-[11.5px] text-amber-600 leading-relaxed">
                     Selecting more preferences helps us show seats that match your needs better.
-                  </p>
+                  </span>
                 </div>
               </div>
             </section>

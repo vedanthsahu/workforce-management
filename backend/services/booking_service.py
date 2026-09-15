@@ -63,7 +63,11 @@ from backend.repositories.guest_visit_repository import (
     fetch_cancelled_guest_visits,
     insert_guest_visit,
 )
-from backend.repositories.location_repository import fetch_seat_configuration
+from backend.repositories.location_repository import (
+    fetch_floor_by_id,
+    fetch_seat_configuration,
+    fetch_site_by_id,
+)
 from backend.repositories.user_repository import fetch_user_by_id
 from backend.schemas.booking import (
     AdminBookingListQuery,
@@ -1374,6 +1378,27 @@ def get_available_seats_by_range(
     normalized_amenity_ids = sorted(set(amenity_ids or []))
 
     try:
+        # fetch_available_seats_by_range's own query INNER JOINs floors/
+        # buildings/sites on status = 'ACTIVE', so an inactive office
+        # silently comes back as zero seats — indistinguishable from "no
+        # availability for these dates" (the check just below). Checking the
+        # site's status explicitly here gives that case its own accurate
+        # message instead of the generic "no seats available" one.
+        floor = fetch_floor_by_id(conn, tenant_id=tenant_id, floor_id=floor_id)
+        if floor and floor.get("site_id"):
+            site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=floor["site_id"])
+            if site and site.get("status") != "ACTIVE":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "office_inactive",
+                        "message": (
+                            "This office is currently inactive and unavailable "
+                            "for booking. Please select a different office."
+                        ),
+                    },
+                )
+
         # calendar_mode: caller only wants raw seat status (no booking-eligibility checks)
         if not calendar_mode:
             if is_guest_booking:

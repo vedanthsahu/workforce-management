@@ -7,6 +7,7 @@ import {
 import { BulkUpdatePayload, SeatStatus, SeatType } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
+import { ALL_SPACE_TYPES, SPACE_TYPE_LABELS } from "../utils/spaceCategory";
 
 interface Props {
   open: boolean;
@@ -17,7 +18,6 @@ interface Props {
   onSave: (payload: BulkUpdatePayload) => Promise<void>;
 }
 
-const SEAT_TYPES: SeatType[] = ["STANDARD", "WINDOW", "CABIN", "ACCESSIBLE", "HOT_DESK"];
 const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
 
 export default function BulkEditModal({
@@ -27,12 +27,15 @@ export default function BulkEditModal({
   const [bookable, setBookable] = useState<string>("");
   const [status, setStatus] = useState<string>("");
   const [amenityIds, setAmenityIds] = useState<string[]>([]);
+  const [capacity, setCapacity] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
 
+  const isConferenceRoom = seatType === "CONFERENCE_ROOM";
+
   const reset = () => {
     setSeatType(""); setBookable(""); setStatus("");
-    setAmenityIds([]);
+    setAmenityIds([]); setCapacity("");
     setSaveError(false);
   };
 
@@ -49,6 +52,7 @@ export default function BulkEditModal({
       if (bookable) payload.is_bookable = bookable === "Yes";
       if (status) payload.status = status as SeatStatus;
       if (amenityIds.length) payload.amenity_ids = amenityIds;
+      if (isConferenceRoom && capacity) payload.capacity = Number(capacity);
       await onSave(payload);
       handleClose();
     } catch {
@@ -75,7 +79,7 @@ export default function BulkEditModal({
         <DialogHeader className="px-5 pt-5 pb-4 border-b">
           <p className="text-xs text-gray-400 mb-0.5 font-medium">Bulk Edit</p>
           <DialogTitle className="text-base font-bold text-gray-900">
-            Edit {selectedIds.length} Seat{selectedIds.length !== 1 ? "s" : ""}
+            Edit {selectedIds.length} Space{selectedIds.length !== 1 ? "s" : ""}
           </DialogTitle>
         </DialogHeader>
 
@@ -84,14 +88,30 @@ export default function BulkEditModal({
             Only filled fields will be applied. Leave blank to keep existing values.
           </p>
 
-          {/* Seat Type */}
+          {/* Space Type */}
           <div>
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Seat Type</label>
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Space Type</label>
             <select value={seatType} onChange={(e) => setSeatType(e.target.value)} className={selectClass} style={dropdownStyle}>
-              <option value="" disabled hidden>Select seat type</option>
-              {SEAT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              <option value="" disabled hidden>Select space type</option>
+              {ALL_SPACE_TYPES.map((t) => <option key={t} value={t}>{SPACE_TYPE_LABELS[t]}</option>)}
             </select>
           </div>
+
+          {/* Capacity — only relevant when bulk-setting Space Type to Conference Room */}
+          {isConferenceRoom && (
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Capacity</label>
+              <input
+                type="number"
+                min={1}
+                max={1000}
+                value={capacity}
+                onChange={(e) => setCapacity(e.target.value)}
+                placeholder="e.g. 12"
+                className={selectClass}
+              />
+            </div>
+          )}
 
           {/* Bookable */}
           <div>

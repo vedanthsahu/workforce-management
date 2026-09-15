@@ -20,10 +20,14 @@ export function defaultFilters(): SeatFilters {
 
 interface Props {
   filters: SeatFilters;
-  seatTypes: string[];
+  // null = this tab's category has no sub-types (Cabins/Conference Rooms) —
+  // hide the Sub-type dropdown entirely rather than showing it disabled,
+  // which would read as "broken/coming soon" instead of "flat category."
+  subTypeOptions: string[] | null;
   preferences: Preference[];
   onUpdate: <K extends keyof SeatFilters>(key: K, value: SeatFilters[K]) => void;
   onReset: () => void;
+  searchPlaceholder?: string;
 }
 
 function FilterSelect({
@@ -86,14 +90,15 @@ function FilterSelect({
 
 export default function SeatFiltersBar({
   filters,
-  seatTypes,
+  subTypeOptions,
   preferences,
   onUpdate,
   onReset,
+  searchPlaceholder = "Search by seat code…",
 }: Props) {
   const activeCount = [
     filters.search.trim() !== "",
-    filters.seat_type !== "All",
+    subTypeOptions != null && filters.seat_type !== "All",
     filters.status !== "All",
     filters.bookable !== "All",
     filters.amenity !== "All",
@@ -122,7 +127,7 @@ export default function SeatFiltersBar({
           />
           <input
             type="text"
-            placeholder="Search by seat code…"
+            placeholder={searchPlaceholder}
             value={filters.search}
             onChange={(e) => onUpdate("search", e.target.value)}
             className={`h-9 pl-8 ${filters.search ? "pr-7" : "pr-3"} w-44 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400`}
@@ -140,12 +145,14 @@ export default function SeatFiltersBar({
         </div>
       </div>
 
-      <FilterSelect
-        label="Seat Type"
-        value={filters.seat_type}
-        options={seatTypes.map((t) => ({ value: t, label: t }))}
-        onChange={(v) => onUpdate("seat_type", v)}
-      />
+      {subTypeOptions && (
+        <FilterSelect
+          label="Sub-type"
+          value={filters.seat_type}
+          options={subTypeOptions.map((t) => ({ value: t, label: t }))}
+          onChange={(v) => onUpdate("seat_type", v)}
+        />
+      )}
 
       <FilterSelect
         label="Status"
