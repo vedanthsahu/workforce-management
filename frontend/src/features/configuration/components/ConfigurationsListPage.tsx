@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Pencil, CalendarDays, UserRound, Info, CheckCircle2, X } from "lucide-react";
-import { CONFIGURATION_SECTIONS, INITIAL_CONFIGURATIONS } from "../utils/configurationData";
+import { CONFIGURATION_SECTIONS, INITIAL_CONFIGURATIONS, ACCENT_BAR_BY_ICON_COLOR } from "../utils/configurationData";
 import type { ConfigurationField, ConfigurationItem } from "../types/configuration.types";
 import ConfigurationDetailPanel from "./ConfigurationDetailPanel";
 
@@ -67,11 +67,14 @@ function MetaInfo({ lastUpdatedAt, lastUpdatedBy }: { lastUpdatedAt: string; las
 
 /** Standard single-configuration card: icon+name+description, its stat
  * block(s), Last Updated/Updated By, and an Edit button.
- * - "row" (default, Activity / Layout Management): everything on one wide
- *   row that wraps onto multiple lines on its own if the card is narrow.
- * - "stack" (Employee Booking's two side-by-side cards): heading on top,
- *   the stat block below it, then a closing row with meta info + Edit --
- *   reads better than "row" once the card is only half-width. */
+ * - "row" (default, used everywhere, including the side-by-side Employee
+ *   Booking cards): everything -- heading, stats, meta, Edit -- sits in
+ *   one row that wraps onto its own lines if the card is too narrow,
+ *   keeping the meta info beside the stat block rather than in a
+ *   separate footer.
+ * - "stack": heading on top, stat block below it, then a closing row with
+ *   meta info + Edit. Currently unused, kept for a future card that's
+ *   narrow enough that "row" would wrap too awkwardly. */
 function ItemCard({
   item,
   onEdit,
@@ -127,20 +130,6 @@ function ItemCard({
   );
 }
 
-// Tailwind needs literal class strings to scan -- can't derive "bg-X" from
-// the "text-X" values in configurationData.ts at runtime, so the accent bar
-// color is looked up from a static map keyed by that same iconColor string.
-const ACCENT_BAR_BY_ICON_COLOR: Record<string, string> = {
-  "text-amber-600": "bg-amber-200",
-  "text-blue-600": "bg-blue-200",
-  "text-red-600": "bg-red-200",
-  "text-indigo-600": "bg-indigo-200",
-  "text-emerald-600": "bg-emerald-200",
-  "text-orange-600": "bg-orange-200",
-  "text-violet-600": "bg-violet-200",
-  
-  "text-gray-600":  "bg-gray-200",
-};
 
 /** Layout Visibility is the one exception: a single configuration whose
  * three fields (Draft/Archived/Discarded) each get their own mini card with
@@ -283,7 +272,7 @@ export default function ConfigurationsListPage() {
             ) : items.length > 1 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {items.map((item) => (
-                  <ItemCard key={item.id} item={item} onEdit={() => setSelectedId(item.id)} layout="stack" />
+                  <ItemCard key={item.id} item={item} onEdit={() => setSelectedId(item.id)} />
                 ))}
               </div>
             ) : (

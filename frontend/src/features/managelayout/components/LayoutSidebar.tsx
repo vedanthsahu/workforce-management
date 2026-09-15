@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useCallback, useState, ReactNode } from "react";
 import { Layout } from "../types/layout.types";
+import { STATIC_PREFETCH_ROUTES } from "../utils/layoutPreview.utils";
 
 interface LayoutSidebarProps {
   layout: Layout | null;
@@ -124,12 +125,6 @@ function StatusBadge({ status, isPublished }: { status: string; isPublished: boo
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
-
-// Static routes that never change — safe to prefetch unconditionally
-const STATIC_PREFETCH_ROUTES = [
-  "/admin/layouts/manage-seats",
-  "/admin/amenities",
-];
 
 export default function LayoutSidebar({
   layout,

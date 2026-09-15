@@ -23,31 +23,10 @@ import {
 } from "lucide-react";
 
 import type { DashboardSummary } from "../types/admin.types";
+import { STAT_ACCENTS } from "../utils/dashboard.utils";
+import type { StatAccent as Accent } from "../utils/dashboard.utils";
 
-type Accent = "blue" | "green" | "orange" | "rose" | "purple";
-
-const ACCENTS: Record<Accent, { icon: string; glow: string }> = {
-  blue: {
-    icon: "bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600 ring-1 ring-inset ring-blue-200/70",
-    glow: "hover:shadow-blue-500/10",
-  },
-  green: {
-    icon: "bg-gradient-to-br from-green-50 to-green-100 text-green-600 ring-1 ring-inset ring-green-200/70",
-    glow: "hover:shadow-green-500/10",
-  },
-  orange: {
-    icon: "bg-gradient-to-br from-orange-50 to-orange-100 text-orange-600 ring-1 ring-inset ring-orange-200/70",
-    glow: "hover:shadow-orange-500/10",
-  },
-  rose: {
-    icon: "bg-gradient-to-br from-rose-50 to-rose-100 text-rose-600 ring-1 ring-inset ring-rose-200/70",
-    glow: "hover:shadow-rose-500/10",
-  },
-  purple: {
-    icon: "bg-gradient-to-br from-purple-50 to-purple-100 text-purple-600 ring-1 ring-inset ring-purple-200/70",
-    glow: "hover:shadow-purple-500/10",
-  },
-};
+const ACCENTS = STAT_ACCENTS;
 
 type Props = {
   data: DashboardSummary | null;
