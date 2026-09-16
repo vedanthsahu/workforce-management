@@ -175,7 +175,7 @@ export default function BlockedSeatsPage() {
             Block Seats
           </button>
         </header>
-        <div className="flex gap-3 overflow-x-auto pb-1">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           {SUMMARY_CARDS.map((card) => (
             <SummaryCard
               key={card.id}
