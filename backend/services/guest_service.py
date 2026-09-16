@@ -2171,6 +2171,19 @@ def cancel_guest_visit_record(
     tenant_id = str(current_user["tenant_id"])
 
     try:
+        # Lock the row before reading anything about it. Without this, a
+        # concurrent attach-seat/workflow call (create_booking_for_existing_
+        # guest_visit, execute_guest_visit_workflow -- both already lock via
+        # fetch_guest_visit_by_id_for_update) could create a new active
+        # booking after active_booking is read below but before this
+        # transaction commits, leaving that booking un-cancelled once the
+        # visit itself is marked CANCELLED.
+        fetch_guest_visit_by_id_for_update(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        )
+
         visit_for_email = fetch_guest_visit_by_id(
             conn,
             tenant_id=tenant_id,
@@ -2322,7 +2335,13 @@ def modify_guest_visit(
 
     try:
 
-        visit = fetch_guest_visit_by_id(
+        # Lock + re-check under the lock: two concurrent modify calls on the
+        # same visit (double-click, two staff editing at once) would both
+        # otherwise read visit_status == SCHEDULED before either commits --
+        # mark_guest_visit_modified's UPDATE has no status guard of its own
+        # (unlike check_in/check_out_guest_visit), so both would proceed and
+        # each insert its own replacement visit, silently duplicating it.
+        visit = fetch_guest_visit_by_id_for_update(
             conn,
             tenant_id=tenant_id,
             guest_visit_id=guest_visit_id,
