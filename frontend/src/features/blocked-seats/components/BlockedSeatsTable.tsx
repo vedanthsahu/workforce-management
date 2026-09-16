@@ -57,13 +57,13 @@ export default function BlockedSeatsTable({
       <div className="overflow-hidden">
         <table className="w-full table-fixed text-left text-[10px] sm:text-[11px] lg:text-[12.5px]">
           <colgroup>
-            <col className="w-[17%]" />
+            <col className="w-[13%]" />
             <col className="w-[20%]" />
             <col className="w-[16%]" />
-            <col className="w-[9%]" />
-            <col className="w-[14%]" />
-            <col className="w-[8%]" />
             <col className="w-[11%]" />
+            <col className="w-[17%]" />
+            <col className="w-[8%]" />
+            <col className="w-[10%]" />
             <col className="w-[5%]" />
           </colgroup>
           <thead className="bg-blue-100/80 text-[11px] font-semibold text-blue-600">
