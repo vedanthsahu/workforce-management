@@ -47,6 +47,7 @@ from backend.core.app_logging import (
     enable_backend_function_trace,
 )
 from backend.core.config import get_settings
+from backend.core.error_diagnostics import print_error_diagnostic
 from backend.db.connection import get_db_connection
 from backend.repositories.token_repository import (
     ensure_refresh_tokens_table,
@@ -146,7 +147,6 @@ async def log_http_requests(request: Request, call_next):
             path=path,
             duration_ms=duration_ms,
             client=client_ip,
-            exc_info=True,
         )
         raise
 
@@ -178,6 +178,8 @@ async def log_http_requests(request: Request, call_next):
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """Convert FastAPI HTTP exceptions into a consistent error envelope."""
+    if exc.__cause__ is not None or exc.__context__ is not None or exc.status_code >= 500:
+        print_error_diagnostic(exc)
     payload = _normalize_http_error(exc.detail)
     error = payload.get("error", {})
 
@@ -196,6 +198,16 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         status_code=exc.status_code,
         headers=exc.headers,
         content=payload,
+    )
+
+
+@app.exception_handler(Exception)
+async def unexpected_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Keep unexpected implementation details in the terminal, never the response."""
+    print_error_diagnostic(exc)
+    return JSONResponse(
+        status_code=500,
+        content={"error": {"code": "internal_server_error", "message": "An unexpected error occurred."}},
     )
 
 
