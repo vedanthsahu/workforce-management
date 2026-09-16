@@ -177,13 +177,13 @@ export default function BlockSeatsDrawer({
         </header>
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <label className="block text-xs font-semibold text-slate-800">
-            Site <span className="text-red-500">*</span>
+            Office <span className="text-red-500">*</span>
             <select
               className={`${fieldClass} mt-1.5`}
               value={siteId}
               onChange={(e) => void selectSite(e.target.value)}
             >
-              <option value="">Select site</option>
+              <option value="">Select office</option>
               {sites.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name}

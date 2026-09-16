@@ -29,7 +29,7 @@ const EMPTY_RESPONSE: BlockedSeatListResponse = {
     expiring_soon: 0,
     expired: 0,
   },
-  pagination: { total: 0, page: 1, limit: 20, total_pages: 0 },
+  pagination: { total: 0, page: 1, limit: 10, total_pages: 0 },
 };
 export default function BlockedSeatsPage() {
   const router = useRouter();
@@ -108,26 +108,20 @@ export default function BlockedSeatsPage() {
     }
   };
   return (
-    <main className="min-h-0 flex-1 overflow-y-auto bg-muted/30 p-4 sm:p-6">
+    <main className="min-h-0 flex-1 overflow-y-auto bg-[#F7F8FC] p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-[1500px] space-y-4 sm:space-y-6">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="mb-2 text-xs text-muted-foreground">
-              Dashboard <span className="px-1">/</span>{" "}
-              <span className="font-semibold text-foreground">
-                Blocked Seats
-              </span>
-            </div>
-            <h1 className="text-xl font-semibold text-foreground sm:text-2xl">
+            <h1 className="text-[17px] font-bold leading-tight text-[#1A1A2E] sm:text-[20px]">
               Blocked Seats
             </h1>
-            <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+            <p className="mt-0.5 text-[11.5px] text-gray-400 sm:text-[12.5px]">
               Block and manage seats that are unavailable for booking.
             </p>
           </div>
           <button
             onClick={() => router.push("/admin/blocked-seats/block")}
-            className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 sm:self-auto"
+            className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-lg bg-indigo-600 px-4 text-[12.5px] font-semibold text-white transition-colors hover:bg-indigo-700 sm:self-auto sm:text-[13px]"
           >
             <Plus size={17} />
             Block Seats
@@ -156,6 +150,11 @@ export default function BlockedSeatsPage() {
           floors={floors}
           onChange={updateFilter}
           enabled={hasCriteria}
+          onClear={() => {
+            setFilters(EMPTY_FILTERS);
+            setAppliedFilters(EMPTY_FILTERS);
+            setPage(1);
+          }}
           onSearch={() => {
             setAppliedFilters(filters);
             setPage(1);
