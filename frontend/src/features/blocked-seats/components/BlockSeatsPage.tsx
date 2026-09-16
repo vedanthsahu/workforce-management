@@ -14,10 +14,10 @@ import {
   modifyGuestBooking,
 } from "@/features/book/services/Bookingform.service";
 import { blockedSeatsService } from "../services/blockedSeatsService";
+import { useBlockedSeatLocations } from "../hooks/useBlockedSeatLocations";
 import type {
   BlockType,
   BlockableFloorLayout,
-  LocationOption,
   SeatOption,
 } from "../types/blockedSeats.types";
 import { BLOCK_TYPE_OPTIONS } from "../utils/constants";
@@ -54,9 +54,18 @@ const isActiveConflictBooking = (booking: AdminBookingRaw) =>
 
 export default function BlockSeatsPage() {
   const router = useRouter();
-  const [sites, setSites] = useState<LocationOption[]>([]),
-    [buildings, setBuildings] = useState<LocationOption[]>([]),
-    [floors, setFloors] = useState<LocationOption[]>([]);
+  const {
+    sites,
+    buildings,
+    floors,
+    loadingSites,
+    loadingBuildings,
+    loadingFloors,
+    loadBuildings,
+    loadFloors,
+    setBuildings,
+    setFloors,
+  } = useBlockedSeatLocations();
   const [siteId, setSiteId] = useState(""),
     [buildingId, setBuildingId] = useState(""),
     [floorId, setFloorId] = useState("");
@@ -78,8 +87,44 @@ export default function BlockSeatsPage() {
   const [conflictPage, setConflictPage] = useState(1);
   useEffect(() => {
     router.prefetch("/admin/blocked-seats");
-    void blockedSeatsService.getSites().then(setSites);
   }, [router]);
+  useEffect(() => {
+    if (
+      siteId &&
+      !buildingId &&
+      !loadingBuildings &&
+      buildings.length === 1
+    ) {
+      const onlyBuildingId = buildings[0].id;
+      setBuildingId(onlyBuildingId);
+      setFloorId("");
+      setLayout(null);
+      setSeats([]);
+      setSelected([]);
+      setFloors([]);
+      void loadFloors(onlyBuildingId);
+    }
+  }, [
+    buildingId,
+    buildings,
+    loadFloors,
+    loadingBuildings,
+    setFloors,
+    siteId,
+  ]);
+  useEffect(() => {
+    if (
+      buildingId &&
+      !floorId &&
+      !loadingFloors &&
+      floors.length === 1
+    ) {
+      setFloorId(floors[0].id);
+      setLayout(null);
+      setSeats([]);
+      setSelected([]);
+    }
+  }, [buildingId, floorId, floors, loadingFloors]);
   useEffect(() => {
     if (!floorId || !from) {
       setEffectiveLayoutName("");
@@ -96,6 +141,7 @@ export default function BlockSeatsPage() {
       .getBlockableLayout(floorId, from, from)
       .then((effectiveLayout) => {
         if (cancelled) return;
+        void fetch(effectiveLayout.layout_file_url).catch(() => undefined);
         const maximumDate = inclusiveLayoutEndDate(
           effectiveLayout.effective_till,
         );
@@ -355,7 +401,8 @@ export default function BlockSeatsPage() {
                 label: "Office",
                 value: siteId,
                 items: sites,
-                disabled: false,
+                disabled: loadingSites,
+                placeholder: loadingSites ? "Loading Offices…" : "Select Office",
                 onChange: async (id: string) => {
                   setSiteId(id);
                   setBuildingId("");
@@ -363,30 +410,35 @@ export default function BlockSeatsPage() {
                   setLayout(null);
                   setSeats([]);
                   setSelected([]);
-                  setBuildings(
-                    id ? await blockedSeatsService.getBuildings(id) : [],
-                  );
+                  setBuildings([]);
+                  setFloors([]);
+                  await loadBuildings(id);
                 },
               },
               {
                 label: "Building",
                 value: buildingId,
                 items: buildings,
-                disabled: !siteId,
+                disabled: !siteId || loadingBuildings,
+                placeholder: loadingBuildings
+                  ? "Loading Buildings…"
+                  : "Select Building",
                 onChange: async (id: string) => {
                   setBuildingId(id);
                   setFloorId("");
                   setLayout(null);
                   setSeats([]);
                   setSelected([]);
-                  setFloors(id ? await blockedSeatsService.getFloors(id) : []);
+                  setFloors([]);
+                  await loadFloors(id);
                 },
               },
               {
                 label: "Floor",
                 value: floorId,
                 items: floors,
-                disabled: !buildingId,
+                disabled: !buildingId || loadingFloors,
+                placeholder: loadingFloors ? "Loading Floors…" : "Select Floor",
                 onChange: async (id: string) => {
                   setFloorId(id);
                   setLayout(null);
@@ -403,7 +455,7 @@ export default function BlockSeatsPage() {
                   disabled={f.disabled}
                   onChange={(e) => void f.onChange(e.target.value)}
                 >
-                  <option value="">Select</option>
+                  <option value="">{f.placeholder}</option>
                   {f.items.map((x) => (
                     <option key={x.id} value={x.id}>
                       {x.name}
