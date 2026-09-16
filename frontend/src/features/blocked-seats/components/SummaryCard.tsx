@@ -27,7 +27,7 @@ export default function SummaryCard({
       disabled={disabled}
       title={disabled ? `${label} has no records` : undefined}
       className={cn(
-        "flex min-w-[190px] flex-1 items-center gap-3 rounded-2xl border bg-white p-3 text-left shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-[0.97] active:duration-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 sm:p-5",
+        "flex min-w-0 w-full items-center gap-2.5 rounded-2xl border bg-white p-3 text-left shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-[0.97] active:duration-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 sm:gap-3 sm:p-5",
         selected
           ? "border-indigo-300 ring-1 ring-indigo-100"
           : "border-gray-200",
@@ -44,7 +44,7 @@ export default function SummaryCard({
         <Icon />
       </span>
       <span className="min-w-0">
-        <span className="block whitespace-nowrap text-xs font-normal text-gray-500 sm:text-sm">
+        <span className="block text-xs font-normal leading-tight text-gray-500 sm:text-sm">
           {label}
         </span>
         <span className="block text-lg font-semibold text-gray-900 sm:text-xl">
