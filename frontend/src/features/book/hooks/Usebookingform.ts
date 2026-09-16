@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
@@ -32,6 +32,7 @@ import {
 } from "../services/Bookingform.service";
 import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
 import { BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE, maxBookableDateIso } from "../utils/constants";
+import { amenityAppliesTo, BookingSpaceType } from "../utils/spaceType";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -49,6 +50,7 @@ const DEFAULT_STATE: BookingFormState = {
   toDate: todayIso(),
   preferences: [],
   selectedSeatId: null,
+  spaceType: "ALL",
 };
 
 // ── URL builder ───────────────────────────────────────────────────────────────
@@ -89,6 +91,7 @@ function buildUrl(
   if (form.toDate) params.set("toDate", form.toDate);
   if (form.selectedSeatId) params.set("seatId", form.selectedSeatId);
   if (form.preferences.length > 0) params.set("preferences", form.preferences.join(","));
+  if (form.spaceType && form.spaceType !== "ALL") params.set("spaceType", form.spaceType);
   if (guestParams?.guestId) params.set("guestId", guestParams.guestId);
   if (guestParams?.hostUserId) params.set("hostUserId", guestParams.hostUserId);
   if (guestParams?.guestType) params.set("guestType", guestParams.guestType);
@@ -181,6 +184,7 @@ export function useBookingForm() {
       toDate: initialToDate,
       selectedSeatId: searchParams.get("seatId") ?? null,
       preferences: prefillPreferences,
+      spaceType: (searchParams.get("spaceType") as BookingSpaceType | null) ?? "ALL",
     };
   });
 
@@ -579,6 +583,15 @@ export function useBookingForm() {
     [availablePreferences],
   );
 
+  // Scoped to the currently-selected space type for the checklist UI —
+  // resolveAmenityIds above deliberately keeps using the full unfiltered
+  // list, since a preference already selected before a type switch still
+  // needs to resolve to its amenity id right up until setSpaceType prunes it.
+  const visiblePreferences = useMemo(
+    () => availablePreferences.filter((p) => amenityAppliesTo(p.applicable_seat_types, form.spaceType as BookingSpaceType)),
+    [availablePreferences, form.spaceType],
+  );
+
   // ── Re-fetch seats on step 2 page refresh ────────────────────────────────
 
   useEffect(() => {
@@ -604,6 +617,7 @@ export function useBookingForm() {
         bookedForUserId: bookedForUserId ?? null,
         isGuestBooking: isGuestBooking,
         bookedForGuestId: guestId ?? null,
+        spaceType: form.spaceType,
       })
         .then(setSeats)
         .catch((e) => setError(e instanceof Error ? e.message : "Failed to load seats"))
@@ -668,10 +682,35 @@ export function useBookingForm() {
 
   const clearAll = () => setForm((f) => ({ ...f, preferences: [] }));
 
+  // Switching space type drops any already-selected preference that no
+  // longer applies under the new type (e.g. a Cabin-only amenity like "Desk
+  // Phone" selected while Cabin was active shouldn't silently keep filtering
+  // the search after switching to Conference Room, where it's not even
+  // shown as an option anymore).
+  const setSpaceType = (next: BookingSpaceType) => {
+    setError(null);
+    setForm((f) => ({
+      ...f,
+      spaceType: next,
+      preferences: f.preferences.filter((key) => {
+        const pref = availablePreferences.find((p) => p.key === key);
+        return amenityAppliesTo(pref?.applicable_seat_types, next);
+      }),
+    }));
+  };
+
   // ── Step 1 → Step 2 ───────────────────────────────────────────────────────
 
   const findAvailableSeats = useCallback(async () => {
     if (!form.floorId || !form.fromDate || !form.toDate) return;
+    // No local "is this office inactive" guard here on purpose — the
+    // backend's own availability check (get_available_seats_by_range in
+    // booking_service.py) now rejects an inactive office with its own
+    // accurate message ("office_inactive"), the same way it already does
+    // for "no_available_seats". Re-implementing that check here would just
+    // be a second, duplicated copy of backend logic that could drift out of
+    // sync with it; the catch block below already surfaces whatever message
+    // the backend sends back.
     setLoadingSeats(true);
     setError(null);
     try {
@@ -687,6 +726,7 @@ export function useBookingForm() {
         bookedForUserId: bookedForUserId ?? null,
         isGuestBooking: isGuestBooking,
         bookedForGuestId: guestId ?? null,
+        spaceType: form.spaceType,
       });
       setSeats(data);
       navigateTo(2, form);
@@ -890,6 +930,7 @@ export function useBookingForm() {
     floors,
     seats,
     availablePreferences,
+    visiblePreferences,
     confirmation,
     error,
     setError,
@@ -922,6 +963,7 @@ export function useBookingForm() {
     setToDate,
     togglePreference,
     clearAll,
+    setSpaceType,
     findAvailableSeats,
     selectSeat,
     goToReview,

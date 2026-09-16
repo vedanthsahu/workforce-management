@@ -986,6 +986,7 @@ def update_layout_seat_mapping_configuration(
     is_reserved: bool | None,
     amenity_ids: list[int] | None,
     updated_by: str,
+    capacity: int | None = None,
 ) -> dict[str, Any]:
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -1001,6 +1002,8 @@ def update_layout_seat_mapping_configuration(
                 is_reserved = COALESCE(%s, is_reserved),
 
                 amenity_ids = COALESCE(%s::jsonb, amenity_ids),
+
+                capacity = COALESCE(%s, capacity),
 
                 is_configured = TRUE,
                 configuration_status = 'COMPLETED',
@@ -1021,6 +1024,8 @@ def update_layout_seat_mapping_configuration(
                 is_reserved,
 
                 Json(amenity_ids) if amenity_ids is not None else None,
+
+                capacity,
 
                 updated_by,
                 tenant_id,
@@ -1054,7 +1059,7 @@ def update_layout_seat_mapping_configurations_bulk(
     """
 
     row_placeholders = ", ".join(
-        ["(%s::bigint, %s::text, %s::text, %s::text, %s::boolean, %s::boolean, %s::jsonb)"]
+        ["(%s::bigint, %s::text, %s::text, %s::text, %s::boolean, %s::boolean, %s::jsonb, %s::integer)"]
         * len(entries)
     )
 
@@ -1070,6 +1075,7 @@ def update_layout_seat_mapping_configurations_bulk(
                 entry["is_bookable"],
                 entry["is_reserved"],
                 Json(amenity_ids) if amenity_ids is not None else None,
+                entry.get("capacity"),
             ]
         )
     params.append(tenant_id)
@@ -1088,6 +1094,8 @@ def update_layout_seat_mapping_configurations_bulk(
 
                 amenity_ids = COALESCE(v.amenity_ids, lsm.amenity_ids),
 
+                capacity = COALESCE(v.capacity, lsm.capacity),
+
                 is_configured = TRUE,
                 configuration_status = 'COMPLETED',
 
@@ -1095,7 +1103,7 @@ def update_layout_seat_mapping_configurations_bulk(
                 updated_at = NOW()
 
             FROM (VALUES {row_placeholders}) AS v(
-                id, seat_name, seat_type, status, is_bookable, is_reserved, amenity_ids
+                id, seat_name, seat_type, status, is_bookable, is_reserved, amenity_ids, capacity
             )
             WHERE lsm.tenant_id = %s
               AND lsm.id = v.id
@@ -1126,6 +1134,7 @@ def upsert_operational_seat(
     is_reserved: bool | None = None,
     svg_element_id: str,
     source_layout_mapping_id: str | None = None,
+    capacity: int | None = None,
 ) -> dict[str, Any]:
     """Insert or update the operational seat row for one layout_seat_mapping.
 
@@ -1157,9 +1166,11 @@ def upsert_operational_seat(
                 status,
                 svg_element_id,
                 source_layout_mapping_id,
+                capacity,
                 live_from
             )
             VALUES (
+                %s,
                 %s,
                 %s,
                 %s,
@@ -1190,6 +1201,7 @@ def upsert_operational_seat(
                 status = EXCLUDED.status,
                 svg_element_id = EXCLUDED.svg_element_id,
                 source_layout_mapping_id = EXCLUDED.source_layout_mapping_id,
+                capacity = EXCLUDED.capacity,
                 live_from = COALESCE(seats.live_from, NOW()),
                 live_until = NULL,
                 retired_reason = NULL,
@@ -1212,6 +1224,7 @@ def upsert_operational_seat(
                 status,
                 svg_element_id,
                 source_layout_mapping_id,
+                capacity,
             ),
         )
 
@@ -1255,6 +1268,7 @@ def upsert_operational_seats_bulk(
             seat["status"],
             seat["svg_element_id"],
             seat["source_layout_mapping_id"],
+            seat.get("capacity"),
         )
         for seat in seats
     ]
@@ -1278,6 +1292,7 @@ def upsert_operational_seats_bulk(
                 status,
                 svg_element_id,
                 source_layout_mapping_id,
+                capacity,
                 live_from
             )
             VALUES %s
@@ -1296,6 +1311,7 @@ def upsert_operational_seats_bulk(
                 status = EXCLUDED.status,
                 svg_element_id = EXCLUDED.svg_element_id,
                 source_layout_mapping_id = EXCLUDED.source_layout_mapping_id,
+                capacity = EXCLUDED.capacity,
                 live_from = COALESCE(seats.live_from, NOW()),
                 live_until = NULL,
                 retired_reason = NULL,
@@ -1306,7 +1322,7 @@ def upsert_operational_seats_bulk(
                 source_layout_mapping_id::text AS source_layout_mapping_id
             """,
             rows,
-            template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())",
+            template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())",
             fetch=True,
         )
 

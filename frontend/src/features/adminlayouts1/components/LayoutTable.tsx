@@ -99,10 +99,22 @@ const LEGEND = [
 
 // ── Status dot config ─────────────────────────────────────────────────────────
 
-function statusConfig(status: string, isPublished: boolean, isDiscarded: boolean) {
+function statusConfig(status: string, isPublished: boolean, isDiscarded: boolean, effectiveFrom?: string | null) {
   if (isDiscarded) return { dot: "bg-red-400", text: "Discarded" };
   if (isPublished && status === "PUBLISHED") return { dot: "bg-green-500", text: "Published" };
-  if (status === "SCHEDULED") return { dot: "bg-sky-500", text: "Scheduled" };
+  if (status === "SCHEDULED") {
+    // Still yellow ("pending") until its own effective_from actually
+    // arrives -- at that point it's functionally live (bookings for today
+    // resolve to it same as a PUBLISHED layout would) even though the
+    // cutover job hasn't run yet to flip its status server-side. Reusing
+    // the same green as Published signals that to the admin instead of
+    // leaving it looking "not yet in effect" once it actually is. No new
+    // backend call needed -- effective_from is already on this row.
+    const isLive = !!effectiveFrom && new Date(effectiveFrom) <= new Date();
+    return isLive
+      ? { dot: "bg-green-500", text: "Scheduled" }
+      : { dot: "bg-amber-400", text: "Scheduled" };
+  }
   if (status === "DRAFT") return { dot: "bg-blue-500", text: "Draft" };
   if (status === "ARCHIVED") return { dot: "bg-gray-600", text: "Archived" };
   return { dot: "bg-gray-400", text: status };
@@ -153,6 +165,15 @@ function formatDetailDate(iso: string): string {
   if (d.toDateString() === today.toDateString()) return `Today, ${time}`;
   const date = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
   return `${date}, ${time}`;
+}
+
+// Date only, no time -- used for a SCHEDULED layout's "from <date>" line.
+// The full timestamp there was overlapping the adjacent Created/Updated
+// columns on narrower screens, and the status dot/label already reads
+// "Scheduled", so repeating "Effective" (and a time nobody asked for) was
+// redundant on top of causing the overlap.
+function formatDateOnly(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -395,9 +416,9 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                     <td className="px-3 py-3 font-medium text-gray-900">
                       {row.layout_name}
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3 overflow-hidden">
                       {(() => {
-                        const { dot, text } = statusConfig(row.status, row.is_published, isDiscarded);
+                        const { dot, text } = statusConfig(row.status, row.is_published, isDiscarded, row.effective_from);
                         // Suppress only for rows optimistically masked right after
                         // a Discard click (about to vanish on refetch, not aging
                         // out) — an actual DELETED-status row still counts down.
@@ -410,7 +431,7 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                             </span>
                             {row.status === "SCHEDULED" && row.effective_from && (
                               <span className="text-[10px] text-sky-600 whitespace-nowrap">
-                                Effective {formatDetailDate(row.effective_from)}
+                                from {formatDateOnly(row.effective_from)}
                               </span>
                             )}
                             {countdown && (

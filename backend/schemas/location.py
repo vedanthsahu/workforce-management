@@ -356,6 +356,12 @@ class LayoutSeatConfigurationUpdateRequest(BaseModel):
 
     amenity_ids: list[int] | None = None
 
+    capacity: int | None = Field(
+        default=None,
+        ge=1,
+        le=1000,
+    )
+
 
 class LayoutSeatBulkConfigurationEntry(LayoutSeatConfigurationUpdateRequest):
     """One seat's own configuration within a bulk request. Any field left
@@ -414,6 +420,8 @@ class LayoutSeatConfigurationResponse(BaseModel):
     configuration_status: str
 
     amenity_ids: list[int]
+
+    capacity: int | None = None
 
 
 class SeatConfigurationUpdateRequest(BaseModel):

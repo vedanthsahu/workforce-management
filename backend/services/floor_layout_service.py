@@ -1071,6 +1071,11 @@ def delete_floor_layout(
             conn,
             tenant_id=tenant_id,
             layout_id=layout_id,
+            target_status=(
+                LayoutStatus.ARCHIVED.value
+                if layout["status"] == LayoutStatus.SCHEDULED.value
+                else LayoutStatus.DELETED.value
+            ),
         )
 
         if deleted_layout is None:

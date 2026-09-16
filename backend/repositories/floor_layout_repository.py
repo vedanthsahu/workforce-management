@@ -648,6 +648,7 @@ def soft_delete_floor_layout(
     *,
     tenant_id: str,
     layout_id: str,
+    target_status: str = LayoutStatus.DELETED.value,
 ) -> dict[str, Any] | None:
     """Soft delete one tenant-scoped DRAFT/ARCHIVED/SCHEDULED layout.
 
@@ -656,6 +657,12 @@ def soft_delete_floor_layout(
     Discarding a SCHEDULED layout also needs the caller (floor_layout_
     service.delete_floor_layout) to reopen the currently-PUBLISHED layout's
     effective_till first -- this function alone does not do that.
+
+    target_status defaults to DELETED (discarding a DRAFT/ARCHIVED layout
+    that never made it live). Cancelling a SCHEDULED layout passes
+    ARCHIVED instead -- it was a real, fully-configured layout that was
+    already committed to going live, not an abandoned draft, so it belongs
+    with the other layouts that did serve their floor at some point.
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -671,7 +678,7 @@ def soft_delete_floor_layout(
                 id::text AS layout_id
             """,
             (
-                LayoutStatus.DELETED.value,
+                target_status,
                 tenant_id,
                 layout_id,
                 [
@@ -838,6 +845,8 @@ def fetch_layout_seats_by_layout_id(
                     '{}'
                 ) AS amenity_ids,
 
+                lsm.capacity,
+
                 lsm.created_at,
 
                 lsm.updated_at
@@ -987,6 +996,7 @@ def publish_layout_seat_configurations(
             is_reserved=mapping.get("is_reserved"),
             svg_element_id=str(mapping["svg_element_id"]),
             source_layout_mapping_id=str(mapping["id"]),
+            capacity=mapping.get("capacity"),
         )
 
         replace_seat_amenities(
