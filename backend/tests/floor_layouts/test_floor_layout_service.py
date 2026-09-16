@@ -323,6 +323,8 @@ class CancelScheduledFloorLayoutServiceTests(unittest.TestCase):
             "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
             return_value=_SCHEDULING_GAP,
         ), patch(
+            "backend.services.floor_layout_service.acquire_floor_publish_lock",
+        ), patch(
             "backend.services.floor_layout_service.fetch_published_layout_for_floor",
             return_value=published_row,
         ), patch(
@@ -365,12 +367,53 @@ class CancelScheduledFloorLayoutServiceTests(unittest.TestCase):
             "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
             return_value=_SCHEDULING_GAP,
         ), patch(
+            "backend.services.floor_layout_service.acquire_floor_publish_lock",
+        ), patch(
             "backend.services.floor_layout_service.soft_delete_floor_layout",
         ) as mock_soft_delete, self.assertRaises(HTTPException) as context:
             delete_floor_layout(conn, current_user=current_user, layout_id="10")
 
         self.assertEqual(context.exception.status_code, 409)
         self.assertEqual(context.exception.detail["code"], "floor_layout_schedule_locked")
+        mock_soft_delete.assert_not_called()
+        self.assertEqual(conn.rollbacks, 1)
+        self.assertEqual(conn.commits, 0)
+
+    def test_cancel_scheduled_layout_rejects_stale_state_after_concurrent_cutover(
+        self,
+    ) -> None:
+        """The exact race this guard exists for: the initial fetch (before
+        the lock) still sees SCHEDULED, but by the time the lock is held and
+        the layout is re-fetched, a concurrent cutover has already promoted
+        it to PUBLISHED. Must reject rather than reopen/retire/archive based
+        on the stale first snapshot."""
+        conn = FakeConnection()
+        current_user = {"tenant_id": "1", "user_id": "5"}
+        future_effective_from = datetime.now(UTC) + timedelta(days=60)
+
+        with patch(
+            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+            side_effect=[
+                _layout_row(
+                    layout_id="10", status="SCHEDULED", effective_from=future_effective_from,
+                ),
+                _layout_row(layout_id="10", status="PUBLISHED"),
+            ],
+        ), patch(
+            "backend.services.floor_layout_service.acquire_floor_publish_lock",
+        ), patch(
+            "backend.services.floor_layout_service.fetch_published_layout_for_floor",
+        ) as mock_fetch_published, patch(
+            "backend.services.floor_layout_service.retire_layout_seats",
+        ) as mock_retire, patch(
+            "backend.services.floor_layout_service.soft_delete_floor_layout",
+        ) as mock_soft_delete, self.assertRaises(HTTPException) as context:
+            delete_floor_layout(conn, current_user=current_user, layout_id="10")
+
+        self.assertEqual(context.exception.status_code, 409)
+        self.assertEqual(context.exception.detail["code"], "floor_layout_not_scheduled")
+        mock_fetch_published.assert_not_called()
+        mock_retire.assert_not_called()
         mock_soft_delete.assert_not_called()
         self.assertEqual(conn.rollbacks, 1)
         self.assertEqual(conn.commits, 0)

@@ -1018,6 +1018,33 @@ def delete_floor_layout(
         if layout["status"] == LayoutStatus.SCHEDULED.value:
             audit_action = FLOOR_LAYOUT_SCHEDULE_CANCELLED
 
+            # Same race reschedule_floor_layout guards against: without the
+            # lock + re-fetch, a concurrent cutover could have already
+            # promoted this layout to PUBLISHED (or a concurrent reschedule
+            # could have moved its effective_from) between the fetch above
+            # and the writes below, and everything after would act on a
+            # stale snapshot -- reopening/retiring seats for a layout that
+            # either no longer needs it or has since moved its own danger
+            # window.
+            acquire_floor_publish_lock(
+                conn, tenant_id=tenant_id, floor_id=str(layout["floor_id"]),
+            )
+            layout = fetch_floor_layout_by_id(
+                conn, tenant_id=tenant_id, layout_id=layout_id,
+            )
+            if layout is None or layout["status"] != LayoutStatus.SCHEDULED.value:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "floor_layout_not_scheduled",
+                        "message": (
+                            "This layout is no longer scheduled -- it may "
+                            "have already taken effect. Refresh and try "
+                            "again."
+                        ),
+                    },
+                )
+
             # Once an employee's booking window could already reach the
             # scheduled layout's effective date, real bookings may already
             # exist against it -- discarding it now would strand them.
