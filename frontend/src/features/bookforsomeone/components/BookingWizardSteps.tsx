@@ -297,7 +297,7 @@ function PhoneField({
                     setCountrySearch("");
                     setHoveredCountry(null);
                   }}
-                  style={{ display: "block", width: "100%", border: 0, background: hoveredCountry === option ? "#6b7280" : option === country ? "#eef2ff" : "#fff", color: hoveredCountry === option ? "#fff" : "#111827", padding: "6px 9px", textAlign: "left", fontSize: 12, cursor: "pointer" }}
+                  style={{ display: "block", width: "100%", border: 0, background: hoveredCountry === option ? "#eef2ff" : option === country ? "#eef2ff" : "#fff", color: "#111827", padding: "6px 9px", textAlign: "left", fontSize: 12, cursor: "pointer" }}
                 >
                   {countryLabel(option)}
                 </button>
@@ -920,7 +920,7 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               disabled={readOnlyLocation}
             >
               <option value="" disabled hidden>Select a Office</option>
-              {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {sites.map((s) => <option key={s.id} value={s.id} className="office-select-option">{s.name}</option>)}
             </select>
             <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
               <IconChevronDown />

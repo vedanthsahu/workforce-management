@@ -72,18 +72,18 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
   },
   {
     id: "booking-calendar-employee",
-    name: "Employee Booking Window",
-    description: "How many days in advance an employee can book a seat.",
+    name: "Booking Calendar (Employee)",
+    description: "Set how far in advance an employee can make bookings.",
     icon: CalendarRange,
     iconBg: "bg-orange-100",
     iconColor: "text-orange-600",
     fields: [
-      field("durationDays", "Advance Window (Days)", "Advance Window", 30, "days", "Employees can book a seat up to this many days from today."),
+      field("durationDays", "Future Duration (Days)", "Duration", 30, "days", "Bookings are allowed within this number of days from today."),
     ],
     lastUpdatedAt: "2026-05-02T10:30:00Z",
     lastUpdatedBy: "Admin User",
     describeRule: (fields) =>
-      `Employees can book a seat for any date up to ${getField(fields, "durationDays")} days from today.`,
+      `Employees will be able to create bookings within the next ${getField(fields, "durationDays")} days from the current date.`,
   },
   {
     id: "visitor-booking",
@@ -103,7 +103,7 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
   {
     id: "layout-visibility",
     name: "Layout Visibility",
-    description: "Configure how long layouts with different statuses remain visible in the UI before being automatically hidden.",
+    description: "Configure how long layouts with different statuses remain available in the UI before being automatically hidden.",
     icon: FileText,
     iconBg: "bg-gray-100",
     iconColor: "text-gray-600",
@@ -122,7 +122,7 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
         iconBg: "bg-amber-100",
         iconColor: "text-amber-600",
         cardTitle: "Draft",
-        cardDescription: "Layouts in draft state will be hidden from the UI after the configured number of days.",
+        cardDescription: "Layouts in draft state will remain available in the UI for the configured number of days.",
         lastUpdatedAt: "2026-05-02T10:30:00Z",
         lastUpdatedBy: "Admin User",
       },
@@ -137,7 +137,7 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
         iconBg: "bg-blue-100",
         iconColor: "text-blue-600",
         cardTitle: "Archived",
-        cardDescription: "Archived layouts will be hidden from the UI after the configured number of days.",
+        cardDescription: "Archived layouts will remain available in the UI for the configured number of days.",
         lastUpdatedAt: "2026-05-02T10:30:00Z",
         lastUpdatedBy: "Admin User",
       },
@@ -152,7 +152,7 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
         iconBg: "bg-red-100",
         iconColor: "text-red-600",
         cardTitle: "Discarded",
-        cardDescription: "Discarded layouts will be hidden from the UI after the configured number of days.",
+        cardDescription: "Discarded layouts will remain available in the UI for the configured number of days.",
         lastUpdatedAt: "2026-05-02T10:30:00Z",
         lastUpdatedBy: "Admin User",
       },
@@ -168,7 +168,7 @@ export const CONFIGURATION_SECTIONS: ConfigurationSection[] = [
   {
     id: "activity",
     title: "Activity",
-    subtitle: "Control the data displayed in activity tables across the application.",
+    subtitle: "Control the data displayed in the Activity table on the Admin Dashboard.",
     itemIds: ["activity-table-record-count"],
   },
   {
@@ -192,7 +192,7 @@ export const CONFIGURATION_SECTIONS: ConfigurationSection[] = [
   {
     id: "layout-visibility",
     title: "Layout Visibility",
-    subtitle: "Configure how long layouts with different statuses remain visible in the UI before being automatically hidden.",
+    subtitle: "Configure how long layouts with different statuses remain available in the UI before being automatically hidden.",
     itemIds: ["layout-visibility"],
   },
 ];

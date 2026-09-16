@@ -32,7 +32,7 @@ export default function FloorFilters({
         onChange={(e) => onSiteChange(e.target.value)}
         className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
       >
-        <option value="">All Sites</option>
+        <option value="">All Offices</option>
         {sites.map((site) => (
           <option key={site.site_id} value={site.site_id} className="text-gray-900">{site.site_name}</option>
         ))}

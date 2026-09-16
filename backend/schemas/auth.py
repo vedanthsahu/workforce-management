@@ -57,6 +57,9 @@ class UserResponse(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
+    bio: str | None = None
+    skills: list[str] | None = None
+
     permissions: list[str] = []
 
     @model_validator(mode="before")

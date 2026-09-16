@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { AdminBookingApiStatus, BookingStatus } from "../types/adminBooking.types";
 
 export const BOOKING_STATUS_STYLES: Record<BookingStatus, string> = {
@@ -50,3 +51,14 @@ export const ADMIN_BOOKINGS_SEARCH_STATE_KEY = "adminBookings:searchState";
 // client-side back/forward, so that API can't tell a Back from a fresh visit
 // here — this flag is what actually distinguishes the two.
 export const ADMIN_BOOKINGS_EXPECT_RETURN_KEY = "adminBookings:expectReturn";
+
+// ─── Shared native-<select> styling (BookingManagementFilters) ────────────────
+export const SELECT_BASE_CLASS =
+  "h-10 pr-8 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors cursor-pointer w-full";
+
+export const SELECT_ARROW_STYLE: CSSProperties = {
+  backgroundImage:
+    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
+  backgroundRepeat: "no-repeat",
+  backgroundPosition: "right 10px center",
+};

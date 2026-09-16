@@ -97,3 +97,41 @@ export function moduleBadgeStyle(module: string): string {
 export function methodBadgeStyle(method: AuditRequestMethod): string {
   return AUDIT_METHOD_STYLES[method] ?? AUDIT_METHOD_FALLBACK_STYLE;
 }
+
+// ─── AuditChangesSection banner tones ────────────────────────────────────────
+export type AuditBannerTone = "create" | "delete" | "auth" | "failed";
+
+export const AUDIT_BANNER_TONE_STYLES: Record<AuditBannerTone, string> = {
+  create: "bg-emerald-50 border-emerald-200 text-emerald-700",
+  delete: "bg-red-50 border-red-200 text-red-700",
+  auth: "bg-gray-50 border-gray-200 text-gray-500",
+  failed: "bg-red-50 border-red-200 text-red-700",
+};
+
+// ─── AuditLogDetailSheet panel sizing ────────────────────────────────────────
+// Matches the old sm:max-w-md cap this panel used before it became
+// resizable, so the default look is unchanged.
+export const AUDIT_DETAIL_DEFAULT_PANEL_WIDTH = 448;
+export const AUDIT_DETAIL_MIN_PANEL_WIDTH = 320;
+
+// ─── AuditLogsTable column widths ───────────────────────────────────────────
+// Shared per-column widths -- declared once so the header row and every body
+// row stay in lockstep (each row is its own independent "table" layout
+// context once thead/tbody go display:block, so widths can't be set via a
+// single <colgroup> the way a normal table would).
+export const AUDIT_TABLE_COL = {
+  actor: "w-[15%]",
+  time: "w-[11%]",
+  action: "w-[15%]",
+  module: "w-[10%]",
+  entity: "w-[10%]",
+  status: "w-[9%]",
+  method: "w-[9%]",
+  source: "w-[8%]",
+  view: "w-[6%]",
+};
+
+// ─── useAuditLogs default sort ───────────────────────────────────────────────
+// The table has no sort-by-column UI -- always newest first.
+export const AUDIT_DEFAULT_SORT_BY = "occurred_at";
+export const AUDIT_DEFAULT_SORT_DIR = "desc";

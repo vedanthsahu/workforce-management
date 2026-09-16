@@ -11,8 +11,7 @@ import AmenitiesPagination from "@/features/amenities/components/AmenitiesPagina
 import { useAmenities } from "@/features/amenities/hooks/useAmenities";
 import { Amenity } from "@/features/amenities/types/amenities.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
-
-const PIN_DURATION = 4000;
+import { AMENITIES_PIN_DURATION as PIN_DURATION } from "@/features/amenities/utils/constants";
 
 function AmenitiesPage() {
   const router = useRouter();
