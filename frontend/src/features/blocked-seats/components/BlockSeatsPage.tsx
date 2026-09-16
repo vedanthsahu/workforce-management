@@ -388,7 +388,7 @@ export default function BlockSeatsPage() {
           </div>
           <button
             onClick={() => router.push("/admin/blocked-seats")}
-            className="flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-[12.5px] font-medium text-gray-600 transition-colors hover:bg-gray-50"
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-[12.5px] font-medium text-gray-600 transition-colors hover:bg-gray-50 sm:w-auto"
           >
             <ArrowLeft size={16} />
             Back to Blocked Seats
@@ -660,11 +660,82 @@ export default function BlockSeatsPage() {
           </div>
         )}
         {!!unresolvedConflictCount && (
-          <section className="overflow-x-auto rounded-xl border border-[#EBEBF5] bg-white">
+          <section className="overflow-hidden rounded-xl border border-[#EBEBF5] bg-white">
             <h2 className="p-4 text-[14px] font-bold text-[#1A1A2E] sm:text-[15px]">
               Conflicting Bookings ({unresolvedConflictCount} seats,{" "}
               {conflicts.length} bookings)
             </h2>
+            <div className="divide-y divide-[#EBEBF5] md:hidden">
+              {visibleConflictRows.map((row) => {
+                if (row.kind === "missing") {
+                  return (
+                    <article key={`mobile-missing-${row.seat.seat_id}`} className="space-y-3 bg-amber-50/50 p-4 text-xs">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="font-semibold text-gray-900">{row.seat.seat_code}</p>
+                        <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-medium text-amber-700">
+                          Resolution required
+                        </span>
+                      </div>
+                      <dl className="grid grid-cols-2 gap-3">
+                        <div>
+                          <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">User</dt>
+                          <dd className="mt-1 text-gray-600">Details unavailable</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Period</dt>
+                          <dd className="mt-1 text-gray-600">{from} – {to}</dd>
+                        </div>
+                      </dl>
+                      <p className="break-words text-gray-500 [overflow-wrap:anywhere]">
+                        Reload seats to retrieve the conflicting booking details.
+                      </p>
+                    </article>
+                  );
+                }
+                const booking = row.booking;
+                const mutable = Boolean(
+                  booking.booking_date && booking.booking_date > today(),
+                );
+                const suggestedSeats = alternatives(booking);
+                return (
+                  <article key={`mobile-${booking.booking_id}`} className="space-y-3 p-4 text-xs">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900">{booking.seat_code}</p>
+                        <p className="mt-1 break-words text-gray-600 [overflow-wrap:anywhere]">
+                          {booking.booked_for_name}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-gray-500">{booking.booking_date}</span>
+                    </div>
+                    {mutable ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          className="rounded-lg border border-red-200 px-3 py-2 font-medium text-red-600 hover:bg-red-50"
+                          onClick={() => void cancel(booking)}
+                        >
+                          Cancel booking
+                        </button>
+                        {suggestedSeats.map((seat) => (
+                          <button
+                            key={seat.seat_id}
+                            className="rounded-lg border border-border px-3 py-2 font-medium text-primary hover:bg-primary/10"
+                            onClick={() => void move(booking, seat)}
+                          >
+                            Move to {seat.seat_code}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-gray-500">
+                        Existing booking rules allow changes only for future dates.
+                      </p>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[900px] table-fixed text-left text-[12px] sm:text-[12.5px]">
               <colgroup>
                 <col className="w-[12%]" />
@@ -744,14 +815,15 @@ export default function BlockSeatsPage() {
                 })}
               </tbody>
             </table>
+            </div>
             {conflictingRows.length > CONFLICT_PAGE_SIZE && (
-              <footer className="flex items-center justify-between border-t border-[#EBEBF5] px-4 py-3 text-[12px] text-gray-500">
+              <footer className="flex flex-col gap-3 border-t border-[#EBEBF5] px-4 py-3 text-[12px] text-gray-500 sm:flex-row sm:items-center sm:justify-between">
                 <span>
                   Showing {(conflictPage - 1) * CONFLICT_PAGE_SIZE + 1} to{" "}
                   {Math.min(conflictPage * CONFLICT_PAGE_SIZE, conflictingRows.length)} of{" "}
                   {conflictingRows.length} entries
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 self-center sm:self-auto">
                   <button
                     type="button"
                     aria-label="Previous conflict page"
@@ -779,7 +851,7 @@ export default function BlockSeatsPage() {
           </section>
         )}
         {!!selected.length && (
-          <footer className="sticky bottom-0 flex items-center justify-between rounded-xl border border-[#EBEBF5] bg-white p-4 shadow-sm">
+          <footer className="sticky bottom-0 flex flex-col gap-3 rounded-xl border border-[#EBEBF5] bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <p
               className={
                 unresolvedConflictCount
@@ -796,7 +868,7 @@ export default function BlockSeatsPage() {
                 !!unresolvedConflictCount || !reason.trim() || saving
               }
               onClick={() => void submit()}
-              className="h-10 rounded-lg bg-indigo-600 px-5 text-[12.5px] font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 sm:text-[13px]"
+              className="h-10 w-full rounded-lg bg-indigo-600 px-5 text-[12.5px] font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:text-[13px]"
             >
               Block {selected.length}{" "}
               {selected.length === 1 ? "Space" : "Spaces"}
