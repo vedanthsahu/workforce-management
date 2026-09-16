@@ -90,10 +90,8 @@ function mapDashboardMe(api: ApiDashboardMe, authMe?: ApiAuthMe): ProfileData {
     employeeId:       safeStr(api.profile_metadata?.employee_id ?? authMe?.employee_id),
     reportingManager: safeStr(api.manager),
     dateOfJoining:    formatDate(api.profile_metadata?.created_at ?? authMe?.created_at),
-    bio:
-      "Curious developer exploring AI, building intelligent solutions, learning endlessly.",
-
-    skills: ["Next.js", "React", "TypeScript", "FastAPI", "AWS"],
+    bio:            safeStr(authMe?.bio),
+    skills:         authMe?.skills ?? [],
     status: safeStr(api.profile_metadata?.status ?? authMe?.status),
   };
 }
@@ -130,42 +128,6 @@ function computeActivitySummary(bookings: BookingData): ActivitySummary {
   };
 }
 
-// ─── Local override types ─────────────────────────────────────────────────────
-
-interface LocalProfileOverride {
-  bio?:      string;
-  skills?:   string[];
-  avatarUrl?: string;
-}
-
-// ─── Persistent overrides (survive refresh via localStorage) ─────────────────
-// Bio/skills/avatar have no backend endpoint yet, so they stay local-only.
-
-const PROFILE_OVERRIDE_KEY = (userId: string) =>
-  `seatbook:profile_override:${userId}`;
-
-function loadProfileOverride(userId: string): LocalProfileOverride {
-  try {
-    const raw = localStorage.getItem(PROFILE_OVERRIDE_KEY(userId));
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-
-function saveProfileOverride(
-  userId: string,
-  data: LocalProfileOverride
-) {
-  try {
-    localStorage.setItem(
-      PROFILE_OVERRIDE_KEY(userId),
-      JSON.stringify(data)
-    );
-  } catch {}
-}
-
 // ─── Main fetch ───────────────────────────────────────────────────────────────
 
 export async function getProfileData(): Promise<ProfileResult> {
@@ -184,8 +146,6 @@ export async function getProfileData(): Promise<ProfileResult> {
     }
 
     const dashboardData = dashboardResult.value.data;
-    const profileOverride =
-  loadProfileOverride(dashboardData.user_id);
 
     const authData      = authResult.status === "fulfilled" ? authResult.value.data : undefined;
 
@@ -224,7 +184,8 @@ export async function getProfileData(): Promise<ProfileResult> {
       phone:         bestStr(authData?.mobile_phone,    dashboardData.mobile_phone),
       status:        bestStr(authData?.status,          dashboardData.profile_metadata?.status),
       dateOfJoining: formatDate(authData?.created_at ?? dashboardData.profile_metadata?.created_at),
-      ...profileOverride,  // ← persisted bio/skills/avatar applied last
+      bio:           authData?.bio ?? "",
+      skills:        authData?.skills ?? [],
     };
 
     const accountInfo: AccountInfo = authData
@@ -255,34 +216,10 @@ export async function getProfileData(): Promise<ProfileResult> {
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
 export async function updateProfile(payload: ApiUpdateProfilePayload): Promise<ProfileData> {
-  const dashResponse =
-  await axiosInstance.get<ApiDashboardMe>("/dashboard/me");
-
-const userId = dashResponse.data.user_id;
-
-const existing = loadProfileOverride(userId);
-  const updated: LocalProfileOverride = {
-    ...existing,
-    ...(payload.bio        !== undefined && { bio:       payload.bio        }),
-    ...(payload.skills     !== undefined && { skills:    payload.skills     }),
-    ...(payload.avatar_url !== undefined && { avatarUrl: payload.avatar_url }),
-  };
-  saveProfileOverride(userId, updated); // ← persist immediately
-
-  const [dashResult, authResult] = await Promise.allSettled([
-    axiosInstance.get<ApiDashboardMe>("/dashboard/me"),
-    axiosInstance.get<ApiAuthMe>("/auth/me"),
-  ]);
-
-  const dashData = dashResult.status === "fulfilled" ? dashResult.value.data : null;
-  const authData = authResult.status === "fulfilled" ? authResult.value.data : undefined;
-
-  if (!dashData) throw new Error("Failed to refresh profile data");
-
-  return {
-    ...mapDashboardMe(dashData, authData),
-    ...updated,  // ← use the freshly saved override
-  };
+  await axiosInstance.patch<ApiAuthMe>("/users/me", payload);
+  const result = await getProfileData();
+  if (!result.ok) throw new Error("Failed to refresh profile data");
+  return result.data.profile;
 }
 
 export async function updatePreferences(

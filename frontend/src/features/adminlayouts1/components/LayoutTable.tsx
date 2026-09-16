@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { fetchLayoutSeats } from "@/features/managelayout1/services/seatService";
 import { deleteLayout, rescheduleLayout } from "@/features/adminlayouts1/services/locationService";
 import type { Seat } from "@/features/managelayout1/types/seat.types";
+import { ROOM_SVG_ID_PATTERN, LEGEND, HIDE_AFTER_DAYS } from "../utils/layoutTable.utils";
 
 function extractApiErrorMessage(err: unknown, fallback: string): string {
   return (
@@ -36,12 +37,6 @@ function resolveSeatFill(seat: Seat): string {
   if (!seat.is_bookable) return "#F59E0B";
   return "#22C55E";
 }
-
-// Cabin/conference/meeting/training room seats are grouped under one svg id
-// containing a "CBN"/"CFR"/"MR"/"TR" segment (e.g. "HYD-PRV-F11-CBN-04",
-// "HYD-PRV-F11-CFR-02", "HYD-PRV-F11-MR-01", "HYD-PRV-F11-TR-01"), not a
-// dedicated field.
-const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr|tr)([-_]|$)/i;
 
 function isRoomSvgId(svgId: string): boolean {
   return ROOM_SVG_ID_PATTERN.test(svgId);
@@ -90,13 +85,6 @@ function applyColors(svgText: string, seats: Seat[]): string {
   return result;
 }
 
-const LEGEND = [
-  { label: "Bookable", color: "#22C55E" },
-  { label: "Non-bookable", color: "#F59E0B" },
-  { label: "Inactive", color: "#EF4444" },
-  { label: "Unconfigured", color: "#D1D5DB" },
-] as const;
-
 // ── Status dot config ─────────────────────────────────────────────────────────
 
 function statusConfig(status: string, isPublished: boolean, isDiscarded: boolean, effectiveFrom?: string | null) {
@@ -121,16 +109,6 @@ function statusConfig(status: string, isPublished: boolean, isDiscarded: boolean
 }
 
 // ── Auto-hide (by status age) ─────────────────────────────────────────────────
-// Non-published layouts fall out of this list on their own once they've sat
-// untouched (by updated_at) past their status's threshold — otherwise old
-// drafts/archived rows accumulate forever. Published layouts are exempt and
-// never auto-hide.
-const HIDE_AFTER_DAYS: Partial<Record<string, number>> = {
-  DRAFT: 15,
-  ARCHIVED: 30,
-  DELETED: 5,
-};
-
 function daysSince(iso: string): number {
   return (Date.now() - new Date(iso).getTime()) / 86_400_000;
 }

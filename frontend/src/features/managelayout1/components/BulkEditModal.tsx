@@ -8,6 +8,7 @@ import { BulkUpdatePayload, SeatStatus, SeatType } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 import { ALL_SPACE_TYPES, SPACE_TYPE_LABELS } from "../utils/spaceCategory";
+import { SEAT_STATUSES } from "../utils/seatOptions.utils";
 
 interface Props {
   open: boolean;
@@ -17,8 +18,6 @@ interface Props {
   preferences: Preference[];
   onSave: (payload: BulkUpdatePayload) => Promise<void>;
 }
-
-const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
 
 export default function BulkEditModal({
   open, onClose, selectedIds, layoutId, preferences, onSave,

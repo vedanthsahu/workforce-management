@@ -6,6 +6,7 @@ import { Seat, SeatStatus, SeatType, SeatUpdatePayload } from "../types/seat.typ
 import { Preference } from "../types/layout.types";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 import { ALL_SPACE_TYPES, SPACE_TYPE_LABELS, categoryOf, suggestSeatType } from "../utils/spaceCategory";
+import { SEAT_STATUSES } from "../utils/seatOptions.utils";
 
 interface Props {
   seat: Seat | null;
@@ -13,8 +14,6 @@ interface Props {
   onSave: (payload: SeatUpdatePayload) => Promise<unknown>;
   onClose: () => void;
 }
-
-const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
 
 export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Props) {
   const [seatType,    setSeatType]    = useState<SeatType>("STANDARD");
