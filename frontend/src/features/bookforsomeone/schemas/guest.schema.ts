@@ -20,15 +20,11 @@ export const createGuestSchema = z.object({
   organization: z
     .string()
     .trim()
-    .refine((val) => !val || /^[a-zA-Z0-9\s.,&'-]+$/.test(val), {
+    .refine((val) => !val || /^[a-zA-Z\s.,&'-]+$/.test(val), {
       message: "Organization name must not contain special characters",
     })
-    // An org name that's entirely digits (e.g. someone fat-fingering a phone
-    // number into the wrong field) isn't a real organization — require at
-    // least one letter so a pure-number value gets caught here instead of
-    // silently saved.
-    .refine((val) => !val || /[a-zA-Z]/.test(val), {
-      message: "Organization name must contain letters, not just numbers",
+    .refine((val) => !val || !/\d/.test(val), {
+      message: "Organization name must not contain numbers",
     })
     .optional(),
 });
