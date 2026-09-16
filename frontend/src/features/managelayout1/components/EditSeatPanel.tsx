@@ -4,6 +4,9 @@ import React, { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Seat, SeatStatus, SeatType, SeatUpdatePayload } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
+import { ALL_SPACE_TYPES, SPACE_TYPE_LABELS, categoryOf, suggestSeatType } from "../utils/spaceCategory";
+import { SEAT_STATUSES } from "../utils/seatOptions.utils";
 
 interface Props {
   seat: Seat | null;
@@ -12,41 +15,38 @@ interface Props {
   onClose: () => void;
 }
 
-// const SEAT_TYPES: SeatType[] = ["Workstation", "Meeting Room", "Cabin", "Phone Booth"];
-// const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
-const SEAT_TYPES: SeatType[] = ["STANDARD" , "WINDOW" , "CABIN" ,"ACCESSIBLE", "HOT_DESK"];
-const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
-
 export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Props) {
   const [seatType,    setSeatType]    = useState<SeatType>("STANDARD");
   const [bookable,    setBookable]    = useState<boolean>(true);
   const [status,      setStatus]      = useState<SeatStatus>("ACTIVE");
   const [amenityIds,  setAmenityIds]  = useState<string[]>([]);
   const [notes,       setNotes]       = useState<string>("");
+  const [capacity,    setCapacity]    = useState<number | null>(null);
+  // True only when the current seatType came from the SVG-id suggestion,
+  // not the seat's own stored value — cleared the moment the admin picks
+  // anything themselves, so the hint below only ever describes a guess that
+  // hasn't been confirmed yet.
+  const [wasSuggested, setWasSuggested] = useState(false);
   const [saving,      setSaving]      = useState(false);
   const [saveError,   setSaveError]   = useState(false);
   const [saved,       setSaved]       = useState(false);
 
-  // useEffect(() => {
-  //   if (!seat) return;
-  //   setSeatType(seat.seat_type as SeatType);
-  //   setBookable(seat.is_bookable);
-  //   setStatus(seat.status);
-  //   setAmenityIds([...seat.amenity_ids]);
-  //   setNotes(seat.notes ?? "");
-  //   setSaved(false);
-  //   setSaveError(false);
-  // }, [seat]);
   useEffect(() => {
-  if (!seat) return;
-  setSeatType((seat.seat_type as SeatType) ?? "STANDARD");  // ← fallback for null
-  setBookable(seat.is_bookable ?? true);                     // ← fallback for null
-  setStatus((seat.status as SeatStatus) ?? "ACTIVE");       // ← also null-safe
-  setAmenityIds([...seat.amenity_ids]);
-  setNotes(seat.notes ?? "");
-  setSaved(false);
-  setSaveError(false);
-}, [seat]);
+    if (!seat) return;
+    const suggested = !seat.seat_type;
+    setSeatType((seat.seat_type as SeatType) ?? (suggestSeatType(seat.seat_svg_id) as SeatType));
+    setWasSuggested(suggested);
+    setBookable(seat.is_bookable ?? true);
+    setStatus((seat.status as SeatStatus) ?? "ACTIVE");
+    setAmenityIds([...seat.amenity_ids]);
+    setNotes(seat.notes ?? "");
+    setCapacity(seat.capacity ?? null);
+    setSaved(false);
+    setSaveError(false);
+  }, [seat]);
+
+  const isConferenceRoom = seatType === "CONFERENCE_ROOM";
+  const capacityInvalid = isConferenceRoom && (capacity == null || capacity < 1);
 
   const toggleAmenity = (id: string) => {
     setSaved(false);
@@ -57,6 +57,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
 
   const handleSave = async () => {
     if (!seat) return;
+    if (capacityInvalid) { setSaved(false); return; }
     setSaving(true); setSaveError(false);
     try {
       await onSave({
@@ -67,6 +68,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
         status,
         amenity_ids: amenityIds,
         notes: notes || undefined,
+        capacity: isConferenceRoom ? capacity : null,
       });
       setSaved(true);
     } catch {
@@ -83,7 +85,9 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">Edit Seat</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">
+            Edit {categoryOf(seat.seat_type) === "SEATS" ? "Seat" : categoryOf(seat.seat_type) === "CABINS" ? "Cabin" : "Conference Room"}
+          </p>
           <h3 className="text-base font-bold text-indigo-600">{seat.seat_code}</h3>
         </div>
         <button
@@ -102,14 +106,14 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
           <p className="text-xs font-semibold text-gray-700 mb-3">1. Basic Information</p>
 
           <div className="space-y-3">
-            {/* Seat Type */}
+            {/* Space Type */}
             <div>
               <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1 block">
-                Seat Type <span className="text-red-500">*</span>
+                Space Type <span className="text-red-500">*</span>
               </label>
               <select
                 value={seatType}
-                onChange={(e) => { setSeatType(e.target.value as SeatType); setSaved(false); }}
+                onChange={(e) => { setSeatType(e.target.value as SeatType); setWasSuggested(false); setSaved(false); }}
                 className="w-full h-9 px-3 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors"
                 style={{
                   backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
@@ -117,9 +121,42 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
                   backgroundPosition: "right 10px center",
                 }}
               >
-                {SEAT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                {ALL_SPACE_TYPES.map((t) => <option key={t} value={t}>{SPACE_TYPE_LABELS[t]}</option>)}
               </select>
+              {wasSuggested && (
+                <p className="text-[10.5px] text-indigo-500 mt-1">
+                  Suggested from the floor-plan ID ({seat.seat_svg_id}) — confirm or change it.
+                </p>
+              )}
             </div>
+
+            {/* Capacity — Conference Rooms only */}
+            {isConferenceRoom && (
+              <div>
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1 block">
+                  Capacity <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={capacity ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setCapacity(v === "" ? null : Number(v));
+                    setSaved(false);
+                  }}
+                  placeholder="e.g. 12"
+                  className={`w-full h-9 px-3 text-xs font-medium text-gray-700 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-colors ${
+                    capacityInvalid ? "border-red-300 focus:border-red-400" : "border-gray-200 focus:border-indigo-400"
+                  }`}
+                />
+                <p className="text-[10.5px] text-gray-400 mt-1">Number of people this room seats.</p>
+                {capacityInvalid && (
+                  <p className="text-[10.5px] text-red-500 mt-1">Capacity is required for a conference room.</p>
+                )}
+              </div>
+            )}
 
             {/* Bookable */}
             <div>
@@ -177,6 +214,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
             <div className="space-y-1.5">
               {preferences.map((p) => {
                 const on = amenityIds.includes(p.preference_id);
+                const color = getAmenityColor(p.preference_name, p.preference_type);
                 return (
                   <label
                     key={p.preference_id}
@@ -199,6 +237,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
                       checked={on}
                       onChange={() => toggleAmenity(p.preference_id)}
                     />
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${color.dot}`} />
                     <span className={`text-xs font-medium flex-1 ${on ? "text-indigo-700" : "text-gray-700"}`}>
                       {p.preference_name}
                     </span>
@@ -241,7 +280,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
           </button>
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || capacityInvalid}
             className="px-4 py-1.5 text-xs font-semibold bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
             {saving ? "Saving…" : "Save Changes"}

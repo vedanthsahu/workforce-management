@@ -16,6 +16,7 @@ import {
 import { formatDate } from "../utils/bookingHelpers";
 import type { Booking } from "../types/bookings.types";
 
+// Used when cancelling a guest's seat only — no "Work From Home" (guests don't WFH).
 const BOOKING_CANCEL_REASONS = [
   "Schedule change",
   "Meeting cancelled",
@@ -23,6 +24,14 @@ const BOOKING_CANCEL_REASONS = [
   "Booked wrong seat / location",
   "No longer needed",
   "Out of office / On leave",
+  "Other",
+];
+
+// Used for an employee's own booking or one booked on their behalf — self or
+// booked-for-someone both count as "employee", so both get this list.
+const EMPLOYEE_BOOKING_CANCEL_REASONS = [
+  ...BOOKING_CANCEL_REASONS.slice(0, -1),
+  "Work From Home",
   "Other",
 ];
 
@@ -70,7 +79,11 @@ export function CancelBookingDialog({ open, booking, cancelMode = "booking", onC
     : isSeatOnlyCancel
       ? "Keep Seat"
       : "Keep Booking";
-  const reasons = cancelMode === "visit" ? VISIT_CANCEL_REASONS : BOOKING_CANCEL_REASONS;
+  const reasons = cancelMode === "visit"
+    ? VISIT_CANCEL_REASONS
+    : bType === "guest"
+      ? BOOKING_CANCEL_REASONS
+      : EMPLOYEE_BOOKING_CANCEL_REASONS;
 
   const finalReason = selectedReason === "Other" ? otherReason.trim() : selectedReason;
 
@@ -204,7 +217,7 @@ export function CancelBookingDialog({ open, booking, cancelMode = "booking", onC
           )}
         </div>
 
-        <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:gap-0">
+        <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:gap-3">
           <AlertDialogCancel
             onClick={() => { setSelectedReason(""); setOtherReason(""); onClose(); }}
             className="text-[12.5px] w-full sm:w-auto"

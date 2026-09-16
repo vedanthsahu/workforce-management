@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 
 import { floorService } from "../services/floorService";
 import { Floor } from "../types/floor.types";
 
-export const useEditFloor = (floor: Floor) => {
+export const useEditFloor = (floor: Floor, open: boolean) => {
   const [loading, setLoading] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -12,14 +11,19 @@ export const useEditFloor = (floor: Floor) => {
     status: "ACTIVE",
   });
 
+  // Re-sync from the source floor every time the modal opens — not just
+  // when `floor` changes — so a Cancel discards any unsaved dropdown edits
+  // instead of leaving them staged for the next open. The modal stays
+  // mounted between opens (parent only toggles `open`), so a `[floor]`-only
+  // effect would only run once per floor.
   useEffect(() => {
-    if (!floor) return;
+    if (!open || !floor) return;
 
     setFormData({
       floor_name: floor.floor_name,
       status: floor.status,
     });
-  }, [floor]);
+  }, [open, floor]);
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));

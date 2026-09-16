@@ -1,17 +1,20 @@
-<!DOCTYPE html>
-<html lang="en">
-<body style="font-family: Arial, sans-serif; color: #222; line-height: 1.5;">
-    <h2>Guest visit scheduled</h2>
-    <p>Hello {{ recipient_name }},</p>
-    <p>Your visit has been scheduled.</p>
-    <table cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
-        <tr><td><strong>Visit ID</strong></td><td>{{ guest_visit_id }}</td></tr>
-        <tr><td><strong>Date</strong></td><td>{{ visit_date }}</td></tr>
-        <tr><td><strong>Time</strong></td><td>{{ start_time }} - {{ end_time }}</td></tr>
-        <tr><td><strong>Host</strong></td><td>{{ host_name }} ({{ host_email }})</td></tr>
-        <tr><td><strong>Location</strong></td><td>{{ site }}, {{ building }}, {{ floor }}</td></tr>
-        <tr><td><strong>Purpose</strong></td><td>{{ purpose_of_visit }}</td></tr>
-    </table>
-    <p>Thank you,<br />Seat Management Team</p>
-</body>
-</html>
+{% extends "_base.html" %}
+{% from "_macros.html" import heading, lead, details_open, details_close, row %}
+{% block title %}Your visit is scheduled{% endblock %}
+{% block preheader %}Your visit to {{ site }} on {{ visit_date }} is confirmed.{% endblock %}
+{% block content %}
+{% set time_window = (start_time ~ " – " ~ end_time) if (start_time and end_time) else (start_time or end_time) %}
+{% set purpose = purpose_of_visit.replace("_", " ")|title if purpose_of_visit else "" %}
+{{ heading("Your visit is scheduled") }}
+{{ lead("Hello " ~ recipient_name ~ ", your visit has been confirmed. Please carry a valid photo ID and check in at reception when you arrive.") }}
+{{ details_open() }}
+{{ row("Date", visit_date) }}
+{{ row("Time", time_window) }}
+{{ row("Host", host_name) }}
+{{ row("Purpose", purpose) }}
+{{ row("Floor", floor) }}
+{{ row("Building", building) }}
+{{ row("Site", site) }}
+{{ details_close() }}
+{% if host_name %}<p style="margin:14px 0 0 0;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#6a7377;">{{ host_name }} will be notified when you check in.</p>{% endif %}
+{% endblock %}

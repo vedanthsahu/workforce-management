@@ -8,7 +8,13 @@ from typing import ParamSpec, TypeVar
 
 from boto3.exceptions import S3UploadFailedError
 from botocore.exceptions import BotoCoreError, ClientError
-from tenacity import RetryCallState, retry, retry_if_exception, stop_after_attempt, wait_exponential
+from tenacity import (
+    RetryCallState,
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 P = ParamSpec("P")
 R = TypeVar("R")

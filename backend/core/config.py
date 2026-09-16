@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from backend.core.runtime_secrets import RuntimeSecretError, get_json_secret
 
 DEFAULT_JWT_ALLOWED_CLAIMS = (
     "user_id",
@@ -27,9 +29,7 @@ def _is_https_url(url: str) -> bool:
 
 
 def _parse_csv(value: str | tuple[str, ...] | list[str], *, field_name: str) -> tuple[str, ...]:
-    if isinstance(value, tuple):
-        values = tuple(str(item).strip() for item in value if str(item).strip())
-    elif isinstance(value, list):
+    if isinstance(value, tuple) or isinstance(value, list):
         values = tuple(str(item).strip() for item in value if str(item).strip())
     else:
         values = tuple(part.strip() for part in value.split(",") if part.strip())
@@ -73,17 +73,19 @@ class Settings(BaseSettings):
     tenant_id: str
     redirect_uri: str
     frontend_url: str
+    additional_frontend_urls: str | tuple[str, ...] = ()
     session_ttl: int = 3600
 
-    aws_access_key_id: str
-    aws_secret_access_key: str
     aws_region: str
     aws_s3_bucket_name: str
     aws_s3_public_base_url: str
     aws_s3_max_retries: int = 3
+    # How long a presigned floor-layout SVG URL stays valid, generated
+    # fresh on every read (see storage.resolve_layout_file_url) -- not a
+    # session length, just how long that one link keeps working if saved
+    # or reloaded from a cached page.
+    s3_presigned_url_ttl_seconds: int = 3600
 
-    aws_ses_access_key_id: str
-    aws_ses_secret_access_key: str
     aws_ses_sender_email: str
     aws_ses_max_retries: int = 3
     aws_retry_initial_delay_seconds: float = 1.0
@@ -92,11 +94,17 @@ class Settings(BaseSettings):
     email_template_dir: str = "templates/email"
     notification_admin_emails: str | tuple[str, ...] = ()
 
-    graph_talent_group_id: str | None = None
+    graph_facilitator_group_id: str | None = None
     graph_role_lookup_retries: int = 2
     graph_role_lookup_backoff_seconds: float = 0.5
     graph_role_sync_enabled: bool = False
     graph_role_sync_interval_minutes: int = 60
+
+    graph_team_sync_enabled: bool = False
+    graph_team_sync_interval_minutes: int = 60
+
+    layout_cutover_enabled: bool = True
+    layout_cutover_interval_minutes: int = 5
 
     app_log_level: str = "INFO"
     app_trace_functions: bool = False
@@ -115,7 +123,7 @@ class Settings(BaseSettings):
         return normalized
 
     @model_validator(mode="after")
-    def _apply_derived_defaults(self) -> "Settings":
+    def _apply_derived_defaults(self) -> Settings:
         access_token_ttl = self.jwt_access_token_ttl
         if access_token_ttl is None:
             access_token_ttl = (
@@ -153,8 +161,19 @@ class Settings(BaseSettings):
             _parse_optional_csv(self.notification_admin_emails),
         )
 
+        object.__setattr__(
+            self,
+            "additional_frontend_urls",
+            tuple(
+                url.rstrip("/")
+                for url in _parse_optional_csv(self.additional_frontend_urls)
+            ),
+        )
+
         if self.aws_s3_max_retries < 0:
             raise ValueError("aws_s3_max_retries must be greater than or equal to zero")
+        if self.s3_presigned_url_ttl_seconds <= 0:
+            raise ValueError("s3_presigned_url_ttl_seconds must be greater than zero")
         if self.aws_ses_max_retries < 0:
             raise ValueError("aws_ses_max_retries must be greater than or equal to zero")
         if self.aws_retry_initial_delay_seconds <= 0:
@@ -169,11 +188,15 @@ class Settings(BaseSettings):
             raise ValueError("graph_role_lookup_backoff_seconds must be greater than or equal to zero")
         if self.graph_role_sync_interval_minutes <= 0:
             raise ValueError("graph_role_sync_interval_minutes must be greater than zero")
+        if self.graph_team_sync_interval_minutes <= 0:
+            raise ValueError("graph_team_sync_interval_minutes must be greater than zero")
+        if self.layout_cutover_interval_minutes <= 0:
+            raise ValueError("layout_cutover_interval_minutes must be greater than zero")
 
-        graph_group_id = str(self.graph_talent_group_id or "").strip()
+        graph_group_id = str(self.graph_facilitator_group_id or "").strip()
         object.__setattr__(
             self,
-            "graph_talent_group_id",
+            "graph_facilitator_group_id",
             graph_group_id or None,
         )
 
@@ -190,6 +213,15 @@ class Settings(BaseSettings):
     @property
     def jwks_url(self) -> str:
         return f"https://login.microsoftonline.com/{self.tenant_id}/discovery/v2.0/keys"
+
+    @property
+    def cors_allowed_origins(self) -> tuple[str, ...]:
+        """Return every frontend origin allowed to call this API."""
+        origins = (self.frontend_url, *self.additional_frontend_urls)
+        seen: dict[str, None] = {}
+        for origin in origins:
+            seen.setdefault(origin, None)
+        return tuple(seen)
 
     @property
     def db_config(self) -> dict[str, object]:
@@ -211,7 +243,77 @@ def _parse_optional_csv(value: str | tuple[str, ...] | list[str]) -> tuple[str, 
     return _parse_csv(value, field_name="notification_admin_emails")
 
 
+def _required_secret_value(
+    payload: dict[str, object],
+    key: str,
+    *,
+    secret_name: str,
+) -> str:
+    value = str(payload.get(key) or "").strip()
+    if not value:
+        raise RuntimeSecretError(
+            f"{secret_name} is missing the required '{key}' value."
+        )
+    return value
+
+
+def _runtime_secret_settings() -> dict[str, object]:
+    database_secret_arn = os.getenv("DATABASE_SECRET_ARN", "").strip()
+    application_secret_arn = os.getenv("APPLICATION_SECRET_ARN", "").strip()
+
+    if not database_secret_arn and not application_secret_arn:
+        return {}
+
+    if not database_secret_arn or not application_secret_arn:
+        raise RuntimeSecretError(
+            "DATABASE_SECRET_ARN and APPLICATION_SECRET_ARN must both be configured."
+        )
+
+    database_secret = get_json_secret(database_secret_arn)
+    application_secret = get_json_secret(application_secret_arn)
+
+    try:
+        database_port = int(database_secret.get("port", 5432))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeSecretError(
+            "The database secret contains an invalid 'port' value."
+        ) from exc
+
+    if not 1 <= database_port <= 65535:
+        raise RuntimeSecretError(
+            "The database secret 'port' must be between 1 and 65535."
+        )
+
+    return {
+        "db_host": _required_secret_value(
+            database_secret,
+            "host",
+            secret_name="Database secret",
+        ),
+        "db_user": _required_secret_value(
+            database_secret,
+            "username",
+            secret_name="Database secret",
+        ),
+        "db_password": _required_secret_value(
+            database_secret,
+            "password",
+            secret_name="Database secret",
+        ),
+        "db_port": database_port,
+        "jwt_secret": _required_secret_value(
+            application_secret,
+            "jwt_secret",
+            secret_name="Application secret",
+        ),
+        "client_secret": _required_secret_value(
+            application_secret,
+            "microsoft_client_secret",
+            secret_name="Application secret",
+        ),
+    }
+
 @lru_cache
 def get_settings() -> Settings:
     """Build and cache the backend settings object."""
-    return Settings()
+    return Settings(**_runtime_secret_settings())

@@ -1,4 +1,4 @@
-export type BookingStatus = "confirmed" | "cancelled" | "pending";
+export type BookingStatus = "confirmed" | "modified" | "cancelled" | "pending";
 
 export type BookingType = "self" | "on_behalf" | "employee" | "guest" | "visit";
 
@@ -6,7 +6,7 @@ export type BookingTab = "upcoming" | "past" | "recurring" | "cancelled";
 
 export interface BookingTag {
   label: string;
-  variant: "confirmed" | "manager" | "zone" | "sprint" | "recurring";
+  variant: "confirmed" | "modified" | "manager" | "zone" | "sprint" | "recurring";
 }
 
 export interface Booking {
@@ -48,6 +48,8 @@ export interface Booking {
   guestVisitId?: string;
   activitySource?: "BOOKING" | "GUEST_VISIT";
   createdAt?: string;
+  updatedByUserId?: string;
+  updatedByName?: string;
 }
 
 export interface BookingSummary {
@@ -74,13 +76,25 @@ export interface RawBooking {
   booking_date:         string;
   from_date?:           string;
   to_date?:             string;
-  booking_status:       "CONFIRMED" | "CANCELLED" | "PENDING" | "ACTIVE";
+  booking_status:       "CONFIRMED" | "MODIFIED" | "CANCELLED" | "PENDING" | "ACTIVE";
   booking_type?:        "EMPLOYEE" | "GUEST";
   source_channel:       string;
   check_in_at:          string | null;
   checked_out_at:       string | null;
   cancelled_at:         string | null;
   cancellation_reason:  string | null;
+  updated_user_id?:     string | null;
+  updated_by_name?:     string | null;
+  updated_by_email?:    string | null;
+
+  // Server-derived (modified_from_booking_id / modified_from_guest_visit_id
+  // is not null) -- the authoritative signal for whether this row is a
+  // modification, independent of the literal booking_status it carries
+  // (a modified row's successor is still literally CONFIRMED/SCHEDULED).
+  is_modified?:         boolean;
+  modified_from_booking_id?: string | null;
+  modified_from_guest_visit_id?: string | null;
+
   created_at:           string;
   updated_at:           string;
   is_full_day?:         boolean;

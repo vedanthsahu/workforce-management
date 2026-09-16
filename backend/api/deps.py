@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Annotated, Iterable
+from collections.abc import Iterable
+from typing import Annotated, Any
 
 import psycopg2
 from fastapi import Depends, HTTPException, Request, Response, status
 from psycopg2.extensions import connection as PGConnection
-from backend.repositories.token_repository import fetch_active_session
+
 from backend.core.config import get_settings
 from backend.core.security import (
     ACCESS_TOKEN_COOKIE_NAME,
@@ -20,12 +21,14 @@ from backend.core.security import (
     is_microsoft_token,
 )
 from backend.db.connection import get_db
+from backend.repositories.token_repository import fetch_active_session
 from backend.repositories.user_repository import fetch_user_by_id
 from backend.services.auth_service import (
     AuthTokens,
     attach_permissions_to_user,
     refresh_auth_tokens,
 )
+
 
 def get_auth_context(
     request: Request,

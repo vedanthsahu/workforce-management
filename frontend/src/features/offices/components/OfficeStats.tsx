@@ -5,18 +5,32 @@ import { Building2, CheckCircle, PauseCircle, Armchair } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { OfficeStatsSummary } from "../types/office.types";
 
+export type OfficeStatusFilter = "ACTIVE" | "INACTIVE" | null;
+
 interface StatCardProps {
   icon: ReactNode;
   bg: string;
   label: string;
   value: string;
   sub: string;
+  selected?: boolean;
+  onClick?: () => void;
 }
 
-function StatCard({ icon, bg, label, value, sub }: StatCardProps) {
+function StatCard({ icon, bg, label, value, sub, selected, onClick }: StatCardProps) {
+  const clickable = !!onClick;
   return (
-    <Card className="flex flex-row items-center gap-3 sm:gap-4 p-3 sm:p-5">
-      <div className={`p-2 sm:p-3 rounded-xl shrink-0 ${bg}`}>{icon}</div>
+    <Card
+      onClick={onClick}
+      className={`group flex flex-row items-center gap-3 sm:gap-4 p-3 sm:p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${
+        clickable ? "cursor-pointer" : ""
+      } ${
+        selected
+          ? "border-2 border-blue-500 ring-2 ring-blue-100 shadow-md"
+          : ""
+      }`}
+    >
+      <div className={`p-2 sm:p-3 rounded-xl shrink-0 transition-transform duration-200 group-hover:scale-110 ${bg}`}>{icon}</div>
       <div>
         <p className="text-xs sm:text-sm text-gray-500">{label}</p>
         <p className="text-lg sm:text-xl font-semibold text-gray-900">{value}</p>
@@ -28,10 +42,16 @@ function StatCard({ icon, bg, label, value, sub }: StatCardProps) {
 
 interface OfficeStatsProps {
   stats: OfficeStatsSummary | null;
+  statusFilter?: OfficeStatusFilter;
+  onStatusFilterChange?: (filter: OfficeStatusFilter) => void;
 }
 
-export default function OfficeStats({ stats }: OfficeStatsProps) {
+export default function OfficeStats({ stats, statusFilter = null, onStatusFilterChange }: OfficeStatsProps) {
   if (!stats) return null;
+
+  const toggle = (value: "ACTIVE" | "INACTIVE") => {
+    onStatusFilterChange?.(statusFilter === value ? null : value);
+  };
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -41,6 +61,7 @@ export default function OfficeStats({ stats }: OfficeStatsProps) {
         label="Total Offices"
         value={stats.total_offices.toString()}
         sub="Across all tenants"
+        onClick={onStatusFilterChange ? () => onStatusFilterChange(null) : undefined}
       />
       <StatCard
         icon={<CheckCircle className="text-green-600" />}
@@ -48,6 +69,8 @@ export default function OfficeStats({ stats }: OfficeStatsProps) {
         label="Active Offices"
         value={stats.active_sites.toString()}
         sub="Currently active"
+        selected={statusFilter === "ACTIVE"}
+        onClick={onStatusFilterChange ? () => toggle("ACTIVE") : undefined}
       />
       <StatCard
         icon={<PauseCircle className="text-yellow-600" />}
@@ -55,6 +78,8 @@ export default function OfficeStats({ stats }: OfficeStatsProps) {
         label="Inactive Offices"
         value={stats.inactive_sites.toString()}
         sub="Currently inactive"
+        selected={statusFilter === "INACTIVE"}
+        onClick={onStatusFilterChange ? () => toggle("INACTIVE") : undefined}
       />
       <StatCard
         icon={<Armchair className="text-purple-600" />}

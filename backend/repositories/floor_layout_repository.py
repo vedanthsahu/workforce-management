@@ -2,18 +2,48 @@
 Repository helpers for floor layout persistence.
 """
 from __future__ import annotations
-from psycopg2.extras import Json
 
 from typing import Any
 
-from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as PGConnection
+from psycopg2.extras import Json, RealDictCursor
 
-from backend.core.enums import LayoutStatus
-from backend.repositories.location_repository import (
-    upsert_operational_seat,
-    replace_seat_amenities,
+from backend.core.enums import (
+    ALL_LAYOUT_STATUSES,
+    NON_DELETED_LAYOUT_STATUSES,
+    LayoutStatus,
 )
+from backend.repositories.location_repository import (
+    replace_seat_amenities,
+    upsert_operational_seat,
+)
+
+# Distinct advisory-lock class from the booking locks in
+# booking_repository.py (1=seat/date, 2=subject/date) so the two lock
+# families can never collide with each other's hashed key.
+_FLOOR_PUBLISH_LOCK_CLASS = 3
+
+
+def acquire_floor_publish_lock(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+) -> None:
+    """Serialize concurrent publish/activate attempts for the same floor.
+
+    No unique index enforces "at most one PUBLISHED layout per floor" at
+    the database level today, so two concurrent activate requests could
+    otherwise both archive-then-activate and leave two floor_layouts rows
+    marked PUBLISHED for the same floor. Advisory lock, same rationale as
+    acquire_booking_slot_locks: no schema change, no special privilege.
+    """
+    key = f"{tenant_id}:floor:{floor_id}"
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT pg_advisory_xact_lock(%s::int, hashtext(%s))",
+            (_FLOOR_PUBLISH_LOCK_CLASS, key),
+        )
 
 FLOOR_LAYOUT_SELECT_FIELDS = """
     fl.id::text AS layout_id,
@@ -34,21 +64,40 @@ FLOOR_LAYOUT_SELECT_FIELDS = """
     fl.uploaded_by_user_id::text AS uploaded_by_user_id,
     au.full_name AS uploaded_by_name,
     au.email AS uploaded_by_email,
-    au.role_name AS uploaded_by_role,
+    UPPER(REPLACE(au.role_name, ' ', '_')) AS uploaded_by_role,
     au.department AS uploaded_by_department,
     au.job_title AS uploaded_by_job_title,
+    fl.updated_by_user_id::text AS updated_by_user_id,
+    upd.full_name AS updated_by_name,
+    upd.email AS updated_by_email,
+    UPPER(REPLACE(upd.role_name, ' ', '_')) AS updated_by_role,
+    upd.department AS updated_by_department,
+    upd.job_title AS updated_by_job_title,
     fl.published_by_user_id::text AS published_by_user_id,
+    pub.full_name AS published_by_name,
+    pub.email AS published_by_email,
+    UPPER(REPLACE(pub.role_name, ' ', '_')) AS published_by_role,
+    pub.department AS published_by_department,
+    pub.job_title AS published_by_job_title,
     fl.published_at,
     fl.status,
+    fl.effective_from,
+    fl.effective_till,
     fl.created_at,
     fl.updated_at
 """
 
 
-FLOOR_LAYOUT_UPLOADER_JOIN = """
+FLOOR_LAYOUT_USER_JOINS = """
     LEFT JOIN app_users AS au
         ON au.id = fl.uploaded_by_user_id
        AND au.tenant_id = fl.tenant_id
+    LEFT JOIN app_users AS pub
+        ON pub.id = fl.published_by_user_id
+       AND pub.tenant_id = fl.tenant_id
+    LEFT JOIN app_users AS upd
+        ON upd.id = fl.updated_by_user_id
+       AND upd.tenant_id = fl.tenant_id
 """
 
 
@@ -100,25 +149,22 @@ def fetch_floor_for_layout(
     return dict(row) if row else None
 
 
-def archive_existing_published_layout(
-    conn: PGConnection,
-    *,
-    tenant_id: str,
-    floor_id: str,
-) -> None:
-    archive_existing_published_layouts(
-        conn,
-        tenant_id=tenant_id,
-        floor_id=floor_id,
-    )
-
-
 def archive_existing_published_layouts(
     conn: PGConnection,
     *,
     tenant_id: str,
     floor_id: str,
+    archived_by_user_id: str,
 ) -> None:
+    """Archive the floor's current PUBLISHED layout as a side effect of
+    publishing a different one.
+
+    Stamps updated_by_user_id with the actor doing the publishing, not just
+    updated_at -- otherwise the archived row's "last updated by" stays
+    whatever it was before (its uploader, or its last seat-config editor,
+    or nobody) while updated_at jumps to now, so the UI would pair a fresh
+    timestamp with a stale/wrong name.
+    """
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -126,6 +172,7 @@ def archive_existing_published_layouts(
             SET
                 status = %s,
                 is_published = FALSE,
+                updated_by_user_id = %s,
                 updated_at = NOW()
             WHERE tenant_id = %s
               AND floor_id = %s
@@ -134,6 +181,7 @@ def archive_existing_published_layouts(
             """,
             (
                 LayoutStatus.ARCHIVED.value,
+                archived_by_user_id,
                 tenant_id,
                 floor_id,
                 LayoutStatus.PUBLISHED.value,
@@ -168,29 +216,94 @@ def get_next_layout_version(
     return current_version + 1
 
 
+# Units allowed for visibility_unit below. Kept to a fixed allow-list since
+# the unit is interpolated directly into the SQL (not bound as a param) --
+# safe only because it's always one of these, never caller/user input.
+_VISIBILITY_INTERVAL_UNITS = frozenset({"days", "hours", "minutes"})
+
+
 def fetch_floor_layouts_by_floor(
     conn: PGConnection,
     *,
     tenant_id: str,
     floor_id: str,
+    visibility_thresholds: dict[str, int] | None = None,
+    visibility_unit: str = "days",
 ) -> list[dict[str, Any]]:
-    """Fetch all layouts for a tenant-scoped floor, newest version first."""
+    """
+    Fetch all layouts for a tenant-scoped floor, including deleted ones.
+
+    Deleted layouts are included as view-only historical entries — the UI
+    shows them but blocks every action (configure, activate/recover) other
+    than viewing. Ordered PUBLISHED, then DRAFT, then ARCHIVED, then DELETED;
+    within each group, most recently updated first.
+
+    visibility_thresholds, when provided, hides DRAFT/ARCHIVED/DELETED rows
+    whose updated_at is older than their status's allowed age, measured in
+    visibility_unit ("days" in production; "minutes" is useful for testing
+    the rule without an actual multi-day wait -- see
+    LAYOUT_VISIBILITY_INTERVAL_UNIT in floor_layout_service.py). PUBLISHED
+    is never hidden. Rows are never deleted by this -- it's a display
+    filter only, scoped per-floor by the caller. Pass
+    visibility_thresholds=None to keep today's behavior (every status
+    shown, regardless of age).
+    """
+    if visibility_unit not in _VISIBILITY_INTERVAL_UNITS:
+        raise ValueError(f"Unsupported visibility_unit: {visibility_unit!r}")
+
+    visibility_clause = ""
+    params: tuple[Any, ...] = (
+        tenant_id,
+        floor_id,
+        list(ALL_LAYOUT_STATUSES),
+    )
+
+    if visibility_thresholds is not None:
+        # PUBLISHED and SCHEDULED are never hidden by age -- both are
+        # operationally live (a SCHEDULED layout is a pending change an
+        # admin needs to keep seeing, act on, modify, or cancel, not
+        # something that should silently age out of the list the way an
+        # abandoned DRAFT should).
+        visibility_clause = f"""
+              AND (
+                  fl.status = 'PUBLISHED'
+                  OR fl.status = 'SCHEDULED'
+                  OR (fl.status = 'DRAFT' AND fl.updated_at >= NOW() - (%s || ' {visibility_unit}')::interval)
+                  OR (fl.status = 'ARCHIVED' AND fl.updated_at >= NOW() - (%s || ' {visibility_unit}')::interval)
+                  OR (fl.status = 'DELETED' AND fl.updated_at >= NOW() - (%s || ' {visibility_unit}')::interval)
+              )
+        """
+        params += (
+            str(visibility_thresholds["DRAFT"]),
+            str(visibility_thresholds["ARCHIVED"]),
+            str(visibility_thresholds["DELETED"]),
+        )
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
             SELECT
                 {FLOOR_LAYOUT_SELECT_FIELDS}
             FROM floor_layouts AS fl
-            {FLOOR_LAYOUT_UPLOADER_JOIN}
+            {FLOOR_LAYOUT_USER_JOINS}
             {FLOOR_LAYOUT_LOCATION_JOINS}
             WHERE fl.tenant_id = %s
               AND fl.floor_id = %s
-            ORDER BY fl.version_no DESC, fl.created_at DESC, fl.id DESC
+              AND fl.status = ANY(%s)
+            {visibility_clause}
+            ORDER BY
+                CASE fl.status
+                    WHEN 'PUBLISHED' THEN 0
+                    WHEN 'SCHEDULED' THEN 1
+                    WHEN 'DRAFT' THEN 2
+                    WHEN 'ARCHIVED' THEN 3
+                    WHEN 'DELETED' THEN 4
+                    ELSE 5
+                END,
+                fl.updated_at DESC,
+                fl.id DESC
             """,
-            (
-                tenant_id,
-                floor_id,
-            ),
+            params,
         )
 
         rows = cur.fetchall()
@@ -198,33 +311,58 @@ def fetch_floor_layouts_by_floor(
     return [dict(row) for row in rows]
 
 
-def fetch_floor_layout_by_id(
+def _fetch_floor_layout_row(
     conn: PGConnection,
     *,
     tenant_id: str,
     layout_id: str,
+    include_deleted: bool = False,
 ) -> dict[str, Any] | None:
-    """Fetch one layout by id within a tenant."""
+    status_filter = "" if include_deleted else "AND fl.status = ANY(%s)"
+    params: tuple[Any, ...] = (tenant_id, layout_id)
+    if not include_deleted:
+        params += (list(NON_DELETED_LAYOUT_STATUSES),)
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
             SELECT
                 {FLOOR_LAYOUT_SELECT_FIELDS}
             FROM floor_layouts AS fl
-            {FLOOR_LAYOUT_UPLOADER_JOIN}
+            {FLOOR_LAYOUT_USER_JOINS}
             {FLOOR_LAYOUT_LOCATION_JOINS}
             WHERE fl.tenant_id = %s
               AND fl.id = %s
+              {status_filter}
             """,
-            (
-                tenant_id,
-                layout_id,
-            ),
+            params,
         )
 
         row = cur.fetchone()
 
     return dict(row) if row else None
+
+
+def fetch_floor_layout_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    include_deleted: bool = False,
+) -> dict[str, Any] | None:
+    """Fetch one layout by id within a tenant.
+
+    By default a deleted layout behaves as if it does not exist — used by
+    every action consumer (activate, configure, delete). Callers backing a
+    view-only surface (e.g. viewing a deleted layout's seats as a historical
+    entry) should pass include_deleted=True.
+    """
+    return _fetch_floor_layout_row(
+        conn,
+        tenant_id=tenant_id,
+        layout_id=layout_id,
+        include_deleted=include_deleted,
+    )
 
 
 def activate_floor_layout(
@@ -233,8 +371,20 @@ def activate_floor_layout(
     tenant_id: str,
     layout_id: str,
     published_by_user_id: str,
+    effective_from: Any = None,
 ) -> dict[str, Any] | None:
-    """Mark one tenant-scoped layout as the published floor layout."""
+    """Mark one tenant-scoped layout as the published floor layout.
+
+    `effective_from`: pass a concrete instant for an immediate publish (the
+    caller is asserting "this layout is live as of right now", regardless
+    of whatever stale value the row might already carry -- e.g. from a
+    prior publish/archive cycle). Leave it None when this is a cutover
+    promotion of an already-SCHEDULED layout -- COALESCE then preserves
+    the effective_from that was set at schedule time, which must NOT be
+    overwritten here. effective_till is always reset to NULL: a layout
+    that's now PUBLISHED is open-ended until something else gets
+    scheduled against it.
+    """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
@@ -244,6 +394,8 @@ def activate_floor_layout(
                 is_published = TRUE,
                 published_at = NOW(),
                 published_by_user_id = %s,
+                effective_from = COALESCE(%s, effective_from),
+                effective_till = NULL,
                 updated_at = NOW()
             WHERE tenant_id = %s
               AND id = %s
@@ -253,6 +405,7 @@ def activate_floor_layout(
             (
                 LayoutStatus.PUBLISHED.value,
                 published_by_user_id,
+                effective_from,
                 tenant_id,
                 layout_id,
             ),
@@ -267,6 +420,288 @@ def activate_floor_layout(
         conn,
         tenant_id=tenant_id,
         layout_id=str(row["layout_id"]),
+    )
+
+
+def fetch_site_timezone(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+) -> str | None:
+    """Return one tenant-scoped site's IANA timezone name, or None if the
+    site doesn't exist. Used to turn an admin's chosen calendar date into
+    the correct absolute instant (midnight in the site's own timezone, not
+    the server's), since a layout's effective date always means midnight
+    at the physical location, not UTC."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT timezone
+            FROM sites
+            WHERE tenant_id = %s
+              AND id = %s
+            """,
+            (tenant_id, site_id),
+        )
+        row = cur.fetchone()
+
+    return row[0] if row else None
+
+
+def fetch_published_layout_for_floor(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+) -> dict[str, Any] | None:
+    """Fetch the floor's current PUBLISHED layout, if any."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                id::text AS layout_id,
+                effective_from,
+                effective_till
+            FROM floor_layouts
+            WHERE tenant_id = %s
+              AND floor_id = %s
+              AND is_published = TRUE
+              AND status = %s
+            """,
+            (tenant_id, floor_id, LayoutStatus.PUBLISHED.value),
+        )
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+
+def fetch_scheduled_layout_for_floor(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+) -> dict[str, Any] | None:
+    """Fetch the floor's current SCHEDULED layout, if any -- at most one
+    can exist per floor (enforced by uq_floor_layouts_one_scheduled_per_floor)."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                id::text AS layout_id,
+                effective_from,
+                effective_till
+            FROM floor_layouts
+            WHERE tenant_id = %s
+              AND floor_id = %s
+              AND status = %s
+            """,
+            (tenant_id, floor_id, LayoutStatus.SCHEDULED.value),
+        )
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+
+def set_published_layout_effective_till(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    effective_till: Any,
+    updated_by_user_id: str,
+) -> None:
+    """Close (or reopen, by passing None) the effective window of the
+    floor's current PUBLISHED layout.
+
+    Must run BEFORE the new SCHEDULED row is written in the same
+    transaction (see schedule_floor_layout) -- excl_floor_layouts_no_overlap
+    is checked immediately per-statement, not deferred, so the old row's
+    window has to be narrowed first or the new row's insert/update is
+    rejected as an overlap.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE floor_layouts
+            SET
+                effective_till = %s,
+                updated_by_user_id = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            """,
+            (effective_till, updated_by_user_id, tenant_id, layout_id),
+        )
+
+
+def schedule_floor_layout(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    effective_from: Any,
+    scheduled_by_user_id: str,
+) -> dict[str, Any] | None:
+    """Mark one tenant-scoped layout SCHEDULED, to take over automatically
+    once its effective_from arrives. Does not touch is_published or
+    published_at -- those only get set at actual cutover (see
+    activate_floor_layout, reused unchanged by the cutover job)."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            UPDATE floor_layouts
+            SET
+                status = %s,
+                effective_from = %s,
+                effective_till = NULL,
+                updated_by_user_id = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING
+                id::text AS layout_id
+            """,
+            (
+                LayoutStatus.SCHEDULED.value,
+                effective_from,
+                scheduled_by_user_id,
+                tenant_id,
+                layout_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    if row is None:
+        return None
+
+    return fetch_floor_layout_by_id(
+        conn,
+        tenant_id=tenant_id,
+        layout_id=str(row["layout_id"]),
+    )
+
+
+def fetch_scheduled_layouts_due(
+    conn: PGConnection,
+) -> list[dict[str, Any]]:
+    """Tenant-wide: every SCHEDULED layout whose effective_from has already
+    arrived (effective_from <= NOW()) -- the cutover job's work list.
+
+    effective_from is stored as an absolute instant (TIMESTAMPTZ), computed
+    from the admin's chosen date in the target site's own timezone at
+    schedule time -- so this NOW() comparison is timezone-correct without
+    needing to know each row's site here.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                id::text AS layout_id,
+                tenant_id::text AS tenant_id,
+                floor_id::text AS floor_id,
+                effective_from
+            FROM floor_layouts
+            WHERE status = %s
+              AND effective_from <= NOW()
+            ORDER BY effective_from
+            """,
+            (LayoutStatus.SCHEDULED.value,),
+        )
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def touch_floor_layout_updated_by(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    updated_by_user_id: str,
+) -> None:
+    """Stamp who last edited this layout's seat configuration.
+
+    The only writers of floor_layouts today are create/activate/archive/
+    delete -- none of which represent "an admin edited this layout's
+    seats." Bulk layout-seat-configuration saves call this directly so
+    updated_by_user_id/updated_at reflect the real last editor instead of
+    staying NULL forever.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE floor_layouts
+            SET
+                updated_by_user_id = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            """,
+            (updated_by_user_id, tenant_id, layout_id),
+        )
+
+
+def soft_delete_floor_layout(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    target_status: str = LayoutStatus.DELETED.value,
+) -> dict[str, Any] | None:
+    """Soft delete one tenant-scoped DRAFT/ARCHIVED/SCHEDULED layout.
+
+    Rows are never removed; PUBLISHED and already-DELETED layouts are
+    excluded here so an out-of-band transition can never sneak through.
+    Discarding a SCHEDULED layout also needs the caller (floor_layout_
+    service.delete_floor_layout) to reopen the currently-PUBLISHED layout's
+    effective_till first -- this function alone does not do that.
+
+    target_status defaults to DELETED (discarding a DRAFT/ARCHIVED layout
+    that never made it live). Cancelling a SCHEDULED layout passes
+    DRAFT instead so it can be edited and scheduled again. Clear its old
+    effective dates because it no longer has a publication window.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            UPDATE floor_layouts
+            SET
+                status = %s,
+                effective_from = CASE WHEN %s = 'DRAFT' THEN NULL ELSE effective_from END,
+                effective_till = CASE WHEN %s = 'DRAFT' THEN NULL ELSE effective_till END,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+              AND status = ANY(%s)
+            RETURNING
+                id::text AS layout_id
+            """,
+            (
+                target_status,
+                target_status,
+                target_status,
+                tenant_id,
+                layout_id,
+                [
+                    LayoutStatus.DRAFT.value,
+                    LayoutStatus.ARCHIVED.value,
+                    LayoutStatus.SCHEDULED.value,
+                ],
+            ),
+        )
+
+        row = cur.fetchone()
+
+    if row is None:
+        return None
+
+    return _fetch_floor_layout_row(
+        conn,
+        tenant_id=tenant_id,
+        layout_id=str(row["layout_id"]),
+        include_deleted=True,
     )
 
 
@@ -413,6 +848,8 @@ def fetch_layout_seats_by_layout_id(
                     '{}'
                 ) AS amenity_ids,
 
+                lsm.capacity,
+
                 lsm.created_at,
 
                 lsm.updated_at
@@ -422,6 +859,7 @@ def fetch_layout_seats_by_layout_id(
             LEFT JOIN seats AS s
                 ON s.tenant_id = lsm.tenant_id
                AND s.floor_id = lsm.floor_id
+               AND s.layout_id = lsm.layout_id
                AND s.seat_code = lsm.seat_code
 
             WHERE lsm.tenant_id = %s
@@ -443,32 +881,78 @@ def fetch_layout_seats_by_layout_id(
         for row in rows
     ]
 
-def sync_published_layout_seats(
+def reconcile_published_layout_seats(
     conn: PGConnection,
     *,
     tenant_id: str,
     floor_id: str,
     layout_id: str,
 ) -> None:
+    """Retire every still-live seat on this floor that isn't part of the
+    layout that was just published.
 
+    `seats` is append-only per layout version: unique key is (floor_id,
+    seat_code, layout_id), so publish_layout_seat_configurations's upsert
+    already created fresh rows under the new `layout_id` for everything it
+    configured -- it never touches a previous version's rows. Whatever is
+    still marked live (`live_until IS NULL`) under any other layout_id on
+    this floor is, by definition, superseded. Retiring (never deleting)
+    keeps bookings/audit_logs pointing at the exact historical seat row
+    they were made against, and keeps every layout_id-scoped stats/
+    availability query (which already excludes non-live seats) correct
+    with no query changes needed there.
+    """
     with conn.cursor() as cur:
-
         cur.execute(
             """
             UPDATE seats
             SET
                 status = 'INACTIVE',
+                is_bookable = FALSE,
+                is_reserved = FALSE,
+                live_until = NOW(),
+                retired_reason = 'LAYOUT_REPUBLISHED',
                 updated_at = NOW()
             WHERE tenant_id = %s
               AND floor_id = %s
-              AND layout_id IS NOT NULL
               AND layout_id <> %s
+              AND live_until IS NULL
             """,
-            (
-                tenant_id,
-                floor_id,
-                layout_id,
-            ),
+            (tenant_id, floor_id, layout_id),
+        )
+
+def retire_layout_seats(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+) -> None:
+    """Retire every still-live seat row under one specific layout_id.
+
+    Used when a SCHEDULED layout is discarded before cutover: scheduling
+    now materializes that layout's seats immediately (see
+    publish_layout_seat_configurations at schedule time in
+    floor_layout_service._schedule_floor_layout) so date-aware reads find
+    them the moment effective_from arrives. Discarding the layout must
+    undo that, or its seat rows would sit "live" (live_until IS NULL)
+    under a DELETED layout_id indefinitely.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE seats
+            SET
+                status = 'INACTIVE',
+                is_bookable = FALSE,
+                is_reserved = FALSE,
+                live_until = NOW(),
+                retired_reason = 'LAYOUT_DISCARDED',
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND layout_id = %s
+              AND live_until IS NULL
+            """,
+            (tenant_id, layout_id),
         )
 
 def publish_layout_seat_configurations(
@@ -508,10 +992,14 @@ def publish_layout_seat_configurations(
             building_id=str(mapping["building_id"]),
             floor_id=str(mapping["floor_id"]),
             seat_code=str(mapping["seat_code"]),
+            seat_name=mapping.get("seat_name"),
             seat_type=mapping["seat_type"],
             status=mapping["status"],
             is_bookable=mapping["is_bookable"],
+            is_reserved=mapping.get("is_reserved"),
             svg_element_id=str(mapping["svg_element_id"]),
+            source_layout_mapping_id=str(mapping["id"]),
+            capacity=mapping.get("capacity"),
         )
 
         replace_seat_amenities(

@@ -15,13 +15,13 @@ export function VisitorSearchBar({
   placeholder = "Search by guest name...",
 }: Props) {
   return (
-    <div className="relative w-full">
+    <div className="relative">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
       <Input
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
         placeholder={placeholder}
-        className="pl-9 h-9 text-sm"
+        className="pl-9 h-9 text-sm w-60"
       />
     </div>
   );

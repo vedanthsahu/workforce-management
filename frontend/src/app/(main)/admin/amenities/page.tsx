@@ -11,8 +11,7 @@ import AmenitiesPagination from "@/features/amenities/components/AmenitiesPagina
 import { useAmenities } from "@/features/amenities/hooks/useAmenities";
 import { Amenity } from "@/features/amenities/types/amenities.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
-
-const PIN_DURATION = 4000;
+import { AMENITIES_PIN_DURATION as PIN_DURATION } from "@/features/amenities/utils/constants";
 
 function AmenitiesPage() {
   const router = useRouter();
@@ -51,7 +50,7 @@ function AmenitiesPage() {
     if (!exists) return;
     activatePin(addedId, "Amenity added successfully!");
     router.replace("/admin/amenities");
-  }, [searchParams, data]);
+  }, [searchParams, data, router]);
 
   // Cleanup timer on unmount
   useEffect(() => () => { if (pinTimerRef.current) clearTimeout(pinTimerRef.current); }, []);
@@ -178,9 +177,11 @@ function AmenitiesPage() {
         {/* FOOTER */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
           <span>
-            Showing {filteredAmenities.length === 0 ? 0 : startIndex + 1} to{" "}
-            {Math.min(startIndex + itemsPerPage, filteredAmenities.length)} of{" "}
-            {filteredAmenities.length} entries
+            {filteredAmenities.length > 0 &&
+              `Showing ${startIndex + 1} to ${Math.min(
+                startIndex + itemsPerPage,
+                filteredAmenities.length
+              )} of ${filteredAmenities.length} entries`}
           </span>
           <div className="self-center sm:self-auto">
             <AmenitiesPagination

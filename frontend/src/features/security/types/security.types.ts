@@ -174,23 +174,6 @@ export interface Site {
 
 // ─── Mutation payloads ───────────────────────────────────────────────────────
 
-export interface CancelVisitPayload {
-  cancellation_reason: string;
-}
-
-export interface ModifyVisitPayload {
-  host_user_id?: number;
-  site_id?: number;
-  building_id?: number;
-  floor_id?: number;
-  visit_date?: string;
-  guest_type?: GuestType;
-  purpose_of_visit?: PurposeOfVisit;
-  start_time?: string;
-  end_time?: string;
-  notes?: string;
-}
-
 export interface InviteGuestPayload {
   guest_name: string;
   guest_email?: string;

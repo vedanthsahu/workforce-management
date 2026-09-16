@@ -1,15 +1,13 @@
 "use client";
 
 import { X, CheckCircle2 } from "lucide-react";
-import { getRoleBadgeClass } from "../utils/roles.utils";
+import { getRoleBadgeClass, ROLE_DETAIL_PANEL_USERS_PREVIEW_COUNT as USERS_PREVIEW_COUNT } from "../utils/roles.utils";
 import type { Role } from "../types/roles.types";
 
 type Props = {
   role: Role | null;
   onClose: () => void;
 };
-
-const USERS_PREVIEW_COUNT = 3;
 
 export default function RoleDetailPanel({ role, onClose }: Props) {
   if (!role) return null;
@@ -46,10 +44,11 @@ export default function RoleDetailPanel({ role, onClose }: Props) {
           Permissions ({role.permissionCount})
         </p>
         <ul className="space-y-1.5">
-          {role.permissions.map((perm, i) => (
-            <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+          {role.permissions.map((perm) => (
+            <li key={perm.id} className="flex items-start gap-2 text-sm text-gray-700">
               <CheckCircle2 size={14} className="text-emerald-500 mt-0.5 shrink-0" />
-              {perm}
+              <span className="flex-1">{perm.description}</span>
+              <span className="text-[10px] text-gray-400 font-mono shrink-0">{perm.permissionKey}</span>
             </li>
           ))}
         </ul>

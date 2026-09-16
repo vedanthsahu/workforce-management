@@ -11,6 +11,15 @@ import {
 import { useRouter, usePathname } from "next/navigation";
 import { authService } from "../services/auth.service";
 import type { AuthContextType, User } from "../types/auth.types";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 type UserState = User | null | undefined;
 
@@ -25,7 +34,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const [user,         setUser]         = useState<UserState>(undefined);
   const [isLoading,    setIsLoading]    = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [, setIsRefreshing] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   const didInitialCheck = useRef(false);
 
@@ -88,6 +98,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // ── Session-expired modal ─────────────────────────────────────────────────
+  // The axios interceptor used to hard-redirect to /login the instant a
+  // refresh failed, with no explanation. Now it just dispatches this event
+  // and waits -- the actual navigation happens below, after the user has
+  // seen why, on the same "click to proceed" pattern as the Sign Out dialog.
+  useEffect(() => {
+    const onSessionExpired = () => {
+      setUser(null);
+      setSessionExpired(true);
+    };
+
+    window.addEventListener("auth:session-expired", onSessionExpired);
+    return () => window.removeEventListener("auth:session-expired", onSessionExpired);
+  }, []);
+
+  const handleSessionExpiredAcknowledge = useCallback(() => {
+    setSessionExpired(false);
+    router.replace("/login");
+  }, [router]);
+
   // ── Logout ────────────────────────────────────────────────────────────────
   const logout = useCallback(async () => {
     await authService.logout().catch(() => {});
@@ -107,6 +137,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+
+      {/* ── Session Expired Dialog ─────────────────────────────────────────────
+          No onOpenChange handler: `open` stays controlled to `sessionExpired`,
+          so Base UI has no state transition to apply from Escape/outside
+          click -- it can only close via handleSessionExpiredAcknowledge. */}
+      <Dialog open={sessionExpired}>
+        <DialogContent
+          className="max-w-sm"
+          showCloseButton={false}
+        >
+          <DialogHeader>
+            <DialogTitle>Session expired</DialogTitle>
+            <DialogDescription>
+              Your session has expired. Please log in again to continue.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={handleSessionExpiredAcknowledge}>
+              OK
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AuthContext.Provider>
   );
 }

@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from enum import Enum
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from backend.core.enums import GuestType, VisitPurpose
+from backend.core.enums import GuestType, GuestVisitModificationReason, VisitPurpose
 from backend.schemas.booking import BookingResponse
 from backend.schemas.pagination import PaginationMetadata
-
-from typing import Literal
 
 GuestVisitStatus = Literal[
     "SCHEDULED",
@@ -27,6 +26,21 @@ class CreateGuestRequest(BaseModel):
     email: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=100)
     organization: str | None = Field(default=None, max_length=255)
+
+
+class UpdateGuestRequest(BaseModel):
+    full_name: str | None = Field(default=None, max_length=255)
+    email: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=100)
+    organization: str | None = Field(default=None, max_length=255)
+
+
+GuestStatus = Literal["ACTIVE", "INACTIVE"]
+
+
+class UpdateGuestStatusRequest(BaseModel):
+    status: GuestStatus
+    cancel_future_bookings: bool = False
 
 
 class GuestResponse(BaseModel):
@@ -81,10 +95,25 @@ class GuestVisitResponse(BaseModel):
     requires_seat: bool
     visit_status: GuestVisitStatus
     created_by_user_id: str | None = None
+
+    modified_from_guest_visit_id: str | None = None
+    modification_reason: str | None = None
+    is_modified: bool = False
+
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
-
+    @model_validator(mode="before")
+    @classmethod
+    def _derive_is_modified(cls, data: Any) -> Any:
+        """Default is_modified from modified_from_guest_visit_id when the
+        caller (a raw DB row) doesn't set it explicitly."""
+        if isinstance(data, dict) and "is_modified" not in data:
+            data = {
+                **data,
+                "is_modified": data.get("modified_from_guest_visit_id") is not None,
+            }
+        return data
 
 
 class GuestVisitListItem(BaseModel):
@@ -103,6 +132,10 @@ class GuestVisitListItem(BaseModel):
 
     checked_in_at: datetime | None = None
     checked_out_at: datetime | None = None
+
+    modified_from_guest_visit_id: str | None = None
+    modification_reason: str | None = None
+    is_modified: bool = False
 
     guest_id: str
     guest_name: str
@@ -149,6 +182,18 @@ class GuestVisitListItem(BaseModel):
     floor_name: str | None = None
 
     seat_code: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _derive_is_modified(cls, data: Any) -> Any:
+        """Default is_modified from modified_from_guest_visit_id when the
+        caller (a raw DB row) doesn't set it explicitly."""
+        if isinstance(data, dict) and "is_modified" not in data:
+            data = {
+                **data,
+                "is_modified": data.get("modified_from_guest_visit_id") is not None,
+            }
+        return data
 
 class GuestVisitSummary(BaseModel):
     total: int = 0
@@ -217,6 +262,7 @@ class GuestWorkflowRequest(BaseModel):
     seat_id: int | None = Field(default=None, gt=0)
 
     cancellation_reason: str | None = None
+    modification_reason: GuestVisitModificationReason | None = None
 
 
 class GuestWorkflowResponse(BaseModel):
@@ -247,6 +293,7 @@ class ModifyGuestVisitRequest(BaseModel):
     end_time: time | None = None
 
     notes: str | None = None
+    modification_reason: GuestVisitModificationReason | None = None
 
 
 
@@ -286,3 +333,54 @@ class CancelledGuestVisitItem(BaseModel):
 
 class CancelledGuestVisitResponse(BaseModel):
     items: list[CancelledGuestVisitItem]
+
+
+class GuestVisitHistorySummary(BaseModel):
+    total_visits: int = 0
+    total_bookings: int = 0
+    scheduled: int = 0
+    checked_in: int = 0
+    checked_out: int = 0
+    cancelled: int = 0
+    modified: int = 0
+    requires_seat_count: int = 0
+
+
+class GuestVisitHistoryItem(BaseModel):
+    guest_visit_id: str
+    visit_date: date
+    visit_status: GuestVisitStatus
+    guest_type: str | None = None
+    purpose_of_visit: str | None = None
+    start_time: time | None = None
+    end_time: time | None = None
+    notes: str | None = None
+    requires_seat: bool
+    checked_in_at: datetime | None = None
+    checked_out_at: datetime | None = None
+    cancelled_at: datetime | None = None
+    cancellation_reason: str | None = None
+
+    host_user_id: str | None = None
+    host_name: str | None = None
+    host_email: str | None = None
+
+    site_id: str
+    site_name: str
+    building_id: str
+    building_name: str
+    floor_id: str | None = None
+    floor_name: str | None = None
+
+    booking_id: str | None = None
+    booking_status: str | None = None
+    seat_id: str | None = None
+    seat_code: str | None = None
+    booking_date: date | None = None
+
+
+class GuestVisitHistoryResponse(BaseModel):
+    guest: GuestResponse
+    summary: GuestVisitHistorySummary = Field(default_factory=GuestVisitHistorySummary)
+    items: list[GuestVisitHistoryItem]
+    pagination: PaginationMetadata

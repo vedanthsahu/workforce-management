@@ -12,6 +12,7 @@ from backend.core.enums import (
     SeatAvailabilityStatus,
     UISeatState,
 )
+from backend.core.storage import resolve_layout_file_url
 
 HierarchyStatus = Literal["ACTIVE", "INACTIVE"]
 
@@ -203,6 +204,32 @@ class FloorLayoutInfo(BaseModel):
     layout_name: str
     layout_file_url: str
 
+    @field_validator("layout_file_url", mode="after")
+    @classmethod
+    def _presign_layout_file_url(cls, value: str) -> str:
+        return resolve_layout_file_url(value) or value
+
+
+class ScheduledFloorLayoutInfo(BaseModel):
+    """Metadata for a floor's pending SCHEDULED layout, if any.
+
+    Surfaced alongside `active_layout` rather than replacing it -- during a
+    scheduling transition a floor can have both a currently live layout and
+    a separate one queued to take over on effective_from, and callers need
+    to see both, not just whichever one a single "pick one" query would
+    have preferred.
+    """
+
+    layout_id: str
+    layout_name: str
+    layout_file_url: str
+    effective_from: datetime | None = None
+
+    @field_validator("layout_file_url", mode="after")
+    @classmethod
+    def _presign_layout_file_url(cls, value: str) -> str:
+        return resolve_layout_file_url(value) or value
+
 
 class FloorResponse(BaseModel):
     """Public representation of a floor within a location/building."""
@@ -227,8 +254,14 @@ class FloorResponse(BaseModel):
     layout_is_published: bool | None = None
     layout_version_no: int | None = None
     published_by_name: str | None = None
+    scheduled_layout: ScheduledFloorLayoutInfo | None = None
     layout_last_updated: datetime | None = None
     active_layout: FloorLayoutInfo | None = None
+
+    @field_validator("layout_file_url", mode="after")
+    @classmethod
+    def _presign_layout_file_url(cls, value: str | None) -> str | None:
+        return resolve_layout_file_url(value)
 
 
 class CreateFloorRequest(BaseModel):
@@ -323,6 +356,42 @@ class LayoutSeatConfigurationUpdateRequest(BaseModel):
 
     amenity_ids: list[int] | None = None
 
+    capacity: int | None = Field(
+        default=None,
+        ge=1,
+        le=1000,
+    )
+
+
+class LayoutSeatBulkConfigurationEntry(LayoutSeatConfigurationUpdateRequest):
+    """One seat's own configuration within a bulk request. Any field left
+    unset falls back to `defaults` (if provided), then to the mapping's
+    existing stored value -- never to another seat's values."""
+
+    layout_seat_mapping_id: int = Field(gt=0)
+
+
+class BulkLayoutSeatConfigurationUpdateRequest(BaseModel):
+    """Payload for configuring multiple layout seat mappings at once
+    (layout editor, pre-publish, or a published layout's own admin-edit
+    flow). Each seat may carry its own status/amenities/is_bookable/etc;
+    `defaults` is an optional base applied to every seat first, so the
+    "same config for all N seats" case still needs only one shared object
+    instead of repeating it per entry."""
+
+    defaults: LayoutSeatConfigurationUpdateRequest | None = None
+    seats: list[LayoutSeatBulkConfigurationEntry] = Field(min_length=1)
+
+    @field_validator("seats")
+    @classmethod
+    def _reject_duplicate_mapping_ids(
+        cls, entries: list[LayoutSeatBulkConfigurationEntry]
+    ) -> list[LayoutSeatBulkConfigurationEntry]:
+        seen = {entry.layout_seat_mapping_id for entry in entries}
+        if len(seen) != len(entries):
+            raise ValueError("Duplicate layout_seat_mapping_id in seats.")
+        return entries
+
 
 class LayoutSeatConfigurationResponse(BaseModel):
 
@@ -352,6 +421,8 @@ class LayoutSeatConfigurationResponse(BaseModel):
 
     amenity_ids: list[int]
 
+    capacity: int | None = None
+
 
 class SeatConfigurationUpdateRequest(BaseModel):
     """Payload for soft seat configuration changes."""
@@ -375,3 +446,9 @@ class SeatConfigurationResponse(BaseModel):
     seat_code: str
     status: str
     is_bookable: bool
+
+
+class BulkSeatConfigurationUpdateRequest(SeatConfigurationUpdateRequest):
+    """Payload for applying one configuration to multiple seats at once."""
+
+    seat_ids: list[int] = Field(min_length=1)

@@ -36,6 +36,10 @@ interface RawFloor {
   floor_code?: string;
   layout_file_url?: string | null;
   active_layout?: { layout_file_url?: string | null };
+  scheduled_layout?: {
+    layout_file_url?: string | null;
+    effective_from?: string | null;
+  } | null;
 }
 
 interface RawPreference {
@@ -60,6 +64,18 @@ export async function fetchSites(): Promise<Site[]> {
     country: s.country ?? "",
     timezone: s.timezone ?? "",
   }));
+}
+
+// fetchSites above only ever returns ACTIVE sites, so a saved work
+// preference (or a modify-booking/prefill deep link) pointing at a site
+// that's since gone INACTIVE silently disappears from that list with no way
+// to tell "inactive" apart from "no longer exists". GET /sites/{id} returns
+// every site regardless of status, so this is used specifically to check
+// whether a missing site id is inactive (vs. genuinely gone) so the UI can
+// show an appropriate message instead of a silent empty seat map.
+export async function fetchSiteStatus(siteId: string): Promise<string | null> {
+  const { data } = await axiosInstance.get<{ status?: string | null }>(`/sites/${siteId}`);
+  return data.status ?? null;
 }
 
 // ── Buildings ─────────────────────────────────────────────────────────────────
@@ -93,7 +109,31 @@ export async function fetchFloors(buildingId: string): Promise<Floor[]> {
     // Prefer active_layout URL; fall back to top-level layout_file_url
     layoutFileUrl:
       f.active_layout?.layout_file_url ?? f.layout_file_url ?? undefined,
+    scheduledLayoutFileUrl: f.scheduled_layout?.layout_file_url ?? undefined,
+    scheduledLayoutEffectiveFrom: f.scheduled_layout?.effective_from ?? undefined,
   }));
+}
+
+// A floor mid-transition can have a currently-live layout (layoutFileUrl)
+// and a separate one queued to take over on a future date
+// (scheduledLayoutFileUrl / scheduledLayoutEffectiveFrom). The floors API
+// itself doesn't resolve "which layout applies on date X" -- it just
+// reports both, same as the backend's own date-window checks -- so pick
+// here, the same way, instead of always rendering whichever one happens
+// to be PUBLISHED right now regardless of the date actually being booked.
+export function resolveFloorLayoutUrl(
+  floor: Pick<Floor, "layoutFileUrl" | "scheduledLayoutFileUrl" | "scheduledLayoutEffectiveFrom">,
+  bookingDate: string | null | undefined,
+): string | undefined {
+  if (
+    bookingDate &&
+    floor.scheduledLayoutFileUrl &&
+    floor.scheduledLayoutEffectiveFrom &&
+    new Date(bookingDate) >= new Date(floor.scheduledLayoutEffectiveFrom)
+  ) {
+    return floor.scheduledLayoutFileUrl;
+  }
+  return floor.layoutFileUrl;
 }
 
 // ── Seat Code → SVG id mapping ────────────────────────────────────────────────
@@ -167,8 +207,12 @@ export async function fetchAvailability(params: {
   bookedForUserId?: string | null;
   isGuestBooking?: boolean;
   bookedForGuestId?: string | null;
+  calendarMode?: boolean;
+  spaceType?: string;
 }): Promise<AvailableSeatResponse[]> {
-  const { data } = await axiosInstance.get<any>(
+  const { data } = await axiosInstance.get<
+    AvailableSeatResponse[] | { items: AvailableSeatResponse[] }
+  >(
     `/floors/${params.floorId}/seats`,
     {
       params: {
@@ -188,6 +232,12 @@ export async function fetchAvailability(params: {
           : {}),
         ...(params.bookedForGuestId
           ? { booked_for_guest_id: Number(params.bookedForGuestId) }
+          : {}),
+        ...(params.calendarMode
+          ? { calendar_mode: true }
+          : {}),
+        ...(params.spaceType && params.spaceType !== "ALL"
+          ? { space_type: params.spaceType }
           : {}),
       },
       paramsSerializer: (p) => {
@@ -223,6 +273,7 @@ export async function fetchSeatsWithAvailability(
     bookedForUserId: params.bookedForUserId ?? null,
     isGuestBooking: params.isGuestBooking ?? false,
     bookedForGuestId: params.bookedForGuestId ?? null,
+    spaceType: params.spaceType,
   });
 
   const selectedPrefs = (params.preferences ?? []).map((p) => p.toLowerCase());
@@ -378,4 +429,66 @@ export async function fetchPreferences(): Promise<Preference[]> {
     description: a.description ?? null,
     icon: a.icon ?? null,
   }));
+}
+
+// ── Saved location/amenity preferences — GET /dashboard/me ──────────────────
+// Used to auto-fill the booking form for the logged-in user's own booking.
+// Returns null when the user has never saved a preference (site_id unset),
+// so the caller can leave the form untouched in that case.
+
+interface RawWorkPreferences {
+  site_id?: string | null;
+  site_name?: string | null;
+  building_id?: string | null;
+  building_name?: string | null;
+  floor_id?: string | null;
+  floor_name?: string | null;
+  amenities?: { id: string }[];
+}
+
+interface RawDashboardMe {
+  work_preferences?: RawWorkPreferences | null;
+}
+
+export interface MyWorkPreferences {
+  siteId: string | null;
+  siteName: string | null;
+  buildingId: string | null;
+  buildingName: string | null;
+  floorId: string | null;
+  floorName: string | null;
+  amenityIds: string[];
+}
+
+function parseWorkPreferences(data: RawDashboardMe): MyWorkPreferences | null {
+  const wp = data.work_preferences;
+  if (!wp?.site_id) return null;
+
+  return {
+    siteId: wp.site_id,
+    siteName: wp.site_name ?? null,
+    buildingId: wp.building_id ?? null,
+    buildingName: wp.building_name ?? null,
+    floorId: wp.floor_id ?? null,
+    floorName: wp.floor_name ?? null,
+    amenityIds: (wp.amenities ?? []).map((a) => a.id),
+  };
+}
+
+export async function fetchMyWorkPreferences(): Promise<MyWorkPreferences | null> {
+  const { data } = await axiosInstance.get<RawDashboardMe>("/dashboard/me");
+  return parseWorkPreferences(data);
+}
+
+// ── Saved location/amenity preferences for a specific employee ──────────────
+// GET /dashboard/employee/{userId} — same shape as /dashboard/me, used when a
+// facilitator/admin/manager books a seat on behalf of that employee.
+
+export async function fetchEmployeeWorkPreferences(
+  userId: string
+): Promise<MyWorkPreferences | null> {
+  const { data } = await axiosInstance.get<RawDashboardMe>(
+    `/dashboard/employee/${userId}`
+  );
+  return parseWorkPreferences(data);
 }

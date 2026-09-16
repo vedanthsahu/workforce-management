@@ -14,7 +14,7 @@ export default function DashboardRoutePage() {
     return <AdminDashboardPage />;
   }
 
-  if (user?.role === "SECURITY") {
+  if (user?.role === "FRONT_OFFICE") {
     return (
       <main className="flex-1 bg-[#F7F8FC] p-6 overflow-y-auto">
         <SecurityDashboardPage />

@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Plus, CheckCircle2, XCircle, X } from "lucide-react";
-import BuildingCards from "@/features/building/components/BuildingCards";
+import BuildingCards, { BuildingStatusFilter } from "@/features/building/components/BuildingCards";
 import BuildingFilters from "@/features/building/components/BuildingFilters";
 import BuildingTable from "@/features/building/components/buildingTable";
 import BuildingPagination from "@/features/building/components/BuildingPagination";
@@ -30,8 +30,9 @@ function BuildingsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [banner, setBanner] = useState<BannerState>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<BuildingStatusFilter>(null);
 
-  useEffect(() => { setCurrentPage(1); }, [search, selectedSiteId]);
+  useEffect(() => { setCurrentPage(1); }, [search, selectedSiteId, statusFilter]);
 
   const showBannerWithHighlight = (message: string, buildingId?: string) => {
     setBanner({ type: "success", message });
@@ -72,6 +73,7 @@ function BuildingsPage() {
       }
       return query.length === 0;
     })
+    .filter((building) => !statusFilter || building.status === statusFilter)
     .sort((a, b) => {
       if (highlightedId) {
         if (a.building_id === highlightedId) return -1;
@@ -125,7 +127,15 @@ function BuildingsPage() {
       )}
 
       {/* STATS */}
-      {loading ? <StatCardsSkeleton /> : <BuildingCards stats={stats} />}
+      {loading ? (
+        <StatCardsSkeleton />
+      ) : (
+        <BuildingCards
+          stats={stats}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+        />
+      )}
 
       {/* TABLE CARD */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
@@ -165,9 +175,11 @@ function BuildingsPage() {
         {/* FOOTER */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
           <span>
-            Showing {filteredBuildings.length === 0 ? 0 : startIndex + 1} to{" "}
-            {Math.min(startIndex + itemsPerPage, filteredBuildings.length)} of{" "}
-            {filteredBuildings.length} entries
+            {filteredBuildings.length > 0 &&
+              `Showing ${startIndex + 1} to ${Math.min(
+                startIndex + itemsPerPage,
+                filteredBuildings.length
+              )} of ${filteredBuildings.length} entries`}
           </span>
           <div className="self-center sm:self-auto">
             <BuildingPagination

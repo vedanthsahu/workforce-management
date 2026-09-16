@@ -2,7 +2,7 @@
 
 import OfficeTable from "@/features/offices/components/OfficeTable";
 import OfficeFilters from "@/features/offices/components/OfficeFilters";
-import OfficeStats from "@/features/offices/components/OfficeStats";
+import OfficeStats, { OfficeStatusFilter } from "@/features/offices/components/OfficeStats";
 import useOffices from "@/features/offices/hooks/useOffices";
 import Pagination from "@/features/offices/components/OfficePagination";
 import EditOfficeModal from "@/features/offices/components/EditOfficeModal";
@@ -29,6 +29,7 @@ function OfficesPage() {
   const [open, setOpen] = useState(false);
   const [banner, setBanner] = useState<BannerState>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<OfficeStatusFilter>(null);
 
   const showBannerWithHighlight = (message: string, siteId?: string) => {
     setBanner({ type: "success", message });
@@ -67,6 +68,7 @@ function OfficesPage() {
       const query = search.toLowerCase().trim();
       return name.includes(query);
     })
+    .filter((o) => !statusFilter || o.status === statusFilter)
     .sort((a, b) => {
       // Always push the newly added/edited office to the top
       if (highlightedId) {
@@ -121,7 +123,18 @@ function OfficesPage() {
       )}
 
       {/* STATS CARDS */}
-      {loading ? <StatCardsSkeleton /> : <OfficeStats stats={stats} />}
+      {loading ? (
+        <StatCardsSkeleton />
+      ) : (
+        <OfficeStats
+          stats={stats}
+          statusFilter={statusFilter}
+          onStatusFilterChange={(filter) => {
+            setStatusFilter(filter);
+            setCurrentPage(1);
+          }}
+        />
+      )}
 
       {/* TABLE CARD */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
@@ -168,9 +181,11 @@ function OfficesPage() {
         {/* FOOTER */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
           <span>
-            Showing {filteredOffices.length === 0 ? 0 : startIndex + 1} to{" "}
-            {Math.min(startIndex + itemsPerPage, filteredOffices.length)} of{" "}
-            {filteredOffices.length} entries
+            {filteredOffices.length > 0 &&
+              `Showing ${startIndex + 1} to ${Math.min(
+                startIndex + itemsPerPage,
+                filteredOffices.length
+              )} of ${filteredOffices.length} entries`}
           </span>
           <div className="self-center sm:self-auto">
             <Pagination

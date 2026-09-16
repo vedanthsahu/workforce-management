@@ -36,7 +36,7 @@ export function formatLocation(building?: string | null, floor?: string | null):
   return [building, floor].filter(Boolean).join(", ") || "—";
 }
 
-const GUEST_TYPE_LABELS: Record<GuestType, string> = {
+export const GUEST_TYPE_LABELS: Record<GuestType, string> = {
   INTERVIEW_CANDIDATE: "Interview Candidate",
   CLIENT: "Client",
   VENDOR: "Vendor",

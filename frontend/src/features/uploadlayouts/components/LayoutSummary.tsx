@@ -6,6 +6,67 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { XCircle, FileStack, Eye } from "lucide-react";
 import SVGPreviewModal from "@/features/uploadlayouts/components/Svgpreviewmodal";
 import { LayoutSummaryData, FloorLayoutInfo } from "../types/layout.types";
+import { fetchLayoutSeats } from "@/features/managelayout1/services/seatService";
+import type { Seat } from "@/features/managelayout1/types/seat.types";
+import { ROOM_SVG_ID_PATTERN, LEGEND } from "../utils/layoutSummary.utils";
+
+// ── seat coloring (same logic as LayoutPreview / LayoutTable) ─────────────────
+
+// Unconfigured seats (desk or room) keep the floor plan's original artwork
+// colors — they only start recoloring once an admin has actually configured
+// them.
+function resolveSeatFill(seat: Seat): string {
+  if (seat.status === "INACTIVE") return "#EF4444";
+  if (!seat.is_bookable)          return "#F59E0B";
+  return "#22C55E";
+}
+
+function isRoomSvgId(svgId: string): boolean {
+  return ROOM_SVG_ID_PATTERN.test(svgId);
+}
+
+// Escapes regex metacharacters so seat ids containing them (e.g. "F9.1",
+// "Group (2)") can be safely interpolated into a RegExp instead of being
+// misinterpreted as pattern syntax.
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function recolorGroup(svgText: string, id: string, fill: string): string {
+  // "g" flag: some exported floor plans reuse the same <g id="..."> more than
+  // once (e.g. a duplicated furniture block that wasn't re-keyed). Without
+  // it, String.replace only recolors the first occurrence, leaving whichever
+  // copy actually renders on screen untouched.
+  const re = new RegExp(`(<g[^>]*id="${escapeRegExp(id)}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "gm");
+  return svgText.replace(re, (_m, open, inner, close) => {
+    // fill="none" (and fill:none) are deliberately transparent — outlines,
+    // cutouts, gaps between an icon's parts. Overwriting those too flattens
+    // the whole group into one solid-color block, erasing the icon's shape
+    // instead of just recoloring its visible parts.
+    const colored = inner
+      .replace(/fill="(?!none")[^"]*"/g,  `fill="${fill}"`)
+      .replace(/fill:(?!none)[^;"}\s]*/g, `fill:${fill}`);
+    return `${open}${colored}${close}`;
+  });
+}
+
+function applyColors(svgText: string, seats: Seat[]): string {
+  let result = svgText;
+  for (const seat of seats) {
+    const id = seat.seat_svg_id;
+
+    // Cabins/conference/meeting rooms are never recolored on the admin
+    // side — they always keep the floor plan's original artwork colors.
+    if (isRoomSvgId(id)) continue;
+
+    // Unconfigured — leave the original artwork colors until an admin
+    // actually configures it.
+    if (!seat.is_configured) continue;
+
+    result = recolorGroup(result, id, resolveSeatFill(seat));
+  }
+  return result;
+}
 
 type Props = {
   formData: LayoutSummaryData;
@@ -24,8 +85,45 @@ function formatLastUpdated(value?: string | null) {
 }
 
 export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
-  const hasFloor      = !!formData.floor?.id;
-  const [showModal, setShowModal] = useState(false);
+  const hasFloor = !!formData.floor?.id;
+  const [showModal,     setShowModal]     = useState(false);
+  const [coloredSvg,    setColoredSvg]    = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const handlePreview = async () => {
+    const url      = floorLayoutInfo?.layoutFileUrl;
+    const layoutId = floorLayoutInfo?.layoutId;
+    if (!url) return;
+    setPreviewLoading(true);
+    try {
+      if (layoutId) {
+        const [svgRes, { seats }] = await Promise.all([
+          fetch(url),
+          fetchLayoutSeats(layoutId),
+        ]);
+        if (!svgRes.ok) throw new Error(`HTTP ${svgRes.status}`);
+        const raw   = await svgRes.text();
+        const fluid = raw
+          .replace(/\bwidth="[^"]*"/,  'width="100%"')
+          .replace(/\bheight="[^"]*"/, 'height="100%"');
+        setColoredSvg(applyColors(fluid, seats));
+      } else {
+        const svgRes = await fetch(url);
+        if (!svgRes.ok) throw new Error(`HTTP ${svgRes.status}`);
+        const raw   = await svgRes.text();
+        const fluid = raw
+          .replace(/\bwidth="[^"]*"/,  'width="100%"')
+          .replace(/\bheight="[^"]*"/, 'height="100%"');
+        setColoredSvg(fluid);
+      }
+      setShowModal(true);
+    } catch {
+      setColoredSvg(null);
+      setShowModal(true); // fall back to svgUrl path in modal
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   return (
     <>
@@ -40,30 +138,30 @@ export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
           </CardHeader>
 
           <CardContent className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Site</span>
-              <span className="text-right font-medium truncate max-w-[180px]">
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground shrink-0">Office</span>
+              <span className="text-right font-medium wrap-break-word">
                 {formData.site?.name || "-"}
               </span>
             </div>
 
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Building</span>
-              <span className="text-right font-medium truncate max-w-[180px]">
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground shrink-0">Building</span>
+              <span className="text-right font-medium wrap-break-word">
                 {formData.building?.name || "-"}
               </span>
             </div>
 
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Floor</span>
-              <span className="text-right font-medium truncate max-w-[180px]">
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground shrink-0">Floor</span>
+              <span className="text-right font-medium wrap-break-word">
                 {formData.floor?.name || "-"}
               </span>
             </div>
 
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Layout Name</span>
-              <span className="text-right font-medium truncate max-w-[180px]">
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground shrink-0">Layout Name</span>
+              <span className="text-right font-medium wrap-break-word">
                 {formData.layoutName || "-"}
               </span>
             </div>
@@ -101,7 +199,7 @@ export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
                 <XCircle className="w-7 h-7 text-gray-300" />
                 <p className="text-[13px] font-medium text-gray-600">No published layout</p>
                 <p className="text-xs text-muted-foreground">
-                  This floor doesn't have a published layout yet.
+                  This floor doesn&apos;t have a published layout yet.
                 </p>
               </div>
             )}
@@ -120,7 +218,7 @@ export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
                   <span className="font-medium">v{floorLayoutInfo.layoutVersionNo ?? "—"}</span>
                 </div>
 
-                {/* <div className="flex justify-between">
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">Published By</span>
                   <span className="font-medium">{floorLayoutInfo.publishedByName ?? "—"}</span>
                 </div>
@@ -130,27 +228,6 @@ export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
                   <span className="font-medium">
                     {formatLastUpdated(floorLayoutInfo.layoutLastUpdated)}
                   </span>
-                </div> */}
-                 <div className="flex justify-between">
-
-                  <span className="text-muted-foreground">Published By</span>
-
-                  <span className="font-medium">Ankitha Kulal</span>
-
-                </div>
-
-
-
-                <div className="flex justify-between">
-
-                  <span className="text-muted-foreground">Last Updated</span>
-
-                  <span className="font-medium">
-
-   15/06/2026
-
-                  </span>
-
                 </div>
 
                 {/* ── Preview button ── */}
@@ -158,11 +235,15 @@ export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
                   <div className="pt-1">
                     <button
                       type="button"
-                      onClick={() => setShowModal(true)}
-                      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 transition-colors"
+                      onClick={handlePreview}
+                      disabled={previewLoading}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      <Eye size={13} />
-                      Preview Layout
+                      {previewLoading
+                        ? <span className="w-3 h-3 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
+                        : <Eye size={13} />
+                      }
+                      {previewLoading ? "Loading…" : "Preview Layout"}
                     </button>
                   </div>
                 )}
@@ -178,13 +259,26 @@ export default function LayoutSummary({ formData, floorLayoutInfo }: Props) {
       {showModal && (
         <SVGPreviewModal
           title={floorLayoutInfo?.layoutName ?? "Published Layout"}
-          svgUrl={floorLayoutInfo?.layoutFileUrl}
+          svgContent={coloredSvg ?? undefined}
+          svgUrl={coloredSvg ? undefined : floorLayoutInfo?.layoutFileUrl}
           badge={
             <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md text-xs font-semibold ring-1 ring-emerald-200">
               v{floorLayoutInfo?.layoutVersionNo} · {floorLayoutInfo?.layoutStatus ?? "PUBLISHED"}
             </span>
           }
-          onClose={() => setShowModal(false)}
+          legend={
+            coloredSvg ? (
+              <div className="flex items-center gap-4">
+                {LEGEND.map(({ label, color }) => (
+                  <span key={label} className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                    {label}
+                  </span>
+                ))}
+              </div>
+            ) : undefined
+          }
+          onClose={() => { setShowModal(false); setColoredSvg(null); }}
         />
       )}
     </>

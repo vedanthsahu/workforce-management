@@ -37,8 +37,11 @@ export type DashboardResult =
 
 function mapBookingStatus(status: string): "Confirmed" | "Pending" | "Cancelled" {
   const s = status.toUpperCase();
-  if (s === "CONFIRMED" || s === "ACTIVE")   return "Confirmed";
-  if (s === "CANCELLED" || s === "CANCELED") return "Cancelled";
+  // MODIFIED is still an active, confirmed booking (just with a modification
+  // history) — this widget has no separate "Modified" badge state, unlike
+  // My Bookings, so it's treated the same as Confirmed here.
+  if (s === "CONFIRMED" || s === "ACTIVE" || s === "MODIFIED") return "Confirmed";
+  if (s === "CANCELLED" || s === "CANCELED")                  return "Cancelled";
   return "Pending";
 }
 
@@ -84,10 +87,14 @@ function mapFavouriteSeat(seat: ApiFavouriteSeat | null): FavouriteSeat | null {
   const site  = seat.site_name ?? seat.building_name ?? "Office";
   return {
     id:          seat.seat_id,
+    seatCode:    seat.seat_code ?? seat.seat_id,
     label:       seat.seat_code ?? seat.seat_id,
     location:    [floor, site].filter(Boolean).join(" · "),
     description: "Favourite seat",
     floor,
+    floorId:     seat.floor_id ?? null,
+    buildingId:  seat.building_id ?? null,
+    siteId:      seat.site_id ?? null,
   };
 }
 
@@ -126,16 +133,21 @@ function mapApiBooking(b: ApiBooking, currentUserId: string): Booking {
 
 function mapApiTeamToMembers(groups: ApiTeamGroup[], currentUserId: string): TeamMember[] {
   const members: TeamMember[] = [];
+  const seenUserIds = new Set<string>();
   let colorIndex = 0;
   for (const group of groups) {
     for (const m of group.members) {
       if (m.user_id === currentUserId) continue;
       if (!m.seat) continue;
+      // A colleague can belong to more than one team shared with the
+      // current user (groups aren't mutually exclusive) — show them once.
+      if (seenUserIds.has(m.user_id)) continue;
+      seenUserIds.add(m.user_id);
       members.push({
         id:          m.user_id,
         name:        m.full_name,
         initials:    toInitials(m.full_name),
-        floor:       m.seat.floor_id ? `Floor ${m.seat.floor_id}` : "—",
+        floor:       m.seat.floor_name ?? (m.seat.floor_id ? `Floor ${m.seat.floor_id}` : "—"),
         avatarColor: pickAvatarColor(colorIndex++),
         seatCode:    m.seat.seat_code ?? undefined,
         email:       m.email ?? undefined,
@@ -263,6 +275,7 @@ export async function getDashboardData(): Promise<DashboardResult> {
     sectionErrors.push(classifyError(dashboardMeResult.reason, "dashboardMe"));
     return {
       favorite_seat:                null,
+      second_favorite_seat:         null,
       days_in_office_total:         0,
       days_in_office_current_month: 0,
       days_in_office_current_year:  0,
@@ -310,7 +323,8 @@ export async function getDashboardData(): Promise<DashboardResult> {
       weekDays:         buildWeekDays(allBookedDates),
       upcomingBookings,
       teamInOfficeToday,
-      favouriteSeat:    mapFavouriteSeat(dashboardMe.favorite_seat),
+      favouriteSeat:       mapFavouriteSeat(dashboardMe.favorite_seat),
+      secondFavouriteSeat: mapFavouriteSeat(dashboardMe.second_favorite_seat ?? null),
       nextBookingDate:  upcomingBookings[0]?.date ?? "—",
       todayBooking,
       daysInOffice:     dashboardMe.days_in_office_current_month,

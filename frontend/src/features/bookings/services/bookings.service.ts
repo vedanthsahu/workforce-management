@@ -8,10 +8,15 @@ const BASE = "/bookings";
 
 // ── Status normaliser ─────────────────────────────────────────────────────────
 
-function normaliseStatus(raw: string): "confirmed" | "cancelled" | "pending" {
-  const s = raw.toUpperCase();
-  if (s === "CONFIRMED" || s === "ACTIVE")   return "confirmed";
+function normaliseStatus(raw: RawBooking): "confirmed" | "modified" | "cancelled" | "pending" {
+  const s = raw.booking_status.toUpperCase();
   if (s === "CANCELLED" || s === "CANCELED") return "cancelled";
+  // A modified row's successor is still literally CONFIRMED/SCHEDULED --
+  // is_modified (derived from modified_from_booking_id /
+  // modified_from_guest_visit_id) is the authoritative signal, same as the
+  // admin bookings list already does.
+  if (s === "MODIFIED" || raw.is_modified)   return "modified";
+  if (s === "CONFIRMED" || s === "ACTIVE")   return "confirmed";
   return "pending";
 }
 
@@ -72,13 +77,15 @@ function mapRawBooking(raw: RawBooking, currentUserId: string): Booking {
     day:   "numeric",
   });
 
-  const status = normaliseStatus(raw.booking_status);
+  const status = normaliseStatus(raw);
   const bookingType = deriveBookingType(raw, currentUserId);
 
   const tagList: Booking["tags"] = [];
 
   if (status === "confirmed") {
     tagList.push({ label: "Confirmed", variant: "confirmed" });
+  } else if (status === "modified") {
+    tagList.push({ label: "Modified", variant: "modified" });
   }
 
   for (const t of raw.tags ?? []) {
@@ -133,6 +140,8 @@ function mapRawBooking(raw: RawBooking, currentUserId: string): Booking {
     guestVisitId:     raw.guest_visit_id ?? undefined,
     activitySource:   (raw.activity_source as Booking["activitySource"]) ?? "BOOKING",
     createdAt:        raw.created_at ?? raw.booking_date,
+    updatedByUserId:  raw.updated_user_id ?? undefined,
+    updatedByName:    raw.updated_by_name ?? undefined,
   };
 }
 
@@ -307,7 +316,9 @@ export async function fetchSeatAmenities(
     const allAmenityIds = allPrefs.map((p) => p.id);
 
     // Step 2: fetch seats passing all amenity ids so the backend populates matched_amenities
-    const { data: resp } = await axiosInstance.get<any>(
+    const { data: resp } = await axiosInstance.get<
+      SeatAmenityMatch[] | { items: SeatAmenityMatch[] }
+    >(
       `/floors/${floorId}/seats`,
       {
         params: {

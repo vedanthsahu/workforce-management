@@ -30,11 +30,11 @@ export default function FloorFilters({
       <select
         value={selectedSite}
         onChange={(e) => onSiteChange(e.target.value)}
-        className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
       >
-        <option value="">Select Site</option>
+        <option value="">All Offices</option>
         {sites.map((site) => (
-          <option key={site.site_id} value={site.site_id}>{site.site_name}</option>
+          <option key={site.site_id} value={site.site_id} className="text-gray-900">{site.site_name}</option>
         ))}
       </select>
 
@@ -42,21 +42,22 @@ export default function FloorFilters({
         value={selectedBuilding}
         disabled={!selectedSite}
         onChange={(e) => onBuildingChange(e.target.value)}
-        className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+        title={selectedSite ? undefined : "Select an Office first to filter by building"}
+        className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-gray-900"
       >
-        <option value="">Select Building</option>
+        <option value="">All Buildings</option>
         {buildings.map((building) => (
           <option key={building.building_id} value={building.building_id}>{building.building_name}</option>
         ))}
       </select>
 
       <div className="relative">
-        <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full sm:w-auto pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Search floors by floor code or floor name"
+          className="h-9 w-50 pl-9 pr-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Search floor..."
         />
       </div>
 

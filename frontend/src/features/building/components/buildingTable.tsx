@@ -66,17 +66,17 @@ export default function BuildingTable({ data, onEdit, highlightedId }: Props) {
             <col style={{ width: "100px" }} /><col style={{ width: "80px" }} />
             <col style={{ width: "70px" }} />
           </colgroup>
-          <thead className="text-xs text-gray-500 bg-gray-50 border-b sticky top-0 z-10">
+          <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
             <tr>
-              <th className="px-3 py-3 text-left font-medium">Building Code</th>
-              <th className="px-3 py-3 text-left font-medium">Building Name</th>
-              <th className="px-3 py-3 text-left font-medium">Site Name</th>
-              <th className="px-3 py-3 text-left font-medium">Floors</th>
-              <th className="px-3 py-3 text-left font-medium">Total Seats</th>
-              <th className="px-3 py-3 text-left font-medium">Active Seats</th>
-              <th className="px-3 py-3 text-left font-medium">Bookable Seats</th>
-              <th className="px-3 py-3 text-left font-medium">Status</th>
-              <th className="px-3 py-3 text-left font-medium">Actions</th>
+              <th className="pl-6 px-3 py-3 text-left font-bold">Building Code</th>
+              <th className="pl-6 px-3 py-3 text-left font-bold">Building Name</th>
+              <th className="pl-4 px-3 py-3 text-left font-bold">Office Name</th>
+              <th className="px-3 py-3 text-center font-bold">Floors</th>
+              <th className="px-3 py-3 text-center font-bold">Total Seats</th>
+              <th className="px-3 py-3 text-center font-bold">Active Seats</th>
+              <th className="px-3 py-3 text-center font-bold">Bookable Seats</th>
+              <th className="pl-6 px-3 py-3 text-left font-bold">Status</th>
+              <th className="px-3 py-3 text-center font-bold">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -85,17 +85,17 @@ export default function BuildingTable({ data, onEdit, highlightedId }: Props) {
               return (
                 <tr key={building.building_id} className={`transition-colors ${isHighlighted ? "row-highlight" : "hover:bg-gray-50"}`}>
                   <td className="px-3 py-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-start gap-2">
                       <div className={`w-7 h-7 shrink-0 flex items-center justify-center rounded-full ${
                         isHighlighted ? "bg-blue-200" : "bg-blue-100"
                       }`}>
                         <Building2 className="w-3 h-3 text-blue-600" />
                       </div>
-                      <span className="font-medium truncate">{building.building_code}</span>
+                      <span title={building.building_code} className="font-medium line-clamp-2 min-w-0 flex-1">{building.building_code}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-3 max-w-0"><span className="block font-medium truncate">{building.building_name}</span></td>
-                  <td className="px-3 py-3 max-w-0"><span className="block truncate">{building.site_name}</span></td>
+                  <td className="px-3 py-3 max-w-0"><span title={building.building_name} className="block font-medium truncate">{building.building_name}</span></td>
+                  <td className="px-3 py-3 max-w-0"><span title={building.site_name} className="block line-clamp-2">{building.site_name}</span></td>
                   <td className="px-3 py-3 text-center">{building.floor_count}</td>
                   <td className="px-3 py-3 text-center">{building.seat_count?.toLocaleString()}</td>
                   <td className="px-3 py-3 text-center">{building.active_seat_count?.toLocaleString()}</td>

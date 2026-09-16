@@ -103,3 +103,8 @@ export interface GuestVisitResponse {
   guest_visit_id: string;
   visit_status: string;
 }
+
+export interface EligibilityResponse {
+  eligible: boolean;
+  message: string;
+}

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 import sys
-from typing import Annotated, Any, Callable
+from collections.abc import Callable
+from typing import Annotated, Any
 
 import psycopg2
 from fastapi import APIRouter, Depends, Request, status
@@ -12,6 +14,8 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user
+from backend.core.app_logging import LOGGER_NAME
+from backend.core.audit_actions import USER_LOGIN
 from backend.core.config import get_settings
 from backend.core.security import (
     ACCESS_TOKEN_COOKIE_NAME,
@@ -19,11 +23,10 @@ from backend.core.security import (
     SESSION_TOKEN_COOKIE_NAME,
     build_auth_cookie_settings,
 )
-from backend.core.logging import LOGGER_NAME
 from backend.core.sso import (
+    STATE_TTL_SECONDS,
     GraphAPIError,
     SSOError,
-    STATE_TTL_SECONDS,
     build_auth_url,
     exchange_code_for_token,
     fetch_graph_groups,
@@ -32,6 +35,7 @@ from backend.core.sso import (
     verify_id_token,
 )
 from backend.db.connection import get_db
+from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.user_repository import (
     create_app_user_from_graph,
     create_auth_identity_for_user,
@@ -39,11 +43,15 @@ from backend.repositories.user_repository import (
     fetch_user_by_id,
     fetch_user_by_microsoft_object_id,
     sync_app_user_from_graph,
-    sync_graph_groups_for_user,
+    sync_department_team_for_user,
+    update_user_department,
     upsert_user_graph_profile,
 )
-from backend.services.auth_service import AuthTokens, determine_graph_onboarding_role, issue_tokens_for_user
-import logging
+from backend.services.auth_service import (
+    AuthTokens,
+    determine_graph_onboarding_role,
+    issue_tokens_for_user,
+)
 
 router = APIRouter(tags=["SSO"])
 logger = logging.getLogger(f"{LOGGER_NAME}.sso")
@@ -130,7 +138,7 @@ def auth_callback(
         return _error_response(exc.status_code, exc.code, exc.message, exc.details)
     except Exception as exc:
         debug(f"Unexpected error in token exchange: {type(exc).__name__}: {exc}")
-        return _error_response(500, "token_exchange_failed", f"{type(exc).__name__}: {str(exc)}")
+        return _error_response(500, "token_exchange_failed", f"{type(exc).__name__}: {exc!s}")
 
     azure_tenant_id = str(claims.get("tid") or "").strip()
     debug(f"azure_tenant_id={azure_tenant_id!r}")
@@ -149,7 +157,7 @@ def auth_callback(
         return _error_response(409, "tenant_resolution_ambiguous", str(exc))
     except Exception as exc:
         debug(f"Exception in tenant fetch: {type(exc).__name__}: {exc}")
-        return _error_response(500, "tenant_resolution_failed", f"{type(exc).__name__}: {str(exc)}")
+        return _error_response(500, "tenant_resolution_failed", f"{type(exc).__name__}: {exc!s}")
 
     tenant_id = str(tenant["tenant_id"])
     debug(f"tenant_id={tenant_id}")
@@ -182,9 +190,7 @@ def auth_callback(
         if user is None:
             debug("Provisioning first-time user...")
             graph_manager = _fetch_graph_payload(fetch_graph_manager, token_payload["access_token"], required=False)
-            graph_groups = _fetch_graph_payload(fetch_graph_groups, token_payload["access_token"], required=True)
             debug(f"Graph manager keys: {list(graph_manager.keys())}")
-            debug(f"Graph groups count: {len(graph_groups.get('value', []))}")
             user = _provision_first_time_user(
                 conn,
                 tenant_id=tenant_id,
@@ -193,10 +199,18 @@ def auth_callback(
                 claims=claims,
                 graph_profile=graph_profile,
                 graph_manager=graph_manager,
-                graph_groups=graph_groups,
                 access_token=token_payload["access_token"],
             )
             debug(f"Provisioned user: {user}")
+        else:
+            debug("Resyncing department team for returning user...")
+            _sync_existing_user_department_team(
+                conn,
+                tenant_id=tenant_id,
+                user=user,
+                graph_profile=graph_profile,
+                access_token=token_payload["access_token"],
+            )
 
         if user is None:
             raise LookupError("User could not be resolved after provisioning.")
@@ -214,6 +228,17 @@ def auth_callback(
         debug("Tokens issued OK, committing...")
         conn.commit()
         debug("Commit OK")
+        safe_write_audit_log(
+            conn,
+            action=USER_LOGIN,
+            tenant_id=str(user["tenant_id"]),
+            actor_user_id=user.get("user_id"),
+            actor_email=user.get("email"),
+            actor_role=str(user.get("role_name") or "").upper() or None,
+            resource_type="session",
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
 
     except PermissionError as exc:
         conn.rollback()
@@ -236,7 +261,7 @@ def auth_callback(
         debug(f"Unexpected exception: {type(exc).__name__}: {exc}")
         import traceback
         traceback.print_exc(file=sys.stderr)
-        return _error_response(500, "sso_failed", f"{type(exc).__name__}: {str(exc)}")
+        return _error_response(500, "sso_failed", f"{type(exc).__name__}: {exc!s}")
 
     settings = get_settings()
     response = RedirectResponse(url=settings.frontend_url, status_code=status.HTTP_302_FOUND)
@@ -291,7 +316,6 @@ def _provision_first_time_user(
     claims: dict[str, Any],
     graph_profile: dict[str, Any],
     graph_manager: dict[str, Any],
-    graph_groups: dict[str, Any],
     access_token: str,
 ) -> dict[str, Any]:
     """Create the app user and Graph enrichment rows required on first login."""
@@ -310,6 +334,7 @@ def _provision_first_time_user(
     user_principal_name = _resolve_user_principal_name(claims, graph_profile)
     display_name = _resolve_display_name(claims, graph_profile)
     full_name = _resolve_full_name(display_name=display_name, email=email)
+    department = _resolve_optional_graph_text(graph_profile, "department")
     role_name = determine_graph_onboarding_role(
         access_token=access_token,
         microsoft_object_id=microsoft_object_id,
@@ -326,7 +351,7 @@ def _provision_first_time_user(
         mobile_phone=_resolve_optional_graph_text(graph_profile, "mobilePhone"),
         office_location=_resolve_optional_graph_text(graph_profile, "officeLocation"),
         job_title=_resolve_optional_graph_text(graph_profile, "jobTitle"),
-        department=_resolve_optional_graph_text(graph_profile, "department"),
+        department=department,
         company_name=_resolve_optional_graph_text(graph_profile, "companyName"),
         employee_id=_resolve_optional_graph_text(graph_profile, "employeeId"),
         manager_user_id=manager_user_id,
@@ -365,16 +390,60 @@ def _provision_first_time_user(
         graph_profile=graph_profile,
         manager_graph_object_id=manager_graph_object_id,
     )
-    sync_graph_groups_for_user(
+    sync_department_team_for_user(
         conn,
         tenant_id=tenant_id,
         user_id=user_id,
-        graph_groups=graph_groups,
+        department=department,
     )
     resolved = fetch_user_by_id(conn, tenant_id=tenant_id, user_id=user_id)
     if resolved is None:
         raise LookupError("Created SSO user could not be reloaded.")
     return resolved
+
+
+def _sync_existing_user_department_team(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user: dict[str, Any],
+    graph_profile: dict[str, Any],
+    access_token: str,
+) -> None:
+    """Move a returning user to the team matching their current department.
+
+    Best-effort by design: a Graph or database failure here must never break
+    an otherwise-valid login, so every failure path logs and returns instead
+    of propagating.
+    """
+    user_id = str(user["user_id"])
+
+    if not graph_profile:
+        try:
+            graph_profile = _fetch_graph_payload(fetch_graph_me, access_token, required=False)
+        except GraphAPIError:
+            logger.warning("sso.department_sync.graph_me_failed user_id=%s", user_id)
+            return
+
+    department = _resolve_optional_graph_text(graph_profile, "department")
+
+    try:
+        if department != (user.get("department") or None):
+            update_user_department(
+                conn,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                department=department,
+            )
+        sync_department_team_for_user(
+            conn,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            department=department,
+        )
+    except (psycopg2.Error, LookupError, ValueError):
+        conn.rollback()
+        logger.exception("sso.department_sync.failed user_id=%s", user_id)
 
 
 def _fetch_graph_payload(

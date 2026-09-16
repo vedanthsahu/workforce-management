@@ -23,32 +23,22 @@ export const useFloors = () => {
   useEffect(() => {
     fetchSites();
     fetchDashboardSummary();
+
+    // A filter saved before navigating away (e.g. after creating a floor)
+    // takes priority; otherwise load every floor for the tenant up front.
+    const saved = sessionStorage.getItem("floorSelection");
+    if (saved) {
+      restoreSelection(saved);
+    } else {
+      fetchFloors();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Auto-load the default site/building selection once sites are available
-  useEffect(() => {
-    const loadDefaultSelection = async () => {
-      if (sites.length === 0) return;
-
-      const defaultSiteId = "5";
-      const defaultBuildingId = "7";
-
-      await handleSiteChange(defaultSiteId);
-      await handleBuildingChange(defaultBuildingId);
-    };
-
-    loadDefaultSelection();
-  }, [sites]);
-
-  // Restore a selection saved before navigating away (e.g. after creating a floor)
-  useEffect(() => {
-    restoreSelection();
-  }, [sites]);
 
   const fetchSites = async () => {
     try {
       const response = await floorService.getSites();
-      setSites(response.filter((site) => site.status === "ACTIVE"));
+      setSites(response);
     } catch (error) {
       console.error(error);
     }
@@ -67,22 +57,19 @@ export const useFloors = () => {
     try {
       const response = await floorService.getBuildings(Number(siteId));
       setBuildings(response);
-
-      if (response.length > 0) {
-        const firstBuildingId = String(response[0].building_id);
-        setSelectedBuilding(firstBuildingId);
-        await fetchFloors(firstBuildingId);
-      }
     } catch (error) {
       console.error(error);
     }
   };
 
-  const fetchFloors = async (buildingId: string) => {
+  const fetchFloors = async (siteId?: string, buildingId?: string) => {
     try {
       setLoading(true);
 
-      const response = await floorService.getFloors(Number(buildingId));
+      const response = await floorService.getAllFloors({
+        site_id: siteId,
+        building_id: buildingId,
+      });
       setFloors(response);
       setError("");
     } catch (error) {
@@ -97,37 +84,37 @@ export const useFloors = () => {
     setSelectedSite(siteId);
     setSelectedBuilding("");
     setBuildings([]);
-    setFloors([]);
 
-    if (!siteId) return;
-    await fetchBuildings(siteId);
+    if (siteId) {
+      await fetchBuildings(siteId);
+    }
+
+    await fetchFloors(siteId || undefined, undefined);
   };
 
   const handleBuildingChange = async (buildingId: string) => {
     setSelectedBuilding(buildingId);
-    setFloors([]);
 
-    if (!buildingId) return;
-    await fetchFloors(buildingId);
+    await fetchFloors(selectedSite || undefined, buildingId || undefined);
   };
 
   const refreshFloors = async () => {
-    if (selectedBuilding) {
-      await fetchFloors(selectedBuilding);
-    }
-
+    await fetchFloors(selectedSite || undefined, selectedBuilding || undefined);
     await fetchDashboardSummary();
   };
 
-  const restoreSelection = async () => {
-    const saved = sessionStorage.getItem("floorSelection");
-    if (!saved) return;
-
+  const restoreSelection = async (saved: string) => {
     try {
       const { site_id, building_id } = JSON.parse(saved);
 
-      await handleSiteChange(site_id);
-      await handleBuildingChange(building_id);
+      setSelectedSite(site_id || "");
+      setSelectedBuilding(building_id || "");
+
+      if (site_id) {
+        await fetchBuildings(site_id);
+      }
+
+      await fetchFloors(site_id || undefined, building_id || undefined);
 
       sessionStorage.removeItem("floorSelection");
     } catch (error) {

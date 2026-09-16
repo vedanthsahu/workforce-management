@@ -24,5 +24,24 @@ export const getLayoutsByFloor = async (
   const res = await axiosInstance.get(
     `/admin/floor-layouts/floors/${floorId}`
   );
+  console.log(res.data)
+  return res.data;
+};
+
+export const deleteLayout = async (layoutId: string): Promise<void> => {
+  await axiosInstance.delete(`/admin/floor-layouts/${layoutId}`);
+};
+
+// Change the effective_date of a layout that's already SCHEDULED -- not a
+// new schedule, not a publish. The backend refuses this (409) once
+// bookings could already exist against the current effective_from.
+export const rescheduleLayout = async (
+  layoutId: string,
+  effectiveDate: string
+): Promise<LayoutApiResponse> => {
+  const res = await axiosInstance.patch(
+    `/admin/floor-layouts/${layoutId}/schedule`,
+    { effective_date: effectiveDate }
+  );
   return res.data;
 };
