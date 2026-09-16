@@ -14,7 +14,7 @@ export const blockedSeatsService = {
     category: BlockCategory,
     filters: BlockedSeatFilters,
     page = 1,
-    limit = 20,
+    limit = 10,
   ): Promise<BlockedSeatListResponse> {
     const { data } = await axiosInstance.get("/admin/blocked-seats", {
       params: {
