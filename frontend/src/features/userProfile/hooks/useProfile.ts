@@ -62,8 +62,8 @@ export function useProfile(): UseProfileReturn {
     setState((s) => ({ ...s, isSavingProfile: true }));
     try {
       const updated = await updateProfile({
-        bio:    form.bio    || undefined,
-        skills: form.skills.length ? form.skills : undefined,
+        bio:    form.bio,
+        skills: form.skills,
       });
       setState((s) => ({
         ...s,

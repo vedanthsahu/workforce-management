@@ -73,6 +73,8 @@ export interface ApiAuthMe {
   employee_id:           string | null;
   manager_user_id:       string | null;
   home_site_id:          string | null;
+  bio:                    string | null;
+  skills:                 string[] | null;
   role:                  string;
   role_name:             string;
   status:                string;
@@ -163,12 +165,8 @@ export interface ApiFloor {
 // ─── Payload types ────────────────────────────────────────────────────────────
 
 export interface ApiUpdateProfilePayload {
-  display_name?:   string;
-  phone?:          string;
-  personal_email?: string;
   bio?:            string;
   skills?:         string[];
-  avatar_url?:     string;
 }
 
 // Matches backend's UpdateMyPreferencesRequest — POST /preferences/me
