@@ -79,17 +79,9 @@ export function FatalErrorScreen({
 // Inline notice inside a section when only that section's data failed.
 // Sits at the top of the section card, doesn't remove other content.
 
-// const SECTION_LABELS: Record<DashboardSectionError["section"], string> = {
-//   user: "Profile",
-//   currentBookings: "Today's booking",
-//   futureBookings: "Upcoming bookings",
-//   team: "Team data",
-// };
-
-
 const SECTION_LABELS: Record<DashboardSectionError["section"], string> = {
   user:            "Profile",
-  dashboardMe:     "Dashboard stats",   // ← add this
+  dashboardMe:     "Dashboard stats",
   currentBookings: "Today's booking",
   futureBookings:  "Upcoming bookings",
   team:            "Team data",
@@ -108,7 +100,7 @@ export function SectionErrorBanner({ errors }: { errors: DashboardSectionError[]
           <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
           <div className="min-w-0">
             <p className="text-[11.5px] font-medium text-amber-800 leading-snug">
-              {SECTION_LABELS[err.section]} couldn't load
+              {SECTION_LABELS[err.section]} couldn&apos;t load
             </p>
             <p className="text-[10.5px] text-amber-600 mt-0.5 leading-snug">{err.message}</p>
           </div>

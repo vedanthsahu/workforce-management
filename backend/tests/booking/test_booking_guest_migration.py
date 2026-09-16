@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import sys
 import unittest
 from datetime import date, timedelta
@@ -12,6 +13,7 @@ from fastapi import HTTPException
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from backend.core.enums import GuestType, VisitPurpose
+from backend.repositories import booking_repository, guest_visit_repository
 from backend.schemas.booking import ModifyBookingRequest
 from backend.schemas.guest import (
     CreateGuestBookingRequest,
@@ -30,6 +32,29 @@ class FakeConnection:
 
     def rollback(self) -> None:
         self.rollbacks += 1
+
+
+class RecordingCursor:
+    def __init__(self, conn: RecordingConnection) -> None:
+        self.conn = conn
+        self.rowcount = 1
+
+    def __enter__(self) -> RecordingCursor:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def execute(self, sql, params=None) -> None:
+        self.conn.executed.append((sql, params))
+
+
+class RecordingConnection:
+    def __init__(self) -> None:
+        self.executed = []
+
+    def cursor(self, *args, **kwargs) -> RecordingCursor:
+        return RecordingCursor(self)
 
 
 def _future_date(days: int = 10) -> date:
@@ -121,7 +146,7 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
         )
         self.assertTrue(
             booking_service._can_book_for_user(
-                current_user={"user_id": "99", "role_name": "TALENT"},
+                current_user={"user_id": "99", "role_name": "FACILITATOR"},
                 booking_user=target,
             )
         )
@@ -184,6 +209,7 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
             floor_id=4,
             seat_id=31,
             booking_date=_future_date(11),
+            modification_reason="OTHER",
         )
         with patch.object(
             booking_service,
@@ -210,6 +236,9 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
             },
         ), patch.object(
             booking_service,
+            "acquire_booking_slot_locks",
+        ), patch.object(
+            booking_service,
             "user_has_active_booking_on_date",
             return_value=False,
         ), patch.object(
@@ -218,12 +247,12 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
             return_value=False,
         ), patch.object(
             booking_service,
-            "cancel_booking",
-        ) as cancel, patch.object(
+            "mark_booking_modified",
+        ) as mark_modified, patch.object(
             booking_service,
             "insert_booking",
             return_value=new_booking,
-        ):
+        ) as insert_booking:
             response = booking_service.modify_booking(
                 conn,
                 current_user={
@@ -235,7 +264,15 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
                 payload=payload,
             )
 
-        self.assertEqual(cancel.call_args.kwargs["booking_status"], "MODIFIED")
+        self.assertEqual(mark_modified.call_args.kwargs["booking_id"], "100")
+        self.assertEqual(
+            mark_modified.call_args.kwargs["modification_reason"],
+            "OTHER",
+        )
+        self.assertEqual(
+            insert_booking.call_args.kwargs["modified_from_booking_id"], "100"
+        )
+        self.assertNotIn("modification_reason", insert_booking.call_args.kwargs)
         self.assertEqual(response.booking_id, "101")
         self.assertEqual(conn.commits, 1)
 
@@ -245,8 +282,11 @@ class GuestBookingMigrationTests(unittest.TestCase):
         self.current_user = {
             "tenant_id": "1",
             "user_id": "10",
-            "role_name": "TALENT",
+            "role_name": "FACILITATOR",
         }
+        audit_patcher = patch.object(guest_service, "safe_write_audit_log")
+        audit_patcher.start()
+        self.addCleanup(audit_patcher.stop)
 
     def _guest_create_patches(self):
         return (
@@ -273,6 +313,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
                     "is_bookable": True,
                 },
             ),
+            patch.object(guest_service, "acquire_booking_slot_locks"),
         )
 
     def test_guest_permission_failure(self) -> None:
@@ -330,6 +371,10 @@ class GuestBookingMigrationTests(unittest.TestCase):
             return_value=visit,
         ) as insert_visit, patch.object(
             guest_service,
+            "fetch_guest_visit_by_id",
+            return_value=visit,
+        ), patch.object(
+            guest_service,
             "insert_guest_booking",
         ) as insert_booking:
             response = guest_service.create_guest_visit(
@@ -345,8 +390,8 @@ class GuestBookingMigrationTests(unittest.TestCase):
 
     def test_guest_booking_creation_is_atomic(self) -> None:
         conn = FakeConnection()
-        guest_patch, host_patch, seat_patch = self._guest_create_patches()
-        with guest_patch, host_patch, seat_patch, patch.object(
+        guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
+        with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
             guest_service,
             "guest_has_active_booking_on_date",
             return_value=False,
@@ -360,7 +405,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
             return_value={"guest_visit_id": "60"},
         ) as insert_visit, patch.object(
             guest_service,
-            "update_guest_visit_requires_seat",
+            "recalculate_guest_visit_requires_seat",
         ), patch.object(
             guest_service,
             "insert_guest_booking",
@@ -380,8 +425,8 @@ class GuestBookingMigrationTests(unittest.TestCase):
 
     def test_guest_visit_insert_failure_rolls_back_before_booking(self) -> None:
         conn = FakeConnection()
-        guest_patch, host_patch, seat_patch = self._guest_create_patches()
-        with guest_patch, host_patch, seat_patch, patch.object(
+        guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
+        with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
             guest_service,
             "guest_has_active_booking_on_date",
             return_value=False,
@@ -396,13 +441,12 @@ class GuestBookingMigrationTests(unittest.TestCase):
         ), patch.object(
             guest_service,
             "insert_guest_booking",
-        ) as insert_booking:
-            with self.assertRaises(HTTPException):
-                guest_service.create_guest_booking(
-                    conn,
-                    current_user=self.current_user,
-                    payload=_guest_payload(),
-                )
+        ) as insert_booking, self.assertRaises(HTTPException):
+            guest_service.create_guest_booking(
+                conn,
+                current_user=self.current_user,
+                payload=_guest_payload(),
+            )
 
         insert_booking.assert_not_called()
         self.assertEqual(conn.commits, 0)
@@ -410,8 +454,8 @@ class GuestBookingMigrationTests(unittest.TestCase):
 
     def test_guest_booking_insert_failure_rolls_back_visit(self) -> None:
         conn = FakeConnection()
-        guest_patch, host_patch, seat_patch = self._guest_create_patches()
-        with guest_patch, host_patch, seat_patch, patch.object(
+        guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
+        with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
             guest_service,
             "guest_has_active_booking_on_date",
             return_value=False,
@@ -430,34 +474,32 @@ class GuestBookingMigrationTests(unittest.TestCase):
             guest_service,
             "insert_guest_booking",
             side_effect=psycopg2.DatabaseError("booking failed"),
-        ):
-            with self.assertRaises(HTTPException):
-                guest_service.create_guest_booking(
-                    conn,
-                    current_user=self.current_user,
-                    payload=_guest_payload(),
-                )
+        ), self.assertRaises(HTTPException):
+            guest_service.create_guest_booking(
+                conn,
+                current_user=self.current_user,
+                payload=_guest_payload(),
+            )
 
         self.assertEqual(conn.commits, 0)
         self.assertEqual(conn.rollbacks, 1)
 
     def test_guest_conflict_prevents_inserts(self) -> None:
         conn = FakeConnection()
-        guest_patch, host_patch, seat_patch = self._guest_create_patches()
-        with guest_patch, host_patch, seat_patch, patch.object(
+        guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
+        with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
             guest_service,
             "guest_has_active_booking_on_date",
             return_value=True,
         ), patch.object(
             guest_service,
             "insert_guest_visit",
-        ) as insert_visit:
-            with self.assertRaises(HTTPException) as context:
-                guest_service.create_guest_booking(
-                    conn,
-                    current_user=self.current_user,
-                    payload=_guest_payload(),
-                )
+        ) as insert_visit, self.assertRaises(HTTPException) as context:
+            guest_service.create_guest_booking(
+                conn,
+                current_user=self.current_user,
+                payload=_guest_payload(),
+            )
 
         self.assertEqual(context.exception.status_code, 409)
         self.assertEqual(
@@ -468,8 +510,8 @@ class GuestBookingMigrationTests(unittest.TestCase):
 
     def test_seat_conflict_prevents_inserts(self) -> None:
         conn = FakeConnection()
-        guest_patch, host_patch, seat_patch = self._guest_create_patches()
-        with guest_patch, host_patch, seat_patch, patch.object(
+        guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
+        with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
             guest_service,
             "guest_has_active_booking_on_date",
             return_value=False,
@@ -480,13 +522,12 @@ class GuestBookingMigrationTests(unittest.TestCase):
         ), patch.object(
             guest_service,
             "insert_guest_visit",
-        ) as insert_visit:
-            with self.assertRaises(HTTPException) as context:
-                guest_service.create_guest_booking(
-                    conn,
-                    current_user=self.current_user,
-                    payload=_guest_payload(),
-                )
+        ) as insert_visit, self.assertRaises(HTTPException) as context:
+            guest_service.create_guest_booking(
+                conn,
+                current_user=self.current_user,
+                payload=_guest_payload(),
+            )
 
         self.assertEqual(context.exception.status_code, 409)
         self.assertEqual(context.exception.detail["code"], "booking_conflict")
@@ -515,7 +556,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
             "cancel_booking",
         ), patch.object(
             guest_service,
-            "update_guest_visit_requires_seat",
+            "recalculate_guest_visit_requires_seat",
         ), patch.object(
             guest_service,
             "fetch_booking_by_id",
@@ -546,12 +587,24 @@ class GuestBookingMigrationTests(unittest.TestCase):
             floor_id=4,
             seat_id=31,
             booking_date=_future_date(11),
+            modification_reason="OTHER",
         )
         with patch.object(
             guest_service,
             "fetch_booking_by_id_for_update",
             return_value=old_booking,
         ), patch.object(
+            guest_service,
+            "fetch_guest_visit_by_id",
+            return_value={
+                "host_user_id": "20",
+                "guest_type": "CUSTOMER",
+                "purpose_of_visit": "MEETING",
+                "start_time": None,
+                "end_time": None,
+                "notes": None,
+            },
+        ),  patch.object(
             guest_service,
             "_resolve_guest",
             return_value={
@@ -573,6 +626,9 @@ class GuestBookingMigrationTests(unittest.TestCase):
             },
         ), patch.object(
             guest_service,
+            "acquire_booking_slot_locks",
+        ), patch.object(
+            guest_service,
             "guest_has_active_booking_on_date",
             return_value=False,
         ), patch.object(
@@ -588,12 +644,15 @@ class GuestBookingMigrationTests(unittest.TestCase):
             "update_guest_visit_booking_details",
         ) as update_visit, patch.object(
             guest_service,
-            "cancel_booking",
-        ) as cancel, patch.object(
+            "mark_booking_modified",
+        ) as mark_modified, patch.object(
             guest_service,
             "insert_guest_booking",
             return_value=new_booking,
-        ) as insert_booking:
+        ) as insert_booking, patch.object(
+            guest_service,
+            "recalculate_guest_visit_requires_seat",
+        ):
             response = guest_service.modify_guest_booking(
                 conn,
                 current_user=self.current_user,
@@ -602,10 +661,70 @@ class GuestBookingMigrationTests(unittest.TestCase):
             )
 
         self.assertEqual(update_visit.call_args.kwargs["guest_visit_id"], "60")
-        self.assertEqual(cancel.call_args.kwargs["booking_status"], "MODIFIED")
+        self.assertEqual(mark_modified.call_args.kwargs["booking_id"], "200")
+        self.assertEqual(
+            mark_modified.call_args.kwargs["modification_reason"],
+            "OTHER",
+        )
         self.assertEqual(insert_booking.call_args.kwargs["guest_visit_id"], "60")
+        self.assertEqual(
+            insert_booking.call_args.kwargs["modified_from_booking_id"], "200"
+        )
+        self.assertNotIn("modification_reason", insert_booking.call_args.kwargs)
         self.assertEqual(response.booking_id, "201")
         self.assertEqual(conn.commits, 1)
+
+
+class ModificationAuditRepositoryTests(unittest.TestCase):
+    def test_booking_mark_modified_writes_reason_on_old_row(self) -> None:
+        conn = RecordingConnection()
+
+        booking_repository.mark_booking_modified(
+            conn,
+            tenant_id="1",
+            booking_id="100",
+            modification_reason="Seat changed",
+            updated_by_user_id="7",
+        )
+
+        sql, params = conn.executed[-1]
+        self.assertIn("booking_status = 'MODIFIED'", sql)
+        self.assertIn("cancelled_at = NOW()", sql)
+        self.assertIn("cancellation_reason = %s", sql)
+        self.assertIn("modification_reason = %s", sql)
+        self.assertIn("updated_by_user_id = %s", sql)
+        self.assertEqual(params, ("Seat changed", "Seat changed", "7", "100", "1"))
+
+    def test_guest_visit_mark_modified_writes_reason_on_old_row(self) -> None:
+        conn = RecordingConnection()
+
+        guest_visit_repository.mark_guest_visit_modified(
+            conn,
+            tenant_id="1",
+            guest_visit_id="60",
+            modification_reason="Visit moved",
+        )
+
+        sql, params = conn.executed[-1]
+        self.assertIn("visit_status = 'MODIFIED'", sql)
+        self.assertIn("cancelled_at = NOW()", sql)
+        self.assertIn("cancellation_reason = %s", sql)
+        self.assertIn("modification_reason = %s", sql)
+        self.assertEqual(params, ("Visit moved", "Visit moved", "60", "1"))
+
+    def test_successor_insert_helpers_do_not_accept_modification_reason(self) -> None:
+        self.assertNotIn(
+            "modification_reason",
+            inspect.signature(booking_repository.insert_booking).parameters,
+        )
+        self.assertNotIn(
+            "modification_reason",
+            inspect.signature(booking_repository.insert_guest_booking).parameters,
+        )
+        self.assertNotIn(
+            "modification_reason",
+            inspect.signature(guest_visit_repository.insert_guest_visit).parameters,
+        )
 
 
 if __name__ == "__main__":

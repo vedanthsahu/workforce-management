@@ -35,8 +35,8 @@ export default function UploadLayoutPage() {
 
       <div className="flex flex-wrap items-start justify-between gap-y-3">
         <div>
-          <h1 className="text-xl font-semibold">Upload New Floor Layout</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-xl sm:text-2xl font-semibold">Upload New Floor Layout</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
             Upload an SVG layout file for a floor and create a new layout version.
           </p>
         </div>

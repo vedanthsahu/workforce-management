@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from psycopg2.extensions import connection as PGConnection
-from backend.services.auth_service import get_auth_me_payload, logout_user_session
+
 from backend.api.deps import get_current_user
 from backend.core.config import get_settings
 from backend.core.security import (
@@ -17,7 +17,12 @@ from backend.core.security import (
 )
 from backend.db.connection import get_db
 from backend.schemas.auth import MessageResponse, UserResponse
-from backend.services.auth_service import AuthTokens, refresh_auth_tokens
+from backend.services.auth_service import (
+    AuthTokens,
+    get_auth_me_payload,
+    logout_user_session,
+    refresh_auth_tokens,
+)
 
 router = APIRouter(tags=["auth"])
 
@@ -30,7 +35,12 @@ def logout(
     refresh_token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
 
     if refresh_token:
-        logout_user_session(conn, refresh_token)
+        logout_user_session(
+            conn,
+            refresh_token,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
 
     _clear_auth_cookies(response)
 

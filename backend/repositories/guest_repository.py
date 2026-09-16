@@ -7,7 +7,6 @@ from typing import Any
 from psycopg2.extensions import connection as PGConnection
 from psycopg2.extras import RealDictCursor
 
-
 GUEST_SELECT_FIELDS = """
     g.id::text AS guest_id,
     g.tenant_id::text AS tenant_id,
@@ -33,7 +32,7 @@ def create_guest(
 ) -> dict[str, Any]:
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            f"""
+            """
             INSERT INTO guests (
                 tenant_id,
                 full_name,
@@ -101,7 +100,8 @@ def search_guests(
     search_text: str,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
-    search_text = search_text.strip().lower()
+    search_text = " ".join(search_text.lower().split())
+    search_text = search_text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     status_clause = ""
     if not include_inactive:
@@ -109,22 +109,14 @@ def search_guests(
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            f"""
+            fr"""
             SELECT {GUEST_SELECT_FIELDS}
             FROM guests AS g
             WHERE g.tenant_id = %s
             {status_clause}
               AND (
-                    EXISTS (
-                        SELECT 1
-                        FROM unnest(
-                            regexp_split_to_array(
-                                lower(coalesce(g.full_name, '')),
-                                '\s+'
-                            )
-                        ) AS name_part
-                        WHERE name_part LIKE %s || '%%'
-                    )
+                    (' ' || regexp_replace(lower(coalesce(g.full_name, '')), '\s+', ' ', 'g'))
+                        LIKE '%% ' || %s || '%%'
                  OR coalesce(g.phone, '')
                         LIKE %s || '%%'
                  OR lower(coalesce(g.email, ''))
@@ -190,13 +182,20 @@ def fetch_guest_by_phone(
     tenant_id: str,
     phone: str,
 ) -> dict[str, Any] | None:
+    # Compares the last 10 digits on both sides (via REGEXP_REPLACE stripping
+    # everything but digits) rather than the raw stored string — "9876543210"
+    # and "+91 9876543210" are the same number but were never equal as plain
+    # strings, which let the same phone number be registered twice under a
+    # different +91 formatting. This also self-heals existing rows that were
+    # stored inconsistently before this fix, since nothing is rewritten in
+    # the table — only how the comparison reads it.
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
             SELECT {GUEST_SELECT_FIELDS}
             FROM guests AS g
             WHERE g.tenant_id = %s
-              AND g.phone = %s
+              AND RIGHT(REGEXP_REPLACE(g.phone, '\\D', '', 'g'), 10) = RIGHT(REGEXP_REPLACE(%s, '\\D', '', 'g'), 10)
               AND g.status = 'ACTIVE'
             ORDER BY g.id
             LIMIT 1
@@ -205,3 +204,165 @@ def fetch_guest_by_phone(
         )
         row = cur.fetchone()
     return dict(row) if row else None
+
+
+def fetch_guest_by_email_including_inactive(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    email: str,
+) -> dict[str, Any] | None:
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {GUEST_SELECT_FIELDS}
+            FROM guests AS g
+            WHERE g.tenant_id = %s
+              AND LOWER(g.email) = LOWER(%s)
+            ORDER BY g.id
+            LIMIT 1
+            """,
+            (tenant_id, email),
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def fetch_guest_by_phone_including_inactive(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    phone: str,
+) -> dict[str, Any] | None:
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {GUEST_SELECT_FIELDS}
+            FROM guests AS g
+            WHERE g.tenant_id = %s
+              AND g.phone = %s
+            ORDER BY g.id
+            LIMIT 1
+            """,
+            (tenant_id, phone),
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def fetch_guest_by_email_excluding_guest(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    email: str,
+    exclude_guest_id: str,
+) -> dict[str, Any] | None:
+    """Check email uniqueness across ACTIVE and INACTIVE guests, excluding one guest."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {GUEST_SELECT_FIELDS}
+            FROM guests AS g
+            WHERE g.tenant_id = %s
+              AND LOWER(g.email) = LOWER(%s)
+              AND g.id <> %s
+            ORDER BY g.id
+            LIMIT 1
+            """,
+            (tenant_id, email, exclude_guest_id),
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def fetch_guest_by_phone_excluding_guest(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    phone: str,
+    exclude_guest_id: str,
+) -> dict[str, Any] | None:
+    """Check phone uniqueness across ACTIVE and INACTIVE guests, excluding one guest."""
+    # See fetch_guest_by_phone above — same last-10-digits normalization so a
+    # number re-entered with/without the +91 prefix is still caught here.
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {GUEST_SELECT_FIELDS}
+            FROM guests AS g
+            WHERE g.tenant_id = %s
+              AND RIGHT(REGEXP_REPLACE(g.phone, '\\D', '', 'g'), 10) = RIGHT(REGEXP_REPLACE(%s, '\\D', '', 'g'), 10)
+              AND g.id <> %s
+            ORDER BY g.id
+            LIMIT 1
+            """,
+            (tenant_id, phone, exclude_guest_id),
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def update_guest(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_id: str,
+    updates: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply a partial update to one tenant-scoped guest."""
+    allowed_fields = ("full_name", "email", "phone", "organization")
+    set_clauses = [
+        f"{field} = %s" for field in allowed_fields if field in updates
+    ]
+    if not set_clauses:
+        raise ValueError("No fields supplied for guest update.")
+
+    params: list[Any] = [
+        updates[field] for field in allowed_fields if field in updates
+    ]
+    set_clauses.append("updated_at = NOW()")
+    params.extend([guest_id, tenant_id])
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            UPDATE guests AS g
+            SET {", ".join(set_clauses)}
+            WHERE g.id = %s
+              AND g.tenant_id = %s
+            RETURNING {GUEST_SELECT_FIELDS}
+            """,
+            params,
+        )
+        row = cur.fetchone()
+
+    if row is None:
+        raise LookupError("Guest not found for update.")
+    return dict(row)
+
+
+def update_guest_status(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_id: str,
+    status: str,
+) -> dict[str, Any]:
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            UPDATE guests AS g
+            SET
+                status = %s,
+                updated_at = NOW()
+            WHERE g.id = %s
+              AND g.tenant_id = %s
+            RETURNING {GUEST_SELECT_FIELDS}
+            """,
+            (status, guest_id, tenant_id),
+        )
+        row = cur.fetchone()
+
+    if row is None:
+        raise LookupError("Guest not found for status update.")
+    return dict(row)

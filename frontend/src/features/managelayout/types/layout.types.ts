@@ -23,7 +23,7 @@ export interface Floor {
 // Layout types
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type LayoutStatus = "PUBLISHED" | "ARCHIVED" | "DRAFT";
+export type LayoutStatus = "PUBLISHED" | "SCHEDULED" | "ARCHIVED" | "DRAFT";
 
 export interface LayoutMetadata {
   width?: number;
@@ -58,8 +58,28 @@ export interface Layout {
   published_by_user_id: string | null;
   published_at: string | null;
   status: LayoutStatus;
+  effective_from: string | null;
+  effective_till: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layout scheduling policy — resolved business-rule values, not raw catalog
+// rows. See GET /business-rules/layout-policy.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface LayoutPolicy {
+  employee_max_advance_days: number;
+  buffer_days: number;
+  // Earliest a new layout can be scheduled to take effect, in days from
+  // today (employee_max_advance_days + buffer_days).
+  min_advance_days: number;
+  visibility_days: {
+    draft: number;
+    archived: number;
+    deleted: number;
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,4 +93,5 @@ export interface LayoutSeatStats {
   unconfigured_seats: number;
   non_bookable_seats: number;
   bookable_seats: number;
+  inactive_seats?: number;
 }

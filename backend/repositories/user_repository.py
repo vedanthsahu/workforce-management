@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from psycopg2.extras import Json, RealDictCursor
 from psycopg2.extensions import connection as PGConnection
+from psycopg2.extras import Json, RealDictCursor
 
 USER_SELECT_FIELDS = """
     au.id::text AS user_id,
@@ -20,11 +21,13 @@ USER_SELECT_FIELDS = """
     au.job_title,
     au.company_name,
     au.employee_id,
+    au.bio,
+    au.skills,
     au.microsoft_object_id,
     au.user_principal_name,
     au.manager_user_id::text AS manager_user_id,
-    au.role_name AS role,
-    au.role_name AS role_name,
+    UPPER(REPLACE(au.role_name, ' ', '_')) AS role,
+    UPPER(REPLACE(au.role_name, ' ', '_')) AS role_name,
     au.status,
     au.home_site_id::text AS home_site_id,
     au.graph_last_synced_at,
@@ -49,11 +52,13 @@ USER_RETURNING_FIELDS = """
     job_title,
     company_name,
     employee_id,
+    bio,
+    skills,
     microsoft_object_id,
     user_principal_name,
     manager_user_id::text AS manager_user_id,
-    role_name AS role,
-    role_name,
+    UPPER(REPLACE(role_name, ' ', '_')) AS role,
+    UPPER(REPLACE(role_name, ' ', '_')) AS role_name,
     status,
     home_site_id::text AS home_site_id,
     graph_last_synced_at,
@@ -64,24 +69,44 @@ USER_RETURNING_FIELDS = """
 ROLE_NAMES = {
     "EMPLOYEE",
     "MANAGER",
-    "TALENT",
-    "SECURITY",
+    "FACILITATOR",
+    "FRONT_OFFICE",
     "TENANT_ADMIN",
-    "TALENT_GUEST_COORDINATOR",
+    "FACILITATOR_GUEST_COORDINATOR",
 }
+
+
+def normalize_role_name(value: str | None) -> str:
+    """Canonicalize a role name read from an external source (DB row, JWT claim).
+
+    Existing rows can carry a space instead of the SCREAMING_SNAKE_CASE form
+    every role comparison in the codebase expects (e.g. "FRONT OFFICE" vs.
+    "FRONT_OFFICE") — normalize once at read time so callers can keep doing
+    plain `==` checks against the canonical constants.
+    """
+    return str(value or "").strip().upper().replace(" ", "_")
+
+
+def _role_name_for_storage(role_name: str) -> str:
+    """Inverse of normalize_role_name for the one role chk_app_users_role still
+    spells with a space ("FRONT OFFICE") instead of the canonical underscore
+    form every other role, and every other layer of the app, uses."""
+    if role_name == "FRONT_OFFICE":
+        return "FRONT OFFICE"
+    return role_name
 
 USER_STATUSES = {"ACTIVE", "INACTIVE", "LOCKED"}
 
 ROLE_DISTRIBUTION_ORDER = (
     "EMPLOYEE",
-    "TALENT",
-    "SECURITY",
+    "FACILITATOR",
+    "FRONT_OFFICE",
     "MANAGER",
     "TENANT_ADMIN",
-    "TALENT_GUEST_COORDINATOR",
+    "FACILITATOR_GUEST_COORDINATOR",
 )
 
-GRAPH_MANAGED_ROLE_NAMES = ("EMPLOYEE", "TALENT")
+GRAPH_MANAGED_ROLE_NAMES = ("EMPLOYEE", "FACILITATOR")
 
 ADMIN_NOTIFICATION_ROLES = (
     "TENANT_ADMIN",
@@ -101,6 +126,52 @@ def _normalize_text(value: str | None, *, max_length: int | None = None) -> str 
     if max_length is not None and len(normalized) > max_length:
         raise ValueError(f"Value exceeds schema limit of {max_length} characters.")
     return normalized
+
+
+def _normalize_skills(value: Any) -> list[str]:
+    """Return app_users.skills as clean strings regardless of driver format."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if not isinstance(value, str):
+        return [str(value).strip()]
+
+    text = value.strip()
+    if not text or text == "{}":
+        return []
+    if not (text.startswith("{") and text.endswith("}")):
+        return [text]
+
+    items: list[str] = []
+    current: list[str] = []
+    quoted = False
+    escaped = False
+    for char in text[1:-1]:
+        if escaped:
+            current.append(char)
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == '"':
+            quoted = not quoted
+        elif char == "," and not quoted:
+            item = "".join(current).strip()
+            if item:
+                items.append(item)
+            current = []
+        else:
+            current.append(char)
+
+    item = "".join(current).strip()
+    if item:
+        items.append(item)
+    return items
+
+
+def _normalize_user_record(record: dict[str, Any]) -> dict[str, Any]:
+    record["skills"] = _normalize_skills(record.get("skills"))
+    return record
 
 
 def _required_text(value: str | None, *, field_name: str, max_length: int) -> str:
@@ -213,7 +284,37 @@ def fetch_user_by_email(
             (tenant_id, _normalize_email(email)),
         )
         result = cur.fetchone()
-    return dict(result) if result else None
+    return _normalize_user_record(dict(result)) if result else None
+
+
+def fetch_user_by_phone(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    phone: str,
+) -> dict[str, Any] | None:
+    """Fetch one ACTIVE user whose mobile_phone matches by last-10-digits.
+
+    mobile_phone has no format convention enforced anywhere (populated from
+    Microsoft Graph's mobilePhone claim or free-typed via profile self-edit),
+    so this normalizes both sides down to their last 10 digits — the same
+    approach guest_repository.fetch_guest_by_phone uses — rather than an
+    exact string match that a "+91" prefix or spacing difference would defeat.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {USER_SELECT_FIELDS}
+            {USER_SELECT_FROM}
+            WHERE au.tenant_id = %s
+              AND au.mobile_phone IS NOT NULL
+              AND RIGHT(REGEXP_REPLACE(au.mobile_phone, '\\D', '', 'g'), 10) = RIGHT(REGEXP_REPLACE(%s, '\\D', '', 'g'), 10)
+              AND au.status = 'ACTIVE'
+            """,
+            (tenant_id, phone),
+        )
+        result = cur.fetchone()
+    return _normalize_user_record(dict(result)) if result else None
 
 
 def fetch_user_by_id(
@@ -234,7 +335,7 @@ def fetch_user_by_id(
             (tenant_id, user_id),
         )
         result = cur.fetchone()
-    return dict(result) if result else None
+    return _normalize_user_record(dict(result)) if result else None
 
 
 def fetch_tenant_name_by_id(
@@ -285,7 +386,7 @@ def fetch_user_profile_context(
                 manager.email AS manager_email,
                 manager.full_name AS manager_full_name,
                 manager.display_name AS manager_display_name,
-                au.role_name,
+                UPPER(REPLACE(au.role_name, ' ', '_')) AS role_name,
                 au.status,
                 au.home_site_id::text AS home_site_id,
                 site.site_code AS home_site_code,
@@ -311,7 +412,7 @@ def fetch_user_profile_context(
             (tenant_id, user_id),
         )
         row = cur.fetchone()
-    return dict(row) if row else None
+    return _normalize_user_record(dict(row)) if row else None
 
 
 def fetch_admin_notification_emails(
@@ -420,6 +521,7 @@ def create_app_user_from_graph(
         raise ValueError("Default role_name is not allowed by chk_app_users_role.")
     if normalized_status not in USER_STATUSES:
         raise ValueError("Default status is not allowed by chk_app_users_status.")
+    normalized_role = _role_name_for_storage(normalized_role)
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -638,29 +740,70 @@ def upsert_user_graph_profile(
         )
 
 
-def sync_graph_groups_for_user(
+UNASSIGNED_TEAM_KEY = "UNASSIGNED"
+UNASSIGNED_TEAM_NAME = "Unassigned"
+
+_TEAM_KEY_SEPARATOR_RE = re.compile(r"[^A-Z0-9]+")
+
+
+def _generate_team_key(department: str) -> str:
+    """Deterministically derive a team_key from a Graph department string.
+
+    Uppercases the department and collapses every run of non-alphanumeric
+    characters (spaces, hyphens, '&', etc.) into a single underscore, so the
+    same department string always maps to the same key without random IDs.
+    """
+    key = _TEAM_KEY_SEPARATOR_RE.sub("_", department.upper()).strip("_")
+    return key or UNASSIGNED_TEAM_KEY
+
+
+def _resolve_department_team(department: str | None) -> tuple[str, str]:
+    """Resolve the (team_key, team_name) pair a Graph department maps to.
+
+    Missing/blank departments fall back to a shared UNASSIGNED team instead
+    of failing login.
+    """
+    normalized = _normalize_text(department, max_length=150)
+    if normalized is None:
+        return UNASSIGNED_TEAM_KEY, UNASSIGNED_TEAM_NAME
+    return _generate_team_key(normalized), normalized
+
+
+def sync_department_team_for_user(
     conn: PGConnection,
     *,
     tenant_id: str,
     user_id: str,
-    graph_groups: dict[str, Any],
-) -> None:
-    """Map Microsoft Graph groups to teams and team_members idempotently."""
-    groups = graph_groups.get("value", [])
-    if not isinstance(groups, list):
-        raise ValueError("Graph groups payload must contain a list in 'value'.")
+    department: str | None,
+) -> dict[str, Any]:
+    """Map a Graph user's department to a team and ensure sole membership.
 
-    for group in groups:
-        if not isinstance(group, dict):
-            continue
-        odata_type = str(group.get("@odata.type") or "").strip()
-        if odata_type and odata_type != "#microsoft.graph.group":
-            continue
+    Department is treated as the single source of truth for team assignment
+    regardless of how a matching team was originally created: a team whose
+    team_name already equals the (normalized) department is reused as-is —
+    whatever its team_key/source — since it still represents the same Graph
+    department. Only when no team is named after the department yet is a new
+    one minted, keyed deterministically from the department text. Either way,
+    any other team the user currently belongs to in this tenant is dropped so
+    a department change moves the user instead of accumulating memberships.
+    """
+    team_key, team_name = _resolve_department_team(department)
 
-        team_key = _required_text(str(group.get("id") or ""), field_name="team_key", max_length=100)
-        team_name = _normalize_text(group.get("displayName"), max_length=200) or team_key
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT id::text AS team_id, team_key, team_name
+            FROM teams
+            WHERE tenant_id = %s
+              AND LOWER(TRIM(team_name)) = LOWER(TRIM(%s))
+            ORDER BY id
+            LIMIT 1
+            """,
+            (tenant_id, team_name),
+        )
+        team = cur.fetchone()
 
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        if team is None:
             cur.execute(
                 """
                 INSERT INTO teams (
@@ -672,29 +815,66 @@ def sync_graph_groups_for_user(
                 VALUES (%s, %s, %s, 'GRAPH')
                 ON CONFLICT (tenant_id, team_key) DO UPDATE
                 SET team_name = EXCLUDED.team_name,
-                    source = EXCLUDED.source,
                     updated_at = NOW()
-                RETURNING id::text AS team_id
+                RETURNING id::text AS team_id, team_key, team_name
                 """,
                 (tenant_id, team_key, team_name),
             )
             team = cur.fetchone()
             if team is None:
-                raise LookupError(f"Graph team '{team_key}' could not be resolved.")
+                raise LookupError(f"Department team '{team_key}' could not be resolved.")
 
-            cur.execute(
-                """
-                INSERT INTO team_members (
-                    tenant_id,
-                    team_id,
-                    user_id,
-                    member_role
-                )
-                VALUES (%s, %s, %s, 'MEMBER')
-                ON CONFLICT (tenant_id, team_id, user_id) DO NOTHING
-                """,
-                (tenant_id, team["team_id"], user_id),
+        team_id = team["team_id"]
+        team_key = team["team_key"]
+        team_name = team["team_name"]
+
+        cur.execute(
+            """
+            DELETE FROM team_members
+            WHERE tenant_id = %s
+              AND user_id = %s
+              AND team_id <> %s
+            """,
+            (tenant_id, user_id, team_id),
+        )
+
+        cur.execute(
+            """
+            INSERT INTO team_members (
+                tenant_id,
+                team_id,
+                user_id,
+                member_role
             )
+            VALUES (%s, %s, %s, 'MEMBER')
+            ON CONFLICT (tenant_id, team_id, user_id) DO NOTHING
+            """,
+            (tenant_id, team_id, user_id),
+        )
+
+    return {"team_id": team_id, "team_key": team_key, "team_name": team_name}
+
+
+def update_user_department(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    department: str | None,
+) -> None:
+    """Refresh the Graph-sourced department field driving team assignment."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE app_users
+            SET department = %s,
+                graph_last_synced_at = NOW(),
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            """,
+            (_normalize_text(department, max_length=150), tenant_id, user_id),
+        )
 
 
 def update_user_profile(
@@ -706,6 +886,10 @@ def update_user_profile(
     display_name: str | None = None,
     mobile_phone: str | None = None,
     office_location: str | None = None,
+    bio: str | None = None,
+    skills: list[str] | None = None,
+    bio_provided: bool = False,
+    skills_provided: bool = False,
 ) -> dict[str, Any] | None:
     """Update self-editable profile fields."""
 
@@ -718,6 +902,8 @@ def update_user_profile(
                 display_name = COALESCE(%s, display_name),
                 mobile_phone = COALESCE(%s, mobile_phone),
                 office_location = COALESCE(%s, office_location),
+                bio = CASE WHEN %s THEN %s ELSE bio END,
+                skills = CASE WHEN %s THEN %s ELSE skills END,
                 updated_at = NOW()
             WHERE tenant_id = %s
               AND id = %s
@@ -728,6 +914,10 @@ def update_user_profile(
                 _normalize_text(display_name, max_length=200),
                 _normalize_text(mobile_phone, max_length=50),
                 _normalize_text(office_location, max_length=200),
+                bio_provided,
+                _normalize_text(bio, max_length=2000),
+                skills_provided,
+                skills if skills is not None else None,
                 tenant_id,
                 user_id,
             ),
@@ -736,6 +926,34 @@ def update_user_profile(
         row = cur.fetchone()
 
     return dict(row) if row else None
+
+
+def count_active_tenant_admins(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    exclude_user_id: str,
+) -> int:
+    """Count active TENANT_ADMIN users for a tenant, excluding one user.
+
+    Used to guard against a role/status change leaving a tenant with zero
+    active admins -- pass the user being changed as exclude_user_id to get
+    the count of *other* active admins that would remain.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COUNT(*)
+            FROM app_users
+            WHERE tenant_id = %s
+              AND role_name = 'TENANT_ADMIN'
+              AND status = 'ACTIVE'
+              AND id::text <> %s
+            """,
+            (tenant_id, exclude_user_id),
+        )
+        row = cur.fetchone()
+    return int(row[0]) if row else 0
 
 
 def admin_update_user_access(
@@ -754,6 +972,8 @@ def admin_update_user_access(
     if status is not None and status not in USER_STATUSES:
         raise ValueError("Invalid status.")
 
+    storage_role_name = _role_name_for_storage(role_name) if role_name is not None else None
+
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
@@ -767,7 +987,7 @@ def admin_update_user_access(
             RETURNING {USER_RETURNING_FIELDS}
             """,
             (
-                role_name,
+                storage_role_name,
                 status,
                 tenant_id,
                 user_id,
@@ -805,6 +1025,28 @@ def fetch_graph_managed_role_users(
     return [dict(row) for row in rows]
 
 
+def fetch_graph_linked_users(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+) -> list[dict[str, Any]]:
+    """Fetch every user with a Microsoft Graph identity, for department resync."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {USER_SELECT_FIELDS}
+            {USER_SELECT_FROM}
+            WHERE au.tenant_id = %s
+              AND au.microsoft_object_id IS NOT NULL
+              AND au.microsoft_object_id <> ''
+            ORDER BY au.id
+            """,
+            (tenant_id,),
+        )
+        rows = cur.fetchall()
+    return [dict(row) for row in rows]
+
+
 def update_user_role(
     conn: PGConnection,
     *,
@@ -828,7 +1070,7 @@ def update_user_role(
             RETURNING {USER_RETURNING_FIELDS}
             """,
             (
-                normalized_role,
+                _role_name_for_storage(normalized_role),
                 tenant_id,
                 user_id,
             ),
@@ -878,7 +1120,7 @@ def sync_app_user_from_graph(
                 _required_text(_normalize_email(email), field_name="email", max_length=200),
                 _required_text(full_name, field_name="full_name", max_length=200),
                 _normalize_text(display_name, max_length=200),
-                normalized_role,
+                _role_name_for_storage(normalized_role),
                 _required_text(microsoft_object_id, field_name="microsoft_object_id", max_length=150),
                 _normalize_text(user_principal_name, max_length=200),
                 _normalize_text(mobile_phone, max_length=50),
@@ -895,30 +1137,74 @@ def fetch_favorite_seat(
     *,
     tenant_id: str,
     user_id: str,
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Return the top two most-booked seats that exist in the current published layout.
+
+    Returns a (first, second) tuple; either element may be None.
+    """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
             SELECT
                 s.id::text AS seat_id,
                 s.seat_code,
-                COUNT(*) AS booking_count
+                s.site_id::text AS site_id,
+                si.site_name,
+                s.building_id::text AS building_id,
+                bu.building_name,
+                s.floor_id::text AS floor_id,
+                fl.floor_name,
+                COUNT(*) AS booking_count,
+                MAX(b.booking_date) AS last_booked_date
             FROM bookings b
             JOIN seats s
                 ON s.id = b.seat_id
                 AND s.tenant_id = b.tenant_id
+            LEFT JOIN sites si
+                ON si.id = s.site_id
+               AND si.tenant_id = s.tenant_id
+            LEFT JOIN buildings bu
+                ON bu.id = s.building_id
+               AND bu.tenant_id = s.tenant_id
+            LEFT JOIN floors fl
+                ON fl.id = s.floor_id
+               AND fl.tenant_id = s.tenant_id
             WHERE b.tenant_id = %s
               AND b.booked_for_user_id = %s
               AND b.booking_type = 'EMPLOYEE'
               AND b.booking_status = 'CONFIRMED'
-            GROUP BY s.id, s.seat_code
-            ORDER BY booking_count DESC, s.id
-            LIMIT 1
+              AND EXISTS (
+                  SELECT 1
+                  FROM floor_layouts fla
+                  JOIN layout_seat_mappings lsm
+                      ON lsm.layout_id = fla.id
+                     AND lsm.tenant_id = fla.tenant_id
+                     AND lsm.floor_id  = s.floor_id
+                     AND lsm.seat_code = s.seat_code
+                  WHERE fla.floor_id  = s.floor_id
+                    AND fla.tenant_id = s.tenant_id
+                    AND fla.is_published = TRUE
+                    AND fla.status = 'PUBLISHED'
+                    AND b.created_at >= fla.published_at
+              )
+            GROUP BY
+                s.id,
+                s.seat_code,
+                s.site_id,
+                si.site_name,
+                s.building_id,
+                bu.building_name,
+                s.floor_id,
+                fl.floor_name
+            ORDER BY booking_count DESC, last_booked_date DESC, s.id
+            LIMIT 2
             """,
             (tenant_id, user_id),
         )
-        row = cur.fetchone()
-    return dict(row) if row else None
+        rows = cur.fetchall()
+    first  = dict(rows[0]) if len(rows) > 0 else None
+    second = dict(rows[1]) if len(rows) > 1 else None
+    return first, second
 
 
 def fetch_days_in_office(
@@ -1078,7 +1364,8 @@ def search_users(
     include_inactive: bool = False,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
-    search_text = search_text.strip().lower()
+    search_text = " ".join(search_text.lower().split())
+    search_text = search_text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     status_clause = ""
     if not include_inactive:
@@ -1086,22 +1373,14 @@ def search_users(
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            f"""
+            fr"""
             SELECT {USER_SELECT_FIELDS}
             {USER_SELECT_FROM}
             WHERE au.tenant_id = %s
             {status_clause}
               AND (
-                    EXISTS (
-                        SELECT 1
-                        FROM unnest(
-                            regexp_split_to_array(
-                                lower(coalesce(au.full_name, '')),
-                                '\s+'
-                            )
-                        ) AS name_part
-                        WHERE name_part LIKE %s || '%%'
-                    )
+                    (' ' || regexp_replace(lower(coalesce(au.full_name, '')), '\s+', ' ', 'g'))
+                        LIKE '%% ' || %s || '%%'
                  OR lower(coalesce(au.employee_id, ''))
                         LIKE %s || '%%'
                  OR coalesce(au.mobile_phone, '')
@@ -1203,7 +1482,7 @@ def fetch_admin_user_directory(
         WHERE au.tenant_id = %(tenant_id)s
           AND (
                 %(role_names)s IS NULL
-                OR au.role_name = ANY(
+                OR UPPER(REPLACE(au.role_name, ' ', '_')) = ANY(
                     %(role_names)s::text[]
                 )
           )
@@ -1284,10 +1563,11 @@ def fetch_admin_user_directory(
                 au.id::text AS id,
                 au.employee_id,
                 au.full_name,
-                au.role_name,
+                UPPER(REPLACE(au.role_name, ' ', '_')) AS role_name,
                 au.department,
                 au.job_title,
                 au.mobile_phone,
+                au.office_location,
                 au.status,
                 au.email
             FROM app_users au
@@ -1345,13 +1625,13 @@ def fetch_user_details_by_id(
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            f"""
+            """
             SELECT
             au.id::text AS id,
             au.email,
             au.full_name,
             au.display_name,
-            au.role_name,
+            UPPER(REPLACE(au.role_name, ' ', '_')) AS role_name,
             au.status,
             au.employee_id,
             au.mobile_phone,
@@ -1386,7 +1666,7 @@ def fetch_admin_role_metadata(
             """
             SELECT
                 r.id AS role_id,
-                r.role_name,
+                UPPER(REPLACE(r.role_name, ' ', '_')) AS role_name,
                 r.description AS role_description,
 
                 COUNT(DISTINCT au.id)::integer AS user_count,
@@ -1415,7 +1695,7 @@ def fetch_admin_role_metadata(
             FROM roles r
 
             LEFT JOIN app_users au
-                ON au.role_name = r.role_name
+                ON UPPER(REPLACE(au.role_name, ' ', '_')) = UPPER(REPLACE(r.role_name, ' ', '_'))
                 AND au.tenant_id = r.tenant_id
 
             LEFT JOIN role_permissions rp

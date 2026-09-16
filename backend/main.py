@@ -18,24 +18,36 @@ from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
+import structlog
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from structlog.contextvars import bind_contextvars, clear_contextvars
 
-from backend.api.routes.dashboard import router as dashboard_router
+from backend.api.routes import teams
+from backend.api.routes.admin_audit import router as admin_audit_router
+from backend.api.routes.admin_blocked_seats import router as admin_blocked_seats_router
+from backend.api.routes.admin_bookings import router as admin_bookings_router
+from backend.api.routes.admin_dashboard import router as admin_dashboard_router
 from backend.api.routes.auth import router as auth_router
 from backend.api.routes.bookings import router as bookings_router
+from backend.api.routes.business_rules import router as business_rules_router
+from backend.api.routes.dashboard import router as dashboard_router
+from backend.api.routes.floor_layouts import router as floor_layout_router
 from backend.api.routes.guest_bookings import router as guest_bookings_router
 from backend.api.routes.guest_visits import router as guest_visits_router
 from backend.api.routes.guests import router as guests_router
 from backend.api.routes.locations import router as locations_router
+from backend.api.routes.preferences import router as preferences_router
 from backend.api.routes.sso import router as sso_router
-from backend.core.config import get_settings
-from backend.core.logging import (
+from backend.api.routes.user_management import router as user_management_router
+from backend.core.app_logging import (
     LOGGER_NAME,
-    configure_console_logging,
+    configure_logging,
     enable_backend_function_trace,
 )
+from backend.core.config import get_settings
+from backend.core.error_diagnostics import print_error_diagnostic
 from backend.db.connection import get_db_connection
 from backend.repositories.token_repository import (
     ensure_refresh_tokens_table,
@@ -43,30 +55,38 @@ from backend.repositories.token_repository import (
     purge_expired_refresh_tokens,
     purge_expired_sessions,
 )
-from backend.services.auth_service import sync_graph_managed_roles
-from backend.api.routes import teams
-from backend.api.routes.preferences import router as preferences_router
-from backend.api.routes.admin_dashboard import router as admin_dashboard_router
-from backend.api.routes.floor_layouts import router as floor_layout_router
-from backend.api.routes.user_management import router as user_management_router
+from backend.services.auth_service import (
+    sync_department_teams,
+    sync_graph_managed_roles,
+)
+from backend.services.floor_layout_service import promote_scheduled_floor_layouts
+
 settings = get_settings()
-configure_console_logging(
+configure_logging(
     "DEBUG" if settings.app_trace_functions else settings.app_log_level,
 )
 if settings.app_trace_functions:
     enable_backend_function_trace()
 
-request_logger = logging.getLogger(f"{LOGGER_NAME}.requests")
+_req_log = structlog.get_logger("requests")
 graph_role_sync_logger = logging.getLogger(f"{LOGGER_NAME}.graph_role_sync")
 _graph_role_sync_stop = threading.Event()
 _graph_role_sync_thread: threading.Thread | None = None
+
+graph_team_sync_logger = logging.getLogger(f"{LOGGER_NAME}.graph_team_sync")
+_graph_team_sync_stop = threading.Event()
+_graph_team_sync_thread: threading.Thread | None = None
+
+layout_cutover_logger = logging.getLogger(f"{LOGGER_NAME}.layout_cutover")
+_layout_cutover_stop = threading.Event()
+_layout_cutover_thread: threading.Thread | None = None
 
 # The application exposes a single frontend origin and composes feature routers
 # from the authentication, SSO, booking, and location modules.
 app = FastAPI(title="Seat Management Backend")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url],
+    allow_origins=list(settings.cors_allowed_origins),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -74,6 +94,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(sso_router)
 app.include_router(bookings_router)
+app.include_router(business_rules_router)
 app.include_router(guests_router)
 app.include_router(guest_visits_router)
 app.include_router(guest_bookings_router)
@@ -81,6 +102,9 @@ app.include_router(locations_router)
 app.include_router(teams.router)
 app.include_router(dashboard_router)
 app.include_router(admin_dashboard_router)
+app.include_router(admin_bookings_router)
+app.include_router(admin_blocked_seats_router)
+app.include_router(admin_audit_router)
 app.include_router(preferences_router)
 app.include_router(floor_layout_router)
 app.include_router(user_management_router)
@@ -88,98 +112,102 @@ app.include_router(user_management_router)
 
 @app.middleware("http")
 async def log_http_requests(request: Request, call_next):
-    """Log every HTTP request to the command window."""
+    # Bind request_id to structlog context — every log emitted anywhere
+    # during this request automatically carries it, with zero per-call effort.
+    clear_contextvars()
     request_id = uuid4().hex[:8]
-    started_at = perf_counter()
     method = request.method
     path = request.url.path
-    query = _safe_query_string(request)
-    client = request.client.host if request.client else "-"
-
-    request_logger.info(
-        "request.start id=%s method=%s path=%s query=%s client=%s",
-        request_id,
-        method,
-        path,
-        query,
-        client,
+    client_ip = request.client.host if request.client else None
+    correlation_id = (
+        request.headers.get("x-correlation-id")
+        or request.headers.get("x-request-id")
+        or None
     )
+    user_agent = request.headers.get("user-agent")
+    bind_contextvars(
+        request_id=request_id,
+        request_method=method,
+        request_path=path,
+        source_channel=_detect_source_channel(request),
+        correlation_id=correlation_id,
+        ip_address=client_ip,
+        user_agent=user_agent,
+    )
+
+    started_at = perf_counter()
 
     try:
         response = await call_next(request)
     except Exception:
-        duration_ms = (perf_counter() - started_at) * 1000
-        request_logger.exception(
-            "request.error id=%s method=%s path=%s endpoint=%s duration_ms=%.2f",
-            request_id,
-            method,
-            path,
-            _endpoint_name(request),
-            duration_ms,
+        duration_ms = round((perf_counter() - started_at) * 1000, 2)
+        _req_log.error(
+            "request.error",
+            method=method,
+            path=path,
+            duration_ms=duration_ms,
+            client=client_ip,
         )
         raise
 
-    duration_ms = (perf_counter() - started_at) * 1000
+    duration_ms = round((perf_counter() - started_at) * 1000, 2)
     tenant_id, user_id = _request_identity(request)
-    request_logger.info(
-        (
-            "request.end id=%s method=%s path=%s endpoint=%s "
-            "status=%s duration_ms=%.2f tenant_id=%s user_id=%s"
-        ),
-        request_id,
-        method,
-        path,
-        _endpoint_name(request),
-        response.status_code,
-        duration_ms,
-        tenant_id,
-        user_id,
+    status_code = response.status_code
+
+    log_fields: dict[str, Any] = dict(
+        method=method,
+        path=path,
+        query=_safe_query_string(request),
+        status=status_code,
+        duration_ms=duration_ms,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        client=client_ip,
     )
+
+    if status_code >= 500:
+        _req_log.error("request.complete", **log_fields)
+    elif status_code == 403:
+        _req_log.warning("request.complete", **log_fields)
+    else:
+        _req_log.info("request.complete", **log_fields)
+
     return response
 
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    """Convert FastAPI HTTP exceptions into a consistent error envelope.
-
-    Args:
-        _: Incoming request object provided by FastAPI. The handler does not
-            inspect the request because the response depends only on the raised
-            exception.
-        exc: The ``HTTPException`` raised by route handlers or dependencies.
-            Its ``status_code``, optional headers, and ``detail`` payload are
-            preserved and normalized for clients.
-
-    Returns:
-        JSONResponse: A response whose body follows the service-wide
-        ``{"error": ...}`` structure expected by frontend and API consumers.
-
-    Side Effects:
-        None beyond generating the outgoing HTTP response.
-
-    Failure Modes:
-        Any unexpected failure would come from response serialization or from
-        invalid exception detail values that cannot be coerced to strings.
-    """
+    """Convert FastAPI HTTP exceptions into a consistent error envelope."""
+    if exc.__cause__ is not None or exc.__context__ is not None or exc.status_code >= 500:
+        print_error_diagnostic(exc)
     payload = _normalize_http_error(exc.detail)
     error = payload.get("error", {})
-    request_logger.warning(
-        (
-            "request.http_exception method=%s path=%s endpoint=%s "
-            "status=%s code=%s message=%s"
-        ),
-        request.method,
-        request.url.path,
-        _endpoint_name(request),
-        exc.status_code,
-        error.get("code", "-") if isinstance(error, dict) else "-",
-        error.get("message", "-") if isinstance(error, dict) else "-",
+
+    # request_id is already in structlog context from the middleware above,
+    # so it appears in this log entry automatically.
+    _req_log.warning(
+        "request.http_exception",
+        method=request.method,
+        path=request.url.path,
+        status=exc.status_code,
+        error_code=error.get("code") if isinstance(error, dict) else None,
+        error_message=error.get("message") if isinstance(error, dict) else None,
     )
 
     return JSONResponse(
         status_code=exc.status_code,
         headers=exc.headers,
         content=payload,
+    )
+
+
+@app.exception_handler(Exception)
+async def unexpected_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Keep unexpected implementation details in the terminal, never the response."""
+    print_error_diagnostic(exc)
+    return JSONResponse(
+        status_code=500,
+        content={"error": {"code": "internal_server_error", "message": "An unexpected error occurred."}},
     )
 
 
@@ -210,12 +238,16 @@ def startup() -> None:
         purge_expired_sessions(conn, settings.session_ttl)
         conn.commit()
     _start_graph_role_sync_scheduler()
+    _start_graph_team_sync_scheduler()
+    _start_layout_cutover_scheduler()
 
 
 @app.on_event("shutdown")
 def shutdown() -> None:
     """Stop optional background workers before process shutdown."""
     _stop_graph_role_sync_scheduler()
+    _stop_graph_team_sync_scheduler()
+    _stop_layout_cutover_scheduler()
 
 
 @app.get("/")
@@ -289,6 +321,25 @@ def health() -> dict[str, str]:
         None expected because no external dependencies are consulted here.
     """
     return {"status": "ok"}
+
+
+def _detect_source_channel(request: Request) -> str:
+    explicit = request.headers.get("x-source-channel", "").strip().upper()
+    if explicit in {"WEB", "MOBILE", "API", "SYSTEM", "IMPORT"}:
+        return explicit
+
+    ua = (request.headers.get("user-agent") or "").lower()
+
+    if not ua:
+        return "API"
+
+    if any(token in ua for token in ("okhttp", "dart", "cfnetwork", "nsurlsession")):
+        return "MOBILE"
+
+    if any(token in ua for token in ("mozilla", "webkit", "gecko", "opera")):
+        return "WEB"
+
+    return "API"
 
 
 def _normalize_http_error(detail: Any) -> dict[str, Any]:
@@ -441,6 +492,90 @@ def _graph_role_sync_loop() -> None:
             graph_role_sync_logger.exception("graph_role_sync.failed")
 
         if _graph_role_sync_stop.wait(interval_seconds):
+            break
+
+
+def _start_graph_team_sync_scheduler() -> None:
+    global _graph_team_sync_thread
+    if not settings.graph_team_sync_enabled:
+        return
+    if _graph_team_sync_thread and _graph_team_sync_thread.is_alive():
+        return
+
+    _graph_team_sync_stop.clear()
+    _graph_team_sync_thread = threading.Thread(
+        target=_graph_team_sync_loop,
+        name="graph-team-sync",
+        daemon=True,
+    )
+    _graph_team_sync_thread.start()
+
+
+def _stop_graph_team_sync_scheduler() -> None:
+    if _graph_team_sync_thread is None:
+        return
+    _graph_team_sync_stop.set()
+    _graph_team_sync_thread.join(timeout=5)
+
+
+def _graph_team_sync_loop() -> None:
+    interval_seconds = settings.graph_team_sync_interval_minutes * 60
+    while not _graph_team_sync_stop.is_set():
+        try:
+            with get_db_connection() as conn:
+                result = sync_department_teams(conn)
+            graph_team_sync_logger.info(
+                "graph_team_sync.complete scanned=%s changed=%s",
+                result.scanned_users,
+                result.changed_users,
+            )
+        except Exception:
+            graph_team_sync_logger.exception("graph_team_sync.failed")
+
+        if _graph_team_sync_stop.wait(interval_seconds):
+            break
+
+
+def _start_layout_cutover_scheduler() -> None:
+    global _layout_cutover_thread
+    if not settings.layout_cutover_enabled:
+        return
+    if _layout_cutover_thread and _layout_cutover_thread.is_alive():
+        return
+
+    _layout_cutover_stop.clear()
+    _layout_cutover_thread = threading.Thread(
+        target=_layout_cutover_loop,
+        name="layout-cutover",
+        daemon=True,
+    )
+    _layout_cutover_thread.start()
+
+
+def _stop_layout_cutover_scheduler() -> None:
+    if _layout_cutover_thread is None:
+        return
+    _layout_cutover_stop.set()
+    _layout_cutover_thread.join(timeout=5)
+
+
+def _layout_cutover_loop() -> None:
+    interval_seconds = settings.layout_cutover_interval_minutes * 60
+    while not _layout_cutover_stop.is_set():
+        try:
+            with get_db_connection() as conn:
+                result = promote_scheduled_floor_layouts(conn)
+            if result.scanned:
+                layout_cutover_logger.info(
+                    "layout_cutover.complete scanned=%s promoted=%s failed=%s",
+                    result.scanned,
+                    result.promoted,
+                    result.failed,
+                )
+        except Exception:
+            layout_cutover_logger.exception("layout_cutover.failed")
+
+        if _layout_cutover_stop.wait(interval_seconds):
             break
 
 

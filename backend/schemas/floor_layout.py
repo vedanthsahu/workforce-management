@@ -4,10 +4,26 @@ Schemas for floor layout upload and persistence.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from backend.core.storage import resolve_layout_file_url
+
+
+class ActivateFloorLayoutRequest(BaseModel):
+    # Omitted or a past/today date = publish immediately, exactly like
+    # before this field existed. A future date schedules the layout
+    # instead -- see floor_layout_service.activate_floor_layout.
+    effective_date: date | None = None
+
+
+class RescheduleFloorLayoutRequest(BaseModel):
+    """Change the effective_date of a layout that's already SCHEDULED."""
+
+    effective_date: date
+
 
 class CreateFloorLayoutRequest(BaseModel):
     site_id: int = Field(gt=0)
@@ -61,16 +77,39 @@ class FloorLayoutResponse(BaseModel):
     uploaded_by_department: str | None = None
     uploaded_by_job_title: str | None = None
 
+    # NULL until the layout's seat configuration has been edited at least
+    # once (see touch_floor_layout_updated_by) -- a freshly uploaded,
+    # never-edited layout has no "updated by" yet.
+    updated_by_user_id: str | None = None
+    updated_by_name: str | None = None
+    updated_by_email: str | None = None
+    updated_by_role: str | None = None
+    updated_by_department: str | None = None
+    updated_by_job_title: str | None = None
+
     published_by_user_id: str | None = None
+    published_by_name: str | None = None
+    published_by_email: str | None = None
+    published_by_role: str | None = None
+    published_by_department: str | None = None
+    published_by_job_title: str | None = None
 
     published_at: datetime | None = None
 
     status: str
 
+    effective_from: datetime | None = None
+    effective_till: datetime | None = None
+
     created_at: datetime
     updated_at: datetime
 
-    
+    @field_validator("layout_file_url", mode="after")
+    @classmethod
+    def _presign_layout_file_url(cls, value: str) -> str:
+        return resolve_layout_file_url(value) or value
+
+
 # class LayoutSeatResponse(BaseModel):
 
 #     layout_seat_mapping_id: str
@@ -134,6 +173,7 @@ class LayoutSeatResponse(BaseModel):
 
     notes: str | None = None
     amenity_ids: list[int] = []         # ← guard against NULL list too
+    capacity: int | None = None
 
     created_at: datetime
     updated_at: datetime

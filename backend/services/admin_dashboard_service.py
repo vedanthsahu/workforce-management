@@ -25,8 +25,8 @@ from backend.schemas.admin_dashboard import (
     AdminActivityListItemResponse,
     AdminActivityListResponse,
     AdminActivityPersonResponse,
-    AdminDateOccupancyResponse,
     AdminDashboardSummaryResponse,
+    AdminDateOccupancyResponse,
     AdminHierarchyOccupancyResponse,
 )
 from backend.schemas.pagination import PaginationMetadata
@@ -459,6 +459,8 @@ def _build_hierarchy_row(
         "blocked_seats": row["blocked_seats"],
         "available_seats": row["available_seats"],
         "booked_seats": row["booked_seats"],
+        "employee_booked_seats": row["employee_booked_seats"],
+        "guest_booked_seats": row["guest_booked_seats"],
         "occupancy_rate": row["occupancy_rate"],
     }
 

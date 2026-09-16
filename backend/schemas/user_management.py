@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.schemas.booking import BookingResponse
+
 
 class CamelModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -12,10 +14,10 @@ class CamelModel(BaseModel):
 AdminDirectoryRole = Literal[
     "EMPLOYEE",
     "MANAGER",
-    "TALENT",
-    "SECURITY",
+    "FACILITATOR",
+    "FRONT_OFFICE",
     "TENANT_ADMIN",
-    "TALENT_GUEST_COORDINATOR",
+    "FACILITATOR_GUEST_COORDINATOR",
 ]
 
 AdminDirectoryStatus = Literal[
@@ -26,18 +28,20 @@ AdminDirectoryStatus = Literal[
 
 
 class UpdateMyProfileRequest(BaseModel):
-    full_name: str | None = Field(default=None, max_length=200)
-    display_name: str | None = Field(default=None, max_length=200)
-    mobile_phone: str | None = Field(default=None, max_length=50)
-    office_location: str | None = Field(default=None, max_length=200)
+    bio: str | None = Field(default=None, max_length=2000)
+    skills: list[str] | None = Field(default=None, max_length=50)
 
 
 class AdminUserAccessUpdateRequest(BaseModel):
     role_name: Literal[
         "EMPLOYEE",
         "MANAGER",
-        "TALENT",
-        "SECURITY",
+        "FACILITATOR",
+        "FRONT_OFFICE",
+        # A Tenant Admin can assign this to anyone (promoting a new admin,
+        # managing an existing one, or their own access) -- PRODUCT_ADMIN
+        # is deliberately not offered here; see admin_update_user_access_service.
+        "TENANT_ADMIN",
     ] | None = None
 
     status: Literal[
@@ -77,6 +81,7 @@ class AdminUserDirectoryItem(CamelModel):
     department: str | None = None
     job_title: str | None = Field(default=None, alias="jobTitle")
     mobile_phone: str | None = Field(default=None, alias="mobilePhone")
+    office_location: str | None = Field(default=None, alias="officeLocation")
     status: str
     email: str | None = None
 
@@ -132,6 +137,21 @@ class UserDetailsResponse(CamelModel):
         default=None,
         alias="homeSiteId",
     )
+
+
+class UserBookingsSummary(CamelModel):
+    items: list[BookingResponse] = Field(default_factory=list)
+
+
+class UserBookingHistoryResponse(CamelModel):
+    user: UserDetailsResponse
+    has_today_booking: bool = Field(alias="hasTodayBooking")
+    today_booking: BookingResponse | None = Field(
+        default=None,
+        alias="todayBooking",
+    )
+    bookings: UserBookingsSummary
+
 
 class PermissionMetadata(CamelModel):
     id: int

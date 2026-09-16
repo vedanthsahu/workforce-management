@@ -1,16 +1,19 @@
-<!DOCTYPE html>
-<html lang="en">
-<body style="font-family: Arial, sans-serif; color: #222; line-height: 1.5;">
-    <h2>Guest visit cancelled</h2>
-    <p>Hello {{ recipient_name }},</p>
-    <p>A guest visit you created has been cancelled.</p>
-    <table cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
-        <tr><td><strong>Visit ID</strong></td><td>{{ guest_visit_id }}</td></tr>
-        <tr><td><strong>Guest</strong></td><td>{{ guest_name }} ({{ guest_email }})</td></tr>
-        <tr><td><strong>Host</strong></td><td>{{ host_name }} ({{ host_email }})</td></tr>
-        <tr><td><strong>Date</strong></td><td>{{ visit_date }}</td></tr>
-        <tr><td><strong>Reason</strong></td><td>{{ cancellation_reason }}</td></tr>
-    </table>
-    <p>Thank you,<br />Seat Management Team</p>
-</body>
-</html>
+{% extends "_base.html" %}
+{% from "_macros.html" import heading, lead, details_open, details_close, row, reason_note %}
+{% block title %}Guest visit cancelled{% endblock %}
+{% block preheader %}Visit for {{ guest_name }} on {{ visit_date }} has been cancelled.{% endblock %}
+{% block content %}
+{% set time_window = (start_time ~ " – " ~ end_time) if (start_time and end_time) else (start_time or end_time) %}
+{% set guest_display = (guest_name ~ (" (" ~ guest_organization ~ ")" if guest_organization else "")) if guest_name else guest_organization %}
+{{ heading("Guest visit cancelled") }}
+{{ lead("Hello " ~ recipient_name ~ ", the guest visit you scheduled has been cancelled. The guest and the host have been notified.") }}
+{{ details_open() }}
+{{ row("Guest", guest_display) }}
+{{ row("Host", host_name) }}
+{{ row("Date", visit_date) }}
+{{ row("Time", time_window) }}
+{{ row("Building", building) }}
+{{ row("Site", site) }}
+{{ details_close() }}
+{{ reason_note(cancellation_reason) }}
+{% endblock %}

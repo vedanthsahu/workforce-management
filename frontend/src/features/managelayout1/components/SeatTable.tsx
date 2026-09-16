@@ -4,9 +4,13 @@ import React, { useState, useMemo } from "react";
 import { Pencil, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from "lucide-react";
 import { Seat } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
+import { SpaceCategory, SPACE_CATEGORY_LABELS, SPACE_CATEGORY_COLOR, categoryOf } from "../utils/spaceCategory";
+import { SEAT_TABLE_PAGE_SIZES as PAGE_SIZES } from "../utils/seatOptions.utils";
 
 interface Props {
   seats: Seat[];
+  category: SpaceCategory;
   preferences: Preference[];
   selected: Set<string>;
   isAllSelected: boolean;
@@ -18,10 +22,35 @@ interface Props {
   onBulkEdit: () => void;
 }
 
-const PAGE_SIZES = [10, 25, 50];
-
-type SortKey = "seat_code" | "is_configured";
+type SortKey = "seat_code" | "is_configured" | "capacity";
 type SortOrder = "asc" | "desc";
+
+// The columns each category's table shows, in order. Cabins are Seats'
+// columns minus Sub-type (flat category, nothing to show there); Conference
+// Rooms swaps Sub-type for Capacity. Everything else is shared.
+type ColumnKey =
+  | "select" | "code" | "category" | "subType" | "capacity"
+  | "amenities" | "bookable" | "status" | "configuration" | "actions";
+
+const COLUMNS: Record<SpaceCategory, ColumnKey[]> = {
+  ALL:              ["select", "code", "category",                        "amenities", "bookable", "status", "configuration", "actions"],
+  SEATS:            ["select", "code",           "subType",               "amenities", "bookable", "status", "configuration", "actions"],
+  CABINS:           ["select", "code",                                    "amenities", "bookable", "status", "configuration", "actions"],
+  CONFERENCE_ROOMS: ["select", "code",                       "capacity",  "amenities", "bookable", "status", "configuration", "actions"],
+};
+
+const COLUMN_WIDTH: Record<ColumnKey, string> = {
+  select:        "48px",
+  code:          "160px",
+  category:      "140px",
+  subType:       "130px",
+  capacity:      "110px",
+  amenities:     "150px",
+  bookable:      "90px",
+  status:        "110px",
+  configuration: "140px",
+  actions:       "100px",
+};
 
 function Dash() {
   return <span className="text-gray-400 text-xs">—</span>;
@@ -31,11 +60,10 @@ function BookablePill({ bookable }: { bookable: boolean | null }) {
   if (bookable === null) return <Dash />;
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
-        bookable
-          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-          : "bg-red-50 text-red-600 border border-red-200"
-      }`}
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${bookable
+        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+        : "bg-red-50 text-red-600 border border-red-200"
+        }`}
     >
       {bookable ? "Yes" : "No"}
     </span>
@@ -45,33 +73,58 @@ function BookablePill({ bookable }: { bookable: boolean | null }) {
 function StatusPill({ status }: { status: string | null }) {
   if (!status) return <Dash />;
   const styles: Record<string, string> = {
-    ACTIVE:      "bg-emerald-50 text-emerald-700 border-emerald-200",
-    INACTIVE:    "bg-gray-100 text-gray-500 border-gray-200",
+    ACTIVE: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    INACTIVE: "bg-gray-100 text-gray-500 border-gray-200",
     MAINTENANCE: "bg-amber-50 text-amber-700 border-amber-200",
   };
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${styles[status] ?? "bg-gray-100 text-gray-500 border-gray-200"}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${
-        status === "ACTIVE"      ? "bg-emerald-500" :
-        status === "MAINTENANCE" ? "bg-amber-500"   :
-        "bg-gray-400"
-      }`} />
+      <span className={`w-1.5 h-1.5 rounded-full ${status === "ACTIVE" ? "bg-emerald-500" :
+        status === "MAINTENANCE" ? "bg-amber-500" :
+          "bg-gray-400"
+        }`} />
       {status}
     </span>
   );
 }
 
-function ConfiguredPill({ configured }: { configured: boolean }) {
+// One pill for the seat's configuration state — a seat edited locally on an
+// already-published layout shows "Pending" in place of "Configured" (it IS
+// configured, but that change isn't saved until Publish) rather than
+// stacking a second badge next to "Configured", which was redundant. The
+// row itself also gets a light tint for the same seats — see the row
+// className below — so the state reads at a glance without hunting through
+// this column.
+function ConfigurationStatusPill({ seat }: { seat: Seat }) {
+  const variant = seat.has_unpublished_changes
+    ? "pending"
+    : seat.is_configured
+      ? "configured"
+      : "unconfigured";
+
+  const styles: Record<typeof variant, string> = {
+    pending: "bg-orange-50 text-orange-700 border-orange-200",
+    configured: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    unconfigured: "bg-amber-50 text-amber-700 border-amber-200",
+  };
+  const dotStyles: Record<typeof variant, string> = {
+    pending: "bg-orange-400",
+    configured: "bg-indigo-500",
+    unconfigured: "bg-amber-400",
+  };
+  const label: Record<typeof variant, string> = {
+    pending: "Pending",
+    configured: "Configured",
+    unconfigured: "Not Configured",
+  };
+
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
-        configured
-          ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-          : "bg-amber-50 text-amber-700 border-amber-200"
-      }`}
+      title={variant === "pending" ? "Edited locally — not saved until you publish" : undefined}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${styles[variant]}`}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${configured ? "bg-indigo-500" : "bg-amber-400"}`} />
-      {configured ? "Configured" : "Not Configured"}
+      <span className={`w-1.5 h-1.5 rounded-full ${dotStyles[variant]}`} />
+      {label[variant]}
     </span>
   );
 }
@@ -84,15 +137,22 @@ function SortIcon({ active, order }: { active: boolean; order: SortOrder }) {
 }
 
 export default function SeatTable({
-  seats, preferences, selected, isAllSelected, isIndeterminate,
+  seats, category, preferences, selected, isAllSelected, isIndeterminate,
   onToggleSelect, onSelectAll, onClearSelection, onEditSeat, onBulkEdit,
 }: Props) {
-  const [page, setPage]           = useState(1);
-  const [pageSize, setPageSize]   = useState(10);
-  const [sortKey, setSortKey]     = useState<SortKey>("seat_code");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [sortKey, setSortKey] = useState<SortKey>("seat_code");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
 
-  const prefMap = Object.fromEntries(preferences.map((p) => [p.preference_id, p.preference_name]));
+  const columns = COLUMNS[category];
+  const { singular, plural } = SPACE_CATEGORY_LABELS[category];
+  const codeLabel =
+    category === "ALL" ? "Code" :
+    category === "SEATS" ? "Seat Code" :
+    category === "CABINS" ? "Cabin Code" : "Room Code";
+
+  const prefMap = Object.fromEntries(preferences.map((p) => [p.preference_id, p]));
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -119,19 +179,210 @@ export default function SeatTable({
         const bVal = b.is_configured ? 1 : 0;
         return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
       }
+      if (sortKey === "capacity") {
+        // Nulls last regardless of direction — an unset capacity isn't
+        // meaningfully "smaller," it's just not there yet.
+        if (a.capacity == null && b.capacity == null) return 0;
+        if (a.capacity == null) return 1;
+        if (b.capacity == null) return -1;
+        return sortOrder === "asc" ? a.capacity - b.capacity : b.capacity - a.capacity;
+      }
       return 0;
     });
   }, [seats, sortKey, sortOrder]);
 
   const totalPages = Math.max(1, Math.ceil(sortedSeats.length / pageSize));
-  const start      = (page - 1) * pageSize;
-  const pageSeats  = sortedSeats.slice(start, start + pageSize);
+  const start = (page - 1) * pageSize;
+  const pageSeats = sortedSeats.slice(start, start + pageSize);
 
-  React.useEffect(() => { setPage(1); }, [seats.length]);
+  // Depends on `category` too, not just seats.length — switching between
+  // two tabs with the same row count would otherwise strand pagination on
+  // whatever page the previous tab was left on.
+  React.useEffect(() => { setPage(1); }, [seats.length, category]);
 
   const handleSelectAll = () => {
     if (isAllSelected) onClearSelection();
     else onSelectAll();
+  };
+
+  const renderHeaderCell = (key: ColumnKey) => {
+    switch (key) {
+      case "select":
+        return (
+          <th key={key} className="px-3 py-3">
+            <input
+              type="checkbox"
+              checked={isAllSelected}
+              ref={(el) => { if (el) el.indeterminate = isIndeterminate; }}
+              onChange={handleSelectAll}
+              disabled={seats.length === 0}
+              className={`mr-2 w-4 h-4 rounded border-gray-300 accent-indigo-600 ${seats.length === 0 ? "opacity-40 cursor-not-allowed pointer-events-none" : "cursor-pointer"}`}
+            />
+          </th>
+        );
+      case "code":
+        return (
+          <th key={key} className="pl-6 px-3 py-3 text-left font-bold">
+            <button onClick={() => handleSort("seat_code")} className="flex items-center gap-1 hover:text-blue-800 transition-colors">
+              {codeLabel}
+              <SortIcon active={sortKey === "seat_code"} order={sortOrder} />
+            </button>
+          </th>
+        );
+      case "category":
+        return <th key={key} className="pl-4 px-3 py-3 text-left font-bold">Type</th>;
+      case "subType":
+        return <th key={key} className="pl-4 px-3 py-3 text-left font-bold">Seat Type</th>;
+      case "capacity":
+        return (
+          <th key={key} className="pl-4 px-3 py-3 text-left font-bold">
+            <button onClick={() => handleSort("capacity")} className="flex items-center gap-1 hover:text-blue-800 transition-colors">
+              Capacity
+              <SortIcon active={sortKey === "capacity"} order={sortOrder} />
+            </button>
+          </th>
+        );
+      case "amenities":
+        return <th key={key} className="pl-6 px-3 py-3 text-left font-bold">{category === "CONFERENCE_ROOMS" ? "Equipment" : "Amenities"}</th>;
+      case "bookable":
+        return <th key={key} className="pr-12 px-3 py-3 text-center font-bold">Bookable</th>;
+      case "status":
+        return <th key={key} className="pr-12 px-3 py-3 text-center font-bold">Status</th>;
+      case "configuration":
+        return (
+          <th key={key} className="pl-6 px-3 py-3 text-left font-bold">
+            <button onClick={() => handleSort("is_configured")} className="flex items-center gap-1 hover:text-blue-800 transition-colors">
+              Configuration
+              <SortIcon active={sortKey === "is_configured"} order={sortOrder} />
+            </button>
+          </th>
+        );
+      case "actions":
+        return <th key={key} className="px-3 py-3 text-center font-bold">Actions</th>;
+    }
+  };
+
+  const renderCell = (key: ColumnKey, seat: Seat, isSelected: boolean) => {
+    switch (key) {
+      case "select":
+        return (
+          <td key={key} className="px-4 py-3">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onToggleSelect(seat.seat_svg_id)}
+              className="w-4 h-4 rounded border-gray-300 accent-indigo-600 cursor-pointer"
+            />
+          </td>
+        );
+      case "code":
+        return (
+          <td key={key} className="px-4 py-3">
+            <button
+              onClick={() => onEditSeat(seat)}
+              className="text-indigo-600 font-semibold hover:text-indigo-800 hover:underline transition-colors text-sm"
+            >
+              {seat.seat_code}
+            </button>
+          </td>
+        );
+      case "category": {
+        const cat = categoryOf(seat.seat_type);
+        const { color, tint } = SPACE_CATEGORY_COLOR[cat];
+        return (
+          <td key={key} className="px-4 py-3">
+            <span
+              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
+              style={{ background: tint, color }}
+            >
+              {SPACE_CATEGORY_LABELS[cat].singular}
+            </span>
+          </td>
+        );
+      }
+      case "subType":
+        return (
+          <td key={key} className="px-4 py-3 text-gray-700 text-xs font-medium">
+            {seat.seat_type ?? <Dash />}
+          </td>
+        );
+      case "capacity":
+        return (
+          <td key={key} className="px-4 py-3 text-gray-700 text-xs font-semibold">
+            {seat.capacity != null ? `${seat.capacity} people` : <Dash />}
+          </td>
+        );
+      case "amenities":
+        return (
+          <td key={key} className="px-4 py-3">
+            {seat.amenity_ids.length === 0 ? (
+              <Dash />
+            ) : (
+              <div className="flex flex-wrap gap-1">
+                {seat.amenity_ids.slice(0, 2).map((id) => {
+                  const pref = prefMap[id];
+                  const name = pref?.preference_name ?? id;
+                  const color = getAmenityColor(name, pref?.preference_type);
+                  return (
+                    <span
+                      key={id}
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-medium border ${color.bg} ${color.text} ${color.border}`}
+                    >
+                      {name}
+                    </span>
+                  );
+                })}
+                {seat.amenity_ids.length > 2 && (
+                  <div className="relative inline-block group">
+                    <button type="button" className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-medium border border-gray-200 cursor-pointer focus:outline-none">
+                      +{seat.amenity_ids.length - 2}
+                    </button>
+                    <div className="hidden group-hover:block absolute right-0 mt-1 w-auto bg-white border border-gray-200 rounded-md shadow-lg p-1.5 z-10 text-xs">
+                      {seat.amenity_ids.slice(2).map((id) => {
+                        const pref = prefMap[id];
+                        const name = pref?.preference_name ?? id;
+                        const cat = pref?.preference_type ?? null;
+                        const color = getAmenityColor(name, cat);
+                        return (
+                          <div key={id} className="py-0.5">
+                            <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-medium whitespace-nowrap border ${color.bg} ${color.text} ${color.border}`}>
+                              {name}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </td>
+        );
+      case "bookable":
+        return <td key={key} className="px-4 py-3"><BookablePill bookable={seat.is_bookable} /></td>;
+      case "status":
+        return <td key={key} className="px-4 py-3"><StatusPill status={seat.status} /></td>;
+      case "configuration":
+        return (
+          <td key={key} className="px-4 py-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <ConfigurationStatusPill seat={seat} />
+            </div>
+          </td>
+        );
+      case "actions":
+        return (
+          <td key={key} className="px-9 py-3 text-right">
+            <button
+              onClick={() => onEditSeat(seat)}
+              className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 bg-white hover:bg-indigo-50 hover:border-indigo-300 text-gray-500 hover:text-indigo-600 transition-colors"
+              title={`Edit ${singular.toLowerCase()}`}
+            >
+              <Pencil size={12} />
+            </button>
+          </td>
+        );
+    }
   };
 
   return (
@@ -139,7 +390,7 @@ export default function SeatTable({
       {/* Table header info */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-gray-800">{seats.length} Seats</span>
+          <span className="text-sm font-semibold text-gray-800 pl-2">{seats.length} {plural}</span>
           {selected.size > 0 && (
             <span className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-600 px-2 py-0.5 rounded-full font-medium">
               {selected.size} selected
@@ -149,7 +400,7 @@ export default function SeatTable({
         {selected.size > 0 && (
           <button
             onClick={onBulkEdit}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 mr-4 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
           >
             <Pencil size={12} />
             Bulk Edit
@@ -158,59 +409,21 @@ export default function SeatTable({
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
-        <table className="min-w-[700px] w-full text-sm border-collapse">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="w-10 px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={isAllSelected}
-                  ref={(el) => { if (el) el.indeterminate = isIndeterminate; }}
-                  onChange={handleSelectAll}
-                  className="w-4 h-4 rounded border-gray-300 accent-indigo-600 cursor-pointer"
-                />
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                <button
-                  onClick={() => handleSort("seat_code")}
-                  className="flex items-center gap-1 hover:text-gray-800 transition-colors"
-                >
-                  Seat Code
-                  <SortIcon active={sortKey === "seat_code"} order={sortOrder} />
-                </button>
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                Seat Type
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                Amenities
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                Bookable
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                Status
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                <button
-                  onClick={() => handleSort("is_configured")}
-                  className="flex items-center gap-1 hover:text-gray-800 transition-colors"
-                >
-                  Configuration
-                  <SortIcon active={sortKey === "is_configured"} order={sortOrder} />
-                </button>
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                Actions
-              </th>
+      <div className="overflow-x-auto">
+        <table className="min-w-[700px] w-full text-xs table-fixed border-collapse">
+          <colgroup>
+            {columns.map((key) => <col key={key} style={{ width: COLUMN_WIDTH[key] }} />)}
+          </colgroup>
+          <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
+            <tr>
+              {columns.map((key) => renderHeaderCell(key))}
             </tr>
           </thead>
           <tbody>
             {pageSeats.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-16 text-center text-sm text-gray-400">
-                  No seats match the current filters.
+                <td colSpan={columns.length} className="py-16 text-center text-sm text-gray-400">
+                  No {plural.toLowerCase()} match the current filters.
                 </td>
               </tr>
             ) : (
@@ -219,77 +432,14 @@ export default function SeatTable({
                 return (
                   <tr
                     key={seat.seat_id}
-                    className={`border-b border-gray-100 transition-colors ${
-                      isSelected ? "bg-indigo-50/60" : idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"
-                    } hover:bg-indigo-50/40`}
+                    className={`border-b border-gray-100 transition-colors ${isSelected
+                      ? "bg-indigo-50/60"
+                      : seat.has_unpublished_changes
+                        ? "bg-amber-100/60"
+                        : idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"
+                      } hover:bg-indigo-50/40`}
                   >
-                    <td className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => onToggleSelect(seat.seat_svg_id)}
-                        className="w-4 h-4 rounded border-gray-300 accent-indigo-600 cursor-pointer"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => onEditSeat(seat)}
-                        className="text-indigo-600 font-semibold hover:text-indigo-800 hover:underline transition-colors text-sm"
-                      >
-                        {seat.seat_code}
-                      </button>
-                    </td>
-
-                    {/* Seat Type — null shows dash */}
-                    <td className="px-4 py-3 text-gray-700 text-xs font-medium">
-                      {seat.seat_type ?? <Dash />}
-                    </td>
-
-                    {/* Amenities */}
-                    <td className="px-4 py-3">
-                      {seat.amenity_ids.length === 0 ? (
-                        <Dash />
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {seat.amenity_ids.slice(0, 2).map((id) => (
-                            <span
-                              key={id}
-                              className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-medium border border-gray-200"
-                            >
-                              {prefMap[id] ?? id}
-                            </span>
-                          ))}
-                          {seat.amenity_ids.length > 2 && (
-                            <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-medium border border-gray-200">
-                              +{seat.amenity_ids.length - 2}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Bookable — null shows dash */}
-                    <td className="px-4 py-3">
-                      <BookablePill bookable={seat.is_bookable} />
-                    </td>
-
-                    {/* Status — null shows dash */}
-                    <td className="px-4 py-3">
-                      <StatusPill status={seat.status} />
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <ConfiguredPill configured={seat.is_configured} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => onEditSeat(seat)}
-                        className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 bg-white hover:bg-indigo-50 hover:border-indigo-300 text-gray-500 hover:text-indigo-600 transition-colors"
-                        title="Edit seat"
-                      >
-                        <Pencil size={12} />
-                      </button>
-                    </td>
+                    {columns.map((key) => renderCell(key, seat, isSelected))}
                   </tr>
                 );
               })
@@ -301,61 +451,63 @@ export default function SeatTable({
       {/* Pagination */}
       <div className="flex items-center justify-between mt-3 px-1">
         <p className="text-xs text-gray-400">
-          Showing {Math.min(start + 1, seats.length)}–{Math.min(start + pageSize, seats.length)} of {seats.length} seats
+          {seats.length > 0 &&
+            `Showing ${Math.min(start + 1, seats.length)}–${Math.min(start + pageSize, seats.length)} of ${seats.length} ${plural.toLowerCase()}`}
         </p>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span>Rows</span>
-            <select
-              value={pageSize}
-              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-              className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
-            >
-              {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </div>
+        {seats.length > 0 && (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>Rows</span>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              >
+                {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
 
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft size={13} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft size={13} />
+              </button>
 
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              let pg = i + 1;
-              if (totalPages > 5) {
-                if (page <= 3) pg = i + 1;
-                else if (page >= totalPages - 2) pg = totalPages - 4 + i;
-                else pg = page - 2 + i;
-              }
-              return (
-                <button
-                  key={pg}
-                  onClick={() => setPage(pg)}
-                  className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-medium transition-colors ${
-                    page === pg
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pg = i + 1;
+                if (totalPages > 5) {
+                  if (page <= 3) pg = i + 1;
+                  else if (page >= totalPages - 2) pg = totalPages - 4 + i;
+                  else pg = page - 2 + i;
+                }
+                return (
+                  <button
+                    key={pg}
+                    onClick={() => setPage(pg)}
+                    className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-medium transition-colors ${page === pg
                       ? "bg-indigo-600 text-white border border-indigo-600"
                       : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  {pg}
-                </button>
-              );
-            })}
+                      }`}
+                  >
+                    {pg}
+                  </button>
+                );
+              })}
 
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronRight size={13} />
-            </button>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight size={13} />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

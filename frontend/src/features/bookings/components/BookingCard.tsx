@@ -15,7 +15,7 @@ function BookingTagChip({ label, variant }: { label: string; variant: string }) 
     )}>
       <span className={cn(
         "w-1.5 h-1.5 rounded-full",
-        variant === "confirmed" ? "bg-green-500" : variant === "sprint" ? "bg-amber-500" : "bg-current",
+        variant === "confirmed" ? "bg-green-500" : variant === "modified" ? "bg-amber-500" : variant === "sprint" ? "bg-amber-500" : "bg-current",
       )} />
       {label}
     </span>
@@ -109,6 +109,18 @@ export function BookingCard({
   variant = "my",
 }: BookingCardProps) {
   const isCancelled = booking.status === "cancelled";
+  // "(self)" only applies to a genuine self-booking (booked by and for the
+  // same person) that its own owner then cancelled themselves. Guests have
+  // no user account, so bookedForUserId is always undefined for guest/visit
+  // bookings — they never qualify and always show the actual actor's name.
+  const isGenuineSelfBooking =
+    !!booking.bookedForUserId && booking.bookedForUserId === booking.bookedByUserId;
+  const isSelfCancel =
+    isCancelled &&
+    isGenuineSelfBooking &&
+    !!booking.updatedByUserId &&
+    booking.updatedByUserId === booking.bookedForUserId;
+  const showCancelledBy = isCancelled && !!booking.updatedByName;
   const bType = booking.bookingType ?? "self";
   const isVisitOnly = bType === "visit";
   const isGuest = bType === "guest";
@@ -267,6 +279,13 @@ export function BookingCard({
             )}
             <BookingTypeBadge type={bType} />
           </div>
+
+          {showCancelledBy && (
+            <p className="text-[13px] font-medium text-gray-500 mt-1.5">
+              Cancelled by <span className="font-bold text-gray-600">{booking.updatedByName}</span>
+              {isSelfCancel && " (self)"}
+            </p>
+          )}
         </div>
 
         {/* Person column */}

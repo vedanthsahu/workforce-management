@@ -96,7 +96,7 @@ function BookingStatsCards({ summary, delegatedCount, showOnBehalf }: { summary:
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type BookingStatus  = "all" | "confirmed" | "pending";
+type BookingStatus  = "all" | "confirmed" | "modified" | "pending";
 type BfsBookingType = "all" | "employees" | "guests" | "visits";
 
 // ── Shared filter chip ────────────────────────────────────────────────────────
@@ -145,6 +145,7 @@ function MyBookingsToolbar({
   const statusOptions: { label: string; value: BookingStatus }[] = [
     { label: "All",       value: "all"       },
     { label: "Confirmed", value: "confirmed" },
+    { label: "Modified",  value: "modified"  },
     { label: "Pending",   value: "pending"   },
   ];
 
@@ -399,7 +400,14 @@ export default function MyBookingsPage() {
         return true;
       });
   const filteredDelegated = applyBfsFilters(bfsBaseFiltered, bfsSearch, bfsBookingType)
-    .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+    .sort((a, b) => {
+      if (bfsSubTab === "past" || bfsSubTab === "cancelled") {
+        // Most recent date first for past/cancelled
+        return new Date(b.fromDate).getTime() - new Date(a.fromDate).getTime();
+      }
+      // Upcoming and all: soonest date first (today at top)
+      return new Date(a.fromDate).getTime() - new Date(b.fromDate).getTime();
+    });
 
   return (
     <>
@@ -585,6 +593,9 @@ export default function MyBookingsPage() {
             <span className="text-[12px] font-semibold text-gray-500">Status Legend</span>
             <span className="flex items-center gap-1.5 text-[12px] text-gray-500">
               <span className="w-2 h-2 rounded-full bg-emerald-500" />Confirmed
+            </span>
+            <span className="flex items-center gap-1.5 text-[12px] text-gray-500">
+              <span className="w-2 h-2 rounded-full bg-amber-500" />Modified
             </span>
             <span className="flex items-center gap-1.5 text-[12px] text-gray-500">
               <span className="w-2 h-2 rounded-full bg-amber-500" />Pending

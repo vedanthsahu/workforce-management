@@ -5,6 +5,9 @@ export interface Preference {
   category?: string | null;
   description?: string | null;
   icon?: string | null;
+  // Optional until the backend ships it — undefined/empty is treated as
+  // "shows for every space type" so the UI degrades gracefully either way.
+  applicable_seat_types?: string[] | null;
 }
 
 // ── Sites / Buildings / Floors ────────────────────────────────────────────────
@@ -29,6 +32,10 @@ export interface Floor {
   name: string;
   number: number;
   layoutFileUrl?: string;
+  // A floor mid-scheduling-transition has a second layout queued to take
+  // over on scheduledLayoutEffectiveFrom -- see resolveFloorLayoutUrl.
+  scheduledLayoutFileUrl?: string;
+  scheduledLayoutEffectiveFrom?: string;
 }
 
 // ── Booking form state ────────────────────────────────────────────────────────
@@ -41,6 +48,8 @@ export interface BookingFormState {
   toDate: string;
   preferences: string[];
   selectedSeatId: string | null;
+  // "ALL" | "SEAT" | "CABIN" | "CONFERENCE_ROOM" — see book/utils/spaceType.ts
+  spaceType: string;
 }
 
 // ── Preference match status (from backend) ────────────────────────────────────
@@ -102,6 +111,8 @@ export interface FetchSeatsParams {
   /** When booking for a guest */
   isGuestBooking?: boolean;
   bookedForGuestId?: string | null;
+  /** "ALL" | "SEAT" | "CABIN" | "CONFERENCE_ROOM" — "ALL" sends no filter, matching today's unfiltered search */
+  spaceType?: string;
 }
 
 // ── Booking payload / response ────────────────────────────────────────────────
@@ -148,6 +159,9 @@ export interface CreateBookingResponse {
   cancelled_at: string | null;
   cancellation_reason: string | null;
   created_at: string | null;
+  modified_from_booking_id?: string | null;
+  modification_reason?: string | null;
+  is_modified?: boolean;
 }
 
 export type BookingStep = 1 | 2 | 3;

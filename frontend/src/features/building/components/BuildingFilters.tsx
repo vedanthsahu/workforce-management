@@ -20,7 +20,7 @@ export default function BuildingFilters({ sites, selectedSiteId, setSelectedSite
         onChange={(e) => setSelectedSiteId(e.target.value)}
         className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <option value="">All Offices</option>
+        <option value=""  >All Offices</option>
         {sites.map((site) => (
           <option key={site.site_id} value={String(site.site_id)}>{site.site_name}</option>
         ))}
@@ -32,7 +32,7 @@ export default function BuildingFilters({ sites, selectedSiteId, setSelectedSite
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full sm:w-auto pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Search buildings"
+          placeholder="Search buildings..."
         />
       </div>
 

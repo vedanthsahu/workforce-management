@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import {
+  ArrowLeft,
   Building2,
   CalendarDays,
   CheckCircle2,
@@ -12,7 +13,6 @@ import {
   Settings2,
   Users,
   X,
-  Pencil,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,10 @@ import { cn } from "@/lib/utils";
 
 import { useBookingForm } from "../hooks/Usebookingform";
 import { SvgFloorMapPage, SeatWithSvgId } from "./SvgFloorMapPage";
-import { fmtDate, getPreferenceIcon } from "../utils/bookingFormHelpers";
+import { fmtDate } from "../utils/bookingFormHelpers";
+import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 import { BookaSeatSkeleton } from "./BookaSeatSkeleton";
+import { BOOKING_SPACE_TYPES, BOOKING_SPACE_TYPE_LABELS } from "../utils/spaceType";
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 
@@ -76,42 +78,16 @@ const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; subtitle: 
   </div>
 );
 
-// ── Summary row ───────────────────────────────────────────────────────────────
-
-const SummaryRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div className="flex justify-between items-center py-2.5 sm:py-3 border-b border-[#EBEBF5] last:border-0 gap-4">
-    <span className="text-[12px] sm:text-[12.5px] text-gray-500 shrink-0">{label}</span>
-    <span className="text-[12px] sm:text-[13px] font-semibold text-[#1A1A2E] text-right">{value}</span>
-  </div>
-);
-
-// ── Review section header ─────────────────────────────────────────────────────
-
-const ReviewSectionHeader: React.FC<{ icon: React.ReactNode; title: string; subtitle: string }> = ({
-  icon,
-  title,
-  subtitle,
-}) => (
-  <div className="flex items-center gap-2.5 mb-4">
-    <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0 text-indigo-600">
-      {icon}
-    </div>
-    <div>
-      <p className="text-[13px] font-semibold text-[#1A1A2E] leading-tight">{title}</p>
-      <p className="text-[11.5px] text-gray-400">{subtitle}</p>
-    </div>
-  </div>
-);
-
 // ── Date input ────────────────────────────────────────────────────────────────
 
 const DateInput: React.FC<{
   label: string;
   value: string;
   min?: string;
+  max?: string;
   disabled?: boolean;
   onChange: (v: string) => void;
-}> = ({ label, value, min, disabled, onChange }) => (
+}> = ({ label, value, min, max, disabled, onChange }) => (
   <div className="flex-1 min-w-0">
     <p className="text-[11px] font-medium text-gray-500 mb-1.5">{label}</p>
     <div className="relative">
@@ -123,8 +99,10 @@ const DateInput: React.FC<{
         type="date"
         value={value}
         min={min}
+        max={max}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => e.preventDefault()}
         className={cn(
           "w-full h-9 sm:h-10 pl-8 pr-2 sm:pr-3 rounded-lg border border-[#EBEBF5] bg-white",
           "text-[12px] sm:text-[13px] text-[#1A1A2E] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent",
@@ -142,11 +120,13 @@ const BookASeatPage: React.FC = () => {
     step,
     form,
     sites,
+    inactiveSiteId,
     buildings,
     floors,
     seats,
     confirmation,
     error,
+    setError,
     loadingSites,
     loadingBuildings,
     loadingFloors,
@@ -158,10 +138,14 @@ const BookASeatPage: React.FC = () => {
     selectedSeat,
     dayCount,
     step1Valid,
+    hasBookingChanges,
+    maxBookableDate,
     isModifyMode,
+    isAdminFlow,
     isBookingForSomeone,
     isGuestBooking,
     bookingForName,
+    prefillSeatLabel,
     floorLayoutUrl,
     setSiteId,
     setBuildingId,
@@ -169,7 +153,7 @@ const BookASeatPage: React.FC = () => {
     setFromDate,
     setToDate,
     togglePreference,
-    clearAll,
+    setSpaceType,
     findAvailableSeats,
     selectSeat,
     goToReview,
@@ -177,6 +161,7 @@ const BookASeatPage: React.FC = () => {
     goBack,
     resetForm,
     availablePreferences,
+    visiblePreferences,
     loadingPreferences,
   } = useBookingForm();
 
@@ -189,6 +174,23 @@ const BookASeatPage: React.FC = () => {
   }, [error]);
 
   const todayIso = new Date().toISOString().slice(0, 10);
+
+  // A native <select> falls back to displaying its FIRST option whenever
+  // the bound `value` doesn't match any <option> currently rendered. When a
+  // saved preference/prefill sets `form.siteId` to an office not yet in
+  // `sites` (fetchSites only returns ACTIVE ones), there's an unavoidable
+  // gap before the hook can inject either a synthetic placeholder or the
+  // inactive-office entry for it — usually just a render or two, but the
+  // hook's own inactive-status check is a real network round-trip, making
+  // that gap long enough to visibly flash an unrelated office (whatever
+  // happened to be sites[0]) before settling on the real one. Deriving the
+  // rendered option list here guarantees a matching (neutral, unnamed)
+  // option exists the *instant* form.siteId changes, closing that gap
+  // regardless of how long the hook's own resolution takes.
+  const officeOptions = React.useMemo(() => {
+    if (!form.siteId || sites.some((s) => s.id === form.siteId)) return sites;
+    return [...sites, { id: form.siteId, name: "…", city: "", country: "", timezone: "" }];
+  }, [sites, form.siteId]);
 
   const seatsWithSvgId = seats as unknown as SeatWithSvgId[];
 
@@ -247,8 +249,8 @@ const BookASeatPage: React.FC = () => {
 
       </div>
 
-      {/* ── Scrollable content ── */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex flex-col gap-4 sm:gap-5">
+      {/* ── Page content ── */}
+      <div className="flex-1 overflow-y-auto px-4 sm:px-5 lg:px-6 py-3 sm:py-4 flex flex-col gap-3 sm:gap-4">
 
         {/* ── Step indicator ── */}
         {step === 1 && (
@@ -268,7 +270,7 @@ const BookASeatPage: React.FC = () => {
             className="bg-red-50 border border-red-200 rounded-xl px-4 sm:px-5 py-3 text-red-500 text-[12.5px] sm:text-[13px] flex items-center justify-between gap-3"
           >
             <span>{error}</span>
-            <button onClick={() => { }} className="text-red-400 hover:text-red-600 shrink-0">
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 shrink-0">
               <X size={14} />
             </button>
           </div>
@@ -298,16 +300,41 @@ const BookASeatPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
 
                 <div>
-                  <p className="text-[11px] font-medium text-gray-500 mb-1.5">Site (Office Location)</p>
+                  <p className="text-[11px] font-medium text-gray-500 mb-1.5">Office</p>
                   <select
                     value={form.siteId ?? ""}
                     onChange={(e) => setSiteId(e.target.value || null)}
                     disabled={loadingSites}
-                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <option value="" disabled>{loadingSites ? "Loading…" : "Select site"}</option>
-                    {sites.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
+                    {/* No `hidden` here (just `disabled`) — with `value=""`
+                        this is what the select is actually supposed to
+                        match and display while nothing real is chosen yet
+                        (still loading, or a saved preference hasn't
+                        resolved). Some browsers mishandle a *hidden*
+                        selected option when it's the first child of the
+                        select, falling back to silently displaying whatever
+                        real office happens to be first in the fetched list
+                        instead — which is exactly what made the field
+                        flash an unrelated, wrong office name before
+                        settling on the real (possibly inactive) one. */}
+                    <option value="" disabled>{loadingSites ? "Loading…" : "Select office"}</option>
+                    {officeOptions.map((s) => (
+                      // An inactive office stays as the current value (so the
+                      // field still shows its name, matching the "this
+                      // office is inactive" message above it) but is hidden
+                      // from the dropdown's own list of choices — `hidden`
+                      // on the currently-selected <option> keeps it out of
+                      // the opened list while a <select> still displays a
+                      // hidden option's label as its current value.
+                      <option
+                        key={s.id}
+                        value={s.id}
+                        hidden={s.id === inactiveSiteId}
+                        style={{ color: '#111827' }}
+                      >
+                        {s.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -318,11 +345,11 @@ const BookASeatPage: React.FC = () => {
                     value={form.buildingId ?? ""}
                     onChange={(e) => setBuildingId(e.target.value || null)}
                     disabled={!form.siteId || loadingBuildings}
-                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <option value="" disabled>{loadingBuildings ? "Loading…" : "Select building"}</option>
+                    <option value="" disabled hidden>{loadingBuildings ? "Loading…" : "Select building"}</option>
                     {buildings.map((b) => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
+                      <option key={b.id} value={b.id} style={{ color: '#111827' }}>{b.name}</option>
                     ))}
                   </select>
                 </div>
@@ -333,11 +360,11 @@ const BookASeatPage: React.FC = () => {
                     value={form.floorId ?? ""}
                     onChange={(e) => setFloorId(e.target.value || null)}
                     disabled={!form.buildingId || loadingFloors}
-                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full h-9 sm:h-10 px-4 border border-gray-200 rounded-lg text-[12.5px] sm:text-[13px] bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <option value="" disabled>{loadingFloors ? "Loading…" : "Select floor"}</option>
+                    <option value="" disabled hidden>{loadingFloors ? "Loading…" : "Select floor"}</option>
                     {floors.map((f) => (
-                      <option key={f.id} value={f.id}>{f.name}</option>
+                      <option key={f.id} value={f.id} style={{ color: '#111827' }}>{f.name}</option>
                     ))}
                   </select>
                 </div>
@@ -359,9 +386,9 @@ const BookASeatPage: React.FC = () => {
               <div className="flex flex-col md:flex-row gap-3 md:gap-4 md:items-end">
 
                 <div className="flex gap-2 sm:gap-3 flex-1 items-center">
-                  <DateInput label="From" value={form.fromDate} min={todayIso} onChange={setFromDate} />
+                  <DateInput label="From" value={form.fromDate} min={todayIso} max={maxBookableDate} onChange={setFromDate} />
                   <ChevronRight size={14} className="text-gray-300 shrink-0 mt-5" />
-                  <DateInput label="To" value={form.toDate} min={form.fromDate} onChange={setToDate} />
+                  <DateInput label="To" value={form.toDate} min={form.fromDate} max={maxBookableDate} onChange={setToDate} />
                 </div>
 
                 {dayCount > 0 && (
@@ -389,41 +416,68 @@ const BookASeatPage: React.FC = () => {
 
             {/* 3. Preferences */}
             <section>
-              <SectionHeader icon={<Settings2 size={14} />} title="3. Preferences" subtitle="Choose features that are important to you" />
-              <div className="flex gap-2 sm:gap-3 flex-wrap">
+              <SectionHeader icon={<Settings2 size={14} />} title="3. Preferences" subtitle="Choose a space type and the features that are important to you" />
+
+              {/* Space type — narrows both the amenity list below and the
+                  actual search. "All" (default) preserves today's behavior:
+                  every amenity shown, search unfiltered by type. */}
+              <div className="flex gap-1.5 sm:gap-2 mb-3 sm:mb-4">
+                {BOOKING_SPACE_TYPES.map((t) => {
+                  const active = form.spaceType === t;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setSpaceType(t)}
+                      className={cn(
+                        "px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-[11.5px] sm:text-[12.5px] font-semibold border transition-colors",
+                        active
+                          ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                          : "border-[#EBEBF5] bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50"
+                      )}
+                    >
+                      {BOOKING_SPACE_TYPE_LABELS[t]}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
                 {loadingPreferences ? (
-                  <p className="text-[12.5px] text-gray-400">Loading preferences…</p>
+                  <p className="text-[12.5px] text-gray-400 col-span-full">Loading preferences…</p>
+                ) : visiblePreferences.length === 0 ? (
+                  <p className="text-[12.5px] text-gray-400 col-span-full">No preferences available for this space type.</p>
                 ) : (
-                  availablePreferences.map(({ key, name }) => {
+                  visiblePreferences.map(({ key, name, category }) => {
                     const checked = form.preferences.includes(key);
+                    const color = getAmenityColor(name, category);
                     return (
                       <button
                         key={key}
                         onClick={() => togglePreference(key)}
                         className={cn(
-                          "flex flex-col items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-3 sm:py-4 rounded-xl border transition-all duration-150",
-                          "w-[calc(50%-4px)] sm:w-[130px] lg:w-[140px]",
+                          "flex flex-col items-center gap-1.5 sm:gap-2 px-3 py-3 sm:py-4 rounded-xl border transition-all duration-150",
                           checked
                             ? "border-indigo-300 bg-indigo-50 shadow-sm"
                             : "border-[#EBEBF5] bg-white hover:border-gray-300 hover:bg-gray-50"
                         )}
                       >
-                        {getPreferenceIcon(key)}
-                        <span className="text-[11.5px] sm:text-[12.5px] font-medium text-[#1A1A2E] text-center">{name}</span>
+                        <color.icon size={20} className={color.text} />
+                        <span className="text-[11.5px] sm:text-[12.5px] font-medium text-center text-black">{name}</span>
                         <Checkbox checked={checked} onCheckedChange={() => togglePreference(key)} className="pointer-events-none" />
                       </button>
                     );
                   })
                 )}
+              </div>
 
-                <div className="flex-1 min-w-[160px] bg-amber-50 border border-amber-100 rounded-xl px-3 sm:px-4 py-3 flex flex-col gap-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-base">💡</span>
-                    <span className="text-[11.5px] sm:text-[12px] font-semibold text-amber-700">Tip</span>
-                  </div>
-                  <p className="text-[11px] sm:text-[11.5px] text-amber-600 leading-relaxed">
+              <div className="mt-2.5 sm:mt-3 bg-amber-50 border border-amber-100 rounded-xl px-3 sm:px-4 py-3 flex items-start gap-1.5">
+                <span className="text-base">💡</span>
+                <div>
+                  <span className="text-[11.5px] sm:text-[12px] font-semibold text-amber-700">Tip </span>
+                  <span className="text-[11px] sm:text-[11.5px] text-amber-600 leading-relaxed">
                     Selecting more preferences helps us show seats that match your needs better.
-                  </p>
+                  </span>
                 </div>
               </div>
             </section>
@@ -470,19 +524,27 @@ const BookASeatPage: React.FC = () => {
               siteName={selectedSite?.name}
               buildingName={selectedBuilding?.name}
               floorName={selectedFloor?.name}
+              preferences={availablePreferences}
             />
 
-            <div className="flex justify-between pt-1 border-t border-[#EBEBF5]">
-              <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px]">
-                ← Back
-              </Button>
-              <Button
-                onClick={goToReview}
-                disabled={!form.selectedSeatId}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-6 gap-2 text-[12.5px] sm:text-[13px] font-semibold"
-              >
-                Review Booking <ChevronRight size={14} />
-              </Button>
+            <div className="flex flex-col items-end gap-1.5 pt-1 border-t border-[#EBEBF5]">
+              <div className="w-full flex justify-between">
+                <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px]">
+                  ← Back
+                </Button>
+                <Button
+                  onClick={goToReview}
+                  disabled={!form.selectedSeatId || (isModifyMode && !hasBookingChanges)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-6 gap-2 text-[12.5px] sm:text-[13px] font-semibold"
+                >
+                  Review Booking <ChevronRight size={14} />
+                </Button>
+              </div>
+              {isModifyMode && form.selectedSeatId && !hasBookingChanges && (
+                <p className="text-[11.5px] text-amber-600">
+                  Select a different seat, date, or location to continue.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -515,7 +577,7 @@ const BookASeatPage: React.FC = () => {
                 )}
               </div>
 
-              <div className="p-5 sm:p-6 flex flex-col gap-5">
+              <div className="p-4 sm:p-5 flex flex-col gap-3">
                 {/* Summary rows — single clean list */}
                 <div className="rounded-xl border border-gray-100 overflow-hidden">
                   {isBookingForSomeone && bookingForName && (
@@ -524,23 +586,23 @@ const BookASeatPage: React.FC = () => {
                       <span className="text-[12.5px] font-semibold text-indigo-700">{bookingForName} ({isGuestBooking ? "Guest" : "Employee"})</span>
                     </div>
                   )}
-                  <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-50">
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-white border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Location</span>
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedSite?.name ?? "—"}</span>
                   </div>
-                  <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50 border-b border-gray-50">
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-slate-50/50 border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Building</span>
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedBuilding?.name ?? "—"}</span>
                   </div>
-                  <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-50">
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-white border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Floor</span>
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedFloor?.name ?? "—"}</span>
                   </div>
-                  <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50 border-b border-gray-50">
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-slate-50/50 border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Seat</span>
-                    <span className="text-[12.5px] font-semibold text-[#0f172a]">Seat {selectedSeat?.label ?? "—"}</span>
+                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedSeat?.label ?? prefillSeatLabel ?? "—"}</span>
                   </div>
-                  <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-50">
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-white border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Date</span>
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{fmtDate(form.fromDate)}</span>
                   </div>
@@ -569,20 +631,27 @@ const BookASeatPage: React.FC = () => {
                 </div>
 
                 {/* Actions */}
-                <div className="flex justify-between items-center">
-                  <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px] h-10 px-5">
-                    ← Back
-                  </Button>
-                  <Button
-                    onClick={confirmBooking}
-                    disabled={submitting}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 sm:px-8 gap-2 text-[13px] font-semibold h-10"
-                  >
-                    {submitting
-                      ? isModifyMode ? "Modifying…" : "Confirming…"
-                      : isModifyMode ? "Confirm Modification" : "Confirm Booking"}
-                    {!submitting && <ChevronRight size={14} />}
-                  </Button>
+                <div className="flex flex-col items-end gap-1.5">
+                  <div className="w-full flex justify-between items-center">
+                    <Button variant="outline" size="sm" onClick={goBack} className="text-[12.5px] h-10 px-5">
+                      ← Back
+                    </Button>
+                    <Button
+                      onClick={confirmBooking}
+                      disabled={submitting || (isModifyMode && !hasBookingChanges)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 sm:px-8 gap-2 text-[13px] font-semibold h-10"
+                    >
+                      {submitting
+                        ? isModifyMode ? "Modifying…" : "Confirming…"
+                        : isModifyMode ? "Confirm Modification" : "Confirm Booking"}
+                      {!submitting && <ChevronRight size={14} />}
+                    </Button>
+                  </div>
+                  {isModifyMode && !hasBookingChanges && (
+                    <p className="text-[11.5px] text-amber-600">
+                      Nothing has changed yet — go back and pick a different seat, date, or location.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -598,8 +667,8 @@ const BookASeatPage: React.FC = () => {
 
               {/* Success header strip */}
               <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-6 text-white text-center">
-                <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
-                  <CheckCircle2 size={30} className="text-white" />
+                <div className="w-13 h-13 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
+                  <CheckCircle2 size={26} className="text-white" />
                 </div>
                 <p className="text-[18px] sm:text-[20px] font-bold">
                   {isModifyMode ? "Booking Modified!" : "Booking Confirmed!"}
@@ -617,20 +686,20 @@ const BookASeatPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="p-5 sm:p-6 flex flex-col gap-5">
+              <div className="p-4 sm:p-5 flex flex-col gap-4">
                 {/* Summary rows */}
                 <div className="rounded-xl border border-gray-100 overflow-hidden">
                   {isBookingForSomeone && bookingForName && (
-                    <div className="flex justify-between items-center px-4 py-3 bg-indigo-50/50 border-b border-gray-100">
+                    <div className="flex justify-between items-center px-4 py-2.5 bg-indigo-50/50 border-b border-gray-100">
                       <span className="text-[12.5px] text-gray-500">Booked For</span>
                       <span className="text-[12.5px] font-semibold text-indigo-700">{bookingForName} ({isGuestBooking ? "Guest" : "Employee"})</span>
                     </div>
                   )}
-                  <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-50">
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-white border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Location</span>
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{confirmation.site_name ?? "—"}</span>
                   </div>
-                  <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50 border-b border-gray-50">
+                  <div className="flex justify-between items-center px-4 py-2.5 bg-slate-50/50 border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Building</span>
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{confirmation.building_name ?? "—"}</span>
                   </div>
@@ -648,18 +717,36 @@ const BookASeatPage: React.FC = () => {
                   </div>
                   <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50">
                     <span className="text-[12.5px] text-gray-500">Status</span>
-                    <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      {confirmation.booking_status}
-                    </span>
+                    {(() => {
+                      // is_modified/booking_status both come straight from the API (BookingResponse) —
+                      // is_modified is derived server-side from modified_from_booking_id, never guessed here.
+                      const rawLabel = confirmation.is_modified ? "Modified" : confirmation.booking_status;
+                      const statusLabel = rawLabel.toUpperCase();
+                      const isModifiedStatus = statusLabel === "MODIFIED";
+                      return (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 text-[12px] font-semibold",
+                            isModifiedStatus ? "text-amber-700" : "text-emerald-700"
+                          )}
+                        >
+                          <span className={cn("w-1.5 h-1.5 rounded-full", isModifiedStatus ? "bg-amber-500" : "bg-emerald-500")} />
+                          {statusLabel}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
 
                 {/* CTA */}
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <Link href={isBookingForSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings"} className="flex-1">
-                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-semibold w-full h-11">
-                      View My Bookings
+                  <Link
+                    href={isAdminFlow ? "/admin/bookings" : isBookingForSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings"}
+                    className="flex-1"
+                  >
+                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-semibold w-full h-11 gap-2">
+                      {isAdminFlow && <ArrowLeft size={15} />}
+                      {isAdminFlow ? "Back to Bookings" : "View My Bookings"}
                     </Button>
                   </Link>
                   <Button

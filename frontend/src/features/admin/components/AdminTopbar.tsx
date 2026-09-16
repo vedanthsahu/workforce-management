@@ -3,7 +3,6 @@
 import { Bell } from "lucide-react";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import { getInitials } from "@/features/auth/types/auth.types";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
 export default function AdminTopbar() {

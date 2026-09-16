@@ -25,7 +25,7 @@ def fetch_permissions_for_role(
             INNER JOIN permissions AS p
                 ON p.id = rp.permission_id
             WHERE r.tenant_id = %s
-              AND r.role_name = %s
+              AND UPPER(REPLACE(r.role_name, ' ', '_')) = UPPER(REPLACE(%s, ' ', '_'))
               AND r.is_active = TRUE
               AND p.is_active = TRUE
             ORDER BY p.permission_key

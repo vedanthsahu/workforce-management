@@ -11,7 +11,7 @@ export const useAdminDashboard = (
   floor_id?: number
 ) => {
   const { data: statsData, loading, error } = useDashboardSummary({ date, site_id, floor_id });
-  const { trendData, selectedWeek, setSelectedWeek } = useOccupancyTrend();
+  const { trendData, selectedPeriod, setSelectedPeriod } = useOccupancyTrend();
   const { topOffices } = useTopOffices(date);
   const { recentBookings } = useRecentBookings();
 
@@ -20,8 +20,8 @@ export const useAdminDashboard = (
     loading,
     error,
     trendData,
-    selectedWeek,
-    setSelectedWeek,
+    selectedPeriod,
+    setSelectedPeriod,
     topOffices,
     recentBookings,
   };

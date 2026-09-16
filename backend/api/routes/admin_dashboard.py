@@ -5,7 +5,7 @@ HTTP routes for admin dashboard analytics.
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 from psycopg2.extensions import connection as PGConnection
@@ -15,10 +15,10 @@ from backend.api.deps import (
 )
 from backend.db.connection import get_db
 from backend.schemas.admin_dashboard import (
-    AdminActivityListResponse,
     AdminActivityListQuery,
-    AdminDateOccupancyResponse,
+    AdminActivityListResponse,
     AdminDashboardSummaryResponse,
+    AdminDateOccupancyResponse,
     AdminHierarchyOccupancyQuery,
     AdminHierarchyOccupancyResponse,
     AdminOccupancyDateRangeQuery,

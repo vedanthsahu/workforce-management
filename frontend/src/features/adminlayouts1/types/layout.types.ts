@@ -36,17 +36,32 @@ export type LayoutTableItem = {
 
 export type LayoutApiResponse = {
   layout_id: string;
+  tenant_id?: string;
   site_id: string;
   building_id: string;
   floor_id: string;
+  site_name?: string;
+  building_name?: string;
+  floor_name?: string;
   layout_name: string;
   layout_file_url: string;
   version_no: number;
   is_published: boolean;
   status: string;
   created_at: string;
+  updated_at?: string | null;
   uploaded_by_user_id: string;
   uploaded_by_name: string | null;
+  updated_by_user_id?: string | null;
+  updated_by_name?: string | null;
+  published_by_user_id?: string | null;
+  published_by_name?: string | null;
+  published_at?: string | null;
+  // Only meaningful while status is SCHEDULED -- the date this layout
+  // takes over automatically. effective_till is set on the currently
+  // PUBLISHED row it's about to replace, not on this row itself.
+  effective_from?: string | null;
+  effective_till?: string | null;
 };
 
 export type LayoutSelection = {

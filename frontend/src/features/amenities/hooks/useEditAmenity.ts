@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 
 import { amenitiesService } from "../services/amenitiesService";
 import { Amenity, AmenityCategory } from "../types/amenities.types";
 
 export const useEditAmenity = (
   amenity: Amenity | null,
+  open: boolean,
   onSuccess?: () => void
 ) => {
   const [loading, setLoading] = useState(false);
@@ -29,7 +29,14 @@ export const useEditAmenity = (
     }
   };
 
+  // Re-sync from the source amenity every time the modal opens — not just
+  // when `amenity` changes — so a Cancel discards any unsaved status/field
+  // edits instead of leaving them staged for the next open. The modal stays
+  // mounted between opens (parent only toggles `open`), so an
+  // `[amenity]`-only effect would only run once per amenity.
   useEffect(() => {
+    if (!open) return;
+
     fetchCategories();
 
     if (!amenity) return;
@@ -41,7 +48,7 @@ export const useEditAmenity = (
       category_id: amenity.category_id,
       is_active: amenity.is_active,
     });
-  }, [amenity]);
+  }, [open, amenity]);
 
   const handleChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));

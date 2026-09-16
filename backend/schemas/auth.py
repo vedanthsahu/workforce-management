@@ -1,9 +1,11 @@
 """Pydantic schemas for authentication endpoints."""
 
 from __future__ import annotations
+
 from datetime import datetime
 
 from pydantic import BaseModel, model_validator
+
 
 class MessageResponse(BaseModel):
     """Simple message-only response."""
@@ -12,6 +14,12 @@ class MessageResponse(BaseModel):
 class FavoriteSeatResponse(BaseModel):
     seat_id: str
     seat_code: str
+    site_id: str | None = None
+    site_name: str | None = None
+    building_id: str | None = None
+    building_name: str | None = None
+    floor_id: str | None = None
+    floor_name: str | None = None
     booking_count: int
 
 
@@ -49,6 +57,9 @@ class UserResponse(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
+    bio: str | None = None
+    skills: list[str] | None = None
+
     permissions: list[str] = []
 
     @model_validator(mode="before")
@@ -74,3 +85,4 @@ class UserResponse(BaseModel):
             return payload
 
         return value
+        

@@ -3,21 +3,9 @@ import type {
   ApiCheckInOutResponse,
   ApiGuestVisitsResponse,
   ApiSite,
-  CancelVisitPayload,
   GuestVisitsQueryParams,
   InviteGuestPayload,
-  ModifyVisitPayload,
 } from "../types/security.types";
-
-// ── Dummy sites (backend /sites endpoint not ready yet) ──────────────────────
-const DUMMY_SITES: ApiSite[] = [
-  { site_id: "5", site_name: "Hyderabad Begumpet Office" },
-  { site_id: "6", site_name: "Tech Park Annex" },
-];
-
-function delay<T>(value: T, ms = 500): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -60,33 +48,10 @@ export const securityService = {
     return data;
   },
 
-  // ── SITES (dummy — swap for a real /sites call once the backend has one) ──
+  // ── SITES (real API) ────────────────────────────────────────────────────
   async getSites(): Promise<ApiSite[]> {
-    return delay(DUMMY_SITES, 150);
-  },
-
-  // ── CANCEL VISIT ─────────────────────────────────────────────────────────
-  // 🚧 DUMMY — intentionally NOT calling the backend yet (per request: cancel
-  // is low priority right now). This just simulates a network round trip.
-  // Flip the comments below once the endpoint is ready to wire up for real:
-  //
-  //   await axiosInstance.post(`/guest-visits/${guestVisitId}/cancel`, payload);
-  //
-  async cancelVisit(guestVisitId: string, payload: CancelVisitPayload): Promise<void> {
-    console.log("[DUMMY cancelVisit] guestVisitId:", guestVisitId, "payload:", payload);
-    await delay(undefined, 700);
-  },
-
-  // ── MODIFY VISIT ─────────────────────────────────────────────────────────
-  // 🚧 DUMMY — intentionally NOT calling the backend yet (per request: modify
-  // is low priority right now). This just simulates a network round trip.
-  // Flip the comments below once the endpoint is ready to wire up for real:
-  //
-  //   await axiosInstance.patch(`/guest-visits/${guestVisitId}`, payload);
-  //
-  async modifyVisit(guestVisitId: string, payload: ModifyVisitPayload): Promise<void> {
-    console.log("[DUMMY modifyVisit] guestVisitId:", guestVisitId, "payload:", payload);
-    await delay(undefined, 700);
+    const { data } = await axiosInstance.get<ApiSite[]>("/sites");
+    return data;
   },
 
   // ── INVITE GUEST (unchanged — outside this pass's scope) ───────────────────
