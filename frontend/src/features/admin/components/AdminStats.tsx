@@ -90,7 +90,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
       subtitle: `Unavailable today`,
       icon: Ban,
       accent: "purple" as Accent,
-      href: null,
+      href: "/admin/blocked-seats",
     },
   ];
 
