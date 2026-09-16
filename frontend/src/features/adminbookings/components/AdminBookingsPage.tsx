@@ -383,8 +383,11 @@ export default function AdminBookingsPage() {
   // Clicking a stat card is a shortcut for "pick this Status and Search" --
   // applies immediately instead of just populating the dropdown, so the
   // table always lands on the same rows the clicked count summarizes.
+  // Clicking the already-active card toggles the filter back off (status
+  // "All"), matching the Offices/Buildings/Floors stat-card behavior.
   const handleStatCardFilter = (status: string) => {
-    const nextFilters = { ...filters, status };
+    const nextStatus = appliedFilters.status === status ? "All" : status;
+    const nextFilters = { ...filters, status: nextStatus };
     setFilters(nextFilters);
     setSearchError(false);
     setAppliedFilters(nextFilters);
@@ -473,7 +476,7 @@ export default function AdminBookingsPage() {
       {hasApplied && (
         <>
           {/* STATS */}
-          <BookingStatCards stats={stats} onFilterClick={handleStatCardFilter} />
+          <BookingStatCards stats={stats} onFilterClick={handleStatCardFilter} activeStatus={appliedFilters.status} />
 
           {/* TABLE */}
           <div className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
