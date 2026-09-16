@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
-import AmenitiesCards      from "@/features/amenities/components/AmenitiesCards";
+import AmenitiesCards, { AmenitiesStatusFilter } from "@/features/amenities/components/AmenitiesCards";
 import AmenitiesFilters    from "@/features/amenities/components/AmenitiesFilters";
 import AmenitiesTable      from "@/features/amenities/components/AmenitiesTable";
 import EditAmenityModal    from "@/features/amenities/components/EditAmenityModal";
@@ -27,6 +27,14 @@ function AmenitiesPage() {
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const statusFilter: AmenitiesStatusFilter =
+    status === "ACTIVE" || status === "INACTIVE" ? status : null;
+
+  const handleStatusFilterChange = (filter: AmenitiesStatusFilter) => {
+    setStatus(filter ?? "");
+    setCurrentPage(1);
+  };
 
   // ─── Shared helper: pin + highlight a row for PIN_DURATION ───────────────
   const activatePin = (id: string, message: string) => {
@@ -138,6 +146,8 @@ function AmenitiesPage() {
                 }
               : null
           }
+          statusFilter={statusFilter}
+          onStatusFilterChange={handleStatusFilterChange}
         />
       )}
 

@@ -8,6 +8,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import AmenitiesPagination from "@/features/amenities/components/AmenitiesPagination";
 import { useBookings } from "../hooks/useBookings";
 import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 import { useBookingActions } from "../hooks/useBookingActions";
@@ -283,6 +284,33 @@ function BfsToolbar({
   );
 }
 
+const ITEMS_PER_PAGE = 10;
+
+// ── Pagination footer ─────────────────────────────────────────────────────────
+
+function BookingsPaginationFooter({
+  currentPage,
+  totalItems,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalItems: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalItems === 0) return null;
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-white border border-[#EBEBF5] rounded-xl px-4 sm:px-5 py-3 mt-1">
+      <span className="text-[12px] text-gray-400">
+        Showing {startIndex + 1} to {Math.min(startIndex + ITEMS_PER_PAGE, totalItems)} of {totalItems} entries
+      </span>
+      <AmenitiesPagination currentPage={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
+    </div>
+  );
+}
+
 // ── Filter helpers ────────────────────────────────────────────────────────────
 
 function applyMyBookingFilters(
@@ -376,6 +404,18 @@ export default function MyBookingsPage() {
   const [bfsSearch, setBfsSearch]           = useState("");
   const [bfsBookingType, setBfsBookingType] = useState<BfsBookingType>("all");
 
+  // Pagination
+  const [myPage, setMyPage]   = useState(1);
+  const [bfsPage, setBfsPage] = useState(1);
+
+  const handleMyTabChange = (t: BookingTab) => { setActiveTab(t); setMyPage(1); };
+  const handleMySearchChange = (v: string) => { setMySearch(v); setMyPage(1); };
+  const handleMyStatusChange = (s: BookingStatus) => { setMyStatus(s); setMyPage(1); };
+
+  const handleBfsSubTabChange = (t: "upcoming" | "past" | "cancelled") => { setBfsSubTab(t); setBfsPage(1); };
+  const handleBfsSearchChange = (v: string) => { setBfsSearch(v); setBfsPage(1); };
+  const handleBfsBookingTypeChange = (t: BfsBookingType) => { setBfsBookingType(t); setBfsPage(1); };
+
   // ── Apply filters ──────────────────────────────────────────────────────────
   const filteredBookings = applyMyBookingFilters(displayedBookings, mySearch, myStatus);
 
@@ -408,6 +448,11 @@ export default function MyBookingsPage() {
       // Upcoming and all: soonest date first (today at top)
       return new Date(a.fromDate).getTime() - new Date(b.fromDate).getTime();
     });
+
+  // ── Pagination slices ────────────────────────────────────────────────────
+  const paginatedUpcomingCards = upcomingCards.slice((myPage - 1) * ITEMS_PER_PAGE, myPage * ITEMS_PER_PAGE);
+  const paginatedSortedDisplayed = sortedDisplayed.slice((myPage - 1) * ITEMS_PER_PAGE, myPage * ITEMS_PER_PAGE);
+  const paginatedDelegated = filteredDelegated.slice((bfsPage - 1) * ITEMS_PER_PAGE, bfsPage * ITEMS_PER_PAGE);
 
   return (
     <>
@@ -476,11 +521,11 @@ export default function MyBookingsPage() {
             <>
               <MyBookingsToolbar
                 activeTab={activeTab}
-                onTabChange={setActiveTab}
+                onTabChange={handleMyTabChange}
                 search={mySearch}
-                onSearchChange={setMySearch}
+                onSearchChange={handleMySearchChange}
                 status={myStatus}
-                onStatusChange={setMyStatus}
+                onStatusChange={handleMyStatusChange}
               />
 
               <div className="flex flex-col gap-3.5">
@@ -492,20 +537,27 @@ export default function MyBookingsPage() {
                 {!isLoading && !error && activeTab === "upcoming" && (
                   <>
                     {upcomingCards.length > 0 ? (
-                      upcomingCards.map((booking) => (
-                        <BookingCard
-                          key={booking.id}
-                          booking={booking}
-                          onCancelClick={setCancelTarget}
-                          onModifyClick={handleModify}
-                          onModifyVisit={handleModifyVisit}
+                      <>
+                        {paginatedUpcomingCards.map((booking) => (
+                          <BookingCard
+                            key={booking.id}
+                            booking={booking}
+                            onCancelClick={setCancelTarget}
+                            onModifyClick={handleModify}
+                            onModifyVisit={handleModifyVisit}
 
-                          onAddBooking={handleAddBooking}
-                          onCancelVisit={handleCancelVisit}
-                          onCancelBooking={handleCancelBookingOnly}
-                          showActions={!isToday(booking.date)}
+                            onAddBooking={handleAddBooking}
+                            onCancelVisit={handleCancelVisit}
+                            onCancelBooking={handleCancelBookingOnly}
+                            showActions={!isToday(booking.date)}
+                          />
+                        ))}
+                        <BookingsPaginationFooter
+                          currentPage={myPage}
+                          totalItems={upcomingCards.length}
+                          onPageChange={setMyPage}
                         />
-                      ))
+                      </>
                     ) : (
                       <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
                         No upcoming bookings found.
@@ -534,15 +586,22 @@ export default function MyBookingsPage() {
                       No {activeTab} bookings found.
                     </div>
                   ) : (
-                    sortedDisplayed.map((booking) => (
-                      <BookingCard
-                        key={booking.id}
-                        booking={booking}
-                        onCancelClick={setCancelTarget}
-                        onModifyClick={handleModify}
-                        showActions={activeTab !== "past" && activeTab !== "cancelled"}
+                    <>
+                      {paginatedSortedDisplayed.map((booking) => (
+                        <BookingCard
+                          key={booking.id}
+                          booking={booking}
+                          onCancelClick={setCancelTarget}
+                          onModifyClick={handleModify}
+                          showActions={activeTab !== "past" && activeTab !== "cancelled"}
+                        />
+                      ))}
+                      <BookingsPaginationFooter
+                        currentPage={myPage}
+                        totalItems={sortedDisplayed.length}
+                        onPageChange={setMyPage}
                       />
-                    ))
+                    </>
                   )
                 )}
               </div>
@@ -554,11 +613,11 @@ export default function MyBookingsPage() {
             <>
               <BfsToolbar
                 subTab={bfsSubTab}
-                onSubTabChange={setBfsSubTab}
+                onSubTabChange={handleBfsSubTabChange}
                 search={bfsSearch}
-                onSearchChange={setBfsSearch}
+                onSearchChange={handleBfsSearchChange}
                 bookingType={bfsBookingType}
-                onBookingTypeChange={setBfsBookingType}
+                onBookingTypeChange={handleBfsBookingTypeChange}
               />
 
               <div className="flex flex-col gap-3.5">
@@ -569,20 +628,27 @@ export default function MyBookingsPage() {
                     No {bfsSubTab} delegated bookings found.
                   </div>
                 ) : (
-                  filteredDelegated.map((booking) => (
-                    <BookingCard
-                      key={booking.id}
-                      booking={booking}
-                      onCancelClick={setCancelTarget}
-                      onModifyClick={handleModify}
-                      onModifyVisit={handleModifyVisit}
-                      onAddBooking={handleAddBooking}
-                      onCancelBooking={handleCancelBookingOnly}
-                      onCancelVisit={handleCancelVisit}
-                      showActions={bfsSubTab === "upcoming" && !isToday(booking.date)}
-                      variant="delegated"
+                  <>
+                    {paginatedDelegated.map((booking) => (
+                      <BookingCard
+                        key={booking.id}
+                        booking={booking}
+                        onCancelClick={setCancelTarget}
+                        onModifyClick={handleModify}
+                        onModifyVisit={handleModifyVisit}
+                        onAddBooking={handleAddBooking}
+                        onCancelBooking={handleCancelBookingOnly}
+                        onCancelVisit={handleCancelVisit}
+                        showActions={bfsSubTab === "upcoming" && !isToday(booking.date)}
+                        variant="delegated"
+                      />
+                    ))}
+                    <BookingsPaginationFooter
+                      currentPage={bfsPage}
+                      totalItems={filteredDelegated.length}
+                      onPageChange={setBfsPage}
                     />
-                  ))
+                  </>
                 )}
               </div>
             </>
