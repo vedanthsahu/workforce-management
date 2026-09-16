@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { adminBookingsService } from "@/features/adminbookings/services/adminBookings.service";
 import type { AdminBookingRaw } from "@/features/adminbookings/types/adminBooking.types";
@@ -24,8 +24,23 @@ import { BLOCK_TYPE_OPTIONS } from "../utils/constants";
 import BlockableFloorMap from "./BlockableFloorMap";
 
 const today = () => new Date().toLocaleDateString("en-CA");
+const inclusiveLayoutEndDate = (effectiveTill: string | null) => {
+  if (!effectiveTill) return "";
+  const [year, month, day] = effectiveTill.slice(0, 10).split("-").map(Number);
+  const endDate = new Date(Date.UTC(year, month - 1, day));
+  endDate.setUTCDate(endDate.getUTCDate() - 1);
+  return endDate.toISOString().slice(0, 10);
+};
+const displayDate = (value: string) =>
+  new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T00:00:00Z`));
+const CONFLICT_PAGE_SIZE = 10;
 const inputClass =
-  "mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/10 disabled:bg-muted disabled:text-muted-foreground";
+  "mt-1.5 h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-[12.5px] text-gray-900 outline-none transition-colors focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400 sm:h-10 sm:text-[13px]";
 const apiErrorMessage = (error: unknown, fallback: string) => {
   const data = (error as {
     response?: { data?: { detail?: { message?: string }; error?: { message?: string } } };
@@ -53,13 +68,64 @@ export default function BlockSeatsPage() {
     [selected, setSelected] = useState<string[]>([]),
     [bookings, setBookings] = useState<AdminBookingRaw[]>([]);
   const [layout, setLayout] = useState<BlockableFloorLayout | null>(null);
+  const [effectiveLayoutName, setEffectiveLayoutName] = useState("");
+  const [layoutEndDate, setLayoutEndDate] = useState("");
+  const [layoutDateError, setLayoutDateError] = useState("");
+  const [checkingLayoutDates, setCheckingLayoutDates] = useState(false);
   const [loading, setLoading] = useState(false),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
+  const [conflictPage, setConflictPage] = useState(1);
   useEffect(() => {
     router.prefetch("/admin/blocked-seats");
     void blockedSeatsService.getSites().then(setSites);
   }, [router]);
+  useEffect(() => {
+    if (!floorId || !from) {
+      setEffectiveLayoutName("");
+      setLayoutEndDate("");
+      setLayoutDateError("");
+      setCheckingLayoutDates(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCheckingLayoutDates(true);
+    setLayoutDateError("");
+    void blockedSeatsService
+      .getBlockableLayout(floorId, from, from)
+      .then((effectiveLayout) => {
+        if (cancelled) return;
+        const maximumDate = inclusiveLayoutEndDate(
+          effectiveLayout.effective_till,
+        );
+        setEffectiveLayoutName(effectiveLayout.layout_name);
+        setLayoutEndDate(maximumDate);
+        setTo((current) =>
+          current < from || (maximumDate && current > maximumDate)
+            ? from
+            : current,
+        );
+      })
+      .catch((requestError: unknown) => {
+        if (cancelled) return;
+        setEffectiveLayoutName("");
+        setLayoutEndDate("");
+        setLayoutDateError(
+          apiErrorMessage(
+            requestError,
+            "No effective floor layout is available for the selected Block From date.",
+          ),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingLayoutDates(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [floorId, from]);
   const invalid = to < from;
   const conflicts = useMemo(
     () =>
@@ -82,6 +148,23 @@ export default function BlockSeatsPage() {
   const missingConflictSeats = selectedBookedSeats.filter(
     (seat) => !conflictSeats.has(seat.seat_id),
   );
+  const conflictingRows = [
+    ...conflicts.map((booking) => ({ kind: "booking" as const, booking })),
+    ...missingConflictSeats.map((seat) => ({ kind: "missing" as const, seat })),
+  ];
+  const conflictTotalPages = Math.max(
+    1,
+    Math.ceil(conflictingRows.length / CONFLICT_PAGE_SIZE),
+  );
+  const visibleConflictRows = conflictingRows.slice(
+    (conflictPage - 1) * CONFLICT_PAGE_SIZE,
+    conflictPage * CONFLICT_PAGE_SIZE,
+  );
+  useEffect(() => {
+    if (conflictPage > conflictTotalPages) {
+      setConflictPage(conflictTotalPages);
+    }
+  }, [conflictPage, conflictTotalPages]);
   const resolveBooking = (booking: AdminBookingRaw) => {
     const remaining = bookings.filter(
       (row) => row.booking_id !== booking.booking_id,
@@ -149,6 +232,7 @@ export default function BlockSeatsPage() {
         ...remainingBookingPages.flatMap((page) => page.items),
       ]);
       setSelected([]);
+      setConflictPage(1);
     } catch (requestError: unknown) {
       setLayout(null);
       setSeats([]);
@@ -246,32 +330,29 @@ export default function BlockSeatsPage() {
       .slice(0, 3);
   };
   return (
-    <main className="flex-1 overflow-y-auto bg-muted/30 p-4 sm:p-6">
-      <div className="mx-auto max-w-[1500px] space-y-4 sm:space-y-6">
+    <main className="flex-1 overflow-y-auto bg-[#F7F8FC] p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-[1680px] space-y-4 sm:space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs text-muted-foreground">
-              Dashboard / Blocked Seats / <b>Block Seats</b>
-            </p>
-            <h1 className="mt-2 text-xl font-semibold text-foreground sm:text-2xl">Block Seats</h1>
-            <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+            <h1 className="text-[17px] font-bold leading-tight text-[#1A1A2E] sm:text-[20px]">Block Seats</h1>
+            <p className="mt-0.5 text-[11.5px] text-gray-400 sm:text-[12.5px]">
               Select location, view available and booked seats, resolve
               conflicts and block seats.
             </p>
           </div>
           <button
             onClick={() => router.push("/admin/blocked-seats")}
-            className="flex h-9 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+            className="flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-[12.5px] font-medium text-gray-600 transition-colors hover:bg-gray-50"
           >
             <ArrowLeft size={16} />
             Back to Blocked Seats
           </button>
         </header>
-        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+        <section className="rounded-xl border border-[#EBEBF5] bg-white p-4 sm:p-6">
           <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-7">
             {[
               {
-                label: "Site",
+                label: "Office",
                 value: siteId,
                 items: sites,
                 disabled: false,
@@ -314,7 +395,7 @@ export default function BlockSeatsPage() {
                 },
               },
             ].map((f) => (
-              <label key={f.label} className="text-xs font-semibold">
+              <label key={f.label} className="text-[11px] font-medium text-gray-500">
                 {f.label} *
                 <select
                   className={inputClass}
@@ -331,7 +412,7 @@ export default function BlockSeatsPage() {
                 </select>
               </label>
             ))}
-            <label className="text-xs font-semibold">
+            <label className="text-[11px] font-medium text-gray-500">
               Block Type *
               <select
                 className={inputClass}
@@ -345,26 +426,31 @@ export default function BlockSeatsPage() {
                 ))}
               </select>
             </label>
-            <label className="text-xs font-semibold">
+            <label className="text-[11px] font-medium text-gray-500">
               Block From *
               <input
                 className={inputClass}
                 type="date"
                 value={from}
                 onChange={(e) => {
-                  setFrom(e.target.value);
+                  const selectedDate = e.target.value;
+                  setFrom(selectedDate);
+                  setTo(selectedDate);
                   setLayout(null);
                   setSeats([]);
                   setSelected([]);
                 }}
               />
             </label>
-            <label className="text-xs font-semibold">
+            <label className="text-[11px] font-medium text-gray-500">
               Block To *
               <input
                 className={inputClass}
                 type="date"
                 value={to}
+                min={from}
+                max={layoutEndDate || undefined}
+                disabled={checkingLayoutDates || Boolean(layoutDateError)}
                 onChange={(e) => {
                   setTo(e.target.value);
                   setLayout(null);
@@ -374,9 +460,15 @@ export default function BlockSeatsPage() {
               />
             </label>
             <button
-              disabled={!floorId || invalid || loading}
+              disabled={
+                !floorId ||
+                invalid ||
+                loading ||
+                checkingLayoutDates ||
+                Boolean(layoutDateError)
+              }
               onClick={() => void load()}
-              className="mt-5 h-10 rounded-xl bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="mt-5 h-9 rounded-lg bg-indigo-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 sm:h-10 sm:text-[13px]"
             >
               {loading ? (
                 <Loader2 className="mx-auto animate-spin" size={18} />
@@ -385,10 +477,10 @@ export default function BlockSeatsPage() {
               )}
             </button>
           </div>
-          <label className="mt-3 block text-xs font-semibold">
+          <label className="mt-4 block text-[11px] font-medium text-gray-500">
             Reason *
             <textarea
-              className="mt-1 min-h-16 w-full rounded-md border border-input bg-background p-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+              className="mt-1.5 min-h-16 w-full rounded-lg border border-gray-200 bg-white p-3 text-[12.5px] text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 sm:text-[13px]"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
@@ -398,6 +490,23 @@ export default function BlockSeatsPage() {
               Block To must be on or after Block From.
             </p>
           )}
+          {checkingLayoutDates && (
+            <p className="mt-2 text-[11.5px] text-gray-400 sm:text-[12px]">
+              Checking the effective floor-layout period…
+            </p>
+          )}
+          {!checkingLayoutDates && effectiveLayoutName && (
+            <p className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-[11.5px] text-indigo-700 sm:text-[12px]">
+              {layoutEndDate
+                ? `${effectiveLayoutName} is effective through ${displayDate(layoutEndDate)}. Block To is limited to this date.`
+                : `${effectiveLayoutName} has no scheduled end date.`}
+            </p>
+          )}
+          {layoutDateError && (
+            <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11.5px] text-red-600 sm:text-[12px]">
+              {layoutDateError}
+            </p>
+          )}
         </section>
         {error && (
           <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -405,12 +514,12 @@ export default function BlockSeatsPage() {
           </p>
         )}
         {layout && (
-          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_320px]">
-            <section className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+          <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_250px] xl:grid-cols-[minmax(0,1fr)_270px]">
+            <section className="min-w-0 rounded-xl border border-[#EBEBF5] bg-white p-4 sm:p-6">
               <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <h2 className="font-semibold">Floor Layout</h2>
-                  <p className="text-xs text-muted-foreground">{layout.layout_name}</p>
+                  <h2 className="text-[14px] font-bold text-[#1A1A2E] sm:text-[15px]">Floor Layout</h2>
+                  <p className="text-[11.5px] text-gray-400 sm:text-[12px]">{layout.layout_name}</p>
                 </div>
                 <span className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
                   {seats.length} spaces
@@ -429,9 +538,9 @@ export default function BlockSeatsPage() {
                 }
               />
             </section>
-            <section className="rounded-2xl border border-border bg-card p-4 shadow-sm lg:sticky lg:top-4">
+            <section className="rounded-xl border border-[#EBEBF5] bg-white p-3 lg:sticky lg:top-4">
               <div className="flex justify-between">
-                <h2 className="font-semibold">
+                <h2 className="text-[14px] font-bold text-[#1A1A2E] sm:text-[15px]">
                   Selected Spaces ({selected.length})
                 </h2>
                 <button
@@ -443,7 +552,7 @@ export default function BlockSeatsPage() {
               </div>
               {!!selected.length && (
                 <div className="mt-3 overflow-hidden rounded-lg border">
-                  <div className="grid grid-cols-[minmax(0,1fr)_auto_36px] items-center gap-2 bg-muted/50 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto_30px] items-center gap-1.5 bg-muted/50 px-2.5 py-2 text-[10px] font-semibold text-muted-foreground">
                     <span>Space</span>
                     <span>Status</span>
                     <span className="text-center">Action</span>
@@ -457,7 +566,7 @@ export default function BlockSeatsPage() {
                         return (
                           <div
                             key={s.seat_id}
-                            className="grid grid-cols-[minmax(0,1fr)_auto_36px] items-center gap-2 px-3 py-3 text-[11px]"
+                            className="grid grid-cols-[minmax(0,1fr)_auto_30px] items-center gap-1.5 px-2.5 py-3 text-[10px]"
                           >
                             <span className="truncate font-semibold text-foreground">
                               {s.seat_code}
@@ -499,13 +608,13 @@ export default function BlockSeatsPage() {
           </div>
         )}
         {!!unresolvedConflictCount && (
-          <section className="overflow-x-auto rounded-2xl border border-border bg-card shadow-sm">
-            <h2 className="p-4 font-semibold">
+          <section className="overflow-x-auto rounded-xl border border-[#EBEBF5] bg-white">
+            <h2 className="p-4 text-[14px] font-bold text-[#1A1A2E] sm:text-[15px]">
               Conflicting Bookings ({unresolvedConflictCount} seats,{" "}
               {conflicts.length} bookings)
             </h2>
-            <table className="w-full min-w-[800px] text-left text-xs">
-              <thead className="bg-muted/50">
+            <table className="w-full min-w-[800px] text-left text-[12px] sm:text-[12.5px]">
+              <thead className="bg-[#F7F8FC] text-[11px] font-semibold text-gray-500">
                 <tr>
                   {[
                     "Seat",
@@ -521,82 +630,120 @@ export default function BlockSeatsPage() {
                 </tr>
               </thead>
               <tbody>
-                {conflicts.map((b) => (
-                  <tr key={b.booking_id} className="border-t">
-                    <td className="p-3 font-semibold">{b.seat_code}</td>
-                    <td className="p-3">{b.booked_for_name}</td>
-                    <td className="p-3">{b.booking_date}</td>
-                    <td className="p-3">
-                      {b.booking_date && b.booking_date > today() ? (
-                        <button
-                          className="text-red-600"
-                          onClick={() => void cancel(b)}
-                        >
-                          Cancel
-                        </button>
-                      ) : (
-                        <span className="text-muted-foreground">Not mutable today</span>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      {b.booking_date && b.booking_date > today() ? (
-                        alternatives(b).map((s) => (
-                          <button
-                            key={s.seat_id}
-                            className="mr-2 rounded-md border border-border px-2 py-1 text-primary hover:bg-primary/10"
-                            onClick={() => void move(b, s)}
-                          >
-                            Move to {s.seat_code}
+                {visibleConflictRows.map((row) => {
+                  if (row.kind === "missing") {
+                    const seat = row.seat;
+                    return (
+                      <tr key={`missing-${seat.seat_id}`} className="border-t bg-amber-50/50">
+                        <td className="p-3 font-semibold">{seat.seat_code}</td>
+                        <td className="p-3 text-muted-foreground">Booking details unavailable</td>
+                        <td className="p-3">{from} – {to}</td>
+                        <td className="p-3 text-amber-700">Resolution required</td>
+                        <td className="p-3 text-muted-foreground">
+                          Reload seats to retrieve the conflicting booking details.
+                        </td>
+                      </tr>
+                    );
+                  }
+                  const booking = row.booking;
+                  const mutable = Boolean(
+                    booking.booking_date && booking.booking_date > today(),
+                  );
+                  return (
+                    <tr key={booking.booking_id} className="border-t">
+                      <td className="p-3 font-semibold">{booking.seat_code}</td>
+                      <td className="p-3">{booking.booked_for_name}</td>
+                      <td className="p-3">{booking.booking_date}</td>
+                      <td className="p-3">
+                        {mutable ? (
+                          <button className="text-red-600" onClick={() => void cancel(booking)}>
+                            Cancel
                           </button>
-                        ))
-                      ) : (
-                        <span className="text-muted-foreground">
-                          Existing booking rules allow changes only for future dates.
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {missingConflictSeats.map((seat) => (
-                  <tr key={`missing-${seat.seat_id}`} className="border-t bg-amber-50/50">
-                    <td className="p-3 font-semibold">{seat.seat_code}</td>
-                    <td className="p-3 text-muted-foreground">Booking details unavailable</td>
-                    <td className="p-3">{from} – {to}</td>
-                    <td className="p-3 text-amber-700">Resolution required</td>
-                    <td className="p-3 text-muted-foreground">
-                      Reload seats to retrieve the conflicting booking details.
-                    </td>
-                  </tr>
-                ))}
+                        ) : (
+                          <span className="text-muted-foreground">Not mutable today</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        {mutable ? (
+                          alternatives(booking).map((seat) => (
+                            <button
+                              key={seat.seat_id}
+                              className="mr-2 rounded-md border border-border px-2 py-1 text-primary hover:bg-primary/10"
+                              onClick={() => void move(booking, seat)}
+                            >
+                              Move to {seat.seat_code}
+                            </button>
+                          ))
+                        ) : (
+                          <span className="text-muted-foreground">
+                            Existing booking rules allow changes only for future dates.
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+            {conflictingRows.length > CONFLICT_PAGE_SIZE && (
+              <footer className="flex items-center justify-between border-t border-[#EBEBF5] px-4 py-3 text-[12px] text-gray-500">
+                <span>
+                  Showing {(conflictPage - 1) * CONFLICT_PAGE_SIZE + 1} to{" "}
+                  {Math.min(conflictPage * CONFLICT_PAGE_SIZE, conflictingRows.length)} of{" "}
+                  {conflictingRows.length} entries
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    aria-label="Previous conflict page"
+                    disabled={conflictPage <= 1}
+                    onClick={() => setConflictPage((page) => page - 1)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
+                  >
+                    <ChevronLeft size={15} />
+                  </button>
+                  <span className="flex h-8 min-w-8 items-center justify-center rounded-lg border border-indigo-600 bg-indigo-50 font-semibold text-indigo-600">
+                    {conflictPage}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Next conflict page"
+                    disabled={conflictPage >= conflictTotalPages}
+                    onClick={() => setConflictPage((page) => page + 1)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
+                  >
+                    <ChevronRight size={15} />
+                  </button>
+                </div>
+              </footer>
+            )}
           </section>
         )}
-        <footer className="sticky bottom-0 flex items-center justify-between rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <p
-            className={
-              unresolvedConflictCount
-                ? "text-sm text-amber-700"
-                : "text-sm text-emerald-700"
-            }
-          >
-            {unresolvedConflictCount
-              ? `${unresolvedConflictCount} space conflict(s) must be resolved.`
-              : `All conflicts resolved. ${selected.length} spaces are ready to block.`}
-          </p>
-          <button
-            disabled={
-              !selected.length ||
-              !!unresolvedConflictCount ||
-              !reason.trim() ||
-              saving
-            }
-            onClick={() => void submit()}
-            className="h-10 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Block {selected.length} {selected.length === 1 ? "Space" : "Spaces"}
-          </button>
-        </footer>
+        {!!selected.length && (
+          <footer className="sticky bottom-0 flex items-center justify-between rounded-xl border border-[#EBEBF5] bg-white p-4 shadow-sm">
+            <p
+              className={
+                unresolvedConflictCount
+                  ? "text-sm text-amber-700"
+                  : "text-sm text-emerald-700"
+              }
+            >
+              {unresolvedConflictCount
+                ? `${unresolvedConflictCount} space conflict(s) must be resolved.`
+                : `All conflicts resolved. ${selected.length} spaces are ready to block.`}
+            </p>
+            <button
+              disabled={
+                !!unresolvedConflictCount || !reason.trim() || saving
+              }
+              onClick={() => void submit()}
+              className="h-10 rounded-lg bg-indigo-600 px-5 text-[12.5px] font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 sm:text-[13px]"
+            >
+              Block {selected.length}{" "}
+              {selected.length === 1 ? "Space" : "Spaces"}
+            </button>
+          </footer>
+        )}
       </div>
     </main>
   );

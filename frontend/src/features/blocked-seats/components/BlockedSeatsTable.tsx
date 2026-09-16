@@ -46,16 +46,17 @@ export default function BlockedSeatsTable({
     "Blocked By",
     "Actions",
   ];
-  const start = total ? (page - 1) * 20 + 1 : 0;
+  const pageSize = 10;
+  const start = total ? (page - 1) * pageSize + 1 : 0;
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-sm">
-      <h2 className="border-b border-border px-4 py-4 text-sm font-semibold text-foreground sm:px-6 sm:text-base">
-        {title}
+    <section className="overflow-hidden rounded-xl border border-[#EBEBF5] bg-white text-gray-900">
+      <h2 className="border-b border-[#EBEBF5] px-4 py-4 text-[14px] font-bold text-[#1A1A2E] sm:px-6 sm:text-[15px]">
+        {title} ({total})
       </h2>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1050px] text-left text-xs">
-          <thead className="bg-muted/50 text-[11px] font-semibold text-muted-foreground">
+        <table className="w-full min-w-[1050px] text-left text-[12px] sm:text-[12.5px]">
+          <thead className="bg-blue-100/80 text-[11px] font-semibold text-blue-600">
             <tr>
               {headings.map((heading) => (
                 <th key={heading} className="px-4 py-3">
@@ -64,14 +65,14 @@ export default function BlockedSeatsTable({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-border">
+          <tbody className="divide-y divide-[#EBEBF5]">
             {!loading &&
               rows.map((row) => (
                 <tr
                   key={row.block_id}
-                  className="text-muted-foreground hover:bg-muted/30"
+                  className="text-gray-500 hover:bg-gray-50"
                 >
-                  <td className="px-4 py-3 font-semibold text-foreground">
+                  <td className="px-4 py-3 font-semibold text-[#1A1A2E]">
                     {row.seat_code}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
@@ -124,30 +125,31 @@ export default function BlockedSeatsTable({
           )
         )}
       </div>
-      <footer className="flex items-center justify-between border-t border-border px-4 py-4 text-xs text-muted-foreground sm:px-6">
+      <footer className="flex items-center justify-between border-t border-[#EBEBF5] px-4 py-4 text-[11.5px] text-gray-500 sm:px-6 sm:text-[12px]">
         <span>
-          Showing {start}
-          {total ? `–${Math.min(start + rows.length - 1, total)}` : ""} of {total}
+          Showing {start} to {total ? Math.min(start + rows.length - 1, total) : 0} of {total} entries
         </span>
-        <div className="flex items-center gap-2">
-          <button
-            disabled={page <= 1}
-            onClick={() => onPageChange(page - 1)}
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted disabled:opacity-40"
-          >
-            <ChevronLeft size={15} />
-          </button>
-          <button className="h-8 min-w-8 rounded-md border border-primary bg-primary/10 font-semibold text-primary">
-            {page}
-          </button>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => onPageChange(page + 1)}
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted disabled:opacity-40"
-          >
-            <ChevronRight size={15} />
-          </button>
-        </div>
+        {total > pageSize && (
+          <div className="flex items-center gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => onPageChange(page - 1)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <button className="h-8 min-w-8 rounded-lg border border-indigo-600 bg-indigo-50 font-semibold text-indigo-600">
+              {page}
+            </button>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => onPageChange(page + 1)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
+            >
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        )}
       </footer>
     </section>
   );
