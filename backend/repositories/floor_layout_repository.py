@@ -660,9 +660,8 @@ def soft_delete_floor_layout(
 
     target_status defaults to DELETED (discarding a DRAFT/ARCHIVED layout
     that never made it live). Cancelling a SCHEDULED layout passes
-    ARCHIVED instead -- it was a real, fully-configured layout that was
-    already committed to going live, not an abandoned draft, so it belongs
-    with the other layouts that did serve their floor at some point.
+    DRAFT instead so it can be edited and scheduled again. Clear its old
+    effective dates because it no longer has a publication window.
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -670,6 +669,8 @@ def soft_delete_floor_layout(
             UPDATE floor_layouts
             SET
                 status = %s,
+                effective_from = CASE WHEN %s = 'DRAFT' THEN NULL ELSE effective_from END,
+                effective_till = CASE WHEN %s = 'DRAFT' THEN NULL ELSE effective_till END,
                 updated_at = NOW()
             WHERE tenant_id = %s
               AND id = %s
@@ -678,6 +679,8 @@ def soft_delete_floor_layout(
                 id::text AS layout_id
             """,
             (
+                target_status,
+                target_status,
                 target_status,
                 tenant_id,
                 layout_id,

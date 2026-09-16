@@ -100,7 +100,8 @@ def search_guests(
     search_text: str,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
-    search_text = search_text.strip().lower()
+    search_text = " ".join(search_text.lower().split())
+    search_text = search_text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     status_clause = ""
     if not include_inactive:
@@ -114,16 +115,8 @@ def search_guests(
             WHERE g.tenant_id = %s
             {status_clause}
               AND (
-                    EXISTS (
-                        SELECT 1
-                        FROM unnest(
-                            regexp_split_to_array(
-                                lower(coalesce(g.full_name, '')),
-                                '\s+'
-                            )
-                        ) AS name_part
-                        WHERE name_part LIKE %s || '%%'
-                    )
+                    (' ' || regexp_replace(lower(coalesce(g.full_name, '')), '\s+', ' ', 'g'))
+                        LIKE '%% ' || %s || '%%'
                  OR coalesce(g.phone, '')
                         LIKE %s || '%%'
                  OR lower(coalesce(g.email, ''))
