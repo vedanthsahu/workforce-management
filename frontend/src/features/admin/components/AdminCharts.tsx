@@ -36,7 +36,12 @@ import type {
   TopOffice,
   TrendPeriod,
 } from "../types/admin.types";
-import { ceilPercentage } from "../utils/dashboard.utils";
+import {
+  ceilPercentage,
+  TREND_PERIOD_OPTIONS as PERIOD_OPTIONS,
+  DONUT_META,
+  TOP_OFFICES_PER_PAGE as OFFICES_PER_PAGE,
+} from "../utils/dashboard.utils";
 
 type Props = {
   data: DashboardSummary | null;
@@ -46,21 +51,7 @@ type Props = {
   topOffices: TopOffice[];
 };
 
-const PERIOD_OPTIONS: { value: TrendPeriod; label: string }[] = [
-  { value: "this-week", label: "This Week" },
-  { value: "last-week", label: "Last Week" },
-  { value: "this-month", label: "This Month" },
-  { value: "last-month", label: "Last Month" },
-];
-
-const DONUT_META: Record<string, { label: string; color: string }> = {
-  booked: { label: "Reserved seats", color: "#4F46E5" },
-  blocked: { label: "Blocked seats", color: "#F59E0B" },
-  available: { label: "Available seats", color: "#10B981" },
-};
-
 // ---------- COMPONENT ----------
-const OFFICES_PER_PAGE = 5;
 
 export default function AdminCharts({ data, trendData, selectedPeriod, setSelectedPeriod, topOffices }: Props) {
   const [officePage, setOfficePage] = useState(0);

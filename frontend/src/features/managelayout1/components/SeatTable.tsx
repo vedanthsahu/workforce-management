@@ -6,6 +6,7 @@ import { Seat } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 import { SpaceCategory, SPACE_CATEGORY_LABELS, SPACE_CATEGORY_COLOR, categoryOf } from "../utils/spaceCategory";
+import { SEAT_TABLE_PAGE_SIZES as PAGE_SIZES } from "../utils/seatOptions.utils";
 
 interface Props {
   seats: Seat[];
@@ -20,8 +21,6 @@ interface Props {
   onEditSeat: (seat: Seat) => void;
   onBulkEdit: () => void;
 }
-
-const PAGE_SIZES = [10, 25, 50];
 
 type SortKey = "seat_code" | "is_configured" | "capacity";
 type SortOrder = "asc" | "desc";

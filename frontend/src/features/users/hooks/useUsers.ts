@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usersService } from "../services/usersService";
-import { mapApiUserToUser, mapSearchResultToUser } from "../utils/users.utils";
+import { mapApiUserToUser, mapSearchResultToUser, SEARCH_DEBOUNCE_MS } from "../utils/users.utils";
 import type { User, UsersSummary } from "../types/users.types";
 import { useUsersFilterStore } from "@/store/useUsersFilterStore";
-
-const SEARCH_DEBOUNCE_MS = 350;
 
 export const useUsers = () => {
   const [users, setUsers] = useState<User[]>([]);
