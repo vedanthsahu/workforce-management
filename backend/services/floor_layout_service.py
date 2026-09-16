@@ -27,6 +27,7 @@ from backend.core.audit_actions import (
 )
 from backend.core.config import get_settings
 from backend.core.enums import LayoutStatus
+from backend.core.error_diagnostics import print_error_diagnostic
 from backend.core.storage import upload_svg_to_s3
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.floor_layout_repository import (
@@ -45,12 +46,14 @@ from backend.repositories.floor_layout_repository import (
     publish_layout_seat_configurations,
     reconcile_published_layout_seats,
     retire_layout_seats,
-    schedule_floor_layout as schedule_floor_layout_record,
     set_published_layout_effective_till,
     soft_delete_floor_layout,
 )
 from backend.repositories.floor_layout_repository import (
     activate_floor_layout as activate_floor_layout_record,
+)
+from backend.repositories.floor_layout_repository import (
+    schedule_floor_layout as schedule_floor_layout_record,
 )
 from backend.repositories.layout_seat_mapping_repository import (
     bulk_insert_layout_seat_mappings,
@@ -957,7 +960,8 @@ def promote_scheduled_floor_layouts(conn: PGConnection) -> LayoutCutoverResult:
 
             result.promoted += 1
 
-        except Exception:
+        except Exception as exc:
+            print_error_diagnostic(exc)
             conn.rollback()
             result.failed += 1
             safe_write_audit_log(
@@ -1086,7 +1090,7 @@ def delete_floor_layout(
 
             # Scheduling this layout published its seats immediately (see
             # _schedule_floor_layout), so discarding it must retire them
-            # too -- otherwise they'd sit "live" under a DELETED layout_id
+            # too -- otherwise they'd sit "live" under a DRAFT layout_id
             # indefinitely.
             retire_layout_seats(
                 conn,
@@ -1099,7 +1103,7 @@ def delete_floor_layout(
             tenant_id=tenant_id,
             layout_id=layout_id,
             target_status=(
-                LayoutStatus.ARCHIVED.value
+                LayoutStatus.DRAFT.value
                 if layout["status"] == LayoutStatus.SCHEDULED.value
                 else LayoutStatus.DELETED.value
             ),

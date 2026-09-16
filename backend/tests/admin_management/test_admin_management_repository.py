@@ -7,6 +7,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
+from backend.repositories.guest_repository import search_guests
 from backend.repositories.location_repository import (
     deactivate_buildings_by_site,
     deactivate_floors_by_building,
@@ -16,7 +17,11 @@ from backend.repositories.location_repository import (
     fetch_sites,
 )
 from backend.repositories.preferences_repository import fetch_amenities
-from backend.repositories.user_repository import fetch_admin_user_directory, search_users
+from backend.repositories.team_repository import search_team_members
+from backend.repositories.user_repository import (
+    fetch_admin_user_directory,
+    search_users,
+)
 
 
 class FakeCursor:
@@ -265,26 +270,36 @@ class AdminManagementRepositoryTests(unittest.TestCase):
 
 
 class SearchUsersRepositoryTests(unittest.TestCase):
-    """A word must match at the START of a name token to count -- 'K'
-    matches 'Kishore' (token 1) and 'Kumar' (token 2 of 'Amit Kumar'), and
-    whichever match sits earliest in its own name ranks first. This is the
-    same match_position ranking search_team_members already used; search_
-    guests uses the identical pattern for the same reason."""
+    """Name searches preserve word boundaries and normalize typed whitespace."""
 
-    def test_orders_by_earliest_matching_word_position(self) -> None:
+    def test_normalizes_full_name_search_and_keeps_tenant_scope(self) -> None:
         cursor = FakeCursor(fetchall_values=[[]])
         conn = FakeConnection(cursor)
-
-        search_users(conn, tenant_id="1", search_text="K", limit=20)
-
+        search_users(conn, tenant_id="1", search_text="  Vedanth   Sahu  ", limit=20)
         sql, params = cursor.executions[0]
-        self.assertIn("WITH ORDINALITY", sql)
-        self.assertIn("word LIKE %s || '%%'", sql)
-        self.assertIn("COALESCE(mp.match_position, 999)", sql)
-        self.assertIn("mp.match_position IS NOT NULL", sql)
-        # Search text feeds the LATERAL join first (it appears earliest in
-        # the SQL text), then tenant_id, then the remaining WHERE clauses.
-        self.assertEqual(params, ("k", "1", "k", "k", 20))
+        self.assertIn("au.tenant_id = %s", sql)
+        self.assertIn("LIKE '%% ' || %s || '%%'", sql)
+        self.assertEqual(params, ("1", "vedanth sahu", "vedanth sahu", "vedanth sahu", "vedanth sahu", 20))
+
+    def test_search_wildcards_are_literal(self) -> None:
+        cursor = FakeCursor(fetchall_values=[[]])
+        search_users(FakeConnection(cursor), tenant_id="1", search_text="a%b_c")
+        self.assertEqual(cursor.executions[0][1][1], r"a\%b\_c")
+
+    def test_guest_full_name_search_normalizes_whitespace(self) -> None:
+        cursor = FakeCursor(fetchall_values=[[]])
+        search_guests(FakeConnection(cursor), tenant_id="1", search_text=" Vedanth  Sahu ")
+        sql, params = cursor.executions[0]
+        self.assertIn("g.tenant_id = %s", sql)
+        self.assertEqual(params[1], "vedanth sahu")
+
+    def test_team_full_name_search_retains_membership_scope(self) -> None:
+        cursor = FakeCursor(fetchall_values=[[]])
+        search_team_members(FakeConnection(cursor), tenant_id="1", user_id="2", search_text=" Vedanth  Sahu ")
+        sql, params = cursor.executions[0]
+        self.assertIn("tm_target.user_id = %s", sql)
+        self.assertIn("tm_target.tenant_id = %s", sql)
+        self.assertEqual(params[:3], ("vedanth sahu", "2", "1"))
 
     def test_include_inactive_drops_status_filter(self) -> None:
         cursor = FakeCursor(fetchall_values=[[]])

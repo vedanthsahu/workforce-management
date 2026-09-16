@@ -303,7 +303,7 @@ class CancelScheduledFloorLayoutServiceTests(unittest.TestCase):
         audit_patcher.start()
         self.addCleanup(audit_patcher.stop)
 
-    def test_cancel_scheduled_layout_archives_reopens_published_and_retires_seats(
+    def test_cancel_scheduled_layout_returns_to_draft_reopens_published_and_retires_seats(
         self,
     ) -> None:
         conn = FakeConnection()
@@ -333,15 +333,15 @@ class CancelScheduledFloorLayoutServiceTests(unittest.TestCase):
             "backend.services.floor_layout_service.retire_layout_seats",
         ) as mock_retire, patch(
             "backend.services.floor_layout_service.soft_delete_floor_layout",
-            return_value=_layout_row(layout_id="10", status="ARCHIVED"),
+            return_value=_layout_row(layout_id="10", status="DRAFT"),
         ) as mock_soft_delete:
             response = delete_floor_layout(
                 conn, current_user=current_user, layout_id="10",
             )
 
-        self.assertEqual(response.status, "ARCHIVED")
+        self.assertEqual(response.status, "DRAFT")
         mock_soft_delete.assert_called_once_with(
-            conn, tenant_id="1", layout_id="10", target_status="ARCHIVED",
+            conn, tenant_id="1", layout_id="10", target_status="DRAFT",
         )
         mock_reopen.assert_called_once_with(
             conn, tenant_id="1", layout_id="20",

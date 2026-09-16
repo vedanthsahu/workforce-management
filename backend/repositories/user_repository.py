@@ -1364,7 +1364,8 @@ def search_users(
     include_inactive: bool = False,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
-    search_text = search_text.strip().lower()
+    search_text = " ".join(search_text.lower().split())
+    search_text = search_text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     status_clause = ""
     if not include_inactive:
@@ -1378,16 +1379,8 @@ def search_users(
             WHERE au.tenant_id = %s
             {status_clause}
               AND (
-                    EXISTS (
-                        SELECT 1
-                        FROM unnest(
-                            regexp_split_to_array(
-                                lower(coalesce(au.full_name, '')),
-                                '\s+'
-                            )
-                        ) AS name_part
-                        WHERE name_part LIKE %s || '%%'
-                    )
+                    (' ' || regexp_replace(lower(coalesce(au.full_name, '')), '\s+', ' ', 'g'))
+                        LIKE '%% ' || %s || '%%'
                  OR lower(coalesce(au.employee_id, ''))
                         LIKE %s || '%%'
                  OR coalesce(au.mobile_phone, '')
