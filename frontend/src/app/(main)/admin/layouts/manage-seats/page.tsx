@@ -10,8 +10,10 @@ import SeatTable from "@/features/managelayout1/components/SeatTable";
 import EditSeatPanel from "@/features/managelayout1/components/EditSeatPanel";
 import BulkEditModal from "@/features/managelayout1/components/BulkEditModal";
 import ViewToggle from "@/features/managelayout1/components/ViewToggle";
+import SpaceCategoryTabs from "@/features/managelayout1/components/SpaceCategoryTabs";
+import SpaceStatCards from "@/features/managelayout1/components/SpaceStatCards";
 import { useManageSeats } from "@/features/managelayout1/hooks/Usemanageseats";
-import LayoutStatCards from "@/features/managelayout/components/Layoutstatcards";
+import { SPACE_CATEGORY_LABELS } from "@/features/managelayout1/utils/spaceCategory";
 import { usePublishLayout } from "@/features/managelayout/hooks/useLayoutDetails";
 import { fetchLayoutPolicy } from "@/features/managelayout/services/layoutService";
 import { useLayoutsStore } from "@/store/useLayoutsStore";
@@ -49,13 +51,17 @@ function ManageSeatsPage() {
     floorId,
     stats,
     statsLoading,
+    activeCategory,
+    setActiveCategory,
+    categoryCounts,
+    categoryStats,
     seats,
     filteredSeats,
-    hasActiveFilters,
+    isMapHighlightActive,
     filters,
     updateFilter,
     resetFilters,
-    seatTypes,
+    subTypeOptions,
     preferences,
     selected,
     toggleSelect,
@@ -186,9 +192,12 @@ function ManageSeatsPage() {
           {/* HEADER */}
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Manage Seats</h1>
+              <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Manage Spaces</h1>
               <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                Configure seat details, settings and amenities for this layout
+                Configure seats, cabins and conference rooms for this layout
+                {stats && (
+                  <span className="text-gray-400"> · {stats.configured_seats} of {stats.total_seats} configured</span>
+                )}
               </p>
             </div>
             <div className="flex gap-3 items-center">
@@ -223,18 +232,27 @@ function ManageSeatsPage() {
             </div>
           )}
 
+          {/* SPACE CATEGORY TABS */}
+          <SpaceCategoryTabs
+            active={activeCategory}
+            counts={categoryCounts}
+            onChange={setActiveCategory}
+            disabled={statsLoading}
+          />
+
           {/* STAT CARDS */}
-          <LayoutStatCards stats={stats} loading={statsLoading} />
+          <SpaceStatCards category={activeCategory} stats={categoryStats} loading={statsLoading} />
 
           {/* FILTERS + VIEW TOGGLE */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
             <div className="min-w-0 flex-1">
               <SeatFiltersBar
                 filters={filters}
-                seatTypes={seatTypes.filter((type): type is string => type !== null)}
+                subTypeOptions={subTypeOptions}
                 preferences={preferences}
                 onUpdate={updateFilter}
                 onReset={resetFilters}
+                searchPlaceholder={`Search by ${SPACE_CATEGORY_LABELS[activeCategory].singular.toLowerCase()} code…`}
               />
             </div>
             <div className="flex-shrink-0">
@@ -258,11 +276,12 @@ function ManageSeatsPage() {
                     preferences={preferences}
                     onSeatSave={saveSeat}
                     filteredSeats={filteredSeats}
-                    isFilterActive={hasActiveFilters}
+                    isFilterActive={isMapHighlightActive}
                   />
                 ) : (
                   <SeatTable
                     seats={filteredSeats}
+                    category={activeCategory}
                     preferences={preferences}
                     selected={selected}
                     isAllSelected={isAllSelected}

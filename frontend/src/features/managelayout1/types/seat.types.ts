@@ -1,6 +1,6 @@
 // ─── Seat Types ───────────────────────────────────────────────────────────────
 
-export type SeatType   = "STANDARD" | "WINDOW" | "CABIN" | "ACCESSIBLE" | "HOT_DESK";
+export type SeatType   = "STANDARD" | "WINDOW" | "CABIN" | "ACCESSIBLE" | "HOT_DESK" | "CONFERENCE_ROOM";
 export type SeatStatus = "ACTIVE" | "INACTIVE";
 export type BookableStatus = "Yes" | "No";
 
@@ -19,6 +19,9 @@ export interface Seat {
   amenity_ids:            string[];
   layout_id:              string;
   notes:                  string;
+  // Conference room seating capacity — meaningful only when seat_type is
+  // CONFERENCE_ROOM, null otherwise.
+  capacity:                number | null;
   // Set client-side only, for a seat edited locally on an already-published
   // layout that hasn't been flushed to the server yet (see Usemanageseats).
   // Never present on server-fetched data — a fresh fetch naturally clears it.
@@ -43,6 +46,7 @@ export interface SeatUpdatePayload {
   status:       SeatStatus;
   amenity_ids:  string[];
   notes?:       string;
+  capacity?:    number | null;
 }
 
 export interface BulkUpdatePayload {
@@ -52,6 +56,7 @@ export interface BulkUpdatePayload {
   is_bookable?: boolean;
   status?:      SeatStatus;
   amenity_ids?: string[];
+  capacity?:    number | null;
 }
 
 export type ViewMode = "map" | "list";
