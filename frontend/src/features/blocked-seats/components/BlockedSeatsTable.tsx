@@ -54,7 +54,68 @@ export default function BlockedSeatsTable({
       <h2 className="border-b border-[#EBEBF5] px-4 py-4 text-[14px] font-bold text-[#1A1A2E] sm:px-6 sm:text-[15px]">
         {title} ({total})
       </h2>
-      <div className="overflow-hidden">
+      {!loading && !!rows.length && (
+        <div className="divide-y divide-[#EBEBF5] md:hidden">
+          {rows.map((row) => (
+            <article key={row.block_id} className="space-y-3 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[#1A1A2E]">
+                    {row.seat_code}
+                  </p>
+                  <p className="mt-1 break-words text-xs text-gray-600 [overflow-wrap:anywhere]">
+                    {row.site_name}
+                  </p>
+                  <p className="mt-0.5 break-words text-xs text-gray-400 [overflow-wrap:anywhere]">
+                    {row.building_name} · {row.floor_name}
+                  </p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium ${STATUS_STYLES[row.display_status]}`}>
+                  {STATUS_LABELS[row.display_status]}
+                </span>
+              </div>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Block period</dt>
+                  <dd className="mt-1 text-gray-600">
+                    {displayDate(row.blocked_from)} – {displayDate(row.blocked_to)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Type</dt>
+                  <dd className="mt-1">
+                    <span className={`inline-block rounded-full px-2.5 py-1 text-[10px] font-medium ${TYPE_STYLES[row.block_type]}`}>
+                      {TYPE_LABELS[row.block_type]}
+                    </span>
+                  </dd>
+                </div>
+                <div className="col-span-2">
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Reason</dt>
+                  <dd className="mt-1 break-words text-gray-600 [overflow-wrap:anywhere]">{row.reason}</dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Blocked by</dt>
+                  <dd className="mt-1 break-words text-gray-600 [overflow-wrap:anywhere]">
+                    {row.blocked_by.name ?? "—"}
+                  </dd>
+                </div>
+                <div className="flex items-end justify-end">
+                  {row.display_status !== "EXPIRED" && (
+                    <button
+                      onClick={() => onCancel(row)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Ban size={14} />
+                      Unblock
+                    </button>
+                  )}
+                </div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      )}
+      <div className="hidden overflow-hidden md:block">
         <table className="w-full table-fixed text-left text-[10px] sm:text-[11px] lg:text-[12.5px]">
           <colgroup>
             <col className="w-[13%]" />
@@ -140,24 +201,24 @@ export default function BlockedSeatsTable({
               ))}
           </tbody>
         </table>
-        {loading ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            Loading blocked seats…
-          </p>
-        ) : (
-          !rows.length && (
-            <p className="py-12 text-center text-sm text-muted-foreground">
-              No blocked seats match the selected criteria.
-            </p>
-          )
-        )}
       </div>
-      <footer className="flex items-center justify-between border-t border-[#EBEBF5] px-4 py-4 text-[11.5px] text-gray-500 sm:px-6 sm:text-[12px]">
+      {loading ? (
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          Loading blocked seats…
+        </p>
+      ) : (
+        !rows.length && (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            No blocked seats match the selected criteria.
+          </p>
+        )
+      )}
+      <footer className="flex flex-col gap-3 border-t border-[#EBEBF5] px-4 py-4 text-[11.5px] text-gray-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:text-[12px]">
         <span>
           Showing {start} to {total ? Math.min(start + rows.length - 1, total) : 0} of {total} entries
         </span>
         {total > pageSize && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-center sm:self-auto">
             <button
               disabled={page <= 1}
               onClick={() => onPageChange(page - 1)}
