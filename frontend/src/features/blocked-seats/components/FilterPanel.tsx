@@ -16,6 +16,9 @@ interface Props {
   sites: LocationOption[];
   buildings: LocationOption[];
   floors: LocationOption[];
+  loadingSites: boolean;
+  loadingBuildings: boolean;
+  loadingFloors: boolean;
   onChange: (key: keyof BlockedSeatFilters, value: string) => void;
   onSearch: () => void;
   onClear: () => void;
@@ -75,6 +78,9 @@ export default function FilterPanel({
   sites,
   buildings,
   floors,
+  loadingSites,
+  loadingBuildings,
+  loadingFloors,
   onChange,
   onSearch,
   onClear,
@@ -101,36 +107,37 @@ export default function FilterPanel({
         <SelectField
           label="Office"
           value={filters.siteId}
-          placeholder="All Offices"
+          placeholder={loadingSites ? "Loading Offices…" : "All Offices"}
           icon={MapPin}
           options={sites.map((option) => ({
             value: option.id,
             label: option.name,
           }))}
+          disabled={loadingSites}
           onChange={(value) => onChange("siteId", value)}
         />
         <SelectField
           label="Building"
           value={filters.buildingId}
-          placeholder="All Buildings"
+          placeholder={loadingBuildings ? "Loading Buildings…" : "All Buildings"}
           icon={Building2}
           options={buildings.map((option) => ({
             value: option.id,
             label: option.name,
           }))}
-          disabled={!filters.siteId}
+          disabled={!filters.siteId || loadingBuildings}
           onChange={(value) => onChange("buildingId", value)}
         />
         <SelectField
           label="Floor"
           value={filters.floorId}
-          placeholder="All Floors"
+          placeholder={loadingFloors ? "Loading Floors…" : "All Floors"}
           icon={Layers3}
           options={floors.map((option) => ({
             value: option.id,
             label: option.name,
           }))}
-          disabled={!filters.buildingId}
+          disabled={!filters.buildingId || loadingFloors}
           onChange={(value) => onChange("floorId", value)}
         />
         <SelectField
