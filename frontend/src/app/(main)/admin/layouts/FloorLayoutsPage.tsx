@@ -3,15 +3,11 @@
 import FloorTree   from "@/features/adminlayouts1/components/FloorTree";
 import LayoutTable from "@/features/adminlayouts1/components/LayoutTable";
 import { useLayoutSelection, LayoutSelection } from "@/features/adminlayouts1/hooks/useLayoutSelection";
+import { DEFAULT_LAYOUT_SELECTION as DEFAULT_SELECTION } from "@/features/adminlayouts1/utils/layoutTable.utils";
 import { useLayoutsStore }    from "@/store/useLayoutsStore";
 import Link        from "next/link";
 import { useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-
-const DEFAULT_SELECTION: LayoutSelection = {
-  siteId: "", buildingId: "", floorId: "",
-  siteName: "", buildingName: "", floorName: "",
-};
 
 export default function FloorLayoutsPage() {
   const router       = useRouter();

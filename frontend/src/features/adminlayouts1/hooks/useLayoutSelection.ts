@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { DEFAULT_LAYOUT_SELECTION as DEFAULT_SELECTION } from "../utils/layoutTable.utils";
 
 export type LayoutSelection = {
   siteId:       string;
@@ -9,15 +10,6 @@ export type LayoutSelection = {
   siteName:     string;
   buildingName: string;
   floorName:    string;
-};
-
-const DEFAULT_SELECTION: LayoutSelection = {
-  siteId:       "",
-  buildingId:   "",
-  floorId:      "",
-  siteName:     "",
-  buildingName: "",
-  floorName:    "",
 };
 
 // FIX: Accepts an optional lazy initializer function.
