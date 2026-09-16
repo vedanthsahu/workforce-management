@@ -613,7 +613,14 @@ export default function BlockSeatsPage() {
               Conflicting Bookings ({unresolvedConflictCount} seats,{" "}
               {conflicts.length} bookings)
             </h2>
-            <table className="w-full min-w-[800px] text-left text-[12px] sm:text-[12.5px]">
+            <table className="w-full min-w-[900px] table-fixed text-left text-[12px] sm:text-[12.5px]">
+              <colgroup>
+                <col className="w-[12%]" />
+                <col className="w-[21%]" />
+                <col className="w-[17%]" />
+                <col className="w-[19%]" />
+                <col className="w-[31%]" />
+              </colgroup>
               <thead className="bg-[#F7F8FC] text-[11px] font-semibold text-gray-500">
                 <tr>
                   {[
@@ -635,11 +642,11 @@ export default function BlockSeatsPage() {
                     const seat = row.seat;
                     return (
                       <tr key={`missing-${seat.seat_id}`} className="border-t bg-amber-50/50">
-                        <td className="p-3 font-semibold">{seat.seat_code}</td>
-                        <td className="p-3 text-muted-foreground">Booking details unavailable</td>
-                        <td className="p-3">{from} – {to}</td>
-                        <td className="p-3 text-amber-700">Resolution required</td>
-                        <td className="p-3 text-muted-foreground">
+                        <td className="break-words p-3 align-top font-semibold [overflow-wrap:anywhere]">{seat.seat_code}</td>
+                        <td className="break-words p-3 align-top text-muted-foreground [overflow-wrap:anywhere]">Booking details unavailable</td>
+                        <td className="break-words p-3 align-top [overflow-wrap:anywhere]">{from} – {to}</td>
+                        <td className="break-words p-3 align-top text-amber-700 [overflow-wrap:anywhere]">Resolution required</td>
+                        <td className="break-words p-3 align-top text-muted-foreground [overflow-wrap:anywhere]">
                           Reload seats to retrieve the conflicting booking details.
                         </td>
                       </tr>
@@ -651,10 +658,10 @@ export default function BlockSeatsPage() {
                   );
                   return (
                     <tr key={booking.booking_id} className="border-t">
-                      <td className="p-3 font-semibold">{booking.seat_code}</td>
-                      <td className="p-3">{booking.booked_for_name}</td>
-                      <td className="p-3">{booking.booking_date}</td>
-                      <td className="p-3">
+                      <td className="break-words p-3 align-top font-semibold [overflow-wrap:anywhere]">{booking.seat_code}</td>
+                      <td className="break-words p-3 align-top [overflow-wrap:anywhere]">{booking.booked_for_name}</td>
+                      <td className="break-words p-3 align-top [overflow-wrap:anywhere]">{booking.booking_date}</td>
+                      <td className="break-words p-3 align-top [overflow-wrap:anywhere]">
                         {mutable ? (
                           <button className="text-red-600" onClick={() => void cancel(booking)}>
                             Cancel
@@ -663,7 +670,7 @@ export default function BlockSeatsPage() {
                           <span className="text-muted-foreground">Not mutable today</span>
                         )}
                       </td>
-                      <td className="p-3">
+                      <td className="break-words p-3 align-top [overflow-wrap:anywhere]">
                         {mutable ? (
                           alternatives(booking).map((seat) => (
                             <button
