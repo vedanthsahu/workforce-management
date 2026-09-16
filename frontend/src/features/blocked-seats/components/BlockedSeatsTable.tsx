@@ -54,12 +54,29 @@ export default function BlockedSeatsTable({
       <h2 className="border-b border-[#EBEBF5] px-4 py-4 text-[14px] font-bold text-[#1A1A2E] sm:px-6 sm:text-[15px]">
         {title} ({total})
       </h2>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1050px] text-left text-[12px] sm:text-[12.5px]">
+      <div className="overflow-hidden">
+        <table className="w-full table-fixed text-left text-[10px] sm:text-[11px] lg:text-[12.5px]">
+          <colgroup>
+            <col className="w-[17%]" />
+            <col className="w-[20%]" />
+            <col className="w-[16%]" />
+            <col className="w-[9%]" />
+            <col className="w-[14%]" />
+            <col className="w-[8%]" />
+            <col className="w-[11%]" />
+            <col className="w-[5%]" />
+          </colgroup>
           <thead className="bg-blue-100/80 text-[11px] font-semibold text-blue-600">
             <tr>
               {headings.map((heading) => (
-                <th key={heading} className="px-4 py-3">
+                <th
+                  key={heading}
+                  className={
+                    heading === "Actions"
+                      ? "whitespace-nowrap px-1 py-3 text-center"
+                      : "break-words px-2 py-3 [overflow-wrap:anywhere] lg:px-4"
+                  }
+                >
                   {heading}
                 </th>
               ))}
@@ -72,30 +89,40 @@ export default function BlockedSeatsTable({
                   key={row.block_id}
                   className="text-gray-500 hover:bg-gray-50"
                 >
-                  <td className="px-4 py-3 font-semibold text-[#1A1A2E]">
+                  <td className="whitespace-nowrap px-2 py-3 align-top font-semibold text-[#1A1A2E] lg:px-4">
                     {row.seat_code}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    {row.site_name} · {row.building_name} · {row.floor_name}
+                  <td className="px-2 py-3 align-top lg:px-4">
+                    <span className="block break-words [overflow-wrap:anywhere]">
+                      {row.site_name}
+                    </span>
+                    <span className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-1 text-gray-400">
+                      <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+                        {row.building_name}
+                      </span>
+                      <span className="whitespace-nowrap">· {row.floor_name}</span>
+                    </span>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3">
+                  <td className="break-words px-2 py-3 align-top [overflow-wrap:anywhere] lg:px-4">
                     {displayDate(row.blocked_from)} – {displayDate(row.blocked_to)}
                   </td>
-                  <td className="px-4 py-3">
-                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${TYPE_STYLES[row.block_type]}`}>
+                  <td className="px-1 py-3 align-top lg:px-3">
+                    <span className={`inline-block max-w-full break-words rounded-full px-1.5 py-1 text-[9px] font-medium [overflow-wrap:anywhere] lg:px-2.5 lg:text-[11px] ${TYPE_STYLES[row.block_type]}`}>
                       {TYPE_LABELS[row.block_type]}
                     </span>
                   </td>
-                  <td className="max-w-[190px] px-4 py-3">{row.reason}</td>
-                  <td className="px-4 py-3">
-                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${STATUS_STYLES[row.display_status]}`}>
+                  <td className="break-words px-2 py-3 align-top [overflow-wrap:anywhere] lg:px-4">
+                    {row.reason}
+                  </td>
+                  <td className="px-1 py-3 align-top lg:px-3">
+                    <span className={`inline-block max-w-full break-words rounded-full px-1.5 py-1 text-[9px] font-medium [overflow-wrap:anywhere] lg:px-2.5 lg:text-[11px] ${STATUS_STYLES[row.display_status]}`}>
                       {STATUS_LABELS[row.display_status]}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3">
+                  <td className="break-words px-2 py-3 align-top [overflow-wrap:anywhere] lg:px-4">
                     {row.blocked_by.name ?? "—"}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-1 py-3 text-center align-top">
                     {row.display_status === "EXPIRED" ? (
                       <span className="text-muted-foreground/50">—</span>
                     ) : (
