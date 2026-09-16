@@ -48,7 +48,7 @@ export default function AdminQuickActions() {
       desc: "Manage blocked or maintenance seats",
       icon: Ban,
       color: "bg-red-50 text-red-600",
-      route: "/admin/seat-status",
+      route: "/admin/blocked-seats",
     },
     {
       title: "Reports",

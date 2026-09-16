@@ -64,6 +64,7 @@ import {
   History,
   UserPlus,
   SlidersHorizontal,
+  Ban,
 } from "lucide-react";
 
 import { getInitials, type User } from "@/features/auth/types/auth.types";
@@ -118,6 +119,7 @@ const ROUTE_MAP: Record<string, string> = {
   seats: "/admin/seats",
   amenities: "/admin/amenities",
   seatstatus: "/admin/seat-status",
+  blockedseats: "/admin/blocked-seats",
   bookings: "/admin/bookings",
   users: "/admin/users",
   roles: "/admin/roles",
@@ -167,6 +169,7 @@ const ADMIN_MANAGE_NAV: NavItem[] = [
   { id: "seats", label: "Seats", icon: CalendarDays, disabled: true },
   { id: "amenities", label: "Amenities", icon: Star },
   { id: "seatstatus", label: "Seat Status", icon: Settings, disabled: true },
+  { id: "blockedseats", label: "Blocked Seats", icon: Ban },
 ];
 
 const ADMIN_OPERATIONS_NAV: NavItem[] = [
