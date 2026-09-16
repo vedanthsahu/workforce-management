@@ -407,9 +407,18 @@ export default function FindTeammatePage() {
     (phase.status === "idle" || phase.status === "not_found");
 
   const q = query.trim().toLowerCase();
+  // Split on whitespace so a multi-word query ("vedanth sahu") is checked
+  // word-by-word against the name's own words, rather than as one literal
+  // string that can never prefix-match a single name word. Every typed word
+  // must prefix some word in the name (order-independent), so "vedanth s"
+  // still matches while "sahu" is still being typed.
+  const qWords = q.split(/\s+/).filter(Boolean);
   const matchesQuery = (m: ApiTeamMember) => {
     const nameWords = m.full_name.toLowerCase().split(" ");
-    return nameWords.some((w) => w.startsWith(q)) || m.email.toLowerCase().startsWith(q);
+    return (
+      qWords.every((qw) => nameWords.some((w) => w.startsWith(qw))) ||
+      m.email.toLowerCase().startsWith(q)
+    );
   };
   const suggestions = showSuggestions
     ? teamGroups
