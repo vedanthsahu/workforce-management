@@ -1,12 +1,13 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import Select, { type MultiValue } from "react-select";
 import {
   Mail, Phone, MapPin, Briefcase,
   Building2, UserCheck, BadgeCheck,
   Camera, Loader2, TriangleAlert, RefreshCw,
   Layers, CalendarCheck2, CalendarClock, History,
   ChevronRight, CalendarDays,
-  Building, Armchair, Check, Pencil, Save, X, ChevronDown,
+  Building, Armchair, Check, Pencil, Save, ChevronDown,
   Sparkles, IdCard, BarChart3, SlidersHorizontal,
 } from "lucide-react";
 
@@ -15,7 +16,6 @@ import { Skeleton }  from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Label }     from "@/components/ui/label";
 import { Textarea }  from "@/components/ui/textarea";
-import { Input }     from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -32,6 +32,7 @@ import type {
   SeatPreferences, ApiBooking, ApiAmenity,
   ApiSite, ApiBuilding, ApiFloor,
 } from "../types/profile.types";
+import { SKILL_OPTIONS, type SkillOption } from "../constants/skills.constants";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -320,7 +321,7 @@ function BookingHistoryModal({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="w-[calc(100vw-2rem)] sm:w-full max-w-lg max-h-[90dvh] sm:max-h-[85vh] flex flex-col p-0 gap-0 rounded-xl">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:w-full max-w-2xl max-h-[90dvh] sm:max-h-[85vh] flex flex-col p-0 gap-0 rounded-xl">
         <DialogHeader className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 shrink-0">
           <DialogTitle className="text-[15px] flex items-center gap-2.5">
             <span className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
@@ -383,7 +384,6 @@ function EditProfileDialog({
 }) {
   const [bio, setBio]           = useState(profile.bio);
   const [skills, setSkills]     = useState<string[]>(profile.skills);
-  const [skillInput, setSkillInput] = useState("");
   const [error, setError]       = useState("");
 
   // Reset when dialog opens with fresh profile
@@ -391,16 +391,9 @@ function EditProfileDialog({
     if (open) {
       setBio(profile.bio);
       setSkills(profile.skills);
-      setSkillInput("");
       setError("");
     }
   }, [open, profile.bio, profile.skills]);
-
-  const handleSkillAdd = () => {
-    const s = skillInput.trim();
-    if (s && !skills.includes(s)) setSkills((prev) => [...prev, s]);
-    setSkillInput("");
-  };
 
   const handleSubmit = async () => {
     setError("");
@@ -414,7 +407,7 @@ function EditProfileDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="w-[calc(100vw-2rem)] sm:w-full max-w-md max-h-[90dvh] sm:max-h-[85vh] flex flex-col p-0 gap-0 rounded-xl">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:w-full max-w-lg max-h-[90dvh] sm:max-h-[85vh] flex flex-col p-0 gap-0 rounded-xl">
         <DialogHeader className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 shrink-0 border-b border-gray-100">
           <DialogTitle className="text-[15px] flex items-center gap-2.5">
             <span className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
@@ -440,33 +433,60 @@ function EditProfileDialog({
           {/* Skills */}
           <div className="space-y-1.5">
             <Label className="text-[12px]">Skills</Label>
-            <div className="flex gap-2">
-              <Input
-                value={skillInput}
-                onChange={(e) => setSkillInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleSkillAdd())}
-                className="h-9 text-[13px]"
-                placeholder="Add skill & press Enter"
+            <Select
+                isMulti
+                isSearchable
+                closeMenuOnSelect={false}
+                maxMenuHeight={360}
+                options={Array.from(new Set([...SKILL_OPTIONS.map((option) => option.value), ...skills])).map((value) => ({
+                  value,
+                  label: value,
+                }))}
+                value={skills.map((value) => ({ value, label: value }))}
+                onChange={(selected: MultiValue<SkillOption>) =>
+                  setSkills(selected.map((option) => option.value))
+                }
+                placeholder="Search skills..."
+                className="text-[13px]"
+                classNamePrefix="skills-select"
+                menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+                styles={{
+                menuPortal: (base) => ({ ...base, zIndex: 50 }),
+                control: (base, state) => ({
+                  ...base,
+                  minHeight: 40,
+                  borderColor: state.isFocused ? "#3b82f6" : "#e5e7eb",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  boxShadow: state.isFocused ? "0 0 0 2px rgb(59 130 246 / 0.2)" : "none",
+                  ":hover": { borderColor: state.isFocused ? "#3b82f6" : "#d1d5db" },
+                }),
+                menu: (base) => ({
+                  ...base,
+                  marginTop: 4,
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 0,
+                  boxShadow: "0 4px 10px rgb(0 0 0 / 0.08)",
+                  overflow: "hidden",
+                }),
+                option: (base, state) => ({
+                  ...base,
+                  padding: "5px 12px",
+                  fontSize: 13,
+                  color: state.isFocused ? "#ffffff" : "#111827",
+                  cursor: "pointer",
+                  backgroundColor: state.isFocused ? "#6b7280" : "#ffffff",
+                  ":active": { backgroundColor: "#e5e7eb" },
+                }),
+                multiValue: (base) => ({ ...base, backgroundColor: "#eef2ff", borderRadius: 6 }),
+                multiValueLabel: (base) => ({ ...base, color: "#4338ca", fontSize: 11 }),
+                  multiValueRemove: (base) => ({
+                  ...base,
+                  cursor: "pointer",
+                  ":hover": { backgroundColor: "#c7d2fe", color: "#3730a3" },
+                  }),
+                }}
               />
-              <Button variant="outline" size="sm" className="h-9 text-[12px] shrink-0" onClick={handleSkillAdd}>
-                Add
-              </Button>
-            </div>
-            {skills.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {skills.map((s) => (
-                  <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[11px] font-medium ring-1 ring-indigo-100">
-                    {s}
-                    <button
-                      onClick={() => setSkills((prev) => prev.filter((x) => x !== s))}
-                      className="hover:text-red-500 transition-colors"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
 
           {error && (

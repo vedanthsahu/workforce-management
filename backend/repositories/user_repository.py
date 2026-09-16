@@ -21,6 +21,8 @@ USER_SELECT_FIELDS = """
     au.job_title,
     au.company_name,
     au.employee_id,
+    au.bio,
+    au.skills,
     au.microsoft_object_id,
     au.user_principal_name,
     au.manager_user_id::text AS manager_user_id,
@@ -50,6 +52,8 @@ USER_RETURNING_FIELDS = """
     job_title,
     company_name,
     employee_id,
+    bio,
+    skills,
     microsoft_object_id,
     user_principal_name,
     manager_user_id::text AS manager_user_id,
@@ -122,6 +126,52 @@ def _normalize_text(value: str | None, *, max_length: int | None = None) -> str 
     if max_length is not None and len(normalized) > max_length:
         raise ValueError(f"Value exceeds schema limit of {max_length} characters.")
     return normalized
+
+
+def _normalize_skills(value: Any) -> list[str]:
+    """Return app_users.skills as clean strings regardless of driver format."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if not isinstance(value, str):
+        return [str(value).strip()]
+
+    text = value.strip()
+    if not text or text == "{}":
+        return []
+    if not (text.startswith("{") and text.endswith("}")):
+        return [text]
+
+    items: list[str] = []
+    current: list[str] = []
+    quoted = False
+    escaped = False
+    for char in text[1:-1]:
+        if escaped:
+            current.append(char)
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == '"':
+            quoted = not quoted
+        elif char == "," and not quoted:
+            item = "".join(current).strip()
+            if item:
+                items.append(item)
+            current = []
+        else:
+            current.append(char)
+
+    item = "".join(current).strip()
+    if item:
+        items.append(item)
+    return items
+
+
+def _normalize_user_record(record: dict[str, Any]) -> dict[str, Any]:
+    record["skills"] = _normalize_skills(record.get("skills"))
+    return record
 
 
 def _required_text(value: str | None, *, field_name: str, max_length: int) -> str:
@@ -234,7 +284,7 @@ def fetch_user_by_email(
             (tenant_id, _normalize_email(email)),
         )
         result = cur.fetchone()
-    return dict(result) if result else None
+    return _normalize_user_record(dict(result)) if result else None
 
 
 def fetch_user_by_phone(
@@ -264,7 +314,7 @@ def fetch_user_by_phone(
             (tenant_id, phone),
         )
         result = cur.fetchone()
-    return dict(result) if result else None
+    return _normalize_user_record(dict(result)) if result else None
 
 
 def fetch_user_by_id(
@@ -285,7 +335,7 @@ def fetch_user_by_id(
             (tenant_id, user_id),
         )
         result = cur.fetchone()
-    return dict(result) if result else None
+    return _normalize_user_record(dict(result)) if result else None
 
 
 def fetch_tenant_name_by_id(
@@ -362,7 +412,7 @@ def fetch_user_profile_context(
             (tenant_id, user_id),
         )
         row = cur.fetchone()
-    return dict(row) if row else None
+    return _normalize_user_record(dict(row)) if row else None
 
 
 def fetch_admin_notification_emails(
@@ -836,6 +886,10 @@ def update_user_profile(
     display_name: str | None = None,
     mobile_phone: str | None = None,
     office_location: str | None = None,
+    bio: str | None = None,
+    skills: list[str] | None = None,
+    bio_provided: bool = False,
+    skills_provided: bool = False,
 ) -> dict[str, Any] | None:
     """Update self-editable profile fields."""
 
@@ -848,6 +902,8 @@ def update_user_profile(
                 display_name = COALESCE(%s, display_name),
                 mobile_phone = COALESCE(%s, mobile_phone),
                 office_location = COALESCE(%s, office_location),
+                bio = CASE WHEN %s THEN %s ELSE bio END,
+                skills = CASE WHEN %s THEN %s ELSE skills END,
                 updated_at = NOW()
             WHERE tenant_id = %s
               AND id = %s
@@ -858,6 +914,10 @@ def update_user_profile(
                 _normalize_text(display_name, max_length=200),
                 _normalize_text(mobile_phone, max_length=50),
                 _normalize_text(office_location, max_length=200),
+                bio_provided,
+                _normalize_text(bio, max_length=2000),
+                skills_provided,
+                skills if skills is not None else None,
                 tenant_id,
                 user_id,
             ),

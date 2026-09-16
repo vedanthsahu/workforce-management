@@ -149,6 +149,11 @@
   background: transparent;
 }
 
+.office-select-option:hover {
+  background-color: #f3f4f6;
+  color: #111827;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
