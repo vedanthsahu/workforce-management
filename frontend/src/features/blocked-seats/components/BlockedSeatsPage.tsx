@@ -37,8 +37,14 @@ export default function BlockedSeatsPage() {
   const [filters, setFilters] = useState<BlockedSeatFilters>(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] =
     useState<BlockedSeatFilters>(EMPTY_FILTERS);
-  const [response, setResponse] = useState(EMPTY_RESPONSE);
-  const [loading, setLoading] = useState(true);
+  const [response, setResponse] = useState(
+    () =>
+      blockedSeatsService.getCachedList("active", EMPTY_FILTERS, 1) ??
+      EMPTY_RESPONSE,
+  );
+  const [loading, setLoading] = useState(
+    () => !blockedSeatsService.getCachedList("active", EMPTY_FILTERS, 1),
+  );
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -46,6 +52,9 @@ export default function BlockedSeatsPage() {
     sites,
     buildings,
     floors,
+    loadingSites,
+    loadingBuildings,
+    loadingFloors,
     loadBuildings,
     loadFloors,
     setBuildings,
@@ -53,8 +62,17 @@ export default function BlockedSeatsPage() {
   } = useBlockedSeatLocations();
   const hasCriteria = Object.values(filters).some(Boolean);
   useEffect(() => {
+    router.prefetch("/admin/blocked-seats/block");
+  }, [router]);
+  useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    const cached = blockedSeatsService.getCachedList(
+      category,
+      appliedFilters,
+      page,
+    );
+    if (cached) setResponse(cached);
+    setLoading(!cached);
     setError("");
     blockedSeatsService
       .list(category, appliedFilters, page)
@@ -95,6 +113,36 @@ export default function BlockedSeatsPage() {
     }
     setFilters((current) => ({ ...current, [key]: value }));
   };
+  useEffect(() => {
+    if (
+      filters.siteId &&
+      !filters.buildingId &&
+      !loadingBuildings &&
+      buildings.length === 1
+    ) {
+      const buildingId = buildings[0].id;
+      setFilters((current) => ({ ...current, buildingId, floorId: "" }));
+      setFloors([]);
+      void loadFloors(buildingId);
+    }
+  }, [
+    buildings,
+    filters.buildingId,
+    filters.siteId,
+    loadFloors,
+    loadingBuildings,
+    setFloors,
+  ]);
+  useEffect(() => {
+    if (
+      filters.buildingId &&
+      !filters.floorId &&
+      !loadingFloors &&
+      floors.length === 1
+    ) {
+      setFilters((current) => ({ ...current, floorId: floors[0].id }));
+    }
+  }, [filters.buildingId, filters.floorId, floors, loadingFloors]);
   const cancelBlock = async (row: BlockedSeat) => {
     const reason = window.prompt(
       `Reason for unblocking seat ${row.seat_code}:`,
@@ -148,6 +196,9 @@ export default function BlockedSeatsPage() {
           sites={sites}
           buildings={buildings}
           floors={floors}
+          loadingSites={loadingSites}
+          loadingBuildings={loadingBuildings}
+          loadingFloors={loadingFloors}
           onChange={updateFilter}
           enabled={hasCriteria}
           onClear={() => {

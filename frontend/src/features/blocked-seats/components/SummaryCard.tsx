@@ -18,15 +18,21 @@ export default function SummaryCard({
   selected,
   onClick,
 }: Props) {
+  const disabled = count === 0;
+
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
+      title={disabled ? `${label} has no records` : undefined}
       className={cn(
         "flex min-w-[190px] flex-1 items-center gap-3 rounded-2xl border bg-white p-3 text-left shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-[0.97] active:duration-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 sm:p-5",
         selected
           ? "border-indigo-300 ring-1 ring-indigo-100"
           : "border-gray-200",
+        disabled &&
+          "cursor-not-allowed opacity-55 hover:translate-y-0 hover:shadow-sm active:scale-100",
       )}
     >
       <span
