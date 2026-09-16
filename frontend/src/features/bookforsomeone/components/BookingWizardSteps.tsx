@@ -297,7 +297,7 @@ function PhoneField({
                     setCountrySearch("");
                     setHoveredCountry(null);
                   }}
-                  style={{ display: "block", width: "100%", border: 0, background: hoveredCountry === option ? "#eef2ff" : option === country ? "#eef2ff" : "#fff", color: "#111827", padding: "6px 9px", textAlign: "left", fontSize: 12, cursor: "pointer" }}
+                  style={{ display: "block", width: "100%", border: 0, background: hoveredCountry === option ? "#374151" : option === country ? "#eef2ff" : "#fff", color: hoveredCountry === option ? "#fff" : "#111827", padding: "6px 9px", textAlign: "left", fontSize: 12, cursor: "pointer" }}
                 >
                   {countryLabel(option)}
                 </button>
