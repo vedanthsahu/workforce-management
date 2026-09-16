@@ -173,6 +173,7 @@ class LayoutSeatResponse(BaseModel):
 
     notes: str | None = None
     amenity_ids: list[int] = []         # ← guard against NULL list too
+    capacity: int | None = None
 
     created_at: datetime
     updated_at: datetime

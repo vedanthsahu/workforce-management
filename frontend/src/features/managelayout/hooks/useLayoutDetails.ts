@@ -116,6 +116,7 @@ export function usePublishLayout(
           is_bookable: seat.is_bookable ?? true,
           is_reserved: seat.is_reserved,
           amenity_ids: seat.amenity_ids.map(Number),
+          capacity:    seat.capacity,
         }));
 
         await bulkConfigureSeats({ seats: entries });

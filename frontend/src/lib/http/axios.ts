@@ -26,6 +26,16 @@ function dispatchRefreshEnd(success: boolean) {
   }
 }
 
+// Session truly expired (refresh failed) — AuthProvider listens for this
+// and shows a modal ("your session expired, please log in again") before
+// navigating to /login, instead of the silent hard-redirect this used to
+// do straight from here with no explanation to the user.
+function dispatchSessionExpired() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("auth:session-expired"));
+  }
+}
+
 axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -64,7 +74,7 @@ axiosInstance.interceptors.response.use(
         !window.location.pathname.includes("/login")
       ) {
         try { await axios.post(`${BACKEND_URL}/auth/logout`, {}, { withCredentials: true }); } catch {}
-        window.location.href = "/login";
+        dispatchSessionExpired();
       }
     }
 
