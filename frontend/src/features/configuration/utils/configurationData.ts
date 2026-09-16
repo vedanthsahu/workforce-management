@@ -202,17 +202,3 @@ export const CONFIGURATION_SECTIONS: ConfigurationSection[] = [
     itemIds: ["layout-visibility"],
   },
 ];
-
-// Tailwind needs literal class strings to scan -- can't derive "bg-X" from
-// the "text-X" values above at runtime, so the accent bar color is looked
-// up from a static map keyed by that same iconColor string.
-export const ACCENT_BAR_BY_ICON_COLOR: Record<string, string> = {
-  "text-amber-600": "bg-amber-200",
-  "text-blue-600": "bg-blue-200",
-  "text-red-600": "bg-red-200",
-  "text-indigo-600": "bg-indigo-200",
-  "text-emerald-600": "bg-emerald-200",
-  "text-orange-600": "bg-orange-200",
-  "text-violet-600": "bg-violet-200",
-  "text-gray-600": "bg-gray-200",
-};
