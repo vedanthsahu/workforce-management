@@ -65,7 +65,7 @@ export default function BulkEditModal({
     backgroundPosition: "right 10px center",
   };
 
-  const selectClass = "w-full h-9 px-3 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors appearance-none";
+  const selectClass = "w-full h-9 px-3 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors appearance-none";
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
