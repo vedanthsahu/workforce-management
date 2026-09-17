@@ -75,7 +75,7 @@ export default function BlockedSeatsPage() {
     setLoading(!cached);
     setError("");
     blockedSeatsService
-      .list(category, appliedFilters, page)
+      .list(category, appliedFilters, page, 10, true)
       .then((data) => {
         if (!cancelled) setResponse(data);
       })
