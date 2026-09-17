@@ -119,6 +119,13 @@ const applyResourceColor = (
 const escapeSelector = (value: string) =>
   typeof CSS !== "undefined" && CSS.escape ? CSS.escape(value) : value;
 
+const resourceHoverLabel = (resource: SeatOption) => {
+  const name = resource.resource_name?.trim();
+  return name && name !== resource.seat_code
+    ? `${resource.seat_code} — ${name}`
+    : resource.seat_code;
+};
+
 export default function BlockableFloorMap({
   layoutUrl,
   resources,
@@ -168,7 +175,19 @@ export default function BlockableFloorMap({
       if (!element) continue;
       const selected = selectedIds.includes(resource.seat_id);
       const disabled = !resource.selectable;
+      const hoverLabel = resourceHoverLabel(resource);
+      const existingTitle = Array.from(element.children).find(
+        (child) => child.tagName.toLowerCase() === "title",
+      );
+      existingTitle?.remove();
+      const title = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "title",
+      );
+      title.textContent = hoverLabel;
+      element.prepend(title);
       element.dataset.blockResourceId = resource.seat_id;
+      element.setAttribute("aria-label", hoverLabel);
       element.style.cursor = disabled ? "not-allowed" : "pointer";
       element.style.opacity = disabled ? "0.55" : "1";
       applyResourceColor(element, resource, selected);
@@ -215,7 +234,7 @@ export default function BlockableFloorMap({
           />
         )}
       </div>
-      <p className="text-[11.5px] text-gray-400 sm:text-[12px]">Click any available seat, cabin, conference room, or meeting room to select it.</p>
+      <p className="text-[11.5px] text-gray-400 sm:text-[12px]">Hover to view a space name. Click any available seat, cabin, conference room, or meeting room to select it.</p>
     </div>
   );
 }
