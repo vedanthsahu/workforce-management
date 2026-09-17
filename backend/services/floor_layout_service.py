@@ -563,17 +563,27 @@ def reschedule_floor_layout(
         floor_id = str(layout["floor_id"])
         tz_name = fetch_site_timezone(conn, tenant_id=tenant_id, site_id=str(layout["site_id"]))
         site_today = _site_local_today(tz_name)
-        min_advance_days = _resolve_admin_min_advance_days(conn, tenant_id=tenant_id)
+        # Deliberately the employee window alone, NOT the full admin
+        # min_advance_days (window + buffer) a *new* schedule requires. The
+        # buffer exists to give a brand-new layout operational lead time
+        # (prep, communication) before it goes live -- but this layout's
+        # seats are already materialized (see _schedule_floor_layout), so
+        # there's nothing left to prepare. Only the booking-conflict floor
+        # (no user booking can land on a layout about to be replaced) is
+        # still load-bearing once a layout is already scheduled.
+        employee_max_advance_days = _resolve_employee_max_advance_days(
+            conn, tenant_id=tenant_id,
+        )
 
-        if effective_date < site_today + timedelta(days=min_advance_days):
+        if effective_date < site_today + timedelta(days=employee_max_advance_days):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
                     "code": "effective_date_too_soon",
                     "message": (
-                        f"Effective date must be at least {min_advance_days} days out, "
-                        "so no user booking can ever land on a layout that's about to "
-                        "be replaced."
+                        f"Effective date must be at least {employee_max_advance_days} "
+                        "days out, so no user booking can ever land on a layout "
+                        "that's about to be replaced."
                     ),
                 },
             )
@@ -598,9 +608,6 @@ def reschedule_floor_layout(
             )
 
         current_effective_from = layout["effective_from"]
-        employee_max_advance_days = _resolve_employee_max_advance_days(
-            conn, tenant_id=tenant_id,
-        )
         danger_window_start = current_effective_from - timedelta(
             days=employee_max_advance_days,
         )

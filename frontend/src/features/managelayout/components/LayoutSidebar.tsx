@@ -5,6 +5,20 @@ import { useEffect, useCallback, useState, ReactNode } from "react";
 import { Layout } from "../types/layout.types";
 import { useScheduledLayoutActions } from "../hooks/useLayoutDetails";
 import { STATIC_PREFETCH_ROUTES } from "../utils/layoutPreview.utils";
+import { fetchLayoutPolicy } from "../services/layoutService";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+
+// Fallback only -- used for the one render before the real tenant value
+// (GET /business-rules/layout-policy) has loaded, and if that call fails.
+// Mirrors the backend's own _DEFAULT_EMPLOYEE_MAX_ADVANCE_DAYS
+// (business_rule_service.py), not an independent guess.
+const FALLBACK_EMPLOYEE_MAX_ADVANCE_DAYS = 30;
+
+function minEffectiveDateIso(minAdvanceDays: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + minAdvanceDays);
+  return d.toISOString().slice(0, 10);
+}
 
 interface LayoutSidebarProps {
   layout: Layout | null;
@@ -143,21 +157,36 @@ function StatusBadge({ status, isPublished }: { status: string; isPublished: boo
 // inline controls, not a full modal -- good enough to unblock admins
 // today, worth a nicer dialog later if this gets heavy use.
 function ScheduleActionsCard({ layout, onChanged }: { layout: Layout; onChanged: () => void }) {
-  const [newDate, setNewDate] = useState(
-    layout.effective_from ? layout.effective_from.slice(0, 10) : "",
-  );
+  const currentEffectiveDate = layout.effective_from ? layout.effective_from.slice(0, 10) : "";
+  const [newDate, setNewDate] = useState(currentEffectiveDate);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  // Deliberately the employee window alone, not the full admin
+  // min_advance_days (window + buffer) a *new* schedule requires -- see
+  // the matching comment on reschedule_floor_layout's own validation
+  // (backend/services/floor_layout_service.py). This layout's seats are
+  // already materialized, so the buffer's lead-time rationale doesn't
+  // apply to just moving its date.
+  const [employeeMaxAdvanceDays, setEmployeeMaxAdvanceDays] = useState(FALLBACK_EMPLOYEE_MAX_ADVANCE_DAYS);
   const { rescheduling, cancelling, actionError, reschedule, cancelSchedule } =
     useScheduledLayoutActions(layout, onChanged);
+
+  useEffect(() => {
+    let active = true;
+    fetchLayoutPolicy()
+      .then((policy) => { if (active) setEmployeeMaxAdvanceDays(policy.employee_max_advance_days); })
+      .catch((err) => console.error("[fetchLayoutPolicy]", err));
+    return () => { active = false; };
+  }, []);
+
+  const minDate = minEffectiveDateIso(employeeMaxAdvanceDays);
 
   const handleReschedule = () => {
     if (!newDate) return;
     reschedule(newDate);
   };
 
-  const handleCancel = () => {
-    if (!window.confirm(
-      "Cancel this scheduled layout? The floor's currently published layout will keep running indefinitely instead.",
-    )) return;
+  const handleCancelConfirm = () => {
+    setShowCancelConfirm(false);
     cancelSchedule();
   };
 
@@ -172,13 +201,22 @@ function ScheduleActionsCard({ layout, onChanged }: { layout: Layout; onChanged:
             <input
               type="date"
               value={newDate}
-              onChange={(e) => setNewDate(e.target.value)}
+              min={minDate}
+              onChange={(e) => {
+                const value = e.target.value;
+                // `min` only greys out the calendar dropdown, it doesn't stop a
+                // date typed directly into the MM/DD/YYYY segments -- clamp
+                // those too instead of letting an obviously-invalid date sit in
+                // the field until Update is clicked (see manage-seats/page.tsx's
+                // publish-date picker for the same reasoning).
+                setNewDate(value && value < minDate ? minDate : value);
+              }}
               className="flex-1 h-9 px-2.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
             />
             <button
               type="button"
               onClick={handleReschedule}
-              disabled={rescheduling || cancelling || !newDate}
+              disabled={rescheduling || cancelling || !newDate || newDate === currentEffectiveDate}
               className="h-9 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-xs font-medium text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
             >
               {rescheduling ? "Saving..." : "Update"}
@@ -188,7 +226,7 @@ function ScheduleActionsCard({ layout, onChanged }: { layout: Layout; onChanged:
 
         <button
           type="button"
-          onClick={handleCancel}
+          onClick={() => setShowCancelConfirm(true)}
           disabled={rescheduling || cancelling}
           className="w-full h-9 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
@@ -199,6 +237,17 @@ function ScheduleActionsCard({ layout, onChanged }: { layout: Layout; onChanged:
           <p className="text-xs text-red-600">{actionError}</p>
         )}
       </div>
+
+      <ConfirmDialog
+        open={showCancelConfirm}
+        title="Cancel this scheduled layout?"
+        description="The floor's currently published layout will keep running indefinitely instead."
+        confirmLabel={cancelling ? "Cancelling…" : "Yes, Cancel Schedule"}
+        loading={cancelling}
+        destructive
+        onConfirm={handleCancelConfirm}
+        onClose={() => setShowCancelConfirm(false)}
+      />
     </div>
   );
 }

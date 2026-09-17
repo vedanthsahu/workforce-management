@@ -582,6 +582,50 @@ class RescheduleFloorLayoutServiceTests(unittest.TestCase):
         mock_schedule.assert_not_called()
         self.assertEqual(conn.rollbacks, 1)
 
+    def test_reschedule_accepts_date_inside_admin_buffer_but_past_employee_window(
+        self,
+    ) -> None:
+        """Reschedule's floor is the employee booking window alone
+        (30 days in _SCHEDULING_GAP), not the full admin min_advance_days
+        (45, window + buffer) a *new* schedule requires -- a scheduled
+        layout's seats are already materialized, so the buffer's
+        lead-time rationale doesn't apply to just moving its date.
+        A date 35 days out (past the 30-day window, short of the
+        45-day min_advance_days) must be accepted, not rejected."""
+        conn = FakeConnection()
+        current_user = {"tenant_id": "1", "user_id": "5"}
+        current_effective_from = datetime.now(UTC) + timedelta(days=90)
+        new_date = (datetime.now(UTC) + timedelta(days=35)).date()
+        scheduled_row = _layout_row(
+            layout_id="10", status="SCHEDULED", effective_from=current_effective_from,
+        )
+
+        with patch(
+            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+            return_value=scheduled_row,
+        ), patch(
+            "backend.services.floor_layout_service.fetch_site_timezone",
+            return_value=None,
+        ), patch(
+            "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
+            return_value=_SCHEDULING_GAP,
+        ), patch(
+            "backend.services.floor_layout_service.acquire_floor_publish_lock",
+        ), patch(
+            "backend.services.floor_layout_service.fetch_published_layout_for_floor",
+            return_value=None,
+        ), patch(
+            "backend.services.floor_layout_service.schedule_floor_layout_record",
+            return_value=_layout_row(layout_id="10", status="SCHEDULED"),
+        ) as mock_schedule:
+            response = reschedule_floor_layout(
+                conn, current_user=current_user, layout_id="10", effective_date=new_date,
+            )
+
+        self.assertEqual(response.status, "SCHEDULED")
+        mock_schedule.assert_called_once()
+        self.assertEqual(conn.commits, 1)
+
     def test_reschedule_non_scheduled_layout_returns_409(self) -> None:
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
