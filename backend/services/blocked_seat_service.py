@@ -21,7 +21,7 @@ from backend.repositories.blocked_seat_repository import (
     fetch_blocked_seats_by_ids,
     fetch_conflicting_booking_seat_codes,
     fetch_seats_for_block,
-    insert_blocked_seat,
+    insert_blocked_seats,
 )
 from backend.schemas.blocked_seat import (
     BlockableFloorLayoutResponse,
@@ -116,6 +116,9 @@ def get_blockable_floor_layout(
     floor_id: int,
     blocked_from: date,
     blocked_to: date,
+    view: str = "resources",
+    page: int = 1,
+    limit: int = 100,
 ) -> BlockableFloorLayoutResponse:
     if blocked_to < blocked_from:
         raise HTTPException(
@@ -132,6 +135,9 @@ def get_blockable_floor_layout(
             floor_id=floor_id,
             blocked_from=blocked_from,
             blocked_to=blocked_to,
+            view=view,
+            page=page,
+            limit=limit,
         )
     except psycopg2.Error as exc:
         raise HTTPException(
@@ -158,6 +164,8 @@ def get_blockable_floor_layout(
         layout_file_url=layout["layout_file_url"],
         effective_from=layout.get("effective_from"),
         effective_till=layout.get("effective_till"),
+        conflicts=layout.get("conflicts", []),
+        has_more_conflicts=layout.get("has_more_conflicts", False),
         resources=[
             BlockableResourceResponse(**resource) for resource in layout["resources"]
         ],
@@ -254,19 +262,16 @@ def create_blocked_seats(
                     ),
                 },
             )
-        block_ids = [
-            insert_blocked_seat(
-                conn,
-                tenant_id=tenant_id,
-                seat=seat,
-                block_type=payload.block_type,
-                blocked_from=payload.blocked_from,
-                blocked_to=payload.blocked_to,
-                reason=payload.reason,
-                blocked_by_user_id=str(current_user["user_id"]),
-            )
-            for seat in seats
-        ]
+        block_ids = insert_blocked_seats(
+            conn,
+            tenant_id=tenant_id,
+            seats=seats,
+            block_type=payload.block_type,
+            blocked_from=payload.blocked_from,
+            blocked_to=payload.blocked_to,
+            reason=payload.reason,
+            blocked_by_user_id=str(current_user["user_id"]),
+        )
         conn.commit()
     except HTTPException as exc:
         conn.rollback()
