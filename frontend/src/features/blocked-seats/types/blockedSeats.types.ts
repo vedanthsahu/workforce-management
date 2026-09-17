@@ -24,7 +24,22 @@ export interface SeatOption {
   capacity?: number | null;
 }
 
+export interface BlockedSeatConflict {
+  booking_id: string;
+  seat_id: string;
+  site_id: string;
+  building_id: string;
+  floor_id: string;
+  seat_code: string;
+  booking_date: string;
+  booking_type: string;
+  booking_status: string;
+  booked_for_name: string | null;
+}
+
 export interface BlockableFloorLayout {
+  conflicts: BlockedSeatConflict[];
+  has_more_conflicts: boolean;
   layout_id: string;
   layout_name: string;
   layout_file_url: string;

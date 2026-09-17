@@ -6,12 +6,12 @@ from datetime import date
 from typing import Any
 
 from psycopg2.extensions import connection as PGConnection
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, execute_values
 
 from backend.schemas.blocked_seat import BlockedSeatListQuery
 
 
-def _filtered_base(query: BlockedSeatListQuery) -> tuple[str, list[Any]]:
+def _filtered_base(query: BlockedSeatListQuery, *, details: bool = True) -> tuple[str, list[Any]]:
     sql = """
         FROM blocked_seats AS bs
         INNER JOIN seats AS st ON st.id = bs.seat_id AND st.tenant_id = bs.tenant_id
@@ -22,6 +22,15 @@ def _filtered_base(query: BlockedSeatListQuery) -> tuple[str, list[Any]]:
         WHERE bs.tenant_id = %s
           AND bs.status <> 'CANCELLED'
     """
+    if not details:
+        # Counts need location IDs on blocked_seats, not display-name joins.
+        sql = """
+            FROM blocked_seats AS bs
+            INNER JOIN sites AS si ON si.id = bs.site_id AND si.tenant_id = bs.tenant_id
+        """
+        if query.search:
+            sql += " INNER JOIN seats AS st ON st.id = bs.seat_id AND st.tenant_id = bs.tenant_id"
+        sql += " WHERE bs.tenant_id = %s AND bs.status <> 'CANCELLED'"
     params: list[Any] = []
     if query.search:
         sql += " AND (st.seat_code ILIKE %s OR COALESCE(bs.reason, '') ILIKE %s)"
@@ -96,7 +105,8 @@ def fetch_blocked_seats(
         + f" AND {category_sql} ORDER BY bs.blocked_from DESC, bs.id DESC LIMIT %s OFFSET %s"
     )
     params.extend([limit, (page - 1) * limit])
-    count_sql = "SELECT COUNT(*)::integer AS total " + base + f" AND {category_sql}"
+    count_base, _ = _filtered_base(query, details=False)
+    count_sql = "SELECT COUNT(*)::integer AS total " + count_base + f" AND {category_sql}"
     count_params: list[Any] = [tenant_id, *filter_params, *category_params]
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(sql, params)
@@ -113,7 +123,7 @@ def fetch_blocked_seat_summary(
     query: BlockedSeatListQuery,
     reference_date: date,
 ) -> dict[str, int]:
-    base, filter_params = _filtered_base(query)
+    base, filter_params = _filtered_base(query, details=False)
     sql = (
         """
         SELECT
@@ -155,6 +165,9 @@ def fetch_blockable_floor_layout(
     floor_id: int,
     blocked_from: date,
     blocked_to: date,
+    view: str = "resources",
+    page: int = 1,
+    limit: int = 100,
 ) -> dict[str, Any] | None:
     """Return the one layout and its resources valid for the entire block range."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -187,6 +200,35 @@ def fetch_blockable_floor_layout(
         layout = cur.fetchone()
         if layout is None:
             return None
+        result = dict(layout)
+        result["resources"] = []
+        if view == "metadata":
+            return result
+        if view == "conflicts":
+            cur.execute(
+                """
+                SELECT b.id::text AS booking_id, b.seat_id::text AS seat_id,
+                       b.site_id::text AS site_id, b.building_id::text AS building_id,
+                       b.floor_id::text AS floor_id, st.seat_code, b.booking_date,
+                       b.booking_type, b.booking_status,
+                       COALESCE(u.full_name, g.full_name) AS booked_for_name
+                FROM bookings AS b
+                INNER JOIN seats AS st ON st.id = b.seat_id AND st.tenant_id = b.tenant_id
+                LEFT JOIN app_users AS u ON u.id = b.booked_for_user_id AND u.tenant_id = b.tenant_id
+                LEFT JOIN guests AS g ON g.id = b.booked_for_guest_id AND g.tenant_id = b.tenant_id
+                WHERE b.tenant_id = %s AND st.floor_id = %s AND st.layout_id = %s
+                  AND b.booking_date BETWEEN %s AND %s
+                  AND b.booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
+                ORDER BY b.booking_date DESC, b.id DESC
+                LIMIT %s OFFSET %s
+                """,
+                (tenant_id, floor_id, layout["layout_id"], blocked_from, blocked_to,
+                 limit + 1, (page - 1) * limit),
+            )
+            rows = [dict(row) for row in cur.fetchall()]
+            result["conflicts"] = rows[:limit]
+            result["has_more_conflicts"] = len(rows) > limit
+            return result
 
         cur.execute(
             """
@@ -256,40 +298,37 @@ def fetch_conflicting_booking_seat_codes(
         return [str(row[0]) for row in cur.fetchall()]
 
 
-def insert_blocked_seat(
+def insert_blocked_seats(
     conn: PGConnection,
     *,
     tenant_id: str,
-    seat: dict[str, Any],
+    seats: list[dict[str, Any]],
     block_type: str,
     blocked_from: date,
     blocked_to: date,
     reason: str,
     blocked_by_user_id: str,
-) -> str:
+) -> list[str]:
+    """Insert the validated selection in one statement (API maximum: 200)."""
+    values = [
+        (tenant_id, seat["id"], seat["site_id"], seat["building_id"], seat["floor_id"],
+         blocked_from, blocked_to, reason, block_type, "ACTIVE", blocked_by_user_id)
+        for seat in seats
+    ]
     with conn.cursor() as cur:
-        cur.execute(
+        rows = execute_values(
+            cur,
             """
             INSERT INTO blocked_seats (
               tenant_id, seat_id, site_id, building_id, floor_id,
               blocked_from, blocked_to, reason, block_type, status, blocked_by_user_id
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'ACTIVE', %s)
-            RETURNING id::text
+            ) VALUES %s RETURNING id::text
             """,
-            (
-                tenant_id,
-                seat["id"],
-                seat["site_id"],
-                seat["building_id"],
-                seat["floor_id"],
-                blocked_from,
-                blocked_to,
-                reason,
-                block_type,
-                blocked_by_user_id,
-            ),
+            values,
+            page_size=200,
+            fetch=True,
         )
-        return str(cur.fetchone()[0])
+        return [str(row[0]) for row in rows]
 
 
 def fetch_blocked_seats_by_ids(

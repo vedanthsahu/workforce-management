@@ -112,6 +112,19 @@ class BlockableResourceResponse(BaseModel):
     has_block: bool
 
 
+class BlockedSeatConflictResponse(BaseModel):
+    booking_id: str
+    seat_id: str
+    site_id: str
+    building_id: str
+    floor_id: str
+    seat_code: str
+    booking_date: date
+    booking_type: str
+    booking_status: str
+    booked_for_name: str | None = None
+
+
 class BlockableFloorLayoutResponse(BaseModel):
     layout_id: str
     layout_name: str
@@ -119,6 +132,8 @@ class BlockableFloorLayoutResponse(BaseModel):
     effective_from: datetime | None = None
     effective_till: datetime | None = None
     resources: list[BlockableResourceResponse]
+    conflicts: list[BlockedSeatConflictResponse] = Field(default_factory=list)
+    has_more_conflicts: bool = False
 
 
 class CancelBlockedSeatRequest(BaseModel):
