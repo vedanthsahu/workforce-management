@@ -749,12 +749,19 @@ def fetch_amenities(
                 ac.tenant_id = a.tenant_id
                 OR ac.tenant_id IS NULL
            )
-        LEFT JOIN LATERAL (
-            SELECT COUNT(DISTINCT sa.seat_id)::integer AS assigned_seat_count
+        -- One GROUP BY pass over seat_amenities for the whole tenant,
+        -- instead of a LATERAL correlated subquery that re-scanned it once
+        -- per amenity row (81 amenities meant 81 separate scans of the
+        -- same table, each filtered down to one amenity_id).
+        LEFT JOIN (
+            SELECT
+                sa.amenity_id,
+                COUNT(DISTINCT sa.seat_id)::integer AS assigned_seat_count
             FROM seat_amenities AS sa
-            WHERE sa.tenant_id = a.tenant_id
-              AND sa.amenity_id = a.id
-        ) AS assignments ON TRUE
+            WHERE sa.tenant_id = %(tenant_id)s
+            GROUP BY sa.amenity_id
+        ) AS assignments
+            ON assignments.amenity_id = a.id
         WHERE a.tenant_id = %(tenant_id)s
           AND (
                 %(is_active)s IS NULL
