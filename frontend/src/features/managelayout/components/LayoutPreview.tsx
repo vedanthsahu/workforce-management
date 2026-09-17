@@ -16,8 +16,6 @@ import {
   SVG_W,
   SVG_H,
   ROOM_SVG_ID_PATTERN,
-  SEAT_TYPES,
-  SEAT_TYPE_LABELS,
   SEAT_STATUSES,
   LEGEND_ITEMS,
 } from "../utils/layoutPreview.utils";
