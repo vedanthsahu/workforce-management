@@ -329,8 +329,8 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
   if (!seat) return null;
 
   const selectCls = `w-full h-9 px-3 text-xs font-medium text-gray-700 bg-white border border-gray-200
-    rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30
-    focus:border-indigo-400 transition-colors`;
+    rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500
+    transition-colors`;
   const chevron = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'
     viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline
     points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`;
@@ -447,7 +447,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
               placeholder="Add any notes about this seat…"
               maxLength={200}
               rows={3}
-              className="w-full px-3 py-2.5 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400"
+              className="w-full px-3 py-2.5 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400"
             />
             <p className="text-right text-[10px] text-gray-400 mt-0.5">{notes.length} / 200</p>
           </div>

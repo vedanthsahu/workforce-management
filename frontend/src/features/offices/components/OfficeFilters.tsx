@@ -15,7 +15,7 @@ export default function OfficeFilters({ search, setSearch }: OfficeFiltersProps)
       <Input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="pl-9"
+        className="pl-9 focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500"
         placeholder="Search offices..."
       />
     </div>

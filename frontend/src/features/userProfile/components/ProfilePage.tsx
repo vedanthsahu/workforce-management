@@ -188,7 +188,7 @@ function CascadeSelect({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled || loading}
-          className="w-full h-9 rounded-md border border-gray-200 bg-white pl-3 pr-8 text-[13px] text-gray-800 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full h-9 rounded-md border border-gray-200 bg-white pl-3 pr-8 text-[13px] text-gray-800 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {!value && <option value="" disabled hidden>{placeholder ?? ""}</option>}
           {options.map((o) => (

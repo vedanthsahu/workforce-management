@@ -58,7 +58,7 @@ function SettingRow({
           min={0}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-20 h-10 px-3 text-center text-sm font-semibold text-gray-900 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors"
+          className="w-20 h-10 px-3 text-center text-sm font-semibold text-gray-900 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
         />
         <span className="text-xs font-medium text-gray-400 w-16">{unit}</span>
       </div>

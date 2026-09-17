@@ -51,7 +51,7 @@ function FilterSelect({
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="h-9 w-full pl-3 pr-8 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors cursor-pointer"
+          className="h-9 w-full pl-3 pr-8 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer"
           style={{
             // The clear (x) button takes over this exact spot when a filter
             // is active, so only one icon ever occupies the corner — showing
@@ -125,7 +125,7 @@ export default function SeatFiltersBar({
             placeholder="Search by seat code…"
             value={filters.search}
             onChange={(e) => onUpdate("search", e.target.value)}
-            className={`h-9 pl-8 ${filters.search ? "pr-7" : "pr-3"} w-44 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400`}
+            className={`h-9 pl-8 ${filters.search ? "pr-7" : "pr-3"} w-44 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400`}
           />
           {filters.search && (
             <button

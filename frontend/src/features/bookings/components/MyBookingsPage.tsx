@@ -185,7 +185,7 @@ function MyBookingsToolbar({
         </div>
 
         {/* Search */}
-        <div className="flex items-center gap-2 bg-gray-50 border border-[#EBEBF5] rounded-lg px-3 py-2 w-[200px]">
+        <div className="flex items-center gap-2 bg-gray-50 border border-[#EBEBF5] rounded-lg px-3 py-2 w-[200px] focus-within:ring-2 focus-within:ring-blue-500">
           <Search className="size-3.5 text-gray-400 shrink-0" />
           <input
             type="text"
@@ -267,7 +267,7 @@ function BfsToolbar({
         </div>
 
         {/* Search */}
-        <div className="flex items-center gap-2 bg-gray-50 border border-[#EBEBF5] rounded-lg px-3 py-2 w-[200px]">
+        <div className="flex items-center gap-2 bg-gray-50 border border-[#EBEBF5] rounded-lg px-3 py-2 w-[200px] focus-within:ring-2 focus-within:ring-blue-500">
           <Search className="size-3.5 text-gray-400 shrink-0" />
           <input
             type="text"
