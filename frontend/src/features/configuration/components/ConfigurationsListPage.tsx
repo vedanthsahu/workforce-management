@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ChevronDown, Info, X } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ConfigurationSkeleton } from "./ConfigurationSkeleton";
 import { CONFIGURATION_SECTIONS, INITIAL_CONFIGURATIONS } from "../utils/configurationData";
 import type { ConfigurationField, ConfigurationItem } from "../types/configuration.types";
 import {
@@ -91,7 +92,7 @@ function SettingRow({
           className={`w-20 h-10 px-3 text-center text-sm font-semibold rounded-lg border transition-colors ${
             readOnly
               ? "border-gray-200 bg-gray-100 text-gray-500 cursor-not-allowed"
-              : "border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+              : "border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
           }`}
         />
         <span className="text-xs font-medium text-gray-400 w-16">{unit}</span>
@@ -112,11 +113,12 @@ export default function ConfigurationsListPage() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Replace the hardcoded mock values for backend-backed items with the
-  // tenant's real, currently-effective ones as soon as they load -- until
-  // then the page still renders instantly with the mock defaults instead
-  // of a blank/loading state.
+  // tenant's real, currently-effective ones as soon as they load. The
+  // ConfigurationSkeleton (below) stays up for exactly as long as this
+  // real fetch takes, not a fixed/fake delay.
   useEffect(() => {
     let cancelled = false;
 
@@ -150,6 +152,9 @@ export default function ConfigurationsListPage() {
         // Real values failed to load -- the mock defaults stay on screen
         // rather than the page breaking; Save still round-trips to the
         // backend and will surface its own error if that's still down.
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
 
     return () => {
@@ -277,6 +282,10 @@ export default function ConfigurationsListPage() {
       ),
     [configurations]
   );
+
+  if (loading) {
+    return <ConfigurationSkeleton />;
+  }
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip bg-[#f8fafc]">

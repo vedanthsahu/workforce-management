@@ -74,7 +74,7 @@ function DateRangeField({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="h-10 px-3 flex items-center gap-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors w-full"
+        className="h-10 px-3 flex items-center gap-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors w-full"
       >
         <CalendarDays size={14} className="text-gray-400 shrink-0" />
         <span className="flex-1 text-left truncate">{label}</span>
@@ -101,7 +101,7 @@ function DateRangeField({
                 if (!["Tab", "Escape", "Shift"].includes(e.key)) e.preventDefault();
               }}
               onPaste={(e) => e.preventDefault()}
-              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -115,7 +115,7 @@ function DateRangeField({
                 if (!["Tab", "Escape", "Shift"].includes(e.key)) e.preventDefault();
               }}
               onPaste={(e) => e.preventDefault()}
-              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="flex items-center justify-between gap-2 pt-1">
@@ -561,7 +561,7 @@ export default function BookingManagementFilters({
                   onKeyDown={(e) => {
                     if (e.key === "Escape") setSearchOpen(false);
                   }}
-                  className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
+                  className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
                 />
                 {filters.search && (
                   <button
@@ -632,7 +632,7 @@ export default function BookingManagementFilters({
               onKeyDown={(e) => {
                 if (e.key === "Escape") setSeatOpen(false);
               }}
-              className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400"
+              className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400"
             />
             {filters.seatNumber && (
               <button

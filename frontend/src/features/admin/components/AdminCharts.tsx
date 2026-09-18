@@ -250,7 +250,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
             <select
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value as TrendPeriod)}
-              className="h-8 cursor-pointer appearance-none rounded-lg border border-blue-500 bg-white pl-3 pr-8 text-xs font-medium text-gray-900 shadow-none transition-colors hover:bg-white focus:border-blue-500 focus:outline-none"
+              className="h-8 cursor-pointer appearance-none rounded-lg border border-blue-500 bg-white pl-3 pr-8 text-xs font-medium text-gray-900 shadow-none transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               {PERIOD_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value} className="bg-white text-gray-900">

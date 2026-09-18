@@ -373,7 +373,7 @@ function ManageSeatsPage() {
                   // for the real minimum), this just avoids a round-trip.
                   setEffectiveDate(value && value < min ? min : value);
                 }}
-                className="w-full h-9 pl-8 pr-3 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+                className="w-full h-9 pl-8 pr-3 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </>

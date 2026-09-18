@@ -229,8 +229,8 @@ export function EmployeeSearch({ placeholder, selectedEmployee, onSelect, onClea
             fontFamily: "inherit",
             cursor: selectedEmployee ? "default" : "text",
           }}
-          onFocusCapture={(e) => { e.currentTarget.style.borderColor = "#4f46e5"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(79,70,229,0.1)"; }}
-          onBlurCapture={(e) => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.boxShadow = "none"; }}
+          onFocusCapture={fieldFocusRing}
+          onBlurCapture={fieldBlurRing}
           aria-label={placeholder}
           role="combobox"
           aria-expanded={isOpen}
@@ -496,15 +496,28 @@ export function inputStyle(focused?: boolean): React.CSSProperties {
     width: "100%",
     height: 40,
     padding: "0 0.75rem",
-    border: `1.5px solid ${focused ? "#4f46e5" : "#e5e7eb"}`,
+    border: `1.5px solid ${focused ? "#3b82f6" : "#e5e7eb"}`,
     borderRadius: 8,
     fontSize: "0.875rem",
     color: "#111827",
     outline: "none",
     background: "#fff",
     fontFamily: "inherit",
-    boxShadow: focused ? "0 0 0 3px rgba(79,70,229,0.1)" : "none",
+    boxShadow: focused ? "0 0 0 3px rgba(59,130,246,0.1)" : "none",
   };
+}
+
+// Shared focus/blur highlight for search + dropdown fields in this wizard --
+// matches the app-wide focus:ring-2 focus:ring-blue-500 convention, applied
+// here via direct style mutation since these fields use inline styles rather
+// than Tailwind classes.
+export function fieldFocusRing(e: React.FocusEvent<HTMLElement>) {
+  e.currentTarget.style.borderColor = "#3b82f6";
+  e.currentTarget.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.1)";
+}
+export function fieldBlurRing(e: React.FocusEvent<HTMLElement>) {
+  e.currentTarget.style.borderColor = "#e5e7eb";
+  e.currentTarget.style.boxShadow = "none";
 }
 
 export function FieldLabel({ children, htmlFor, required }: { children: React.ReactNode; htmlFor?: string; required?: boolean }) {

@@ -1,8 +1,8 @@
 import { axiosInstance } from "@/lib/http/axios";
 import type { ApiTeamGroup, TeammateSearchResult } from "../types/findteammate.types";
 
-export async function fetchAllTeamGroups(): Promise<ApiTeamGroup[]> {
-  const { data } = await axiosInstance.get<ApiTeamGroup[]>("/teams/me");
+export async function fetchAllTeamGroups(params?: { page?: number; limit?: number }): Promise<ApiTeamGroup[]> {
+  const { data } = await axiosInstance.get<ApiTeamGroup[]>("/teams/me", { params });
   return data;
 }
 
