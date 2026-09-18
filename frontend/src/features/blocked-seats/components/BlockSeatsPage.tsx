@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Trash2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { adminBookingsService } from "@/features/adminbookings/services/adminBookings.service";
-import type { AdminBookingRaw } from "@/features/adminbookings/types/adminBooking.types";
 import {
   cancelBooking,
   cancelGuestBooking,
@@ -17,6 +21,7 @@ import { blockedSeatsService } from "../services/blockedSeatsService";
 import { useBlockedSeatLocations } from "../hooks/useBlockedSeatLocations";
 import type {
   BlockType,
+  BlockedSeatConflict,
   BlockableFloorLayout,
   SeatOption,
 } from "../types/blockedSeats.types";
@@ -42,15 +47,22 @@ const CONFLICT_PAGE_SIZE = 10;
 const inputClass =
   "mt-1.5 h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-[12.5px] text-gray-900 outline-none transition-colors focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400 sm:h-10 sm:text-[13px]";
 const apiErrorMessage = (error: unknown, fallback: string) => {
-  const data = (error as {
-    response?: { data?: { detail?: { message?: string }; error?: { message?: string } } };
-  }).response?.data;
-  return data?.detail?.message ?? data?.error?.message ?? fallback;
+  const data = (
+    error as {
+      response?: {
+        data?: { detail?: { message?: string }; error?: { message?: string } };
+      };
+    }
+  ).response?.data;
+  return data?.detail?.message ?? data?.error?.message ??
+    (error instanceof Error && error.message.startsWith("The blocked-seat API is outdated.")
+      ? error.message
+      : fallback);
 };
-const isActiveConflictBooking = (booking: AdminBookingRaw) =>
+const isActiveConflictBooking = (booking: BlockedSeatConflict) =>
   ["CONFIRMED", "CHECKED_IN", "COMPLETED"].includes(
     booking.booking_status ?? "",
-  ) || (booking.booking_status === "MODIFIED" && booking.is_modified === true);
+  );
 
 export default function BlockSeatsPage() {
   const router = useRouter();
@@ -75,7 +87,7 @@ export default function BlockSeatsPage() {
   const [blockType, setBlockType] = useState<BlockType>("MAINTENANCE"),
     [seats, setSeats] = useState<SeatOption[]>([]),
     [selected, setSelected] = useState<string[]>([]),
-    [bookings, setBookings] = useState<AdminBookingRaw[]>([]);
+    [bookings, setBookings] = useState<BlockedSeatConflict[]>([]);
   const [layout, setLayout] = useState<BlockableFloorLayout | null>(null);
   const [effectiveLayoutName, setEffectiveLayoutName] = useState("");
   const [layoutEndDate, setLayoutEndDate] = useState("");
@@ -85,16 +97,20 @@ export default function BlockSeatsPage() {
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const [conflictPage, setConflictPage] = useState(1);
+  const loadVersion = useRef(0);
+  useEffect(() => {
+    loadVersion.current += 1;
+    setLoading(false);
+    setBookings([]);
+    return () => {
+      loadVersion.current += 1;
+    };
+  }, [floorId, from, to]);
   useEffect(() => {
     router.prefetch("/admin/blocked-seats");
   }, [router]);
   useEffect(() => {
-    if (
-      siteId &&
-      !buildingId &&
-      !loadingBuildings &&
-      buildings.length === 1
-    ) {
+    if (siteId && !buildingId && !loadingBuildings && buildings.length === 1) {
       const onlyBuildingId = buildings[0].id;
       setBuildingId(onlyBuildingId);
       setFloorId("");
@@ -104,21 +120,9 @@ export default function BlockSeatsPage() {
       setFloors([]);
       void loadFloors(onlyBuildingId);
     }
-  }, [
-    buildingId,
-    buildings,
-    loadFloors,
-    loadingBuildings,
-    setFloors,
-    siteId,
-  ]);
+  }, [buildingId, buildings, loadFloors, loadingBuildings, setFloors, siteId]);
   useEffect(() => {
-    if (
-      buildingId &&
-      !floorId &&
-      !loadingFloors &&
-      floors.length === 1
-    ) {
+    if (buildingId && !floorId && !loadingFloors && floors.length === 1) {
       setFloorId(floors[0].id);
       setLayout(null);
       setSeats([]);
@@ -138,7 +142,7 @@ export default function BlockSeatsPage() {
     setCheckingLayoutDates(true);
     setLayoutDateError("");
     void blockedSeatsService
-      .getBlockableLayout(floorId, from, from)
+      .getBlockableLayout(floorId, from, from, false, "metadata")
       .then((effectiveLayout) => {
         if (cancelled) return;
         void fetch(effectiveLayout.layout_file_url).catch(() => undefined);
@@ -211,7 +215,7 @@ export default function BlockSeatsPage() {
       setConflictPage(conflictTotalPages);
     }
   }, [conflictPage, conflictTotalPages]);
-  const resolveBooking = (booking: AdminBookingRaw) => {
+  const resolveBooking = (booking: BlockedSeatConflict) => {
     const remaining = bookings.filter(
       (row) => row.booking_id !== booking.booking_id,
     );
@@ -232,54 +236,59 @@ export default function BlockSeatsPage() {
     }
   };
   const load = async () => {
+    const version = ++loadVersion.current;
+    setLayout(null);
+    setSeats([]);
+    setSelected([]);
+    setBookings([]);
     setLoading(true);
     setError("");
     try {
-      const [floorLayout, firstBookingPage] = await Promise.all([
-        blockedSeatsService.getBlockableLayout(floorId, from, to),
-        adminBookingsService.list({
-          floorId,
-          startDate: from,
-          endDate: to,
-          limit: 100,
-        }),
+      const [, bookingPages] = await Promise.all([
+        blockedSeatsService
+          .getBlockableLayout(floorId, from, to, true)
+          .then((floorLayout) => {
+            if (version !== loadVersion.current) return;
+            setLayout(floorLayout);
+            setSeats(
+              floorLayout.resources.map((resource) => ({
+                seat_id: String(resource.resource_id),
+                seat_code: resource.resource_code,
+                resource_name: resource.resource_name,
+                resource_type: resource.resource_type,
+                svg_element_id: resource.svg_element_id,
+                capacity: resource.capacity,
+                hasBooking: resource.has_booking,
+                hasBlock: resource.has_block,
+                isUnavailable: !resource.is_active || !resource.is_bookable,
+                selectable:
+                  resource.is_active &&
+                  resource.is_bookable &&
+                  !resource.has_block,
+              })),
+            );
+          }),
+        (async () => {
+          const conflicts: BlockedSeatConflict[] = [];
+          let page = 1;
+          // SQL pagination and sequential pages keep database load bounded.
+          while (version === loadVersion.current) {
+            const result = await blockedSeatsService.getConflicts(floorId, from, to, page);
+            conflicts.push(...result.conflicts);
+            if (!result.has_more_conflicts) break;
+            page += 1;
+          }
+          return conflicts;
+        })(),
       ]);
-      const remainingBookingPages = await Promise.all(
-        Array.from(
-          { length: Math.max(0, firstBookingPage.pagination.total_pages - 1) },
-          (_, index) =>
-            adminBookingsService.list({
-              floorId,
-              startDate: from,
-              endDate: to,
-              page: index + 2,
-              limit: 100,
-            }),
-        ),
-      );
-      setLayout(floorLayout);
-      setSeats(
-        floorLayout.resources.map((resource) => ({
-          seat_id: String(resource.resource_id),
-          seat_code: resource.resource_code,
-          resource_name: resource.resource_name,
-          resource_type: resource.resource_type,
-          svg_element_id: resource.svg_element_id,
-          capacity: resource.capacity,
-          hasBooking: resource.has_booking,
-          hasBlock: resource.has_block,
-          isUnavailable: !resource.is_active || !resource.is_bookable,
-          selectable:
-            resource.is_active && resource.is_bookable && !resource.has_block,
-        })),
-      );
-      setBookings([
-        ...firstBookingPage.items,
-        ...remainingBookingPages.flatMap((page) => page.items),
-      ]);
-      setSelected([]);
+      if (version !== loadVersion.current) return;
+      setBookings(bookingPages);
       setConflictPage(1);
     } catch (requestError: unknown) {
+      if (version !== loadVersion.current) return;
+      // Invalidate the other parallel request if one request failed.
+      loadVersion.current += 1;
+      setLoading(false);
       setLayout(null);
       setSeats([]);
       setBookings([]);
@@ -291,10 +300,10 @@ export default function BlockSeatsPage() {
         ),
       );
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
   };
-  const cancel = async (b: AdminBookingRaw) => {
+  const cancel = async (b: BlockedSeatConflict) => {
     if (
       !b.booking_id ||
       !confirm(`Cancel booking for ${b.seat_code} on ${b.booking_date}?`)
@@ -309,7 +318,7 @@ export default function BlockSeatsPage() {
       setError(apiErrorMessage(requestError, "Unable to cancel this booking."));
     }
   };
-  const move = async (b: AdminBookingRaw, seat: SeatOption) => {
+  const move = async (b: BlockedSeatConflict, seat: SeatOption) => {
     if (
       !b.booking_id ||
       !b.site_id ||
@@ -339,7 +348,7 @@ export default function BlockSeatsPage() {
     }
   };
   const submit = async () => {
-    if (unresolvedConflictCount || !selected.length || !reason.trim()) return;
+    if (loading || unresolvedConflictCount || !selected.length || !reason.trim()) return;
     setSaving(true);
     try {
       await blockedSeatsService.create({
@@ -360,7 +369,7 @@ export default function BlockSeatsPage() {
       setSaving(false);
     }
   };
-  const alternatives = (b: AdminBookingRaw) => {
+  const alternatives = (b: BlockedSeatConflict) => {
     const blockedResource = seats.find(
       (resource) => resource.seat_id === String(b.seat_id),
     );
@@ -565,6 +574,9 @@ export default function BlockSeatsPage() {
             {error}
           </p>
         )}
+        {layout && loading && (
+          <p role="status" className="text-sm text-gray-500">Loading booking conflicts...</p>
+        )}
         {layout && (
           <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_250px] xl:grid-cols-[minmax(0,1fr)_270px]">
             <section className="min-w-0 rounded-xl border border-[#EBEBF5] bg-white p-4 sm:p-6">
@@ -659,7 +671,7 @@ export default function BlockSeatsPage() {
             </section>
           </div>
         )}
-        {!!unresolvedConflictCount && (
+        {!loading && !!unresolvedConflictCount && (
           <section className="overflow-hidden rounded-xl border border-[#EBEBF5] bg-white">
             <h2 className="p-4 text-[14px] font-bold text-[#1A1A2E] sm:text-[15px]">
               Conflicting Bookings ({unresolvedConflictCount} seats,{" "}
@@ -859,13 +871,15 @@ export default function BlockSeatsPage() {
                   : "text-sm text-emerald-700"
               }
             >
-              {unresolvedConflictCount
+              {loading
+                ? "Checking booking conflicts..."
+                : unresolvedConflictCount
                 ? `${unresolvedConflictCount} space conflict(s) must be resolved.`
                 : `All conflicts resolved. ${selected.length} spaces are ready to block.`}
             </p>
             <button
               disabled={
-                !!unresolvedConflictCount || !reason.trim() || saving
+                loading || !!unresolvedConflictCount || !reason.trim() || saving
               }
               onClick={() => void submit()}
               className="h-10 w-full rounded-lg bg-indigo-600 px-5 text-[12.5px] font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:text-[13px]"

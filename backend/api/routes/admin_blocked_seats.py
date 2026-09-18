@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import require_any_permission, require_permission
@@ -80,13 +80,27 @@ def blockable_floor_layout(
     blocked_to: Annotated[date, Query(alias="blockedTo")],
     current_user: Annotated[dict[str, Any], Depends(require_permission("seat:block"))],
     conn: Annotated[PGConnection, Depends(get_db)],
+    view: Annotated[Literal["resources", "metadata", "conflicts"], Query()] = "resources",
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
 ) -> BlockableFloorLayoutResponse:
+    # Preserve the permission boundary of the previous /admin/bookings lookup.
+    if view == "conflicts" and not {"booking:view_all", "admin_dashboard:view"}.intersection(
+        current_user.get("permissions", [])
+    ):
+        raise HTTPException(status_code=403, detail={
+            "code": "insufficient_permissions",
+            "message": "Booking-view permission is required to view conflict details.",
+        })
     return get_blockable_floor_layout(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         floor_id=floor_id,
         blocked_from=blocked_from,
         blocked_to=blocked_to,
+        view=view,
+        page=page,
+        limit=limit,
     )
 
 
