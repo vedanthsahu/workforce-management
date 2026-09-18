@@ -50,7 +50,7 @@ const DEFAULT_STATE: BookingFormState = {
   toDate: todayIso(),
   preferences: [],
   selectedSeatId: null,
-  spaceType: "ALL",
+  spaceType: "SEAT",
 };
 
 // ── URL builder ───────────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ function buildUrl(
   if (form.toDate) params.set("toDate", form.toDate);
   if (form.selectedSeatId) params.set("seatId", form.selectedSeatId);
   if (form.preferences.length > 0) params.set("preferences", form.preferences.join(","));
-  if (form.spaceType && form.spaceType !== "ALL") params.set("spaceType", form.spaceType);
+  if (form.spaceType) params.set("spaceType", form.spaceType);
   if (guestParams?.guestId) params.set("guestId", guestParams.guestId);
   if (guestParams?.hostUserId) params.set("hostUserId", guestParams.hostUserId);
   if (guestParams?.guestType) params.set("guestType", guestParams.guestType);
@@ -184,7 +184,7 @@ export function useBookingForm() {
       toDate: initialToDate,
       selectedSeatId: searchParams.get("seatId") ?? null,
       preferences: prefillPreferences,
-      spaceType: (searchParams.get("spaceType") as BookingSpaceType | null) ?? "ALL",
+      spaceType: (searchParams.get("spaceType") as BookingSpaceType | null) ?? "SEAT",
     };
   });
 
@@ -620,7 +620,7 @@ export function useBookingForm() {
         spaceType: form.spaceType,
       })
         .then(setSeats)
-        .catch((e) => setError(e instanceof Error ? e.message : "Failed to load seats"))
+        .catch((e) => setError(e instanceof Error ? e.message : "Failed to load spaces"))
         .finally(() => setLoadingSeats(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

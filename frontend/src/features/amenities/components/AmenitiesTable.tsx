@@ -4,6 +4,17 @@ import { Pencil } from "lucide-react";
 
 import { Amenity } from "../types/amenities.types";
 import { getCategoryColor } from "../utils/amenityColors";
+import {
+  APPLICABLE_SEAT_TYPE_LABELS,
+  type ApplicableSeatType,
+} from "../utils/applicableSeatTypes";
+
+function spaceTypesLabel(applicableSeatTypes: string[]): string {
+  if (!applicableSeatTypes || applicableSeatTypes.length === 0) return "All spaces";
+  return applicableSeatTypes
+    .map((t) => APPLICABLE_SEAT_TYPE_LABELS[t as ApplicableSeatType] ?? t)
+    .join(", ");
+}
 
 type Props = {
   data: Amenity[];
@@ -54,6 +65,9 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
                     {amenity.is_active ? "Active" : "Inactive"}
                   </span>
                   <span className="text-xs text-gray-500">{amenity.assigned_seat_count} seats</span>
+                  <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600">
+                    {spaceTypesLabel(amenity.applicable_seat_types)}
+                  </span>
                 </div>
               </div>
               <button
@@ -70,12 +84,13 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
       {/* ── Desktop table (hidden below md) ───────────────── */}
       {/* ✅ CHANGED: removed overflow-x-auto here — parent div in page.tsx owns it now */}
       <div className="hidden md:block">
-        <table className="w-full text-xs" style={{ minWidth: "860px" }}>
+        <table className="w-full text-xs" style={{ minWidth: "1010px" }}>
           <colgroup>
             <col style={{ width: "170px" }} />
             <col style={{ width: "170px" }} />
             <col style={{ width: "220px" }} />
             <col style={{ width: "90px" }} />
+            <col style={{ width: "150px" }} />
             <col style={{ width: "110px" }} />
             <col style={{ width: "70px" }} />
           </colgroup>
@@ -85,6 +100,7 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
               <th className="pl-10 px-3 py-3 text-left font-bold">Category</th>
               <th className="pl-13 px-3 py-3 text-left font-bold">Description</th>
               <th className="px-3 py-3 text-center font-bold">Status</th>
+              <th className="px-3 py-3 text-center font-bold">Space Type</th>
               <th className="px-3 py-3 text-center font-bold">Assigned Seats</th>
               <th className="px-3 py-3 text-center font-bold">Actions</th>
             </tr>
@@ -116,6 +132,11 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
                       amenity.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
                     }`}>
                       {amenity.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 text-center">
+                    <span className="inline-flex px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap bg-gray-100 text-gray-600">
+                      {spaceTypesLabel(amenity.applicable_seat_types)}
                     </span>
                   </td>
                   <td className="px-3 py-3 text-center font-medium">

@@ -61,7 +61,6 @@ function ManageSeatsPage() {
     filters,
     updateFilter,
     resetFilters,
-    subTypeOptions,
     preferences,
     selected,
     toggleSelect,
@@ -111,7 +110,7 @@ function ManageSeatsPage() {
   const hasUnpublishedEdits = !!layout?.is_published && isDirty;
   useUnsavedChangesGuard(
     hasUnpublishedEdits,
-    "You have unpublished seat changes. If you leave now, they will be lost.",
+    "You have unpublished space changes. If you leave now, they will be lost.",
     discardChanges
   );
   const { requestNavigation } = useNavigationGuardStore();
@@ -211,7 +210,7 @@ function ManageSeatsPage() {
               <button
                 onClick={openPublishConfirm}
                 disabled={!canPublish || publishing}
-                title={!allConfigured ? `Configure all seats before publishing` : undefined}
+                title={!allConfigured ? `Configure all spaces before publishing` : undefined}
                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {publishing ? (
@@ -248,7 +247,6 @@ function ManageSeatsPage() {
             <div className="min-w-0 flex-1">
               <SeatFiltersBar
                 filters={filters}
-                subTypeOptions={subTypeOptions}
                 preferences={preferences}
                 onUpdate={updateFilter}
                 onReset={resetFilters}
@@ -328,7 +326,7 @@ function ManageSeatsPage() {
 
       <ConfirmDialog
         open={showPublishConfirm}
-        title={hasUnpublishedEdits ? "Publish pending seat changes?" : "Publish this layout?"}
+        title={hasUnpublishedEdits ? "Publish pending space changes?" : "Publish this layout?"}
         description={
           hasUnpublishedEdits
             // This path (PATCH /layout-seats/bulk-configuration) has no

@@ -865,7 +865,7 @@ const SeatTooltip: React.FC<{
             marginTop: 2, fontSize: 10, color: "#9ca3af", textAlign: "center",
             background: "#f9fafb", borderRadius: 6, padding: "4px 0",
           }}>
-            {seat.status === "yours" ? "↩ Click to deselect" : "↵ Click to select this seat"}
+            {seat.status === "yours" ? "↩ Click to deselect" : "↵ Click to select this space"}
           </div>
         )}
       </div>
@@ -1452,7 +1452,7 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
             </span>
           </div>
           <span className="text-[10px] text-gray-400 select-none">
-            Scroll to zoom · Drag to pan · Click a seat to select
+            Scroll to zoom · Drag to pan · Click a space to select
           </span>
         </div>
       )}

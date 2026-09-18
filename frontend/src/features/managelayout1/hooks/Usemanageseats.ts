@@ -23,7 +23,6 @@ import {
 import { useSeatsStore } from "@/store/seatStore";
 import {
   categoryOf,
-  SEAT_TYPES,
   SpaceCategory,
 } from "../utils/spaceCategory";
 
@@ -218,11 +217,6 @@ export function useManageSeats() {
   // a highlight on their own.
   const isMapHighlightActive = hasActiveFilters || (activeCategory !== "SEATS" && activeCategory !== "ALL");
 
-  // Sub-type filter only exists under Seats — the original list, unchanged.
-  // null signals "this tab has no sub-types, hide the dropdown" (also true
-  // for ALL, since a mixed list has no single sub-type set to filter by).
-  const subTypeOptions = activeCategory === "SEATS" ? ["All", ...SEAT_TYPES] : null;
-
   // ── Selection ──────────────────────────────────────────────────────────
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -336,7 +330,7 @@ export function useManageSeats() {
     // selected seat's untouched fields with whichever seat happened to be
     // first in the array.
     const resolveFor = (seat: Seat) => ({
-      seat_type:   payload.seat_type   ?? seat.seat_type   ?? "STANDARD",
+      seat_type:   payload.seat_type   ?? seat.seat_type   ?? "SEAT",
       status:      payload.status      ?? seat.status      ?? "ACTIVE",
       is_bookable: payload.is_bookable ?? seat.is_bookable ?? true,
       is_reserved: seat.is_reserved,
@@ -440,7 +434,6 @@ export function useManageSeats() {
     filters,
     updateFilter,
     resetFilters,
-    subTypeOptions,
 
     // unpublished (local-only) edits on an already-published layout
     isDirty,

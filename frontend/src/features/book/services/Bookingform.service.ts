@@ -11,6 +11,8 @@ import {
   PreferenceMatchStatus,
   UiState,
   FetchSeatsParams,
+  QuickPickSeat,
+  TomorrowBooking,
 } from "../types/Bookingform.types";
 
 // ── Raw API shapes ────────────────────────────────────────────────────────────
@@ -49,6 +51,7 @@ interface RawPreference {
   category?: string | null;
   description?: string | null;
   icon?: string | null;
+  applicable_seat_types?: string[] | null;
 }
 
 // ── Sites ─────────────────────────────────────────────────────────────────────
@@ -236,7 +239,7 @@ export async function fetchAvailability(params: {
         ...(params.calendarMode
           ? { calendar_mode: true }
           : {}),
-        ...(params.spaceType && params.spaceType !== "ALL"
+        ...(params.spaceType
           ? { space_type: params.spaceType }
           : {}),
       },
@@ -428,6 +431,7 @@ export async function fetchPreferences(): Promise<Preference[]> {
     category: a.category ?? null,
     description: a.description ?? null,
     icon: a.icon ?? null,
+    applicable_seat_types: a.applicable_seat_types ?? null,
   }));
 }
 
@@ -491,4 +495,87 @@ export async function fetchEmployeeWorkPreferences(
     `/dashboard/employee/${userId}`
   );
   return parseWorkPreferences(data);
+}
+
+// ── Sidebar: quick-pick seats — GET /dashboard/me ────────────────────────────
+// Reuses the same favorite_seat/second_favorite_seat fields as the dashboard's
+// favourite-seat widget (most-booked / 2nd most-booked CONFIRMED seat).
+
+interface RawFavouriteSeat {
+  seat_id: string;
+  seat_code?: string | null;
+  floor_id?: string | null;
+  floor_name?: string | null;
+  building_id?: string | null;
+  building_name?: string | null;
+  site_id?: string | null;
+  site_name?: string | null;
+}
+
+interface RawDashboardMeFavourites {
+  favorite_seat: RawFavouriteSeat | null;
+  second_favorite_seat?: RawFavouriteSeat | null;
+}
+
+function toQuickPick(
+  seat: RawFavouriteSeat | null | undefined,
+  tag: QuickPickSeat["tag"]
+): QuickPickSeat | null {
+  if (!seat) return null;
+  return {
+    id: seat.seat_id,
+    label: seat.seat_code ?? seat.seat_id,
+    tag,
+    floor: seat.floor_name ?? (seat.floor_id ? `Floor ${seat.floor_id}` : ""),
+    siteId: seat.site_id ?? null,
+    buildingId: seat.building_id ?? null,
+    floorId: seat.floor_id ?? null,
+  };
+}
+
+export async function fetchQuickPickSeats(): Promise<QuickPickSeat[]> {
+  const { data } = await axiosInstance.get<RawDashboardMeFavourites>("/dashboard/me");
+  return [
+    toQuickPick(data.favorite_seat, "favourite"),
+    toQuickPick(data.second_favorite_seat ?? null, "frequent"),
+  ].filter((p): p is QuickPickSeat => p !== null);
+}
+
+// ── Sidebar: tomorrow's booking — GET /bookings/me/future ───────────────────
+
+interface RawFutureBooking {
+  booking_id: string;
+  seat_code?: string | null;
+  site_name?: string | null;
+  building_name?: string | null;
+  floor_name?: string | null;
+  booking_date: string;
+  from_date?: string | null;
+  to_date?: string | null;
+  booking_status: string;
+}
+
+export async function fetchTomorrowBooking(): Promise<TomorrowBooking | null> {
+  const { data } = await axiosInstance.get<RawFutureBooking[]>("/bookings/me/future");
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowIso = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
+
+  const match = data.find((b) => {
+    if ((b.booking_status ?? "").toUpperCase() === "CANCELLED") return false;
+    const from = b.from_date ?? b.booking_date;
+    const to = b.to_date ?? b.booking_date;
+    return tomorrowIso >= from && tomorrowIso <= to;
+  });
+  if (!match) return null;
+
+  return {
+    bookingId: match.booking_id,
+    seatCode: match.seat_code ?? null,
+    siteName: match.site_name ?? null,
+    buildingName: match.building_name ?? null,
+    floorName: match.floor_name ?? null,
+    bookingDate: tomorrowIso,
+  };
 }
