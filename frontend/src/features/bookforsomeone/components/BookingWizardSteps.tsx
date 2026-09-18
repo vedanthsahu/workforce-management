@@ -14,6 +14,8 @@ import {
   IconEdit,
   IconSearch,
   inputStyle,
+  fieldFocusRing,
+  fieldBlurRing,
 } from "./BookForSomeone";
 import {
   GUEST_TYPES,
@@ -261,6 +263,8 @@ function PhoneField({
             }}
             title={countryLabel(country)}
             style={{ ...inputStyle(), width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 7px", cursor: "pointer", background: "#fff" }}
+            onFocusCapture={fieldFocusRing}
+            onBlurCapture={fieldBlurRing}
           >
             <span>+{callingCode}</span>
             <span style={{ fontSize: 10, color: "#6b7280" }}>⌄</span>
@@ -280,6 +284,8 @@ function PhoneField({
                 value={countrySearch}
                 onChange={(event) => setCountrySearch(event.target.value)}
                 style={{ width: "calc(100% - 12px)", height: 30, margin: 6, padding: "0 8px", border: "1px solid #d1d5db", borderRadius: 4, outline: "none", fontSize: 12 }}
+                onFocusCapture={fieldFocusRing}
+                onBlurCapture={fieldBlurRing}
               />
               {visibleCountries.length === 0 ? (
                 <div style={{ padding: "8px 9px", color: "#6b7280", fontSize: 12 }}>No country found</div>
@@ -297,7 +303,7 @@ function PhoneField({
                     setCountrySearch("");
                     setHoveredCountry(null);
                   }}
-                  style={{ display: "block", width: "100%", border: 0, background: hoveredCountry === option ? "#eef2ff" : option === country ? "#eef2ff" : "#fff", color: "#111827", padding: "6px 9px", textAlign: "left", fontSize: 12, cursor: "pointer" }}
+                  style={{ display: "block", width: "100%", border: 0, background: hoveredCountry === option ? "#374151" : option === country ? "#eef2ff" : "#fff", color: hoveredCountry === option ? "#fff" : "#111827", padding: "6px 9px", textAlign: "left", fontSize: 12, cursor: "pointer" }}
                 >
                   {countryLabel(option)}
                 </button>
@@ -389,8 +395,8 @@ export function GuestSelectStep({ selectedGuest, view, onViewChange, onSelect, o
               paddingRight: selectedGuest ? 34 : 12,
               cursor: selectedGuest ? "default" : "text",
             }}
-            onFocusCapture={(e) => { e.currentTarget.style.borderColor = "#4f46e5"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(79,70,229,0.1)"; }}
-            onBlurCapture={(e) => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.boxShadow = "none"; }}
+            onFocusCapture={fieldFocusRing}
+            onBlurCapture={fieldBlurRing}
           />
           {selectedGuest && (
             <button
@@ -809,6 +815,8 @@ function TimeSlotSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
+        onFocusCapture={fieldFocusRing}
+        onBlurCapture={fieldBlurRing}
       >
         <option value="">{placeholder}</option>
         {TIME_SLOTS.map((slot) => (
@@ -872,6 +880,8 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: "pointer" }}
               value={visitDetails.guestType}
               onChange={(e) => onChange({ guestType: e.target.value as GuestType })}
+              onFocusCapture={fieldFocusRing}
+              onBlurCapture={fieldBlurRing}
             >
               {GUEST_TYPES.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
             </select>
@@ -888,6 +898,8 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: "pointer" }}
               value={visitDetails.purposeOfVisit}
               onChange={(e) => onChange({ purposeOfVisit: e.target.value as PurposeOfVisit })}
+              onFocusCapture={fieldFocusRing}
+              onBlurCapture={fieldBlurRing}
             >
               {PURPOSE_OF_VISIT.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
@@ -918,6 +930,8 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               value={visitDetails.siteId}
               onChange={(e) => onChange({ siteId: e.target.value, buildingId: "", floorId: "" })}
               disabled={readOnlyLocation}
+              onFocusCapture={fieldFocusRing}
+              onBlurCapture={fieldBlurRing}
             >
               <option value="" disabled hidden>Select a Office</option>
               {sites.map((s) => <option key={s.id} value={s.id} className="office-select-option">{s.name}</option>)}
@@ -936,6 +950,8 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               value={visitDetails.buildingId}
               onChange={(e) => onChange({ buildingId: e.target.value, floorId: "" })}
               disabled={readOnlyLocation || !visitDetails.siteId}
+              onFocusCapture={fieldFocusRing}
+              onBlurCapture={fieldBlurRing}
             >
               <option value="" disabled hidden>
                 {!visitDetails.siteId ? "Select a office first" : isLoadingBuildings ? "Loading…" : "Select a building"}
@@ -956,6 +972,8 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               value={visitDetails.floorId}
               onChange={(e) => onChange({ floorId: e.target.value })}
               disabled={readOnlyLocation || !visitDetails.buildingId}
+              onFocusCapture={fieldFocusRing}
+              onBlurCapture={fieldBlurRing}
             >
               <option value="" disabled hidden>
                 {!visitDetails.buildingId ? "Select a building first" : isLoadingFloors ? "Loading…" : "Select a floor"}
