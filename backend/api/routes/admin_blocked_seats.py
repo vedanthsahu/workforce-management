@@ -13,19 +13,24 @@ from backend.db.connection import get_db
 from backend.schemas.blocked_seat import (
     BlockableFloorLayoutResponse,
     BlockedSeatCategory,
+    BlockedSeatHistoryResponse,
     BlockedSeatListQuery,
     BlockedSeatListResponse,
+    BlockedSeatResponse,
     BlockedSeatType,
     CancelBlockedSeatRequest,
     CancelBlockedSeatResponse,
     CreateBlockedSeatsRequest,
     CreateBlockedSeatsResponse,
+    UpdateBlockedSeatRequest,
 )
 from backend.services.blocked_seat_service import (
     cancel_seat_block,
     create_blocked_seats,
     get_blockable_floor_layout,
+    get_blocked_seat_history,
     get_blocked_seats,
+    update_seat_block,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin-blocked-seats"])
@@ -66,6 +71,45 @@ def admin_blocked_seats(
         query=query,
         page=page,
         limit=limit,
+    )
+
+
+@router.get(
+    "/blocked-seats/{block_id}/history",
+    response_model=BlockedSeatHistoryResponse,
+    summary="Get blocked-seat audit history",
+)
+def blocked_seat_history(
+    block_id: Annotated[int, Path(gt=0)],
+    current_user: Annotated[
+        dict[str, Any], Depends(require_any_permission(["seat:block", "seat:view_all"]))
+    ],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> BlockedSeatHistoryResponse:
+    return get_blocked_seat_history(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        block_id=str(block_id),
+    )
+
+
+@router.patch(
+    "/blocked-seats/{block_id}",
+    response_model=BlockedSeatResponse,
+    summary="Update an active seat block",
+)
+def update_block(
+    block_id: Annotated[int, Path(gt=0)],
+    payload: UpdateBlockedSeatRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_permission("seat:block"))],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> BlockedSeatResponse:
+    return update_seat_block(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        block_id=str(block_id),
+        payload=payload,
+        current_user=current_user,
     )
 
 

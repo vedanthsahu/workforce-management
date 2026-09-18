@@ -99,6 +99,44 @@ class CreateBlockedSeatsResponse(BaseModel):
     items: list[BlockedSeatResponse]
 
 
+class UpdateBlockedSeatRequest(BaseModel):
+    block_type: BlockedSeatType | None = None
+    blocked_from: date | None = None
+    blocked_to: date | None = None
+    reason: str | None = Field(default=None, min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def trim_optional_reason(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("reason must not be empty.")
+        return normalized
+
+    @model_validator(mode="after")
+    def require_change(self) -> UpdateBlockedSeatRequest:
+        if not self.model_fields_set:
+            raise ValueError("At least one field must be provided.")
+        return self
+
+
+class BlockedSeatHistoryItemResponse(BaseModel):
+    id: str
+    action: str
+    actor_name: str | None = None
+    actor_email: str | None = None
+    old_values: dict[str, object] | None = None
+    new_values: dict[str, object] | None = None
+    changed_fields: list[str] | None = None
+    occurred_at: datetime
+
+
+class BlockedSeatHistoryResponse(BaseModel):
+    items: list[BlockedSeatHistoryItemResponse]
+
+
 class BlockableResourceResponse(BaseModel):
     resource_id: str
     resource_code: str

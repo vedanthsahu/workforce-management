@@ -73,6 +73,7 @@ export default function BlockSeatsPage() {
     loadingSites,
     loadingBuildings,
     loadingFloors,
+    locationError,
     loadBuildings,
     loadFloors,
     setBuildings,
@@ -145,7 +146,6 @@ export default function BlockSeatsPage() {
       .getBlockableLayout(floorId, from, from, false, "metadata")
       .then((effectiveLayout) => {
         if (cancelled) return;
-        void fetch(effectiveLayout.layout_file_url).catch(() => undefined);
         const maximumDate = inclusiveLayoutEndDate(
           effectiveLayout.effective_till,
         );
@@ -304,10 +304,11 @@ export default function BlockSeatsPage() {
     }
   };
   const cancel = async (b: BlockedSeatConflict) => {
-    if (
-      !b.booking_id ||
-      !confirm(`Cancel booking for ${b.seat_code} on ${b.booking_date}?`)
-    )
+    if (!b.booking_id) {
+      setError("Booking details are incomplete. Reload the seats and try again.");
+      return;
+    }
+    if (!confirm(`Cancel booking for ${b.seat_code} on ${b.booking_date}?`))
       return;
     try {
       const action =
@@ -325,8 +326,10 @@ export default function BlockSeatsPage() {
       !b.building_id ||
       !b.floor_id ||
       !b.booking_date
-    )
+    ) {
+      setError("Booking details are incomplete. Reload the seats and try again.");
       return;
+    }
     try {
       const action =
         b.booking_type === "GUEST" ? modifyGuestBooking : modifyBooking;
@@ -359,11 +362,12 @@ export default function BlockSeatsPage() {
         reason: reason.trim(),
       });
       router.push("/admin/blocked-seats");
-    } catch (e: unknown) {
+    } catch (requestError: unknown) {
       setError(
-        (e as { response?: { data?: { detail?: { message?: string } } } })
-          .response?.data?.detail?.message ??
+        apiErrorMessage(
+          requestError,
           "Unable to block seats; reload to check for new conflicts.",
+        ),
       );
     } finally {
       setSaving(false);
@@ -569,9 +573,9 @@ export default function BlockSeatsPage() {
             </p>
           )}
         </section>
-        {error && (
+        {(locationError || error) && (
           <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {error}
+            {locationError || error}
           </p>
         )}
         {layout && loading && (
