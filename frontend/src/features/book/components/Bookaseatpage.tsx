@@ -1,15 +1,19 @@
 "use client";
 
-import React from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  Armchair,
   ArrowLeft,
-  Building2,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   ClipboardCheck,
+  DoorClosed,
+  MapPin,
   RefreshCw,
+  Search,
   Settings2,
   Users,
   X,
@@ -17,7 +21,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Separator } from "@/components/ui/separator";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 import { useBookingForm } from "../hooks/Usebookingform";
@@ -25,7 +29,20 @@ import { SvgFloorMapPage, SeatWithSvgId } from "./SvgFloorMapPage";
 import { fmtDate } from "../utils/bookingFormHelpers";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 import { BookaSeatSkeleton } from "./BookaSeatSkeleton";
-import { BOOKING_SPACE_TYPES, BOOKING_SPACE_TYPE_LABELS } from "../utils/spaceType";
+import { BookingSidebar } from "./BookingSidebar";
+import {
+  BOOKING_SPACE_TYPES,
+  BOOKING_SPACE_TYPE_COLORS,
+  BOOKING_SPACE_TYPE_LABELS,
+  BOOKING_SPACE_TYPE_SUBLABELS,
+  type BookingSpaceType,
+} from "../utils/spaceType";
+
+const BOOKING_SPACE_TYPE_ICONS: Record<BookingSpaceType, React.ElementType> = {
+  SEAT: Armchair,
+  CABIN: DoorClosed,
+  CONFERENCE_ROOM: Users,
+};
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 
@@ -60,20 +77,20 @@ const StepDot: React.FC<StepDotProps> = ({ number, label, sublabel, active, done
 
 const StepArrow = () => <ChevronRight size={14} className="text-gray-300 shrink-0" />;
 
-// ── Section header ────────────────────────────────────────────────────────────
+// ── Card header ───────────────────────────────────────────────────────────────
 
-const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; subtitle: string }> = ({
+const CardHeader: React.FC<{ icon: React.ReactNode; title: string; subtitle: string }> = ({
   icon,
   title,
   subtitle,
 }) => (
-  <div className="flex items-center gap-3 mb-4 sm:mb-5">
-    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
-      {icon}
+  <div className="flex items-center gap-3">
+    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+      <span className="text-indigo-600">{icon}</span>
     </div>
     <div>
-      <p className="text-[13px] sm:text-[14px] font-bold text-[#1A1A2E] leading-tight">{title}</p>
-      <p className="text-[11px] sm:text-[12px] text-gray-400 mt-0.5">{subtitle}</p>
+      <p className="text-[14px] sm:text-[15px] font-bold text-[#1A1A2E]">{title}</p>
+      <p className="text-[11.5px] sm:text-[12px] text-gray-400">{subtitle}</p>
     </div>
   </div>
 );
@@ -112,6 +129,28 @@ const DateInput: React.FC<{
     </div>
   </div>
 );
+
+// ── Preferences grouping ─────────────────────────────────────────────────────
+
+// Groups preferences by category, preserving the order categories first
+// appear in (the API already returns them sorted by category name, so this
+// just clusters consecutive same-category items rather than re-sorting).
+// Un-categorized preferences fall under "Other".
+function groupPreferencesByCategory<T extends { category?: string | null }>(
+  preferences: T[]
+): [string, T[]][] {
+  const groups = new Map<string, T[]>();
+  for (const pref of preferences) {
+    const category = pref.category?.trim() || "Other";
+    const existing = groups.get(category);
+    if (existing) {
+      existing.push(pref);
+    } else {
+      groups.set(category, [pref]);
+    }
+  }
+  return Array.from(groups.entries());
+}
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -153,6 +192,7 @@ const BookASeatPage: React.FC = () => {
     setFromDate,
     setToDate,
     togglePreference,
+    clearAll,
     setSpaceType,
     findAvailableSeats,
     selectSeat,
@@ -164,6 +204,24 @@ const BookASeatPage: React.FC = () => {
     visiblePreferences,
     loadingPreferences,
   } = useBookingForm();
+
+  // Preferences stays hidden until the admin/user actually picks a space
+  // type -- except in modify mode, where form.spaceType already reflects
+  // the existing booking's real type, so there's nothing to wait on.
+  const [spaceTypeChosen, setSpaceTypeChosen] = useState(isModifyMode);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [preferencesSearch, setPreferencesSearch] = useState("");
+
+  const filteredPreferences = useMemo(() => {
+    const query = preferencesSearch.trim().toLowerCase();
+    if (!query) return visiblePreferences;
+    return visiblePreferences.filter((p) => p.name.toLowerCase().includes(query));
+  }, [visiblePreferences, preferencesSearch]);
+
+  const selectedPreferences = useMemo(
+    () => visiblePreferences.filter((p) => form.preferences.includes(p.key)),
+    [visiblePreferences, form.preferences]
+  );
 
   const errorBannerRef = React.useRef<HTMLDivElement>(null);
 
@@ -196,6 +254,11 @@ const BookASeatPage: React.FC = () => {
 
   const showHeaderAction = step !== 3;
 
+  // The "Tomorrow" / "Quick picks" sidebar is all self-booking data (the
+  // logged-in user's own favourites and future bookings) — hidden for
+  // modify, book-for-someone and guest flows, where it wouldn't be meaningful.
+  const showSidebar = !isModifyMode && !isBookingForSomeone;
+
   if (loadingSites && sites.length === 0) {
     return (
       <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#F7F8FC]">
@@ -217,11 +280,11 @@ const BookASeatPage: React.FC = () => {
             <h1 className="text-[17px] sm:text-[20px] font-bold text-[#1A1A2E] leading-tight">
               {isModifyMode
                 ? (isBookingForSomeone && bookingForName ? `Modify Booking for ${bookingForName}` : "Modify Booking")
-                : isBookingForSomeone ? `Book a Seat for ${bookingForName}` : "Book a Seat"}
+                : isBookingForSomeone ? `Book a Space for ${bookingForName}` : "Book a Space"}
             </h1>
             <p className="text-[11.5px] sm:text-[12.5px] text-gray-400 mt-0.5">
               {isModifyMode
-                ? "Select a new seat to replace your existing booking"
+                ? "Select a new space to replace your existing booking"
                 : isBookingForSomeone
                   ? `Selecting a workspace for ${isGuestBooking ? "guest" : "employee"} — ${bookingForName}`
                   : "Reserve your workspace in a few steps"}
@@ -257,7 +320,7 @@ const BookASeatPage: React.FC = () => {
           <div className="flex items-center justify-between sm:justify-start sm:gap-3 bg-white border border-[#EBEBF5] rounded-xl px-4 sm:px-6 py-3 sm:py-4">
             <StepDot number={1} label="Workspace & Preferences" sublabel="Select your workspace, dates and preferences" active={step === 1} done={false} />
             <StepArrow />
-            <StepDot number={2} label="Select a Seat" sublabel="Choose your preferred seat on the floor map" active={false} done={false} />
+            <StepDot number={2} label="Select a Space" sublabel="Choose your preferred space on the floor map" active={false} done={false} />
             <StepArrow />
             <StepDot number={3} label="Review & Confirm" sublabel="Review your booking and confirm" active={false} done={false} />
           </div>
@@ -280,23 +343,18 @@ const BookASeatPage: React.FC = () => {
             STEP 1 – Workspace & Preferences
         ════════════════════════════════════════════════════ */}
         {step === 1 && (
-          <div className="bg-white border border-[#EBEBF5] rounded-xl p-4 sm:p-6 flex flex-col gap-5 sm:gap-7">
+          <div className={cn("grid grid-cols-1 gap-3 sm:gap-4", showSidebar && "lg:grid-cols-[1fr_336px] lg:items-start")}>
+          <div className="flex flex-col gap-3 sm:gap-4 min-w-0">
 
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
-                <Building2 size={18} className="text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-[14px] sm:text-[15px] font-bold text-[#1A1A2E]">Workspace & Preferences</p>
-                <p className="text-[11.5px] sm:text-[12px] text-gray-400">Tell us where and when you plan to work</p>
-              </div>
-            </div>
+          <div className="bg-white border border-[#EBEBF5] rounded-xl p-4 sm:p-6 flex flex-col gap-5 sm:gap-6">
+            <CardHeader
+              icon={<MapPin size={18} />}
+              title="Where & when"
+              subtitle="Choose your workplace and booking dates"
+            />
 
-            <Separator />
-
-            {/* 1. Select Workspace */}
+            {/* Select Workspace */}
             <section>
-              <SectionHeader icon={<Building2 size={14} />} title="1. Select Workspace" subtitle="Choose your office location, building and floor" />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
 
                 <div>
@@ -372,17 +430,14 @@ const BookASeatPage: React.FC = () => {
               </div>
             </section>
 
-            {/* 2. Select Dates */}
+            {/* Select Dates */}
             <section>
-              <SectionHeader
-                icon={<CalendarDays size={14} />}
-                title="2. Select Dates"
-                subtitle={
-                  isModifyMode
-                    ? "Date is pre-filled from your original booking — you can change it if needed"
-                    : "Choose the dates you'll be coming to the office"
-                }
-              />
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[12.5px] font-semibold text-[#1A1A2E]">Dates</p>
+                {isModifyMode && (
+                  <p className="text-[11px] text-gray-400">Pre-filled from your original booking</p>
+                )}
+              </div>
               <div className="flex flex-col md:flex-row gap-3 md:gap-4 md:items-end">
 
                 <div className="flex gap-2 sm:gap-3 flex-1 items-center">
@@ -405,7 +460,7 @@ const BookASeatPage: React.FC = () => {
                           {fmtDate(form.fromDate)} – {fmtDate(form.toDate)}
                         </p>
                         <p className="text-[10.5px] sm:text-[11px] text-indigo-400 mt-1">
-                          You will be able to select a seat for all days in the next step.
+                          You will be able to select a space for all days in the next step.
                         </p>
                       </>
                     )}
@@ -413,83 +468,198 @@ const BookASeatPage: React.FC = () => {
                 )}
               </div>
             </section>
+          </div>
 
-            {/* 3. Preferences */}
+          <div className="bg-white border border-[#EBEBF5] rounded-xl p-4 sm:p-6 flex flex-col gap-5 sm:gap-6">
+            <CardHeader
+              icon={<Settings2 size={18} />}
+              title="Your space, your preferences"
+              subtitle="Choose a space type, then add the amenities you prefer"
+            />
+
             <section>
-              <SectionHeader icon={<Settings2 size={14} />} title="3. Preferences" subtitle="Choose a space type and the features that are important to you" />
-
               {/* Space type — narrows both the amenity list below and the
-                  actual search. "All" (default) preserves today's behavior:
-                  every amenity shown, search unfiltered by type. */}
-              <div className="flex gap-1.5 sm:gap-2 mb-3 sm:mb-4">
+                  actual search. Preferences stays hidden (see
+                  spaceTypeChosen) until one of these is picked. */}
+              <div className="flex flex-wrap gap-2 sm:gap-3 mb-3 sm:mb-4">
                 {BOOKING_SPACE_TYPES.map((t) => {
-                  const active = form.spaceType === t;
+                  const active = spaceTypeChosen && form.spaceType === t;
+                  const Icon = BOOKING_SPACE_TYPE_ICONS[t];
+                  const { color, tint } = BOOKING_SPACE_TYPE_COLORS[t];
                   return (
                     <button
                       key={t}
                       type="button"
-                      onClick={() => setSpaceType(t)}
-                      className={cn(
-                        "px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-[11.5px] sm:text-[12.5px] font-semibold border transition-colors",
-                        active
-                          ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                          : "border-[#EBEBF5] bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50"
-                      )}
+                      onClick={() => {
+                        setSpaceType(t);
+                        setSpaceTypeChosen(true);
+                      }}
+                      className="flex-1 min-w-[130px] flex flex-col items-center gap-2 px-4 py-4 sm:py-5 rounded-xl border-2 transition-colors hover:shadow-sm"
+                      style={{
+                        borderColor: active ? color : "#EBEBF5",
+                        backgroundColor: active ? tint : "#fff",
+                      }}
                     >
-                      {BOOKING_SPACE_TYPE_LABELS[t]}
+                      <div
+                        className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center"
+                        style={{ backgroundColor: tint, color }}
+                      >
+                        <Icon size={18} />
+                      </div>
+                      <span
+                        className="text-[13px] sm:text-[14px] font-semibold"
+                        style={{ color: active ? color : "#1A1A2E" }}
+                      >
+                        {BOOKING_SPACE_TYPE_LABELS[t]}
+                      </span>
+                      <span className="text-[11px] text-gray-400">{BOOKING_SPACE_TYPE_SUBLABELS[t]}</span>
                     </button>
                   );
                 })}
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
-                {loadingPreferences ? (
-                  <p className="text-[12.5px] text-gray-400 col-span-full">Loading preferences…</p>
-                ) : visiblePreferences.length === 0 ? (
-                  <p className="text-[12.5px] text-gray-400 col-span-full">No preferences available for this space type.</p>
-                ) : (
-                  visiblePreferences.map(({ key, name, category }) => {
-                    const checked = form.preferences.includes(key);
-                    const color = getAmenityColor(name, category);
-                    return (
-                      <button
+              {spaceTypeChosen && (
+              <>
+              <Popover
+                open={preferencesOpen}
+                onOpenChange={(next) => {
+                  setPreferencesOpen(next);
+                  if (!next) setPreferencesSearch("");
+                }}
+              >
+                <PopoverTrigger
+                  nativeButton={false}
+                  render={
+                    <div className="w-full h-11 px-3.5 flex items-center justify-between gap-2 bg-white border border-[#EBEBF5] rounded-xl text-[12.5px] cursor-pointer hover:border-gray-300 transition-colors">
+                      <span className="flex items-center gap-2 text-[#1A1A2E] font-medium">
+                        <Settings2 size={14} className="text-gray-400" />
+                        Preferences
+                        <span className="text-gray-400 font-normal">(optional)</span>
+                      </span>
+                      <ChevronDown
+                        size={15}
+                        className={cn("text-gray-400 transition-transform", preferencesOpen && "rotate-180")}
+                      />
+                    </div>
+                  }
+                />
+
+                {selectedPreferences.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2.5">
+                    {selectedPreferences.map(({ key, name }) => (
+                      <span
                         key={key}
-                        onClick={() => togglePreference(key)}
-                        className={cn(
-                          "flex flex-col items-center gap-1.5 sm:gap-2 px-3 py-3 sm:py-4 rounded-xl border transition-all duration-150",
-                          checked
-                            ? "border-indigo-300 bg-indigo-50 shadow-sm"
-                            : "border-[#EBEBF5] bg-white hover:border-gray-300 hover:bg-gray-50"
-                        )}
+                        className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-[11.5px] sm:text-[12px] font-medium"
                       >
-                        <color.icon size={20} className={color.text} />
-                        <span className="text-[11.5px] sm:text-[12.5px] font-medium text-center text-black">{name}</span>
-                        <Checkbox checked={checked} onCheckedChange={() => togglePreference(key)} className="pointer-events-none" />
-                      </button>
-                    );
-                  })
+                        {name}
+                        <button
+                          type="button"
+                          onClick={() => togglePreference(key)}
+                          aria-label={`Remove ${name}`}
+                          className="p-0.5 rounded-full hover:bg-indigo-100"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
                 )}
-              </div>
+
+                <PopoverContent
+                  align="start"
+                  side="bottom"
+                  collisionAvoidance={{ side: "none" }}
+                  className="w-(--anchor-width) p-0 gap-0 rounded-xl border border-[#EBEBF5] bg-white shadow-md ring-0 overflow-hidden flex flex-col"
+                >
+                  <div className="px-3 py-2.5 border-b border-[#EBEBF5] shrink-0">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        autoFocus
+                        value={preferencesSearch}
+                        onChange={(e) => setPreferencesSearch(e.target.value)}
+                        placeholder="Search amenities"
+                        className="w-full h-9 pl-8 pr-3 rounded-lg bg-gray-50 border-0 text-[12.5px] text-[#1A1A2E] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="max-h-64 min-h-0 overflow-y-auto scrollbar-thin px-2 py-2">
+                    {loadingPreferences ? (
+                      <p className="text-[12.5px] text-gray-400 px-2 py-3">Loading preferences…</p>
+                    ) : filteredPreferences.length === 0 ? (
+                      <p className="text-[12.5px] text-gray-400 px-2 py-3">
+                        {visiblePreferences.length === 0
+                          ? "No preferences available for this space type."
+                          : "No amenities match your search."}
+                      </p>
+                    ) : (
+                      groupPreferencesByCategory(filteredPreferences).map(([category, prefs]) => (
+                        <div key={category} className="mb-1 last:mb-0">
+                          <p className="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                            {category}
+                          </p>
+                          {prefs.map(({ key, name, category: prefCategory }) => {
+                            const checked = form.preferences.includes(key);
+                            const color = getAmenityColor(name, prefCategory);
+                            return (
+                              <label
+                                key={key}
+                                className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-[12.5px] text-[#1A1A2E] cursor-pointer hover:bg-gray-50"
+                              >
+                                <Checkbox checked={checked} onCheckedChange={() => togglePreference(key)} />
+                                <color.icon size={14} className="text-gray-400 shrink-0" />
+                                {name}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between px-3.5 py-2.5 border-t border-[#EBEBF5] shrink-0">
+                    <button
+                      type="button"
+                      onClick={clearAll}
+                      disabled={form.preferences.length === 0}
+                      className="text-[12px] font-medium text-gray-500 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Clear all
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreferencesOpen(false)}
+                      className="px-3.5 py-1.5 rounded-lg bg-indigo-600 text-white text-[12px] font-semibold hover:bg-indigo-700"
+                    >
+                      Done{form.preferences.length > 0 ? ` · ${form.preferences.length} selected` : ""}
+                    </button>
+                  </div>
+                </PopoverContent>
+              </Popover>
 
               <div className="mt-2.5 sm:mt-3 bg-amber-50 border border-amber-100 rounded-xl px-3 sm:px-4 py-3 flex items-start gap-1.5">
                 <span className="text-base">💡</span>
                 <div>
                   <span className="text-[11.5px] sm:text-[12px] font-semibold text-amber-700">Tip </span>
                   <span className="text-[11px] sm:text-[11.5px] text-amber-600 leading-relaxed">
-                    Selecting more preferences helps us show seats that match your needs better.
+                    Selecting more preferences helps us show spaces that match your needs better.
                   </span>
                 </div>
               </div>
+              </>
+              )}
             </section>
+          </div>
 
             {/* Actions */}
-            <div className="flex justify-end items-center pt-1 border-t border-[#EBEBF5]">
+            <div className="flex justify-end items-center">
               <Button
                 onClick={findAvailableSeats}
                 disabled={!step1Valid || loadingSeats}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-6 gap-2 text-[12.5px] sm:text-[13px] font-semibold"
               >
-                {loadingSeats ? "Finding seats…" : "Find Available Seats"}
+                {loadingSeats ? "Finding spaces…" : "Find Available Spaces"}
                 {!loadingSeats && <ChevronRight size={14} />}
               </Button>
             </div>
@@ -502,16 +672,20 @@ const BookASeatPage: React.FC = () => {
                 <p className="text-[12px] sm:text-[12.5px] font-semibold text-[#1A1A2E]">What happens next?</p>
                 <p className="text-[11.5px] sm:text-[12px] text-gray-400 mt-0.5">
                   {isModifyMode
-                    ? "You'll see the floor map to pick your new seat. Once you confirm, your original booking will be cancelled and the new one created."
-                    : "You'll be taken to the floor map to view and select your preferred seats based on availability and your preferences."}
+                    ? "You'll see the floor map to pick your new space. Once you confirm, your original booking will be cancelled and the new one created."
+                    : "You'll be taken to the floor map to view and select your preferred space based on availability and your preferences."}
                 </p>
               </div>
             </div>
+
+          </div>
+
+          {showSidebar && <BookingSidebar fromDate={form.fromDate} toDate={form.toDate} />}
           </div>
         )}
 
         {/* ════════════════════════════════════════════════════
-            STEP 2 – Select a Seat (SVG Floor Map)
+            STEP 2 – Select a Space (SVG Floor Map)
         ════════════════════════════════════════════════════ */}
         {step === 2 && (
           <div className="bg-white border border-[#EBEBF5] rounded-xl p-3 sm:p-6 flex flex-col gap-4 sm:gap-5">
@@ -542,7 +716,7 @@ const BookASeatPage: React.FC = () => {
               </div>
               {isModifyMode && form.selectedSeatId && !hasBookingChanges && (
                 <p className="text-[11.5px] text-amber-600">
-                  Select a different seat, date, or location to continue.
+                  Select a different space, date, or location to continue.
                 </p>
               )}
             </div>
@@ -599,7 +773,7 @@ const BookASeatPage: React.FC = () => {
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedFloor?.name ?? "—"}</span>
                   </div>
                   <div className="flex justify-between items-center px-4 py-2.5 bg-slate-50/50 border-b border-gray-50">
-                    <span className="text-[12.5px] text-gray-500">Seat</span>
+                    <span className="text-[12.5px] text-gray-500">Space</span>
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{selectedSeat?.label ?? prefillSeatLabel ?? "—"}</span>
                   </div>
                   <div className="flex justify-between items-center px-4 py-2.5 bg-white border-b border-gray-50">
@@ -649,7 +823,7 @@ const BookASeatPage: React.FC = () => {
                   </div>
                   {isModifyMode && !hasBookingChanges && (
                     <p className="text-[11.5px] text-amber-600">
-                      Nothing has changed yet — go back and pick a different seat, date, or location.
+                      Nothing has changed yet — go back and pick a different space, date, or location.
                     </p>
                   )}
                 </div>
@@ -677,8 +851,8 @@ const BookASeatPage: React.FC = () => {
                   {isModifyMode
                     ? "Your booking has been updated successfully."
                     : isBookingForSomeone && bookingForName
-                      ? `A seat has been reserved for ${bookingForName}.`
-                      : "Your seat has been reserved successfully."}
+                      ? `A space has been reserved for ${bookingForName}.`
+                      : "Your space has been reserved successfully."}
                 </p>
                 <div className="inline-flex items-center gap-2 bg-white/15 rounded-full px-4 py-1.5 mt-3 text-[12px]">
                   <span className="text-indigo-100 font-medium">Booking ID</span>
@@ -708,7 +882,7 @@ const BookASeatPage: React.FC = () => {
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{confirmation.floor_name ?? "—"}</span>
                   </div>
                   <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50 border-b border-gray-50">
-                    <span className="text-[12.5px] text-gray-500">Seat</span>
+                    <span className="text-[12.5px] text-gray-500">Space</span>
                     <span className="text-[12.5px] font-semibold text-[#0f172a]">{confirmation.seat_code ?? "—"}</span>
                   </div>
                   <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-50">
@@ -754,7 +928,7 @@ const BookASeatPage: React.FC = () => {
                     onClick={resetForm}
                     className="flex-1 h-11 text-[13px] font-semibold text-gray-600"
                   >
-                    Book Another Seat
+                    Book Another Space
                   </Button>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import { SeatStatus, SeatType } from "@/features/managelayout1";
+import { SeatStatus } from "@/features/managelayout1";
 
 // ─── SVG helpers ─────────────────────────────────────────────────────────────
 // Fallback canvas size used when a layout's own <svg viewBox>/width/height
@@ -13,16 +13,6 @@ export const SVG_H = 2039;
 export const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr|tr)([-_]|$)/i;
 
 // ─── Seat Config Dialog ──────────────────────────────────────────────────────
-export const SEAT_TYPES: SeatType[] = ["STANDARD", "WINDOW", "CABIN", "ACCESSIBLE", "HOT_DESK"];
-
-export const SEAT_TYPE_LABELS: Record<string, string> = {
-  STANDARD: "STANDARD",
-  WINDOW: "WINDOW",
-  CABIN: "CABIN",
-  ACCESSIBLE: "ACCESSIBLE",
-  HOT_DESK: "HOT_DESK",
-};
-
 export const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
 
 // ─── Legend ──────────────────────────────────────────────────────────────────

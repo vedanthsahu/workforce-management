@@ -1082,15 +1082,15 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
   const options: { key: "yes" | "no"; label: string; sub: string; bullets: string[] }[] = [
     {
       key: "yes",
-      label: "Yes, book a seat",
+      label: "Yes, book a space",
       sub: "Reserve a workspace for this guest.",
-      bullets: ["Guest will have a dedicated seat", "Seat will be held for the selected time", "Ideal for longer or in-office visits"],
+      bullets: ["Guest will have a dedicated space", "Space will be held for the selected time", "Ideal for longer or in-office visits"],
     },
     {
       key: "no",
       label: "No, invite only",
-      sub: "Send an invite without reserving a seat.",
-      bullets: ["Guest does not need a seat", "Perfect for short or host-only visits", "Quick invite and arrival"],
+      sub: "Send an invite without reserving a space.",
+      bullets: ["Guest does not need a space", "Perfect for short or host-only visits", "Quick invite and arrival"],
     },
   ];
 

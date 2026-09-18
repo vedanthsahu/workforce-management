@@ -7,10 +7,10 @@ import {
 } from "@/components/ui/dialog";
 import { Layout } from "../types/layout.types";
 import {
+  AmenityChecklist,
   Preference, Seat, SeatStatus, SeatType, SeatUpdatePayload,
-  ALL_SPACE_TYPES, SPACE_TYPE_LABELS, categoryOf, suggestSeatType,
+  amenityAppliesToSeatType, categoryOf, SPACE_CATEGORY_LABELS, suggestSeatType,
 } from "@/features/managelayout1";
-import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 import { extractSeatIds } from "@/lib/svg/extractSeatIds";
 import {
   SVG_W,
@@ -278,25 +278,28 @@ interface SeatConfigDialogProps {
 }
 
 const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat, preferences, onSave }) => {
-  const [seatType, setSeatType] = useState<SeatType>("STANDARD");
+  const [seatType, setSeatType] = useState<SeatType>("SEAT");
   const [bookable, setBookable] = useState(true);
   const [status, setStatus] = useState<SeatStatus>("ACTIVE");
   const [amenityIds, setAmenityIds] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [capacity, setCapacity] = useState<number | null>(null);
-  const [wasSuggested, setWasSuggested] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const isConferenceRoom = seatType === "CONFERENCE_ROOM";
   const capacityInvalid = isConferenceRoom && (capacity == null || capacity < 1);
+  const visiblePreferences = preferences.filter((p) =>
+    amenityAppliesToSeatType(p.applicable_seat_types, seatType)
+  );
 
   useEffect(() => {
     if (!seat) return;
-    const suggested = !seat.seat_type;
+    // seat_type is auto-categorized (from its own stored value, or a
+    // suggestion derived from the floor-plan SVG id when unset) -- not a
+    // field the admin fills in by hand here.
     setSeatType((seat.seat_type as SeatType) ?? (suggestSeatType(seat.seat_svg_id) as SeatType));
-    setWasSuggested(suggested);
     setBookable(seat.is_bookable ?? true);
     setStatus((seat.status as SeatStatus) ?? "ACTIVE");
     setAmenityIds([...seat.amenity_ids]);
@@ -358,27 +361,15 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
           </DialogTitle>
         </DialogHeader>
 
-        <div className="px-5 py-5 space-y-4 overflow-y-auto max-h-[60vh]">
-          {/* Space Type */}
+        <div className="px-5 py-5 space-y-4 overflow-y-auto scrollbar-thin max-h-[60vh]">
+          {/* Space Type — auto-categorized, read-only */}
           <div>
             <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">
-              Space Type <span className="text-red-500">*</span>
+              Space Type
             </label>
-            <select
-              value={seatType}
-              onChange={(e) => { setSeatType(e.target.value as SeatType); setWasSuggested(false); setSaved(false); }}
-              className={selectCls}
-              style={{ backgroundImage: chevron, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
-            >
-              {ALL_SPACE_TYPES.map((t) => (
-                <option key={t} value={t}>{SPACE_TYPE_LABELS[t]}</option>
-              ))}
-            </select>
-            {wasSuggested && (
-              <p className="text-[10.5px] text-indigo-500 mt-1">
-                Suggested from the floor-plan ID ({seat.seat_svg_id}) — confirm or change it.
-              </p>
-            )}
+            <div className="w-full h-9 px-3 flex items-center text-xs font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-lg">
+              {SPACE_CATEGORY_LABELS[categoryOf(seat.seat_type)].singular}
+            </div>
           </div>
 
           {/* Capacity — Conference Rooms only */}
@@ -449,35 +440,11 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
             <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2 block">
               Amenities
             </label>
-            {preferences.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">No amenities available.</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-1.5">
-                {preferences.map((p) => {
-                  const on = amenityIds.includes(p.preference_id);
-                  const color = getAmenityColor(p.preference_name, p.preference_type);
-                  return (
-                    <button
-                      key={p.preference_id}
-                      onClick={() => toggleAmenity(p.preference_id)}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left text-xs font-medium transition-colors ${on ? "bg-indigo-50 border-indigo-300 text-indigo-700" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                        }`}
-                    >
-                      <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${on ? "bg-indigo-600 border-indigo-600" : "border-gray-300"
-                        }`}>
-                        {on && (
-                          <svg viewBox="0 0 8 7" className="w-2.5 h-2.5">
-                            <path d="M1 3.5l2 2L7 1" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        )}
-                      </div>
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${color.dot}`} />
-                      {p.preference_name}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            <AmenityChecklist
+              preferences={visiblePreferences}
+              selectedIds={amenityIds}
+              onToggle={toggleAmenity}
+            />
           </div>
 
           {/* Notes */}
@@ -488,7 +455,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
             <textarea
               value={notes}
               onChange={(e) => { setNotes(e.target.value); setSaved(false); }}
-              placeholder="Add any notes about this seat…"
+              placeholder="Add any notes about this space…"
               maxLength={200}
               rows={3}
               className="w-full px-3 py-2.5 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400"
@@ -1065,7 +1032,7 @@ export default function LayoutPreview({
             </button>
             {/* FIX: hide hint text on mobile — too long for narrow screens */}
             <p className="text-[10px] text-gray-400 select-none hidden sm:block">
-              Scroll to zoom · Drag to pan · Click a seat to configure
+              Scroll to zoom · Drag to pan · Click a space to configure
             </p>
           </div>
         )}
