@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ChevronDown, Info, X } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ConfigurationSkeleton } from "./ConfigurationSkeleton";
 import { CONFIGURATION_SECTIONS, INITIAL_CONFIGURATIONS } from "../utils/configurationData";
 import type { ConfigurationItem } from "../types/configuration.types";
 
@@ -76,6 +77,11 @@ export default function ConfigurationsListPage() {
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [showConfirm, setShowConfirm] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(false);
+  }, []);
 
   const getItem = (id: string) => configurations.find((c) => c.id === id);
 
@@ -134,6 +140,10 @@ export default function ConfigurationsListPage() {
       ),
     [configurations]
   );
+
+  if (loading) {
+    return <ConfigurationSkeleton />;
+  }
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip bg-[#f8fafc]">
