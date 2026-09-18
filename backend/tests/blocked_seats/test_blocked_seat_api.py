@@ -166,7 +166,7 @@ class BlockedSeatServiceTests(unittest.TestCase):
 
     @patch("backend.services.blocked_seat_service.safe_write_audit_log")
     @patch("backend.services.blocked_seat_service.fetch_blocked_seats_by_ids")
-    @patch("backend.services.blocked_seat_service.insert_blocked_seat")
+    @patch("backend.services.blocked_seat_service.insert_blocked_seats")
     @patch("backend.services.blocked_seat_service.fetch_conflicting_booking_seat_codes")
     @patch("backend.services.blocked_seat_service.fetch_blockable_floor_layout")
     @patch("backend.services.blocked_seat_service.fetch_seats_for_block")
@@ -193,7 +193,7 @@ class BlockedSeatServiceTests(unittest.TestCase):
         ]
         fetch_layout.return_value = {"resources": [{"resource_id": "501"}]}
         fetch_conflicts.return_value = []
-        insert.return_value = "10"
+        insert.return_value = ["10"]
         fetch_created.return_value = [_row()]
         response = create_blocked_seats(
             conn,
