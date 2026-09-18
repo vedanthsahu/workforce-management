@@ -335,8 +335,8 @@ export function BookingTypeSelector({ selected, onChange, disabledType }: Bookin
   const { can } = usePermissions();
 
   const options = [
-    { type: "internal" as BookingType, label: "Internal Employee", sub: "Book a seat for an employee in your organization", Icon: IconUser },
-    { type: "visitor" as BookingType, label: "Visitor / Guest", sub: "Book a seat for a visitor or guest", Icon: IconBadge },
+    { type: "internal" as BookingType, label: "Internal Employee", sub: "Book a space for an employee in your organization", Icon: IconUser },
+    { type: "visitor" as BookingType, label: "Visitor / Guest", sub: "Book a space for a visitor or guest", Icon: IconBadge },
   ].filter(({ type }) =>
     type === "internal" ? can("booking:book_for_employee") : can("booking:book_for_guest")
   );
@@ -412,7 +412,7 @@ export function InternalEmployeeForm({ selectedEmployee, onSelect, onClear, excl
     <div>
       <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Employee Details</h2>
       <p style={{ fontSize: "0.8125rem", color: "#6b7280", marginTop: 4, marginBottom: "1.25rem" }}>
-        Search and select the employee for whom you want to book a seat.
+        Search and select the employee for whom you want to book a space.
       </p>
 
       {/* Search */}
@@ -526,7 +526,7 @@ interface FormFooterProps {
   infoText?: string;
 }
 
-export function FormFooter({ onSubmit, onBack, submitLabel = "Book a Seat", submitDisabled, infoText }: FormFooterProps) {
+export function FormFooter({ onSubmit, onBack, submitLabel = "Book a Space", submitDisabled, infoText }: FormFooterProps) {
   return (
     <div style={{ marginTop: "2rem" }}>
       {/* Info banner */}

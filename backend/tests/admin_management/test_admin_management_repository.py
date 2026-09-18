@@ -163,7 +163,11 @@ class AdminManagementRepositoryTests(unittest.TestCase):
 
         combined_sql = " ".join(sql for sql, _ in cursor.executions)
         self.assertIn("assigned_seat_count", combined_sql)
-        self.assertIn("COUNT(DISTINCT sa.amenity_id)", combined_sql)
+        self.assertIn("FROM seat_amenities AS sa", combined_sql)
+        self.assertIn("INNER JOIN seats AS s", combined_sql)
+        self.assertIn("fl.is_published = TRUE", combined_sql)
+        self.assertIn("fl.status = 'PUBLISHED'", combined_sql)
+        self.assertIn("sa.amenity_id = a.id", combined_sql)
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["active_amenities"], 1)
         self.assertEqual(result["items"][0]["assigned_seat_count"], 3)

@@ -44,7 +44,7 @@ export function UpcomingBookings({
             </div>
             <p className="text-[12px] text-gray-400 text-center">
               No upcoming bookings.
-              {canBookSelf && <><br /><span className="text-blue-500 font-medium">Book a seat</span> to get started.</>}
+              {canBookSelf && <><br /><span className="text-blue-500 font-medium">Book a space</span> to get started.</>}
             </p>
           </div>
         ) : (

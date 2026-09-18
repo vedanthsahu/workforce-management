@@ -7,6 +7,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 AmenityStatusFilter = Literal["ACTIVE", "INACTIVE"]
 
+# Mirrors the flat Seat/Cabin/Conference Room convention already hardcoded in
+# backend/core/seat_categorization.py and frontend/.../book/utils/spaceType.ts
+# -- there is no lookup table for these anywhere in the app.
+ApplicableSeatType = Literal["SEAT", "CABIN", "CONFERENCE_ROOM"]
+
 _UNSAFE_KEY_CHARS = re.compile(r"[^A-Z0-9]+")
 _DUPLICATE_UNDERSCORES = re.compile(r"_+")
 
@@ -61,6 +66,20 @@ def _normalize_keywords(value: Any) -> Any:
     return normalized
 
 
+def _dedupe_seat_types(value: Any) -> Any:
+    if value is None:
+        return value
+    if not isinstance(value, list):
+        return value
+
+    seen: dict[str, None] = {}
+    for item in value:
+        key = item.strip().upper() if isinstance(item, str) else item
+        if key:
+            seen.setdefault(key, None)
+    return list(seen)
+
+
 class AmenityResponse(BaseModel):
     id: str
     key: str
@@ -68,6 +87,7 @@ class AmenityResponse(BaseModel):
     category: str | None = None
     description: str | None = None
     icon: str | None = None
+    applicable_seat_types: list[str] = Field(default_factory=list)
 
 
 class PreferencesResponse(BaseModel):
@@ -115,11 +135,18 @@ class CreateAmenityRequest(BaseModel):
     description: str | None = None
     icon_name: str | None = Field(default=None, max_length=100)
     is_active: bool = True
+    # Empty list means "applies to every space type" (Seat, Cabin, Conference Room).
+    applicable_seat_types: list[ApplicableSeatType] = Field(default_factory=list)
 
     @field_validator("amenity_name", "description", "icon_name", mode="before")
     @classmethod
     def trim_text(cls, value: str | None) -> str | None:
         return _trim_string(value)
+
+    @field_validator("applicable_seat_types", mode="before")
+    @classmethod
+    def dedupe_seat_types(cls, value: Any) -> Any:
+        return _dedupe_seat_types(value)
 
     @property
     def amenity_key(self) -> str:
@@ -134,11 +161,17 @@ class UpdateAmenityRequest(BaseModel):
     icon_name: str | None = Field(default=None, max_length=100)
     category_id: int | None = Field(default=None, gt=0)
     is_active: bool | None = None
+    applicable_seat_types: list[ApplicableSeatType] | None = None
 
     @field_validator("amenity_name", "description", "icon_name", mode="before")
     @classmethod
     def trim_text(cls, value: str | None) -> str | None:
         return _trim_string(value)
+
+    @field_validator("applicable_seat_types", mode="before")
+    @classmethod
+    def dedupe_seat_types(cls, value: Any) -> Any:
+        return _dedupe_seat_types(value)
 
 
 class AdminAmenityResponse(BaseModel):
@@ -151,6 +184,7 @@ class AdminAmenityResponse(BaseModel):
     category_name: str | None = None
     is_active: bool
     assigned_seat_count: int = 0
+    applicable_seat_types: list[str] = Field(default_factory=list)
 
 
 class AmenityListResponse(BaseModel):

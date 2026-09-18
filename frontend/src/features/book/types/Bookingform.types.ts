@@ -44,7 +44,7 @@ export interface BookingFormState {
   toDate: string;
   preferences: string[];
   selectedSeatId: string | null;
-  // "ALL" | "SEAT" | "CABIN" | "CONFERENCE_ROOM" — see book/utils/spaceType.ts
+  // "SEAT" | "CABIN" | "CONFERENCE_ROOM" — see book/utils/spaceType.ts
   spaceType: string;
 }
 
@@ -107,7 +107,7 @@ export interface FetchSeatsParams {
   /** When booking for a guest */
   isGuestBooking?: boolean;
   bookedForGuestId?: string | null;
-  /** "ALL" | "SEAT" | "CABIN" | "CONFERENCE_ROOM" — "ALL" sends no filter, matching today's unfiltered search */
+  /** "SEAT" | "CABIN" | "CONFERENCE_ROOM" */
   spaceType?: string;
 }
 
@@ -161,6 +161,28 @@ export interface CreateBookingResponse {
 }
 
 export type BookingStep = 1 | 2 | 3;
+
+// ── Booking sidebar (Step 1 "Tomorrow" + "Quick picks") ───────────────────────
+
+export interface TomorrowBooking {
+  bookingId: string;
+  seatCode: string | null;
+  siteName: string | null;
+  buildingName: string | null;
+  floorName: string | null;
+  /** ISO date string (YYYY-MM-DD) for tomorrow */
+  bookingDate: string;
+}
+
+export interface QuickPickSeat {
+  id: string;
+  label: string;
+  tag: "favourite" | "frequent";
+  floor: string;
+  siteId: string | null;
+  buildingId: string | null;
+  floorId: string | null;
+}
 
 // ── Floor map visual configuration ────────────────────────────────────────────
 

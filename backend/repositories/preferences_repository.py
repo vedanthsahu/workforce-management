@@ -21,7 +21,8 @@ def fetch_active_amenities(
                 amenities.amenity_name AS name,
                 COALESCE(ac.category_name, amenities.category) AS category,
                 amenities.description,
-                amenities.icon_name AS icon
+                amenities.icon_name AS icon,
+                COALESCE(amenities.applicable_seat_types, '{}') AS applicable_seat_types
             FROM amenities
             LEFT JOIN amenity_categories AS ac
                 ON ac.id = amenities.category_id
@@ -85,7 +86,8 @@ def fetch_user_preferred_amenities(
                 a.amenity_name AS name,
                 COALESCE(ac.category_name, a.category) AS category,
                 a.description,
-                a.icon_name AS icon
+                a.icon_name AS icon,
+                COALESCE(a.applicable_seat_types, '{}') AS applicable_seat_types
             FROM user_preferred_amenities AS upa
             INNER JOIN amenities AS a
                 ON a.id = upa.amenity_id
@@ -578,19 +580,28 @@ def fetch_amenity_by_id(
                 a.category_id::text AS category_id,
                 COALESCE(ac.category_name, a.category) AS category_name,
                 a.is_active,
-                COALESCE(assignments.assigned_seat_count, 0)::integer AS assigned_seat_count
+                COALESCE(assignments.assigned_seat_count, 0)::integer AS assigned_seat_count,
+                COALESCE(a.applicable_seat_types, '{}') AS applicable_seat_types
             FROM amenities AS a
             LEFT JOIN amenity_categories AS ac
                 ON ac.id = a.category_id
                AND (
                     ac.tenant_id = a.tenant_id
                     OR ac.tenant_id IS NULL
-               )
-            LEFT JOIN LATERAL (
-                SELECT COUNT(DISTINCT sa.seat_id)::integer AS assigned_seat_count
-                FROM seat_amenities AS sa
-                WHERE sa.tenant_id = a.tenant_id
-                  AND sa.amenity_id = a.id
+        )
+        LEFT JOIN LATERAL (
+            SELECT COUNT(DISTINCT s.id)::integer AS assigned_seat_count
+            FROM seat_amenities AS sa
+            INNER JOIN seats AS s
+                ON s.id = sa.seat_id
+               AND s.tenant_id = sa.tenant_id
+            INNER JOIN floor_layouts AS fl
+                ON fl.id = s.layout_id
+               AND fl.tenant_id = s.tenant_id
+               AND fl.is_published = TRUE
+               AND fl.status = 'PUBLISHED'
+            WHERE sa.tenant_id = a.tenant_id
+              AND sa.amenity_id = a.id
             ) AS assignments ON TRUE
             WHERE a.tenant_id = %s
               AND a.id = %s
@@ -641,6 +652,7 @@ def insert_amenity(
     category_id: str,
     category_name: str,
     is_active: bool,
+    applicable_seat_types: list[str] | None = None,
 ) -> dict[str, Any]:
     """Insert one amenity and reload it with assignment counts."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -654,9 +666,10 @@ def insert_amenity(
                 icon_name,
                 category_id,
                 category,
-                is_active
+                is_active,
+                applicable_seat_types
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id::text AS amenity_id
             """,
             (
@@ -668,6 +681,7 @@ def insert_amenity(
                 category_id,
                 category_name,
                 is_active,
+                applicable_seat_types or [],
             ),
         )
         row = cur.fetchone()
@@ -750,8 +764,16 @@ def fetch_amenities(
                 OR ac.tenant_id IS NULL
            )
         LEFT JOIN LATERAL (
-            SELECT COUNT(DISTINCT sa.seat_id)::integer AS assigned_seat_count
+            SELECT COUNT(DISTINCT s.id)::integer AS assigned_seat_count
             FROM seat_amenities AS sa
+            INNER JOIN seats AS s
+                ON s.id = sa.seat_id
+               AND s.tenant_id = sa.tenant_id
+            INNER JOIN floor_layouts AS fl
+                ON fl.id = s.layout_id
+               AND fl.tenant_id = s.tenant_id
+               AND fl.is_published = TRUE
+               AND fl.status = 'PUBLISHED'
             WHERE sa.tenant_id = a.tenant_id
               AND sa.amenity_id = a.id
         ) AS assignments ON TRUE
@@ -790,7 +812,8 @@ def fetch_amenities(
                 a.category_id::text AS category_id,
                 COALESCE(ac.category_name, a.category) AS category_name,
                 a.is_active,
-                COALESCE(assignments.assigned_seat_count, 0)::integer AS assigned_seat_count
+                COALESCE(assignments.assigned_seat_count, 0)::integer AS assigned_seat_count,
+                COALESCE(a.applicable_seat_types, '{{}}') AS applicable_seat_types
             {from_and_where}
             ORDER BY COALESCE(ac.category_name, a.category), a.amenity_name, a.id
             LIMIT %(limit)s
@@ -809,6 +832,14 @@ def fetch_amenities(
                 (
                     SELECT COUNT(DISTINCT sa.amenity_id)::integer
                     FROM seat_amenities AS sa
+                    INNER JOIN seats AS s
+                        ON s.id = sa.seat_id
+                       AND s.tenant_id = sa.tenant_id
+                    INNER JOIN floor_layouts AS fl
+                        ON fl.id = s.layout_id
+                       AND fl.tenant_id = s.tenant_id
+                       AND fl.is_published = TRUE
+                       AND fl.status = 'PUBLISHED'
                     WHERE sa.tenant_id = %(tenant_id)s
                 ) AS assigned_amenities
             FROM amenities
