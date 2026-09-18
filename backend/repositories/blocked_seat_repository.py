@@ -374,3 +374,63 @@ def cancel_blocked_seat(
         )
         row = cur.fetchone()
         return dict(row) if row else None
+
+
+def update_blocked_seat(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    block_id: str,
+    block_type: str,
+    blocked_from: date,
+    blocked_to: date,
+    reason: str,
+) -> bool:
+    """Update one non-expired active block after service-level validation."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE blocked_seats
+            SET block_type = %s, blocked_from = %s, blocked_to = %s,
+                reason = %s, updated_at = NOW()
+            WHERE tenant_id = %s AND id = %s AND status = 'ACTIVE'
+              AND blocked_to >= CURRENT_DATE
+            """,
+            (
+                block_type,
+                blocked_from,
+                blocked_to,
+                reason,
+                tenant_id,
+                block_id,
+            ),
+        )
+        return cur.rowcount == 1
+
+
+def fetch_blocked_seat_history(
+    conn: PGConnection, *, tenant_id: str, block_id: str
+) -> list[dict[str, Any]]:
+    """Return audit events written specifically for one blocked-seat record."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT al.id::text AS id, al.action,
+                   COALESCE(au.full_name, al.actor_email) AS actor_name,
+                   al.actor_email, al.old_values, al.new_values,
+                   al.changed_fields, al.occurred_at
+            FROM audit_logs AS al
+            LEFT JOIN app_users AS au
+              ON au.id = al.actor_user_id AND au.tenant_id = al.tenant_id
+            WHERE al.tenant_id = %s
+              AND al.entity_type = 'blocked_seat'
+              AND al.event_status = 'SUCCESS'
+              AND (
+                    al.entity_id = %s
+                    OR %s = ANY(string_to_array(COALESCE(al.entity_id, ''), ','))
+                  )
+            ORDER BY al.occurred_at DESC, al.id DESC
+            """,
+            (tenant_id, block_id, block_id),
+        )
+        return [dict(row) for row in cur.fetchall()]

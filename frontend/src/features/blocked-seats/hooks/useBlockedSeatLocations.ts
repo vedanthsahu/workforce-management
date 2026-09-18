@@ -13,6 +13,7 @@ export function useBlockedSeatLocations() {
   );
   const [loadingBuildings, setLoadingBuildings] = useState(false);
   const [loadingFloors, setLoadingFloors] = useState(false);
+  const [locationError, setLocationError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -20,10 +21,16 @@ export function useBlockedSeatLocations() {
     void blockedSeatsService
       .getSites()
       .then((items) => {
-        if (!cancelled) setSites(items);
+        if (!cancelled) {
+          setSites(items);
+          setLocationError("");
+        }
       })
       .catch(() => {
-        if (!cancelled) setSites([]);
+        if (!cancelled) {
+          setSites([]);
+          setLocationError("Unable to load offices. Refresh the page and try again.");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadingSites(false);
@@ -48,10 +55,12 @@ export function useBlockedSeatLocations() {
       return;
     }
     setLoadingBuildings(true);
+    setLocationError("");
     try {
       setBuildings(await blockedSeatsService.getBuildings(siteId));
     } catch {
       setBuildings([]);
+      setLocationError("Unable to load buildings for the selected office.");
     } finally {
       setLoadingBuildings(false);
     }
@@ -70,10 +79,12 @@ export function useBlockedSeatLocations() {
       return;
     }
     setLoadingFloors(true);
+    setLocationError("");
     try {
       setFloors(await blockedSeatsService.getFloors(buildingId));
     } catch {
       setFloors([]);
+      setLocationError("Unable to load floors for the selected building.");
     } finally {
       setLoadingFloors(false);
     }
@@ -86,6 +97,7 @@ export function useBlockedSeatLocations() {
     loadingSites,
     loadingBuildings,
     loadingFloors,
+    locationError,
     loadBuildings,
     loadFloors,
     setBuildings,

@@ -1,5 +1,8 @@
-import { Ban, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { BlockedSeat } from "../types/blockedSeats.types";
+import BlockedSeatActionMenu, {
+  type BlockedSeatAction,
+} from "./BlockedSeatActionMenu";
 import {
   STATUS_LABELS,
   STATUS_STYLES,
@@ -23,7 +26,7 @@ interface Props {
   totalPages: number;
   loading: boolean;
   onPageChange: (page: number) => void;
-  onCancel: (row: BlockedSeat) => void;
+  onAction: (action: BlockedSeatAction, row: BlockedSeat) => void;
 }
 
 export default function BlockedSeatsTable({
@@ -34,7 +37,7 @@ export default function BlockedSeatsTable({
   totalPages,
   loading,
   onPageChange,
-  onCancel,
+  onAction,
 }: Props) {
   const headings = [
     "Seat",
@@ -50,7 +53,7 @@ export default function BlockedSeatsTable({
   const start = total ? (page - 1) * pageSize + 1 : 0;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-[#EBEBF5] bg-white text-gray-900">
+    <section className="rounded-xl border border-[#EBEBF5] bg-white text-gray-900">
       <h2 className="border-b border-[#EBEBF5] px-4 py-4 text-[14px] font-bold text-[#1A1A2E] sm:px-6 sm:text-[15px]">
         {title} ({total})
       </h2>
@@ -100,22 +103,14 @@ export default function BlockedSeatsTable({
                   </dd>
                 </div>
                 <div className="flex items-end justify-end">
-                  {row.display_status !== "EXPIRED" && (
-                    <button
-                      onClick={() => onCancel(row)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-                    >
-                      <Ban size={14} />
-                      Unblock
-                    </button>
-                  )}
+                  <BlockedSeatActionMenu row={row} onAction={onAction} />
                 </div>
               </dl>
             </article>
           ))}
         </div>
       )}
-      <div className="hidden overflow-hidden md:block">
+      <div className="hidden md:block">
         <table className="w-full table-fixed text-left text-[10px] sm:text-[11px] lg:text-[12.5px]">
           <colgroup>
             <col className="w-[13%]" />
@@ -184,18 +179,7 @@ export default function BlockedSeatsTable({
                     {row.blocked_by.name ?? "—"}
                   </td>
                   <td className="px-1 py-3 text-center align-top">
-                    {row.display_status === "EXPIRED" ? (
-                      <span className="text-muted-foreground/50">—</span>
-                    ) : (
-                      <button
-                        onClick={() => onCancel(row)}
-                        title="Unblock seat"
-                        aria-label={`Unblock seat ${row.seat_code}`}
-                        className="rounded-md p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                      >
-                        <Ban size={16} />
-                      </button>
-                    )}
+                    <BlockedSeatActionMenu row={row} onAction={onAction} />
                   </td>
                 </tr>
               ))}

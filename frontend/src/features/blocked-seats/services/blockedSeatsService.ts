@@ -3,10 +3,12 @@ import type {
   BlockCategory,
   BlockableFloorLayout,
   BlockedSeatFilters,
+  BlockedSeat,
+  BlockedSeatHistoryItem,
   BlockedSeatListResponse,
   CreateBlockedSeatsPayload,
   LocationOption,
-  SeatOption,
+  UpdateBlockedSeatPayload,
 } from "../types/blockedSeats.types";
 
 interface CacheEntry<T> {
@@ -130,6 +132,24 @@ export const blockedSeatsService = {
     listCache.clear();
     layoutCache.clear();
   },
+  async history(blockId: string): Promise<BlockedSeatHistoryItem[]> {
+    const { data } = await axiosInstance.get(
+      `/admin/blocked-seats/${blockId}/history`,
+    );
+    return data.items;
+  },
+  async update(
+    blockId: string,
+    payload: UpdateBlockedSeatPayload,
+  ): Promise<BlockedSeat> {
+    const { data } = await axiosInstance.patch(
+      `/admin/blocked-seats/${blockId}`,
+      payload,
+    );
+    listCache.clear();
+    layoutCache.clear();
+    return data;
+  },
   getCachedSites(): LocationOption[] | undefined {
     return cachedLocationValue("sites");
   },
@@ -181,62 +201,6 @@ export const blockedSeatsService = {
         name: item.floor_name ?? item.floor_id,
       }));
     });
-  },
-  async getSeats(
-    floorId: string,
-    startDate: string,
-    endDate: string,
-  ): Promise<SeatOption[]> {
-    const { data } = await axiosInstance.get(`/floors/${floorId}/seats`, {
-      params: { start_date: startDate, end_date: endDate, calendar_mode: true },
-    });
-    return data.items.map(
-      (item: {
-        seat_id: string;
-        seat_code: string;
-        is_bookable?: boolean;
-        availability: {
-          booked_dates?: string[];
-          bookedDates?: string[];
-          blocked_dates?: string[];
-          blockedDates?: string[];
-          unavailable_dates?: string[];
-          unavailableDates?: string[];
-          daily_statuses?: Array<{ status: string }>;
-          dailyStatuses?: Array<{ status: string }>;
-        };
-      }) => {
-        const dailyStatuses =
-          item.availability.daily_statuses ??
-          item.availability.dailyStatuses ??
-          [];
-        const hasBooking = Boolean(
-          (item.availability.booked_dates ?? item.availability.bookedDates)
-            ?.length || dailyStatuses.some((day) => day.status === "BOOKED"),
-        );
-        const hasBlock = Boolean(
-          (item.availability.blocked_dates ?? item.availability.blockedDates)
-            ?.length || dailyStatuses.some((day) => day.status === "BLOCKED"),
-        );
-        const isUnavailable =
-          item.is_bookable === false ||
-          Boolean(
-            (
-              item.availability.unavailable_dates ??
-              item.availability.unavailableDates
-            )?.length,
-          ) ||
-          dailyStatuses.some((day) => day.status === "UNAVAILABLE");
-        return {
-          seat_id: item.seat_id,
-          seat_code: item.seat_code,
-          hasBooking,
-          hasBlock,
-          isUnavailable,
-          selectable: !hasBlock && !isUnavailable,
-        };
-      },
-    );
   },
   async getConflicts(
     floorId: string,

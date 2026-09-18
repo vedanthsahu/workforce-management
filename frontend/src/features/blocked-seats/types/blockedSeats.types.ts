@@ -113,3 +113,21 @@ export interface CreateBlockedSeatsPayload {
   blocked_to: string;
   reason: string;
 }
+
+export interface UpdateBlockedSeatPayload {
+  block_type?: BlockType;
+  blocked_from?: string;
+  blocked_to?: string;
+  reason?: string;
+}
+
+export interface BlockedSeatHistoryItem {
+  id: string;
+  action: string;
+  actor_name: string | null;
+  actor_email: string | null;
+  old_values: Record<string, unknown> | null;
+  new_values: Record<string, unknown> | null;
+  changed_fields: string[] | null;
+  occurred_at: string;
+}

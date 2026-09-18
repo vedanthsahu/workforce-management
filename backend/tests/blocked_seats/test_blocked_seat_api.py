@@ -9,11 +9,16 @@ from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
 from backend.api.routes.admin_blocked_seats import router
-from backend.schemas.blocked_seat import BlockedSeatListQuery, CreateBlockedSeatsRequest
+from backend.schemas.blocked_seat import (
+    BlockedSeatListQuery,
+    CreateBlockedSeatsRequest,
+    UpdateBlockedSeatRequest,
+)
 from backend.services.blocked_seat_service import (
     create_blocked_seats,
     get_blockable_floor_layout,
     get_blocked_seats,
+    update_seat_block,
 )
 
 
@@ -60,6 +65,10 @@ class BlockedSeatSchemaTests(unittest.TestCase):
                 reason="Repair",
             )
 
+    def test_update_request_requires_at_least_one_change(self) -> None:
+        with self.assertRaises(ValidationError):
+            UpdateBlockedSeatRequest()
+
 
 class BlockedSeatRouteTests(unittest.TestCase):
     def test_routes_are_registered(self) -> None:
@@ -76,9 +85,46 @@ class BlockedSeatRouteTests(unittest.TestCase):
             operations,
         )
         self.assertIn(("/admin/blocked-seats/{block_id}/cancel", "POST"), operations)
+        self.assertIn(("/admin/blocked-seats/{block_id}", "PATCH"), operations)
+        self.assertIn(("/admin/blocked-seats/{block_id}/history", "GET"), operations)
 
 
 class BlockedSeatServiceTests(unittest.TestCase):
+    @patch("backend.services.blocked_seat_service.safe_write_audit_log")
+    @patch("backend.services.blocked_seat_service.update_blocked_seat")
+    @patch("backend.services.blocked_seat_service.fetch_conflicting_booking_seat_codes")
+    @patch("backend.services.blocked_seat_service.fetch_blockable_floor_layout")
+    @patch("backend.services.blocked_seat_service.fetch_blocked_seats_by_ids")
+    def test_update_validates_and_returns_updated_block(
+        self,
+        fetch_rows: MagicMock,
+        fetch_layout: MagicMock,
+        fetch_conflicts: MagicMock,
+        update_row: MagicMock,
+        audit: MagicMock,
+    ) -> None:
+        old = _row()
+        updated = {**old, "blocked_to": date(2026, 9, 20), "reason": "Extended repair"}
+        fetch_rows.side_effect = [[old], [updated]]
+        fetch_layout.return_value = {"resources": [{"resource_id": "501"}]}
+        fetch_conflicts.return_value = []
+        update_row.return_value = True
+        conn = MagicMock()
+
+        response = update_seat_block(
+            conn,
+            tenant_id="1",
+            block_id="10",
+            payload=UpdateBlockedSeatRequest(
+                blocked_to=date(2026, 9, 20), reason="Extended repair"
+            ),
+            current_user={"user_id": "7", "tenant_id": "1"},
+        )
+
+        self.assertEqual(response.blocked_to, date(2026, 9, 20))
+        conn.commit.assert_called_once()
+        audit.assert_called_once()
+
     @patch("backend.services.blocked_seat_service.fetch_blockable_floor_layout")
     def test_layout_range_must_resolve_to_one_effective_layout(
         self,

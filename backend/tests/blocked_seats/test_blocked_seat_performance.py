@@ -7,8 +7,10 @@ from fastapi import HTTPException
 
 from backend.api.routes.admin_blocked_seats import blockable_floor_layout
 from backend.repositories.blocked_seat_repository import (
-    fetch_blockable_floor_layout, fetch_blocked_seats,
-    fetch_blocked_seat_summary, insert_blocked_seats,
+    fetch_blockable_floor_layout,
+    fetch_blocked_seat_summary,
+    fetch_blocked_seats,
+    insert_blocked_seats,
 )
 from backend.schemas.blocked_seat import BlockedSeatListQuery
 
@@ -115,7 +117,9 @@ class ConflictPermissionTests(TestCase):
 class BatchRollbackTests(TestCase):
     def test_batch_conflict_rolls_back_without_partial_commit(self):
         from contextlib import ExitStack
+
         from psycopg2.errors import ExclusionViolation
+
         from backend.schemas.blocked_seat import CreateBlockedSeatsRequest
         from backend.services.blocked_seat_service import create_blocked_seats
 
