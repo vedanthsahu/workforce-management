@@ -4,8 +4,8 @@ import React, { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Seat, SeatStatus, SeatType, SeatUpdatePayload } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
-import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
-import { ALL_SPACE_TYPES, SPACE_TYPE_LABELS, categoryOf, suggestSeatType } from "../utils/spaceCategory";
+import { amenityAppliesToSeatType, categoryOf, SPACE_CATEGORY_LABELS, suggestSeatType } from "../utils/spaceCategory";
+import AmenityChecklist from "./AmenityChecklist";
 
 interface Props {
   seat: Seat | null;
@@ -17,26 +17,22 @@ interface Props {
 const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
 
 export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Props) {
-  const [seatType,    setSeatType]    = useState<SeatType>("STANDARD");
+  const [seatType,    setSeatType]    = useState<SeatType>("SEAT");
   const [bookable,    setBookable]    = useState<boolean>(true);
   const [status,      setStatus]      = useState<SeatStatus>("ACTIVE");
   const [amenityIds,  setAmenityIds]  = useState<string[]>([]);
   const [notes,       setNotes]       = useState<string>("");
   const [capacity,    setCapacity]    = useState<number | null>(null);
-  // True only when the current seatType came from the SVG-id suggestion,
-  // not the seat's own stored value — cleared the moment the admin picks
-  // anything themselves, so the hint below only ever describes a guess that
-  // hasn't been confirmed yet.
-  const [wasSuggested, setWasSuggested] = useState(false);
   const [saving,      setSaving]      = useState(false);
   const [saveError,   setSaveError]   = useState(false);
   const [saved,       setSaved]       = useState(false);
 
   useEffect(() => {
     if (!seat) return;
-    const suggested = !seat.seat_type;
+    // seat_type is auto-categorized (from its own stored value, or a
+    // suggestion derived from the floor-plan SVG id when unset) -- not a
+    // field the admin fills in by hand here.
     setSeatType((seat.seat_type as SeatType) ?? (suggestSeatType(seat.seat_svg_id) as SeatType));
-    setWasSuggested(suggested);
     setBookable(seat.is_bookable ?? true);
     setStatus((seat.status as SeatStatus) ?? "ACTIVE");
     setAmenityIds([...seat.amenity_ids]);
@@ -48,6 +44,9 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
 
   const isConferenceRoom = seatType === "CONFERENCE_ROOM";
   const capacityInvalid = isConferenceRoom && (capacity == null || capacity < 1);
+  const visiblePreferences = preferences.filter((p) =>
+    amenityAppliesToSeatType(p.applicable_seat_types, seatType)
+  );
 
   const toggleAmenity = (id: string) => {
     setSaved(false);
@@ -107,28 +106,14 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
           <p className="text-xs font-semibold text-gray-700 mb-3">1. Basic Information</p>
 
           <div className="space-y-3">
-            {/* Space Type */}
+            {/* Space Type — auto-categorized, read-only */}
             <div>
               <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1 block">
-                Space Type <span className="text-red-500">*</span>
+                Space Type
               </label>
-              <select
-                value={seatType}
-                onChange={(e) => { setSeatType(e.target.value as SeatType); setWasSuggested(false); setSaved(false); }}
-                className="w-full h-9 px-3 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
-                  backgroundRepeat: "no-repeat",
-                  backgroundPosition: "right 10px center",
-                }}
-              >
-                {ALL_SPACE_TYPES.map((t) => <option key={t} value={t}>{SPACE_TYPE_LABELS[t]}</option>)}
-              </select>
-              {wasSuggested && (
-                <p className="text-[10.5px] text-indigo-500 mt-1">
-                  Suggested from the floor-plan ID ({seat.seat_svg_id}) — confirm or change it.
-                </p>
-              )}
+              <div className="w-full h-9 px-3 flex items-center text-xs font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-lg">
+                {SPACE_CATEGORY_LABELS[categoryOf(seat.seat_type)].singular}
+              </div>
             </div>
 
             {/* Capacity — Conference Rooms only */}
@@ -208,45 +193,12 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
         {/* 2. Amenities */}
         <section>
           <p className="text-xs font-semibold text-gray-700 mb-1">2. Amenities</p>
-          <p className="text-[10px] text-gray-400 mb-3">Select amenities for this seat</p>
-          {preferences.length === 0 ? (
-            <p className="text-xs text-gray-400 italic">No amenities available.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {preferences.map((p) => {
-                const on = amenityIds.includes(p.preference_id);
-                const color = getAmenityColor(p.preference_name, p.preference_type);
-                return (
-                  <label
-                    key={p.preference_id}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
-                      on ? "bg-indigo-50 border-indigo-200" : "bg-white border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
-                      on ? "bg-indigo-600 border-indigo-600" : "border-gray-300"
-                    }`}>
-                      {on && (
-                        <svg viewBox="0 0 8 7" className="w-2.5 h-2.5">
-                          <path d="M1 3.5l2 2L7 1" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </div>
-                    <input
-                      type="checkbox"
-                      className="hidden"
-                      checked={on}
-                      onChange={() => toggleAmenity(p.preference_id)}
-                    />
-                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${color.dot}`} />
-                    <span className={`text-xs font-medium flex-1 ${on ? "text-indigo-700" : "text-gray-700"}`}>
-                      {p.preference_name}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
+          <p className="text-[10px] text-gray-400 mb-3">Select amenities for this space</p>
+          <AmenityChecklist
+            preferences={visiblePreferences}
+            selectedIds={amenityIds}
+            onToggle={toggleAmenity}
+          />
         </section>
 
         {/* 3. Notes */}
@@ -257,7 +209,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
           <textarea
             value={notes}
             onChange={(e) => { setNotes(e.target.value); setSaved(false); }}
-            placeholder="Add any notes about this seat…"
+            placeholder="Add any notes about this space…"
             maxLength={200}
             rows={3}
             className="w-full px-3 py-2.5 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400"

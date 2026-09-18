@@ -1,6 +1,6 @@
 // ─── Seat Types ───────────────────────────────────────────────────────────────
 
-export type SeatType   = "STANDARD" | "WINDOW" | "CABIN" | "ACCESSIBLE" | "HOT_DESK" | "CONFERENCE_ROOM";
+export type SeatType   = "SEAT" | "CABIN" | "CONFERENCE_ROOM";
 export type SeatStatus = "ACTIVE" | "INACTIVE";
 export type BookableStatus = "Yes" | "No";
 

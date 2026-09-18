@@ -6,8 +6,8 @@ import {
 } from "@/components/ui/dialog";
 import { BulkUpdatePayload, SeatStatus, SeatType } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
-import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
-import { ALL_SPACE_TYPES, SPACE_TYPE_LABELS } from "../utils/spaceCategory";
+import { SPACE_TYPES, SPACE_TYPE_LABELS, amenityAppliesToSeatType } from "../utils/spaceCategory";
+import AmenityChecklist from "./AmenityChecklist";
 
 interface Props {
   open: boolean;
@@ -32,6 +32,12 @@ export default function BulkEditModal({
   const [saveError, setSaveError] = useState(false);
 
   const isConferenceRoom = seatType === "CONFERENCE_ROOM";
+  // Only filter once the admin picks a space type to bulk-set -- left blank,
+  // the selected seats may be a mix of types, so no single type's amenity
+  // list would be meaningful.
+  const visiblePreferences = seatType
+    ? preferences.filter((p) => amenityAppliesToSeatType(p.applicable_seat_types, seatType))
+    : preferences;
 
   const reset = () => {
     setSeatType(""); setBookable(""); setStatus("");
@@ -83,7 +89,7 @@ export default function BulkEditModal({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="px-5 py-5 space-y-4 overflow-y-auto max-h-[60vh]">
+        <div className="px-5 py-5 space-y-4 overflow-y-auto scrollbar-thin max-h-[60vh]">
           <p className="text-xs text-gray-500">
             Only filled fields will be applied. Leave blank to keep existing values.
           </p>
@@ -91,9 +97,23 @@ export default function BulkEditModal({
           {/* Space Type */}
           <div>
             <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Space Type</label>
-            <select value={seatType} onChange={(e) => setSeatType(e.target.value)} className={selectClass} style={dropdownStyle}>
+            <select
+              value={seatType}
+              onChange={(e) => {
+                const next = e.target.value;
+                setSeatType(next);
+                setAmenityIds((prev) =>
+                  prev.filter((id) => {
+                    const pref = preferences.find((p) => p.preference_id === id);
+                    return amenityAppliesToSeatType(pref?.applicable_seat_types, next);
+                  })
+                );
+              }}
+              className={selectClass}
+              style={dropdownStyle}
+            >
               <option value="" disabled hidden>Select space type</option>
-              {ALL_SPACE_TYPES.map((t) => <option key={t} value={t}>{SPACE_TYPE_LABELS[t]}</option>)}
+              {SPACE_TYPES.map((t) => <option key={t} value={t}>{SPACE_TYPE_LABELS[t]}</option>)}
             </select>
           </div>
 
@@ -134,26 +154,11 @@ export default function BulkEditModal({
           {/* Amenities */}
           <div>
             <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2 block">Amenities</label>
-            <div className="grid grid-cols-2 gap-1.5">
-              {preferences.map((p) => {
-                const on = amenityIds.includes(p.preference_id);
-                const color = getAmenityColor(p.preference_name, p.preference_type);
-                return (
-                  <button
-                    key={p.preference_id}
-                    onClick={() => toggleAmenity(p.preference_id)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left text-xs font-medium transition-colors ${on ? "bg-indigo-50 border-indigo-300 text-indigo-700" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                      }`}
-                  >
-                    <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${on ? "bg-indigo-600 border-indigo-600" : "border-gray-300"}`}>
-                      {on && <svg viewBox="0 0 8 7" className="w-2.5 h-2.5"><path d="M1 3.5l2 2L7 1" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                    </div>
-                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${color.dot}`} />
-                    {p.preference_name}
-                  </button>
-                );
-              })}
-            </div>
+            <AmenityChecklist
+              preferences={visiblePreferences}
+              selectedIds={amenityIds}
+              onToggle={toggleAmenity}
+            />
           </div>
         </div>
 

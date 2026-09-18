@@ -28,21 +28,14 @@ export const SPACE_CATEGORY_COLOR: Record<SpaceCategory, { color: string; tint: 
   CONFERENCE_ROOMS: { color: "#0E9F6E", tint: "#E9F9F2" },
 };
 
-// The original seat_type list, unchanged — this is exactly what Usemanageseats.ts's
-// old hardcoded `seatTypes` array was ("All" prefix aside). Kept as-is rather than
-// trimmed, per explicit instruction — CABIN stays in this list.
-export const SEAT_TYPES = ["STANDARD", "WINDOW", "CABIN", "ACCESSIBLE", "HOT_DESK"] as const;
-
-// Every seat_type value selectable in a config dropdown: the original list,
-// plus the one new value this redesign adds.
-export const ALL_SPACE_TYPES = [...SEAT_TYPES, "CONFERENCE_ROOM"] as const;
+// The only 3 real space types — no finer sub-types (Window/Accessible/Hot
+// Desk/etc.) under Seats. Every seat_type value selectable in a config
+// dropdown.
+export const SPACE_TYPES = ["SEAT", "CABIN", "CONFERENCE_ROOM"] as const;
 
 export const SPACE_TYPE_LABELS: Record<string, string> = {
-  STANDARD: "Standard",
-  WINDOW: "Window",
+  SEAT: "Seat",
   CABIN: "Cabin",
-  ACCESSIBLE: "Accessible",
-  HOT_DESK: "Hot Desk",
   CONFERENCE_ROOM: "Conference Room",
 };
 
@@ -60,6 +53,30 @@ export function categoryOf(seatType: string | null | undefined): "SEATS" | "CABI
   return "SEATS";
 }
 
+// The amenities admin screen tags each amenity with which of the 3 real
+// space types (SEAT/CABIN/CONFERENCE_ROOM) it applies to -- same convention
+// as categoryOf, singular rather than plural.
+const CATEGORY_TO_APPLICABLE_SEAT_TYPE: Record<
+  "SEATS" | "CABINS" | "CONFERENCE_ROOMS",
+  string
+> = {
+  SEATS: "SEAT",
+  CABINS: "CABIN",
+  CONFERENCE_ROOMS: "CONFERENCE_ROOM",
+};
+
+// Whether an amenity may be assigned to a seat of the given (granular)
+// seat_type. Strict: an amenity only applies where it's explicitly tagged --
+// an untagged amenity (applicable_seat_types empty/unset) applies nowhere,
+// same convention as the booking flow's amenityAppliesTo.
+export function amenityAppliesToSeatType(
+  applicableSeatTypes: string[] | null | undefined,
+  seatType: string | null | undefined,
+): boolean {
+  if (!applicableSeatTypes || applicableSeatTypes.length === 0) return false;
+  return applicableSeatTypes.includes(CATEGORY_TO_APPLICABLE_SEAT_TYPE[categoryOf(seatType)]);
+}
+
 // Prefill suggestion for the seat_type dropdown when configuring a seat that
 // doesn't have one yet — wraps the existing CBN/CFR/MR/TR svg-id heuristic
 // (lib/svg/seatCategories.ts), built for the layout-upload summary. Meeting
@@ -68,6 +85,6 @@ export function categoryOf(seatType: string | null | undefined): "SEATS" | "CABI
 export function suggestSeatType(svgId: string): string {
   const c = categorizeSvgId(svgId);
   if (c === "cabin") return "CABIN";
-  if (c === "seat") return "STANDARD";
+  if (c === "seat") return "SEAT";
   return "CONFERENCE_ROOM"; // conference + meeting + training all collapse
 }
