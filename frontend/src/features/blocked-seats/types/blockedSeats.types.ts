@@ -114,6 +114,18 @@ export interface CreateBlockedSeatsPayload {
   reason: string;
 }
 
+export interface FloorLayoutScheduleItem {
+  layout_id: string;
+  layout_name: string;
+  status: string;
+  effective_from: string | null;
+  effective_till: string | null;
+}
+
+export interface FloorLayoutSchedule {
+  layouts: FloorLayoutScheduleItem[];
+}
+
 export interface UpdateBlockedSeatPayload {
   block_type?: BlockType;
   blocked_from?: string;

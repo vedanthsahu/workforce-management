@@ -1,5 +1,5 @@
 """Regression checks for the blocked-seat-only query paths."""
-from datetime import date
+from datetime import date, timedelta
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
@@ -29,6 +29,16 @@ class BlockedSeatQueryTests(TestCase):
         self.assertEqual(result["resources"], [])
         self.cur.execute.assert_called_once()
         self.cur.fetchall.assert_not_called()
+
+    def test_schedule_reuses_layout_endpoint_and_returns_current_and_future(self):
+        self.cur.fetchall.return_value = [
+            {"layout_id": "44", "layout_name": "Current"},
+            {"layout_id": "45", "layout_name": "Future"},
+        ]
+        result = fetch_blockable_floor_layout(self.conn, **self.args, view="schedule")
+        self.assertEqual(len(result["layouts"]), 2)
+        self.cur.execute.assert_called_once()
+        self.cur.fetchone.assert_not_called()
 
     def test_default_view_retains_availability_query(self):
         self.cur.fetchall.return_value = [{"resource_id": "501"}]
@@ -140,9 +150,10 @@ class BatchRollbackTests(TestCase):
             insert = stack.enter_context(patch(prefix + "insert_blocked_seats", side_effect=Overlap()))
             stack.enter_context(patch(prefix + "safe_write_audit_log"))
             with self.assertRaises(HTTPException) as error:
+                start = date.today()
                 create_blocked_seats(conn, tenant_id="7", current_user={"user_id": "9"},
                     payload=CreateBlockedSeatsRequest(seat_ids=[501, 502], block_type="MAINTENANCE",
-                        blocked_from=date(2026, 9, 10), blocked_to=date(2026, 9, 12), reason="Repair"))
+                        blocked_from=start, blocked_to=start + timedelta(days=2), reason="Repair"))
             self.assertEqual(error.exception.status_code, 409)
             self.assertEqual(insert.call_args.kwargs["seats"], seats)
         conn.rollback.assert_called_once()

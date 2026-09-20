@@ -168,9 +168,36 @@ def fetch_blockable_floor_layout(
     view: str = "resources",
     page: int = 1,
     limit: int = 100,
+    seat_ids: list[int] | None = None,
 ) -> dict[str, Any] | None:
     """Return the one layout and its resources valid for the entire block range."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        if view == "schedule":
+            cur.execute(
+                """
+                SELECT fl.id::text AS layout_id, fl.layout_name, fl.status,
+                       (fl.effective_from AT TIME ZONE COALESCE(si.timezone, 'UTC'))::date
+                         AS effective_from,
+                       (fl.effective_till AT TIME ZONE COALESCE(si.timezone, 'UTC'))::date
+                         AS effective_till
+                FROM floor_layouts AS fl
+                INNER JOIN sites AS si
+                  ON si.id = fl.site_id AND si.tenant_id = fl.tenant_id
+                WHERE fl.tenant_id = %s
+                  AND fl.floor_id = %s
+                  AND (
+                        fl.status IN ('PUBLISHED', 'SCHEDULED')
+                        OR (fl.status = 'ARCHIVED' AND fl.effective_till IS NOT NULL)
+                      )
+                  AND (
+                        fl.effective_till IS NULL
+                        OR (fl.effective_till AT TIME ZONE COALESCE(si.timezone, 'UTC'))::date > %s
+                      )
+                ORDER BY fl.effective_from ASC NULLS FIRST, fl.version_no ASC
+                """,
+                (tenant_id, floor_id, blocked_from),
+            )
+            return {"layouts": [dict(row) for row in cur.fetchall()]}
         cur.execute(
             """
             SELECT fl.id::text AS layout_id, fl.layout_name,
@@ -205,8 +232,9 @@ def fetch_blockable_floor_layout(
         if view == "metadata":
             return result
         if view == "conflicts":
+            seat_filter = " AND b.seat_id = ANY(%s)" if seat_ids else ""
             cur.execute(
-                """
+                f"""
                 SELECT b.id::text AS booking_id, b.seat_id::text AS seat_id,
                        b.site_id::text AS site_id, b.building_id::text AS building_id,
                        b.floor_id::text AS floor_id, st.seat_code, b.booking_date,
@@ -219,11 +247,20 @@ def fetch_blockable_floor_layout(
                 WHERE b.tenant_id = %s AND st.floor_id = %s AND st.layout_id = %s
                   AND b.booking_date BETWEEN %s AND %s
                   AND b.booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
+                  {seat_filter}
                 ORDER BY b.booking_date DESC, b.id DESC
                 LIMIT %s OFFSET %s
                 """,
-                (tenant_id, floor_id, layout["layout_id"], blocked_from, blocked_to,
-                 limit + 1, (page - 1) * limit),
+                (
+                    tenant_id,
+                    floor_id,
+                    layout["layout_id"],
+                    blocked_from,
+                    blocked_to,
+                    *([seat_ids] if seat_ids else []),
+                    limit + 1,
+                    (page - 1) * limit,
+                ),
             )
             rows = [dict(row) for row in cur.fetchall()]
             result["conflicts"] = rows[:limit]

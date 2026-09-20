@@ -15,6 +15,7 @@ import type {
   BlockedSeat,
   BlockedSeatFilters,
   BlockedSeatListResponse,
+  BlockedSeatSummary,
 } from "../types/blockedSeats.types";
 import {
   CATEGORY_LABELS,
@@ -33,6 +34,7 @@ const EMPTY_RESPONSE: BlockedSeatListResponse = {
   },
   pagination: { total: 0, page: 1, limit: 10, total_pages: 0 },
 };
+const EMPTY_SUMMARY: BlockedSeatSummary = EMPTY_RESPONSE.summary;
 const apiErrorMessage = (error: unknown, fallback: string) =>
   (
     error as {
@@ -62,6 +64,9 @@ export default function BlockedSeatsPage() {
   const [loading, setLoading] = useState(
     () => !blockedSeatsService.getCachedList("active", EMPTY_FILTERS, 1),
   );
+  const [summary, setSummary] = useState(
+    () => blockedSeatsService.getCachedSummary() ?? EMPTY_SUMMARY,
+  );
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -88,6 +93,20 @@ export default function BlockedSeatsPage() {
   }, [router]);
   useEffect(() => {
     let cancelled = false;
+    blockedSeatsService
+      .summary(refreshKey > 0)
+      .then((data) => {
+        if (!cancelled) setSummary(data);
+      })
+      .catch(() => {
+        // The table remains usable if only the summary request fails.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+  useEffect(() => {
+    let cancelled = false;
     const cached = blockedSeatsService.getCachedList(
       category,
       appliedFilters,
@@ -96,8 +115,11 @@ export default function BlockedSeatsPage() {
     if (cached) setResponse(cached);
     setLoading(!cached);
     setError("");
+    if (cached) return () => {
+      cancelled = true;
+    };
     blockedSeatsService
-      .list(category, appliedFilters, page, 10, true)
+      .list(category, appliedFilters, page)
       .then((data) => {
         if (!cancelled) setResponse(data);
       })
@@ -114,6 +136,14 @@ export default function BlockedSeatsPage() {
       cancelled = true;
     };
   }, [category, appliedFilters, page, refreshKey]);
+  useEffect(() => {
+    if (loading || error) return;
+    void Promise.allSettled(
+      SUMMARY_CARDS.map((card) => card.id)
+        .filter((id) => id !== category)
+        .map((id) => blockedSeatsService.list(id, EMPTY_FILTERS, 1)),
+    );
+  }, [category, error, loading]);
   const updateFilter = (key: keyof BlockedSeatFilters, value: string) => {
     if (key === "siteId") {
       setFilters((current) => ({
@@ -195,7 +225,7 @@ export default function BlockedSeatsPage() {
               label={card.label}
               icon={card.icon}
               iconClass={card.iconClass}
-              count={response.summary[card.summaryKey]}
+              count={summary[card.summaryKey]}
               selected={category === card.id}
               onClick={() => {
                 setCategory(card.id);

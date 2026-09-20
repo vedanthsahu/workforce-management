@@ -42,6 +42,8 @@ from backend.schemas.blocked_seat import (
     CancelBlockedSeatResponse,
     CreateBlockedSeatsRequest,
     CreateBlockedSeatsResponse,
+    FloorLayoutScheduleItemResponse,
+    FloorLayoutScheduleResponse,
     UpdateBlockedSeatRequest,
 )
 from backend.schemas.pagination import PaginationMetadata
@@ -78,6 +80,7 @@ def get_blocked_seats(
     query: BlockedSeatListQuery,
     page: int,
     limit: int,
+    include_summary: bool = True,
 ) -> BlockedSeatListResponse:
     reference_date = date.today()
     try:
@@ -89,15 +92,16 @@ def get_blocked_seats(
             page=page,
             limit=limit,
         )
-        # Summary cards represent tenant-wide totals. Search and location/type/date
-        # filters apply only to the result table and its pagination.
-        summary_query = BlockedSeatListQuery(category=query.category)
-        summary = fetch_blocked_seat_summary(
-            conn,
-            tenant_id=tenant_id,
-            query=summary_query,
-            reference_date=reference_date,
-        )
+        summary = {}
+        if include_summary:
+            # Summary cards represent tenant-wide totals. Search and location/type/date
+            # filters apply only to the result table and its pagination.
+            summary = fetch_blocked_seat_summary(
+                conn,
+                tenant_id=tenant_id,
+                query=BlockedSeatListQuery(category=query.category),
+                reference_date=reference_date,
+            )
     except psycopg2.Error as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -116,6 +120,27 @@ def get_blocked_seats(
             total_pages=math.ceil(total / limit) if total else 0,
         ),
     )
+
+
+def get_blocked_seat_summary(
+    conn: PGConnection, *, tenant_id: str
+) -> BlockedSeatSummaryResponse:
+    try:
+        summary = fetch_blocked_seat_summary(
+            conn,
+            tenant_id=tenant_id,
+            query=BlockedSeatListQuery(),
+            reference_date=date.today(),
+        )
+    except psycopg2.Error as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "blocked_seat_summary_failed",
+                "message": "Failed to fetch blocked-seat summary.",
+            },
+        ) from exc
+    return BlockedSeatSummaryResponse(**summary)
 
 
 def get_blocked_seat(
@@ -179,7 +204,16 @@ def get_blockable_floor_layout(
     view: str = "resources",
     page: int = 1,
     limit: int = 100,
-) -> BlockableFloorLayoutResponse:
+    seat_ids: list[int] | None = None,
+) -> BlockableFloorLayoutResponse | FloorLayoutScheduleResponse:
+    if blocked_from < date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "past_block_date",
+                "message": "Seats cannot be blocked for a past date.",
+            },
+        )
     if blocked_to < blocked_from:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -198,6 +232,7 @@ def get_blockable_floor_layout(
             view=view,
             page=page,
             limit=limit,
+            seat_ids=seat_ids,
         )
     except psycopg2.Error as exc:
         raise HTTPException(
@@ -217,6 +252,13 @@ def get_blockable_floor_layout(
                     "or has no effective layout. Select dates within one layout period."
                 ),
             },
+        )
+    if view == "schedule":
+        return FloorLayoutScheduleResponse(
+            layouts=[
+                FloorLayoutScheduleItemResponse(**item)
+                for item in layout.get("layouts", [])
+            ]
         )
     return BlockableFloorLayoutResponse(
         layout_id=str(layout["layout_id"]),
@@ -239,6 +281,14 @@ def create_blocked_seats(
     payload: CreateBlockedSeatsRequest,
     current_user: dict[str, Any],
 ) -> CreateBlockedSeatsResponse:
+    if payload.blocked_from < date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "past_block_date",
+                "message": "Seats cannot be blocked for a past date.",
+            },
+        )
     seat_ids = payload.seat_ids
     resource_id = ",".join(str(value) for value in seat_ids)
     try:
