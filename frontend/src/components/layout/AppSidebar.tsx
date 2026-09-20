@@ -141,7 +141,7 @@ const ROUTE_MAP: Record<string, string> = {
 
 const MAIN_NAV: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "book", label: "Book a seat", icon: CalendarDays, permission: "seat:book_self" },
+  { id: "book", label: "Book a space", icon: CalendarDays, permission: "seat:book_self" },
   { id: "mybookings", label: "My bookings", icon: BookOpen, badge: 3, badgeRed: true, permission: "booking:view_own" },
   { id: "team", label: "Book for someone", icon: Monitor, badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
   { id: "schedule", label: "My schedule", icon: CalendarCheck, permission: "booking:view_own", disabled: true },
@@ -191,7 +191,7 @@ const ADMIN_SETTINGS_NAV: NavItem[] = [
 ];
 
 const ADMIN_CONFIGURATION_NAV: NavItem[] = [
-  { id: "all_configurations", label: "Configuration", icon: SlidersHorizontal ,disabled: true},
+  { id: "all_configurations", label: "Configuration", icon: SlidersHorizontal },
 ];
 //--------security nav config----------------------------------------------------
 const FRONT_OFFICE_DASHBOARD: NavItem[] = [

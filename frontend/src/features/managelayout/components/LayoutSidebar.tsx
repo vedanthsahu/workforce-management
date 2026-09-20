@@ -3,6 +3,22 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useCallback, useState, ReactNode } from "react";
 import { Layout } from "../types/layout.types";
+import { useScheduledLayoutActions } from "../hooks/useLayoutDetails";
+import { STATIC_PREFETCH_ROUTES } from "../utils/layoutPreview.utils";
+import { fetchLayoutPolicy } from "../services/layoutService";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+
+// Fallback only -- used for the one render before the real tenant value
+// (GET /business-rules/layout-policy) has loaded, and if that call fails.
+// Mirrors the backend's own _DEFAULT_EMPLOYEE_MAX_ADVANCE_DAYS
+// (business_rule_service.py), not an independent guess.
+const FALLBACK_EMPLOYEE_MAX_ADVANCE_DAYS = 30;
+
+function minEffectiveDateIso(minAdvanceDays: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + minAdvanceDays);
+  return d.toISOString().slice(0, 10);
+}
 
 interface LayoutSidebarProps {
   layout: Layout | null;
@@ -109,6 +125,17 @@ function StatusBadge({ status, isPublished }: { status: string; isPublished: boo
       </span>
     );
   }
+  // Checked before the ARCHIVED/Draft fallback -- a SCHEDULED layout has
+  // isPublished=false and status="SCHEDULED", so without this case it
+  // fell through to "Draft" and was indistinguishable from an actual
+  // draft that nobody had scheduled at all.
+  if (status === "SCHEDULED") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+        Scheduled
+      </span>
+    );
+  }
   if (status === "ARCHIVED") {
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
@@ -123,13 +150,109 @@ function StatusBadge({ status, isPublished }: { status: string; isPublished: boo
   );
 }
 
-// ── component ─────────────────────────────────────────────────────────────────
+// A layout that's already SCHEDULED can still have its effective date
+// moved, or be cancelled outright -- both refused by the backend (409)
+// once bookings could already exist against the current effective_from
+// (see reschedule_floor_layout / delete_floor_layout). First pass: plain
+// inline controls, not a full modal -- good enough to unblock admins
+// today, worth a nicer dialog later if this gets heavy use.
+function ScheduleActionsCard({ layout, onChanged }: { layout: Layout; onChanged: () => void }) {
+  const currentEffectiveDate = layout.effective_from ? layout.effective_from.slice(0, 10) : "";
+  const [newDate, setNewDate] = useState(currentEffectiveDate);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  // Deliberately the employee window alone, not the full admin
+  // min_advance_days (window + buffer) a *new* schedule requires -- see
+  // the matching comment on reschedule_floor_layout's own validation
+  // (backend/services/floor_layout_service.py). This layout's seats are
+  // already materialized, so the buffer's lead-time rationale doesn't
+  // apply to just moving its date.
+  const [employeeMaxAdvanceDays, setEmployeeMaxAdvanceDays] = useState(FALLBACK_EMPLOYEE_MAX_ADVANCE_DAYS);
+  const { rescheduling, cancelling, actionError, reschedule, cancelSchedule } =
+    useScheduledLayoutActions(layout, onChanged);
 
-// Static routes that never change — safe to prefetch unconditionally
-const STATIC_PREFETCH_ROUTES = [
-  "/admin/layouts/manage-seats",
-  "/admin/amenities",
-];
+  useEffect(() => {
+    let active = true;
+    fetchLayoutPolicy()
+      .then((policy) => { if (active) setEmployeeMaxAdvanceDays(policy.employee_max_advance_days); })
+      .catch((err) => console.error("[fetchLayoutPolicy]", err));
+    return () => { active = false; };
+  }, []);
+
+  const minDate = minEffectiveDateIso(employeeMaxAdvanceDays);
+
+  const handleReschedule = () => {
+    if (!newDate) return;
+    reschedule(newDate);
+  };
+
+  const handleCancelConfirm = () => {
+    setShowCancelConfirm(false);
+    cancelSchedule();
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-4">
+      <h3 className="text-sm font-semibold text-gray-900 mb-3">Schedule Actions</h3>
+
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">New effective date</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={newDate}
+              min={minDate}
+              onChange={(e) => {
+                const value = e.target.value;
+                // `min` only greys out the calendar dropdown, it doesn't stop a
+                // date typed directly into the MM/DD/YYYY segments -- clamp
+                // those too instead of letting an obviously-invalid date sit in
+                // the field until Update is clicked (see manage-seats/page.tsx's
+                // publish-date picker for the same reasoning).
+                setNewDate(value && value < minDate ? minDate : value);
+              }}
+              className="flex-1 h-9 px-2.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+            />
+            <button
+              type="button"
+              onClick={handleReschedule}
+              disabled={rescheduling || cancelling || !newDate || newDate === currentEffectiveDate}
+              className="h-9 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-xs font-medium text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+            >
+              {rescheduling ? "Saving..." : "Update"}
+            </button>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowCancelConfirm(true)}
+          disabled={rescheduling || cancelling}
+          className="w-full h-9 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          {cancelling ? "Cancelling..." : "Cancel Schedule"}
+        </button>
+
+        {actionError && (
+          <p className="text-xs text-red-600">{actionError}</p>
+        )}
+      </div>
+
+      <ConfirmDialog
+        open={showCancelConfirm}
+        title="Cancel this scheduled layout?"
+        description="The floor's currently published layout will keep running indefinitely instead."
+        confirmLabel={cancelling ? "Cancelling…" : "Yes, Cancel Schedule"}
+        loading={cancelling}
+        destructive
+        onConfirm={handleCancelConfirm}
+        onClose={() => setShowCancelConfirm(false)}
+      />
+    </div>
+  );
+}
+
+// ── component ─────────────────────────────────────────────────────────────────
 
 export default function LayoutSidebar({
   layout,
@@ -187,10 +310,12 @@ export default function LayoutSidebar({
   const quickActions = [
     {
       icon: <SeatIcon />,
-      label: "Manage Seats",
-      sub: "Configure seat details and settings",
+      label: "Manage Spaces",
+      sub: "Configure seats, cabins and conference rooms",
       color: "text-indigo-600 bg-indigo-50",
-      // Static base path — query added at click time
+      // Static base path — query added at click time. URL/folder name
+      // intentionally kept as "manage-seats" (bookmarks, prefetch list,
+      // query-param plumbing) — only the visible label changed.
       basePath: "/admin/layouts/manage-seats",
       href: `/admin/layouts/manage-seats${buildQuery()}`,
     },
@@ -236,6 +361,10 @@ export default function LayoutSidebar({
             </span>
           </InfoRow>
 
+          {layout.status === "SCHEDULED" && layout.effective_from && (
+            <InfoRow label="Effective">{formatDate(layout.effective_from)}</InfoRow>
+          )}
+
           <InfoRow label="Uploaded By">{layout.uploaded_by_name ?? "—"}</InfoRow>
 
           <InfoRow label="Uploaded On">
@@ -268,6 +397,15 @@ export default function LayoutSidebar({
           )}
         </div>
       </div>
+
+      {layout.status === "SCHEDULED" && (
+        // Full reload rather than router.refresh(): this layout's data is
+        // fetched client-side (useFloorLayouts), which refresh() doesn't
+        // re-trigger -- a reload is the simplest way to guarantee every
+        // consumer of it (this sidebar, the preview, the stat cards) picks
+        // up the post-action state instead of going stale silently.
+        <ScheduleActionsCard layout={layout} onChanged={() => window.location.reload()} />
+      )}
 
       {/* ── Quick Actions ──────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-gray-100 p-4">

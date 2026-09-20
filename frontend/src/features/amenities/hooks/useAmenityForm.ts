@@ -15,6 +15,7 @@ export const useAmenityForm = () => {
     icon_name: "",
     category_id: "",
     is_active: true,
+    applicable_seat_types: [],
   });
 
   const fetchCategories = async () => {
@@ -32,6 +33,10 @@ export const useAmenityForm = () => {
 
   const handleChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSeatTypesChange = (seatTypes: string[]) => {
+    setFormData((prev) => ({ ...prev, applicable_seat_types: seatTypes }));
   };
 
   const handleSubmit = async (): Promise<string | null> => {
@@ -61,6 +66,7 @@ export const useAmenityForm = () => {
     formData,
     categories,
     handleChange,
+    handleSeatTypesChange,
     handleSubmit,
   };
 };

@@ -87,6 +87,50 @@ def validate_svg_file(file: UploadFile) -> None:
         )
 
 
+def resolve_layout_file_url(stored_url: str | None) -> str | None:
+    """Turn a stored floor-layout URL into a time-limited presigned S3 URL,
+    generated fresh on every read.
+
+    Storage still writes the plain `{aws_s3_public_base_url}/{key}` value
+    at upload time (see upload_svg_to_s3 below) -- no DB migration or
+    backfill needed, existing rows work unchanged. This only changes what
+    a client is handed: the bucket is already private (see template.yaml),
+    so that stored value was never directly fetchable on its own -- this
+    is what actually makes it resolve, with access expiring on its own
+    (s3_presigned_url_ttl_seconds) instead of needing to be revoked.
+
+    Called from every response schema whose layout_file_url field carries
+    one (a Pydantic field_validator, not scattered across call sites --
+    see FloorLayoutResponse, FloorLayoutInfo, ScheduledFloorLayoutInfo,
+    FloorResponse), so every read path gets this uniformly.
+    """
+    if not stored_url:
+        return stored_url
+
+    settings = get_settings()
+    prefix = f"{settings.aws_s3_public_base_url}/"
+    if not stored_url.startswith(prefix):
+        # Unexpected shape (a raw key already, a different host, ...) --
+        # hand it back rather than guess at how to parse it.
+        return stored_url
+
+    object_key = stored_url[len(prefix):]
+    s3_client = get_s3_client()
+
+    try:
+        return s3_client.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": settings.aws_s3_bucket_name,
+                "Key": object_key,
+            },
+            ExpiresIn=settings.s3_presigned_url_ttl_seconds,
+        )
+    except (BotoCoreError, ClientError):
+        logger.exception("s3.presign.failed key=%s", object_key)
+        return stored_url
+
+
 def build_layout_object_key(
     *,
     tenant_id: str,

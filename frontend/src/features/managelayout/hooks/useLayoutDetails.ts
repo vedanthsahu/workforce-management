@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import axios from "axios";
 import { Building, Floor, Layout, LayoutSeatStats, Site } from "../types/layout.types";
 import {
   activateLayout,
+  discardLayout,
   fetchBuildings,
   fetchFloors,
   fetchLayoutSeatStats,
   fetchSites,
   getLayoutsByFloor,
+  rescheduleLayout,
 } from "../services/layoutService";
 import { useSeatsStore } from "@/store/seatStore";
 import { bulkConfigureSeats, SeatBulkEntry } from "@/features/managelayout1/services/seatService";
@@ -55,7 +58,7 @@ interface UsePublishLayoutReturn {
   publishError:  boolean;
   canPublish:    boolean;
   allConfigured: boolean;
-  publishLayout: () => Promise<void>;
+  publishLayout: (effectiveDate?: string) => Promise<void>;
 }
 
 export function usePublishLayout(
@@ -82,7 +85,7 @@ export function usePublishLayout(
       (layout.is_published && isDirty)
     );
 
-  const publishLayout = useCallback(async () => {
+  const publishLayout = useCallback(async (effectiveDate?: string) => {
     if (!layout?.layout_id) return;
     setPublishing(true);
     setPublishError(false);
@@ -97,6 +100,14 @@ export function usePublishLayout(
         // request, each dirty seat carrying its own fields (no more
         // grouping-by-identical-payload — the new payload shape allows
         // per-seat overrides in a single call).
+        //
+        // NOTE: effectiveDate is deliberately NOT sent here.
+        // bulk-configuration has no scheduling concept at all -- it edits
+        // the live layout's seats immediately, regardless of what's picked
+        // in the dialog. The confirm dialog's copy for this case ("...make
+        // them available to users on the selected effective date") is not
+        // actually true today; either the copy needs correcting or this
+        // path needs its own scheduling support, which doesn't exist yet.
         const dirtySeats = seats.filter((s) => dirtyMappingIds.has(s.layout_seat_mapping_id));
         const entries: SeatBulkEntry[] = dirtySeats.map((seat) => ({
           layout_seat_mapping_id: Number(seat.layout_seat_mapping_id),
@@ -105,6 +116,7 @@ export function usePublishLayout(
           is_bookable: seat.is_bookable ?? true,
           is_reserved: seat.is_reserved,
           amenity_ids: seat.amenity_ids.map(Number),
+          capacity:    seat.capacity,
         }));
 
         await bulkConfigureSeats({ seats: entries });
@@ -116,7 +128,11 @@ export function usePublishLayout(
         // First (or re-)promotion of a DRAFT/ARCHIVED layout to PUBLISHED.
         // Seat data was already written immediately while the layout was a
         // draft, so this call carries no seat payload of its own.
-        await activateLayout(layout.layout_id);
+        // effectiveDate, if in the future, schedules the layout instead of
+        // publishing it immediately -- the backend validates it against the
+        // tenant's minimum scheduling gap (see GET /business-rules/layout-
+        // policy) and rejects anything too soon.
+        await activateLayout(layout.layout_id, effectiveDate);
       }
 
       clearDirty();
@@ -130,6 +146,72 @@ export function usePublishLayout(
   }, [layout, dirtyMappingIds, seats, onPublishSuccess, clearDirty, fetchSeats]);
 
   return { publishing, publishError, canPublish, allConfigured, publishLayout };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// useScheduledLayoutActions
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface UseScheduledLayoutActionsReturn {
+  rescheduling:   boolean;
+  cancelling:     boolean;
+  actionError:    string | null;
+  reschedule:     (effectiveDate: string) => Promise<void>;
+  cancelSchedule: () => Promise<void>;
+}
+
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (axios.isAxiosError(err)) {
+    const detail = (err.response?.data as { detail?: { message?: string } } | undefined)?.detail;
+    if (detail?.message) return detail.message;
+  }
+  return fallback;
+}
+
+// Modify or cancel a layout that's already SCHEDULED -- see
+// PATCH/DELETE /admin/floor-layouts/{id}/schedule /{id} and the business
+// rules in floor_layout_service.reschedule_floor_layout /
+// delete_floor_layout: both are refused (409) once bookings could already
+// exist against the current effective_from.
+export function useScheduledLayoutActions(
+  layout:    Layout | null,
+  onSuccess: () => void,
+): UseScheduledLayoutActionsReturn {
+  const [rescheduling, setRescheduling] = useState(false);
+  const [cancelling,   setCancelling]   = useState(false);
+  const [actionError,  setActionError]  = useState<string | null>(null);
+
+  const reschedule = useCallback(async (effectiveDate: string) => {
+    if (!layout?.layout_id) return;
+    setRescheduling(true);
+    setActionError(null);
+    try {
+      await rescheduleLayout(layout.layout_id, effectiveDate);
+      onSuccess();
+    } catch (err) {
+      console.error("[reschedule]", err);
+      setActionError(extractErrorMessage(err, "Failed to change the effective date."));
+    } finally {
+      setRescheduling(false);
+    }
+  }, [layout, onSuccess]);
+
+  const cancelSchedule = useCallback(async () => {
+    if (!layout?.layout_id) return;
+    setCancelling(true);
+    setActionError(null);
+    try {
+      await discardLayout(layout.layout_id);
+      onSuccess();
+    } catch (err) {
+      console.error("[cancelSchedule]", err);
+      setActionError(extractErrorMessage(err, "Failed to cancel the schedule."));
+    } finally {
+      setCancelling(false);
+    }
+  }, [layout, onSuccess]);
+
+  return { rescheduling, cancelling, actionError, reschedule, cancelSchedule };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

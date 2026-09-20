@@ -5,6 +5,9 @@ export interface Preference {
   category?: string | null;
   description?: string | null;
   icon?: string | null;
+  // Optional until the backend ships it — undefined/empty is treated as
+  // "shows for every space type" so the UI degrades gracefully either way.
+  applicable_seat_types?: string[] | null;
 }
 
 // ── Sites / Buildings / Floors ────────────────────────────────────────────────
@@ -29,6 +32,10 @@ export interface Floor {
   name: string;
   number: number;
   layoutFileUrl?: string;
+  // A floor mid-scheduling-transition has a second layout queued to take
+  // over on scheduledLayoutEffectiveFrom -- see resolveFloorLayoutUrl.
+  scheduledLayoutFileUrl?: string;
+  scheduledLayoutEffectiveFrom?: string;
 }
 
 // ── Booking form state ────────────────────────────────────────────────────────
@@ -41,6 +48,8 @@ export interface BookingFormState {
   toDate: string;
   preferences: string[];
   selectedSeatId: string | null;
+  // "SEAT" | "CABIN" | "CONFERENCE_ROOM" — see book/utils/spaceType.ts
+  spaceType: string;
 }
 
 // ── Preference match status (from backend) ────────────────────────────────────
@@ -102,6 +111,8 @@ export interface FetchSeatsParams {
   /** When booking for a guest */
   isGuestBooking?: boolean;
   bookedForGuestId?: string | null;
+  /** "SEAT" | "CABIN" | "CONFERENCE_ROOM" */
+  spaceType?: string;
 }
 
 // ── Booking payload / response ────────────────────────────────────────────────
@@ -154,6 +165,28 @@ export interface CreateBookingResponse {
 }
 
 export type BookingStep = 1 | 2 | 3;
+
+// ── Booking sidebar (Step 1 "Tomorrow" + "Quick picks") ───────────────────────
+
+export interface TomorrowBooking {
+  bookingId: string;
+  seatCode: string | null;
+  siteName: string | null;
+  buildingName: string | null;
+  floorName: string | null;
+  /** ISO date string (YYYY-MM-DD) for tomorrow */
+  bookingDate: string;
+}
+
+export interface QuickPickSeat {
+  id: string;
+  label: string;
+  tag: "favourite" | "frequent";
+  floor: string;
+  siteId: string | null;
+  buildingId: string | null;
+  floorId: string | null;
+}
 
 // ── Floor map visual configuration ────────────────────────────────────────────
 

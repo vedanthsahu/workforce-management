@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
+import { getCountries, getCountryCallingCode, type Country } from "react-phone-number-input";
 import {
   Avatar,
   EmployeeSearch,
@@ -13,6 +14,8 @@ import {
   IconEdit,
   IconSearch,
   inputStyle,
+  fieldFocusRing,
+  fieldBlurRing,
 } from "./BookForSomeone";
 import {
   GUEST_TYPES,
@@ -34,6 +37,23 @@ import {
   VisitDetails,
 } from "../types/booking";
 import { updateGuest } from "../services/booking.service";
+
+// Backend errors from the guest endpoints raise FastAPI's HTTPException with
+// a dict `detail` (e.g. `{code: "guest_phone_exists", message: "..."}`), not
+// a plain string — so `err.response.data.detail` alone is the raw object,
+// not display text. Reading `.detail.message` first (falling back to
+// `.detail` only when it's already a string) is what actually surfaces the
+// backend's message instead of rendering "[object Object]"/crashing React.
+function extractGuestApiErrorMessage(err: unknown): string | null {
+  if (!axios.isAxiosError(err)) return null;
+  const data = err.response?.data;
+  return (
+    data?.error?.message ||
+    data?.message ||
+    (typeof data?.detail === "string" ? data.detail : data?.detail?.message) ||
+    null
+  );
+}
 
 // ─── StepProgressBar ────────────────────────────────────────────────────────
 
@@ -147,6 +167,168 @@ const EMPTY_GUEST_DRAFT = {
   organization: "",
 };
 
+const COUNTRY_NAMES = new Intl.DisplayNames(["en"], { type: "region" });
+const COUNTRIES = getCountries();
+const COMMON_COUNTRIES: Country[] = ["IN", "US", "GB", "CA", "AU", "AE", "SG"];
+
+function countryLabel(country: Country) {
+  return `${COUNTRY_NAMES.of(country) ?? country} (+${getCountryCallingCode(country)})`;
+}
+
+function localPhoneValue(phone: string, country: Country) {
+  const prefix = `+${getCountryCallingCode(country)}`;
+  return phone.startsWith(prefix) ? phone.slice(prefix.length).trim() : phone.replace(/\D/g, "");
+}
+
+function countryForPhone(phone: string): Country {
+  const normalized = phone.replace(/\s/g, "");
+  const match = [...COUNTRIES]
+    .sort((a, b) => getCountryCallingCode(b).length - getCountryCallingCode(a).length)
+    .find((country) => normalized.startsWith(`+${getCountryCallingCode(country)}`));
+  return match ?? "IN";
+}
+
+function PhoneField({
+  id,
+  country,
+  phone,
+  required = false,
+  error,
+  onCountryChange,
+  onPhoneChange,
+  onBlur,
+}: {
+  id: string;
+  country: Country;
+  phone: string;
+  required?: boolean;
+  error?: string;
+  onCountryChange: (country: Country) => void;
+  onPhoneChange: (value: string) => void;
+  onBlur: () => void;
+}) {
+  const callingCode = getCountryCallingCode(country);
+  const [isCountryMenuOpen, setIsCountryMenuOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
+  const [hoveredCountry, setHoveredCountry] = useState<Country | null>(null);
+  const countryMenuRef = useRef<HTMLDivElement>(null);
+
+  const normalizedSearch = countrySearch.trim().toLowerCase();
+  const searchDigits = normalizedSearch.replace(/[+\s()-]/g, "");
+  const visibleCountries = [...COUNTRIES]
+    .filter((option) => {
+      if (!normalizedSearch) return true;
+      return (
+        countryLabel(option).toLowerCase().includes(normalizedSearch) ||
+        getCountryCallingCode(option).includes(searchDigits)
+      );
+    })
+    .sort((a, b) => {
+      if (normalizedSearch) return countryLabel(a).localeCompare(countryLabel(b));
+      const aCommonIndex = COMMON_COUNTRIES.indexOf(a);
+      const bCommonIndex = COMMON_COUNTRIES.indexOf(b);
+      if (aCommonIndex !== -1 || bCommonIndex !== -1) {
+        if (aCommonIndex === -1) return 1;
+        if (bCommonIndex === -1) return -1;
+        return aCommonIndex - bCommonIndex;
+      }
+      return countryLabel(a).localeCompare(countryLabel(b));
+    });
+
+  useEffect(() => {
+    if (!isCountryMenuOpen) return;
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!countryMenuRef.current?.contains(event.target as Node)) {
+        setIsCountryMenuOpen(false);
+        setCountrySearch("");
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [isCountryMenuOpen]);
+
+  return (
+    <div>
+      <FieldLabel htmlFor={id} required={required}>Phone Number</FieldLabel>
+      <div style={{ display: "flex", gap: 6 }}>
+        <div ref={countryMenuRef} style={{ position: "relative", width: 74, flexShrink: 0 }}>
+          <button
+            type="button"
+            aria-label={`Country calling code: ${countryLabel(country)}`}
+            aria-expanded={isCountryMenuOpen}
+            onClick={() => {
+              setIsCountryMenuOpen((open) => !open);
+              setCountrySearch("");
+              setHoveredCountry(null);
+            }}
+            title={countryLabel(country)}
+            style={{ ...inputStyle(), width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 7px", cursor: "pointer", background: "#fff" }}
+            onFocusCapture={fieldFocusRing}
+            onBlurCapture={fieldBlurRing}
+          >
+            <span>+{callingCode}</span>
+            <span style={{ fontSize: 10, color: "#6b7280" }}>⌄</span>
+          </button>
+          {isCountryMenuOpen && (
+            <div
+              role="listbox"
+              aria-label="Country calling codes"
+              className="country-code-menu-scroll"
+              style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, width: 180, maxHeight: 150, overflowY: "auto", zIndex: 30, background: "#fff", border: "1px solid #d1d5db", borderRadius: 6, boxShadow: "0 8px 18px rgba(15, 23, 42, 0.16)", scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
+            >
+              <input
+                type="search"
+                aria-label="Search country or calling code"
+                autoFocus
+                placeholder="Search country or code"
+                value={countrySearch}
+                onChange={(event) => setCountrySearch(event.target.value)}
+                style={{ width: "calc(100% - 12px)", height: 30, margin: 6, padding: "0 8px", border: "1px solid #d1d5db", borderRadius: 4, outline: "none", fontSize: 12 }}
+                onFocusCapture={fieldFocusRing}
+                onBlurCapture={fieldBlurRing}
+              />
+              {visibleCountries.length === 0 ? (
+                <div style={{ padding: "8px 9px", color: "#6b7280", fontSize: 12 }}>No country found</div>
+              ) : visibleCountries.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  role="option"
+                  aria-selected={option === country}
+                  onMouseEnter={() => setHoveredCountry(option)}
+                  onMouseLeave={() => setHoveredCountry(null)}
+                  onClick={() => {
+                    onCountryChange(option);
+                    setIsCountryMenuOpen(false);
+                    setCountrySearch("");
+                    setHoveredCountry(null);
+                  }}
+                  style={{ display: "block", width: "100%", border: 0, background: hoveredCountry === option ? "#374151" : option === country ? "#eef2ff" : "#fff", color: hoveredCountry === option ? "#fff" : "#111827", padding: "6px 9px", textAlign: "left", fontSize: 12, cursor: "pointer" }}
+                >
+                  {countryLabel(option)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <input
+          id={id}
+          type="tel"
+          inputMode="numeric"
+          maxLength={10}
+          pattern="[0-9]{10}"
+          style={inputStyle()}
+          placeholder="9876543210"
+          value={localPhoneValue(phone, country)}
+          onChange={(event) => onPhoneChange(`+${callingCode} ${event.target.value.replace(/\D/g, "").slice(0, 10)}`)}
+          onBlur={onBlur}
+        />
+      </div>
+      {error && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{error}</p>}
+    </div>
+  );
+}
+
 interface GuestSelectStepProps {
   selectedGuest: Guest | null;
   view: "list" | "create" | "edit";
@@ -213,8 +395,8 @@ export function GuestSelectStep({ selectedGuest, view, onViewChange, onSelect, o
               paddingRight: selectedGuest ? 34 : 12,
               cursor: selectedGuest ? "default" : "text",
             }}
-            onFocusCapture={(e) => { e.currentTarget.style.borderColor = "#4f46e5"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(79,70,229,0.1)"; }}
-            onBlurCapture={(e) => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.boxShadow = "none"; }}
+            onFocusCapture={fieldFocusRing}
+            onBlurCapture={fieldBlurRing}
           />
           {selectedGuest && (
             <button
@@ -346,6 +528,7 @@ interface CreateGuestFormProps {
 
 function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
   const [form, setForm] = useState(EMPTY_GUEST_DRAFT);
+  const [phoneCountry, setPhoneCountry] = useState<Country>("IN");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -369,22 +552,36 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
   const handleChange = (field: keyof typeof form) => (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const value = field === "phone" ? sanitizePhoneNumber(e.target.value) : e.target.value;
+    const rawValue = e.target.value;
+    const value = field === "phone"
+      ? sanitizePhoneNumber(e.target.value)
+      : field === "organization"
+        ? rawValue.replace(/\d/g, "")
+        : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
     if (!touched[field]) setTouched((prev) => ({ ...prev, [field]: true }));
     validateField(field, value);
+    if (field === "organization" && /\d/.test(rawValue)) {
+      setErrors((prev) => ({ ...prev, organization: "Organization name must not contain numbers" }));
+    }
   };
 
   const handleBlur = (field: keyof typeof form) => () => {
     if (touched[field]) validateField(field, form[field]);
   };
 
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = sanitizePhoneNumber(e.target.value);
-
+  const handlePhoneChange = (value: string) => {
     setForm((prev) => ({ ...prev, phone: value }));
     if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
     validateField("phone", value);
+  };
+
+  const handlePhoneCountryChange = (country: Country) => {
+    setPhoneCountry(country);
+    setForm((prev) => ({
+      ...prev,
+      phone: prev.phone ? `+${getCountryCallingCode(country)} ${localPhoneValue(prev.phone, phoneCountry)}` : "",
+    }));
   };
 
   const handleSave = async () => {
@@ -412,10 +609,7 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
         organization: v.organization || undefined,
       });
     } catch (err) {
-      const serverMsg = axios.isAxiosError(err)
-        ? err.response?.data?.error?.message || err.response?.data?.message || err.response?.data?.detail
-        : null;
-      setApiError(serverMsg ?? "Failed to save guest. Please try again.");
+      setApiError(extractGuestApiErrorMessage(err) ?? "Failed to save guest. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -490,21 +684,16 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
         </div>
 
         {/* Phone */}
-        <div>
-          <FieldLabel htmlFor="g-phone" required>Phone Number</FieldLabel>
-          <input
-            id="g-phone"
-            type="tel"
-            style={inputStyle()}
-            placeholder="+91 1111111111"
-            value={form.phone}
-            onChange={handlePhoneChange}
-            onBlur={handleBlur("phone")}
-          />
-          {errors.phone && (
-            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.phone}</p>
-          )}
-        </div>
+        <PhoneField
+          id="g-phone"
+          country={phoneCountry}
+          phone={form.phone}
+          required
+          error={errors.phone}
+          onCountryChange={handlePhoneCountryChange}
+          onPhoneChange={handlePhoneChange}
+          onBlur={handleBlur("phone")}
+        />
 
         {/* Organization — with inline error */}
         <div>
@@ -626,6 +815,8 @@ function TimeSlotSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
+        onFocusCapture={fieldFocusRing}
+        onBlurCapture={fieldBlurRing}
       >
         <option value="">{placeholder}</option>
         {TIME_SLOTS.map((slot) => (
@@ -689,6 +880,8 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: "pointer" }}
               value={visitDetails.guestType}
               onChange={(e) => onChange({ guestType: e.target.value as GuestType })}
+              onFocusCapture={fieldFocusRing}
+              onBlurCapture={fieldBlurRing}
             >
               {GUEST_TYPES.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
             </select>
@@ -705,6 +898,8 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: "pointer" }}
               value={visitDetails.purposeOfVisit}
               onChange={(e) => onChange({ purposeOfVisit: e.target.value as PurposeOfVisit })}
+              onFocusCapture={fieldFocusRing}
+              onBlurCapture={fieldBlurRing}
             >
               {PURPOSE_OF_VISIT.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
@@ -735,9 +930,11 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               value={visitDetails.siteId}
               onChange={(e) => onChange({ siteId: e.target.value, buildingId: "", floorId: "" })}
               disabled={readOnlyLocation}
+              onFocusCapture={fieldFocusRing}
+              onBlurCapture={fieldBlurRing}
             >
               <option value="" disabled hidden>Select a Office</option>
-              {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {sites.map((s) => <option key={s.id} value={s.id} className="office-select-option">{s.name}</option>)}
             </select>
             <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", display: "flex" }}>
               <IconChevronDown />
@@ -753,6 +950,8 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               value={visitDetails.buildingId}
               onChange={(e) => onChange({ buildingId: e.target.value, floorId: "" })}
               disabled={readOnlyLocation || !visitDetails.siteId}
+              onFocusCapture={fieldFocusRing}
+              onBlurCapture={fieldBlurRing}
             >
               <option value="" disabled hidden>
                 {!visitDetails.siteId ? "Select a office first" : isLoadingBuildings ? "Loading…" : "Select a building"}
@@ -773,6 +972,8 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               value={visitDetails.floorId}
               onChange={(e) => onChange({ floorId: e.target.value })}
               disabled={readOnlyLocation || !visitDetails.buildingId}
+              onFocusCapture={fieldFocusRing}
+              onBlurCapture={fieldBlurRing}
             >
               <option value="" disabled hidden>
                 {!visitDetails.buildingId ? "Select a building first" : isLoadingFloors ? "Loading…" : "Select a floor"}
@@ -881,15 +1082,15 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
   const options: { key: "yes" | "no"; label: string; sub: string; bullets: string[] }[] = [
     {
       key: "yes",
-      label: "Yes, book a seat",
+      label: "Yes, book a space",
       sub: "Reserve a workspace for this guest.",
-      bullets: ["Guest will have a dedicated seat", "Seat will be held for the selected time", "Ideal for longer or in-office visits"],
+      bullets: ["Guest will have a dedicated space", "Space will be held for the selected time", "Ideal for longer or in-office visits"],
     },
     {
       key: "no",
       label: "No, invite only",
-      sub: "Send an invite without reserving a seat.",
-      bullets: ["Guest does not need a seat", "Perfect for short or host-only visits", "Quick invite and arrival"],
+      sub: "Send an invite without reserving a space.",
+      bullets: ["Guest does not need a space", "Perfect for short or host-only visits", "Quick invite and arrival"],
     },
   ];
 
@@ -979,22 +1180,56 @@ interface EditGuestFormProps {
 
 function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
   const spaceIdx = guest.fullName.indexOf(" ");
-  const [form, setForm] = useState({
+  const [phoneCountry, setPhoneCountry] = useState<Country>(() => countryForPhone(guest.phone ?? ""));
+  // Captured once (ref, not state) as the "nothing changed yet" snapshot —
+  // compared against the live `form` below to decide whether Save should be
+  // enabled at all, so the button isn't clickable for a no-op update.
+  const initialFormRef = useRef({
     firstName:    spaceIdx >= 0 ? guest.fullName.slice(0, spaceIdx) : guest.fullName,
     lastName:     spaceIdx >= 0 ? guest.fullName.slice(spaceIdx + 1) : "",
     email:        guest.email ?? "",
     phone:        guest.phone ?? "",
     organization: guest.organization ?? "",
   });
+  const [form, setForm] = useState(initialFormRef.current);
   const [errors,   setErrors]   = useState<Record<string, string>>({});
   const [touched,  setTouched]  = useState<Record<string, boolean>>({});
   const [saving,   setSaving]   = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
+  const isDirty = (Object.keys(initialFormRef.current) as (keyof typeof form)[]).some((key) => {
+    const currentValue = typeof form[key] === "string" ? form[key].trim() : form[key];
+    const initialValue = typeof initialFormRef.current[key] === "string" ? initialFormRef.current[key].trim() : initialFormRef.current[key];
+    return currentValue !== initialValue;
+  });
+  const isValid = createGuestSchema.safeParse(form).success;
+  const canSave = isDirty && isValid && !saving;
+
   const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = field === "phone" ? sanitizePhoneNumber(e.target.value) : e.target.value;
+    const rawValue = e.target.value;
+    const value = field === "phone"
+      ? sanitizePhoneNumber(e.target.value)
+      : field === "organization"
+        ? rawValue.replace(/\d/g, "")
+        : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
     if (touched[field]) validateField(field, value);
+    if (field === "organization" && /\d/.test(rawValue)) {
+      setErrors((prev) => ({ ...prev, organization: "Organization name must not contain numbers" }));
+    }
+  };
+
+  const handlePhoneChange = (value: string) => {
+    setForm((prev) => ({ ...prev, phone: value }));
+    if (touched.phone) validateField("phone", value);
+  };
+
+  const handlePhoneCountryChange = (country: Country) => {
+    setPhoneCountry(country);
+    setForm((prev) => ({
+      ...prev,
+      phone: prev.phone ? `+${getCountryCallingCode(country)} ${localPhoneValue(prev.phone, phoneCountry)}` : "",
+    }));
   };
 
   const handleBlur = (field: string) => () => {
@@ -1038,10 +1273,7 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
       });
       onSave(updated);
     } catch (err) {
-      const serverMsg = axios.isAxiosError(err)
-        ? err.response?.data?.error?.message || err.response?.data?.message || err.response?.data?.detail
-        : null;
-      setApiError(serverMsg ?? "Failed to update guest. Please try again.");
+      setApiError(extractGuestApiErrorMessage(err) ?? "Failed to update guest. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -1089,12 +1321,15 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
         </div>
 
         {/* Phone */}
-        <div>
-          <FieldLabel htmlFor="eg-phone">Phone Number</FieldLabel>
-          <input id="eg-phone" type="tel" style={inputStyle()} placeholder="Phone number"
-            value={form.phone} onChange={handleChange("phone")} onBlur={handleBlur("phone")} />
-          {errors.phone && <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{errors.phone}</p>}
-        </div>
+        <PhoneField
+          id="eg-phone"
+          country={phoneCountry}
+          phone={form.phone}
+          error={errors.phone}
+          onCountryChange={handlePhoneCountryChange}
+          onPhoneChange={handlePhoneChange}
+          onBlur={handleBlur("phone")}
+        />
       </div>
 
       {/* Organization */}
@@ -1110,8 +1345,8 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
           style={{ padding: "0.5rem 1.25rem", fontSize: "0.875rem", fontWeight: 500, color: "#374151", background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 8, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1, fontFamily: "inherit" }}>
           Cancel
         </button>
-        <button type="button" onClick={handleSave} disabled={saving}
-          style={{ padding: "0.5rem 1.25rem", fontSize: "0.875rem", fontWeight: 600, color: "#fff", background: "#4f46e5", border: "none", borderRadius: 8, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <button type="button" onClick={handleSave} disabled={!canSave}
+          style={{ padding: "0.5rem 1.25rem", fontSize: "0.875rem", fontWeight: 600, color: "#fff", background: "#4f46e5", border: "none", borderRadius: 8, cursor: canSave ? "pointer" : "not-allowed", opacity: canSave ? 1 : 0.6, fontFamily: "inherit", display: "flex", alignItems: "center", gap: "0.5rem" }}>
           {saving && <span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />}
           {saving ? "Saving…" : "Save Changes"}
         </button>

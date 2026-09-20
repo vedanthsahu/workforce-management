@@ -11,7 +11,7 @@ import {
   AdminBookingBuildingOption,
   AdminBookingFloorOption,
 } from "../types/adminBooking.types";
-import { BOOKING_STATUS_OPTIONS } from "../utils/constants";
+import { BOOKING_STATUS_OPTIONS, SELECT_BASE_CLASS, SELECT_ARROW_STYLE } from "../utils/constants";
 
 type Props = {
   filters: AdminBookingFilters;
@@ -74,7 +74,7 @@ function DateRangeField({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="h-10 px-3 flex items-center gap-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors w-full"
+        className="h-10 px-3 flex items-center gap-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors w-full"
       >
         <CalendarDays size={14} className="text-gray-400 shrink-0" />
         <span className="flex-1 text-left truncate">{label}</span>
@@ -101,7 +101,7 @@ function DateRangeField({
                 if (!["Tab", "Escape", "Shift"].includes(e.key)) e.preventDefault();
               }}
               onPaste={(e) => e.preventDefault()}
-              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -115,7 +115,7 @@ function DateRangeField({
                 if (!["Tab", "Escape", "Shift"].includes(e.key)) e.preventDefault();
               }}
               onPaste={(e) => e.preventDefault()}
-              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="flex items-center justify-between gap-2 pt-1">
@@ -171,16 +171,6 @@ function Field({
   );
 }
 
-const selectBaseClass =
-  "h-10 pr-8 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors cursor-pointer w-full";
-
-const selectArrowStyle: React.CSSProperties = {
-  backgroundImage:
-    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
-  backgroundRepeat: "no-repeat",
-  backgroundPosition: "right 10px center",
-};
-
 function NativeSelect({
   value,
   onChange,
@@ -218,8 +208,8 @@ function NativeSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className={`${selectBaseClass} ${icon ? "pl-8" : "pl-3"} disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400`}
-        style={showClear ? { backgroundImage: "none" } : selectArrowStyle}
+        className={`${SELECT_BASE_CLASS} ${icon ? "pl-8" : "pl-3"} disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400`}
+        style={showClear ? { backgroundImage: "none" } : SELECT_ARROW_STYLE}
       >
         {placeholder && (
           <option value="" disabled hidden>
@@ -571,7 +561,7 @@ export default function BookingManagementFilters({
                   onKeyDown={(e) => {
                     if (e.key === "Escape") setSearchOpen(false);
                   }}
-                  className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
+                  className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
                 />
                 {filters.search && (
                   <button
@@ -642,7 +632,7 @@ export default function BookingManagementFilters({
               onKeyDown={(e) => {
                 if (e.key === "Escape") setSeatOpen(false);
               }}
-              className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400"
+              className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400"
             />
             {filters.seatNumber && (
               <button

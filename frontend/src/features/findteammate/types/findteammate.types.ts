@@ -1,6 +1,14 @@
-import type { ApiTeamGroup, ApiTeamMember } from "@/features/dashboard/types/dashboard.types";
+import type { ApiTeamGroup as BaseApiTeamGroup, ApiTeamMember } from "@/features/dashboard/types/dashboard.types";
 
-export type { ApiTeamGroup, ApiTeamMember };
+export type { ApiTeamMember };
+
+// GET /teams/me includes page/limit/total_pages on each team group when the
+// (unpaginated-by-id) member list is requested -- see backend team_service.py
+export interface ApiTeamGroup extends BaseApiTeamGroup {
+  page?: number;
+  limit?: number;
+  total_pages?: number;
+}
 
 // Matches UserSearchResponse from GET /teams/members/search
 export interface TeammateSearchResult {

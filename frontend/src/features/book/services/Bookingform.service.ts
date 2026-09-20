@@ -11,6 +11,8 @@ import {
   PreferenceMatchStatus,
   UiState,
   FetchSeatsParams,
+  QuickPickSeat,
+  TomorrowBooking,
 } from "../types/Bookingform.types";
 
 // ── Raw API shapes ────────────────────────────────────────────────────────────
@@ -36,6 +38,10 @@ interface RawFloor {
   floor_code?: string;
   layout_file_url?: string | null;
   active_layout?: { layout_file_url?: string | null };
+  scheduled_layout?: {
+    layout_file_url?: string | null;
+    effective_from?: string | null;
+  } | null;
 }
 
 interface RawPreference {
@@ -45,6 +51,7 @@ interface RawPreference {
   category?: string | null;
   description?: string | null;
   icon?: string | null;
+  applicable_seat_types?: string[] | null;
 }
 
 // ── Sites ─────────────────────────────────────────────────────────────────────
@@ -60,6 +67,18 @@ export async function fetchSites(): Promise<Site[]> {
     country: s.country ?? "",
     timezone: s.timezone ?? "",
   }));
+}
+
+// fetchSites above only ever returns ACTIVE sites, so a saved work
+// preference (or a modify-booking/prefill deep link) pointing at a site
+// that's since gone INACTIVE silently disappears from that list with no way
+// to tell "inactive" apart from "no longer exists". GET /sites/{id} returns
+// every site regardless of status, so this is used specifically to check
+// whether a missing site id is inactive (vs. genuinely gone) so the UI can
+// show an appropriate message instead of a silent empty seat map.
+export async function fetchSiteStatus(siteId: string): Promise<string | null> {
+  const { data } = await axiosInstance.get<{ status?: string | null }>(`/sites/${siteId}`);
+  return data.status ?? null;
 }
 
 // ── Buildings ─────────────────────────────────────────────────────────────────
@@ -93,7 +112,31 @@ export async function fetchFloors(buildingId: string): Promise<Floor[]> {
     // Prefer active_layout URL; fall back to top-level layout_file_url
     layoutFileUrl:
       f.active_layout?.layout_file_url ?? f.layout_file_url ?? undefined,
+    scheduledLayoutFileUrl: f.scheduled_layout?.layout_file_url ?? undefined,
+    scheduledLayoutEffectiveFrom: f.scheduled_layout?.effective_from ?? undefined,
   }));
+}
+
+// A floor mid-transition can have a currently-live layout (layoutFileUrl)
+// and a separate one queued to take over on a future date
+// (scheduledLayoutFileUrl / scheduledLayoutEffectiveFrom). The floors API
+// itself doesn't resolve "which layout applies on date X" -- it just
+// reports both, same as the backend's own date-window checks -- so pick
+// here, the same way, instead of always rendering whichever one happens
+// to be PUBLISHED right now regardless of the date actually being booked.
+export function resolveFloorLayoutUrl(
+  floor: Pick<Floor, "layoutFileUrl" | "scheduledLayoutFileUrl" | "scheduledLayoutEffectiveFrom">,
+  bookingDate: string | null | undefined,
+): string | undefined {
+  if (
+    bookingDate &&
+    floor.scheduledLayoutFileUrl &&
+    floor.scheduledLayoutEffectiveFrom &&
+    new Date(bookingDate) >= new Date(floor.scheduledLayoutEffectiveFrom)
+  ) {
+    return floor.scheduledLayoutFileUrl;
+  }
+  return floor.layoutFileUrl;
 }
 
 // ── Seat Code → SVG id mapping ────────────────────────────────────────────────
@@ -168,6 +211,7 @@ export async function fetchAvailability(params: {
   isGuestBooking?: boolean;
   bookedForGuestId?: string | null;
   calendarMode?: boolean;
+  spaceType?: string;
 }): Promise<AvailableSeatResponse[]> {
   const { data } = await axiosInstance.get<
     AvailableSeatResponse[] | { items: AvailableSeatResponse[] }
@@ -194,6 +238,9 @@ export async function fetchAvailability(params: {
           : {}),
         ...(params.calendarMode
           ? { calendar_mode: true }
+          : {}),
+        ...(params.spaceType
+          ? { space_type: params.spaceType }
           : {}),
       },
       paramsSerializer: (p) => {
@@ -229,6 +276,7 @@ export async function fetchSeatsWithAvailability(
     bookedForUserId: params.bookedForUserId ?? null,
     isGuestBooking: params.isGuestBooking ?? false,
     bookedForGuestId: params.bookedForGuestId ?? null,
+    spaceType: params.spaceType,
   });
 
   const selectedPrefs = (params.preferences ?? []).map((p) => p.toLowerCase());
@@ -383,6 +431,7 @@ export async function fetchPreferences(): Promise<Preference[]> {
     category: a.category ?? null,
     description: a.description ?? null,
     icon: a.icon ?? null,
+    applicable_seat_types: a.applicable_seat_types ?? null,
   }));
 }
 
@@ -446,4 +495,87 @@ export async function fetchEmployeeWorkPreferences(
     `/dashboard/employee/${userId}`
   );
   return parseWorkPreferences(data);
+}
+
+// ── Sidebar: quick-pick seats — GET /dashboard/me ────────────────────────────
+// Reuses the same favorite_seat/second_favorite_seat fields as the dashboard's
+// favourite-seat widget (most-booked / 2nd most-booked CONFIRMED seat).
+
+interface RawFavouriteSeat {
+  seat_id: string;
+  seat_code?: string | null;
+  floor_id?: string | null;
+  floor_name?: string | null;
+  building_id?: string | null;
+  building_name?: string | null;
+  site_id?: string | null;
+  site_name?: string | null;
+}
+
+interface RawDashboardMeFavourites {
+  favorite_seat: RawFavouriteSeat | null;
+  second_favorite_seat?: RawFavouriteSeat | null;
+}
+
+function toQuickPick(
+  seat: RawFavouriteSeat | null | undefined,
+  tag: QuickPickSeat["tag"]
+): QuickPickSeat | null {
+  if (!seat) return null;
+  return {
+    id: seat.seat_id,
+    label: seat.seat_code ?? seat.seat_id,
+    tag,
+    floor: seat.floor_name ?? (seat.floor_id ? `Floor ${seat.floor_id}` : ""),
+    siteId: seat.site_id ?? null,
+    buildingId: seat.building_id ?? null,
+    floorId: seat.floor_id ?? null,
+  };
+}
+
+export async function fetchQuickPickSeats(): Promise<QuickPickSeat[]> {
+  const { data } = await axiosInstance.get<RawDashboardMeFavourites>("/dashboard/me");
+  return [
+    toQuickPick(data.favorite_seat, "favourite"),
+    toQuickPick(data.second_favorite_seat ?? null, "frequent"),
+  ].filter((p): p is QuickPickSeat => p !== null);
+}
+
+// ── Sidebar: tomorrow's booking — GET /bookings/me/future ───────────────────
+
+interface RawFutureBooking {
+  booking_id: string;
+  seat_code?: string | null;
+  site_name?: string | null;
+  building_name?: string | null;
+  floor_name?: string | null;
+  booking_date: string;
+  from_date?: string | null;
+  to_date?: string | null;
+  booking_status: string;
+}
+
+export async function fetchTomorrowBooking(): Promise<TomorrowBooking | null> {
+  const { data } = await axiosInstance.get<RawFutureBooking[]>("/bookings/me/future");
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowIso = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
+
+  const match = data.find((b) => {
+    if ((b.booking_status ?? "").toUpperCase() === "CANCELLED") return false;
+    const from = b.from_date ?? b.booking_date;
+    const to = b.to_date ?? b.booking_date;
+    return tomorrowIso >= from && tomorrowIso <= to;
+  });
+  if (!match) return null;
+
+  return {
+    bookingId: match.booking_id,
+    seatCode: match.seat_code ?? null,
+    siteName: match.site_name ?? null,
+    buildingName: match.building_name ?? null,
+    floorName: match.floor_name ?? null,
+    bookingDate: tomorrowIso,
+  };
 }

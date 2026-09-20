@@ -12,6 +12,7 @@ from backend.core.enums import (
     SeatAvailabilityStatus,
     UISeatState,
 )
+from backend.core.storage import resolve_layout_file_url
 
 HierarchyStatus = Literal["ACTIVE", "INACTIVE"]
 
@@ -203,6 +204,32 @@ class FloorLayoutInfo(BaseModel):
     layout_name: str
     layout_file_url: str
 
+    @field_validator("layout_file_url", mode="after")
+    @classmethod
+    def _presign_layout_file_url(cls, value: str) -> str:
+        return resolve_layout_file_url(value) or value
+
+
+class ScheduledFloorLayoutInfo(BaseModel):
+    """Metadata for a floor's pending SCHEDULED layout, if any.
+
+    Surfaced alongside `active_layout` rather than replacing it -- during a
+    scheduling transition a floor can have both a currently live layout and
+    a separate one queued to take over on effective_from, and callers need
+    to see both, not just whichever one a single "pick one" query would
+    have preferred.
+    """
+
+    layout_id: str
+    layout_name: str
+    layout_file_url: str
+    effective_from: datetime | None = None
+
+    @field_validator("layout_file_url", mode="after")
+    @classmethod
+    def _presign_layout_file_url(cls, value: str) -> str:
+        return resolve_layout_file_url(value) or value
+
 
 class FloorResponse(BaseModel):
     """Public representation of a floor within a location/building."""
@@ -227,8 +254,14 @@ class FloorResponse(BaseModel):
     layout_is_published: bool | None = None
     layout_version_no: int | None = None
     published_by_name: str | None = None
+    scheduled_layout: ScheduledFloorLayoutInfo | None = None
     layout_last_updated: datetime | None = None
     active_layout: FloorLayoutInfo | None = None
+
+    @field_validator("layout_file_url", mode="after")
+    @classmethod
+    def _presign_layout_file_url(cls, value: str | None) -> str | None:
+        return resolve_layout_file_url(value)
 
 
 class CreateFloorRequest(BaseModel):
@@ -323,6 +356,12 @@ class LayoutSeatConfigurationUpdateRequest(BaseModel):
 
     amenity_ids: list[int] | None = None
 
+    capacity: int | None = Field(
+        default=None,
+        ge=1,
+        le=1000,
+    )
+
 
 class LayoutSeatBulkConfigurationEntry(LayoutSeatConfigurationUpdateRequest):
     """One seat's own configuration within a bulk request. Any field left
@@ -381,6 +420,8 @@ class LayoutSeatConfigurationResponse(BaseModel):
     configuration_status: str
 
     amenity_ids: list[int]
+
+    capacity: int | None = None
 
 
 class SeatConfigurationUpdateRequest(BaseModel):

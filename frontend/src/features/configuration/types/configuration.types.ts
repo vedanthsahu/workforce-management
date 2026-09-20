@@ -10,6 +10,11 @@ export interface ConfigurationField {
   /** Short label shown above the value in a stat block, e.g. "Record Count". */
   statLabel: string;
   helperText: string;
+  /** True for a value that's *derived* from other rules (e.g. the total
+   * effective-after window = employee booking window + buffer) rather
+   * than stored/edited directly -- shown in the edit panel as read-only
+   * instead of a number input, and excluded from what gets saved. */
+  readOnly?: boolean;
   // Only set on fields that render as their own mini stat-card (icon +
   // title + description + value) instead of a plain stat block -- only
   // Layout Visibility's Draft/Archived/Discarded fields use this.
@@ -18,6 +23,11 @@ export interface ConfigurationField {
   iconColor?: string;
   cardTitle?: string;
   cardDescription?: string;
+  // Per-field metadata, shown alongside cardTitle/cardDescription on
+  // Layout Visibility's mini stat-cards -- other fields are edited as part
+  // of their item and rely on the item's own lastUpdatedAt/lastUpdatedBy.
+  lastUpdatedAt?: string;
+  lastUpdatedBy?: string;
 }
 
 export interface ConfigurationItem {
