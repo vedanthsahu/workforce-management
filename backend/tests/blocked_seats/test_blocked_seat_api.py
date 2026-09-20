@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
@@ -90,6 +90,24 @@ class BlockedSeatRouteTests(unittest.TestCase):
 
 
 class BlockedSeatServiceTests(unittest.TestCase):
+    def test_create_rejects_past_block_date(self) -> None:
+        yesterday = date.today() - timedelta(days=1)
+        with self.assertRaises(HTTPException) as context:
+            create_blocked_seats(
+                MagicMock(),
+                tenant_id="1",
+                payload=CreateBlockedSeatsRequest(
+                    seat_ids=[501],
+                    block_type="MAINTENANCE",
+                    blocked_from=yesterday,
+                    blocked_to=yesterday,
+                    reason="Repair",
+                ),
+                current_user={"user_id": "7", "tenant_id": "1"},
+            )
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertEqual(context.exception.detail["code"], "past_block_date")
+
     @patch("backend.services.blocked_seat_service.safe_write_audit_log")
     @patch("backend.services.blocked_seat_service.update_blocked_seat")
     @patch("backend.services.blocked_seat_service.fetch_conflicting_booking_seat_codes")
@@ -131,13 +149,14 @@ class BlockedSeatServiceTests(unittest.TestCase):
         fetch_layout: MagicMock,
     ) -> None:
         fetch_layout.return_value = None
+        start = date.today() + timedelta(days=1)
         with self.assertRaises(HTTPException) as context:
             get_blockable_floor_layout(
                 MagicMock(),
                 tenant_id="1",
                 floor_id=16,
-                blocked_from=date(2026, 9, 11),
-                blocked_to=date(2026, 9, 15),
+                blocked_from=start,
+                blocked_to=start + timedelta(days=4),
             )
         self.assertEqual(context.exception.status_code, 409)
         self.assertEqual(
@@ -241,14 +260,15 @@ class BlockedSeatServiceTests(unittest.TestCase):
         fetch_conflicts.return_value = []
         insert.return_value = ["10"]
         fetch_created.return_value = [_row()]
+        start = date.today()
         response = create_blocked_seats(
             conn,
             tenant_id="1",
             payload=CreateBlockedSeatsRequest(
                 seat_ids=[501],
                 block_type="MAINTENANCE",
-                blocked_from=date(2026, 9, 10),
-                blocked_to=date(2026, 9, 12),
+                blocked_from=start,
+                blocked_to=start + timedelta(days=2),
                 reason="Repair",
             ),
             current_user={"user_id": "7", "tenant_id": "1"},
@@ -279,6 +299,7 @@ class BlockedSeatServiceTests(unittest.TestCase):
         ]
         fetch_layout.return_value = {"resources": [{"resource_id": "501"}]}
         fetch_conflicts.return_value = ["3570"]
+        start = date.today()
         with self.assertRaises(HTTPException) as context:
             create_blocked_seats(
                 conn,
@@ -286,8 +307,8 @@ class BlockedSeatServiceTests(unittest.TestCase):
                 payload=CreateBlockedSeatsRequest(
                     seat_ids=[501],
                     block_type="RESERVED",
-                    blocked_from=date(2026, 9, 10),
-                    blocked_to=date(2026, 9, 12),
+                    blocked_from=start,
+                    blocked_to=start + timedelta(days=2),
                     reason="Reserved",
                 ),
                 current_user={"user_id": "7", "tenant_id": "1"},

@@ -163,6 +163,18 @@ class BlockedSeatConflictResponse(BaseModel):
     booked_for_name: str | None = None
 
 
+class FloorLayoutScheduleItemResponse(BaseModel):
+    layout_id: str
+    layout_name: str
+    status: str
+    effective_from: date | None = None
+    effective_till: date | None = None
+
+
+class FloorLayoutScheduleResponse(BaseModel):
+    layouts: list[FloorLayoutScheduleItemResponse]
+
+
 class BlockableFloorLayoutResponse(BaseModel):
     layout_id: str
     layout_name: str

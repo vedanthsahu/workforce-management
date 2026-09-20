@@ -6,7 +6,10 @@ import type {
   BlockedSeat,
   BlockedSeatHistoryItem,
   BlockedSeatListResponse,
+  BlockedSeatSummary,
+  BlockedSeatConflict,
   CreateBlockedSeatsPayload,
+  FloorLayoutSchedule,
   LocationOption,
   UpdateBlockedSeatPayload,
 } from "../types/blockedSeats.types";
@@ -20,9 +23,12 @@ interface CacheEntry<T> {
 const LOCATION_CACHE_MS = 5 * 60 * 1000;
 const LAYOUT_CACHE_MS = 15 * 1000;
 const LIST_CACHE_MS = 15 * 1000;
+const SUMMARY_CACHE_MS = 30 * 1000;
 const locationCache = new Map<string, CacheEntry<LocationOption[]>>();
 const layoutCache = new Map<string, CacheEntry<BlockableFloorLayout>>();
 const listCache = new Map<string, CacheEntry<BlockedSeatListResponse>>();
+const summaryCache = new Map<string, CacheEntry<BlockedSeatSummary>>();
+const scheduleCache = new Map<string, CacheEntry<FloorLayoutSchedule>>();
 
 const cachedRequest = <T>(
   cache: Map<string, CacheEntry<T>>,
@@ -76,6 +82,40 @@ const blockedSeatListKey = (
   });
 
 export const blockedSeatsService = {
+  getCachedSummary(): BlockedSeatSummary | undefined {
+    const entry = summaryCache.get("summary");
+    return entry?.value && entry.expiresAt > Date.now()
+      ? entry.value
+      : undefined;
+  },
+  summary(refresh = false): Promise<BlockedSeatSummary> {
+    return cachedRequest(
+      summaryCache,
+      "summary",
+      SUMMARY_CACHE_MS,
+      async () => {
+        try {
+          const { data } = await axiosInstance.get("/admin/blocked-seats/summary");
+          return data;
+        } catch (error: unknown) {
+          const status = (error as { response?: { status?: number } }).response?.status;
+          if (status !== 404) throw error;
+          // Keep counts available while a frontend deployment is briefly served
+          // with an older backend that does not yet expose the summary endpoint.
+          const { data } = await axiosInstance.get("/admin/blocked-seats", {
+            params: {
+              category: "active",
+              page: 1,
+              limit: 1,
+              includeSummary: true,
+            },
+          });
+          return data.summary;
+        }
+      },
+      refresh,
+    );
+  },
   getCachedList(
     category: BlockCategory,
     filters: BlockedSeatFilters,
@@ -113,6 +153,7 @@ export const blockedSeatsService = {
             date: filters.date || undefined,
             page,
             limit,
+            includeSummary: false,
           },
         });
         return data;
@@ -123,6 +164,7 @@ export const blockedSeatsService = {
   async create(payload: CreateBlockedSeatsPayload): Promise<void> {
     await axiosInstance.post("/admin/blocked-seats", payload);
     listCache.clear();
+    summaryCache.clear();
     layoutCache.clear();
   },
   async cancel(blockId: string, reason: string): Promise<void> {
@@ -130,6 +172,7 @@ export const blockedSeatsService = {
       reason,
     });
     listCache.clear();
+    summaryCache.clear();
     layoutCache.clear();
   },
   async history(blockId: string): Promise<BlockedSeatHistoryItem[]> {
@@ -147,6 +190,7 @@ export const blockedSeatsService = {
       payload,
     );
     listCache.clear();
+    summaryCache.clear();
     layoutCache.clear();
     return data;
   },
@@ -204,20 +248,24 @@ export const blockedSeatsService = {
   },
   async getConflicts(
     floorId: string,
+    seatIds: string[],
     blockedFrom: string,
     blockedTo: string,
-    page = 1,
-  ): Promise<BlockableFloorLayout> {
+    signal?: AbortSignal,
+  ): Promise<BlockedSeatConflict[]> {
+    const params = new URLSearchParams({ blockedFrom, blockedTo });
+    seatIds.forEach((seatId) => params.append("seatId", seatId));
+    params.append("view", "conflicts");
     const { data } = await axiosInstance.get(
       `/admin/blocked-seats/floors/${floorId}/layout-resources`,
-      { params: { blockedFrom, blockedTo, view: "conflicts", page, limit: 100 } },
+      { params, signal },
     );
-    if (!Array.isArray(data.conflicts) || typeof data.has_more_conflicts !== "boolean") {
+    if (!Array.isArray(data.conflicts)) {
       throw new Error(
         "The blocked-seat API is outdated. Restart or deploy the updated backend, then load the layout again.",
       );
     }
-    return data;
+    return data.conflicts;
   },
   getBlockableLayout(
     floorId: string,
@@ -225,6 +273,7 @@ export const blockedSeatsService = {
     blockedTo: string,
     refresh = false,
     view: "resources" | "metadata" = "resources",
+    signal?: AbortSignal,
   ): Promise<BlockableFloorLayout> {
     const key = `${view}:${floorId}:${blockedFrom}:${blockedTo}`;
     return cachedRequest(
@@ -234,11 +283,32 @@ export const blockedSeatsService = {
       async () => {
         const { data } = await axiosInstance.get(
           `/admin/blocked-seats/floors/${floorId}/layout-resources`,
-          { params: { blockedFrom, blockedTo, view } },
+          { params: { blockedFrom, blockedTo, view }, signal },
         );
         return data;
       },
       refresh,
+    );
+  },
+  getFloorLayoutSchedule(floorId: string): Promise<FloorLayoutSchedule> {
+    const currentDate = new Date().toLocaleDateString("en-CA");
+    return cachedRequest(
+      scheduleCache,
+      floorId,
+      LOCATION_CACHE_MS,
+      async () => {
+        const { data } = await axiosInstance.get(
+          `/admin/blocked-seats/floors/${floorId}/layout-resources`,
+          {
+            params: {
+              blockedFrom: currentDate,
+              blockedTo: currentDate,
+              view: "schedule",
+            },
+          },
+        );
+        return data;
+      },
     );
   },
 };
