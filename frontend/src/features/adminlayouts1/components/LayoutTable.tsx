@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, Download, MoreHorizontal, Settings2, Trash2 } from "lucide-react";
+import { Eye, Download, MoreHorizontal, Settings2, Trash2, CalendarClock, XCircle } from "lucide-react";
 import { useLayoutsTable } from "@/features/adminlayouts1/hooks/useLayoutsTable";
 import { useLayoutsStore } from "@/store/useLayoutsStore";
 import LayoutPagination from "./LayoutPagination";
@@ -8,8 +8,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutSelection, LayoutApiResponse } from "../types/layout.types";
 import { useRouter } from "next/navigation";
 import { fetchLayoutSeats } from "@/features/managelayout1/services/seatService";
-import { deleteLayout } from "@/features/adminlayouts1/services/locationService";
+import { deleteLayout, rescheduleLayout } from "@/features/adminlayouts1/services/locationService";
 import type { Seat } from "@/features/managelayout1/types/seat.types";
+import { ROOM_SVG_ID_PATTERN, LEGEND, HIDE_AFTER_DAYS } from "../utils/layoutTable.utils";
+
+function extractApiErrorMessage(err: unknown, fallback: string): string {
+  return (
+    (err as { response?: { data?: { error?: { message?: string }; message?: string; detail?: { message?: string } } } })
+      ?.response?.data?.error?.message ||
+    (err as { response?: { data?: { detail?: { message?: string } } } })?.response?.data?.detail?.message ||
+    (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+    fallback
+  );
+}
 
 type Props = {
   selection: LayoutSelection;
@@ -26,12 +37,6 @@ function resolveSeatFill(seat: Seat): string {
   if (!seat.is_bookable) return "#F59E0B";
   return "#22C55E";
 }
-
-// Cabin/conference/meeting/training room seats are grouped under one svg id
-// containing a "CBN"/"CFR"/"MR"/"TR" segment (e.g. "HYD-PRV-F11-CBN-04",
-// "HYD-PRV-F11-CFR-02", "HYD-PRV-F11-MR-01", "HYD-PRV-F11-TR-01"), not a
-// dedicated field.
-const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr|tr)([-_]|$)/i;
 
 function isRoomSvgId(svgId: string): boolean {
   return ROOM_SVG_ID_PATTERN.test(svgId);
@@ -80,34 +85,30 @@ function applyColors(svgText: string, seats: Seat[]): string {
   return result;
 }
 
-const LEGEND = [
-  { label: "Bookable", color: "#22C55E" },
-  { label: "Non-bookable", color: "#F59E0B" },
-  { label: "Inactive", color: "#EF4444" },
-  { label: "Unconfigured", color: "#D1D5DB" },
-] as const;
-
 // ── Status dot config ─────────────────────────────────────────────────────────
 
-function statusConfig(status: string, isPublished: boolean, isDiscarded: boolean) {
+function statusConfig(status: string, isPublished: boolean, isDiscarded: boolean, effectiveFrom?: string | null) {
   if (isDiscarded) return { dot: "bg-red-400", text: "Discarded" };
   if (isPublished && status === "PUBLISHED") return { dot: "bg-green-500", text: "Published" };
+  if (status === "SCHEDULED") {
+    // Still yellow ("pending") until its own effective_from actually
+    // arrives -- at that point it's functionally live (bookings for today
+    // resolve to it same as a PUBLISHED layout would) even though the
+    // cutover job hasn't run yet to flip its status server-side. Reusing
+    // the same green as Published signals that to the admin instead of
+    // leaving it looking "not yet in effect" once it actually is. No new
+    // backend call needed -- effective_from is already on this row.
+    const isLive = !!effectiveFrom && new Date(effectiveFrom) <= new Date();
+    return isLive
+      ? { dot: "bg-green-500", text: "Scheduled" }
+      : { dot: "bg-amber-400", text: "Scheduled" };
+  }
   if (status === "DRAFT") return { dot: "bg-blue-500", text: "Draft" };
   if (status === "ARCHIVED") return { dot: "bg-gray-600", text: "Archived" };
   return { dot: "bg-gray-400", text: status };
 }
 
 // ── Auto-hide (by status age) ─────────────────────────────────────────────────
-// Non-published layouts fall out of this list on their own once they've sat
-// untouched (by updated_at) past their status's threshold — otherwise old
-// drafts/archived rows accumulate forever. Published layouts are exempt and
-// never auto-hide.
-const HIDE_AFTER_DAYS: Partial<Record<string, number>> = {
-  DRAFT: 15,
-  ARCHIVED: 30,
-  DELETED: 5,
-};
-
 function daysSince(iso: string): number {
   return (Date.now() - new Date(iso).getTime()) / 86_400_000;
 }
@@ -144,6 +145,15 @@ function formatDetailDate(iso: string): string {
   return `${date}, ${time}`;
 }
 
+// Date only, no time -- used for a SCHEDULED layout's "from <date>" line.
+// The full timestamp there was overlapping the adjacent Created/Updated
+// columns on narrower screens, and the status dot/label already reads
+// "Scheduled", so repeating "Effective" (and a time nobody asked for) was
+// redundant on top of causing the overlap.
+function formatDateOnly(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function LayoutTable({ selection, selectedLayoutId }: Props) {
@@ -161,11 +171,20 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // ── Discard confirmation state ────────────────────────────────────────────
+  // ── Discard / Cancel Schedule confirmation state ─────────────────────────
+  // Same modal handles both: discarding a DRAFT and cancelling a SCHEDULED
+  // layout are the same DELETE call server-side (delete_floor_layout),
+  // just worded differently depending on discardTarget.status.
   const [discardTarget, setDiscardTarget] = useState<LayoutApiResponse | null>(null);
   const [discarding, setDiscarding] = useState(false);
   const [discardError, setDiscardError] = useState<string | null>(null);
   const [discardedIds, setDiscardedIds] = useState<Set<string>>(new Set());
+
+  // ── Reschedule (Modify) confirmation state ───────────────────────────────
+  const [rescheduleTarget, setRescheduleTarget] = useState<LayoutApiResponse | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduling, setRescheduling] = useState(false);
+  const [rescheduleError, setRescheduleError] = useState<string | null>(null);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -273,16 +292,35 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
         return next;
       });
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: { message?: string }; message?: string; detail?: string } } })
-          ?.response?.data?.error?.message ||
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-        "Failed to discard layout. Please try again.";
-      setDiscardError(msg);
+      setDiscardError(extractApiErrorMessage(err, "Failed to discard layout. Please try again."));
     } finally {
       setDiscarding(false);
     }
   }, [discardTarget, invalidateFloor, fetchLayouts]);
+
+  // ── Reschedule (Modify) ───────────────────────────────────────────────────
+  const handleRescheduleClick = useCallback((row: LayoutApiResponse) => {
+    setOpenMenuId(null);
+    setRescheduleTarget(row);
+    setRescheduleDate(row.effective_from ? row.effective_from.slice(0, 10) : "");
+    setRescheduleError(null);
+  }, []);
+
+  const handleRescheduleConfirm = useCallback(async () => {
+    if (!rescheduleTarget || !rescheduleDate) return;
+    setRescheduling(true);
+    setRescheduleError(null);
+    try {
+      await rescheduleLayout(rescheduleTarget.layout_id, rescheduleDate);
+      setRescheduleTarget(null);
+      invalidateFloor(rescheduleTarget.floor_id);
+      await fetchLayouts(rescheduleTarget.floor_id);
+    } catch (err: unknown) {
+      setRescheduleError(extractApiErrorMessage(err, "Failed to change the effective date. Please try again."));
+    } finally {
+      setRescheduling(false);
+    }
+  }, [rescheduleTarget, rescheduleDate, invalidateFloor, fetchLayouts]);
 
   const visibleLayouts = useMemo(() => layouts.filter((row) => !isAutoHidden(row)), [layouts]);
   const { page, rowsPerPage, total, paginated, setPage } = useLayoutsTable(visibleLayouts);
@@ -342,6 +380,7 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
               paginated.map((row, rowIndex) => {
                 const isDiscarded = discardedIds.has(row.layout_id) || row.status === "DELETED";
                 const isDraft = row.status === "DRAFT";
+                const isScheduled = row.status === "SCHEDULED";
                 const isNearBottom = rowIndex >= paginated.length - 3;
 
                 return (
@@ -355,9 +394,9 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                     <td className="px-3 py-3 font-medium text-gray-900">
                       {row.layout_name}
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3 overflow-hidden">
                       {(() => {
-                        const { dot, text } = statusConfig(row.status, row.is_published, isDiscarded);
+                        const { dot, text } = statusConfig(row.status, row.is_published, isDiscarded, row.effective_from);
                         // Suppress only for rows optimistically masked right after
                         // a Discard click (about to vanish on refetch, not aging
                         // out) — an actual DELETED-status row still counts down.
@@ -368,6 +407,11 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
                               <span className="text-xs text-gray-700 whitespace-nowrap">{text}</span>
                             </span>
+                            {row.status === "SCHEDULED" && row.effective_from && (
+                              <span className="text-[10px] text-sky-600 whitespace-nowrap">
+                                from {formatDateOnly(row.effective_from)}
+                              </span>
+                            )}
                             {countdown && (
                               <span className="text-[10px] text-amber-500 whitespace-nowrap">{countdown}</span>
                             )}
@@ -464,6 +508,27 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                                 Manage Layout
                               </button>
 
+                              {/* Modify / Cancel Schedule — SCHEDULED only */}
+                              {isScheduled && (
+                                <>
+                                  <div className="my-1 border-t border-gray-100" />
+                                  <button
+                                    onClick={() => handleRescheduleClick(row)}
+                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+                                  >
+                                    <CalendarClock className="w-3.5 h-3.5 text-sky-600 flex-shrink-0" />
+                                    Modify Schedule
+                                  </button>
+                                  <button
+                                    onClick={() => handleDiscardClick(row)}
+                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-red-600 hover:bg-red-50 transition-colors"
+                                  >
+                                    <XCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                    Cancel Schedule
+                                  </button>
+                                </>
+                              )}
+
                               {/* Discard — DRAFT only */}
                               {isDraft && (
                                 <>
@@ -559,47 +624,124 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
         </div>
       )}
 
-      {/* ── DISCARD CONFIRMATION MODAL ── */}
-      {discardTarget && (
+      {/* ── DISCARD / CANCEL SCHEDULE CONFIRMATION MODAL ── */}
+      {discardTarget && (() => {
+        const isCancellingSchedule = discardTarget.status === "SCHEDULED";
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl w-full max-w-sm mx-4 shadow-xl p-6 flex flex-col gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                  {isCancellingSchedule
+                    ? <XCircle className="w-4 h-4 text-red-600" />
+                    : <Trash2 className="w-4 h-4 text-red-600" />}
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">
+                    {isCancellingSchedule ? "Cancel Schedule" : "Discard Layout"}
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {isCancellingSchedule ? (
+                      <>
+                        Are you sure you want to cancel the scheduled takeover of{" "}
+                        <span className="font-medium text-gray-700">{discardTarget.layout_name}</span>?
+                        The floor&apos;s currently published layout will keep running indefinitely instead.
+                        This action cannot be undone.
+                      </>
+                    ) : (
+                      <>
+                        Are you sure you want to discard{" "}
+                        <span className="font-medium text-gray-700">{discardTarget.layout_name}</span>?
+                        This action cannot be undone.
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {discardError && (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  {discardError}
+                </p>
+              )}
+
+              <div className="flex justify-end gap-2.5 pt-1">
+                <button
+                  onClick={() => { setDiscardTarget(null); setDiscardError(null); }}
+                  disabled={discarding}
+                  className="px-4 py-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Keep it
+                </button>
+                <button
+                  onClick={handleDiscardConfirm}
+                  disabled={discarding}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                >
+                  {discarding && (
+                    <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  )}
+                  {discarding
+                    ? (isCancellingSchedule ? "Cancelling…" : "Discarding…")
+                    : (isCancellingSchedule ? "Yes, Cancel Schedule" : "Yes, Discard")}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── RESCHEDULE (MODIFY SCHEDULE) MODAL ── */}
+      {rescheduleTarget && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl w-full max-w-sm mx-4 shadow-xl p-6 flex flex-col gap-4">
             <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-                <Trash2 className="w-4 h-4 text-red-600" />
+              <div className="w-9 h-9 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0">
+                <CalendarClock className="w-4 h-4 text-sky-600" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">Discard Layout</h3>
+                <h3 className="text-sm font-semibold text-gray-900">Modify Schedule</h3>
                 <p className="text-xs text-gray-500 mt-1">
-                  Are you sure you want to discard{" "}
-                  <span className="font-medium text-gray-700">{discardTarget.layout_name}</span>?
-                  This action cannot be undone.
+                  Change the effective date for{" "}
+                  <span className="font-medium text-gray-700">{rescheduleTarget.layout_name}</span>.
+                  Only allowed until employee bookings could already reach the current date.
                 </p>
               </div>
             </div>
 
-            {discardError && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">New effective date</label>
+              <input
+                type="date"
+                value={rescheduleDate}
+                onChange={(e) => setRescheduleDate(e.target.value)}
+                className="w-full h-10 px-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-400 transition-colors"
+              />
+            </div>
+
+            {rescheduleError && (
               <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                {discardError}
+                {rescheduleError}
               </p>
             )}
 
             <div className="flex justify-end gap-2.5 pt-1">
               <button
-                onClick={() => { setDiscardTarget(null); setDiscardError(null); }}
-                disabled={discarding}
+                onClick={() => { setRescheduleTarget(null); setRescheduleError(null); }}
+                disabled={rescheduling}
                 className="px-4 py-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={handleDiscardConfirm}
-                disabled={discarding}
-                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                onClick={handleRescheduleConfirm}
+                disabled={rescheduling || !rescheduleDate}
+                className="px-4 py-2 text-xs font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
-                {discarding && (
+                {rescheduling && (
                   <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                 )}
-                {discarding ? "Discarding…" : "Yes, Discard"}
+                {rescheduling ? "Saving…" : "Save Date"}
               </button>
             </div>
           </div>

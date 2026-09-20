@@ -10,6 +10,10 @@ import {
   getAuditEventCategory,
   updateFieldKeys,
 } from "../utils/mapAuditLog";
+import {
+  AUDIT_BANNER_TONE_STYLES as BANNER_TONE_STYLES,
+  type AuditBannerTone as BannerTone,
+} from "../utils/constants";
 
 type Props = {
   log: AuditLog;
@@ -18,15 +22,6 @@ type Props = {
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest border-b pb-1.5">{children}</h3>;
 }
-
-type BannerTone = "create" | "delete" | "auth" | "failed";
-
-const BANNER_TONE_STYLES: Record<BannerTone, string> = {
-  create: "bg-emerald-50 border-emerald-200 text-emerald-700",
-  delete: "bg-red-50 border-red-200 text-red-700",
-  auth: "bg-gray-50 border-gray-200 text-gray-500",
-  failed: "bg-red-50 border-red-200 text-red-700",
-};
 
 function Banner({
   icon: Icon,

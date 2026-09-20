@@ -42,12 +42,35 @@ export const useFloorForm = () => {
   };
 
   const handleChange = async (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-
+    // Default the status field to match the chosen office/building so a
+    // new floor under an inactive one doesn't default to ACTIVE (the
+    // backend rejects that combination anyway) -- still overridable by
+    // hand afterwards. Building is the immediate parent, so its status
+    // wins once one is picked; the office's status is just the interim
+    // default before that.
     if (field === "site_id") {
-      setFormData((prev) => ({ ...prev, site_id: value, building_id: "" }));
+      const site = sites.find((s) => s.site_id === value);
+      setFormData((prev) => ({
+        ...prev,
+        site_id: value,
+        building_id: "",
+        status: site?.status ?? prev.status,
+      }));
       await fetchBuildings(value);
+      return;
     }
+
+    if (field === "building_id") {
+      const building = buildings.find((b) => b.building_id === value);
+      setFormData((prev) => ({
+        ...prev,
+        building_id: value,
+        status: building?.status ?? prev.status,
+      }));
+      return;
+    }
+
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async () => {
