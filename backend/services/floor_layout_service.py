@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -380,7 +380,7 @@ def _resolve_employee_max_advance_days(conn: PGConnection, *, tenant_id: str) ->
 
 def _site_local_today(tz_name: str | None) -> date:
     if not tz_name:
-        return datetime.now().date()
+        return datetime.now(UTC).date()
     return datetime.now(ZoneInfo(tz_name)).date()
 
 
@@ -611,7 +611,7 @@ def reschedule_floor_layout(
         danger_window_start = current_effective_from - timedelta(
             days=employee_max_advance_days,
         )
-        if datetime.now(timezone.utc) >= danger_window_start:
+        if datetime.now(UTC) >= danger_window_start:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
@@ -795,7 +795,7 @@ def activate_floor_layout(
             # cycle (or the NULL every layout starts with). Without this,
             # date-aware reads (fl.effective_from <= booking_date) exclude
             # the row forever, since NULL <= anything is never true.
-            effective_from=datetime.now(timezone.utc),
+            effective_from=datetime.now(UTC),
         )
 
         publish_layout_seat_configurations(
@@ -1067,7 +1067,7 @@ def delete_floor_layout(
             danger_window_start = layout["effective_from"] - timedelta(
                 days=employee_max_advance_days,
             )
-            if datetime.now(timezone.utc) >= danger_window_start:
+            if datetime.now(UTC) >= danger_window_start:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail={
