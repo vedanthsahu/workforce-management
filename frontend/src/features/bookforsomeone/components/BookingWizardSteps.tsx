@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
 import { getCountries, getCountryCallingCode, type Country } from "react-phone-number-input";
+import flags from "react-phone-number-input/flags";
+import { AsYouType, getExampleNumber } from "libphonenumber-js/mobile";
+import mobileExamples from "libphonenumber-js/examples.mobile.json";
 import {
   Avatar,
   EmployeeSearch,
@@ -175,6 +178,12 @@ function countryLabel(country: Country) {
   return `${COUNTRY_NAMES.of(country) ?? country} (+${getCountryCallingCode(country)})`;
 }
 
+function mobileExample(country: Country) {
+  const example = getExampleNumber(country, mobileExamples);
+  if (!example) return "Enter mobile number";
+  return new AsYouType(country).input(example.nationalNumber);
+}
+
 function localPhoneValue(phone: string, country: Country) {
   const prefix = `+${getCountryCallingCode(country)}`;
   return phone.startsWith(prefix) ? phone.slice(prefix.length).trim() : phone.replace(/\D/g, "");
@@ -208,6 +217,7 @@ function PhoneField({
   onBlur: () => void;
 }) {
   const callingCode = getCountryCallingCode(country);
+  const SelectedCountryFlag = flags[country];
   const [isCountryMenuOpen, setIsCountryMenuOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
   const [hoveredCountry, setHoveredCountry] = useState<Country | null>(null);
@@ -251,7 +261,7 @@ function PhoneField({
     <div>
       <FieldLabel htmlFor={id} required={required}>Phone Number</FieldLabel>
       <div style={{ display: "flex", gap: 6 }}>
-        <div ref={countryMenuRef} style={{ position: "relative", width: 74, flexShrink: 0 }}>
+        <div ref={countryMenuRef} style={{ position: "relative", width: 96, flexShrink: 0 }}>
           <button
             type="button"
             aria-label={`Country calling code: ${countryLabel(country)}`}
@@ -266,7 +276,14 @@ function PhoneField({
             onFocusCapture={fieldFocusRing}
             onBlurCapture={fieldBlurRing}
           >
-            <span>+{callingCode}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {SelectedCountryFlag && (
+                <span style={{ width: 20, height: 14, display: "inline-flex", overflow: "hidden", borderRadius: 2 }}>
+                  <SelectedCountryFlag title={COUNTRY_NAMES.of(country) ?? country} />
+                </span>
+              )}
+              <span>+{callingCode}</span>
+            </span>
             <span style={{ fontSize: 10, color: "#6b7280" }}>⌄</span>
           </button>
           {isCountryMenuOpen && (
@@ -274,7 +291,7 @@ function PhoneField({
               role="listbox"
               aria-label="Country calling codes"
               className="country-code-menu-scroll"
-              style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, width: 180, maxHeight: 150, overflowY: "auto", zIndex: 30, background: "#fff", border: "1px solid #d1d5db", borderRadius: 6, boxShadow: "0 8px 18px rgba(15, 23, 42, 0.16)", scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
+              style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, width: 260, maxHeight: 190, overflowY: "auto", zIndex: 30, background: "#fff", border: "1px solid #d1d5db", borderRadius: 6, boxShadow: "0 8px 18px rgba(15, 23, 42, 0.16)", scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
             >
               <input
                 type="search"
@@ -289,25 +306,33 @@ function PhoneField({
               />
               {visibleCountries.length === 0 ? (
                 <div style={{ padding: "8px 9px", color: "#6b7280", fontSize: 12 }}>No country found</div>
-              ) : visibleCountries.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  role="option"
-                  aria-selected={option === country}
-                  onMouseEnter={() => setHoveredCountry(option)}
-                  onMouseLeave={() => setHoveredCountry(null)}
-                  onClick={() => {
-                    onCountryChange(option);
-                    setIsCountryMenuOpen(false);
-                    setCountrySearch("");
-                    setHoveredCountry(null);
-                  }}
-                  style={{ display: "block", width: "100%", border: 0, background: hoveredCountry === option ? "#374151" : option === country ? "#eef2ff" : "#fff", color: hoveredCountry === option ? "#fff" : "#111827", padding: "6px 9px", textAlign: "left", fontSize: 12, cursor: "pointer" }}
-                >
-                  {countryLabel(option)}
-                </button>
-              ))}
+              ) : visibleCountries.map((option) => {
+                const CountryFlag = flags[option];
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    role="option"
+                    aria-selected={option === country}
+                    onMouseEnter={() => setHoveredCountry(option)}
+                    onMouseLeave={() => setHoveredCountry(null)}
+                    onClick={() => {
+                      onCountryChange(option);
+                      setIsCountryMenuOpen(false);
+                      setCountrySearch("");
+                      setHoveredCountry(null);
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", border: 0, background: hoveredCountry === option ? "#374151" : option === country ? "#eef2ff" : "#fff", color: hoveredCountry === option ? "#fff" : "#111827", padding: "7px 9px", textAlign: "left", fontSize: 12, cursor: "pointer" }}
+                  >
+                    {CountryFlag && (
+                      <span style={{ width: 22, height: 15, display: "inline-flex", overflow: "hidden", borderRadius: 2, flexShrink: 0 }}>
+                        <CountryFlag title={COUNTRY_NAMES.of(option) ?? option} />
+                      </span>
+                    )}
+                    <span>{countryLabel(option)}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -315,12 +340,11 @@ function PhoneField({
           id={id}
           type="tel"
           inputMode="numeric"
-          maxLength={10}
-          pattern="[0-9]{10}"
+          maxLength={15}
           style={inputStyle()}
-          placeholder="9876543210"
+          placeholder={mobileExample(country)}
           value={localPhoneValue(phone, country)}
-          onChange={(event) => onPhoneChange(`+${callingCode} ${event.target.value.replace(/\D/g, "").slice(0, 10)}`)}
+          onChange={(event) => onPhoneChange(`+${callingCode} ${event.target.value.replace(/\D/g, "").slice(0, 15)}`)}
           onBlur={onBlur}
         />
       </div>
@@ -578,10 +602,11 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
 
   const handlePhoneCountryChange = (country: Country) => {
     setPhoneCountry(country);
-    setForm((prev) => ({
-      ...prev,
-      phone: prev.phone ? `+${getCountryCallingCode(country)} ${localPhoneValue(prev.phone, phoneCountry)}` : "",
-    }));
+    const phone = form.phone
+      ? `+${getCountryCallingCode(country)} ${localPhoneValue(form.phone, phoneCountry)}`
+      : "";
+    setForm((prev) => ({ ...prev, phone }));
+    if (phone) validateField("phone", phone);
   };
 
   const handleSave = async () => {
@@ -1226,10 +1251,11 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
 
   const handlePhoneCountryChange = (country: Country) => {
     setPhoneCountry(country);
-    setForm((prev) => ({
-      ...prev,
-      phone: prev.phone ? `+${getCountryCallingCode(country)} ${localPhoneValue(prev.phone, phoneCountry)}` : "",
-    }));
+    const phone = form.phone
+      ? `+${getCountryCallingCode(country)} ${localPhoneValue(form.phone, phoneCountry)}`
+      : "";
+    setForm((prev) => ({ ...prev, phone }));
+    if (phone) validateField("phone", phone);
   };
 
   const handleBlur = (field: string) => () => {
