@@ -91,9 +91,30 @@ class AcquireBookingSlotLocksTests(unittest.TestCase):
         self.assertNotEqual(seat_key_a, seat_key_b)
 
 
+class _NoRowCursor:
+    """Cursor stand-in simulating an unseeded business_rules table --
+    fetchone() returns None, so resolve_booking_advance_days() falls back
+    to its hardcoded defaults."""
+
+    def __enter__(self) -> _NoRowCursor:
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        return None
+
+    def execute(self, sql: str, params: Any = None) -> None:
+        pass
+
+    def fetchone(self) -> None:
+        return None
+
+
 class _CommitRollbackOnlyConnection:
     """Minimal conn stand-in for book_seat paths that reach the
     commit/rollback try-block after the lock call."""
+
+    def cursor(self, **_: Any) -> _NoRowCursor:
+        return _NoRowCursor()
 
     def commit(self) -> None:
         pass

@@ -13,6 +13,31 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from backend.services.booking_service import get_available_seats_by_range
 
 
+class _NoFloorCursor:
+    """Simulates a floor/site lookup with no matching row -- fetchone()
+    returns None, so get_available_seats_by_range's office-active check
+    (fetch_floor_by_id / fetch_site_by_id, called unconditionally near the
+    top of the function) short-circuits and execution reaches the
+    guest-role gate these tests actually exercise."""
+
+    def __enter__(self) -> _NoFloorCursor:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def execute(self, sql, params=None) -> None:
+        pass
+
+    def fetchone(self):
+        return None
+
+
+class _FakeConnection:
+    def cursor(self, *args, **kwargs) -> _NoFloorCursor:
+        return _NoFloorCursor()
+
+
 class GuestAvailabilityAuthorizationTests(unittest.TestCase):
     """GET /floors/{floor_id}/seats?is_guest_booking=true&booked_for_guest_id=X
     must be restricted to guest-operator roles, matching every other
@@ -25,7 +50,7 @@ class GuestAvailabilityAuthorizationTests(unittest.TestCase):
             "backend.services.booking_service.fetch_available_seats_by_range",
         ) as mock_fetch_seats, self.assertRaises(HTTPException) as context:
             get_available_seats_by_range(
-                conn=object(),
+                conn=_FakeConnection(),
                 tenant_id="1",
                 floor_id="10",
                 start_date=date(2026, 7, 1),
@@ -45,7 +70,7 @@ class GuestAvailabilityAuthorizationTests(unittest.TestCase):
     def test_missing_current_user_is_also_rejected(self) -> None:
         with self.assertRaises(HTTPException) as context:
             get_available_seats_by_range(
-                conn=object(),
+                conn=_FakeConnection(),
                 tenant_id="1",
                 floor_id="10",
                 start_date=date(2026, 7, 1),
@@ -70,7 +95,7 @@ class GuestAvailabilityAuthorizationTests(unittest.TestCase):
             "backend.services.booking_service.fetch_available_seats_by_range",
         ) as mock_fetch_seats, self.assertRaises(HTTPException) as context:
             get_available_seats_by_range(
-                conn=object(),
+                conn=_FakeConnection(),
                 tenant_id="1",
                 floor_id="10",
                 start_date=date(2026, 7, 1),

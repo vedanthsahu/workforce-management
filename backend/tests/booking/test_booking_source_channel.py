@@ -17,7 +17,28 @@ TOMORROW = date.today() + timedelta(days=1)
 CALLER = {"tenant_id": "1", "user_id": "7", "role_name": "EMPLOYEE"}
 
 
+class _NoRowCursor:
+    """Simulates an unseeded business_rules table -- fetchone() returns
+    None, so resolve_booking_advance_days() falls back to its hardcoded
+    defaults."""
+
+    def __enter__(self) -> _NoRowCursor:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def execute(self, sql, params=None) -> None:
+        pass
+
+    def fetchone(self):
+        return None
+
+
 class FakeConnection:
+    def cursor(self, *args, **kwargs) -> _NoRowCursor:
+        return _NoRowCursor()
+
     def commit(self) -> None:
         pass
 
