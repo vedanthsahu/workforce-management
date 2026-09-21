@@ -1,0 +1,441 @@
+<title>SeatBook Walkthrough Script</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root{
+    --bg:#f6f4ee;
+    --surface:#ffffff;
+    --surface-2:#eeeade;
+    --ink:#211d17;
+    --ink-muted:#726c5d;
+    --line:#ddd6c2;
+    --intro:#2c3a55;
+    --intro-tint:#e4e7ee;
+    --employee:#2f6f7e;
+    --employee-ink:#1a4750;
+    --employee-tint:#e1eef0;
+    --admin:#9c5a2c;
+    --admin-ink:#6b3c1c;
+    --admin-tint:#f4e6d6;
+    --shadow: 0 1px 2px rgba(33,29,23,0.06), 0 6px 20px -12px rgba(33,29,23,0.18);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#18160f;
+      --surface:#211e17;
+      --surface-2:#2a261c;
+      --ink:#f1ecdf;
+      --ink-muted:#b2ab97;
+      --line:#3b3627;
+      --intro:#9db0d9;
+      --intro-tint:#242b3c;
+      --employee:#7cc0cc;
+      --employee-ink:#d8eef1;
+      --employee-tint:#1e363a;
+      --admin:#e4a771;
+      --admin-ink:#f7e2c9;
+      --admin-tint:#3a2a19;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 6px 20px -12px rgba(0,0,0,0.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#18160f;
+    --surface:#211e17;
+    --surface-2:#2a261c;
+    --ink:#f1ecdf;
+    --ink-muted:#b2ab97;
+    --line:#3b3627;
+    --intro:#9db0d9;
+    --intro-tint:#242b3c;
+    --employee:#7cc0cc;
+    --employee-ink:#d8eef1;
+    --employee-tint:#1e363a;
+    --admin:#e4a771;
+    --admin-ink:#f7e2c9;
+    --admin-tint:#3a2a19;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 6px 20px -12px rgba(0,0,0,0.5);
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Public Sans", ui-sans-serif, system-ui, sans-serif;
+    padding-inline:20px;
+    padding-block:40px 64px;
+  }
+  ::selection{ background:var(--employee-tint); color:var(--employee-ink); }
+
+  .page{ max-width:760px; margin-inline:auto; }
+
+  .eyebrow{
+    font-family:"IBM Plex Mono", ui-monospace, monospace;
+    font-size:12px; font-weight:600; letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--ink-muted);
+  }
+  h1{
+    font-family:"Fraunces", Georgia, serif;
+    font-weight:600; font-optical-sizing:auto;
+    font-size:clamp(30px,5.4vw,44px);
+    line-height:1.08; letter-spacing:-0.01em;
+    text-wrap:balance;
+    margin:8px 0 12px;
+  }
+  .dek{
+    font-size:16.5px; line-height:1.55; color:var(--ink-muted);
+    max-width:58ch; margin:0 0 22px;
+  }
+
+  .meta-row{ display:flex; flex-wrap:wrap; gap:10px; margin-bottom:30px; }
+  .chip{
+    display:inline-flex; align-items:center; gap:7px;
+    font-family:"IBM Plex Mono", monospace; font-size:12px; font-weight:600;
+    letter-spacing:0.03em;
+    padding:6px 12px; border-radius:100px;
+    background:var(--surface); border:1px solid var(--line);
+    color:var(--ink);
+  }
+  .swatch{ width:9px; height:9px; border-radius:50%; flex:none; }
+
+  /* Agenda bar */
+  .agenda{ margin-bottom:38px; }
+  .agenda-bar{
+    display:flex; width:100%; height:34px; border-radius:8px; overflow:hidden;
+    border:1px solid var(--line); box-shadow:var(--shadow);
+  }
+  .agenda-bar span{
+    display:flex; align-items:center; justify-content:center;
+    font-family:"IBM Plex Mono", monospace; font-size:11px; font-weight:600;
+    color:#fff; white-space:nowrap; overflow:hidden;
+  }
+  .seg-intro{ background:var(--intro); }
+  .seg-employee{ background:var(--employee); }
+  .seg-admin{ background:var(--admin); }
+  .agenda-legend{
+    display:flex; flex-wrap:wrap; gap:16px; margin-top:10px;
+    font-family:"IBM Plex Mono", monospace; font-size:11.5px; color:var(--ink-muted);
+  }
+  .agenda-legend .swatch{ width:8px; height:8px; border-radius:2px; }
+  .agenda-legend li{ display:flex; align-items:center; gap:6px; list-style:none; }
+  .agenda-legend ul{ display:flex; flex-wrap:wrap; gap:16px; padding:0; margin:0; }
+
+  /* TOC */
+  .toc{
+    background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    padding:18px 20px 20px; margin-bottom:8px; box-shadow:var(--shadow);
+  }
+  .toc h2{
+    font-family:"IBM Plex Mono", monospace; font-size:11.5px; font-weight:600;
+    letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-muted);
+    margin:0 0 12px;
+  }
+  .toc ol{ list-style:none; margin:0; padding:0; display:grid; gap:2px; }
+  .toc li{ display:grid; grid-template-columns:52px 1fr; gap:12px; align-items:baseline; }
+  .toc a{
+    color:var(--ink); text-decoration:none; font-size:14.5px; font-weight:500;
+    border-bottom:1px solid transparent;
+  }
+  .toc a:hover, .toc a:focus-visible{ border-bottom-color:var(--ink-muted); }
+  .toc time{
+    font-family:"IBM Plex Mono", monospace; font-size:12px; color:var(--ink-muted);
+    font-variant-numeric:tabular-nums;
+  }
+
+  section.script-section{
+    display:grid; grid-template-columns:100px 1fr; gap:22px;
+    padding-block:30px; border-top:1px solid var(--line);
+    scroll-margin-top:20px;
+  }
+  section.script-section:first-of-type{ border-top:none; padding-top:36px; }
+
+  .timecol{ display:flex; flex-direction:column; gap:8px; }
+  .timecol time{
+    font-family:"IBM Plex Mono", monospace; font-size:12.5px; font-weight:600;
+    color:var(--ink-muted); font-variant-numeric:tabular-nums; white-space:nowrap;
+  }
+  .tag{
+    display:inline-flex; align-items:center; width:fit-content;
+    font-family:"IBM Plex Mono", monospace; font-size:10.5px; font-weight:600;
+    letter-spacing:0.08em; text-transform:uppercase;
+    padding:3px 8px; border-radius:5px;
+  }
+  .tag-intro{ background:var(--intro-tint); color:var(--intro); }
+  .tag-employee{ background:var(--employee-tint); color:var(--employee-ink); }
+  .tag-admin{ background:var(--admin-tint); color:var(--admin-ink); }
+
+  .content h3{
+    font-family:"Fraunces", Georgia, serif; font-weight:600; font-size:21px;
+    margin:0 0 12px; letter-spacing:-0.005em;
+  }
+  .content p{
+    font-size:16px; line-height:1.62; max-width:64ch; margin:0 0 16px; color:var(--ink);
+  }
+  .content p:last-of-type{ margin-bottom:18px; }
+  .content p em{ font-style:italic; color:var(--ink-muted); }
+
+  .onscreen{
+    background:var(--surface); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; box-shadow:var(--shadow); max-width:64ch;
+  }
+  .onscreen .label{
+    font-family:"IBM Plex Mono", monospace; font-size:10.5px; font-weight:600;
+    letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-muted);
+    margin:0 0 8px;
+  }
+  .onscreen ul{ margin:0; padding-left:18px; }
+  .onscreen li{ font-size:14.5px; line-height:1.55; margin-bottom:3px; }
+  .onscreen li::marker{ color:var(--ink-muted); }
+
+  .transition{
+    max-width:64ch; margin:6px 0 0; padding:12px 16px;
+    border-left:3px solid var(--ink-muted); font-style:italic;
+    color:var(--ink-muted); font-size:14.5px; line-height:1.5;
+  }
+
+  .backup{
+    margin-top:8px; padding-top:34px; border-top:1px solid var(--line);
+  }
+  .backup h2{
+    font-family:"Fraunces", Georgia, serif; font-weight:600; font-size:22px;
+    margin:0 0 6px;
+  }
+  .backup > p{ color:var(--ink-muted); font-size:14.5px; margin:0 0 18px; }
+  .backup-grid{ display:grid; gap:12px; }
+  .backup-item{
+    display:grid; grid-template-columns:86px 1fr; gap:14px;
+    background:var(--surface); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; box-shadow:var(--shadow);
+  }
+  .backup-item p{ font-size:14.5px; line-height:1.55; margin:0; color:var(--ink); }
+  .backup-item .tag{ height:fit-content; }
+
+  footer{
+    margin-top:40px; padding-top:20px; border-top:1px solid var(--line);
+    font-family:"IBM Plex Mono", monospace; font-size:11.5px; color:var(--ink-muted);
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;
+  }
+
+  @media (max-width:640px){
+    section.script-section{ grid-template-columns:1fr; gap:12px; }
+    .timecol{ flex-direction:row; align-items:center; gap:10px; }
+    .backup-item{ grid-template-columns:1fr; }
+    .toc li{ grid-template-columns:46px 1fr; }
+  }
+</style>
+
+<div class="page">
+
+  <p class="eyebrow">Presentation script · live demo</p>
+  <h1>SeatBook Product Walkthrough</h1>
+  <p class="dek">A ten-minute stakeholder demo script — the desk-booking experience through an employee's eyes, then the admin console that configures everything underneath it.</p>
+
+  <div class="meta-row">
+    <span class="chip"><span class="swatch" style="background:var(--intro)"></span>Runtime 10:00</span>
+    <span class="chip"><span class="swatch" style="background:var(--employee)"></span>Employee segment</span>
+    <span class="chip"><span class="swatch" style="background:var(--admin)"></span>Admin segment</span>
+  </div>
+
+  <div class="agenda">
+    <div class="agenda-bar">
+      <span class="seg-intro" style="width:7.5%"></span>
+      <span class="seg-employee" style="width:35%">Employee · 3:30</span>
+      <span class="seg-admin" style="width:47.5%">Admin · 4:45</span>
+      <span class="seg-intro" style="width:10%"></span>
+    </div>
+    <div class="agenda-legend">
+      <ul>
+        <li><span class="swatch" style="background:var(--intro)"></span>Intro / close — 1:45</li>
+        <li><span class="swatch" style="background:var(--employee)"></span>Employee — 3:30</li>
+        <li><span class="swatch" style="background:var(--admin)"></span>Admin — 4:45</li>
+      </ul>
+    </div>
+  </div>
+
+  <nav class="toc">
+    <h2>Running order</h2>
+    <ol>
+      <li><time>0:00</time><a href="#intro">Open — why we built this</a></li>
+      <li><time>0:45</time><a href="#emp-dashboard">Employee: Dashboard</a></li>
+      <li><time>1:30</time><a href="#emp-book">Employee: Book a Seat</a></li>
+      <li><time>2:45</time><a href="#emp-mybookings">Employee: My Bookings &amp; Find Teammates</a></li>
+      <li><time>3:30</time><a href="#emp-bookfor">Employee: Book for Someone</a></li>
+      <li><time>4:15</time><a href="#admin-setup">Admin: Setting up the space</a></li>
+      <li><time>5:30</time><a href="#admin-manage">Admin: Manage Spaces</a></li>
+      <li><time>7:00</time><a href="#admin-bookings">Admin: Company-wide Bookings</a></li>
+      <li><time>7:45</time><a href="#admin-users">Admin: Users &amp; Roles</a></li>
+      <li><time>8:30</time><a href="#admin-audit">Admin: Audit Logs</a></li>
+      <li><time>9:00</time><a href="#closing">Close &amp; Q&amp;A</a></li>
+    </ol>
+  </nav>
+
+  <section class="script-section" id="intro">
+    <div class="timecol"><time>0:00–0:45</time><span class="tag tag-intro">Intro</span></div>
+    <div class="content">
+      <h3>Why we built this</h3>
+      <p>"Thanks for making the time. What you're looking at is SeatBook — the desk-booking system replacing the spreadsheet-and-Slack-thread approach to hybrid seating. This walkthrough is short by design: about ten minutes, in two halves. First I'll show the app the way most of our people actually use it — booking a desk as an employee. Then I'll switch hats and show the admin console, where facilities and IT configure floors, seats, and access. Let's start on the employee side."</p>
+      <div class="onscreen">
+        <p class="label">Show on screen</p>
+        <ul><li>Signed in as a standard employee, landing on the Dashboard</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="script-section" id="emp-dashboard">
+    <div class="timecol"><time>0:45–1:30</time><span class="tag tag-employee">Employee</span></div>
+    <div class="content">
+      <h3>Dashboard</h3>
+      <p>"This is home base for every employee. At a glance: whether they're booked in today, a week strip they can tap through, and a running stat on days in office versus target. Below that, their upcoming bookings with one-tap cancel or modify. This card — teammates in office today — is the one people ask for constantly: before you commute in, you can already see who else will actually be there. And if someone has a favorite desk, it surfaces right here as a one-click rebook."</p>
+      <div class="onscreen">
+        <p class="label">Show on screen</p>
+        <ul>
+          <li>Today's booking status + week strip</li>
+          <li>Days-in-office stat / trend</li>
+          <li>Upcoming bookings list, teammates-in-office card, favourite-seat quick-book</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="script-section" id="emp-book">
+    <div class="timecol"><time>1:30–2:45</time><span class="tag tag-employee">Employee</span></div>
+    <div class="content">
+      <h3>Book a Seat</h3>
+      <p>"Let's book one from scratch — it's a three-step flow. Step one, pick dates, single day or a range. Step two, pick the office and floor. Step three is the part people actually like: an interactive floor map drawn from the real floor plan, where every bookable seat sits exactly where it sits in the office. Filter by amenity — dual monitor, standing desk, near a window — and the map updates live. Click a seat, confirm, done. Because the map matches the physical floor exactly, there's zero ambiguity about which literal desk you're sitting at Monday morning."</p>
+      <div class="onscreen">
+        <p class="label">Show on screen</p>
+        <ul><li>Run the full flow live: dates → office/floor → amenity filter → click a seat on the map → confirmation</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="script-section" id="emp-mybookings">
+    <div class="timecol"><time>2:45–3:30</time><span class="tag tag-employee">Employee</span></div>
+    <div class="content">
+      <h3>My Bookings &amp; Find Teammates</h3>
+      <p>"Two more things employees lean on daily. My Bookings is their own list, upcoming and past, cancel anytime. Find Teammates is the directory view — search a colleague and see if and where they're seated today, which matters a lot once people aren't all sitting in the same three rows anymore."</p>
+      <div class="onscreen">
+        <p class="label">Show on screen</p>
+        <ul><li>My Bookings list</li><li>Find Teammates search resolving to a colleague's seat</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="script-section" id="emp-bookfor">
+    <div class="timecol"><time>3:30–4:15</time><span class="tag tag-employee">Employee</span></div>
+    <div class="content">
+      <h3>Book for Someone</h3>
+      <p>"One more feature worth calling out: Book for Someone. A manager, or anyone with the right permission, can reserve a desk for a teammate — or for an external visitor coming onsite. That visitor path connects into a full guest-visit system underneath: the guest and the host both get email confirmations, and if the visit changes or gets cancelled, both sides are notified automatically."</p>
+      <div class="onscreen">
+        <p class="label">Show on screen</p>
+        <ul><li>Book for Someone, toggle Teammate vs. Visitor</li></ul>
+      </div>
+      <p class="transition">Transition: "That's the employee experience end to end. Now let's flip to the other side of the product — the admin console where all of this gets configured."</p>
+    </div>
+  </section>
+
+  <section class="script-section" id="admin-setup">
+    <div class="timecol"><time>4:15–5:30</time><span class="tag tag-admin">Admin</span></div>
+    <div class="content">
+      <h3>Setting up the space</h3>
+      <p>"Everything an employee just saw starts here. Admins define the physical hierarchy first — offices, buildings, floors — then upload the actual floor-plan file for each floor. The moment a layout is uploaded, the system reads the seat labels in that file and automatically sorts them: a desk, a private cabin, a conference room, based on naming convention. Nobody has to manually tag hundreds of seats one at a time."</p>
+      <div class="onscreen">
+        <p class="label">Show on screen</p>
+        <ul><li>Offices / Buildings / Floors tree</li><li>Floor Layouts screen — upload a floor plan, show auto-categorization</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="script-section" id="admin-manage">
+    <div class="timecol"><time>5:30–7:00</time><span class="tag tag-admin">Admin</span></div>
+    <div class="content">
+      <h3>Manage Spaces</h3>
+      <p>"This is the heart of the admin experience. Every seat, cabin, and conference room on a floor lands here, split into tabs with live stat cards showing how many are configured versus how many still need attention. An admin can open a single seat and edit its type, bookable status, capacity, or amenities — or, more realistically, select fifty seats at once and bulk-edit them together: mark a row as hot-desks, tag a wing with a monitor amenity, take a bank of seats offline for renovation. Nothing goes live immediately, though. Changes are staged, and publishing a layout requires an effective date at least fifteen days out — on purpose, so facilities and comms have time to notify the floor before the seating map underneath them actually changes."</p>
+      <div class="onscreen">
+        <p class="label">Show on screen</p>
+        <ul>
+          <li>Seats / Cabins / Conference Rooms tabs with stat cards</li>
+          <li>Select multiple rows → Bulk Edit modal</li>
+          <li>Publish Layout button and its effective-date requirement</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="script-section" id="admin-bookings">
+    <div class="timecol"><time>7:00–7:45</time><span class="tag tag-admin">Admin</span></div>
+    <div class="content">
+      <h3>Company-wide Bookings</h3>
+      <p>"Admins also get full visibility into bookings across the company — filterable by date, office, building, floor, or a specific employee or guest. Every row shows whether it's an employee or a guest booking, and admins can modify or cancel either a seat booking or a whole visit directly from this table, with CSV export for anyone who needs the raw data."</p>
+      <div class="onscreen">
+        <p class="label">Show on screen</p>
+        <ul><li>Apply a filter, point out Employee vs. Guest column</li><li>Modify/Cancel action, CSV export</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="script-section" id="admin-users">
+    <div class="timecol"><time>7:45–8:30</time><span class="tag tag-admin">Admin</span></div>
+    <div class="content">
+      <h3>Users &amp; Roles</h3>
+      <p>"On the people side, admins manage the user list and can change someone's role through a confirmation step, so access changes aren't a single accidental click. Role Management shows exactly what each role — employee, manager, tenant admin — can and can't do, permission by permission, which makes access reviews straightforward instead of guesswork."</p>
+      <div class="onscreen">
+        <p class="label">Show on screen</p>
+        <ul><li>Users list with role filter → change-role confirmation modal</li><li>Role Management permission view</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="script-section" id="admin-audit">
+    <div class="timecol"><time>8:30–9:00</time><span class="tag tag-admin">Admin</span></div>
+    <div class="content">
+      <h3>Audit Logs</h3>
+      <p>"Everything that happens in this console is logged. The audit trail is filterable and searchable, and opening any entry shows a before-and-after of exactly what changed and who changed it — which matters a lot the first time someone asks who moved their desk."</p>
+      <div class="onscreen">
+        <p class="label">Show on screen</p>
+        <ul><li>Audit Logs list → open a detail drawer with before/after values</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="script-section" id="closing">
+    <div class="timecol"><time>9:00–10:00</time><span class="tag tag-intro">Close</span></div>
+    <div class="content">
+      <h3>Wrap-up &amp; Q&amp;A</h3>
+      <p>"So — two products in one: a booking experience simple enough nobody needs training, and an admin console with enough control that facilities can run an entire portfolio of floors from it. A few things are already scaffolded for what's next — a dedicated front-desk view for visitor check-in, and occupancy and utilization reporting — both sitting in the nav today as 'coming soon.' Happy to go deeper on either side, or open it up for questions."</p>
+      <div class="onscreen">
+        <p class="label">Show on screen</p>
+        <ul><li>Admin nav, pointing at the "coming soon" items as a natural roadmap segue</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="backup">
+    <h2>If it comes up</h2>
+    <p>Backup talking points — not part of the timed script, use only if a question opens the door.</p>
+    <div class="backup-grid">
+      <div class="backup-item">
+        <span class="tag tag-employee">Guest visits</span>
+        <p>The visitor path isn't a bolt-on — it's a full guest-visit subsystem with its own email lifecycle for created, modified, and cancelled visits, sent to the guest, the host, and whoever booked it.</p>
+      </div>
+      <div class="backup-item">
+        <span class="tag tag-admin">Auto-categorization</span>
+        <p>Seats are sorted into desks, cabins, and conference rooms by reading naming patterns in the uploaded floor plan itself — no manual tagging pass needed after an upload.</p>
+      </div>
+      <div class="backup-item">
+        <span class="tag tag-admin">Permission model</span>
+        <p>Access isn't hardcoded per role — each user carries a granular permission list. That's what lets us introduce new roles later (front office, facilities) without rebuilding the access logic.</p>
+      </div>
+      <div class="backup-item">
+        <span class="tag tag-intro">What's scaffolded</span>
+        <p>Front-office / visitor check-in and facilities-specific views already exist in the navigation structure but are placeholders today — a preview of roadmap direction, not a promise of a date.</p>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <span>SeatBook — internal walkthrough script</span>
+    <span>Total runtime 10:00</span>
+  </footer>
+
+</div>
