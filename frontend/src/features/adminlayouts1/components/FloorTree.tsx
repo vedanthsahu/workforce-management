@@ -331,7 +331,7 @@ const FloorTree = memo(function FloorTree({
             loadingSites ? "Loading sites…" : isSearchLoading ? "Searching…" : "Search floors..."
           }
           disabled={loadingSites}
-          className="w-full h-10 pl-9 pr-8 border rounded-md text-sm disabled:opacity-50 disabled:cursor-wait"
+          className="w-full h-10 pl-9 pr-8 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-wait"
         />
         {search && !isBusy && (
           <button

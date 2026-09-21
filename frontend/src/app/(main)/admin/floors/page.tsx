@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 
-import FloorCards from "@/features/floor/components/FloorCards";
+import FloorCards, { FloorStatusFilter } from "@/features/floor/components/FloorCards";
 import FloorFilters from "@/features/floor/components/FloorFilters";
 import FloorPagination from "@/features/floor/components/FloorPagination";
 import FloorTable from "@/features/floor/components/FloorTable";
@@ -40,6 +40,7 @@ function FloorsPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [pinnedFloorId, setPinnedFloorId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<FloorStatusFilter>(null);
 
   useEffect(() => {
     const addedFloorId = searchParams.get("added");
@@ -65,11 +66,13 @@ function FloorsPage() {
   };
 
   const filteredFloors = useMemo(() => {
-    const filtered = floors.filter(
-      (floor) =>
-        floor.floor_name?.toLowerCase().includes(search.toLowerCase()) ||
-        floor.floor_code?.toLowerCase().includes(search.toLowerCase())
-    );
+    const filtered = floors
+      .filter(
+        (floor) =>
+          floor.floor_name?.toLowerCase().includes(search.toLowerCase()) ||
+          floor.floor_code?.toLowerCase().includes(search.toLowerCase())
+      )
+      .filter((floor) => !statusFilter || floor.status === statusFilter);
 
     if (!pinnedFloorId) return filtered;
 
@@ -77,7 +80,7 @@ function FloorsPage() {
       ...filtered.filter((f) => String(f.floor_id) === pinnedFloorId),
       ...filtered.filter((f) => String(f.floor_id) !== pinnedFloorId),
     ];
-  }, [floors, search, pinnedFloorId]);
+  }, [floors, search, statusFilter, pinnedFloorId]);
 
   const itemsPerPage = 10;
   const totalPages = Math.ceil(filteredFloors.length / itemsPerPage);
@@ -112,7 +115,18 @@ function FloorsPage() {
       </div>
 
       {/* CARDS */}
-      {loading ? <StatCardsSkeleton /> : <FloorCards stats={stats} />}
+      {loading ? (
+        <StatCardsSkeleton />
+      ) : (
+        <FloorCards
+          stats={stats}
+          statusFilter={statusFilter}
+          onStatusFilterChange={(filter) => {
+            setStatusFilter(filter);
+            setCurrentPage(1);
+          }}
+        />
+      )}
 
       {/* TABLE CARD */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
@@ -138,10 +152,6 @@ function FloorsPage() {
             <TableBodySkeleton columns={5} rows={4} />
           ) : error ? (
             <div className="p-6 text-sm text-red-500">{error}</div>
-          ) : !selectedBuilding ? (
-            <div className="p-10 text-center text-gray-500">
-              
-            </div>
           ) : (
             <FloorTable
               data={paginatedFloors}

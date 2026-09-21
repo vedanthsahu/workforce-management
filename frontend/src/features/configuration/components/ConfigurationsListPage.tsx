@@ -1,10 +1,35 @@
 "use client";
 
-import { useState } from "react";
-import { Pencil, CalendarDays, UserRound, Info, CheckCircle2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, ChevronDown, Info, X } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ConfigurationSkeleton } from "./ConfigurationSkeleton";
 import { CONFIGURATION_SECTIONS, INITIAL_CONFIGURATIONS } from "../utils/configurationData";
 import type { ConfigurationField, ConfigurationItem } from "../types/configuration.types";
-import ConfigurationDetailPanel from "./ConfigurationDetailPanel";
+import {
+  fetchBookingPolicy,
+  fetchLayoutPolicy,
+  updateBookingPolicy,
+  updateLayoutPolicy,
+} from "../services/configuration.service";
+
+// Only these items are backed by a real tenant business rule (see
+// backend/services/business_rule_service.py). "Max future bookings" /
+// "max bookings within N days" concepts were removed from this page
+// entirely -- nothing in the booking flow actually enforces either of
+// them, they were mock-only placeholders with no server-side counterpart
+// (see the Configuration-page audit that found this). Only
+// activity-table-record-count remains an unbacked, local-only mock.
+const BACKED_ITEM_IDS = new Set([
+  "new-layout-publishing",
+  "booking-calendar-employee",
+  "visitor-booking",
+  "layout-visibility",
+]);
+
+function withFieldValue(fields: ConfigurationField[], key: string, value: number): ConfigurationField[] {
+  return fields.map((f) => (f.key === key ? { ...f, value } : f));
+}
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
@@ -17,224 +42,426 @@ function formatDateTime(iso: string): string {
   });
 }
 
-function EditButton({ onClick, className = "" }: { onClick: () => void; className?: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-1.5 h-9 px-4 border border-indigo-200 text-indigo-600 rounded-lg text-xs font-semibold hover:bg-indigo-50 transition-colors shrink-0 ${className}`}
-    >
-      <Pencil size={13} />
-      Edit
-    </button>
-  );
+function draftKey(itemId: string, fieldKey: string): string {
+  return `${itemId}:${fieldKey}`;
 }
 
-function StatBlock({ statLabel, value, unit }: { statLabel: string; value: number; unit: string }) {
-  return (
-    <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 min-w-[110px]">
-      <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">{statLabel}</p>
-      <p className="text-lg font-bold text-gray-900 mt-0.5">{value}</p>
-      <p className="text-[10px] text-gray-400">{unit}</p>
-    </div>
-  );
-}
+type ChangedRow = {
+  key: string;
+  label: string;
+  from: number;
+  to: number;
+  unit: string;
+};
 
-function MetaInfo({ lastUpdatedAt, lastUpdatedBy }: { lastUpdatedAt: string; lastUpdatedBy: string }) {
-  return (
-    <div className="flex flex-col gap-1.5 text-xs">
-      <div className="flex items-center gap-1.5">
-        <CalendarDays size={13} className="text-gray-400 shrink-0" />
-        <div>
-          <p className="text-[10px] text-gray-400">Last Updated</p>
-          <p className="font-medium text-gray-600 whitespace-nowrap">{formatDateTime(lastUpdatedAt)}</p>
-        </div>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <UserRound size={13} className="text-gray-400 shrink-0" />
-        <div>
-          <p className="text-[10px] text-gray-400">Updated By</p>
-          <p className="font-medium text-gray-600">{lastUpdatedBy}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** Standard single-configuration card: icon+name+description, its stat
- * block(s), Last Updated/Updated By, and an Edit button -- wraps onto
- * multiple lines on its own when the card is narrow (e.g. two side by side
- * in Employee Booking) instead of needing separate mobile/desktop layouts. */
-function ItemCard({ item, onEdit }: { item: ConfigurationItem; onEdit: () => void }) {
-  const Icon = item.icon;
-  return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 flex flex-wrap items-center gap-5">
-      <div className="flex items-start gap-3 min-w-[220px] flex-1">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${item.iconBg}`}>
-          <Icon className={`w-5 h-5 ${item.iconColor}`} />
-        </div>
-        <div className="min-w-0">
-          <h4 className="font-semibold text-gray-900 text-sm">{item.name}</h4>
-          <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-3">
-        {item.fields.map((f) => (
-          <StatBlock key={f.key} statLabel={f.statLabel} value={f.value} unit={f.unit} />
-        ))}
-      </div>
-
-      <MetaInfo lastUpdatedAt={item.lastUpdatedAt} lastUpdatedBy={item.lastUpdatedBy} />
-
-      <EditButton onClick={onEdit} className="ml-auto" />
-    </div>
-  );
-}
-
-/** Layout Visibility is the one exception: a single configuration whose
- * three fields (Draft/Archived/Discarded) each get their own mini card with
- * their own icon and blurb, sharing one Edit action at the section header
- * instead of a per-field one. */
-function LayoutVisibilityCards({ item }: { item: ConfigurationItem }) {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      {item.fields.map((f) => {
-        const FieldIcon = f.icon;
-        return (
-          <div key={f.key} className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              {FieldIcon && (
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${f.iconBg}`}>
-                  <FieldIcon className={`w-4.5 h-4.5 ${f.iconColor}`} />
-                </div>
-              )}
-              <h4 className="font-semibold text-gray-900 text-sm">{f.cardTitle}</h4>
-            </div>
-            <p className="text-xs text-gray-500">{f.cardDescription}</p>
-            <div>
-              <span className="text-xl font-bold text-gray-900">{f.value}</span>
-              <span className="text-xs text-gray-400 ml-1">{f.unit}</span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function Section({
-  title,
-  subtitle,
-  onEdit,
-  children,
+/** One editable setting row: label + helper text on the left, a compact
+ * number input + unit on the right. Layout Visibility's fields use their
+ * own cardTitle/cardDescription (shorter, purpose-built for this row);
+ * every other field uses its regular label/helperText. */
+function SettingRow({
+  label,
+  description,
+  value,
+  unit,
+  onChange,
+  readOnly = false,
 }: {
-  title: string;
-  subtitle: string;
-  onEdit?: () => void;
-  children: React.ReactNode;
+  label: string;
+  description: string;
+  value: number;
+  unit: string;
+  onChange: (raw: string) => void;
+  readOnly?: boolean;
 }) {
   return (
-    <section className="space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-gray-900">{title}</h2>
-          <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
-        </div>
-        {onEdit && <EditButton onClick={onEdit} />}
+    <div className="flex items-center justify-between gap-6 py-4">
+      <div className="min-w-0">
+        <p className="text-sm font-normal text-black">
+          {label}
+          {readOnly && <span className="ml-1.5 text-xs text-gray-400 font-normal">(calculated)</span>}
+        </p>
+        {description && <p className="text-xs text-gray-500 mt-0.5">{description}</p>}
       </div>
-      {children}
-    </section>
+      <div className="flex items-center gap-2.5 shrink-0">
+        <input
+          type="number"
+          min={0}
+          value={value}
+          readOnly={readOnly}
+          onChange={(e) => !readOnly && onChange(e.target.value)}
+          className={`w-20 h-10 px-3 text-center text-sm font-semibold rounded-lg border transition-colors ${
+            readOnly
+              ? "border-gray-200 bg-gray-100 text-gray-500 cursor-not-allowed"
+              : "border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          }`}
+        />
+        <span className="text-xs font-medium text-gray-400 w-16">{unit}</span>
+      </div>
+    </div>
   );
 }
 
 export default function ConfigurationsListPage() {
   const [configurations, setConfigurations] = useState<ConfigurationItem[]>(INITIAL_CONFIGURATIONS);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Keyed by "<itemId>:<fieldKey>" -- only touched fields get an entry, so
+  // "is this field dirty" is just "is its key present here", not a value
+  // comparison that could false-negative if someone types back to the
+  // original number.
+  const [draft, setDraft] = useState<Record<string, number>>({});
+  const [detailsOpen, setDetailsOpen] = useState(true);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const selectedItem = configurations.find((c) => c.id === selectedId) ?? null;
+  // Replace the hardcoded mock values for backend-backed items with the
+  // tenant's real, currently-effective ones as soon as they load. The
+  // ConfigurationSkeleton (below) stays up for exactly as long as this
+  // real fetch takes, not a fixed/fake delay.
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([fetchBookingPolicy(), fetchLayoutPolicy()])
+      .then(([booking, layout]) => {
+        if (cancelled) return;
+        setConfigurations((prev) =>
+          prev.map((c) => {
+            if (c.id === "new-layout-publishing") {
+              let fields = withFieldValue(c.fields, "days", layout.buffer_days);
+              fields = withFieldValue(fields, "totalDays", layout.min_advance_days);
+              return { ...c, fields };
+            }
+            if (c.id === "booking-calendar-employee") {
+              return { ...c, fields: withFieldValue(c.fields, "durationDays", booking.employee_max_advance_days) };
+            }
+            if (c.id === "visitor-booking") {
+              return { ...c, fields: withFieldValue(c.fields, "durationDays", booking.guest_max_advance_days) };
+            }
+            if (c.id === "layout-visibility") {
+              let fields = withFieldValue(c.fields, "draftDays", layout.visibility_days.draft);
+              fields = withFieldValue(fields, "archivedDays", layout.visibility_days.archived);
+              fields = withFieldValue(fields, "discardedDays", layout.visibility_days.deleted);
+              return { ...c, fields };
+            }
+            return c;
+          }),
+        );
+      })
+      .catch(() => {
+        // Real values failed to load -- the mock defaults stay on screen
+        // rather than the page breaking; Save still round-trips to the
+        // backend and will surface its own error if that's still down.
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const getItem = (id: string) => configurations.find((c) => c.id === id);
 
-  const handleSave = (id: string, description: string, fields: ConfigurationField[]) => {
-    const nowIso = new Date().toISOString();
-    setConfigurations((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? { ...c, description, fields, lastUpdatedAt: nowIso, lastUpdatedBy: "Admin User" }
-          : c
-      )
-    );
-    setSelectedId(null);
-    setSavedMessage("Configuration updated successfully.");
-    setTimeout(() => setSavedMessage(null), 4000);
+  const changedRows = useMemo<ChangedRow[]>(() => {
+    const rows: ChangedRow[] = [];
+    for (const item of configurations) {
+      for (const f of item.fields) {
+        const key = draftKey(item.id, f.key);
+        if (key in draft && draft[key] !== f.value) {
+          const label = item.multiField ? f.cardTitle ?? f.label : f.label;
+          rows.push({ key, label, from: f.value, to: draft[key], unit: f.unit });
+        }
+      }
+    }
+    return rows;
+  }, [configurations, draft]);
+
+  const hasChanges = changedRows.length > 0;
+
+  const handleFieldChange = (itemId: string, fieldKey: string, raw: string) => {
+    const parsed = Number(raw);
+    setDraft((prev) => ({
+      ...prev,
+      [draftKey(itemId, fieldKey)]: Number.isFinite(parsed) ? Math.max(0, parsed) : 0,
+    }));
   };
 
-  return (
-    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-5 sm:space-y-6 bg-[#f8fafc]">
-     
+  const handleDiscard = () => setDraft({});
 
-      {savedMessage && (
-        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-green-200 bg-green-50 text-sm font-medium text-green-700">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} />
-            {savedMessage}
-          </div>
-          <button onClick={() => setSavedMessage(null)} className="p-1 rounded hover:opacity-70">
-            <X size={14} />
-          </button>
-        </div>
-      )}
+  // Save applies every dirty item in this batch. Backed items (see
+  // BACKED_ITEM_IDS) round-trip through the real business-rule API one at a
+  // time; unbacked items just apply their draft value locally, matching the
+  // previous per-item modal's behavior now folded into one multi-item save.
+  const confirmApply = async () => {
+    setErrorMessage(null);
+    setSaving(true);
+    try {
+      const now = new Date().toISOString();
+      const changedItemIds = Array.from(new Set(changedRows.map((r) => r.key.split(":")[0])));
 
-      {/* HEADER */}
-      <div>
-        <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">All Configurations</h1>
-        <p className="text-xs sm:text-sm text-gray-500 mt-1">
-          Manage application configuration settings. Update values as per your organization&apos;s requirements.
-        </p>
-      </div>
+      let nextConfigurations = configurations;
 
-      {/* SECTIONS */}
-      {CONFIGURATION_SECTIONS.map((section) => {
-        const items = section.itemIds.map(getItem).filter((i): i is ConfigurationItem => !!i);
-        if (items.length === 0) return null;
-        const isMultiField = items.length === 1 && items[0].multiField;
+      for (const itemId of changedItemIds) {
+        const item = nextConfigurations.find((c) => c.id === itemId);
+        if (!item) continue;
 
-        return (
-          <Section
-            key={section.id}
-            title={section.title}
-            subtitle={section.subtitle}
-            onEdit={isMultiField ? () => setSelectedId(items[0].id) : undefined}
-          >
-            {isMultiField ? (
-              <LayoutVisibilityCards item={items[0]} />
-            ) : items.length > 1 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {items.map((item) => (
-                  <ItemCard key={item.id} item={item} onEdit={() => setSelectedId(item.id)} />
-                ))}
-              </div>
-            ) : (
-              <ItemCard item={items[0]} onEdit={() => setSelectedId(items[0].id)} />
-            )}
-          </Section>
+        const fieldsWithDraft = item.fields.map((f) => {
+          const key = draftKey(itemId, f.key);
+          return key in draft ? { ...f, value: draft[key] } : f;
+        });
+
+        let resolvedFields = fieldsWithDraft;
+
+        if (BACKED_ITEM_IDS.has(itemId)) {
+          if (itemId === "new-layout-publishing") {
+            const days = fieldsWithDraft.find((f) => f.key === "days")?.value;
+            const result = await updateLayoutPolicy({ buffer_days: days });
+            resolvedFields = withFieldValue(fieldsWithDraft, "days", result.buffer_days);
+            resolvedFields = withFieldValue(resolvedFields, "totalDays", result.min_advance_days);
+          } else if (itemId === "booking-calendar-employee") {
+            const durationDays = fieldsWithDraft.find((f) => f.key === "durationDays")?.value;
+            const result = await updateBookingPolicy({ employee_max_advance_days: durationDays });
+            resolvedFields = withFieldValue(fieldsWithDraft, "durationDays", result.employee_max_advance_days);
+            // The layout card's "Effective After (Total)" is derived from
+            // this same window -- refresh it too so it doesn't go stale
+            // until that card happens to be opened/saved next. Applied
+            // directly to nextConfigurations since that item may not itself
+            // be part of this save batch.
+            try {
+              const layoutResult = await fetchLayoutPolicy();
+              nextConfigurations = nextConfigurations.map((c) =>
+                c.id === "new-layout-publishing"
+                  ? { ...c, fields: withFieldValue(c.fields, "totalDays", layoutResult.min_advance_days) }
+                  : c,
+              );
+            } catch {
+              // Non-fatal -- the booking window save itself already succeeded.
+            }
+          } else if (itemId === "visitor-booking") {
+            const durationDays = fieldsWithDraft.find((f) => f.key === "durationDays")?.value;
+            const result = await updateBookingPolicy({ guest_max_advance_days: durationDays });
+            resolvedFields = withFieldValue(fieldsWithDraft, "durationDays", result.guest_max_advance_days);
+          } else if (itemId === "layout-visibility") {
+            const draftDays = fieldsWithDraft.find((f) => f.key === "draftDays")?.value;
+            const archivedDays = fieldsWithDraft.find((f) => f.key === "archivedDays")?.value;
+            const discardedDays = fieldsWithDraft.find((f) => f.key === "discardedDays")?.value;
+            const result = await updateLayoutPolicy({
+              visibility_days: { draft: draftDays, archived: archivedDays, deleted: discardedDays },
+            });
+            resolvedFields = withFieldValue(fieldsWithDraft, "draftDays", result.visibility_days.draft);
+            resolvedFields = withFieldValue(resolvedFields, "archivedDays", result.visibility_days.archived);
+            resolvedFields = withFieldValue(resolvedFields, "discardedDays", result.visibility_days.deleted);
+          }
+        }
+
+        nextConfigurations = nextConfigurations.map((c) =>
+          c.id === itemId
+            ? { ...c, fields: resolvedFields, lastUpdatedAt: now, lastUpdatedBy: "Admin User" }
+            : c,
         );
-      })}
+      }
 
-      {/* NOTE */}
-      <div className="flex items-start gap-3 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
-        <Info size={16} className="text-indigo-500 mt-0.5 shrink-0" />
+      setConfigurations(nextConfigurations);
+      setDraft({});
+      setShowConfirm(false);
+      setSavedMessage("Configuration updated successfully.");
+      setTimeout(() => setSavedMessage(null), 4000);
+    } catch {
+      setErrorMessage("Failed to save one or more configuration changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const mostRecentUpdate = useMemo(
+    () =>
+      configurations.reduce((latest, item) =>
+        new Date(item.lastUpdatedAt) > new Date(latest.lastUpdatedAt) ? item : latest
+      ),
+    [configurations]
+  );
+
+  if (loading) {
+    return <ConfigurationSkeleton />;
+  }
+
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip bg-[#f8fafc]">
+      <div className="p-5 sm:p-8 space-y-6 pb-28">
+        {savedMessage && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-green-200 bg-green-50 text-sm font-medium text-green-700">
+            <div className="flex items-center gap-2.5">
+              <span className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                <CheckCircle2 size={14} className="text-green-600" />
+              </span>
+              {savedMessage}
+            </div>
+            <button onClick={() => setSavedMessage(null)} className="p-1 rounded hover:bg-green-100/70 transition-colors">
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-sm font-medium text-red-700">
+            <div className="flex items-center gap-2">
+              <Info size={16} />
+              {errorMessage}
+            </div>
+            <button onClick={() => setErrorMessage(null)} className="p-1 rounded hover:opacity-70">
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        {/* HEADER */}
         <div>
-          <p className="text-sm font-semibold text-indigo-900">Note</p>
-          <p className="text-xs text-indigo-700 mt-0.5">
-            These configuration settings control key application behaviors. Changes will be applied across the
-            system based on the defined rules.
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Configuration</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">
+            Update your settings, then save your changes.
           </p>
         </div>
+
+        {/* SETTINGS PANEL */}
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm divide-y divide-gray-100">
+          {CONFIGURATION_SECTIONS.map((section) => {
+            const items = section.itemIds
+              .map(getItem)
+              .filter((i): i is ConfigurationItem => !!i);
+            if (items.length === 0) return null;
+
+            return (
+              <div key={section.id} className="px-5 sm:px-6 py-5">
+                <div className="flex items-start gap-3 mb-1">
+                  <div className="w-1 self-stretch rounded-full bg-linear-to-b from-indigo-500 to-indigo-300 mt-0.5" />
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">{section.title}</h2>
+                  </div>
+                </div>
+
+                <div className="pl-4 divide-y divide-gray-100">
+                  {items.flatMap((item) =>
+                    item.fields.map((f) => {
+                      const key = draftKey(item.id, f.key);
+                      const value = key in draft ? draft[key] : f.value;
+                      // Single-setting items show the item's own name/description
+                      // (the original, fuller wording); an item with more than one
+                      // field needs each row to carry its own label so the rows
+                      // stay distinguishable (Visitor Booking's two fields,
+                      // Layout Visibility's Draft/Archived/Discarded cards).
+                      const label = item.multiField
+                        ? f.cardTitle ?? f.label
+                        : item.fields.length === 1
+                        ? item.name
+                        : f.label;
+                      const description = item.multiField
+                        ? f.cardDescription ?? f.helperText
+                        : item.fields.length === 1
+                        ? item.description
+                        : f.helperText;
+
+                      return (
+                        <SettingRow
+                          key={key}
+                          label={label}
+                          description={description}
+                          value={value}
+                          unit={f.unit}
+                          readOnly={f.readOnly}
+                          onChange={(raw) => handleFieldChange(item.id, f.key, raw)}
+                        />
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* NOTE */}
+        <div className="flex items-start gap-4 bg-linear-to-r from-indigo-50 to-violet-50 border border-indigo-100 rounded-xl px-5 py-4 shadow-sm">
+          <span className="w-7 h-7 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm">
+            <Info size={15} className="text-indigo-500" />
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-indigo-900">Note</p>
+            <p className="text-xs text-indigo-700 mt-1">
+              These configuration settings control key application behaviors. Changes will be applied across the
+              system based on the defined rules.
+            </p>
+          </div>
+        </div>
+
+        {/* UPDATE DETAILS */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setDetailsOpen((o) => !o)}
+            className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            <ChevronDown size={14} className={`transition-transform ${detailsOpen ? "" : "-rotate-90"}`} />
+            Update details
+          </button>
+          {detailsOpen && (
+            <p className="text-xs text-black mt-1.5 ml-[21px]">
+              All settings last updated {formatDateTime(mostRecentUpdate.lastUpdatedAt)} by {mostRecentUpdate.lastUpdatedBy}.
+            </p>
+          )}
+        </div>
       </div>
 
-      <ConfigurationDetailPanel item={selectedItem} onClose={() => setSelectedId(null)} onSave={handleSave} />
+      {/* STICKY SAVE BAR */}
+      <div className="sticky bottom-0 left-0 right-0 flex items-center justify-between gap-4 px-5 sm:px-8 py-4 bg-white/95 backdrop-blur border-t border-gray-200">
+        <span className={`text-xs sm:text-sm ${hasChanges ? "text-black" : "text-gray-500"}`}>
+          {hasChanges
+            ? `${changedRows.length} unsaved change${changedRows.length > 1 ? "s" : ""}`
+            : "No unsaved changes"}
+        </span>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            disabled={!hasChanges || saving}
+            onClick={handleDiscard}
+            className={`h-9 px-4 rounded-xl border border-gray-200 bg-white text-sm font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${
+              hasChanges ? "text-black" : "text-gray-700"
+            }`}
+          >
+            Discard
+          </button>
+          <button
+            type="button"
+            disabled={!hasChanges || saving}
+            onClick={() => setShowConfirm(true)}
+            className="h-9 px-4 rounded-xl bg-linear-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-sm font-medium text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:from-indigo-600 disabled:to-indigo-700 transition-all shadow-sm hover:shadow-md hover:shadow-indigo-200"
+          >
+            Save changes
+          </button>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={showConfirm}
+        title="Apply these changes?"
+        description="This will take effect across the application immediately."
+        confirmLabel={saving ? "Saving..." : "Apply Changes"}
+        loading={saving}
+        onConfirm={confirmApply}
+        onClose={() => setShowConfirm(false)}
+      >
+        <ul className="space-y-1.5 text-xs text-gray-600">
+          {changedRows.map((row) => (
+            <li key={row.key} className="flex items-center justify-between gap-3">
+              <span>{row.label}</span>
+              <span className="font-medium text-gray-900">
+                {row.from} → {row.to} {row.unit}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </ConfirmDialog>
     </div>
   );
 }

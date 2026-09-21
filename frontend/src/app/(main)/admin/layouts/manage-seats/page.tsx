@@ -2,7 +2,7 @@
 
 import { ArrowLeft, CalendarDays } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Suspense, useRef, useLayoutEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useLayoutEffect, useState } from "react";
 
 import LayoutPreview from "@/features/managelayout/components/LayoutPreview";
 import SeatFiltersBar from "@/features/managelayout1/components/SeatFiltersBar";
@@ -10,20 +10,27 @@ import SeatTable from "@/features/managelayout1/components/SeatTable";
 import EditSeatPanel from "@/features/managelayout1/components/EditSeatPanel";
 import BulkEditModal from "@/features/managelayout1/components/BulkEditModal";
 import ViewToggle from "@/features/managelayout1/components/ViewToggle";
+import SpaceCategoryTabs from "@/features/managelayout1/components/SpaceCategoryTabs";
+import SpaceStatCards from "@/features/managelayout1/components/SpaceStatCards";
 import { useManageSeats } from "@/features/managelayout1/hooks/Usemanageseats";
-import LayoutStatCards from "@/features/managelayout/components/Layoutstatcards";
+import { SPACE_CATEGORY_LABELS } from "@/features/managelayout1/utils/spaceCategory";
 import { usePublishLayout } from "@/features/managelayout/hooks/useLayoutDetails";
+import { fetchLayoutPolicy } from "@/features/managelayout/services/layoutService";
 import { useLayoutsStore } from "@/store/useLayoutsStore";
 import { ManageSeatsSkeleton } from "@/features/managelayout1/components/ManageSeatsSkeleton";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { useNavigationGuardStore } from "@/store/useNavigationGuardStore";
 
-// Effective date must be at least 15 days out — e.g. today the 14th means
-// the 14th-28th are unavailable and the 29th is the earliest pickable date.
-function minEffectiveDateIso(): string {
+// Fallback only -- used for the one render before the real tenant value
+// (GET /business-rules/layout-policy) has loaded, and if that call fails.
+// Mirrors the backend's own fallback default (business_rule_service.py),
+// not an independent guess.
+const FALLBACK_MIN_ADVANCE_DAYS = 45;
+
+function minEffectiveDateIso(minAdvanceDays: number): string {
   const d = new Date();
-  d.setDate(d.getDate() + 15);
+  d.setDate(d.getDate() + minAdvanceDays);
   return d.toISOString().slice(0, 10);
 }
 
@@ -44,13 +51,16 @@ function ManageSeatsPage() {
     floorId,
     stats,
     statsLoading,
+    activeCategory,
+    setActiveCategory,
+    categoryCounts,
+    categoryStats,
     seats,
     filteredSeats,
-    hasActiveFilters,
+    isMapHighlightActive,
     filters,
     updateFilter,
     resetFilters,
-    seatTypes,
     preferences,
     selected,
     toggleSelect,
@@ -100,24 +110,39 @@ function ManageSeatsPage() {
   const hasUnpublishedEdits = !!layout?.is_published && isDirty;
   useUnsavedChangesGuard(
     hasUnpublishedEdits,
-    "You have unpublished seat changes. If you leave now, they will be lost.",
+    "You have unpublished space changes. If you leave now, they will be lost.",
     discardChanges
   );
   const { requestNavigation } = useNavigationGuardStore();
 
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
-  // Frontend-only for now, per explicit instruction — not sent to the
-  // backend/publish API in any form. Purely a UI field until there's a
-  // real "effective date" concept on the backend to wire it into.
-  const [effectiveDate, setEffectiveDate] = useState(minEffectiveDateIso);
+  // The tenant's actual minimum scheduling gap (GET /business-rules/
+  // layout-policy) -- falls back to FALLBACK_MIN_ADVANCE_DAYS only until
+  // that call resolves, or if it fails.
+  const [minAdvanceDays, setMinAdvanceDays] = useState(FALLBACK_MIN_ADVANCE_DAYS);
+  const [effectiveDate, setEffectiveDate] = useState(() =>
+    minEffectiveDateIso(FALLBACK_MIN_ADVANCE_DAYS)
+  );
+
+  useEffect(() => {
+    let active = true;
+    fetchLayoutPolicy()
+      .then((policy) => {
+        if (active) setMinAdvanceDays(policy.min_advance_days);
+      })
+      .catch((err) => {
+        console.error("[fetchLayoutPolicy]", err);
+      });
+    return () => { active = false; };
+  }, []);
 
   const openPublishConfirm = () => {
-    setEffectiveDate(minEffectiveDateIso());
+    setEffectiveDate(minEffectiveDateIso(minAdvanceDays));
     setShowPublishConfirm(true);
   };
 
   const handleConfirmPublish = async () => {
-    await publishLayout();
+    await publishLayout(effectiveDate);
     setShowPublishConfirm(false);
   };
 
@@ -166,9 +191,12 @@ function ManageSeatsPage() {
           {/* HEADER */}
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Manage Seats</h1>
+              <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Manage Spaces</h1>
               <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                Configure seat details, settings and amenities for this layout
+                Configure seats, cabins and conference rooms for this layout
+                {stats && (
+                  <span className="text-gray-400"> · {stats.configured_seats} of {stats.total_seats} configured</span>
+                )}
               </p>
             </div>
             <div className="flex gap-3 items-center">
@@ -182,7 +210,7 @@ function ManageSeatsPage() {
               <button
                 onClick={openPublishConfirm}
                 disabled={!canPublish || publishing}
-                title={!allConfigured ? `Configure all seats before publishing` : undefined}
+                title={!allConfigured ? `Configure all spaces before publishing` : undefined}
                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {publishing ? (
@@ -203,18 +231,26 @@ function ManageSeatsPage() {
             </div>
           )}
 
+          {/* SPACE CATEGORY TABS */}
+          <SpaceCategoryTabs
+            active={activeCategory}
+            counts={categoryCounts}
+            onChange={setActiveCategory}
+            disabled={statsLoading}
+          />
+
           {/* STAT CARDS */}
-          <LayoutStatCards stats={stats} loading={statsLoading} />
+          <SpaceStatCards category={activeCategory} stats={categoryStats} loading={statsLoading} />
 
           {/* FILTERS + VIEW TOGGLE */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
             <div className="min-w-0 flex-1">
               <SeatFiltersBar
                 filters={filters}
-                seatTypes={seatTypes.filter((type): type is string => type !== null)}
                 preferences={preferences}
                 onUpdate={updateFilter}
                 onReset={resetFilters}
+                searchPlaceholder={`Search by ${SPACE_CATEGORY_LABELS[activeCategory].singular.toLowerCase()} code…`}
               />
             </div>
             <div className="flex-shrink-0">
@@ -238,11 +274,12 @@ function ManageSeatsPage() {
                     preferences={preferences}
                     onSeatSave={saveSeat}
                     filteredSeats={filteredSeats}
-                    isFilterActive={hasActiveFilters}
+                    isFilterActive={isMapHighlightActive}
                   />
                 ) : (
                   <SeatTable
                     seats={filteredSeats}
+                    category={activeCategory}
                     preferences={preferences}
                     selected={selected}
                     isAllSelected={isAllSelected}
@@ -289,43 +326,56 @@ function ManageSeatsPage() {
 
       <ConfirmDialog
         open={showPublishConfirm}
-        title={hasUnpublishedEdits ? "Publish pending seat changes?" : "Publish this layout?"}
+        title={hasUnpublishedEdits ? "Publish pending space changes?" : "Publish this layout?"}
         description={
           hasUnpublishedEdits
-            ? "This will publish your recent configuration changes and make them available to users on the selected effective date."
-            : "This will make this layout the live layout for its floor."
+            // This path (PATCH /layout-seats/bulk-configuration) has no
+            // scheduling concept -- it cascades into the live seats table
+            // immediately, regardless of any date. The previous copy here
+            // promised "on the selected effective date", which was never
+            // true; corrected rather than left to mislead admins. If
+            // scheduled seat-config edits are wanted, that needs real
+            // backend support, not just UI copy.
+            ? "This will publish your recent configuration changes and make them available to users immediately."
+            : "This will make this layout the live layout for its floor on the selected effective date."
         }
         confirmLabel={publishing ? "Publishing…" : "Yes, Publish"}
         loading={publishing}
         onConfirm={handleConfirmPublish}
         onClose={() => setShowPublishConfirm(false)}
       >
-        <label htmlFor="publish-effective-date" className="text-[12.5px] font-medium text-gray-600 mb-1.5 block">
-          Effective Date
-        </label>
-        <div className="relative">
-          <CalendarDays
-            size={13}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-          />
-          <input
-            id="publish-effective-date"
-            type="date"
-            min={minEffectiveDateIso()}
-            value={effectiveDate}
-            onChange={(e) => {
-              const value = e.target.value;
-              const min = minEffectiveDateIso();
-              // The `min` attribute only greys out the calendar dropdown and
-              // marks the input :invalid — it does NOT stop a date typed
-              // directly into the MM/DD/YYYY segments from being accepted.
-              // Clamp any manually-typed date earlier than the minimum
-              // instead of letting it through silently.
-              setEffectiveDate(value && value < min ? min : value);
-            }}
-            className="w-full h-9 pl-8 pr-3 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
-          />
-        </div>
+        {!hasUnpublishedEdits && (
+          <>
+            <label htmlFor="publish-effective-date" className="text-[12.5px] font-medium text-gray-600 mb-1.5 block">
+              Effective Date
+            </label>
+            <div className="relative">
+              <CalendarDays
+                size={13}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              />
+              <input
+                id="publish-effective-date"
+                type="date"
+                min={minEffectiveDateIso(minAdvanceDays)}
+                value={effectiveDate}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  const min = minEffectiveDateIso(minAdvanceDays);
+                  // The `min` attribute only greys out the calendar dropdown and
+                  // marks the input :invalid — it does NOT stop a date typed
+                  // directly into the MM/DD/YYYY segments from being accepted.
+                  // Clamp any manually-typed date earlier than the minimum
+                  // instead of letting it through silently -- the backend
+                  // would reject it anyway (see GET /business-rules/layout-policy
+                  // for the real minimum), this just avoids a round-trip.
+                  setEffectiveDate(value && value < min ? min : value);
+                }}
+                className="w-full h-9 pl-8 pr-3 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </>
+        )}
       </ConfirmDialog>
     </div>
   );

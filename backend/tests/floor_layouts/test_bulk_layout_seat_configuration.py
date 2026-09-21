@@ -55,6 +55,7 @@ def _updated_row(mapping_id: str, **overrides) -> dict[str, object]:
         "is_bookable": True,
         "is_reserved": False,
         "amenity_ids": [],
+        "capacity": None,
     }
     base.update(overrides)
     return base
@@ -364,6 +365,73 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
             conn, tenant_id="1", layout_id="100", updated_by_user_id="5"
         )
         self.assertEqual(conn.commits, 1)
+
+
+    def test_capacity_round_trips_and_cascades_into_seats_on_publish(self) -> None:
+        """A bulk edit of several conference rooms' capacity resolves it
+        per seat (own value wins over `defaults`, same as every other
+        field) and, for a PUBLISHED layout, carries it into the
+        `upsert_operational_seats_bulk` payload used to cascade into the
+        live `seats` table."""
+        conn = FakeConnection()
+        payload = BulkLayoutSeatConfigurationUpdateRequest(
+            defaults={"seat_type": "CONFERENCE_ROOM", "capacity": 10},
+            seats=[
+                {"layout_seat_mapping_id": 1},
+                {"layout_seat_mapping_id": 2, "capacity": 20},
+            ],
+        )
+
+        with (
+            patch(
+                "backend.services.location_service.fetch_layout_seat_mappings_by_ids",
+                return_value={"1": _mapping_row("1"), "2": _mapping_row("2")},
+            ),
+            patch(
+                "backend.services.location_service.update_layout_seat_mapping_configurations_bulk",
+                return_value={
+                    "1": _updated_row(
+                        "1", seat_type="CONFERENCE_ROOM", capacity=10
+                    ),
+                    "2": _updated_row(
+                        "2", seat_type="CONFERENCE_ROOM", capacity=20
+                    ),
+                },
+            ) as mock_update,
+            patch(
+                "backend.services.location_service.fetch_floor_layout_by_id",
+                return_value=_published_layout(),
+            ),
+            patch("backend.services.location_service.touch_floor_layout_updated_by"),
+            patch(
+                "backend.services.location_service.upsert_operational_seats_bulk",
+                return_value={
+                    "1": {"seat_id": "501"},
+                    "2": {"seat_id": "502"},
+                },
+            ) as mock_upsert_seats,
+            patch(
+                "backend.services.location_service.replace_seat_amenities_bulk",
+            ),
+        ):
+            responses = update_layout_seat_configurations_bulk(
+                conn,
+                tenant_id="1",
+                payload=payload,
+                current_user=CALLER,
+            )
+
+        entries = mock_update.call_args.kwargs["entries"]
+        self.assertEqual(entries[0]["capacity"], 10)
+        self.assertEqual(entries[1]["capacity"], 20)
+
+        seats_payload = mock_upsert_seats.call_args.kwargs["seats"]
+        capacities_by_mapping = {
+            s["source_layout_mapping_id"]: s["capacity"] for s in seats_payload
+        }
+        self.assertEqual(capacities_by_mapping, {"1": 10, "2": 20})
+
+        self.assertEqual([r.capacity for r in responses], [10, 20])
 
 
 if __name__ == "__main__":

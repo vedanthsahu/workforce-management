@@ -6,7 +6,9 @@ from datetime import date, datetime, time
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+import phonenumbers
+from phonenumbers import NumberParseException, PhoneNumberFormat, PhoneNumberType
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.core.enums import GuestType, GuestVisitModificationReason, VisitPurpose
 from backend.schemas.booking import BookingResponse
@@ -21,11 +23,33 @@ GuestVisitStatus = Literal[
     "MODIFIED",
 ]
 
+
+def _normalize_mobile_phone(value: str | None) -> str | None:
+    """Validate an international mobile number and return canonical E.164."""
+    if value is None or not value.strip():
+        return value
+    try:
+        parsed = phonenumbers.parse(value, None)
+    except NumberParseException as exc:
+        raise ValueError("Enter a valid mobile number with a country code") from exc
+
+    number_type = phonenumbers.number_type(parsed)
+    if not phonenumbers.is_valid_number(parsed) or number_type not in {
+        PhoneNumberType.MOBILE,
+        PhoneNumberType.FIXED_LINE_OR_MOBILE,
+    }:
+        raise ValueError("Enter a valid mobile number for the selected country")
+
+    return phonenumbers.format_number(parsed, PhoneNumberFormat.E164)
+
+
 class CreateGuestRequest(BaseModel):
     full_name: str = Field(min_length=1, max_length=255)
     email: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=100)
     organization: str | None = Field(default=None, max_length=255)
+
+    _validate_phone = field_validator("phone")(_normalize_mobile_phone)
 
 
 class UpdateGuestRequest(BaseModel):
@@ -33,6 +57,8 @@ class UpdateGuestRequest(BaseModel):
     email: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=100)
     organization: str | None = Field(default=None, max_length=255)
+
+    _validate_phone = field_validator("phone")(_normalize_mobile_phone)
 
 
 GuestStatus = Literal["ACTIVE", "INACTIVE"]
