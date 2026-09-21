@@ -87,7 +87,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
     {
       title: "Blocked Seats",
       value: data?.blocked_seats ?? "-",
-      subtitle: `Unavailable today`,
+      subtitle: `Active blocks for ${formattedSelectedDate}`,
       icon: Ban,
       accent: "purple" as Accent,
       href: "/admin/blocked-seats",

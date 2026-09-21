@@ -183,12 +183,12 @@ export default function BlockedSeatActionPanel({
           <button onClick={onClose} aria-label="Close"><X size={20} /></button>
         </header>
 
-        <div className="flex-1 space-y-5 overflow-y-auto p-5">
-          <section className="rounded-xl border border-gray-200 p-4">
+        <div className={`flex-1 overflow-y-auto ${action === "history" ? "space-y-3 p-4" : "space-y-5 p-5"}`}>
+          <section className={`rounded-xl border border-gray-200 ${action === "history" ? "p-3" : "p-4"}`}>
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="font-semibold text-gray-900">{row.site_name}</p>
-                <p className="mt-1 text-sm text-gray-500">{row.building_name} · {row.floor_name}</p>
+                <p className={`${action === "history" ? "text-sm" : ""} font-semibold text-gray-900`}>{row.site_name}</p>
+                <p className={`${action === "history" ? "mt-0.5 text-xs" : "mt-1 text-sm"} text-gray-500`}>{row.building_name} · {row.floor_name}</p>
               </div>
               <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[row.display_status]}`}>
                 {STATUS_LABELS[row.display_status]}
@@ -217,6 +217,29 @@ export default function BlockedSeatActionPanel({
                 <textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} className="mt-1.5 min-h-28 w-full rounded-lg border border-gray-200 p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
               </label>
             </div>
+          ) : action === "history" ? (
+            <dl className="grid grid-cols-2 gap-x-5 gap-y-3 rounded-xl border border-gray-200 p-3 text-xs">
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Block Type</dt>
+                <dd className="mt-0.5 font-medium text-gray-800">{row.block_type.replaceAll("_", " ")}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Block Period</dt>
+                <dd className="mt-0.5 font-medium text-gray-800">{row.blocked_from} – {row.blocked_to}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Blocked By</dt>
+                <dd className="mt-0.5 font-medium text-gray-800">{row.blocked_by.name ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Created</dt>
+                <dd className="mt-0.5 font-medium text-gray-800">{new Date(row.created_at).toLocaleString()}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Reason</dt>
+                <dd className="mt-0.5 break-words font-medium text-gray-800 [overflow-wrap:anywhere]">{row.reason}</dd>
+              </div>
+            </dl>
           ) : (
             <dl className="grid grid-cols-[130px_1fr] gap-x-4 gap-y-3 rounded-xl border border-gray-200 p-4 text-sm">
               <dt className="text-gray-500">Block Type</dt><dd>{row.block_type.replaceAll("_", " ")}</dd>
@@ -228,17 +251,24 @@ export default function BlockedSeatActionPanel({
           )}
 
           {action === "history" && (
-            <section>
-              <h3 className="mb-3 text-sm font-bold text-gray-900">Audit History</h3>
+            <section className="min-h-[360px] rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h3 className="text-base font-bold text-gray-900">Audit History</h3>
+                {!loadingHistory && !error && (
+                  <span className="rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-700">
+                    {history.length} {history.length === 1 ? "event" : "events"}
+                  </span>
+                )}
+              </div>
               {loadingHistory ? (
                 <p className="text-sm text-gray-500">Loading audit history…</p>
               ) : error ? null : history.length ? (
-                <ol className="space-y-4 border-l-2 border-indigo-100 pl-4">
+                <ol className="space-y-6 border-l-2 border-indigo-200 pl-5">
                   {history.map((item) => (
                     <li key={item.id} className="relative">
-                      <span className="absolute -left-[21px] top-1 size-2.5 rounded-full bg-indigo-600" />
-                      <p className="text-sm font-semibold text-gray-900">{historyLabel(item.action)}</p>
-                      <p className="mt-0.5 text-xs text-gray-500">
+                      <span className="absolute -left-[26px] top-1 size-3 rounded-full border-2 border-white bg-indigo-600 shadow-sm" />
+                      <p className="text-[15px] font-semibold text-gray-900">{historyLabel(item.action)}</p>
+                      <p className="mt-1 text-xs text-gray-500">
                         {item.actor_name ?? item.actor_email ?? "System"} · {new Date(item.occurred_at).toLocaleString()}
                       </p>
                       {!!item.changed_fields?.length && <p className="mt-1 text-xs text-gray-500">Changed: {item.changed_fields.join(", ")}</p>}

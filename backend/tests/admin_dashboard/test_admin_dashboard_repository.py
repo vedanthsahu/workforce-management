@@ -92,6 +92,11 @@ class AdminDashboardRepositoryTests(unittest.TestCase):
         self.assertIn("guest_visit_booking_with_seat_today", sql)
         self.assertIn("SELECT DISTINCT b.seat_id", sql)
         self.assertIn("b.seat_id IS NOT NULL", sql)
+        self.assertIn("SELECT COUNT(*) AS blocked_seats", sql)
+        blocked_count_sql = sql.split("blocked_seat_counts AS (", 1)[1].split(
+            "),\n\n", 1
+        )[0]
+        self.assertNotIn("JOIN bookable_seats AS bks", blocked_count_sql)
         self.assertIn("blocked_seats AS blocked_seats_today", sql)
         self.assertEqual(params["tenant_id"], "1")
         self.assertEqual(result["booked_today"], 3)
