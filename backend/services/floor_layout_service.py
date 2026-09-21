@@ -390,7 +390,7 @@ def _effective_instant_for_date(effective_date: date, tz_name: str | None) -> da
     floor, not midnight UTC."""
     naive_midnight = datetime.combine(effective_date, time.min)
     if not tz_name:
-        return naive_midnight.replace(tzinfo=ZoneInfo("UTC"))
+        return naive_midnight.replace(tzinfo=UTC)
     return naive_midnight.replace(tzinfo=ZoneInfo(tz_name))
 
 

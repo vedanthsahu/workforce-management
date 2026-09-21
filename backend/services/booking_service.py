@@ -1395,42 +1395,34 @@ def get_available_seats_by_range(
     normalized_amenity_ids = sorted(set(amenity_ids or []))
 
     try:
+        # Reject unauthorized guest-availability probes before performing
+        # any location lookups. Besides avoiding unnecessary database work,
+        # this prevents callers from inferring whether a floor exists.
+        if (
+            not calendar_mode
+            and is_guest_booking
+            and (current_user is None or not _can_book_guest(current_user))
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "guest_booking_not_allowed",
+                    "message": (
+                        "Only FACILITATOR and Tenant Admin users "
+                        "can check guest booking availability."
+                    ),
+                },
+            )
+
         # fetch_available_seats_by_range's own query INNER JOINs floors/
         # buildings/sites on status = 'ACTIVE', so an inactive office
         # silently comes back as zero seats — indistinguishable from "no
         # availability for these dates" (the check just below). Checking the
         # site's status explicitly here gives that case its own accurate
         # message instead of the generic "no seats available" one.
-        floor = fetch_floor_by_id(conn, tenant_id=tenant_id, floor_id=floor_id)
-        if floor and floor.get("site_id"):
-            site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=floor["site_id"])
-            if site and site.get("status") != "ACTIVE":
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail={
-                        "code": "office_inactive",
-                        "message": (
-                            "This office is currently inactive and unavailable "
-                            "for booking. Please select a different office."
-                        ),
-                    },
-                )
-
         # calendar_mode: caller only wants raw seat status (no booking-eligibility checks)
         if not calendar_mode:
             if is_guest_booking:
-                if current_user is None or not _can_book_guest(current_user):
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail={
-                            "code": "guest_booking_not_allowed",
-                            "message": (
-                                "Only FACILITATOR and Tenant Admin users "
-                                "can check guest booking availability."
-                            ),
-                        },
-                    )
-
                 if booked_for_guest_id is None:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
@@ -1495,6 +1487,25 @@ def get_available_seats_by_range(
                     _raise_user_booking_conflict(
                         "The booking owner already has an active booking in the requested date range.",
                     )
+
+        # The availability query joins only ACTIVE locations, so explicitly
+        # distinguish an inactive office from a floor with no free seats.
+        # Eligibility checks run first to avoid leaking location state and
+        # to skip this lookup when the booking subject already conflicts.
+        floor = fetch_floor_by_id(conn, tenant_id=tenant_id, floor_id=floor_id)
+        if floor and floor.get("site_id"):
+            site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=floor["site_id"])
+            if site and site.get("status") != "ACTIVE":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "office_inactive",
+                        "message": (
+                            "This office is currently inactive and unavailable "
+                            "for booking. Please select a different office."
+                        ),
+                    },
+                )
 
         seats = fetch_available_seats_by_range(
                 conn,
