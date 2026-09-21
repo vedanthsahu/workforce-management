@@ -29,6 +29,8 @@ export interface CreateFloorPayload {
 export interface UpdateFloorPayload {
   floor_name: string;
   status: string;
+  reactivate_building?: boolean;
+  reactivate_office?: boolean;
 }
 
 export interface FloorSite {

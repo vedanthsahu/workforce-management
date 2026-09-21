@@ -24,17 +24,24 @@ export const floorService = {
     return data;
   },
 
-  async getFloors(building_id: number): Promise<Floor[]> {
-    const { data } = await axiosInstance.get(`/buildings/${building_id}/floors`);
+  async getFloors(building_id: number, status?: string): Promise<Floor[]> {
+    const { data } = await axiosInstance.get(`/buildings/${building_id}/floors`, {
+      params: { status: status || undefined },
+    });
 
     return data;
   },
 
-  async getAllFloors(params?: { site_id?: string; building_id?: string }): Promise<Floor[]> {
+  async getAllFloors(params?: {
+    site_id?: string;
+    building_id?: string;
+    status?: string;
+  }): Promise<Floor[]> {
     const { data } = await axiosInstance.get("/floors", {
       params: {
         site_id: params?.site_id || undefined,
         building_id: params?.building_id || undefined,
+        status: params?.status || undefined,
       },
     });
 

@@ -42,4 +42,7 @@ export interface UpdateBuildingPayload {
   building_name: string;
 
   status: "ACTIVE" | "INACTIVE";
+
+  reactivate_floor_ids?: number[];
+  reactivate_office?: boolean;
 }
