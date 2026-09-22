@@ -12,6 +12,7 @@ import { useBlockedSeatLocations } from "../hooks/useBlockedSeatLocations";
 import { blockedSeatsService } from "../services/blockedSeatsService";
 import type {
   BlockCategory,
+  BlockListScope,
   BlockedSeat,
   BlockedSeatFilters,
   BlockedSeatListResponse,
@@ -53,6 +54,7 @@ const apiErrorMessage = (error: unknown, fallback: string) =>
 export default function BlockedSeatsPage() {
   const router = useRouter();
   const [category, setCategory] = useState<BlockCategory>("active");
+  const [listScope, setListScope] = useState<BlockListScope>("active");
   const [filters, setFilters] = useState<BlockedSeatFilters>(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] =
     useState<BlockedSeatFilters>(EMPTY_FILTERS);
@@ -108,7 +110,7 @@ export default function BlockedSeatsPage() {
   useEffect(() => {
     let cancelled = false;
     const cached = blockedSeatsService.getCachedList(
-      category,
+      listScope,
       appliedFilters,
       page,
     );
@@ -119,7 +121,7 @@ export default function BlockedSeatsPage() {
       cancelled = true;
     };
     blockedSeatsService
-      .list(category, appliedFilters, page)
+      .list(listScope, appliedFilters, page)
       .then((data) => {
         if (!cancelled) setResponse(data);
       })
@@ -135,7 +137,7 @@ export default function BlockedSeatsPage() {
     return () => {
       cancelled = true;
     };
-  }, [category, appliedFilters, page, refreshKey]);
+  }, [listScope, appliedFilters, page, refreshKey]);
   useEffect(() => {
     if (loading || error) return;
     void Promise.allSettled(
@@ -226,9 +228,10 @@ export default function BlockedSeatsPage() {
               icon={card.icon}
               iconClass={card.iconClass}
               count={summary[card.summaryKey]}
-              selected={category === card.id}
+              selected={listScope !== "all" && category === card.id}
               onClick={() => {
                 setCategory(card.id);
+                setListScope(card.id);
                 setPage(1);
               }}
             />
@@ -247,10 +250,12 @@ export default function BlockedSeatsPage() {
           onClear={() => {
             setFilters(EMPTY_FILTERS);
             setAppliedFilters(EMPTY_FILTERS);
+            setListScope(category);
             setPage(1);
           }}
           onSearch={() => {
             setAppliedFilters(filters);
+            setListScope("all");
             setPage(1);
           }}
         />
@@ -260,7 +265,7 @@ export default function BlockedSeatsPage() {
           </p>
         )}
         <BlockedSeatsTable
-          title={CATEGORY_LABELS[category]}
+          title={listScope === "all" ? "Filtered Blocks" : CATEGORY_LABELS[category]}
           rows={response.items}
           total={response.pagination.total}
           page={page}
