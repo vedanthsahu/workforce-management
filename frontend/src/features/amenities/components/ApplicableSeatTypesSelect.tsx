@@ -45,7 +45,8 @@ export default function ApplicableSeatTypesSelect({ value, onChange, className }
         render={
           <div
             className={cn(
-              "w-full min-h-9 px-2.5 py-1 flex flex-wrap items-center gap-1.5 bg-white border border-gray-200 rounded-lg text-sm text-left focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500",
+              // Same visual chrome as the Status <select> (and <Input>) on this form.
+              "w-full min-h-9 px-2.5 py-1 flex flex-wrap items-center gap-1.5 bg-transparent border border-input rounded-md shadow-xs text-sm text-left cursor-pointer transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
               className
             )}
           >
@@ -88,7 +89,7 @@ export default function ApplicableSeatTypesSelect({ value, onChange, className }
               key={seatType}
               type="button"
               onClick={() => toggle(seatType)}
-              className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-gray-900 hover:bg-gray-600 hover:text-white"
+              className="w-full flex items-center justify-between gap-2 px-3 py-1 text-sm text-gray-900 hover:bg-gray-600 hover:text-white"
             >
               {labelFor(seatType)}
               {selected && <Check size={14} />}

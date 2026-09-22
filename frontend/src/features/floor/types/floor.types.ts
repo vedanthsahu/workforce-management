@@ -41,6 +41,7 @@ export interface FloorSite {
 
 export interface FloorBuilding {
   building_id: string;
+  building_code: string;
   building_name: string;
   status: "ACTIVE" | "INACTIVE";
 }

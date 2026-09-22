@@ -1,10 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 import { useState } from "react";
 import axios from "axios";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useBuildingForm } from "../hooks/useBuildingForm";
 
 export default function AddBuildingForm() {
@@ -43,25 +45,20 @@ export default function AddBuildingForm() {
     }
   };
 
-  const inputClass =
-    "w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-150";
-
+  // Same visual chrome as <Input> (components/ui/input.tsx) -- kept as a class
+  // string instead of the component itself because this is a native <select>.
   const selectClass =
-    "w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-150 cursor-pointer";
+    "h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs transition-[color,box-shadow] outline-none cursor-pointer focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50";
 
-  const labelClass =
-    "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
+  // Shared field-label look across all "Add" forms (Office, Building, Floor, Amenity).
+  const labelClass = "text-xs font-semibold text-gray-500 uppercase tracking-wide";
+
+  // Read-only, derived fields (office/building/floor codes) share this look so
+  // it's visually obvious they can't be typed into.
+  const readOnlyInputClass = "bg-gray-50 text-gray-500 cursor-not-allowed";
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc]">
-
-      {/* <Link
-        href="/admin/building"
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 mb-5 transition-colors"
-      >
-        <ArrowLeft size={14} />
-        Back to Buildings
-      </Link> */}
+    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 bg-[#f7f8fa]">
 
       {/* ERROR BANNER */}
       {errorMessage && (
@@ -79,38 +76,36 @@ export default function AddBuildingForm() {
         </div>
 
         <div className="flex items-center gap-2 sm:shrink-0">
-          <Link
-            href="/admin/building"
-            className="h-9 px-4 text-sm font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all inline-flex items-center"
+          <Button
+            variant="outline"
+            className="h-9 px-4 rounded-lg"
+            onClick={() => router.push("/admin/building")}
           >
             Cancel
-          </Link>
-          <button
+          </Button>
+          <Button
+            className="h-9 px-4 rounded-lg"
             onClick={handleSave}
             onMouseEnter={() => router.prefetch("/admin/building")}
             disabled={!isFormValid || loading}
-            className={`h-9 px-4 text-sm font-medium rounded-lg text-white transition-all ${isFormValid && !loading
-              ? "bg-blue-600 hover:bg-blue-700 shadow-sm shadow-blue-200"
-              : "bg-gray-300 cursor-not-allowed"
-              }`}
           >
             {loading ? "Saving..." : "Save Building"}
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* CARD */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
         <div className="px-5 py-4 border-b border-gray-100">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Basic Information</p>
         </div>
 
         <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-          <div>
-            <label className={labelClass}>
+          <div className="space-y-1.5">
+            <Label className={labelClass}>
               Office Name <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
-            </label>
+            </Label>
             <select
               value={formData.site_id || ""}
               onChange={(e) => {
@@ -124,42 +119,38 @@ export default function AddBuildingForm() {
                 <option key={site.site_id} value={site.site_id}>{site.site_name}</option>
               ))}
             </select>
-            <p className="text-[11px] text-gray-400 mt-1">Select the office where this building belongs</p>
+            <p className="text-[11px] text-gray-400">Select the office where this building belongs</p>
           </div>
 
-          <div>
-            <label className={labelClass}>
-              Building Code <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
-            </label>
-            <input
-              value={formData.building_code}
-              onChange={(e) => {
-                setErrorMessage("");
-                handleChange("building_code", e.target.value);
-              }}
-              placeholder="e.g. HYD-BEG-ROX"
-              className={inputClass}
-            />
-            <p className="text-[11px] text-gray-400 mt-1">Unique code for this building</p>
-          </div>
-
-          <div>
-            <label className={labelClass}>
+          <div className="space-y-1.5">
+            <Label className={labelClass}>
               Building Name <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
-            </label>
-            <input
+            </Label>
+            <Input
               value={formData.building_name}
               onChange={(e) => {
                 setErrorMessage("");
                 handleChange("building_name", e.target.value);
               }}
               placeholder="e.g. Roxana Towers"
-              className={inputClass}
             />
           </div>
 
-          <div>
-            <label className={labelClass}>Status</label>
+          <div className="space-y-1.5">
+            <Label className={labelClass}>
+              Building Code <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
+            </Label>
+            <Input
+              value={formData.building_code}
+              readOnly
+              placeholder="Auto-generated from office + building name"
+              className={readOnlyInputClass}
+            />
+            <p className="text-[11px] text-gray-400">Auto-generated from the office and building name</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className={labelClass}>Status</Label>
             <select
               value={formData.status}
               onChange={(e) => handleChange("status", e.target.value)}
