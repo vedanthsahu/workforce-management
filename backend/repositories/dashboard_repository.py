@@ -597,6 +597,9 @@ def _fetch_employee_activity_rows(
 
                 b.booking_status AS activity_status,
 
+                b.modified_from_booking_id::text AS modified_from_booking_id,
+                NULL::text AS modified_from_guest_visit_id,
+
                 b.booking_date AS activity_date,
 
                 booked_by.id::text AS booked_by_id,
@@ -672,6 +675,11 @@ def _fetch_employee_activity_rows(
             WHERE b.tenant_id = %(tenant_id)s
 
               AND b.booking_type = 'EMPLOYEE'
+
+              -- A superseded booking (replaced by a reschedule/modify) must
+              -- not show up as its own separate activity row -- only the
+              -- active booking it was replaced by should appear.
+              AND b.booking_status <> 'MODIFIED'
 
               AND (%(activity_date)s IS NULL
                 OR b.booking_date = %(activity_date)s)
@@ -757,6 +765,9 @@ def _fetch_guest_activity_rows(
 
                 gv.visit_status AS activity_status,
 
+                b.modified_from_booking_id::text AS modified_from_booking_id,
+                gv.modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
+
                 COALESCE(b.booking_date, gv.visit_date) AS activity_date,
 
                 booked_by.id::text AS booked_by_id,
@@ -778,6 +789,9 @@ def _fetch_guest_activity_rows(
                 gv.id::text AS guest_visit_id,
 
                 gv.visit_status AS activity_status,
+
+                b.modified_from_booking_id::text AS modified_from_booking_id,
+                gv.modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
 
                 COALESCE(b.booking_date, gv.visit_date) AS activity_date,
 
@@ -872,7 +886,11 @@ def _fetch_guest_activity_rows(
 
             WHERE gv.tenant_id = %(tenant_id)s
 
-            
+            -- A superseded guest visit (replaced by a reschedule/modify)
+            -- must not show up as its own separate activity row -- only
+            -- the active visit it was replaced by should appear.
+            AND gv.visit_status <> 'MODIFIED'
+
             AND (%(activity_date)s IS NULL
                 OR COALESCE(b.booking_date, gv.visit_date) = %(activity_date)s)
               AND (

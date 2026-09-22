@@ -1476,6 +1476,7 @@ def modify_guest_booking(
             seat=target_seat,
             booking_date=payload.booking_date,
             modified_from_booking_id=booking_id,
+            updated_by_user_id=_current_user_id(current_user),
         )
         recalculate_guest_visit_requires_seat(
             conn,
@@ -2945,6 +2946,7 @@ def execute_guest_visit_workflow(
                 seat=seat,
                 booking_date=payload.visit_date,
                 modified_from_booking_id=old_booking_id,
+                updated_by_user_id=_current_user_id(current_user),
             )
             recalculate_guest_visit_requires_seat(
                 conn,
