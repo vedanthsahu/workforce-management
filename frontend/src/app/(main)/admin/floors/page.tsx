@@ -14,6 +14,7 @@ import EditFloorModal from "@/features/floor/components/EditFloorModal";
 import { useFloors } from "@/features/floor/hooks/useFloors";
 import { Floor } from "@/features/floor/types/floor.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
+import { bestSearchMatchRank, searchMatchRank } from "@/lib/searchRank";
 
 function FloorsPage() {
   const {
@@ -66,19 +67,24 @@ function FloorsPage() {
   };
 
   const filteredFloors = useMemo(() => {
-    const filtered = floors
-      .filter(
-        (floor) =>
-          floor.floor_name?.toLowerCase().includes(search.toLowerCase()) ||
-          floor.floor_code?.toLowerCase().includes(search.toLowerCase())
-      )
-      .filter((floor) => !statusFilter || floor.status === statusFilter);
+    const ranked = floors
+      .map((floor) => ({
+        floor,
+        rank: bestSearchMatchRank(
+          searchMatchRank(floor.floor_name || "", search),
+          searchMatchRank(floor.floor_code || "", search),
+        ),
+      }))
+      .filter((x): x is { floor: Floor; rank: number } => x.rank !== null)
+      .filter((x) => !statusFilter || x.floor.status === statusFilter)
+      .sort((a, b) => a.rank - b.rank)
+      .map((x) => x.floor);
 
-    if (!pinnedFloorId) return filtered;
+    if (!pinnedFloorId) return ranked;
 
     return [
-      ...filtered.filter((f) => String(f.floor_id) === pinnedFloorId),
-      ...filtered.filter((f) => String(f.floor_id) !== pinnedFloorId),
+      ...ranked.filter((f) => String(f.floor_id) === pinnedFloorId),
+      ...ranked.filter((f) => String(f.floor_id) !== pinnedFloorId),
     ];
   }, [floors, search, statusFilter, pinnedFloorId]);
 

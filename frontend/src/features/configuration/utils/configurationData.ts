@@ -168,31 +168,26 @@ export const CONFIGURATION_SECTIONS: ConfigurationSection[] = [
   {
     id: "activity",
     title: "Activity",
-    subtitle: "Control the data displayed in the Activity table on the Admin Dashboard.",
     itemIds: ["activity-table-record-count"],
   },
   {
     id: "layout-management",
     title: "Layout Management",
-    subtitle: "Configure layout related settings and publishing rules.",
     itemIds: ["new-layout-publishing"],
   },
   {
     id: "employee-booking",
     title: "Employee Booking",
-    subtitle: "Configure how far in advance employees can book.",
     itemIds: ["booking-calendar-employee"],
   },
   {
     id: "visitor-booking",
     title: "Visitor Booking",
-    subtitle: "Configure how far in advance hosts can book for guests.",
     itemIds: ["visitor-booking"],
   },
   {
     id: "layout-visibility",
     title: "Layout Visibility",
-    subtitle: "Configure how long layouts with different statuses remain available in the UI before being automatically hidden.",
     itemIds: ["layout-visibility"],
   },
 ];

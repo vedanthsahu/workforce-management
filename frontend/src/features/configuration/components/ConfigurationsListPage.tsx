@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ChevronDown, Info, X } from "lucide-react";
+import { CheckCircle2, Info, X } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ConfigurationSkeleton } from "./ConfigurationSkeleton";
 import { CONFIGURATION_SECTIONS, INITIAL_CONFIGURATIONS } from "../utils/configurationData";
@@ -29,17 +29,6 @@ const BACKED_ITEM_IDS = new Set([
 
 function withFieldValue(fields: ConfigurationField[], key: string, value: number): ConfigurationField[] {
   return fields.map((f) => (f.key === key ? { ...f, value } : f));
-}
-
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("en-US", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 function draftKey(itemId: string, fieldKey: string): string {
@@ -74,7 +63,7 @@ function SettingRow({
   readOnly?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-6 py-4">
+    <div className="flex items-center justify-between gap-6 py-4 px-2 -mx-2 rounded-lg transition-colors hover:bg-gray-50">
       <div className="min-w-0">
         <p className="text-sm font-normal text-black">
           {label}
@@ -108,7 +97,6 @@ export default function ConfigurationsListPage() {
   // comparison that could false-negative if someone types back to the
   // original number.
   const [draft, setDraft] = useState<Record<string, number>>({});
-  const [detailsOpen, setDetailsOpen] = useState(true);
   const [showConfirm, setShowConfirm] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -275,14 +263,6 @@ export default function ConfigurationsListPage() {
     }
   };
 
-  const mostRecentUpdate = useMemo(
-    () =>
-      configurations.reduce((latest, item) =>
-        new Date(item.lastUpdatedAt) > new Date(latest.lastUpdatedAt) ? item : latest
-      ),
-    [configurations]
-  );
-
   if (loading) {
     return <ConfigurationSkeleton />;
   }
@@ -393,23 +373,6 @@ export default function ConfigurationsListPage() {
               system based on the defined rules.
             </p>
           </div>
-        </div>
-
-        {/* UPDATE DETAILS */}
-        <div>
-          <button
-            type="button"
-            onClick={() => setDetailsOpen((o) => !o)}
-            className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            <ChevronDown size={14} className={`transition-transform ${detailsOpen ? "" : "-rotate-90"}`} />
-            Update details
-          </button>
-          {detailsOpen && (
-            <p className="text-xs text-black mt-1.5 ml-[21px]">
-              All settings last updated {formatDateTime(mostRecentUpdate.lastUpdatedAt)} by {mostRecentUpdate.lastUpdatedBy}.
-            </p>
-          )}
         </div>
       </div>
 
