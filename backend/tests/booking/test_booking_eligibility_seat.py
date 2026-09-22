@@ -46,7 +46,13 @@ class BookingEligibilitySeatTests(unittest.TestCase):
     the seat itself, on top of the pre-existing user/guest availability
     checks, which must keep working exactly as before."""
 
-    def _run(self, payload: BookingEligibilityRequest, **patches):
+    def _run(
+        self,
+        payload: BookingEligibilityRequest,
+        *,
+        current_user: dict[str, str] = CALLER,
+        **patches,
+    ):
         defaults = {
             "backend.services.booking_service._resolve_booked_for_user": patch(
                 "backend.services.booking_service._resolve_booked_for_user",
@@ -86,7 +92,7 @@ class BookingEligibilitySeatTests(unittest.TestCase):
             return check_booking_eligibility(
                 conn=object(),
                 tenant_id="1",
-                current_user=CALLER,
+                current_user=current_user,
                 payload=payload,
             )
 
@@ -163,6 +169,24 @@ class BookingEligibilitySeatTests(unittest.TestCase):
             )
         self.assertEqual(context.exception.status_code, 400)
         self.assertEqual(context.exception.detail["code"], "booking_seat_not_bookable")
+
+    def test_tenant_admin_can_use_active_non_bookable_seat(self) -> None:
+        result = self._run(
+            _payload(),
+            current_user={
+                "tenant_id": "1",
+                "user_id": "7",
+                "role_name": "TENANT_ADMIN",
+            },
+            **{
+                "backend.services.booking_service.fetch_seat_configuration": patch(
+                    "backend.services.booking_service.fetch_seat_configuration",
+                    return_value={**ACTIVE_BOOKABLE_SEAT, "is_bookable": False},
+                )
+            },
+        )
+
+        self.assertTrue(result.eligible)
 
     def test_blocked_seat_raises_409(self) -> None:
         with self.assertRaises(HTTPException) as context:

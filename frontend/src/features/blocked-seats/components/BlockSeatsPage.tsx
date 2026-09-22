@@ -84,9 +84,8 @@ export default function BlockSeatsPage() {
     [buildingId, setBuildingId] = useState(""),
     [floorId, setFloorId] = useState("");
   const [from, setFrom] = useState(today()),
-    [to, setTo] = useState(today()),
-    [reason, setReason] = useState("");
-  const [blockType, setBlockType] = useState<BlockType>("MAINTENANCE"),
+    [to, setTo] = useState(today());
+  const [blockType, setBlockType] = useState<BlockType>("Operational block"),
     [seats, setSeats] = useState<SeatOption[]>([]),
     [selected, setSelected] = useState<string[]>([]),
     [bookings, setBookings] = useState<BlockedSeatConflict[]>([]);
@@ -325,8 +324,8 @@ export default function BlockSeatsPage() {
           capacity: resource.capacity,
           hasBooking: resource.has_booking,
           hasBlock: resource.has_block,
-          isUnavailable: !resource.is_active || !resource.is_bookable,
-          selectable: resource.is_active && resource.is_bookable && !resource.has_block,
+          isUnavailable: !resource.is_active,
+          selectable: resource.is_active && !resource.has_block,
         })),
       );
       setConflictPage(1);
@@ -399,7 +398,7 @@ export default function BlockSeatsPage() {
     }
   };
   const submit = async () => {
-    if (loading || unresolvedConflictCount || !selected.length || !reason.trim()) return;
+    if (loading || unresolvedConflictCount || !selected.length) return;
     setSaving(true);
     try {
       await blockedSeatsService.create({
@@ -407,7 +406,6 @@ export default function BlockSeatsPage() {
         block_type: blockType,
         blocked_from: from,
         blocked_to: to,
-        reason: reason.trim(),
       });
       router.push("/admin/blocked-seats");
     } catch (requestError: unknown) {
@@ -592,14 +590,6 @@ export default function BlockSeatsPage() {
               )}
             </button>
           </div>
-          <label className="mt-4 block text-[11px] font-medium text-gray-500">
-            Reason *
-            <textarea
-              className="mt-1.5 min-h-16 w-full rounded-lg border border-gray-200 bg-white p-3 text-[12.5px] text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 sm:text-[13px]"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-            />
-          </label>
           {invalid && (
             <p className="text-xs text-red-600">
               Block To must be on or after Block From.
@@ -977,7 +967,6 @@ export default function BlockSeatsPage() {
                 loading ||
                 loadingConflictSeatIds.length > 0 ||
                 !!unresolvedConflictCount ||
-                !reason.trim() ||
                 saving
               }
               onClick={() => void submit()}

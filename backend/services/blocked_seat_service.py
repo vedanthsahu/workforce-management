@@ -48,6 +48,12 @@ from backend.schemas.blocked_seat import (
 )
 from backend.schemas.pagination import PaginationMetadata
 
+BLOCK_TYPE_REASONS = {
+    "Operational block": "Operational block",
+    "Restricted": "Restricted",
+    "Exclusive": "Exclusive",
+}
+
 
 def _response(row: dict[str, Any]) -> BlockedSeatResponse:
     return BlockedSeatResponse(
@@ -344,14 +350,14 @@ def create_blocked_seats(
         unavailable = [
             seat["seat_code"]
             for seat in seats
-            if seat["status"] != "ACTIVE" or not seat["is_bookable"]
+            if seat["status"] != "ACTIVE"
         ]
         if unavailable:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
-                    "code": "seat_not_bookable",
-                    "message": f"Seats are not active and bookable: {', '.join(unavailable)}.",
+                    "code": "seat_inactive",
+                    "message": f"Seats are not active: {', '.join(unavailable)}.",
                 },
             )
         booking_conflicts = fetch_conflicting_booking_seat_codes(
@@ -379,7 +385,7 @@ def create_blocked_seats(
             block_type=payload.block_type,
             blocked_from=payload.blocked_from,
             blocked_to=payload.blocked_to,
-            reason=payload.reason,
+            reason=BLOCK_TYPE_REASONS[payload.block_type],
             blocked_by_user_id=str(current_user["user_id"]),
         )
         conn.commit()
@@ -438,7 +444,10 @@ def create_blocked_seats(
         current_user=current_user,
         resource_type="blocked_seat",
         resource_id=",".join(block_ids),
-        new_values=payload.model_dump(mode="json"),
+        new_values={
+            **payload.model_dump(mode="json"),
+            "reason": BLOCK_TYPE_REASONS[payload.block_type],
+        },
         metadata={"seat_ids": seat_ids, "block_ids": block_ids},
     )
     return CreateBlockedSeatsResponse(
@@ -457,7 +466,13 @@ def cancel_seat_block(
     current_user: dict[str, Any],
 ) -> CancelBlockedSeatResponse:
     try:
-        old = cancel_blocked_seat(conn, tenant_id=tenant_id, block_id=block_id)
+        existing = get_blocked_seat(conn, tenant_id=tenant_id, block_id=block_id)
+        old = cancel_blocked_seat(
+            conn,
+            tenant_id=tenant_id,
+            block_id=block_id,
+            reason=reason,
+        )
         if old is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -487,11 +502,16 @@ def cancel_seat_block(
         resource_type="blocked_seat",
         resource_id=block_id,
         old_values={
-            key: value.isoformat() if hasattr(value, "isoformat") else value
-            for key, value in old.items()
+            "block_id": existing.block_id,
+            "seat_id": existing.seat_id,
+            "blocked_from": existing.blocked_from.isoformat(),
+            "blocked_to": existing.blocked_to.isoformat(),
+            "block_type": existing.block_type,
+            "reason": existing.reason,
         },
         new_values={"status": "CANCELLED", "reason": reason},
-        changed_fields=["status"],
+        changed_fields=["status"]
+        + (["reason"] if existing.reason != reason else []),
     )
     return CancelBlockedSeatResponse(
         message="Seat block cancelled successfully.",
@@ -521,7 +541,7 @@ def update_seat_block(
     blocked_from = payload.blocked_from or existing.blocked_from
     blocked_to = payload.blocked_to or existing.blocked_to
     block_type = payload.block_type or existing.block_type
-    reason = payload.reason or existing.reason
+    reason = payload.reason
     if blocked_to < blocked_from:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

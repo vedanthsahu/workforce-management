@@ -121,6 +121,7 @@ from backend.schemas.pagination import PaginationMetadata
 from backend.services.booking_service import (
     GUEST_OPERATION_ROLES,
     _apply_modified_display_status,
+    _can_use_non_bookable_seat,
     _display_cancellation_reason,
     _normalize_cancellation_reason,
     _user_role,
@@ -335,6 +336,7 @@ def _resolve_seat(
     floor_id: str,
     seat_id: str,
     booking_date: date,
+    current_user: dict[str, Any],
 ) -> dict[str, Any]:
     seat = fetch_seat_for_booking(
         conn,
@@ -361,7 +363,7 @@ def _resolve_seat(
                 "message": "Bookings can only target ACTIVE seats.",
             },
         )
-    if seat.get("is_bookable") is not True:
+    if seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(current_user):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -1052,6 +1054,7 @@ def create_guest_booking(
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
             booking_date=payload.visit_date,
+            current_user=current_user,
         )
 
         # Same seat/date race as employee bookings -- no DB constraint
@@ -1413,6 +1416,7 @@ def modify_guest_booking(
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
             booking_date=payload.booking_date,
+            current_user=current_user,
         )
 
         acquire_booking_slot_locks(
@@ -2113,6 +2117,7 @@ def create_booking_for_existing_guest_visit(
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
             booking_date=visit["visit_date"],
+            current_user=current_user,
         )
 
         if has_active_booking_conflict(
@@ -2120,6 +2125,7 @@ def create_booking_for_existing_guest_visit(
             tenant_id=tenant_id,
             seat_id=str(payload.seat_id),
             booking_date=visit["visit_date"],
+            current_user=current_user,
         ):
             _raise_seat_booking_conflict()
 
@@ -2879,6 +2885,7 @@ def execute_guest_visit_workflow(
                 floor_id=str(payload.floor_id),
                 seat_id=seat_id,
                 booking_date=payload.visit_date,
+                current_user=current_user,
             )
             if guest_has_active_booking_on_date(
                 conn,
@@ -3040,6 +3047,7 @@ def execute_guest_visit_workflow(
                 floor_id=str(payload.floor_id),
                 booking_date=payload.visit_date,
                 seat_id=seat_id,
+                current_user=current_user,
             )
             if guest_has_active_booking_on_date(
                 conn,
