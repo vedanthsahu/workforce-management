@@ -32,13 +32,13 @@ export default function AddBuildingForm() {
     } catch (error) {
       const status = axios.isAxiosError(error) ? error.response?.status : undefined;
       const serverMessage = axios.isAxiosError(error)
-        ? error.response?.data?.message
+        ? error.response?.data?.error?.message
         : undefined;
 
-      if (status === 409) {
-        setErrorMessage(
-          serverMessage || "A building with this code already exists."
-        );
+      if (serverMessage) {
+        setErrorMessage(serverMessage);
+      } else if (status === 409) {
+        setErrorMessage("A building with this code already exists.");
       } else {
         setErrorMessage("Something went wrong. Please try again.");
       }
