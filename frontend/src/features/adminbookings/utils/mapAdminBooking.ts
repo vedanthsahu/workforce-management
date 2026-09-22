@@ -73,8 +73,14 @@ export function resolveStatus(raw: AdminBookingRaw): BookingStatus {
 }
 
 export function mapAdminBookingRawToUiBooking(raw: AdminBookingRaw): AdminBooking {
-  const isCancelledOrModified =
-    raw.booking_status === "CANCELLED" || raw.booking_status === "MODIFIED";
+  const status = resolveStatus(raw);
+  // GET /admin/bookings always excludes the superseded row (real
+  // booking_status === "MODIFIED" never reaches here) -- the row shown as
+  // "Modified" is the active replacement, still literally CONFIRMED/
+  // SCHEDULED, relabeled by resolveStatus() via raw.is_modified. Comparing
+  // against the resolved status (instead of the raw literal) is what
+  // actually catches that row.
+  const isCancelledOrModified = status === "Cancelled" || status === "Modified";
   // "(self)" only applies to a genuine self-booking (booked by and for the
   // same person) that its own owner then cancelled/modified themselves.
   // Guests have no user account, so booked_for_user_id is always null for
@@ -103,7 +109,7 @@ export function mapAdminBookingRawToUiBooking(raw: AdminBookingRaw): AdminBookin
     date_label: raw.booking_date ? formatDateLabel(raw.booking_date) : "",
     date_relative: raw.booking_date ? relativeDayLabel(raw.booking_date) : "",
     time_range: "",
-    status: resolveStatus(raw),
+    status,
     // "Self" when the booker made the booking for themself; otherwise the actual booker's name.
     booked_by:
       raw.booked_by_user_id && raw.booked_by_user_id === raw.booked_for_user_id
