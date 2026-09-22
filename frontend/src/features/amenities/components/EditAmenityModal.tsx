@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { Amenity } from "../types/amenities.types";
 import { useEditAmenity } from "../hooks/useEditAmenity";
+import ApplicableSeatTypesSelect from "./ApplicableSeatTypesSelect";
 
 type Props = {
   amenity: Amenity;
@@ -30,14 +31,19 @@ export default function EditAmenityModal({
   onClose,
   onSuccess,
 }: Props) {
-  const { loading, formData, categories, handleChange, handleUpdate } =
+  const { loading, formData, categories, handleChange, handleSeatTypesChange, handleUpdate } =
     useEditAmenity(amenity, open);
+
+  const seatTypesChanged =
+    [...formData.applicable_seat_types].sort().join(",") !==
+    [...(amenity.applicable_seat_types ?? [])].sort().join(",");
 
   const hasChanges =
     formData.amenity_name !== amenity.amenity_name ||
     formData.description !== amenity.description ||
     String(formData.category_id) !== String(amenity.category_id) ||
-    formData.is_active !== amenity.is_active;
+    formData.is_active !== amenity.is_active ||
+    seatTypesChanged;
 
   return (
     <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
@@ -95,6 +101,17 @@ export default function EditAmenityModal({
               <option value="ACTIVE">ACTIVE</option>
               <option value="INACTIVE">INACTIVE</option>
             </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Applicable Space Types</Label>
+            <ApplicableSeatTypesSelect
+              value={formData.applicable_seat_types}
+              onChange={handleSeatTypesChange}
+            />
+            <p className="text-[11px] text-gray-400">
+              Leave unselected to show this amenity for every space type
+            </p>
           </div>
         </div>
 

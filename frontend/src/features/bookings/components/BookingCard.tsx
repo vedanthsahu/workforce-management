@@ -166,7 +166,7 @@ export function BookingCard({
             }
             items={[
               { label: "Modify Visit", icon: <FileEdit className="size-3.5" />, onClick: () => onModifyVisit?.(booking) },
-              { label: "Book a Seat", icon: <CalendarPlus className="size-3.5" />, onClick: () => onAddBooking?.(booking) },
+              { label: "Book a Space", icon: <CalendarPlus className="size-3.5" />, onClick: () => onAddBooking?.(booking) },
             ]}
           />
           <button type="button" onClick={() => onCancelVisit?.(booking)} className={btnCancel}>

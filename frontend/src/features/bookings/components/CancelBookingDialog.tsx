@@ -183,7 +183,7 @@ export function CancelBookingDialog({ open, booking, cancelMode = "booking", onC
                   setSelectedReason(e.target.value);
                   if (e.target.value !== "Other") setOtherReason("");
                 }}
-                className="w-full h-10 px-3 pr-8 rounded-lg border border-[#EBEBF5] bg-white text-[13px] text-[#1A1A2E] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full h-10 px-3 pr-8 rounded-lg border border-[#EBEBF5] bg-white text-[13px] text-[#1A1A2E] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Select a reason</option>
                 {reasons.map((r) => (

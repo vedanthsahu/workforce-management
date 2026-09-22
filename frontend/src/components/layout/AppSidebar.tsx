@@ -64,6 +64,7 @@ import {
   History,
   UserPlus,
   SlidersHorizontal,
+  Ban,
 } from "lucide-react";
 
 import { getInitials, type User } from "@/features/auth/types/auth.types";
@@ -118,6 +119,7 @@ const ROUTE_MAP: Record<string, string> = {
   seats: "/admin/seats",
   amenities: "/admin/amenities",
   seatstatus: "/admin/seat-status",
+  blockedseats: "/admin/blocked-seats",
   bookings: "/admin/bookings",
   users: "/admin/users",
   roles: "/admin/roles",
@@ -139,7 +141,7 @@ const ROUTE_MAP: Record<string, string> = {
 
 const MAIN_NAV: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "book", label: "Book a seat", icon: CalendarDays, permission: "seat:book_self" },
+  { id: "book", label: "Book a space", icon: CalendarDays, permission: "seat:book_self" },
   { id: "mybookings", label: "My bookings", icon: BookOpen, badge: 3, badgeRed: true, permission: "booking:view_own" },
   { id: "team", label: "Book for someone", icon: Monitor, badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
   { id: "schedule", label: "My schedule", icon: CalendarCheck, permission: "booking:view_own", disabled: true },
@@ -167,6 +169,7 @@ const ADMIN_MANAGE_NAV: NavItem[] = [
   { id: "seats", label: "Seats", icon: CalendarDays, disabled: true },
   { id: "amenities", label: "Amenities", icon: Star },
   { id: "seatstatus", label: "Seat Status", icon: Settings, disabled: true },
+  { id: "blockedseats", label: "Blocked Seats", icon: Ban },
 ];
 
 const ADMIN_OPERATIONS_NAV: NavItem[] = [
@@ -188,7 +191,7 @@ const ADMIN_SETTINGS_NAV: NavItem[] = [
 ];
 
 const ADMIN_CONFIGURATION_NAV: NavItem[] = [
-  { id: "all_configurations", label: "Configuration", icon: SlidersHorizontal ,disabled: true},
+  { id: "all_configurations", label: "Configuration", icon: SlidersHorizontal },
 ];
 //--------security nav config----------------------------------------------------
 const FRONT_OFFICE_DASHBOARD: NavItem[] = [

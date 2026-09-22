@@ -1,5 +1,5 @@
 import { axiosInstance } from "@/lib/http/axios";
-import { Building, Floor, Layout, LayoutSeatStats, Site } from "../types/layout.types";
+import { Building, Floor, Layout, LayoutPolicy, LayoutSeatStats, Site } from "../types/layout.types";
 
 interface RawSite {
   site_id: number | string;
@@ -71,9 +71,46 @@ export async function getLayoutsByFloor(floorId: string): Promise<Layout[]> {
   return data;
 }
 
-export async function activateLayout(layoutId: string): Promise<Layout> {
+export async function activateLayout(
+  layoutId: string,
+  effectiveDate?: string,
+): Promise<Layout> {
+  // Omitted (or a today/past date, though this UI never offers one) =
+  // publish immediately. A future date schedules the layout instead of
+  // publishing it now -- see backend/services/floor_layout_service.py.
   const { data } = await axiosInstance.post<Layout>(
-    `/admin/floor-layouts/${layoutId}/activate`
+    `/admin/floor-layouts/${layoutId}/activate`,
+    effectiveDate ? { effective_date: effectiveDate } : undefined,
+  );
+  return data;
+}
+
+export async function fetchLayoutPolicy(): Promise<LayoutPolicy> {
+  const { data } = await axiosInstance.get<LayoutPolicy>("/business-rules/layout-policy");
+  return data;
+}
+
+// Change the effective_date of a layout that's already SCHEDULED (not a
+// new schedule, not a publish) -- see PATCH /admin/floor-layouts/{id}/schedule.
+// The backend rejects this once bookings could already exist against the
+// current effective_from (409 floor_layout_schedule_locked).
+export async function rescheduleLayout(
+  layoutId: string,
+  effectiveDate: string,
+): Promise<Layout> {
+  const { data } = await axiosInstance.patch<Layout>(
+    `/admin/floor-layouts/${layoutId}/schedule`,
+    { effective_date: effectiveDate },
+  );
+  return data;
+}
+
+// Cancel a SCHEDULED layout (or discard a DRAFT/ARCHIVED one). Same
+// 409 floor_layout_schedule_locked guard as reschedule for a SCHEDULED
+// layout too close to its effective date.
+export async function discardLayout(layoutId: string): Promise<Layout> {
+  const { data } = await axiosInstance.delete<Layout>(
+    `/admin/floor-layouts/${layoutId}`,
   );
   return data;
 }
@@ -88,6 +125,7 @@ export interface Preference {
   preference_type: string;
   description: string;
   icon_name: string;
+  applicable_seat_types: string[];
 }
 
 interface RawPreference {
@@ -96,6 +134,7 @@ interface RawPreference {
   category: string;
   description?: string;
   icon?: string;
+  applicable_seat_types?: string[] | null;
 }
 
 export async function fetchAllPreferences(): Promise<Preference[]> {
@@ -107,6 +146,7 @@ export async function fetchAllPreferences(): Promise<Preference[]> {
     preference_type: item.category,
     description:     item.description ?? "",
     icon_name:       item.icon ?? "",
+    applicable_seat_types: item.applicable_seat_types ?? [],
   }));
 }
 

@@ -167,13 +167,18 @@ def fetch_floors_by_building(
     conn: PGConnection,
     *,
     tenant_id: str,
-    building_id: str,
+    building_id: str | None = None,
+    site_id: str | None = None,
     page: int | None = None,
     limit: int | None = None,
     search: str | None = None,
     status_filter: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Fetch floors under given building for one tenant-scoped site."""
+    """Fetch tenant-scoped floors, optionally narrowed to one building and/or site.
+
+    With both `building_id` and `site_id` omitted, returns every floor across
+    every office/building for the tenant.
+    """
     query = f"""
         SELECT
             f.id::text AS floor_id,
@@ -196,7 +201,11 @@ def fetch_floors_by_building(
             fl.is_published AS layout_is_published,
             fl.version_no AS layout_version_no,
             fl.updated_at AS layout_last_updated,
-            pub.full_name AS published_by_name
+            pub.full_name AS published_by_name,
+            sched.id::text AS scheduled_layout_id,
+            sched.layout_name AS scheduled_layout_name,
+            sched.layout_file_url AS scheduled_layout_file_url,
+            sched.effective_from AS scheduled_layout_effective_from
         FROM floors AS f
         JOIN buildings AS b
             ON f.building_id = b.id
@@ -259,15 +268,38 @@ def fetch_floors_by_building(
         LEFT JOIN app_users AS pub
             ON pub.id = fl.published_by_user_id
            AND pub.tenant_id = f.tenant_id
-        WHERE b.id = %s
-          AND f.tenant_id = %s
+        -- The `fl` lateral above always prefers a PUBLISHED layout when one
+        -- exists, so a floor mid-transition (PUBLISHED live, another layout
+        -- SCHEDULED to take over) would never surface the SCHEDULED one
+        -- anywhere in this response. Surfaced separately here instead of
+        -- changing `fl`'s own selection, since callers still need "the
+        -- currently live layout" to keep meaning exactly that.
+        LEFT JOIN LATERAL (
+            SELECT
+                sfl.id,
+                sfl.layout_name,
+                sfl.layout_file_url,
+                sfl.effective_from
+            FROM floor_layouts AS sfl
+            WHERE sfl.tenant_id = f.tenant_id
+              AND sfl.floor_id = f.id
+              AND sfl.status = 'SCHEDULED'
+            ORDER BY sfl.effective_from ASC NULLS LAST, sfl.id DESC
+            LIMIT 1
+        ) AS sched ON TRUE
+        WHERE f.tenant_id = %s
     """
     params: list[Any] = [
         list(NON_DELETED_LAYOUT_STATUSES),
         list(NON_DELETED_LAYOUT_STATUSES),
-        building_id,
         tenant_id,
     ]
+    if building_id is not None:
+        query += " AND b.id = %s"
+        params.append(building_id)
+    if site_id is not None:
+        query += " AND f.site_id = %s"
+        params.append(site_id)
     query, params = _apply_status_filter(query, params, "f.status", status_filter)
     query, params = _apply_search_filter(
         query,
@@ -462,6 +494,79 @@ def update_site(
     if row is None:
         return None
     return fetch_site_by_id(conn, tenant_id=tenant_id, site_id=str(row["site_id"]))
+
+
+def deactivate_buildings_by_site(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+) -> int:
+    """Cascade-deactivate every currently-ACTIVE building under one site.
+
+    Called when the site itself is deactivated, so a building never stays
+    ACTIVE under an inactive office. Never runs the other direction --
+    reactivating a site must not resurrect buildings that were already
+    inactive for their own reasons.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE buildings
+            SET status = 'INACTIVE', updated_at = NOW()
+            WHERE tenant_id = %s
+              AND site_id = %s
+              AND status = 'ACTIVE'
+            """,
+            (tenant_id, site_id),
+        )
+        return cur.rowcount
+
+
+def deactivate_floors_by_site(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+) -> int:
+    """Cascade-deactivate every currently-ACTIVE floor under one site.
+
+    Floors carry their own site_id, so this reaches every floor in the
+    site directly without joining through buildings.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE floors
+            SET status = 'INACTIVE', updated_at = NOW()
+            WHERE tenant_id = %s
+              AND site_id = %s
+              AND status = 'ACTIVE'
+            """,
+            (tenant_id, site_id),
+        )
+        return cur.rowcount
+
+
+def deactivate_floors_by_building(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    building_id: str,
+) -> int:
+    """Cascade-deactivate every currently-ACTIVE floor under one building."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE floors
+            SET status = 'INACTIVE', updated_at = NOW()
+            WHERE tenant_id = %s
+              AND building_id = %s
+              AND status = 'ACTIVE'
+            """,
+            (tenant_id, building_id),
+        )
+        return cur.rowcount
 
 
 
@@ -672,7 +777,11 @@ def fetch_floor_by_id(
                 fl.layout_file_url,
                 fl.status AS layout_status,
                 fl.is_published AS layout_is_published,
-                fl.version_no AS layout_version_no
+                fl.version_no AS layout_version_no,
+                sched.id::text AS scheduled_layout_id,
+                sched.layout_name AS scheduled_layout_name,
+                sched.layout_file_url AS scheduled_layout_file_url,
+                sched.effective_from AS scheduled_layout_effective_from
             FROM floors AS f
             INNER JOIN buildings AS b
                 ON b.id = f.building_id
@@ -728,6 +837,19 @@ def fetch_floor_by_id(
                     fl.id DESC
                 LIMIT 1
             ) AS fl ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT
+                    sfl.id,
+                    sfl.layout_name,
+                    sfl.layout_file_url,
+                    sfl.effective_from
+                FROM floor_layouts AS sfl
+                WHERE sfl.tenant_id = f.tenant_id
+                  AND sfl.floor_id = f.id
+                  AND sfl.status = 'SCHEDULED'
+                ORDER BY sfl.effective_from ASC NULLS LAST, sfl.id DESC
+                LIMIT 1
+            ) AS sched ON TRUE
             WHERE f.tenant_id = %s
               AND f.id = %s
             """,
@@ -864,6 +986,7 @@ def update_layout_seat_mapping_configuration(
     is_reserved: bool | None,
     amenity_ids: list[int] | None,
     updated_by: str,
+    capacity: int | None = None,
 ) -> dict[str, Any]:
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -879,6 +1002,8 @@ def update_layout_seat_mapping_configuration(
                 is_reserved = COALESCE(%s, is_reserved),
 
                 amenity_ids = COALESCE(%s::jsonb, amenity_ids),
+
+                capacity = COALESCE(%s, capacity),
 
                 is_configured = TRUE,
                 configuration_status = 'COMPLETED',
@@ -899,6 +1024,8 @@ def update_layout_seat_mapping_configuration(
                 is_reserved,
 
                 Json(amenity_ids) if amenity_ids is not None else None,
+
+                capacity,
 
                 updated_by,
                 tenant_id,
@@ -932,7 +1059,7 @@ def update_layout_seat_mapping_configurations_bulk(
     """
 
     row_placeholders = ", ".join(
-        ["(%s::bigint, %s::text, %s::text, %s::text, %s::boolean, %s::boolean, %s::jsonb)"]
+        ["(%s::bigint, %s::text, %s::text, %s::text, %s::boolean, %s::boolean, %s::jsonb, %s::integer)"]
         * len(entries)
     )
 
@@ -948,6 +1075,7 @@ def update_layout_seat_mapping_configurations_bulk(
                 entry["is_bookable"],
                 entry["is_reserved"],
                 Json(amenity_ids) if amenity_ids is not None else None,
+                entry.get("capacity"),
             ]
         )
     params.append(tenant_id)
@@ -966,6 +1094,8 @@ def update_layout_seat_mapping_configurations_bulk(
 
                 amenity_ids = COALESCE(v.amenity_ids, lsm.amenity_ids),
 
+                capacity = COALESCE(v.capacity, lsm.capacity),
+
                 is_configured = TRUE,
                 configuration_status = 'COMPLETED',
 
@@ -973,7 +1103,7 @@ def update_layout_seat_mapping_configurations_bulk(
                 updated_at = NOW()
 
             FROM (VALUES {row_placeholders}) AS v(
-                id, seat_name, seat_type, status, is_bookable, is_reserved, amenity_ids
+                id, seat_name, seat_type, status, is_bookable, is_reserved, amenity_ids, capacity
             )
             WHERE lsm.tenant_id = %s
               AND lsm.id = v.id
@@ -1004,6 +1134,7 @@ def upsert_operational_seat(
     is_reserved: bool | None = None,
     svg_element_id: str,
     source_layout_mapping_id: str | None = None,
+    capacity: int | None = None,
 ) -> dict[str, Any]:
     """Insert or update the operational seat row for one layout_seat_mapping.
 
@@ -1035,9 +1166,11 @@ def upsert_operational_seat(
                 status,
                 svg_element_id,
                 source_layout_mapping_id,
+                capacity,
                 live_from
             )
             VALUES (
+                %s,
                 %s,
                 %s,
                 %s,
@@ -1068,6 +1201,7 @@ def upsert_operational_seat(
                 status = EXCLUDED.status,
                 svg_element_id = EXCLUDED.svg_element_id,
                 source_layout_mapping_id = EXCLUDED.source_layout_mapping_id,
+                capacity = EXCLUDED.capacity,
                 live_from = COALESCE(seats.live_from, NOW()),
                 live_until = NULL,
                 retired_reason = NULL,
@@ -1090,6 +1224,7 @@ def upsert_operational_seat(
                 status,
                 svg_element_id,
                 source_layout_mapping_id,
+                capacity,
             ),
         )
 
@@ -1133,6 +1268,7 @@ def upsert_operational_seats_bulk(
             seat["status"],
             seat["svg_element_id"],
             seat["source_layout_mapping_id"],
+            seat.get("capacity"),
         )
         for seat in seats
     ]
@@ -1156,6 +1292,7 @@ def upsert_operational_seats_bulk(
                 status,
                 svg_element_id,
                 source_layout_mapping_id,
+                capacity,
                 live_from
             )
             VALUES %s
@@ -1174,6 +1311,7 @@ def upsert_operational_seats_bulk(
                 status = EXCLUDED.status,
                 svg_element_id = EXCLUDED.svg_element_id,
                 source_layout_mapping_id = EXCLUDED.source_layout_mapping_id,
+                capacity = EXCLUDED.capacity,
                 live_from = COALESCE(seats.live_from, NOW()),
                 live_until = NULL,
                 retired_reason = NULL,
@@ -1184,7 +1322,7 @@ def upsert_operational_seats_bulk(
                 source_layout_mapping_id::text AS source_layout_mapping_id
             """,
             rows,
-            template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())",
+            template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())",
             fetch=True,
         )
 
@@ -1443,15 +1581,17 @@ def fetch_seat_configuration(
     *,
     tenant_id: str,
     seat_id: str,
-    require_current_layout: bool = False,
+    booking_date: date | None = None,
 ) -> dict[str, Any] | None:
     """Fetch one tenant-scoped seat for configuration updates.
 
-    Admin seat-configuration callers intentionally leave
-    ``require_current_layout`` False -- they must still be able to find and
-    fix a seat left over from a superseded layout. Callers validating
-    booking-time eligibility should pass True so a stale seat is treated as
-    not found, matching the booking/availability queries.
+    Admin seat-configuration callers intentionally leave ``booking_date``
+    unset -- they must still be able to find and fix a seat left over from
+    a superseded layout. Callers validating booking-time eligibility should
+    pass the requested date so a seat that doesn't belong to whichever
+    layout covers that date (the current PUBLISHED one, or a SCHEDULED one
+    if the date is on/after its effective_from) is treated as not found,
+    matching the booking/availability queries.
     """
     query = """
         SELECT
@@ -1467,20 +1607,23 @@ def fetch_seat_configuration(
         WHERE tenant_id = %s
           AND id = %s
     """
-    if require_current_layout:
+    params: list[Any] = [tenant_id, seat_id]
+    if booking_date is not None:
         query += """
           AND layout_id = (
               SELECT id
               FROM floor_layouts
               WHERE floor_id = seats.floor_id
                 AND tenant_id = seats.tenant_id
-                AND is_published = TRUE
-                AND status = 'PUBLISHED'
+                AND status IN ('PUBLISHED', 'SCHEDULED')
+                AND effective_from <= %s
+                AND (effective_till IS NULL OR effective_till > %s)
           )
         """
+        params.extend([booking_date, booking_date])
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(query, (tenant_id, seat_id))
+        cur.execute(query, params)
         row = cur.fetchone()
     return dict(row) if row else None
 

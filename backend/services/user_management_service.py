@@ -113,10 +113,10 @@ def update_my_profile(
         conn,
         tenant_id=str(current_user["tenant_id"]),
         user_id=str(current_user["user_id"]),
-        full_name=payload.full_name,
-        display_name=payload.display_name,
-        mobile_phone=payload.mobile_phone,
-        office_location=payload.office_location,
+        bio=payload.bio,
+        skills=payload.skills,
+        bio_provided="bio" in payload.model_fields_set,
+        skills_provided="skills" in payload.model_fields_set,
     )
 
     if updated_user is None:

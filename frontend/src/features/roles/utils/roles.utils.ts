@@ -30,3 +30,10 @@ export const ROLE_BADGE_STYLES: Record<string, string> = {
 export function getRoleBadgeClass(key: string): string {
   return ROLE_BADGE_STYLES[key] ?? "bg-gray-50 text-gray-500 ring-gray-200";
 }
+
+// ─── User-list preview counts ───────────────────────────────────────────────
+// NOTE: these were already different values (2 vs 3) in the two components
+// before this move -- preserved as-is here, not reconciled, since that's a
+// behavior decision and not part of a pure constant relocation.
+export const ROLE_DETAIL_MODAL_USERS_PREVIEW_COUNT = 2;
+export const ROLE_DETAIL_PANEL_USERS_PREVIEW_COUNT = 3;
