@@ -442,11 +442,19 @@ export default function AdminBookingsPage() {
             <Plus size={15} />
             Book for Someone
           </button>
-          <button className="inline-flex items-center gap-2 h-9 px-4 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-sm font-medium">
+          <button
+            disabled
+            aria-disabled="true"
+            className="inline-flex items-center gap-2 h-9 px-4 bg-white border border-gray-200 text-gray-400 rounded-xl text-sm font-medium cursor-not-allowed opacity-60"
+          >
             <Download size={15} />
             Export
           </button>
-          <button className="h-9 w-9 flex items-center justify-center bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-xl">
+          <button
+            disabled
+            aria-disabled="true"
+            className="h-9 w-9 flex items-center justify-center bg-white border border-gray-200 text-gray-400 rounded-xl cursor-not-allowed opacity-60"
+          >
             <MoreHorizontal size={16} />
           </button>
         </div>
