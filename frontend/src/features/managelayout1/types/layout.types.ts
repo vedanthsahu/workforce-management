@@ -4,6 +4,7 @@ export interface Preference {
   preference_type: string;
   description: string;
   icon_name: string;
+  applicable_seat_types: string[];
 }
 
 /**

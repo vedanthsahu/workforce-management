@@ -53,6 +53,7 @@ def _visit(**overrides):
         "purpose_of_visit": "MEETING",
         "requires_seat": True,
         "visit_status": "SCHEDULED",
+        "created_by_user_id": "15",
     }
     row.update(overrides)
     return row
@@ -71,6 +72,7 @@ def _booking(**overrides):
         "floor_id": "4",
         "booking_date": _future_date(),
         "booking_status": "CONFIRMED",
+        "booked_by_user_id": "10",
     }
     row.update(overrides)
     return row
@@ -376,14 +378,11 @@ class GuestWorkflowTests(unittest.TestCase):
                 payload=payload,
             )
 
-        self.assertEqual(mark_booking.call_args.kwargs["booking_id"], "200")
-        self.assertEqual(
-            # LOCATION_CHANGED is valid for guest_visits.modification_reason
-            # but not bookings.modification_reason (chk_booking_modification_reason),
-            # so the booking side falls back to OTHER.
-            mark_booking.call_args.kwargs["modification_reason"],
-            "OTHER",
-        )
+        # modify_guest_visit carries the linked booking forward in place via
+        # sync_booking_from_guest_visit below rather than replacing it, so
+        # (unlike modify_booking/modify_guest_booking) mark_booking_modified
+        # is never called on this direct-modify path.
+        mark_booking.assert_not_called()
         mark_visit.assert_called_once_with(
             conn,
             tenant_id="1",

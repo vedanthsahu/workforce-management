@@ -806,6 +806,7 @@ def fetch_seat_for_booking(
     building_id: str,
     floor_id: str,
     seat_id: str,
+    booking_date: date,
 ) -> dict[str, Any] | None:
     """Fetch a tenant-scoped seat matching the requested hierarchy."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -843,14 +844,17 @@ def fetch_seat_for_booking(
             AND f.tenant_id = s.tenant_id
             AND f.status = 'ACTIVE'
 
-            -- A seat is only bookable if it belongs to the floor's
-            -- currently published layout. Seats left over from a
-            -- superseded layout (retired or not) must never match here.
+            -- A seat is only bookable if it belongs to whichever layout
+            -- covers the requested booking_date -- the currently PUBLISHED
+            -- one, or a SCHEDULED one if booking_date is on/after its
+            -- effective_from. Seats left over from a superseded layout
+            -- (retired or not) must never match here.
             JOIN floor_layouts fl
                 ON fl.floor_id = s.floor_id
             AND fl.tenant_id = s.tenant_id
-            AND fl.is_published = TRUE
-            AND fl.status = 'PUBLISHED'
+            AND fl.status IN ('PUBLISHED', 'SCHEDULED')
+            AND fl.effective_from <= %s
+            AND (fl.effective_till IS NULL OR fl.effective_till > %s)
             AND fl.id = s.layout_id
 
             WHERE s.id = %s
@@ -859,7 +863,7 @@ def fetch_seat_for_booking(
             AND s.site_id = %s
             AND s.tenant_id = %s
             """,
-            (seat_id, floor_id, building_id, site_id, tenant_id),
+            (booking_date, booking_date, seat_id, floor_id, building_id, site_id, tenant_id),
         )
         row = cur.fetchone()
     return dict(row) if row else None
@@ -1787,14 +1791,19 @@ def fetch_available_seats_by_range(
                 FROM seats s
                 CROSS JOIN requested_dates rd
 
-                -- Only seats belonging to the floor's currently published
-                -- layout, on an active site/building/floor, are ever
-                -- eligible -- everything else is a stale/orphaned row.
+                -- Only seats belonging to whichever layout covers each
+                -- individual date in the range are eligible -- correlated
+                -- against rd.booking_date, not a single flat "PUBLISHED"
+                -- check, since a multi-day range can straddle a scheduled
+                -- layout cutover: early dates in the range may resolve to
+                -- the current PUBLISHED layout while later ones resolve to
+                -- a SCHEDULED one. Everything else is a stale/orphaned row.
                 INNER JOIN floor_layouts fl
                     ON fl.floor_id = s.floor_id
                    AND fl.tenant_id = s.tenant_id
-                   AND fl.is_published = TRUE
-                   AND fl.status = 'PUBLISHED'
+                   AND fl.status IN ('PUBLISHED', 'SCHEDULED')
+                   AND fl.effective_from <= rd.booking_date
+                   AND (fl.effective_till IS NULL OR fl.effective_till > rd.booking_date)
                    AND fl.id = s.layout_id
                 INNER JOIN floors flr
                     ON flr.id = s.floor_id
@@ -2236,13 +2245,20 @@ def fetch_available_seats(
                     ON bls.seat_id = s.id
                 LEFT JOIN amenity_matches AS am
                     ON am.seat_id = s.id
-                -- Only seats belonging to the floor's currently published
-                -- layout, on an active site/building/floor, are eligible.
+                -- Only seats belonging to whichever layout actually covers
+                -- the requested booking_date are eligible -- the currently
+                -- PUBLISHED one, or a SCHEDULED one if booking_date falls
+                -- on/after its effective_from. This is the date the seat
+                -- would actually be used on, not "today" -- a booking made
+                -- now for a date inside a SCHEDULED layout's window must
+                -- see that layout's seats, not the one about to be
+                -- superseded.
                 INNER JOIN floor_layouts fl
                     ON fl.floor_id = s.floor_id
                    AND fl.tenant_id = s.tenant_id
-                   AND fl.is_published = TRUE
-                   AND fl.status = 'PUBLISHED'
+                   AND fl.status IN ('PUBLISHED', 'SCHEDULED')
+                   AND fl.effective_from <= %s
+                   AND (fl.effective_till IS NULL OR fl.effective_till > %s)
                    AND fl.id = s.layout_id
                 INNER JOIN floors flr
                     ON flr.id = s.floor_id
@@ -2311,6 +2327,8 @@ def fetch_available_seats(
                 booking_date,
                 booking_date,
                 tenant_id,
+                booking_date,
+                booking_date,
                 tenant_id,
                 floor_id,
             ),

@@ -82,7 +82,7 @@ export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps
 
   const cards = [
     {
-      label:      "Total Seats",
+      label:      "Total Spaces",
       value:      total_seats,
       sub:        null as string | null,
       icon:       <ChairIcon />,

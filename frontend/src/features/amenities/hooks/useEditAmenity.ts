@@ -18,6 +18,7 @@ export const useEditAmenity = (
     icon_name: "",
     category_id: "",
     is_active: true,
+    applicable_seat_types: [] as string[],
   });
 
   const fetchCategories = async () => {
@@ -47,11 +48,16 @@ export const useEditAmenity = (
       icon_name: amenity.icon_name,
       category_id: amenity.category_id,
       is_active: amenity.is_active,
+      applicable_seat_types: amenity.applicable_seat_types ?? [],
     });
   }, [open, amenity]);
 
   const handleChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSeatTypesChange = (seatTypes: string[]) => {
+    setFormData((prev) => ({ ...prev, applicable_seat_types: seatTypes }));
   };
 
   const handleUpdate = async () => {
@@ -66,6 +72,7 @@ export const useEditAmenity = (
         icon_name: formData.icon_name,
         category_id: Number(formData.category_id),
         is_active: formData.is_active,
+        applicable_seat_types: formData.applicable_seat_types,
       });
 
       onSuccess?.();
@@ -84,6 +91,7 @@ export const useEditAmenity = (
     formData,
     categories,
     handleChange,
+    handleSeatTypesChange,
     handleUpdate,
   };
 };

@@ -94,7 +94,7 @@ class BookingEligibilitySeatTests(unittest.TestCase):
         result = self._run(_payload())
         self.assertTrue(result.eligible)
 
-    def test_seat_lookup_requires_current_published_layout(self) -> None:
+    def test_seat_lookup_uses_layout_effective_on_start_date(self) -> None:
         """A seat left over from a superseded layout must be treated as
         not-found here, same as the booking-creation path."""
         with patch(
@@ -117,7 +117,10 @@ class BookingEligibilitySeatTests(unittest.TestCase):
                 conn=object(), tenant_id="1", current_user=CALLER, payload=_payload(),
             )
 
-        self.assertTrue(mock_fetch_seat.call_args.kwargs["require_current_layout"])
+        self.assertEqual(
+            mock_fetch_seat.call_args.kwargs["booking_date"],
+            _payload().start_date,
+        )
 
     def test_seat_not_found_raises_404(self) -> None:
         with self.assertRaises(HTTPException) as context:

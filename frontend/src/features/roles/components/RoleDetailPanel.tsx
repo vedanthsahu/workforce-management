@@ -1,15 +1,13 @@
 "use client";
 
 import { X, CheckCircle2 } from "lucide-react";
-import { getRoleBadgeClass } from "../utils/roles.utils";
+import { getRoleBadgeClass, ROLE_DETAIL_PANEL_USERS_PREVIEW_COUNT as USERS_PREVIEW_COUNT } from "../utils/roles.utils";
 import type { Role } from "../types/roles.types";
 
 type Props = {
   role: Role | null;
   onClose: () => void;
 };
-
-const USERS_PREVIEW_COUNT = 3;
 
 export default function RoleDetailPanel({ role, onClose }: Props) {
   if (!role) return null;

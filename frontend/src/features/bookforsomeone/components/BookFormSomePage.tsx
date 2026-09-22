@@ -279,8 +279,8 @@ export default function BookForSomeonePage() {
   }
 
   const submitLabel = (() => {
-    if (bookingType === "internal" && step === 1) return "Book a Seat";
-    if (bookingType === "visitor" && step === 3) return seatRequired === "no" ? "Continue" : "Book a Seat";
+    if (bookingType === "internal" && step === 1) return "Book a Space";
+    if (bookingType === "visitor" && step === 3) return seatRequired === "no" ? "Continue" : "Book a Space";
     if (bookingType === "visitor" && step === 4) {
       if (editVisitId) return editSubmitting ? "Saving…" : "Confirm Changes";
       return isSubmitting ? "Sending…" : "Confirm Invite";
@@ -462,7 +462,7 @@ export default function BookForSomeonePage() {
               Book for Someone
             </h1>
             <p className="text-[12px] sm:text-[12.5px] text-gray-400 mt-0.5">
-              Book a seat for an internal employee, or send a visitor an invite.
+              Book a space for an internal employee, or send a visitor an invite.
             </p>
           </div>
         </div>
@@ -562,7 +562,7 @@ export default function BookForSomeonePage() {
                 Booking policy
               </p>
               <p className="text-[11.5px] text-indigo-500 leading-relaxed">
-                You can book a seat up to 30 days in advance. Visitors must be
+                You can book a space up to 30 days in advance. Visitors must be
                 accompanied by a host employee at all times.
               </p>
             </div>

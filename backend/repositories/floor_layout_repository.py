@@ -81,6 +81,8 @@ FLOOR_LAYOUT_SELECT_FIELDS = """
     pub.job_title AS published_by_job_title,
     fl.published_at,
     fl.status,
+    fl.effective_from,
+    fl.effective_till,
     fl.created_at,
     fl.updated_at
 """
@@ -257,9 +259,15 @@ def fetch_floor_layouts_by_floor(
     )
 
     if visibility_thresholds is not None:
+        # PUBLISHED and SCHEDULED are never hidden by age -- both are
+        # operationally live (a SCHEDULED layout is a pending change an
+        # admin needs to keep seeing, act on, modify, or cancel, not
+        # something that should silently age out of the list the way an
+        # abandoned DRAFT should).
         visibility_clause = f"""
               AND (
                   fl.status = 'PUBLISHED'
+                  OR fl.status = 'SCHEDULED'
                   OR (fl.status = 'DRAFT' AND fl.updated_at >= NOW() - (%s || ' {visibility_unit}')::interval)
                   OR (fl.status = 'ARCHIVED' AND fl.updated_at >= NOW() - (%s || ' {visibility_unit}')::interval)
                   OR (fl.status = 'DELETED' AND fl.updated_at >= NOW() - (%s || ' {visibility_unit}')::interval)
@@ -286,10 +294,11 @@ def fetch_floor_layouts_by_floor(
             ORDER BY
                 CASE fl.status
                     WHEN 'PUBLISHED' THEN 0
-                    WHEN 'DRAFT' THEN 1
-                    WHEN 'ARCHIVED' THEN 2
-                    WHEN 'DELETED' THEN 3
-                    ELSE 4
+                    WHEN 'SCHEDULED' THEN 1
+                    WHEN 'DRAFT' THEN 2
+                    WHEN 'ARCHIVED' THEN 3
+                    WHEN 'DELETED' THEN 4
+                    ELSE 5
                 END,
                 fl.updated_at DESC,
                 fl.id DESC
@@ -362,8 +371,20 @@ def activate_floor_layout(
     tenant_id: str,
     layout_id: str,
     published_by_user_id: str,
+    effective_from: Any = None,
 ) -> dict[str, Any] | None:
-    """Mark one tenant-scoped layout as the published floor layout."""
+    """Mark one tenant-scoped layout as the published floor layout.
+
+    `effective_from`: pass a concrete instant for an immediate publish (the
+    caller is asserting "this layout is live as of right now", regardless
+    of whatever stale value the row might already carry -- e.g. from a
+    prior publish/archive cycle). Leave it None when this is a cutover
+    promotion of an already-SCHEDULED layout -- COALESCE then preserves
+    the effective_from that was set at schedule time, which must NOT be
+    overwritten here. effective_till is always reset to NULL: a layout
+    that's now PUBLISHED is open-ended until something else gets
+    scheduled against it.
+    """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
@@ -373,6 +394,8 @@ def activate_floor_layout(
                 is_published = TRUE,
                 published_at = NOW(),
                 published_by_user_id = %s,
+                effective_from = COALESCE(%s, effective_from),
+                effective_till = NULL,
                 updated_at = NOW()
             WHERE tenant_id = %s
               AND id = %s
@@ -382,6 +405,7 @@ def activate_floor_layout(
             (
                 LayoutStatus.PUBLISHED.value,
                 published_by_user_id,
+                effective_from,
                 tenant_id,
                 layout_id,
             ),
@@ -397,6 +421,197 @@ def activate_floor_layout(
         tenant_id=tenant_id,
         layout_id=str(row["layout_id"]),
     )
+
+
+def fetch_site_timezone(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+) -> str | None:
+    """Return one tenant-scoped site's IANA timezone name, or None if the
+    site doesn't exist. Used to turn an admin's chosen calendar date into
+    the correct absolute instant (midnight in the site's own timezone, not
+    the server's), since a layout's effective date always means midnight
+    at the physical location, not UTC."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT timezone
+            FROM sites
+            WHERE tenant_id = %s
+              AND id = %s
+            """,
+            (tenant_id, site_id),
+        )
+        row = cur.fetchone()
+
+    return row[0] if row else None
+
+
+def fetch_published_layout_for_floor(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+) -> dict[str, Any] | None:
+    """Fetch the floor's current PUBLISHED layout, if any."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                id::text AS layout_id,
+                effective_from,
+                effective_till
+            FROM floor_layouts
+            WHERE tenant_id = %s
+              AND floor_id = %s
+              AND is_published = TRUE
+              AND status = %s
+            """,
+            (tenant_id, floor_id, LayoutStatus.PUBLISHED.value),
+        )
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+
+def fetch_scheduled_layout_for_floor(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    floor_id: str,
+) -> dict[str, Any] | None:
+    """Fetch the floor's current SCHEDULED layout, if any -- at most one
+    can exist per floor (enforced by uq_floor_layouts_one_scheduled_per_floor)."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                id::text AS layout_id,
+                effective_from,
+                effective_till
+            FROM floor_layouts
+            WHERE tenant_id = %s
+              AND floor_id = %s
+              AND status = %s
+            """,
+            (tenant_id, floor_id, LayoutStatus.SCHEDULED.value),
+        )
+        row = cur.fetchone()
+
+    return dict(row) if row else None
+
+
+def set_published_layout_effective_till(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    effective_till: Any,
+    updated_by_user_id: str,
+) -> None:
+    """Close (or reopen, by passing None) the effective window of the
+    floor's current PUBLISHED layout.
+
+    Must run BEFORE the new SCHEDULED row is written in the same
+    transaction (see schedule_floor_layout) -- excl_floor_layouts_no_overlap
+    is checked immediately per-statement, not deferred, so the old row's
+    window has to be narrowed first or the new row's insert/update is
+    rejected as an overlap.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE floor_layouts
+            SET
+                effective_till = %s,
+                updated_by_user_id = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            """,
+            (effective_till, updated_by_user_id, tenant_id, layout_id),
+        )
+
+
+def schedule_floor_layout(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    effective_from: Any,
+    scheduled_by_user_id: str,
+) -> dict[str, Any] | None:
+    """Mark one tenant-scoped layout SCHEDULED, to take over automatically
+    once its effective_from arrives. Does not touch is_published or
+    published_at -- those only get set at actual cutover (see
+    activate_floor_layout, reused unchanged by the cutover job)."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            UPDATE floor_layouts
+            SET
+                status = %s,
+                effective_from = %s,
+                effective_till = NULL,
+                updated_by_user_id = %s,
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+            RETURNING
+                id::text AS layout_id
+            """,
+            (
+                LayoutStatus.SCHEDULED.value,
+                effective_from,
+                scheduled_by_user_id,
+                tenant_id,
+                layout_id,
+            ),
+        )
+
+        row = cur.fetchone()
+
+    if row is None:
+        return None
+
+    return fetch_floor_layout_by_id(
+        conn,
+        tenant_id=tenant_id,
+        layout_id=str(row["layout_id"]),
+    )
+
+
+def fetch_scheduled_layouts_due(
+    conn: PGConnection,
+) -> list[dict[str, Any]]:
+    """Tenant-wide: every SCHEDULED layout whose effective_from has already
+    arrived (effective_from <= NOW()) -- the cutover job's work list.
+
+    effective_from is stored as an absolute instant (TIMESTAMPTZ), computed
+    from the admin's chosen date in the target site's own timezone at
+    schedule time -- so this NOW() comparison is timezone-correct without
+    needing to know each row's site here.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                id::text AS layout_id,
+                tenant_id::text AS tenant_id,
+                floor_id::text AS floor_id,
+                effective_from
+            FROM floor_layouts
+            WHERE status = %s
+              AND effective_from <= NOW()
+            ORDER BY effective_from
+            """,
+            (LayoutStatus.SCHEDULED.value,),
+        )
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
 
 
 def touch_floor_layout_updated_by(
@@ -433,11 +648,20 @@ def soft_delete_floor_layout(
     *,
     tenant_id: str,
     layout_id: str,
+    target_status: str = LayoutStatus.DELETED.value,
 ) -> dict[str, Any] | None:
-    """Soft delete one tenant-scoped DRAFT/ARCHIVED layout.
+    """Soft delete one tenant-scoped DRAFT/ARCHIVED/SCHEDULED layout.
 
     Rows are never removed; PUBLISHED and already-DELETED layouts are
     excluded here so an out-of-band transition can never sneak through.
+    Discarding a SCHEDULED layout also needs the caller (floor_layout_
+    service.delete_floor_layout) to reopen the currently-PUBLISHED layout's
+    effective_till first -- this function alone does not do that.
+
+    target_status defaults to DELETED (discarding a DRAFT/ARCHIVED layout
+    that never made it live). Cancelling a SCHEDULED layout passes
+    DRAFT instead so it can be edited and scheduled again. Clear its old
+    effective dates because it no longer has a publication window.
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -445,6 +669,8 @@ def soft_delete_floor_layout(
             UPDATE floor_layouts
             SET
                 status = %s,
+                effective_from = CASE WHEN %s = 'DRAFT' THEN NULL ELSE effective_from END,
+                effective_till = CASE WHEN %s = 'DRAFT' THEN NULL ELSE effective_till END,
                 updated_at = NOW()
             WHERE tenant_id = %s
               AND id = %s
@@ -453,10 +679,16 @@ def soft_delete_floor_layout(
                 id::text AS layout_id
             """,
             (
-                LayoutStatus.DELETED.value,
+                target_status,
+                target_status,
+                target_status,
                 tenant_id,
                 layout_id,
-                [LayoutStatus.DRAFT.value, LayoutStatus.ARCHIVED.value],
+                [
+                    LayoutStatus.DRAFT.value,
+                    LayoutStatus.ARCHIVED.value,
+                    LayoutStatus.SCHEDULED.value,
+                ],
             ),
         )
 
@@ -616,6 +848,8 @@ def fetch_layout_seats_by_layout_id(
                     '{}'
                 ) AS amenity_ids,
 
+                lsm.capacity,
+
                 lsm.created_at,
 
                 lsm.updated_at
@@ -687,6 +921,40 @@ def reconcile_published_layout_seats(
             (tenant_id, floor_id, layout_id),
         )
 
+def retire_layout_seats(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+) -> None:
+    """Retire every still-live seat row under one specific layout_id.
+
+    Used when a SCHEDULED layout is discarded before cutover: scheduling
+    now materializes that layout's seats immediately (see
+    publish_layout_seat_configurations at schedule time in
+    floor_layout_service._schedule_floor_layout) so date-aware reads find
+    them the moment effective_from arrives. Discarding the layout must
+    undo that, or its seat rows would sit "live" (live_until IS NULL)
+    under a DELETED layout_id indefinitely.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE seats
+            SET
+                status = 'INACTIVE',
+                is_bookable = FALSE,
+                is_reserved = FALSE,
+                live_until = NOW(),
+                retired_reason = 'LAYOUT_DISCARDED',
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND layout_id = %s
+              AND live_until IS NULL
+            """,
+            (tenant_id, layout_id),
+        )
+
 def publish_layout_seat_configurations(
     conn: PGConnection,
     *,
@@ -731,6 +999,7 @@ def publish_layout_seat_configurations(
             is_reserved=mapping.get("is_reserved"),
             svg_element_id=str(mapping["svg_element_id"]),
             source_layout_mapping_id=str(mapping["id"]),
+            capacity=mapping.get("capacity"),
         )
 
         replace_seat_amenities(

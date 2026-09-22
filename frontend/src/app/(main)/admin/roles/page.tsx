@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import RolesTable from "@/features/roles/components/RolesTable";
 import RoleDetailModal from "@/features/roles/components/RoleDetailModal";
 import { useRoles } from "@/features/roles/hooks/useRoles";
@@ -47,12 +47,13 @@ export default function RoleManagementPage() {
               {totalRoles}
             </span>
           </h2>
-          <div className="w-full sm:w-auto">
+          <div className="relative w-full sm:w-56">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search roles..."
-              className="h-9 w-full sm:w-56 px-3 text-sm border rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="h-9 w-full pl-9 pr-3 text-sm border rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             />
           </div>
         </div>

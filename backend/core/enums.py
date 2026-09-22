@@ -8,12 +8,14 @@ from enum import Enum
 class LayoutStatus(str, Enum):
     DRAFT = "DRAFT"
     PUBLISHED = "PUBLISHED"
+    SCHEDULED = "SCHEDULED"
     ARCHIVED = "ARCHIVED"
     DELETED = "DELETED"
 
 
 NON_DELETED_LAYOUT_STATUSES: tuple[str, ...] = (
     LayoutStatus.DRAFT.value,
+    LayoutStatus.SCHEDULED.value,
     LayoutStatus.ARCHIVED.value,
     LayoutStatus.PUBLISHED.value,
 )

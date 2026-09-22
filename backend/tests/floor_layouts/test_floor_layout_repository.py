@@ -67,7 +67,7 @@ class FloorLayoutRepositoryFilterTests(unittest.TestCase):
         self.assertNotIn("!=", sql)
         self.assertEqual(
             params,
-            ("1", "2", ["DRAFT", "PUBLISHED", "ARCHIVED", "DELETED"]),
+            ("1", "2", ["DRAFT", "PUBLISHED", "SCHEDULED", "ARCHIVED", "DELETED"]),
         )
 
     def test_fetch_layouts_by_floor_omits_visibility_clause_by_default(self) -> None:
@@ -81,7 +81,7 @@ class FloorLayoutRepositoryFilterTests(unittest.TestCase):
 
         sql, params = cursor.executions[0]
         self.assertNotIn("updated_at >=", sql)
-        self.assertEqual(params, ("1", "2", ["DRAFT", "PUBLISHED", "ARCHIVED", "DELETED"]))
+        self.assertEqual(params, ("1", "2", ["DRAFT", "PUBLISHED", "SCHEDULED", "ARCHIVED", "DELETED"]))
 
     def test_fetch_layouts_by_floor_applies_visibility_clause_when_enrolled(self) -> None:
         """A floor enrolled in the visibility rule gets the extra age
@@ -107,7 +107,7 @@ class FloorLayoutRepositoryFilterTests(unittest.TestCase):
             (
                 "1",
                 "2",
-                ["DRAFT", "PUBLISHED", "ARCHIVED", "DELETED"],
+                ["DRAFT", "PUBLISHED", "SCHEDULED", "ARCHIVED", "DELETED"],
                 "15",
                 "30",
                 "5",
@@ -154,10 +154,19 @@ class FloorLayoutRepositoryFilterTests(unittest.TestCase):
 
         sql, params = cursor.executions[0]
         self.assertIn("fl.status = ANY(%s)", sql)
-        self.assertEqual(params, ("1", "10", ["DRAFT", "ARCHIVED", "PUBLISHED"]))
+        self.assertEqual(params, ("1", "10", ["DRAFT", "SCHEDULED", "ARCHIVED", "PUBLISHED"]))
 
 
 class SoftDeleteFloorLayoutRepositoryTests(unittest.TestCase):
+    def test_cancel_schedule_clears_dates_and_returns_draft(self) -> None:
+        cursor = FakeCursor(fetchone_values=[{"layout_id": "10"}, {"layout_id": "10", "status": "DRAFT"}])
+        result = soft_delete_floor_layout(FakeConnection(cursor), tenant_id="1", layout_id="10", target_status="DRAFT")
+        sql, params = cursor.executions[0]
+        self.assertIn("effective_from = CASE WHEN %s = 'DRAFT' THEN NULL", sql)
+        self.assertIn("effective_till = CASE WHEN %s = 'DRAFT' THEN NULL", sql)
+        self.assertEqual(params[:3], ("DRAFT", "DRAFT", "DRAFT"))
+        self.assertEqual(result["status"], "DRAFT")
+
     def test_soft_delete_updates_only_floor_layouts_and_restricts_source_statuses(
         self,
     ) -> None:
@@ -176,7 +185,7 @@ class SoftDeleteFloorLayoutRepositoryTests(unittest.TestCase):
         self.assertIn("status = ANY(%s)", update_sql)
         self.assertEqual(
             update_params,
-            ("DELETED", "1", "10", ["DRAFT", "ARCHIVED"]),
+            ("DELETED", "DELETED", "DELETED", "1", "10", ["DRAFT", "ARCHIVED", "SCHEDULED"]),
         )
 
         for sql, _ in cursor.executions:
@@ -211,7 +220,7 @@ class LayoutSeatMappingConfigurationVisibilityTests(unittest.TestCase):
         sql, params = cursor.executions[0]
         self.assertIn("JOIN floor_layouts", sql)
         self.assertIn("fl.status = ANY(%s)", sql)
-        self.assertEqual(params, ("1", "20", ["DRAFT", "ARCHIVED", "PUBLISHED"]))
+        self.assertEqual(params, ("1", "20", ["DRAFT", "SCHEDULED", "ARCHIVED", "PUBLISHED"]))
 
 
 if __name__ == "__main__":

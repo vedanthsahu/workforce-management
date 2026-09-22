@@ -40,6 +40,7 @@ export interface FloorSite {
 export interface FloorBuilding {
   building_id: string;
   building_name: string;
+  status: "ACTIVE" | "INACTIVE";
 }
 
 export interface FloorStatsSummary {

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { AlertTriangle, Check, X } from "lucide-react";
-import { getRoleBadgeClass } from "../utils/users.utils";
+import { getRoleBadgeClass, ROLE_CHANGE_CONSEQUENCES, STATUS_CHANGE_CONSEQUENCES } from "../utils/users.utils";
 import type { User, UserStatus } from "../types/users.types";
 
 type Props = {
@@ -15,17 +15,6 @@ type Props = {
   onCancel: () => void;
   onConfirm: () => void;
 };
-
-const ROLE_CHANGE_CONSEQUENCES = [
-  "Update user permissions",
-  "Invalidate existing sessions",
-  "Force the user to login again",
-];
-
-const STATUS_CHANGE_CONSEQUENCES = [
-  "Invalidate existing sessions",
-  "Force the user to login again",
-];
 
 function StatusBadge({ status }: { status: UserStatus }) {
   return (

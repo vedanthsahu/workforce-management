@@ -83,6 +83,8 @@ export function mapOccupancyRangeToTrend(
         }),
         occupancy: ceilPercentage(found?.occupancyRate ?? 0),
         bookedSeats: found?.bookedSeats ?? 0,
+        employeeBookedSeats: found?.employeeBookedSeats ?? 0,
+        guestBookedSeats: found?.guestBookedSeats ?? 0,
       });
     }
 
@@ -105,6 +107,8 @@ export function mapOccupancyRangeToTrend(
       }),
       occupancy: ceilPercentage(found?.occupancyRate ?? 0),
       bookedSeats: found?.bookedSeats ?? 0,
+      employeeBookedSeats: found?.employeeBookedSeats ?? 0,
+      guestBookedSeats: found?.guestBookedSeats ?? 0,
     });
   }
 
@@ -117,6 +121,8 @@ export function mapHierarchyToTopOffices(items: OccupancyHierarchyItem[]): TopOf
       name: item.siteName,
       value: ceilPercentage(item.occupancyRate),
       bookedSeats: item.bookedSeats,
+      employeeBookedSeats: item.employeeBookedSeats,
+      guestBookedSeats: item.guestBookedSeats,
       totalSeats: item.totalSeats,
     }))
     .sort((a, b) => b.value - a.value);
@@ -168,3 +174,61 @@ export function mapActivitiesToRecent(items: AdminActivityItem[]): RecentBooking
     };
   });
 }
+
+// ─── AdminRecentBookings badge styles ──────────────────────────────────────
+export const RECENT_BOOKING_TYPE_STYLES: Record<RecentBooking["type"], string> = {
+  Self: "bg-blue-100 text-blue-600",
+  Employee: "bg-purple-100 text-purple-600",
+  Guest: "bg-amber-100 text-amber-600",
+};
+
+export const RECENT_BOOKING_STATUS_STYLES: Record<RecentBooking["status"], string> = {
+  Booked: "bg-green-100 text-green-600",
+  "Checked In": "bg-blue-100 text-blue-600",
+  Completed: "bg-gray-100 text-gray-600",
+  Cancelled: "bg-red-100 text-red-600",
+  "No Show": "bg-orange-100 text-orange-600",
+  Modified: "bg-amber-100 text-amber-600",
+};
+
+// ─── AdminStats accent color map ────────────────────────────────────────────
+export type StatAccent = "blue" | "green" | "orange" | "rose" | "purple";
+
+export const STAT_ACCENTS: Record<StatAccent, { icon: string; glow: string }> = {
+  blue: {
+    icon: "bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600 ring-1 ring-inset ring-blue-200/70",
+    glow: "hover:shadow-blue-500/10",
+  },
+  green: {
+    icon: "bg-gradient-to-br from-green-50 to-green-100 text-green-600 ring-1 ring-inset ring-green-200/70",
+    glow: "hover:shadow-green-500/10",
+  },
+  orange: {
+    icon: "bg-gradient-to-br from-orange-50 to-orange-100 text-orange-600 ring-1 ring-inset ring-orange-200/70",
+    glow: "hover:shadow-orange-500/10",
+  },
+  rose: {
+    icon: "bg-gradient-to-br from-rose-50 to-rose-100 text-rose-600 ring-1 ring-inset ring-rose-200/70",
+    glow: "hover:shadow-rose-500/10",
+  },
+  purple: {
+    icon: "bg-gradient-to-br from-purple-50 to-purple-100 text-purple-600 ring-1 ring-inset ring-purple-200/70",
+    glow: "hover:shadow-purple-500/10",
+  },
+};
+
+// ─── AdminCharts option lists / lookups ─────────────────────────────────────
+export const TREND_PERIOD_OPTIONS: { value: TrendPeriod; label: string }[] = [
+  { value: "this-week", label: "This Week" },
+  { value: "last-week", label: "Last Week" },
+  { value: "this-month", label: "This Month" },
+  { value: "last-month", label: "Last Month" },
+];
+
+export const DONUT_META: Record<string, { label: string; color: string }> = {
+  booked: { label: "Reserved seats", color: "#4F46E5" },
+  blocked: { label: "Blocked seats", color: "#F59E0B" },
+  available: { label: "Available seats", color: "#10B981" },
+};
+
+export const TOP_OFFICES_PER_PAGE = 5;

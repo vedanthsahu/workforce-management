@@ -1,11 +1,13 @@
 "use client";
 // SeatFiltersBar.tsx  – unchanged UI, exports defaultFilters helper
 
-import React from "react";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import React, { useState } from "react";
+import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
 import { SeatFilters } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 /** Call this to get a fresh "no filters applied" object */
 export function defaultFilters(): SeatFilters {
@@ -20,10 +22,10 @@ export function defaultFilters(): SeatFilters {
 
 interface Props {
   filters: SeatFilters;
-  seatTypes: string[];
   preferences: Preference[];
   onUpdate: <K extends keyof SeatFilters>(key: K, value: SeatFilters[K]) => void;
   onReset: () => void;
+  searchPlaceholder?: string;
 }
 
 function FilterSelect({
@@ -51,7 +53,7 @@ function FilterSelect({
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="h-9 w-full pl-3 pr-8 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors cursor-pointer"
+          className="h-9 w-full pl-3 pr-8 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer"
           style={{
             // The clear (x) button takes over this exact spot when a filter
             // is active, so only one icon ever occupies the corner — showing
@@ -84,16 +86,113 @@ function FilterSelect({
   );
 }
 
+// Custom (non-native) single-select for the Amenities filter. A plain
+// <select> here would need color-styled <option> rows (dot + amenity
+// name), and browsers render that colored-option combination with their
+// own uncontrollable popup chrome (a dark highlighted first row, a heavy
+// grey scrollbar) that no CSS can override -- so this gets its own fully
+// styled Popover dropdown instead, matching the plainer native <select>
+// look of the other filters here.
+function AmenityFilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string; dotColor?: string }[];
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const isActive = value !== options[0]?.value;
+  const selected = options.find((o) => o.value === value) ?? options[0];
+
+  return (
+    <div className="flex flex-col gap-1 min-w-[180px] flex-shrink-0">
+      <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+        {label}
+      </label>
+      <div className="relative">
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger
+            nativeButton={false}
+            render={
+              <div className="h-9 w-full pl-3 pr-8 flex items-center text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:border-gray-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30">
+                <span className="truncate flex items-center gap-1.5">
+                  {selected?.dotColor && (
+                    <span
+                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ backgroundColor: selected.dotColor }}
+                    />
+                  )}
+                  {selected?.label}
+                </span>
+              </div>
+            }
+          />
+          <PopoverContent
+            align="start"
+            side="bottom"
+            collisionAvoidance={{ side: "none" }}
+            className="w-60 p-1 gap-0 rounded-lg border border-gray-200 bg-white shadow-md ring-0 max-h-64 min-h-0 overflow-y-auto scrollbar-thin"
+          >
+            {options.map((o) => {
+              const checked = o.value === value;
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(o.value);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-left transition-colors",
+                    checked ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-700 hover:bg-gray-50"
+                  )}
+                >
+                  {o.dotColor && (
+                    <span
+                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ backgroundColor: o.dotColor }}
+                    />
+                  )}
+                  <span className="truncate">{o.label}</span>
+                </button>
+              );
+            })}
+          </PopoverContent>
+        </Popover>
+        {isActive ? (
+          <button
+            type="button"
+            onClick={() => onChange(options[0].value)}
+            aria-label={`Clear ${label} filter`}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center text-gray-400 hover:text-gray-600"
+          >
+            <X size={12} />
+          </button>
+        ) : (
+          <ChevronDown
+            size={13}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function SeatFiltersBar({
   filters,
-  seatTypes,
   preferences,
   onUpdate,
   onReset,
+  searchPlaceholder = "Search by code…",
 }: Props) {
   const activeCount = [
     filters.search.trim() !== "",
-    filters.seat_type !== "All",
     filters.status !== "All",
     filters.bookable !== "All",
     filters.amenity !== "All",
@@ -122,10 +221,10 @@ export default function SeatFiltersBar({
           />
           <input
             type="text"
-            placeholder="Search by seat code…"
+            placeholder={searchPlaceholder}
             value={filters.search}
             onChange={(e) => onUpdate("search", e.target.value)}
-            className={`h-9 pl-8 ${filters.search ? "pr-7" : "pr-3"} w-44 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400`}
+            className={`h-9 pl-8 ${filters.search ? "pr-7" : "pr-3"} w-44 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400`}
           />
           {filters.search && (
             <button
@@ -139,13 +238,6 @@ export default function SeatFiltersBar({
           )}
         </div>
       </div>
-
-      <FilterSelect
-        label="Seat Type"
-        value={filters.seat_type}
-        options={seatTypes.map((t) => ({ value: t, label: t }))}
-        onChange={(v) => onUpdate("seat_type", v)}
-      />
 
       <FilterSelect
         label="Status"
@@ -170,7 +262,7 @@ export default function SeatFiltersBar({
         onChange={(v) => onUpdate("bookable", v)}
       />
 
-      <FilterSelect
+      <AmenityFilterSelect
         label="Amenities"
         value={filters.amenity}
         options={amenityOptions}

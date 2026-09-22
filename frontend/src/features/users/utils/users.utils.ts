@@ -1,6 +1,6 @@
 
 
-import type { ApiUser, ApiUserSearchResult, User } from "../types/users.types";
+import type { ApiUser, ApiUserSearchResult, ApiUserStatus, User } from "../types/users.types";
 
 export { getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
 
@@ -52,3 +52,29 @@ export function normalizeRoleKey(value: string | null | undefined): string {
   if (!value) return "";
   return value.trim().toUpperCase().replace(/[\s_-]+/g, "_");
 }
+
+// ─── ConfirmRoleChangeModal consequence copy ────────────────────────────────
+export const ROLE_CHANGE_CONSEQUENCES = [
+  "Update user permissions",
+  "Invalidate existing sessions",
+  "Force the user to login again",
+];
+
+export const STATUS_CHANGE_CONSEQUENCES = [
+  "Invalidate existing sessions",
+  "Force the user to login again",
+];
+
+// ─── Users list page ─────────────────────────────────────────────────────────
+export const USERS_PIN_DURATION = 4000;
+export const USERS_PAGE_SIZES = [10, 25, 50, 75, 100];
+
+// Search input debounce (useUsers hook)
+export const SEARCH_DEBOUNCE_MS = 350;
+
+// ─── StatusFilterDropdown options ───────────────────────────────────────────
+export const STATUS_FILTER_OPTIONS: { key: ApiUserStatus | "ALL"; label: string }[] = [
+  { key: "ALL", label: "All Status" },
+  { key: "ACTIVE", label: "Active" },
+  { key: "INACTIVE", label: "Inactive" },
+];

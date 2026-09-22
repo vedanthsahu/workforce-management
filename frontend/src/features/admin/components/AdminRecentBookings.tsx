@@ -8,38 +8,24 @@ import {
 } from "@/components/ui/card";
 
 import type { RecentBooking } from "../types/admin.types";
+import { RECENT_BOOKING_TYPE_STYLES, RECENT_BOOKING_STATUS_STYLES } from "../utils/dashboard.utils";
 
 type Props = {
   bookings: RecentBooking[];
   loading?: boolean;
 };
 
-const TYPE_STYLES: Record<RecentBooking["type"], string> = {
-  Self: "bg-blue-100 text-blue-600",
-  Employee: "bg-purple-100 text-purple-600",
-  Guest: "bg-amber-100 text-amber-600",
-};
-
 function TypeBadge({ type, className = "" }: { type: RecentBooking["type"]; className?: string }) {
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${TYPE_STYLES[type]} ${className}`}>
+    <span className={`px-2 py-1 rounded-full text-xs font-medium ${RECENT_BOOKING_TYPE_STYLES[type]} ${className}`}>
       {type}
     </span>
   );
 }
 
-const STATUS_STYLES: Record<RecentBooking["status"], string> = {
-  Booked: "bg-green-100 text-green-600",
-  "Checked In": "bg-blue-100 text-blue-600",
-  Completed: "bg-gray-100 text-gray-600",
-  Cancelled: "bg-red-100 text-red-600",
-  "No Show": "bg-orange-100 text-orange-600",
-  Modified: "bg-amber-100 text-amber-600",
-};
-
 function StatusBadge({ status, className = "" }: { status: RecentBooking["status"]; className?: string }) {
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${STATUS_STYLES[status]} ${className}`}>
+    <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${RECENT_BOOKING_STATUS_STYLES[status]} ${className}`}>
       {status}
     </span>
   );

@@ -209,6 +209,7 @@ Resources:
           AWS_S3_BUCKET_NAME: !Ref S3BucketName
           AWS_S3_PUBLIC_BASE_URL: !Ref S3PublicBaseUrl
           AWS_S3_MAX_RETRIES: "3"
+          S3_PRESIGNED_URL_TTL_SECONDS: "3600"
 
           AWS_SES_SENDER_EMAIL: !Ref SesSenderEmail
           AWS_SES_MAX_RETRIES: "3"
@@ -243,6 +244,12 @@ Resources:
               Effect: Allow
               Action:
                 - s3:PutObject
+                # GetObject is what a presigned URL actually checks at
+                # access time -- S3 authorizes against the signing
+                # principal's permissions, not the caller's, so this is
+                # required for generate_presigned_url's URLs to resolve
+                # against this private bucket (see storage.py).
+                - s3:GetObject
               Resource:
                 - !Sub "arn:${AWS::Partition}:s3:::${S3BucketName}/tenant_*/*"
             - Sid: SendApplicationEmail

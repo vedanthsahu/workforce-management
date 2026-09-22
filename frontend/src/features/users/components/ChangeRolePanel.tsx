@@ -62,7 +62,7 @@ export default function ChangeRolePanel({
             <select
               value={selectedRole === currentRole ? "" : selectedRole ?? ""}
               onChange={(e) => handleRoleChange(e.target.value)}
-              className="w-full appearance-none h-10 px-3 pr-8 text-sm border border-gray-200 rounded-xl bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 focus-visible:border-indigo-400 transition-colors"
+              className="w-full appearance-none h-10 px-3 pr-8 text-sm border border-gray-200 rounded-xl bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors"
             >
               <option value="__NO_CHANGE__">{currentRole}</option>
               <option value="" disabled hidden>{currentRole}</option>
@@ -88,7 +88,7 @@ export default function ChangeRolePanel({
             <select
               value={selectedStatus}
               onChange={(e) => handleStatusChange(e.target.value)}
-              className="w-full appearance-none h-10 px-3 pr-8 text-sm border border-gray-200 rounded-xl bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 focus-visible:border-indigo-400 transition-colors"
+              className="w-full appearance-none h-10 px-3 pr-8 text-sm border border-gray-200 rounded-xl bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors"
             >
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>

@@ -57,6 +57,11 @@ export type LayoutApiResponse = {
   published_by_user_id?: string | null;
   published_by_name?: string | null;
   published_at?: string | null;
+  // Only meaningful while status is SCHEDULED -- the date this layout
+  // takes over automatically. effective_till is set on the currently
+  // PUBLISHED row it's about to replace, not on this row itself.
+  effective_from?: string | null;
+  effective_till?: string | null;
 };
 
 export type LayoutSelection = {

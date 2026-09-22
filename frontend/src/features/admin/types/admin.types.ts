@@ -3,6 +3,11 @@ export type DashboardSummary = {
   total_floors: number;
   total_seats: number;
   booked_today: number;
+  booked_seats_today: number;
+  employee_bookings_today: number;
+  guest_bookings_today: number;
+  guest_visit_today: number;
+  guest_visit_booking_with_seat_today: number;
   blocked_seats: number;
   occupancy_percentage: number;
 };
@@ -21,6 +26,8 @@ export interface OccupancyRangeItem {
   date: string;
   occupancyRate: number;
   bookedSeats: number;
+  employeeBookedSeats: number;
+  guestBookedSeats: number;
 }
 
 export interface OccupancyTrendPoint {
@@ -28,6 +35,8 @@ export interface OccupancyTrendPoint {
   date: string;
   occupancy: number;
   bookedSeats: number;
+  employeeBookedSeats: number;
+  guestBookedSeats: number;
 }
 
 // ── Top offices (occupancy hierarchy) ───────────────────────────────────────
@@ -36,6 +45,8 @@ export interface OccupancyHierarchyItem {
   siteName: string;
   occupancyRate: number;
   bookedSeats: number;
+  employeeBookedSeats: number;
+  guestBookedSeats: number;
   totalSeats: number;
 }
 
@@ -43,6 +54,8 @@ export interface TopOffice {
   name: string;
   value: number;
   bookedSeats: number;
+  employeeBookedSeats: number;
+  guestBookedSeats: number;
   totalSeats: number;
 }
 

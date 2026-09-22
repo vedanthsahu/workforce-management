@@ -25,6 +25,7 @@ export interface SiteOption {
   site_id: string;
   site_code: string;
   site_name: string;
+  status: "ACTIVE" | "INACTIVE";
 }
 
 export interface CreateBuildingPayload {

@@ -28,10 +28,8 @@ AdminDirectoryStatus = Literal[
 
 
 class UpdateMyProfileRequest(BaseModel):
-    full_name: str | None = Field(default=None, max_length=200)
-    display_name: str | None = Field(default=None, max_length=200)
-    mobile_phone: str | None = Field(default=None, max_length=50)
-    office_location: str | None = Field(default=None, max_length=200)
+    bio: str | None = Field(default=None, max_length=2000)
+    skills: list[str] | None = Field(default=None, max_length=50)
 
 
 class AdminUserAccessUpdateRequest(BaseModel):

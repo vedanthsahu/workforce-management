@@ -8,6 +8,8 @@ export interface Amenity {
   category_name: string;
   is_active: boolean;
   assigned_seat_count: number;
+  // Empty array means "applies to every space type" (Seat, Cabin, Conference Room).
+  applicable_seat_types: string[];
 }
 
 export interface AmenitiesResponse {
@@ -38,6 +40,7 @@ export interface CreateAmenityPayload {
   icon_name: string;
   category_id: number;
   is_active: boolean;
+  applicable_seat_types: string[];
 }
 
 export interface UpdateAmenityPayload {
@@ -46,6 +49,7 @@ export interface UpdateAmenityPayload {
   icon_name: string;
   category_id: number;
   is_active: boolean;
+  applicable_seat_types: string[];
 }
 
 export interface PreferenceAmenity {
@@ -55,6 +59,7 @@ export interface PreferenceAmenity {
   category: string;
   description: string;
   icon: string;
+  applicable_seat_types: string[];
 }
 
 export interface PreferencesResponse {
@@ -68,6 +73,7 @@ export interface AmenityFormData {
   icon_name: string;
   category_id: string;
   is_active: boolean;
+  applicable_seat_types: string[];
 }
 
 export interface AmenityStats {

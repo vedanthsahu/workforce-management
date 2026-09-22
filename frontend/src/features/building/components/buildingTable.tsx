@@ -85,13 +85,13 @@ export default function BuildingTable({ data, onEdit, highlightedId }: Props) {
               return (
                 <tr key={building.building_id} className={`transition-colors ${isHighlighted ? "row-highlight" : "hover:bg-gray-50"}`}>
                   <td className="px-3 py-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-start gap-2">
                       <div className={`w-7 h-7 shrink-0 flex items-center justify-center rounded-full ${
                         isHighlighted ? "bg-blue-200" : "bg-blue-100"
                       }`}>
                         <Building2 className="w-3 h-3 text-blue-600" />
                       </div>
-                      <span className="font-medium truncate">{building.building_code}</span>
+                      <span title={building.building_code} className="font-medium line-clamp-2 min-w-0 flex-1">{building.building_code}</span>
                     </div>
                   </td>
                   <td className="px-3 py-3 max-w-0"><span title={building.building_name} className="block font-medium truncate">{building.building_name}</span></td>

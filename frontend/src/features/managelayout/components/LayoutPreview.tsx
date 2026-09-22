@@ -6,9 +6,19 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Layout } from "../types/layout.types";
-import { Preference, Seat, SeatStatus, SeatType, SeatUpdatePayload } from "@/features/managelayout1";
-import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
+import {
+  AmenityChecklist,
+  Preference, Seat, SeatStatus, SeatType, SeatUpdatePayload,
+  amenityAppliesToSeatType, categoryOf, SPACE_CATEGORY_LABELS, suggestSeatType,
+} from "@/features/managelayout1";
 import { extractSeatIds } from "@/lib/svg/extractSeatIds";
+import {
+  SVG_W,
+  SVG_H,
+  ROOM_SVG_ID_PATTERN,
+  SEAT_STATUSES,
+  LEGEND_ITEMS,
+} from "../utils/layoutPreview.utils";
 
 interface LayoutPreviewProps {
   layout: Layout | null;
@@ -88,12 +98,6 @@ function resolveSeatFill(seat: Seat): string {
   return "#22C55E";                                 // Bookable     — green
 }
 
-// Cabin/conference/meeting/training room seats are grouped under one svg id
-// containing a "CBN"/"CFR"/"MR"/"TR" segment (e.g. "HYD-PRV-F11-CBN-04",
-// "HYD-PRV-F11-CFR-02", "HYD-PRV-F11-MR-01", "HYD-PRV-F11-TR-01"), not a
-// dedicated field.
-const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr|tr)([-_]|$)/i;
-
 function isRoomSvgId(svgId: string): boolean {
   return ROOM_SVG_ID_PATTERN.test(svgId);
 }
@@ -151,21 +155,25 @@ function addFlatBorder(svgText: string, id: string, color = "#000000", width = "
   });
 }
 
-// Outlines a highlighted seat's silhouette in black by stacking four 1px
-// drop-shadows (one per direction) on its <g>, instead of overriding its
-// fill — so the seat's own status color (green/amber/red, or the floor
-// plan's original artwork color when unconfigured) stays visible under the
-// highlight rather than being hidden by a solid highlight block.
-function addSeatBorder(svgText: string, id: string, color = "#000000"): string {
-  const openTagRegex = new RegExp(`<g\\b[^>]*\\sid="${escapeRegExp(id)}"[^>]*>`, "g");
-  const border = `drop-shadow(1px 0 0 ${color}) drop-shadow(-1px 0 0 ${color}) drop-shadow(0 1px 0 ${color}) drop-shadow(0 -1px 0 ${color})`;
-  return svgText.replace(openTagRegex, (openTag) => {
-    if (/\sstyle="/.test(openTag)) {
-      return openTag.replace(/\sstyle="([^"]*)"/, (_m, existing) =>
-        ` style="${existing}${existing && !existing.trim().endsWith(";") ? ";" : ""}filter:${border}"`
-      );
-    }
-    return openTag.replace(/>$/, ` style="filter:${border}">`);
+// Outlines a search/filter-matched seat by painting a solid stroke directly
+// on every shape inside its <g> — the same per-shape technique addFlatBorder
+// uses for the base status border, not a CSS `filter: drop-shadow`. A
+// drop-shadow's offset is resolved in this SVG's own coordinate units, and a
+// fixed "1px" offset is a rounding error against a canvas this size (see
+// addFlatBorder's comment on the same issue) — it never actually rendered
+// visibly. A `stroke` avoids that scaling problem entirely, and being wider
+// than addFlatBorder's own 32-unit base border (which every configured seat
+// already has, in black) makes this highlight visibly override it instead
+// of being swallowed underneath.
+function addSeatBorder(svgText: string, id: string, color = "#FACC15", width = "60"): string {
+  const groupRegex = new RegExp(`(<g[^>]*id="${escapeRegExp(id)}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "gm");
+  return svgText.replace(groupRegex, (_match, open, inner, close) => {
+    const bordered = inner
+      .replace(/<(path|rect|polygon|circle|ellipse)\b(?![^>]*\sstroke=)/g, `<$1 stroke="${color}"`)
+      .replace(/<(path|rect|polygon|circle|ellipse)\b(?![^>]*\sstroke-width=)/g, `<$1 stroke-width="${width}"`)
+      .replace(/stroke="[^"]*"/g, `stroke="${color}"`)
+      .replace(/stroke-width="[^"]*"/g, `stroke-width="${width}"`);
+    return `${open}${bordered}${close}`;
   });
 }
 
@@ -228,10 +236,13 @@ function colorSeats(svgText: string, seats: Seat[], filteredIds: Set<string> | u
     result = addFlatBorder(result, id);
   });
 
-  // Applied last, after every fill recolor above, so the border sits on top
-  // of whatever status color the seat ended up with.
+  // Applied last, after every fill/border above, so a search/filter match
+  // overrides whatever status color and (black) border the seat already
+  // got — a solid yellow fill plus a matching border reads as "this seat,
+  // completely," not just a thin outline traced on top of its old color.
   highlightedIds.forEach((id) => {
-    result = addSeatBorder(result, id);
+    result = recolorGroup(result, id, "#FACC15");
+    result = addSeatBorder(result, id, "#EAB308");
   });
 
   return result;
@@ -258,16 +269,6 @@ function highlightSeat(svgText: string, svgId: string): string {
 
 // ─── Seat Config Dialog ───────────────────────────────────────────────────────
 
-const SEAT_TYPES: SeatType[] = ["STANDARD", "WINDOW", "CABIN", "ACCESSIBLE", "HOT_DESK"];
-const SEAT_TYPE_LABELS: Record<string, string> = {
-  STANDARD: "STANDARD",
-  WINDOW: "WINDOW",
-  CABIN: "CABIN",
-  ACCESSIBLE: "ACCESSIBLE",
-  HOT_DESK: "HOT_DESK",
-};
-const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
-
 interface SeatConfigDialogProps {
   open: boolean;
   onClose: () => void;
@@ -277,22 +278,33 @@ interface SeatConfigDialogProps {
 }
 
 const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat, preferences, onSave }) => {
-  const [seatType, setSeatType] = useState<SeatType>("STANDARD");
+  const [seatType, setSeatType] = useState<SeatType>("SEAT");
   const [bookable, setBookable] = useState(true);
   const [status, setStatus] = useState<SeatStatus>("ACTIVE");
   const [amenityIds, setAmenityIds] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
+  const [capacity, setCapacity] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const isConferenceRoom = seatType === "CONFERENCE_ROOM";
+  const capacityInvalid = isConferenceRoom && (capacity == null || capacity < 1);
+  const visiblePreferences = preferences.filter((p) =>
+    amenityAppliesToSeatType(p.applicable_seat_types, seatType)
+  );
+
   useEffect(() => {
     if (!seat) return;
-    setSeatType((seat.seat_type as SeatType) ?? "STANDARD");
+    // seat_type is auto-categorized (from its own stored value, or a
+    // suggestion derived from the floor-plan SVG id when unset) -- not a
+    // field the admin fills in by hand here.
+    setSeatType((seat.seat_type as SeatType) ?? (suggestSeatType(seat.seat_svg_id) as SeatType));
     setBookable(seat.is_bookable ?? true);
     setStatus((seat.status as SeatStatus) ?? "ACTIVE");
     setAmenityIds([...seat.amenity_ids]);
     setNotes(seat.notes ?? "");
+    setCapacity(seat.capacity ?? null);
     setSaved(false);
     setSaveError(false);
   }, [seat]);
@@ -306,6 +318,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
 
   const handleSave = async () => {
     if (!seat) return;
+    if (capacityInvalid) { setSaved(false); return; }
     setSaving(true); setSaveError(false);
     try {
       await onSave({
@@ -316,6 +329,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
         status,
         amenity_ids: amenityIds,
         notes: notes || undefined,
+        capacity: isConferenceRoom ? capacity : null,
       });
       setSaved(true);
       setTimeout(() => onClose(), 800);
@@ -329,8 +343,8 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
   if (!seat) return null;
 
   const selectCls = `w-full h-9 px-3 text-xs font-medium text-gray-700 bg-white border border-gray-200
-    rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30
-    focus:border-indigo-400 transition-colors`;
+    rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500
+    transition-colors`;
   const chevron = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'
     viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline
     points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`;
@@ -339,29 +353,50 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md rounded-xl p-0 overflow-hidden gap-0 [&>button:last-child]:hidden">
         <DialogHeader className="px-5 pt-5 pb-4 border-b">
-          <p className="text-xs text-gray-400 mb-0.5 font-medium">Configure Seat</p>
+          <p className="text-xs text-gray-400 mb-0.5 font-medium">
+            Configure {categoryOf(seat.seat_type) === "SEATS" ? "Seat" : categoryOf(seat.seat_type) === "CABINS" ? "Cabin" : "Conference Room"}
+          </p>
           <DialogTitle className="text-base font-bold text-indigo-600">
             {seat.seat_code}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="px-5 py-5 space-y-4 overflow-y-auto max-h-[60vh]">
-          {/* Seat Type */}
+        <div className="px-5 py-5 space-y-4 overflow-y-auto scrollbar-thin max-h-[60vh]">
+          {/* Space Type — auto-categorized, read-only */}
           <div>
             <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">
-              Seat Type <span className="text-red-500">*</span>
+              Space Type
             </label>
-            <select
-              value={seatType}
-              onChange={(e) => { setSeatType(e.target.value as SeatType); setSaved(false); }}
-              className={selectCls}
-              style={{ backgroundImage: chevron, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
-            >
-              {SEAT_TYPES.map((t) => (
-                <option key={t} value={t}>{SEAT_TYPE_LABELS[t]}</option>
-              ))}
-            </select>
+            <div className="w-full h-9 px-3 flex items-center text-xs font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-lg">
+              {SPACE_CATEGORY_LABELS[categoryOf(seat.seat_type)].singular}
+            </div>
           </div>
+
+          {/* Capacity — Conference Rooms only */}
+          {isConferenceRoom && (
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">
+                Capacity <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={1000}
+                value={capacity ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCapacity(v === "" ? null : Number(v));
+                  setSaved(false);
+                }}
+                placeholder="e.g. 12"
+                className={`${selectCls} ${capacityInvalid ? "border-red-300 focus:border-red-400" : ""}`}
+              />
+              <p className="text-[10.5px] text-gray-400 mt-1">Number of people this room seats.</p>
+              {capacityInvalid && (
+                <p className="text-[10.5px] text-red-500 mt-1">Capacity is required for a conference room.</p>
+              )}
+            </div>
+          )}
 
           {/* Bookable */}
           <div>
@@ -405,35 +440,11 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
             <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2 block">
               Amenities
             </label>
-            {preferences.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">No amenities available.</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-1.5">
-                {preferences.map((p) => {
-                  const on = amenityIds.includes(p.preference_id);
-                  const color = getAmenityColor(p.preference_name, p.preference_type);
-                  return (
-                    <button
-                      key={p.preference_id}
-                      onClick={() => toggleAmenity(p.preference_id)}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left text-xs font-medium transition-colors ${on ? "bg-indigo-50 border-indigo-300 text-indigo-700" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                        }`}
-                    >
-                      <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${on ? "bg-indigo-600 border-indigo-600" : "border-gray-300"
-                        }`}>
-                        {on && (
-                          <svg viewBox="0 0 8 7" className="w-2.5 h-2.5">
-                            <path d="M1 3.5l2 2L7 1" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        )}
-                      </div>
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${color.dot}`} />
-                      {p.preference_name}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            <AmenityChecklist
+              preferences={visiblePreferences}
+              selectedIds={amenityIds}
+              onToggle={toggleAmenity}
+            />
           </div>
 
           {/* Notes */}
@@ -444,10 +455,10 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
             <textarea
               value={notes}
               onChange={(e) => { setNotes(e.target.value); setSaved(false); }}
-              placeholder="Add any notes about this seat…"
+              placeholder="Add any notes about this space…"
               maxLength={200}
               rows={3}
-              className="w-full px-3 py-2.5 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400"
+              className="w-full px-3 py-2.5 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400"
             />
             <p className="text-right text-[10px] text-gray-400 mt-0.5">{notes.length} / 200</p>
           </div>
@@ -467,7 +478,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
             </button>
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || capacityInvalid}
               className="px-4 py-1.5 text-xs font-semibold bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors"
             >
               {saving ? "Saving…" : "Save Changes"}
@@ -480,13 +491,6 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
 };
 
 // ─── Legend ───────────────────────────────────────────────────────────────────
-
-const LEGEND_ITEMS = [
-  { label: "Bookable", color: "#22C55E" },
-  { label: "Non-bookable", color: "#F59E0B" },
-  { label: "Inactive", color: "#EF4444" },
-  { label: "Unconfigured", color: "#000000ff" },
-] as const;
 
 // FIX: flex-wrap + gap-y so items wrap on narrow screens instead of overflowing
 function PreviewLegend() {
@@ -503,9 +507,6 @@ function PreviewLegend() {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-
-const SVG_W = 2466;
-const SVG_H = 2039;
 
 export default function LayoutPreview({
   layout,
@@ -1031,13 +1032,31 @@ export default function LayoutPreview({
             </button>
             {/* FIX: hide hint text on mobile — too long for narrow screens */}
             <p className="text-[10px] text-gray-400 select-none hidden sm:block">
-              Scroll to zoom · Drag to pan · Click a seat to configure
+              Scroll to zoom · Drag to pan · Click a space to configure
             </p>
           </div>
         )}
 
+        {/* ── Scheduled banner ─────────────────────────────────────────────
+            Checked before the draft banner below -- a SCHEDULED layout
+            also has is_published=false, so without this it fell into the
+            "this is a draft, publish it" banner, which is both wrong (it's
+            already scheduled, not sitting undecided) and actively
+            misleading (there's no "Publish" action to take here; seat
+            edits are already live via the reschedule/edit endpoints). */}
+        {layout && layout.status === "SCHEDULED" && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-sky-50 border border-sky-200 rounded-lg text-xs text-sky-700 flex-shrink-0">
+            <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+            </svg>
+            {layout.effective_from
+              ? `Scheduled to take over on ${new Date(layout.effective_from).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}. Seat changes made now apply immediately; changing the date is still allowed until bookings exist against it.`
+              : "This layout is scheduled to take over automatically. Seat changes made now apply immediately."}
+          </div>
+        )}
+
         {/* ── Draft banner ──────────────────────────────────────────────── */}
-        {layout && !layout.is_published && layout.status !== "ARCHIVED" && (
+        {layout && !layout.is_published && layout.status !== "ARCHIVED" && layout.status !== "SCHEDULED" && (
           <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 flex-shrink-0">
             <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
