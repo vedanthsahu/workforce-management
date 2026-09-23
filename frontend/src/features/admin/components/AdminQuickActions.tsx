@@ -30,8 +30,8 @@ export default function AdminQuickActions() {
       route: "/admin/floors",
     },
     {
-      title: "Manage Seats",
-      desc: "Add, edit or import seats",
+      title: "Manage Spaces",
+      desc: "Add, edit or import spaces",
       icon: Armchair,
       color: "bg-green-50 text-green-600",
       route: "/admin/seats",
@@ -44,8 +44,8 @@ export default function AdminQuickActions() {
       route: "/admin/amenities",
     },
     {
-      title: "Seat Status",
-      desc: "Manage blocked or maintenance seats",
+      title: "Space Status",
+      desc: "Manage blocked or maintenance spaces",
       icon: Ban,
       color: "bg-red-50 text-red-600",
       route: "/admin/blocked-seats",

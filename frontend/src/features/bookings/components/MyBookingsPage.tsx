@@ -189,7 +189,7 @@ function MyBookingsToolbar({
           <Search className="size-3.5 text-gray-400 shrink-0" />
           <input
             type="text"
-            placeholder="Search seat, location…"
+            placeholder="Search space, location…"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="border-none bg-transparent text-[13px] text-[#0f172a] outline-none w-full placeholder:text-gray-400"
@@ -468,7 +468,7 @@ export default function MyBookingsPage() {
                 My Bookings
               </h1>
               <p className="text-[12px] sm:text-[12.5px] text-gray-400 mt-0.5">
-                View and manage your seat reservations
+                View and manage your space reservations
               </p>
             </div>
             <div className="flex gap-2.5 items-center">

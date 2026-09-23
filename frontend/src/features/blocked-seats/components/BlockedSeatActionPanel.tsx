@@ -7,8 +7,10 @@ import type {
   BlockedSeat,
   BlockedSeatHistoryItem,
   BlockType,
+  ModifyBlockReason,
+  UnblockReason,
 } from "../types/blockedSeats.types";
-import { BLOCK_TYPE_OPTIONS, STATUS_LABELS, STATUS_STYLES } from "../utils/constants";
+import { BLOCK_TYPE_OPTIONS, MODIFY_REASON_OPTIONS, STATUS_LABELS, STATUS_STYLES, TYPE_LABELS, UNBLOCK_REASON_OPTIONS } from "../utils/constants";
 import type { BlockedSeatAction } from "./BlockedSeatActionMenu";
 
 interface Props {
@@ -42,6 +44,24 @@ const historyLabel = (action: string) =>
     "seat_block.cancelled": "Block cancelled",
   })[action] ?? action.replaceAll("_", " ").replaceAll(".", " · ");
 
+const auditFieldLabels: Record<string, string> = {
+  block_type: "Block Type",
+  blocked_from: "Block From",
+  blocked_to: "Block To",
+  reason: "Reason",
+  status: "Status",
+};
+
+const auditValue = (field: string, value: unknown) => {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  const text = String(value);
+  if (field === "status") {
+    return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+  }
+  return text;
+};
+
 export default function BlockedSeatActionPanel({
   action,
   row,
@@ -53,8 +73,8 @@ export default function BlockedSeatActionPanel({
   const [blockType, setBlockType] = useState<BlockType>(row.block_type);
   const [from, setFrom] = useState(reblock ? today() : row.blocked_from);
   const [to, setTo] = useState(reblock ? today() : row.blocked_to);
-  const [reason, setReason] = useState(row.reason);
-  const [unblockReason, setUnblockReason] = useState("");
+  const [modifyReason, setModifyReason] = useState<ModifyBlockReason | "">("");
+  const [unblockReason, setUnblockReason] = useState<UnblockReason | "">("");
   const [history, setHistory] = useState<BlockedSeatHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -85,8 +105,10 @@ export default function BlockedSeatActionPanel({
   }, [action, row.block_id]);
 
   const save = async () => {
-    if (to < from || !reason.trim()) {
-      setError("Enter a valid date range and reason.");
+    if (to < from || (!reblock && !modifyReason)) {
+      setError(
+        to < from ? "Enter a valid date range." : "Select a reason for modifying the block.",
+      );
       return;
     }
     setSaving(true);
@@ -98,14 +120,13 @@ export default function BlockedSeatActionPanel({
           block_type: blockType,
           blocked_from: from,
           blocked_to: to,
-          reason: reason.trim(),
         });
       } else {
         await blockedSeatsService.update(row.block_id, {
           block_type: blockType,
           blocked_from: from,
           blocked_to: to,
-          reason: reason.trim(),
+          reason: modifyReason as ModifyBlockReason,
         });
       }
       onChanged();
@@ -118,11 +139,14 @@ export default function BlockedSeatActionPanel({
   };
 
   const unblock = async () => {
-    if (!unblockReason.trim()) return;
+    if (!unblockReason) {
+      setError("Select a reason for unblocking the seat.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
-      await blockedSeatsService.cancel(row.block_id, unblockReason.trim());
+      await blockedSeatsService.cancel(row.block_id, unblockReason);
       onChanged();
       onClose();
     } catch (requestError: unknown) {
@@ -146,18 +170,20 @@ export default function BlockedSeatActionPanel({
             </div>
             <label className="block text-sm font-medium text-gray-700">
               Reason for unblocking *
-              <textarea
+              <select
                 value={unblockReason}
-                onChange={(event) => setUnblockReason(event.target.value)}
-                className="mt-1.5 min-h-24 w-full rounded-lg border border-gray-200 p-3 outline-none focus:ring-2 focus:ring-indigo-500"
-                maxLength={500}
-              />
+                onChange={(event) => setUnblockReason(event.target.value as UnblockReason)}
+                className={fieldClass}
+              >
+                <option value="" disabled>Select a reason</option>
+                {UNBLOCK_REASON_OPTIONS.map((reason) => <option key={reason} value={reason}>{reason}</option>)}
+              </select>
             </label>
             {error && <p className="text-sm text-red-600">{error}</p>}
           </div>
           <footer className="flex justify-end gap-2 border-t p-4">
             <button onClick={onClose} className="rounded-lg border px-4 py-2 text-sm">Cancel</button>
-            <button disabled={!unblockReason.trim() || saving} onClick={() => void unblock()} className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
+            <button disabled={!unblockReason || saving} onClick={() => void unblock()} className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
               {saving ? <Loader2 className="animate-spin" size={15} /> : <Ban size={15} />} Unblock Seat
             </button>
           </footer>
@@ -206,22 +232,41 @@ export default function BlockedSeatActionPanel({
               </label>
               <label className="text-sm font-medium text-gray-700">
                 Block From
-                <input type="date" value={from} min={reblock ? today() : undefined} onChange={(event) => setFrom(event.target.value)} className={fieldClass} />
+                <input
+                  type="date"
+                  value={from}
+                  min={reblock ? today() : undefined}
+                  onChange={(event) => {
+                    const selectedDate = event.target.value;
+                    setFrom(selectedDate);
+                    setTo(selectedDate);
+                  }}
+                  className={fieldClass}
+                />
               </label>
               <label className="text-sm font-medium text-gray-700">
                 Block To
                 <input type="date" value={to} min={from} onChange={(event) => setTo(event.target.value)} className={fieldClass} />
               </label>
-              <label className="text-sm font-medium text-gray-700 sm:col-span-2">
-                Reason *
-                <textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} className="mt-1.5 min-h-28 w-full rounded-lg border border-gray-200 p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
-              </label>
+              {!reblock && (
+                <label className="text-sm font-medium text-gray-700 sm:col-span-2">
+                  Reason for modification *
+                  <select
+                    value={modifyReason}
+                    onChange={(event) => setModifyReason(event.target.value as ModifyBlockReason)}
+                    className={fieldClass}
+                  >
+                    <option value="" disabled>Select a reason</option>
+                    {MODIFY_REASON_OPTIONS.map((reason) => <option key={reason} value={reason}>{reason}</option>)}
+                  </select>
+                </label>
+              )}
             </div>
           ) : action === "history" ? (
             <dl className="grid grid-cols-2 gap-x-5 gap-y-3 rounded-xl border border-gray-200 p-3 text-xs">
               <div>
                 <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Block Type</dt>
-                <dd className="mt-0.5 font-medium text-gray-800">{row.block_type.replaceAll("_", " ")}</dd>
+                <dd className="mt-0.5 font-medium text-gray-800">{TYPE_LABELS[row.block_type]}</dd>
               </div>
               <div>
                 <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Block Period</dt>
@@ -242,7 +287,7 @@ export default function BlockedSeatActionPanel({
             </dl>
           ) : (
             <dl className="grid grid-cols-[130px_1fr] gap-x-4 gap-y-3 rounded-xl border border-gray-200 p-4 text-sm">
-              <dt className="text-gray-500">Block Type</dt><dd>{row.block_type.replaceAll("_", " ")}</dd>
+              <dt className="text-gray-500">Block Type</dt><dd>{TYPE_LABELS[row.block_type]}</dd>
               <dt className="text-gray-500">Block Period</dt><dd>{row.blocked_from} – {row.blocked_to}</dd>
               <dt className="text-gray-500">Reason</dt><dd className="break-words [overflow-wrap:anywhere]">{row.reason}</dd>
               <dt className="text-gray-500">Blocked By</dt><dd>{row.blocked_by.name ?? "—"}</dd>
@@ -271,7 +316,23 @@ export default function BlockedSeatActionPanel({
                       <p className="mt-1 text-xs text-gray-500">
                         {item.actor_name ?? item.actor_email ?? "System"} · {new Date(item.occurred_at).toLocaleString()}
                       </p>
-                      {!!item.changed_fields?.length && <p className="mt-1 text-xs text-gray-500">Changed: {item.changed_fields.join(", ")}</p>}
+                      {!!item.changed_fields?.length && (
+                        <div className="mt-3 space-y-2">
+                          {item.changed_fields.map((field) => (
+                            <div key={field} className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                                {auditFieldLabels[field] ?? field.replaceAll("_", " ")}
+                              </p>
+                              <div className="mt-1 flex items-start gap-2 text-xs">
+                                <span className="shrink-0 font-medium text-gray-500">Old value:</span>
+                                <span className="min-w-0 break-words font-medium text-gray-900">
+                                  {auditValue(field, item.old_values?.[field])}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ol>

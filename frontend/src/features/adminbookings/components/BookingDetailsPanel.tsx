@@ -113,7 +113,7 @@ export default function BookingDetailsPanel({
           {/* Booking info */}
           <Section title="Booking Info">
             <div className="space-y-3">
-              <InfoRow icon={Armchair} label="Seat" value={seatValue} />
+              <InfoRow icon={Armchair} label="Space" value={seatValue} />
               <InfoRow icon={CalendarPlus} label="Booked On" value={booking.booked_on} />
             </div>
           </Section>

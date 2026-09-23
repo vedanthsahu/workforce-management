@@ -112,6 +112,8 @@ def get_admin_activity_list(
             },
         ) from exc
 
+    rows = _apply_modified_display_status(rows)
+
     items = [
         _build_activity_item(row)
         for row in rows
@@ -352,6 +354,35 @@ def _raise_invalid_hierarchy(message: str) -> None:
             "message": message,
         },
     )
+
+
+# A row that resulted from modifying an earlier booking/visit
+# (modified_from_booking_id / modified_from_guest_visit_id is set) is,
+# internally, just a normal active booking -- but the admin should never see
+# that real state. It should always read as "Modified" so it's clear where
+# it came from (the Modified From column elsewhere ties it back to the
+# original). Mirrors booking_service._apply_modified_display_status, applied
+# to activity_status instead of booking_status.
+_ACTIVE_STATUS_BY_ENTITY: dict[str, str] = {
+    "EMPLOYEE": "CONFIRMED",
+    "GUEST": "SCHEDULED",
+}
+
+
+def _apply_modified_display_status(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    for row in rows:
+        is_guest = str(row["activity_type"]) in {"GUEST_VISIT", "GUEST_BOOKING"}
+        active_status = _ACTIVE_STATUS_BY_ENTITY["GUEST" if is_guest else "EMPLOYEE"]
+        if (
+            (
+                row.get("modified_from_booking_id") is not None
+                or row.get("modified_from_guest_visit_id") is not None
+            )
+            and row.get("activity_status") == active_status
+        ):
+            row["activity_status"] = "MODIFIED"
+
+    return rows
 
 
 def _build_activity_item(row: dict[str, Any]) -> AdminActivityListItemResponse:

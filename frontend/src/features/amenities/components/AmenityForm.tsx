@@ -3,6 +3,10 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useAmenityForm } from "../hooks/useAmenityForm";
 import ApplicableSeatTypesSelect from "./ApplicableSeatTypesSelect";
 
@@ -38,17 +42,16 @@ export default function AmenityForm() {
     }
   };
 
-  const inputClass =
-    "w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500";
-
+  // Same visual chrome as <Input> (components/ui/input.tsx) -- kept as a class
+  // string instead of the component itself because this is a native <select>.
   const selectClass =
-    "w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500";
+    "h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs transition-[color,box-shadow] outline-none cursor-pointer focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50";
 
-  const labelClass =
-    "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
+  // Shared field-label look across all "Add" forms (Office, Building, Floor, Amenity).
+  const labelClass = "text-xs font-semibold text-gray-500 uppercase tracking-wide";
 
   return (
-    <div>
+    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 bg-[#f7f8fa]">
 
       {errorMessage && (
         <div className="mb-4 flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700 px-3.5 py-2.5 rounded-lg text-sm">
@@ -61,64 +64,60 @@ export default function AmenityForm() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
           <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Add Amenity</h1>
-          <p className="text-[11px] text-gray-400 mt-1">
+          <p className="text-xs text-gray-500 mt-0.5">
             Create a new amenity to make it available in your workspace.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
+        <div className="flex items-center gap-2 sm:shrink-0">
+          <Button
+            variant="outline"
+            className="h-9 px-4 rounded-lg"
             onClick={() => router.push("/admin/amenities")}
             onMouseEnter={() => router.prefetch("/admin/amenities")}
-            className="h-9 px-4 text-sm font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50"
           >
             Cancel
-          </button>
+          </Button>
 
-          <button
+          <Button
+            className="h-9 px-4 rounded-lg"
             onClick={handleSave}
             disabled={!isFormValid || loading}
-            className={`h-9 px-4 text-sm font-medium rounded-lg text-white transition-all ${isFormValid && !loading
-                ? "bg-blue-600 hover:bg-blue-700 shadow-sm shadow-blue-200"
-                : "bg-gray-300 cursor-not-allowed"
-              }`}
           >
             {loading ? "Saving..." : "Save Amenity"}
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* FORM CARD */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
 
-        <div className="px-5 py-3 border-b">
-          <h3 className="text-xs font-semibold tracking-widest text-gray-400 uppercase">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
             Basic Information
-          </h3>
+          </p>
         </div>
 
-        <div className="p-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="px-5 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
 
             {/* AMENITY NAME */}
-            <div>
-              <label className={labelClass}>
-                Amenity Name <span className="text-red-400">*</span>
-              </label>
-              <input
+            <div className="space-y-1.5">
+              <Label className={labelClass}>
+                Amenity Name <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
+              </Label>
+              <Input
                 value={formData.amenity_name}
                 onChange={(e) => handleChange("amenity_name", e.target.value)}
                 placeholder="Enter amenity name"
-                className={inputClass}
               />
-              <p className="text-[11px] text-gray-400 mt-1">Example: High Speed Wi-Fi</p>
+              <p className="text-[11px] text-gray-400">Example: High Speed Wi-Fi</p>
             </div>
 
             {/* CATEGORY */}
-            <div>
-              <label className={labelClass}>
-                Category <span className="text-red-400">*</span>
-              </label>
+            <div className="space-y-1.5">
+              <Label className={labelClass}>
+                Category <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
+              </Label>
               <select
                 value={formData.category_id}
                 onChange={(e) => handleChange("category_id", e.target.value)}
@@ -131,31 +130,31 @@ export default function AmenityForm() {
                   </option>
                 ))}
               </select>
-              <p className="text-[11px] text-gray-400 mt-1">Select the most relevant category</p>
+              <p className="text-[11px] text-gray-400">Select the most relevant category</p>
             </div>
 
             {/* DESCRIPTION */}
-            <div className="md:col-span-2">
-              <label className={labelClass}>
-                Description <span className="text-red-400">*</span>
-              </label>
-              <textarea
+            <div className="md:col-span-2 space-y-1.5">
+              <Label className={labelClass}>
+                Description <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
+              </Label>
+              <Textarea
                 rows={3}
                 value={formData.description}
                 onChange={(e) => handleChange("description", e.target.value)}
                 placeholder="Enter short description"
-                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                className="resize-none"
               />
-              <p className="text-[11px] text-gray-400 mt-1">
+              <p className="text-[11px] text-gray-400">
                 Briefly describe what this amenity provides
               </p>
             </div>
 
             {/* STATUS */}
-            <div>
-              <label className={labelClass}>
-                Status <span className="text-red-400">*</span>
-              </label>
+            <div className="space-y-1.5">
+              <Label className={labelClass}>
+                Status <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
+              </Label>
               <select
                 value={formData.is_active ? "ACTIVE" : "INACTIVE"}
                 onChange={(e) => handleChange("is_active", e.target.value === "ACTIVE")}
@@ -164,24 +163,23 @@ export default function AmenityForm() {
                 <option value="ACTIVE">Active</option>
                 <option value="INACTIVE">Inactive</option>
               </select>
-              <p className="text-[11px] text-gray-400 mt-1">
+              <p className="text-[11px] text-gray-400">
                 Inactive amenities will not be available for selection
               </p>
             </div>
 
             {/* APPLICABLE SEAT TYPES */}
-            <div>
-              <label className={labelClass}>Applicable Space Types</label>
+            <div className="space-y-1.5">
+              <Label className={labelClass}>Applicable Space Types</Label>
               <ApplicableSeatTypesSelect
                 value={formData.applicable_seat_types}
                 onChange={handleSeatTypesChange}
               />
-              <p className="text-[11px] text-gray-400 mt-1">
+              <p className="text-[11px] text-gray-400">
                 Leave unselected to show this amenity for every space type
               </p>
             </div>
 
-          </div>
         </div>
 
       </div>
