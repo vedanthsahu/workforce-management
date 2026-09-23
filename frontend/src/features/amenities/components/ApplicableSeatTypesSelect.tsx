@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 
 import {
   Popover,
@@ -81,9 +81,13 @@ export default function ApplicableSeatTypesSelect({ value, onChange, className }
         align="start"
         className="w-(--anchor-width) gap-0 rounded-none border border-gray-300 bg-white p-0 shadow-none ring-0"
       >
-        {APPLICABLE_SEAT_TYPES.map((seatType) => {
-          const selected = value.includes(seatType);
-          return (
+        {/* Already-selected types move up into the chips above instead of
+            staying listed here — removing a chip's X is what brings a type
+            back into this list. */}
+        {APPLICABLE_SEAT_TYPES.filter((seatType) => !value.includes(seatType)).length === 0 ? (
+          <p className="px-3 py-2 text-sm text-gray-400">All space types selected</p>
+        ) : (
+          APPLICABLE_SEAT_TYPES.filter((seatType) => !value.includes(seatType)).map((seatType) => (
             <button
               key={seatType}
               type="button"
@@ -91,10 +95,9 @@ export default function ApplicableSeatTypesSelect({ value, onChange, className }
               className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-gray-900 hover:bg-gray-600 hover:text-white"
             >
               {labelFor(seatType)}
-              {selected && <Check size={14} />}
             </button>
-          );
-        })}
+          ))
+        )}
       </PopoverContent>
     </Popover>
   );

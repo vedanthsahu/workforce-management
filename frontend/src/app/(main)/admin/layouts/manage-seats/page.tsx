@@ -61,6 +61,8 @@ function ManageSeatsPage() {
     filters,
     updateFilter,
     resetFilters,
+    cardFilter,
+    setCardFilter,
     preferences,
     selected,
     toggleSelect,
@@ -240,7 +242,13 @@ function ManageSeatsPage() {
           />
 
           {/* STAT CARDS */}
-          <SpaceStatCards category={activeCategory} stats={categoryStats} loading={statsLoading} />
+          <SpaceStatCards
+            category={activeCategory}
+            stats={categoryStats}
+            loading={statsLoading}
+            cardFilter={cardFilter}
+            onCardFilterChange={setCardFilter}
+          />
 
           {/* FILTERS + VIEW TOGGLE */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
@@ -318,7 +326,9 @@ function ManageSeatsPage() {
           open={bulkOpen}
           onClose={closeBulkEdit}
           selectedIds={[...selected]}
+          seats={seats}
           layoutId={layout.layout_id}
+          category={activeCategory}
           preferences={preferences}
           onSave={saveBulk}
         />

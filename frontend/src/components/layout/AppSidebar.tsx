@@ -166,10 +166,10 @@ const ADMIN_MANAGE_NAV: NavItem[] = [
   { id: "buildings", label: "Buildings", icon: Building },
   { id: "floors", label: "Floors", icon: MapPin },
   { id: "layouts", label: "Floor Layouts", icon: ClipboardList },
-  { id: "seats", label: "Seats", icon: CalendarDays, disabled: true },
+  { id: "seats", label: "Spaces", icon: CalendarDays, disabled: true },
   { id: "amenities", label: "Amenities", icon: Star },
-  { id: "seatstatus", label: "Seat Status", icon: Settings, disabled: true },
-  { id: "blockedseats", label: "Blocked Seats", icon: Ban },
+  { id: "seatstatus", label: "Space Status", icon: Settings, disabled: true },
+  { id: "blockedseats", label: "Blocked Spaces", icon: Ban },
 ];
 
 const ADMIN_OPERATIONS_NAV: NavItem[] = [

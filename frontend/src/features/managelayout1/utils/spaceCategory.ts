@@ -55,8 +55,10 @@ export function categoryOf(seatType: string | null | undefined): "SEATS" | "CABI
 
 // The amenities admin screen tags each amenity with which of the 3 real
 // space types (SEAT/CABIN/CONFERENCE_ROOM) it applies to -- same convention
-// as categoryOf, singular rather than plural.
-const CATEGORY_TO_APPLICABLE_SEAT_TYPE: Record<
+// as categoryOf, singular rather than plural. Also doubles as the fixed
+// seat_type for a bulk edit started from a specific tab (BulkEditModal) --
+// every seat selected there already shares this type.
+export const CATEGORY_TO_APPLICABLE_SEAT_TYPE: Record<
   "SEATS" | "CABINS" | "CONFERENCE_ROOMS",
   string
 > = {

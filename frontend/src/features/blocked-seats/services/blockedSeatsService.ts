@@ -1,6 +1,6 @@
 import { axiosInstance } from "@/lib/http/axios";
 import type {
-  BlockCategory,
+  BlockListScope,
   BlockableFloorLayout,
   BlockedSeatFilters,
   BlockedSeat,
@@ -64,7 +64,7 @@ const cachedLocationValue = (key: string) => {
 };
 
 const blockedSeatListKey = (
-  category: BlockCategory,
+  category: BlockListScope,
   filters: BlockedSeatFilters,
   page: number,
   limit: number,
@@ -117,7 +117,7 @@ export const blockedSeatsService = {
     );
   },
   getCachedList(
-    category: BlockCategory,
+    category: BlockListScope,
     filters: BlockedSeatFilters,
     page = 1,
     limit = 10,
@@ -130,7 +130,7 @@ export const blockedSeatsService = {
       : undefined;
   },
   list(
-    category: BlockCategory,
+    category: BlockListScope,
     filters: BlockedSeatFilters,
     page = 1,
     limit = 10,
@@ -168,9 +168,7 @@ export const blockedSeatsService = {
     layoutCache.clear();
   },
   async cancel(blockId: string, reason: string): Promise<void> {
-    await axiosInstance.post(`/admin/blocked-seats/${blockId}/cancel`, {
-      reason,
-    });
+    await axiosInstance.post(`/admin/blocked-seats/${blockId}/cancel`, { reason });
     listCache.clear();
     summaryCache.clear();
     layoutCache.clear();

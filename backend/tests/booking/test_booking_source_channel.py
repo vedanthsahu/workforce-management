@@ -68,6 +68,10 @@ class CreateBookingSourceChannelTests(unittest.TestCase):
                 return_value=False,
             ),
             patch(
+                "backend.services.booking_service.seat_has_active_block_in_range",
+                return_value=False,
+            ),
+            patch(
                 "backend.services.booking_service.insert_booking",
                 return_value={"booking_id": "1", "booking_type": "EMPLOYEE"},
             ) as mock_insert,
@@ -115,6 +119,10 @@ class CreateBookingSourceChannelTests(unittest.TestCase):
             ),
             patch(
                 "backend.services.booking_service.has_active_booking_conflict",
+                return_value=False,
+            ),
+            patch(
+                "backend.services.booking_service.seat_has_active_block_in_range",
                 return_value=False,
             ),
             patch("backend.services.booking_service.safe_write_audit_log"),

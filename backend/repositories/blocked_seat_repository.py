@@ -53,8 +53,9 @@ def _filtered_base(query: BlockedSeatListQuery, *, details: bool = True) -> tupl
     return sql, params
 
 
-def _category_condition(category: str) -> str:
+def _category_condition(category: str) -> str | None:
     return {
+        "all": None,
         "active": "bs.status = 'ACTIVE' AND %s BETWEEN bs.blocked_from AND bs.blocked_to",
         "today": "bs.status = 'ACTIVE' AND (bs.created_at AT TIME ZONE COALESCE(si.timezone, 'UTC'))::date = %s",
         "upcoming": "bs.status = 'ACTIVE' AND bs.blocked_from > %s",
@@ -77,7 +78,7 @@ def fetch_blocked_seats(
     category_params = (
         [reference_date, reference_date]
         if query.category == "expiring"
-        else [reference_date]
+        else [] if query.category == "all" else [reference_date]
     )
     select = """
         SELECT bs.id::text AS block_id, bs.seat_id::text AS seat_id,
@@ -99,14 +100,12 @@ def fetch_blocked_seats(
         *filter_params,
         *category_params,
     ]
-    sql = (
-        select
-        + base
-        + f" AND {category_sql} ORDER BY bs.blocked_from DESC, bs.id DESC LIMIT %s OFFSET %s"
-    )
+    category_clause = f" AND {category_sql}" if category_sql else ""
+    sql = select + base + category_clause
+    sql += " ORDER BY bs.blocked_from DESC, bs.id DESC LIMIT %s OFFSET %s"
     params.extend([limit, (page - 1) * limit])
     count_base, _ = _filtered_base(query, details=False)
-    count_sql = "SELECT COUNT(*)::integer AS total " + count_base + f" AND {category_sql}"
+    count_sql = "SELECT COUNT(*)::integer AS total " + count_base + category_clause
     count_params: list[Any] = [tenant_id, *filter_params, *category_params]
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(sql, params)
@@ -396,18 +395,19 @@ def fetch_blocked_seats_by_ids(
 
 
 def cancel_blocked_seat(
-    conn: PGConnection, *, tenant_id: str, block_id: str
+    conn: PGConnection, *, tenant_id: str, block_id: str, reason: str
 ) -> dict[str, Any] | None:
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
-            UPDATE blocked_seats SET status = 'CANCELLED', updated_at = NOW()
+            UPDATE blocked_seats
+            SET status = 'CANCELLED', reason = %s, updated_at = NOW()
             WHERE tenant_id = %s AND id = %s AND status = 'ACTIVE'
               AND blocked_to >= CURRENT_DATE
             RETURNING id::text AS block_id, seat_id::text AS seat_id,
                       blocked_from, blocked_to, block_type, reason
             """,
-            (tenant_id, block_id),
+            (reason, tenant_id, block_id),
         )
         row = cur.fetchone()
         return dict(row) if row else None
