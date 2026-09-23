@@ -19,6 +19,7 @@ from backend.services.blocked_seat_service import (
     cancel_seat_block,
     create_blocked_seats,
     get_blockable_floor_layout,
+    get_blocked_seat_summary,
     get_blocked_seats,
     update_seat_block,
 )
@@ -92,6 +93,32 @@ class BlockedSeatRouteTests(unittest.TestCase):
 
 
 class BlockedSeatServiceTests(unittest.TestCase):
+    @patch("backend.services.blocked_seat_service.resolve_blocked_seat_days")
+    @patch("backend.services.blocked_seat_service.fetch_blocked_seat_summary")
+    def test_summary_uses_configured_business_rule_windows(
+        self,
+        fetch_summary: MagicMock,
+        resolve_policy: MagicMock,
+    ) -> None:
+        resolve_policy.return_value = {
+            "UPCOMING": 1,
+            "EXPIRING_SOON": 3,
+            "EXPIRED_WINDOW": 10,
+        }
+        fetch_summary.return_value = {
+            "active_blocks": 3,
+            "seats_blocked_today": 1,
+            "upcoming_blocks": 2,
+            "expiring_soon": 1,
+            "expired": 4,
+        }
+
+        response = get_blocked_seat_summary(MagicMock(), tenant_id="1")
+
+        self.assertEqual(response.active_blocks, 3)
+        self.assertEqual(fetch_summary.call_args.kwargs["upcoming_days"], 1)
+        self.assertEqual(fetch_summary.call_args.kwargs["expiring_soon_days"], 3)
+
     def test_create_rejects_past_block_date(self) -> None:
         yesterday = date.today() - timedelta(days=1)
         with self.assertRaises(HTTPException) as context:
