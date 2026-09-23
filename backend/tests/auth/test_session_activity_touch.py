@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import psycopg2
@@ -57,6 +58,10 @@ class SessionActivityTouchTests(unittest.TestCase):
             patch("backend.api.deps.decode_token", return_value=VALID_CLAIMS),
             patch("backend.api.deps.is_microsoft_token", return_value=False),
             patch(
+                "backend.api.deps.get_settings",
+                return_value=SimpleNamespace(jwt_refresh_token_ttl=2_592_000),
+            ),
+            patch(
                 "backend.api.deps.fetch_active_session",
                 return_value={"session_id": "session-abc", "revoked_at": None},
             ),
@@ -82,6 +87,10 @@ class SessionActivityTouchTests(unittest.TestCase):
         with (
             patch("backend.api.deps.decode_token", return_value=VALID_CLAIMS),
             patch("backend.api.deps.is_microsoft_token", return_value=False),
+            patch(
+                "backend.api.deps.get_settings",
+                return_value=SimpleNamespace(jwt_refresh_token_ttl=2_592_000),
+            ),
             patch(
                 "backend.api.deps.fetch_active_session",
                 return_value={"session_id": "session-abc", "revoked_at": None},
