@@ -91,7 +91,7 @@ export function VisitorTable({
                       key={h}
                       className={cn(
                         "px-4 py-3 font-bold whitespace-nowrap",
-                        ["Guest Name", "Host", "Visit Time", "Location", "Seat Booked", "Status", "Actions"].includes(h)
+                        ["Guest Name", "Host", "Visit Time", "Location", "Space Booked", "Status", "Actions"].includes(h)
                           ? "text-center"
                           : "text-left"
                       )}
@@ -255,7 +255,7 @@ export function VisitorTable({
                     <p className="text-gray-700 font-medium truncate">{v.location}</p>
                   </div>
                   <div>
-                    <p className="text-gray-400">Seat Booked</p>
+                    <p className="text-gray-400">Space Booked</p>
                     {v.seatBooked ? (
                       <p className="text-emerald-600 font-medium">
                         Yes {v.seatCode ? `(${v.seatCode})` : ""}

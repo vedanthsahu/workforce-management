@@ -90,6 +90,7 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         self.assertIn("flr.status = 'ACTIVE'", sql)
         self.assertIn("bldg.status = 'ACTIVE'", sql)
         self.assertIn("st.status = 'ACTIVE'", sql)
+        self.assertIn("s.is_bookable IS NOT TRUE AND %s IS NOT TRUE", sql)
 
     def test_fetch_available_seats_single_date_requires_published_layout(self) -> None:
         cursor = FakeCursor()
@@ -102,6 +103,7 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         self.assertIn("fl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
         self.assertIn("fl.effective_from <= %s", sql)
         self.assertIn("fl.id = s.layout_id", sql)
+        self.assertIn("s.is_bookable IS NOT TRUE AND %s IS NOT TRUE", sql)
 
     def test_fetch_seat_configuration_default_ignores_layout_currency(self) -> None:
         """Admin seat-management must still be able to find a stale seat in

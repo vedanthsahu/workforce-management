@@ -205,10 +205,13 @@ const BookASeatPage: React.FC = () => {
     loadingPreferences,
   } = useBookingForm();
 
-  // Preferences stays hidden until the admin/user actually picks a space
-  // type -- except in modify mode, where form.spaceType already reflects
-  // the existing booking's real type, so there's nothing to wait on.
-  const [spaceTypeChosen, setSpaceTypeChosen] = useState(isModifyMode);
+  // form.spaceType always starts as "SEAT" (Usebookingform.ts's DEFAULT_STATE)
+  // for a fresh booking, or the existing booking's real type in modify mode
+  // -- either way there's already a valid, meaningful selection the moment
+  // this page mounts, so the Seat/Cabin/Conference Room cards (and the
+  // Preferences section below, gated on the same flag) start reflecting it
+  // immediately instead of showing nothing until the admin clicks one.
+  const [spaceTypeChosen, setSpaceTypeChosen] = useState(true);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [preferencesSearch, setPreferencesSearch] = useState("");
 
@@ -251,6 +254,23 @@ const BookASeatPage: React.FC = () => {
   }, [sites, form.siteId]);
 
   const seatsWithSvgId = seats as unknown as SeatWithSvgId[];
+
+  // A deep link (Quick Pick, "Tomorrow's Booking") lands straight on step 3
+  // without ever going through step 2's own availability fetch, so this
+  // triggers that fetch for the first time on step 3 itself (see
+  // Usebookingform.ts). The seat was already verified available right
+  // before this navigation (BookingSidebar's own pre-click check), so
+  // rather than blocking the whole review summary behind a fresh
+  // "Checking availability…" spinner for what's essentially a redundant
+  // re-check, render the summary immediately from the URL-supplied
+  // details (prefillSeatLabel/selectedSite/Building/Floor) and let that
+  // fetch run quietly in the background. Only fall back to a loading
+  // state in the rare case it actually turns up a conflict — one tick
+  // before the hook's own effect bounces back to step 1 with the error —
+  // so a real conflict still never flashes a confirmable summary.
+  const reviewSeat = seats.find((s) => s.id === form.selectedSeatId);
+  const reviewSeatConflict = !!reviewSeat && reviewSeat.status !== "available" && reviewSeat.status !== "yours";
+  const checkingReviewSeat = step === 3 && reviewSeatConflict;
 
   const showHeaderAction = step !== 3;
 
@@ -479,8 +499,9 @@ const BookASeatPage: React.FC = () => {
 
             <section>
               {/* Space type — narrows both the amenity list below and the
-                  actual search. Preferences stays hidden (see
-                  spaceTypeChosen) until one of these is picked. */}
+                  actual search. Defaults to Seat (form.spaceType's own
+                  default) rather than starting blank; picking a different
+                  card here still updates it the same way. */}
               <div className="flex flex-wrap gap-2 sm:gap-3 mb-3 sm:mb-4">
                 {BOOKING_SPACE_TYPES.map((t) => {
                   const active = spaceTypeChosen && form.spaceType === t;
@@ -680,7 +701,7 @@ const BookASeatPage: React.FC = () => {
 
           </div>
 
-          {showSidebar && <BookingSidebar fromDate={form.fromDate} toDate={form.toDate} />}
+          {showSidebar && <BookingSidebar fromDate={form.fromDate} toDate={form.toDate} onConflict={setError} />}
           </div>
         )}
 
@@ -726,7 +747,14 @@ const BookASeatPage: React.FC = () => {
         {/* ════════════════════════════════════════════════════
             STEP 3 – Review & Confirm
         ════════════════════════════════════════════════════ */}
-        {step === 3 && !confirmation && (
+        {step === 3 && !confirmation && (checkingReviewSeat ? (
+          <div className="flex justify-center">
+            <div className="bg-white border border-[#EBEBF5] rounded-2xl overflow-hidden w-full max-w-3xl shadow-sm p-10 flex flex-col items-center gap-3">
+              <div className="w-8 h-8 border-[3px] border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+              <p className="text-[13px] text-gray-500">Checking availability…</p>
+            </div>
+          </div>
+        ) : (
           <div className="flex justify-center">
             <div className="bg-white border border-[#EBEBF5] rounded-2xl overflow-hidden w-full max-w-3xl shadow-sm">
 
@@ -830,7 +858,7 @@ const BookASeatPage: React.FC = () => {
               </div>
             </div>
           </div>
-        )}
+        ))}
 
         {/* ════════════════════════════════════════════════════
             Confirmation success

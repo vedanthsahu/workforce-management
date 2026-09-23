@@ -291,7 +291,7 @@ function BookingCard({ booking }: { booking: ApiBooking }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2 mb-0.5">
-          <p className="text-[12.5px] font-semibold text-gray-800 truncate">Seat {booking.seat_code}</p>
+          <p className="text-[12.5px] font-semibold text-gray-800 truncate">Space {booking.seat_code}</p>
           <BookingStatusBadge status={booking.booking_status} />
         </div>
         <p className="text-[11.5px] text-gray-500 truncate">

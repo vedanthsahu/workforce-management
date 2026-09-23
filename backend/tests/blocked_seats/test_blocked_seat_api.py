@@ -11,10 +11,12 @@ from pydantic import ValidationError
 from backend.api.routes.admin_blocked_seats import router
 from backend.schemas.blocked_seat import (
     BlockedSeatListQuery,
+    BlockedSeatResponse,
     CreateBlockedSeatsRequest,
     UpdateBlockedSeatRequest,
 )
 from backend.services.blocked_seat_service import (
+    cancel_seat_block,
     create_blocked_seats,
     get_blockable_floor_layout,
     get_blocked_seats,
@@ -35,7 +37,7 @@ def _row(block_id: str = "10") -> dict[str, object]:
         "floor_name": "Floor 16",
         "blocked_from": date(2026, 9, 10),
         "blocked_to": date(2026, 9, 12),
-        "block_type": "MAINTENANCE",
+        "block_type": "Operational block",
         "reason": "Cable repair",
         "display_status": "ACTIVE",
         "blocked_by_user_id": "7",
@@ -49,7 +51,7 @@ class BlockedSeatSchemaTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             CreateBlockedSeatsRequest(
                 seat_ids=[501],
-                block_type="MAINTENANCE",
+                block_type="Operational block",
                 blocked_from=date(2026, 9, 12),
                 blocked_to=date(2026, 9, 10),
                 reason="Repair",
@@ -59,7 +61,7 @@ class BlockedSeatSchemaTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             CreateBlockedSeatsRequest(
                 seat_ids=[501, 501],
-                block_type="MAINTENANCE",
+                block_type="Operational block",
                 blocked_from=date(2026, 9, 10),
                 blocked_to=date(2026, 9, 12),
                 reason="Repair",
@@ -98,7 +100,7 @@ class BlockedSeatServiceTests(unittest.TestCase):
                 tenant_id="1",
                 payload=CreateBlockedSeatsRequest(
                     seat_ids=[501],
-                    block_type="MAINTENANCE",
+                    block_type="Operational block",
                     blocked_from=yesterday,
                     blocked_to=yesterday,
                     reason="Repair",
@@ -122,7 +124,12 @@ class BlockedSeatServiceTests(unittest.TestCase):
         audit: MagicMock,
     ) -> None:
         old = _row()
-        updated = {**old, "blocked_to": date(2026, 9, 20), "reason": "Extended repair"}
+        updated = {
+            **old,
+            "block_type": "Restricted",
+            "blocked_to": date(2026, 9, 20),
+            "reason": "Access restriction changed",
+        }
         fetch_rows.side_effect = [[old], [updated]]
         fetch_layout.return_value = {"resources": [{"resource_id": "501"}]}
         fetch_conflicts.return_value = []
@@ -134,14 +141,60 @@ class BlockedSeatServiceTests(unittest.TestCase):
             tenant_id="1",
             block_id="10",
             payload=UpdateBlockedSeatRequest(
-                blocked_to=date(2026, 9, 20), reason="Extended repair"
+                block_type="Restricted",
+                blocked_to=date(2026, 9, 20),
+                reason="Access restriction changed",
             ),
             current_user={"user_id": "7", "tenant_id": "1"},
         )
 
         self.assertEqual(response.blocked_to, date(2026, 9, 20))
+        self.assertEqual(response.reason, "Access restriction changed")
+        self.assertEqual(
+            update_row.call_args.kwargs["reason"],
+            "Access restriction changed",
+        )
         conn.commit.assert_called_once()
         audit.assert_called_once()
+
+    @patch("backend.services.blocked_seat_service.safe_write_audit_log")
+    @patch("backend.services.blocked_seat_service.cancel_blocked_seat")
+    @patch("backend.services.blocked_seat_service.get_blocked_seat")
+    def test_unblock_normalizes_reason_from_block_type(
+        self,
+        get_block: MagicMock,
+        cancel_block: MagicMock,
+        audit: MagicMock,
+    ) -> None:
+        existing = BlockedSeatResponse(
+            **{
+                **_row(),
+                "reason": "Legacy reason",
+                "blocked_by": {"user_id": "7", "name": "Admin User"},
+            }
+        )
+        get_block.return_value = existing
+        cancel_block.return_value = _row()
+        conn = MagicMock()
+
+        response = cancel_seat_block(
+            conn,
+            tenant_id="1",
+            block_id="10",
+            reason="Maintenance completed",
+            current_user={
+                "user_id": "7",
+                "tenant_id": "1",
+                "role_name": "TENANT_ADMIN",
+            },
+        )
+
+        self.assertEqual(response.status, "CANCELLED")
+        self.assertEqual(cancel_block.call_args.kwargs["reason"], "Maintenance completed")
+        self.assertEqual(
+            audit.call_args.kwargs["new_values"]["reason"],
+            "Maintenance completed",
+        )
 
     @patch("backend.services.blocked_seat_service.fetch_blockable_floor_layout")
     def test_layout_range_must_resolve_to_one_effective_layout(
@@ -208,7 +261,7 @@ class BlockedSeatServiceTests(unittest.TestCase):
             site_id=1,
             building_id=2,
             floor_id=3,
-            block_type="MAINTENANCE",
+            block_type="Operational block",
             selected_date=date(2026, 9, 11),
         )
 
@@ -253,7 +306,7 @@ class BlockedSeatServiceTests(unittest.TestCase):
                 "building_id": 14,
                 "floor_id": 16,
                 "status": "ACTIVE",
-                "is_bookable": True,
+                "is_bookable": False,
             }
         ]
         fetch_layout.return_value = {"resources": [{"resource_id": "501"}]}
@@ -266,14 +319,19 @@ class BlockedSeatServiceTests(unittest.TestCase):
             tenant_id="1",
             payload=CreateBlockedSeatsRequest(
                 seat_ids=[501],
-                block_type="MAINTENANCE",
+                block_type="Operational block",
                 blocked_from=start,
                 blocked_to=start + timedelta(days=2),
                 reason="Repair",
             ),
-            current_user={"user_id": "7", "tenant_id": "1"},
+            current_user={
+                "user_id": "7",
+                "tenant_id": "1",
+                "role_name": "TENANT_ADMIN",
+            },
         )
         conn.commit.assert_called_once()
+        self.assertEqual(insert.call_args.kwargs["reason"], "Operational block")
         self.assertEqual(response.created_count, 1)
 
     @patch("backend.services.blocked_seat_service.safe_write_audit_log")
@@ -306,7 +364,7 @@ class BlockedSeatServiceTests(unittest.TestCase):
                 tenant_id="1",
                 payload=CreateBlockedSeatsRequest(
                     seat_ids=[501],
-                    block_type="RESERVED",
+                    block_type="Restricted",
                     blocked_from=start,
                     blocked_to=start + timedelta(days=2),
                     reason="Reserved",

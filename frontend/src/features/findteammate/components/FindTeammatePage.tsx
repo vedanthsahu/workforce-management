@@ -160,7 +160,7 @@ function TeamGroupCard({
                       {member.seat.seat_code}
                     </span>
                   ) : (
-                    <span className="text-[10.5px] text-amber-500 italic">No seat booked</span>
+                    <span className="text-[10.5px] text-amber-500 italic">No space booked</span>
                   )}
                 </div>
               </div>
@@ -238,7 +238,7 @@ function TeamOverview({
       )}
 
       <p className="text-[11px] text-gray-400 text-center pb-2">
-        Click any teammate to view their seat details
+        Click any teammate to view their space details
       </p>
     </div>
   );
@@ -260,7 +260,7 @@ function StatusCard({ inOffice, booking }: { inOffice: boolean; booking: RawTeam
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
           </p>
           <p className="text-[11.5px] text-emerald-600 mt-0.5">
-            {booking ? "Booked a seat for today" : "Checked in today"}
+            {booking ? "Booked a space for today" : "Checked in today"}
           </p>
         </>
       ) : (
@@ -295,7 +295,7 @@ function SeatDetailsGrid({ booking }: { booking: RawTeammateBooking }) {
   const cells: { label: string; value: React.ReactNode }[] = [
     { label: "Building", value: booking.building_name ?? "—" },
     { label: "Floor", value: booking.floor_name ?? "—" },
-    { label: "Seat Number", value: booking.seat_code ?? "—" },
+    { label: "Space Number", value: booking.seat_code ?? "—" },
     { label: "Booking Source", value: booking.source_channel ?? "—" },
     { label: "Start Time", value: formatTime(booking.start_time) },
     { label: "End Time", value: formatTime(booking.end_time) },
@@ -379,7 +379,7 @@ function ResultCard({ result, searchedAt, onBack }: { result: TeammateResult; se
             <div className="p-5">
               <p className="text-[12.5px] font-semibold text-gray-700 flex items-center gap-1.5 mb-4">
                 <MapPin className="w-3.5 h-3.5 text-indigo-400" />
-                Seat Details
+                Space Details
               </p>
               <SeatDetailsGrid booking={result.booking} />
               <p className="mt-4 text-[11px] text-gray-400 flex items-center gap-1.5">

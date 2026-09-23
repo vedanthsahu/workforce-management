@@ -72,9 +72,9 @@ export default function BuildingTable({ data, onEdit, highlightedId }: Props) {
               <th className="pl-6 px-3 py-3 text-left font-bold">Building Name</th>
               <th className="pl-4 px-3 py-3 text-left font-bold">Office Name</th>
               <th className="px-3 py-3 text-center font-bold">Floors</th>
-              <th className="px-3 py-3 text-center font-bold">Total Seats</th>
-              <th className="px-3 py-3 text-center font-bold">Active Seats</th>
-              <th className="px-3 py-3 text-center font-bold">Bookable Seats</th>
+              <th className="px-3 py-3 text-center font-bold">Total Spaces</th>
+              <th className="px-3 py-3 text-center font-bold">Active Spaces</th>
+              <th className="px-3 py-3 text-center font-bold">Bookable Spaces</th>
               <th className="pl-6 px-3 py-3 text-left font-bold">Status</th>
               <th className="px-3 py-3 text-center font-bold">Actions</th>
             </tr>

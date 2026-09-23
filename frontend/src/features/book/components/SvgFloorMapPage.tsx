@@ -700,7 +700,7 @@ const SeatTooltip: React.FC<{
               <div style={{ borderTop: "1px solid #f3f4f6" }} />
               <div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
-                  Seat Type
+                  Space Type
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                   {seat.amenities.map((a) => (
@@ -787,7 +787,7 @@ const SeatTooltip: React.FC<{
             <div style={{ borderTop: "1px solid #f3f4f6" }} />
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
-                Seat Type
+                Space Type
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 {seat.amenities.map((a) => (
