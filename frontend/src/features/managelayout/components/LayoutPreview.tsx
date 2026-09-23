@@ -152,7 +152,17 @@ function pulseStyleBlock(): string {
   // too, since `._foo` and `.foo` target different classes.
   const rules = Object.entries(PULSE_KEYFRAMES).map(([className, color]) => {
     const anim = `${className.replace(/^_/, "")}-kf`;
-    return `@keyframes ${anim}{0%,100%{filter:drop-shadow(0 0 45px ${color});}50%{filter:drop-shadow(0 0 100px ${color}) brightness(1.15);}}.${className}{animation:${anim} 1.6s ease-in-out infinite;}`;
+    // `transform: scale(...)` alongside the glow so a matched seat visibly
+    // grows, not just brightens -- a composited transform, so it's cheap to
+    // animate on hundreds of seats at once (no per-element layout work, same
+    // reasoning as skipping bringToFront above). `transform-box: fill-box`
+    // makes the scale originate from the seat's own center instead of the
+    // whole SVG's (0,0) origin, which is the default for SVG elements.
+    // Seats sit flush against their neighbors with no gap, so scaling up
+    // does mean a matched seat's icon can overlap into its neighbors'
+    // artwork -- kept modest (1.18x) so it still reads as "this one seat"
+    // rather than distorting the whole cluster.
+    return `@keyframes ${anim}{0%,100%{filter:drop-shadow(0 0 45px ${color});transform:scale(1);}50%{filter:drop-shadow(0 0 100px ${color}) brightness(1.15);transform:scale(1.18);}}.${className}{transform-box:fill-box;transform-origin:center;animation:${anim} 1.6s ease-in-out infinite;}`;
   }).join("");
   return `<style>${rules}</style>`;
 }
