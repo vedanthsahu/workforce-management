@@ -6,7 +6,7 @@ import { AmenitiesResponse } from "../types/amenities.types";
 // offices/buildings/floors pages), so this always fetches the full tenant
 // list -- 200 is the backend's max page size (Query(..., le=200)), well
 // above any tenant's real amenity count.
-const FETCH_ALL_LIMIT = 200;
+// const FETCH_ALL_LIMIT = 200;
 
 export const useAmenities = () => {
   const [data, setData] =
