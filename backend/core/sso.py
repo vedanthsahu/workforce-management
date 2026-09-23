@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+import time
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode
@@ -23,6 +24,7 @@ logger = logging.getLogger(f"{LOGGER_NAME}.sso")
 
 MICROSOFT_GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 MICROSOFT_TOKEN_BASE_URL = "https://login.microsoftonline.com"
+GATEWAY_SSO_LOGIN_URL = "https://apps.solugenix.com/sso/auth/login"
 STATE_TTL_SECONDS = 600
 MICROSOFT_SCOPES = (
     "openid",
@@ -104,6 +106,19 @@ def build_auth_url() -> tuple[str, str]:
         }
     )
     return f"{settings.auth_url}?{query}", state
+
+
+def build_gateway_sso_url() -> str:
+    """Create the apps.solugenix.com SSO gateway login URL.
+
+    redirectUI points back at this backend's own gateway callback
+    (/auth/sso-gateway-callback), same as build_auth_url's redirect_uri
+    points back at /auth/callback for the direct flow.
+    """
+    settings = get_settings()
+    redirect_ui = f"{settings.backend_base_url}/auth/sso-gateway-callback"
+    query = urlencode({"redirectUI": redirect_ui})
+    return f"{GATEWAY_SSO_LOGIN_URL}?{query}"
 
 
 def exchange_code_for_token(code: str) -> dict[str, str]:
@@ -277,6 +292,86 @@ def verify_id_token(id_token: str) -> dict[str, Any]:
         )
 
     return claims
+
+
+def decode_gateway_token(token: str) -> dict[str, str]:
+    """Decode the apps.solugenix.com SSO gateway's wrapper token.
+
+    The wrapper is HS256-signed with a secret this service does not hold, so
+    its signature cannot be verified here. Trust is established downstream
+    instead: the embedded Microsoft Graph access token is only acted on
+    after Microsoft itself accepts it (see ``fetch_graph_me``) -- a forged or
+    tampered wrapper would carry a Graph access token whose own RS256
+    signature Microsoft rejects, so the ``tid`` claim read from it below is
+    only trustworthy once that Graph call succeeds.
+
+    Args:
+        token: The ``token`` query parameter from the gateway's redirect.
+
+    Returns:
+        dict[str, str]: ``graph_access_token`` (to pass to Graph calls) and
+        ``azure_tenant_id`` (the ``tid`` claim from that access token).
+
+    Side Effects:
+        None.
+
+    Failure Modes:
+        Raises ``SSOError`` when the token is missing, unparsable, expired,
+        or does not carry an embedded Graph access token with a tenant id.
+    """
+    if not token:
+        raise SSOError(
+            status_code=400,
+            code="missing_gateway_token",
+            message="SSO gateway token is required.",
+        )
+
+    try:
+        claims = jwt.get_unverified_claims(token)
+    except JWTError as exc:
+        raise SSOError(
+            status_code=400,
+            code="invalid_gateway_token",
+            message="SSO gateway token could not be parsed.",
+        ) from exc
+
+    expires_at = claims.get("exp")
+    if not expires_at or float(expires_at) < time.time():
+        raise SSOError(
+            status_code=401,
+            code="expired_gateway_token",
+            message="SSO gateway token has expired.",
+        )
+
+    access_token = str(claims.get("accessToken") or "").strip()
+    if not access_token:
+        raise SSOError(
+            status_code=400,
+            code="missing_graph_access_token",
+            message="SSO gateway token did not include a Microsoft Graph access token.",
+        )
+
+    try:
+        access_claims = jwt.get_unverified_claims(access_token)
+    except JWTError as exc:
+        raise SSOError(
+            status_code=400,
+            code="invalid_graph_access_token",
+            message="Embedded Microsoft Graph access token could not be parsed.",
+        ) from exc
+
+    azure_tenant_id = str(access_claims.get("tid") or "").strip()
+    if not azure_tenant_id:
+        raise SSOError(
+            status_code=400,
+            code="missing_tenant_claim",
+            message="Embedded Microsoft Graph access token did not include a tenant id.",
+        )
+
+    return {
+        "graph_access_token": access_token,
+        "azure_tenant_id": azure_tenant_id,
+    }
 
 
 def fetch_graph_me(access_token: str) -> dict[str, Any]:
