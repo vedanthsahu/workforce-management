@@ -1133,8 +1133,9 @@ def seat_has_active_block_in_range(
     seat_id: str,
     start_date: date,
     end_date: date,
+    allowed_block_types: tuple[str, ...] = (),
 ) -> bool:
-    """Return whether a seat has an ACTIVE block overlapping a date range."""
+    """Return whether a role-blocking ACTIVE block overlaps a date range."""
     query = """
         SELECT 1
         FROM blocked_seats
@@ -1143,11 +1144,15 @@ def seat_has_active_block_in_range(
           AND status = 'ACTIVE'
           AND blocked_from <= %s
           AND blocked_to >= %s
+          AND NOT (block_type = ANY(%s::text[]))
         LIMIT 1
     """
 
     with conn.cursor() as cur:
-        cur.execute(query, (tenant_id, seat_id, end_date, start_date))
+        cur.execute(
+            query,
+            (tenant_id, seat_id, end_date, start_date, list(allowed_block_types)),
+        )
         return cur.fetchone() is not None
 
 
@@ -1754,6 +1759,7 @@ def fetch_available_seats_by_range(
     end_date: date,
     amenity_ids: list[int],
     allow_non_bookable: bool = False,
+    allowed_block_types: tuple[str, ...] = (),
     exclude_booking_id: str | None = None,
 ) -> list[dict[str, Any]]:
 
@@ -1854,6 +1860,7 @@ def fetch_available_seats_by_range(
                     ON bl.seat_id = sd.seat_id
                    AND bl.tenant_id = %s
                    AND bl.status = 'ACTIVE'
+                   AND NOT (bl.block_type = ANY(%s::text[]))
                    AND sd.booking_date
                         BETWEEN bl.blocked_from
                         AND bl.blocked_to
@@ -2151,6 +2158,7 @@ def fetch_available_seats_by_range(
                         exclude_booking_id,
 
                         tenant_id,
+                        list(allowed_block_types),
 
                         tenant_id,
 
@@ -2172,6 +2180,7 @@ def fetch_available_seats(
     booking_date: date,
     amenity_ids: list[int],
     allow_non_bookable: bool = False,
+    allowed_block_types: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     """Fetch computed availability and preference state for floor seats."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -2198,6 +2207,7 @@ def fetch_available_seats(
                 WHERE bl.tenant_id = %s
                   AND bl.floor_id = %s
                   AND bl.status = 'ACTIVE'
+                  AND NOT (bl.block_type = ANY(%s::text[]))
                   AND bl.blocked_from <= %s
                   AND bl.blocked_to >= %s
             ),
@@ -2328,6 +2338,7 @@ def fetch_available_seats(
                 booking_date,
                 tenant_id,
                 floor_id,
+                list(allowed_block_types),
                 booking_date,
                 booking_date,
                 allow_non_bookable,

@@ -118,6 +118,28 @@ def _can_use_non_bookable_seat(current_user: dict[str, Any] | None) -> bool:
     return current_user is not None and _user_role(current_user) in ADMIN_SEAT_ACCESS_ROLES
 
 
+def _allowed_block_types(current_user: dict[str, Any] | None) -> tuple[str, ...]:
+    """Return block types the caller is permitted to book through."""
+    if current_user is None:
+        return ()
+    role = _user_role(current_user)
+    if role in ADMIN_SEAT_ACCESS_ROLES:
+        return ("Restricted", "Exclusive")
+    if role == "FACILITATOR":
+        return ("Restricted",)
+    return ()
+
+
+def _raise_blocked_seat_conflict() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "booking_seat_blocked",
+            "message": "The requested seat is blocked for your role during the requested date range.",
+        },
+    )
+
+
 def _can_book_for_user(
     *,
     current_user: dict[str, Any],
@@ -534,6 +556,15 @@ def book_seat(
                     "message": "The requested seat already has an active booking for that day.",
                 },
             )
+        if seat_has_active_block_in_range(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+            start_date=payload.booking_date,
+            end_date=payload.booking_date,
+            allowed_block_types=_allowed_block_types(current_user),
+        ):
+            _raise_blocked_seat_conflict()
 
         booking = insert_booking(
             conn,
@@ -827,6 +858,7 @@ def get_available_seats(
             booking_date=booking_date,
             amenity_ids=normalized_amenity_ids,
             allow_non_bookable=_can_use_non_bookable_seat(current_user),
+            allowed_block_types=_allowed_block_types(current_user),
         )
     except psycopg2.Error as exc:
         raise HTTPException(
@@ -1231,6 +1263,15 @@ def modify_booking(
                     "message": "The requested seat already has an active booking.",
                 },
             )
+        if seat_has_active_block_in_range(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+            start_date=payload.booking_date,
+            end_date=payload.booking_date,
+            allowed_block_types=_allowed_block_types(current_user),
+        ):
+            _raise_blocked_seat_conflict()
  
         mark_booking_modified(
             conn,
@@ -1521,6 +1562,7 @@ def get_available_seats_by_range(
                 end_date=end_date,
                 amenity_ids=normalized_amenity_ids,
                 allow_non_bookable=_can_use_non_bookable_seat(current_user),
+                allowed_block_types=_allowed_block_types(current_user),
                 exclude_booking_id=exclude_booking_id,
             )
 
@@ -2042,14 +2084,9 @@ payload: BookingEligibilityRequest,
             seat_id=str(payload.seat_id),
             start_date=payload.start_date,
             end_date=payload.end_date,
+            allowed_block_types=_allowed_block_types(current_user),
         ):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "code": "booking_seat_blocked",
-                    "message": "The requested seat is blocked during the requested date range.",
-                },
-            )
+            _raise_blocked_seat_conflict()
         if seat_has_active_booking_in_range(
             conn,
             tenant_id=tenant_id,
