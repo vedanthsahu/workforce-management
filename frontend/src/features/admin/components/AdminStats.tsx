@@ -59,9 +59,11 @@ export default function AdminStats({ data, selectedDate }: Props) {
       href: "/admin/floors",
     },
     {
-      title: "Total Seats",
-      value: data?.total_seats ?? "-",
-      subtitle: "Active seats",
+      title: "Total Spaces",
+      value: data
+        ? Math.max(data.total_seats - data.blocked_seats, 0)
+        : "-",
+      subtitle: "Active spaces",
       icon: Armchair,
       accent: "orange" as Accent,
       // No dedicated seats management page yet -- wire this up once one
@@ -69,7 +71,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
       href: null,
     },
     {
-      title: "Employee Seats Reserved",
+      title: "Employee Spaces Reserved",
       value: data?.employee_bookings_today ?? "-",
       subtitle: `For ${formattedSelectedDate}`,
       icon: UserRound,
@@ -79,13 +81,13 @@ export default function AdminStats({ data, selectedDate }: Props) {
     {
       title: "Guest Visits",
       value: data?.guest_bookings_today ?? "-",
-      subtitle: `${data?.guest_visit_booking_with_seat_today ?? 0} with seats • ${data?.guest_visit_today ?? 0} invite only`,
+      subtitle: `${data?.guest_visit_booking_with_seat_today ?? 0} with spaces • ${data?.guest_visit_today ?? 0} invite only`,
       icon: UserRoundPlus,
       accent: "rose" as Accent,
       href: "/admin/bookings?type=guest",
     },
     {
-      title: "Blocked Seats",
+      title: "Blocked Spaces",
       value: data?.blocked_seats ?? "-",
       subtitle: `Active blocks for ${formattedSelectedDate}`,
       icon: Ban,
@@ -135,7 +137,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
 
             {/* HEADER */}
             <CardHeader className="flex h-[50px] flex-row items-center justify-between pb-2">
-              <CardTitle className={`min-w-0 text-sm font-semibold text-gray-700 ${item.title === "Employee Seats Reserved" ? "-ml-1" : ""}`}>
+              <CardTitle className={`min-w-0 text-sm font-semibold text-gray-700 ${item.title === "Employee Spaces Reserved" ? "-ml-1" : ""}`}>
   {item.title}
 </CardTitle>
 
@@ -165,7 +167,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
                     className="pointer-events-none invisible absolute inset-x-1 bottom-4 z-20 flex items-start gap-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-600 opacity-0 ring-1 ring-inset ring-blue-100 transition-opacity duration-150 group-hover/guest:visible group-hover/guest:opacity-100"
                   >
                     <Info className="mt-px h-3.5 w-3.5 shrink-0" />
-                    <span>Invite-only visitors do not affect seat occupancy.</span>
+                    <span>Invite-only visitors do not affect space occupancy.</span>
                   </div>
                 </div>
               ) : (

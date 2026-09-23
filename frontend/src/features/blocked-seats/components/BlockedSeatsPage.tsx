@@ -12,6 +12,7 @@ import { useBlockedSeatLocations } from "../hooks/useBlockedSeatLocations";
 import { blockedSeatsService } from "../services/blockedSeatsService";
 import type {
   BlockCategory,
+  BlockListScope,
   BlockedSeat,
   BlockedSeatFilters,
   BlockedSeatListResponse,
@@ -53,6 +54,7 @@ const apiErrorMessage = (error: unknown, fallback: string) =>
 export default function BlockedSeatsPage() {
   const router = useRouter();
   const [category, setCategory] = useState<BlockCategory>("active");
+  const [listScope, setListScope] = useState<BlockListScope>("active");
   const [filters, setFilters] = useState<BlockedSeatFilters>(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] =
     useState<BlockedSeatFilters>(EMPTY_FILTERS);
@@ -108,7 +110,7 @@ export default function BlockedSeatsPage() {
   useEffect(() => {
     let cancelled = false;
     const cached = blockedSeatsService.getCachedList(
-      category,
+      listScope,
       appliedFilters,
       page,
     );
@@ -119,14 +121,14 @@ export default function BlockedSeatsPage() {
       cancelled = true;
     };
     blockedSeatsService
-      .list(category, appliedFilters, page)
+      .list(listScope, appliedFilters, page)
       .then((data) => {
         if (!cancelled) setResponse(data);
       })
       .catch((requestError: unknown) => {
         if (!cancelled) {
           setResponse(EMPTY_RESPONSE);
-          setError(apiErrorMessage(requestError, "Unable to load blocked seats."));
+          setError(apiErrorMessage(requestError, "Unable to load blocked spaces."));
         }
       })
       .finally(() => {
@@ -135,7 +137,7 @@ export default function BlockedSeatsPage() {
     return () => {
       cancelled = true;
     };
-  }, [category, appliedFilters, page, refreshKey]);
+  }, [listScope, appliedFilters, page, refreshKey]);
   useEffect(() => {
     if (loading || error) return;
     void Promise.allSettled(
@@ -204,10 +206,10 @@ export default function BlockedSeatsPage() {
         <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-[17px] font-bold leading-tight text-[#1A1A2E] sm:text-[20px]">
-              Blocked Seats
+              Blocked Spaces
             </h1>
             <p className="mt-0.5 text-[11.5px] text-gray-400 sm:text-[12.5px]">
-              Block and manage seats that are unavailable for booking.
+              Block and manage spaces that are unavailable for booking.
             </p>
           </div>
           <button
@@ -215,7 +217,7 @@ export default function BlockedSeatsPage() {
             className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-lg bg-indigo-600 px-4 text-[12.5px] font-semibold text-white transition-colors hover:bg-indigo-700 sm:self-auto sm:text-[13px]"
           >
             <Plus size={17} />
-            Block Seats
+            Block Spaces
           </button>
         </header>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
@@ -226,9 +228,10 @@ export default function BlockedSeatsPage() {
               icon={card.icon}
               iconClass={card.iconClass}
               count={summary[card.summaryKey]}
-              selected={category === card.id}
+              selected={listScope !== "all" && category === card.id}
               onClick={() => {
                 setCategory(card.id);
+                setListScope(card.id);
                 setPage(1);
               }}
             />
@@ -247,10 +250,12 @@ export default function BlockedSeatsPage() {
           onClear={() => {
             setFilters(EMPTY_FILTERS);
             setAppliedFilters(EMPTY_FILTERS);
+            setListScope(category);
             setPage(1);
           }}
           onSearch={() => {
             setAppliedFilters(filters);
+            setListScope("all");
             setPage(1);
           }}
         />
@@ -260,7 +265,7 @@ export default function BlockedSeatsPage() {
           </p>
         )}
         <BlockedSeatsTable
-          title={CATEGORY_LABELS[category]}
+          title={listScope === "all" ? "Filtered Blocks" : CATEGORY_LABELS[category]}
           rows={response.items}
           total={response.pagination.total}
           page={page}

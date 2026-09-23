@@ -3,6 +3,7 @@ import axios from "axios";
 
 import { floorService } from "../services/floorService";
 import { FloorSite, FloorBuilding } from "../types/floor.types";
+import { codeWithParent, uniqueCode } from "@/lib/codeGenerator";
 
 export const useFloorForm = () => {
   const [loading, setLoading] = useState(false);
@@ -10,6 +11,10 @@ export const useFloorForm = () => {
 
   const [sites, setSites] = useState<FloorSite[]>([]);
   const [buildings, setBuildings] = useState<FloorBuilding[]>([]);
+
+  // Existing floor codes for the selected building, fetched so the
+  // generated code can be disambiguated (e.g. GRO, GRO-01) before submit.
+  const [existingFloorCodes, setExistingFloorCodes] = useState<string[]>([]);
 
   const [formData, setFormData] = useState({
     site_id: "",
@@ -22,6 +27,31 @@ export const useFloorForm = () => {
   useEffect(() => {
     fetchSites();
   }, []);
+
+  // Floors existing under the selected building, refetched whenever the
+  // building changes -- their codes are what the generated code must avoid.
+  useEffect(() => {
+    if (!formData.building_id) {
+      setExistingFloorCodes([]);
+      return;
+    }
+    floorService.getFloors(Number(formData.building_id)).then(
+      (floors) => setExistingFloorCodes(floors.map((f) => f.floor_code)),
+      (error) => console.error("Failed to load existing floor codes", error)
+    );
+  }, [formData.building_id]);
+
+  // Floor code is derived from the parent building's code + the floor name,
+  // not typed by hand -- keep it in sync with whichever changed, and
+  // disambiguate against floors that already exist under this building.
+  useEffect(() => {
+    const building = buildings.find((b) => b.building_id === formData.building_id);
+    const base = codeWithParent(building?.building_code ?? "", formData.floor_name);
+    const generated = uniqueCode(base, existingFloorCodes);
+    setFormData((prev) =>
+      prev.floor_code === generated ? prev : { ...prev, floor_code: generated }
+    );
+  }, [formData.building_id, formData.floor_name, buildings, existingFloorCodes]);
 
   const fetchSites = async () => {
     try {

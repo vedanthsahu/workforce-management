@@ -2,7 +2,7 @@
 
 import type { ApiUser, ApiUserSearchResult, ApiUserStatus, User } from "../types/users.types";
 
-export { getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
+export { getRoleBadgeClass, formatRoleLabel } from "@/features/roles/utils/roles.utils";
 
 export function mapApiUserToUser(item: ApiUser): User {
   return {

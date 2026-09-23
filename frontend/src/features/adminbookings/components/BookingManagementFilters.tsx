@@ -615,12 +615,12 @@ export default function BookingManagementFilters({
           </div>
         </Field>
 
-        <Field label="Seat Number">
+        <Field label="Space Number">
           <div ref={seatRef} className="relative w-full sm:w-60">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Search seat number"
+              placeholder="Search space number"
               value={filters.seatNumber}
               onChange={(e) => {
                 onUpdate("seatNumber", e.target.value);

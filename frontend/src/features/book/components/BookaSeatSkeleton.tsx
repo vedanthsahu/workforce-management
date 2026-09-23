@@ -1,6 +1,7 @@
 "use client";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { BookingSidebarSkeleton } from "./BookingSidebar";
 
 export function BookaSeatSkeleton() {
   return (
@@ -91,10 +92,7 @@ export function BookaSeatSkeleton() {
         </div>
 
         {/* Sidebar */}
-        <div className="flex flex-col gap-4">
-          <Skeleton className="h-36 rounded-2xl" />
-          <Skeleton className="h-40 rounded-2xl" />
-        </div>
+        <BookingSidebarSkeleton />
       </div>
     </>
   );

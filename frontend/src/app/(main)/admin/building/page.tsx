@@ -12,6 +12,7 @@ import EditBuildingModal from "@/features/building/components/EditBuildingModal"
 import { useBuildings } from "@/features/building/hooks/useBuildings";
 import { Building } from "@/features/building/types/building.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
+import { searchMatchRank } from "@/lib/searchRank";
 
 type BannerState = { type: "success" | "error"; message: string } | null;
 
@@ -63,24 +64,17 @@ function BuildingsPage() {
   };
 
   const filteredBuildings = buildings
-    .filter((building) => {
-      const name = (building.building_name || "").toLowerCase();
-      const query = search.toLowerCase();
-      let i = 0;
-      for (const char of name) {
-        if (char === query[i]) i++;
-        if (i === query.length) return true;
-      }
-      return query.length === 0;
-    })
-    .filter((building) => !statusFilter || building.status === statusFilter)
+    .map((building) => ({ building, rank: searchMatchRank(building.building_name || "", search) }))
+    .filter((x): x is { building: Building; rank: number } => x.rank !== null)
+    .filter((x) => !statusFilter || x.building.status === statusFilter)
     .sort((a, b) => {
       if (highlightedId) {
-        if (a.building_id === highlightedId) return -1;
-        if (b.building_id === highlightedId) return 1;
+        if (a.building.building_id === highlightedId) return -1;
+        if (b.building.building_id === highlightedId) return 1;
       }
-      return 0;
-    });
+      return a.rank - b.rank;
+    })
+    .map((x) => x.building);
 
   const itemsPerPage = 10;
   const totalPages = Math.ceil(filteredBuildings.length / itemsPerPage);

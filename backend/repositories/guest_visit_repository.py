@@ -98,15 +98,12 @@ def _append_guest_visit_filters(
         params.append(requires_seat)
 
     if search:
-        pattern = f"%{search.strip()}%"
-        query += """
-            AND (
-                g.full_name ILIKE %s
-                OR g.email ILIKE %s
-                OR g.phone ILIKE %s
-            )
-        """
-        params.extend([pattern, pattern, pattern])
+        # Prefix-only match on the guest's name, matching the search-as-you-go
+        # behavior used across the admin list pages -- e.g. "santi" matches
+        # "Santiago Rao" but "iago" or a fuzzy/mid-name match does not.
+        pattern = f"{search.strip()}%"
+        query += " AND g.full_name ILIKE %s"
+        params.append(pattern)
 
     return query
 

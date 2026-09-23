@@ -717,8 +717,12 @@ def activate_floor_layout(
     effective_date: date | None = None,
 ) -> FloorLayoutResponse:
     """Publish one layout and archive any currently active layout on the
-    floor -- or, if `effective_date` is a future date, schedule it to take
-    over automatically once that date arrives instead of publishing now."""
+    floor -- or, if `effective_date` is a future date AND the floor already
+    has a published layout to protect, schedule it to take over
+    automatically once that date arrives instead of publishing now. A
+    floor with zero published layouts always publishes immediately,
+    regardless of effective_date -- see the floor_has_published_layout
+    check below."""
     tenant_id = str(current_user["tenant_id"])
     user_id = str(current_user["user_id"])
     failure_audit_action = FLOOR_LAYOUT_PUBLISHED
@@ -755,6 +759,30 @@ def activate_floor_layout(
             return FloorLayoutResponse(**layout)
 
         if effective_date is not None:
+            # The whole point of scheduling (a min-advance-days buffer
+            # before cutover) is protecting bookings a user could already
+            # have made against the floor's CURRENT published layout -- a
+            # layout that's about to be silently replaced out from under
+            # them. A floor with zero published layouts has nothing live to
+            # protect: no seat on it has ever been bookable, so no booking
+            # could possibly reference one. There's also no way to
+            # "unpublish" a layout once it's live (only a site can be
+            # deactivated), so this is the one moment a layout can safely
+            # skip the buffer entirely. Publish immediately regardless of
+            # whatever effective_date was passed -- this is a brand-new
+            # location, not a replacement. Only checked here (not
+            # unconditionally above) since it's irrelevant, and an
+            # avoidable DB call, whenever effective_date wasn't even given.
+            floor_has_published_layout = (
+                fetch_published_layout_for_floor(
+                    conn, tenant_id=tenant_id, floor_id=str(layout["floor_id"]),
+                )
+                is not None
+            )
+        else:
+            floor_has_published_layout = False
+
+        if effective_date is not None and floor_has_published_layout:
             tz_name = fetch_site_timezone(
                 conn, tenant_id=tenant_id, site_id=str(layout["site_id"]),
             )

@@ -27,6 +27,10 @@ from backend.repositories.floor_layout_repository import (
     touch_floor_layout_updated_by,
 )
 from backend.repositories.location_repository import (
+    activate_buildings_by_ids,
+    activate_floors_by_ids_for_building,
+    activate_floors_by_ids_for_site,
+    activate_site_by_id,
     deactivate_buildings_by_site,
     deactivate_floors_by_building,
     deactivate_floors_by_site,
@@ -299,14 +303,39 @@ def update_site_metadata(
         if updated_site is None:
             _raise_not_found("site")
 
-        # Deactivating an office cascades down: a building (and its floors)
-        # can never stay ACTIVE under an inactive office. Reactivating a
-        # site is deliberately NOT cascaded back up -- each building/floor
-        # must be reactivated on its own, so nothing that was already
-        # inactive for an unrelated reason gets silently resurrected.
+        # Deactivating an office cascades down automatically: a building
+        # (and its floors) can never stay ACTIVE under an inactive office.
+        # Reactivating a site is NOT auto-cascaded the same way -- only the
+        # buildings/floors the caller explicitly opts in via
+        # reactivate_building_ids/reactivate_floor_ids come back, so nothing
+        # that was already inactive for an unrelated reason gets silently
+        # resurrected.
         if updates.get("status") == "INACTIVE":
             deactivate_buildings_by_site(conn, tenant_id=tenant_id, site_id=site_id)
             deactivate_floors_by_site(conn, tenant_id=tenant_id, site_id=site_id)
+        elif updates.get("status") == "ACTIVE":
+            # Opt-in reactivation: only the buildings/floors the caller
+            # explicitly selected come back, never every inactive child.
+            # Buildings first so activate_floors_by_ids_for_site sees them
+            # as ACTIVE when deciding which floors it's allowed to reach.
+            if payload.reactivate_building_ids:
+                activate_buildings_by_ids(
+                    conn,
+                    tenant_id=tenant_id,
+                    site_id=site_id,
+                    building_ids=payload.reactivate_building_ids,
+                )
+            if payload.reactivate_floor_ids:
+                activate_floors_by_ids_for_site(
+                    conn,
+                    tenant_id=tenant_id,
+                    site_id=site_id,
+                    floor_ids=payload.reactivate_floor_ids,
+                )
+        elif payload.reactivate_building_ids or payload.reactivate_floor_ids:
+            _raise_invalid_hierarchy(
+                "reactivate_building_ids/reactivate_floor_ids are only valid when activating the office.",
+            )
 
         conn.commit()
     except HTTPException as he:
@@ -851,6 +880,25 @@ def update_building_metadata(
                 building_name=str(updates["building_name"]),
             )
 
+        if updates.get("status") == "ACTIVE" and building.get("status") != "ACTIVE":
+            site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=str(building["site_id"]))
+            if site is None:
+                _raise_invalid_hierarchy(
+                    "Cannot activate a building while its office is INACTIVE.",
+                )
+            elif site.get("status") != "ACTIVE":
+                # A building can never be ACTIVE under an INACTIVE office.
+                # The caller must explicitly opt in via reactivate_office
+                # (surfaced in the UI as a locked, always-checked "Office"
+                # row) to also reactivate the office in the same request --
+                # otherwise this stays a hard rejection, same as before.
+                if payload.reactivate_office:
+                    activate_site_by_id(conn, tenant_id=tenant_id, site_id=str(building["site_id"]))
+                else:
+                    _raise_invalid_hierarchy(
+                        "Cannot activate a building while its office is INACTIVE.",
+                    )
+
         updated_building = update_building(
             conn,
             tenant_id=tenant_id,
@@ -864,6 +912,20 @@ def update_building_metadata(
         # and same reactivation exception as the site cascade above.
         if updates.get("status") == "INACTIVE":
             deactivate_floors_by_building(conn, tenant_id=tenant_id, building_id=building_id)
+        elif updates.get("status") == "ACTIVE":
+            # Opt-in reactivation of the floors the caller explicitly
+            # selected, same pattern as the site-level cascade above.
+            if payload.reactivate_floor_ids:
+                activate_floors_by_ids_for_building(
+                    conn,
+                    tenant_id=tenant_id,
+                    building_id=building_id,
+                    floor_ids=payload.reactivate_floor_ids,
+                )
+        elif payload.reactivate_floor_ids:
+            _raise_invalid_hierarchy(
+                "reactivate_floor_ids is only valid when activating the building.",
+            )
 
         conn.commit()
     except HTTPException as he:
@@ -1071,6 +1133,42 @@ def update_floor_metadata(
                 ),
                 floor_name=str(updates["floor_name"]),
             )
+
+        if updates.get("status") == "ACTIVE" and floor.get("status") != "ACTIVE":
+            building = fetch_building_by_id(conn, tenant_id=tenant_id, building_id=str(floor["building_id"]))
+            if building is None:
+                _raise_invalid_hierarchy(
+                    "Cannot activate a floor while its building is INACTIVE.",
+                )
+
+            site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=str(building["site_id"]))
+            if site is None:
+                _raise_invalid_hierarchy(
+                    "Cannot activate a floor while its office is INACTIVE.",
+                )
+
+            # Two independent opt-in cascades, same pattern as the building
+            # endpoint's reactivate_office: each ancestor that's still
+            # INACTIVE needs its own explicit flag (surfaced in the UI as a
+            # locked, always-checked row) before it gets reactivated here.
+            if site.get("status") != "ACTIVE":
+                if not payload.reactivate_office:
+                    _raise_invalid_hierarchy(
+                        "Cannot activate a floor while its office is INACTIVE.",
+                    )
+                activate_site_by_id(conn, tenant_id=tenant_id, site_id=str(building["site_id"]))
+
+            if building.get("status") != "ACTIVE":
+                if not payload.reactivate_building:
+                    _raise_invalid_hierarchy(
+                        "Cannot activate a floor while its building is INACTIVE.",
+                    )
+                activate_buildings_by_ids(
+                    conn,
+                    tenant_id=tenant_id,
+                    site_id=str(building["site_id"]),
+                    building_ids=[int(building["building_id"])],
+                )
 
         updated_floor = update_floor(
             conn,

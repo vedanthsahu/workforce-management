@@ -205,18 +205,26 @@ export default function SeatTable({
     else onSelectAll();
   };
 
+  // A configured row's checkbox is disabled below -- "select all" must be
+  // disabled the same way once nothing on the page is actually selectable,
+  // not just when the page itself is empty. Otherwise it stays clickable
+  // and silently no-ops (or worse, looks actionable) once every row here
+  // is already configured.
+  const hasSelectableSeat = seats.some((s) => !s.is_configured);
+
   const renderHeaderCell = (key: ColumnKey) => {
     switch (key) {
       case "select":
         return (
-          <th key={key} className="px-3 py-3">
+          <th key={key} className="px-4 py-3 text-left">
             <input
               type="checkbox"
               checked={isAllSelected}
               ref={(el) => { if (el) el.indeterminate = isIndeterminate; }}
               onChange={handleSelectAll}
-              disabled={seats.length === 0}
-              className={`mr-2 w-4 h-4 rounded border-gray-300 accent-indigo-600 ${seats.length === 0 ? "opacity-40 cursor-not-allowed pointer-events-none" : "cursor-pointer"}`}
+              disabled={!hasSelectableSeat}
+              title={!hasSelectableSeat && seats.length > 0 ? "Every space here is already configured — use Edit to modify" : undefined}
+              className={`w-4 h-4 rounded border-gray-300 accent-indigo-600 ${!hasSelectableSeat ? "opacity-40 cursor-not-allowed pointer-events-none" : "cursor-pointer"}`}
             />
           </th>
         );
@@ -267,12 +275,15 @@ export default function SeatTable({
       case "select":
         return (
           <td key={key} className="px-4 py-3">
-            <input
-              type="checkbox"
-              checked={isSelected}
-              onChange={() => onToggleSelect(seat.seat_svg_id)}
-              className="w-4 h-4 rounded border-gray-300 accent-indigo-600 cursor-pointer"
-            />
+            <span title={seat.is_configured ? "Already configured — use Edit to modify" : undefined}>
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => !seat.is_configured && onToggleSelect(seat.seat_svg_id)}
+                disabled={seat.is_configured}
+                className={`w-4 h-4 rounded border-gray-300 accent-indigo-600 ${seat.is_configured ? "opacity-30 cursor-not-allowed pointer-events-none" : "cursor-pointer"}`}
+              />
+            </span>
           </td>
         );
       case "code":
@@ -433,11 +444,14 @@ export default function SeatTable({
                   <tr
                     key={seat.seat_id}
                     className={`border-b border-gray-100 transition-colors ${isSelected
-                      ? "bg-indigo-50/60"
+                      ? "bg-indigo-50/60 hover:bg-indigo-50/60"
                       : seat.has_unpublished_changes
-                        ? "bg-amber-100/60"
-                        : idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"
-                      } hover:bg-indigo-50/40`}
+                        // Pending (unpublished) tint must survive hover -- a plain
+                        // hover:bg-indigo-50/40 here would wash it out, making the
+                        // row look "clean" the moment the admin mouses over it.
+                        ? "bg-amber-100/60 hover:bg-amber-100/60"
+                        : idx % 2 === 0 ? "bg-white hover:bg-indigo-50/40" : "bg-gray-50/40 hover:bg-indigo-50/40"
+                      }`}
                   >
                     {columns.map((key) => renderCell(key, seat, isSelected))}
                   </tr>

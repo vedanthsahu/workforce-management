@@ -71,7 +71,17 @@ export default function FloorLayoutsPage() {
     fetchLayouts(data.floorId);
   }, [setSelection, fetchLayouts]);
 
-
+  // Carry the tree's current office/building/floor selection into the
+  // upload page so it lands pre-populated instead of starting blank.
+  // UploadLayoutPage/LayoutForm already know how to resolve names and
+  // auto-generate the layout name from these same three params.
+  const uploadHref = selection.floorId
+    ? `/admin/layouts/upload?${new URLSearchParams({
+        siteId: selection.siteId,
+        buildingId: selection.buildingId,
+        floorId: selection.floorId,
+      }).toString()}`
+    : "/admin/layouts/upload";
 
   return (
     <main className="flex-1 bg-[#f8fafc] p-6 space-y-6 overflow-y-auto">
@@ -85,7 +95,7 @@ export default function FloorLayoutsPage() {
         </div>
         <div className="flex items-center gap-3">
           <Link
-            href="/admin/layouts/upload"
+            href={uploadHref}
             className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700 transition-colors"
           >
             ⬆ Upload New Layout

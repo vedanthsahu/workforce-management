@@ -57,6 +57,5 @@ export interface ConfigurationItem {
 export interface ConfigurationSection {
   id: string;
   title: string;
-  subtitle: string;
   itemIds: string[];
 }

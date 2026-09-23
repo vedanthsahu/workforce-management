@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ChevronDown, Info, X } from "lucide-react";
+import { CheckCircle2, Info, X } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ConfigurationSkeleton } from "./ConfigurationSkeleton";
 import { CONFIGURATION_SECTIONS, INITIAL_CONFIGURATIONS } from "../utils/configurationData";
 import type { ConfigurationField, ConfigurationItem } from "../types/configuration.types";
 import {
+  fetchBlockedSeatPolicy,
   fetchBookingPolicy,
   fetchLayoutPolicy,
+  updateBlockedSeatPolicy,
   updateBookingPolicy,
   updateLayoutPolicy,
 } from "../services/configuration.service";
@@ -25,21 +27,11 @@ const BACKED_ITEM_IDS = new Set([
   "booking-calendar-employee",
   "visitor-booking",
   "layout-visibility",
+  "blocked-seat-policy",
 ]);
 
 function withFieldValue(fields: ConfigurationField[], key: string, value: number): ConfigurationField[] {
   return fields.map((f) => (f.key === key ? { ...f, value } : f));
-}
-
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("en-US", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 function draftKey(itemId: string, fieldKey: string): string {
@@ -74,7 +66,7 @@ function SettingRow({
   readOnly?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-6 py-4">
+    <div className="flex items-center justify-between gap-6 py-4 px-2 -mx-2 rounded-lg transition-colors hover:bg-gray-50">
       <div className="min-w-0">
         <p className="text-sm font-normal text-black">
           {label}
@@ -108,7 +100,6 @@ export default function ConfigurationsListPage() {
   // comparison that could false-negative if someone types back to the
   // original number.
   const [draft, setDraft] = useState<Record<string, number>>({});
-  const [detailsOpen, setDetailsOpen] = useState(true);
   const [showConfirm, setShowConfirm] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -122,8 +113,8 @@ export default function ConfigurationsListPage() {
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([fetchBookingPolicy(), fetchLayoutPolicy()])
-      .then(([booking, layout]) => {
+    Promise.all([fetchBookingPolicy(), fetchLayoutPolicy(), fetchBlockedSeatPolicy()])
+      .then(([booking, layout, blockedSeat]) => {
         if (cancelled) return;
         setConfigurations((prev) =>
           prev.map((c) => {
@@ -142,6 +133,12 @@ export default function ConfigurationsListPage() {
               let fields = withFieldValue(c.fields, "draftDays", layout.visibility_days.draft);
               fields = withFieldValue(fields, "archivedDays", layout.visibility_days.archived);
               fields = withFieldValue(fields, "discardedDays", layout.visibility_days.deleted);
+              return { ...c, fields };
+            }
+            if (c.id === "blocked-seat-policy") {
+              let fields = withFieldValue(c.fields, "upcomingDays", blockedSeat.upcoming_days);
+              fields = withFieldValue(fields, "expiringSoonDays", blockedSeat.expiring_soon_days);
+              fields = withFieldValue(fields, "expiredWindowDays", blockedSeat.expired_window_days);
               return { ...c, fields };
             }
             return c;
@@ -253,6 +250,18 @@ export default function ConfigurationsListPage() {
             resolvedFields = withFieldValue(fieldsWithDraft, "draftDays", result.visibility_days.draft);
             resolvedFields = withFieldValue(resolvedFields, "archivedDays", result.visibility_days.archived);
             resolvedFields = withFieldValue(resolvedFields, "discardedDays", result.visibility_days.deleted);
+          } else if (itemId === "blocked-seat-policy") {
+            const upcomingDays = fieldsWithDraft.find((f) => f.key === "upcomingDays")?.value;
+            const expiringSoonDays = fieldsWithDraft.find((f) => f.key === "expiringSoonDays")?.value;
+            const expiredWindowDays = fieldsWithDraft.find((f) => f.key === "expiredWindowDays")?.value;
+            const result = await updateBlockedSeatPolicy({
+              upcoming_days: upcomingDays,
+              expiring_soon_days: expiringSoonDays,
+              expired_window_days: expiredWindowDays,
+            });
+            resolvedFields = withFieldValue(fieldsWithDraft, "upcomingDays", result.upcoming_days);
+            resolvedFields = withFieldValue(resolvedFields, "expiringSoonDays", result.expiring_soon_days);
+            resolvedFields = withFieldValue(resolvedFields, "expiredWindowDays", result.expired_window_days);
           }
         }
 
@@ -274,14 +283,6 @@ export default function ConfigurationsListPage() {
       setSaving(false);
     }
   };
-
-  const mostRecentUpdate = useMemo(
-    () =>
-      configurations.reduce((latest, item) =>
-        new Date(item.lastUpdatedAt) > new Date(latest.lastUpdatedAt) ? item : latest
-      ),
-    [configurations]
-  );
 
   if (loading) {
     return <ConfigurationSkeleton />;
@@ -393,23 +394,6 @@ export default function ConfigurationsListPage() {
               system based on the defined rules.
             </p>
           </div>
-        </div>
-
-        {/* UPDATE DETAILS */}
-        <div>
-          <button
-            type="button"
-            onClick={() => setDetailsOpen((o) => !o)}
-            className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            <ChevronDown size={14} className={`transition-transform ${detailsOpen ? "" : "-rotate-90"}`} />
-            Update details
-          </button>
-          {detailsOpen && (
-            <p className="text-xs text-black mt-1.5 ml-[21px]">
-              All settings last updated {formatDateTime(mostRecentUpdate.lastUpdatedAt)} by {mostRecentUpdate.lastUpdatedBy}.
-            </p>
-          )}
         </div>
       </div>
 

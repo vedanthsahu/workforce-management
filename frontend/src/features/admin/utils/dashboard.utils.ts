@@ -226,9 +226,9 @@ export const TREND_PERIOD_OPTIONS: { value: TrendPeriod; label: string }[] = [
 ];
 
 export const DONUT_META: Record<string, { label: string; color: string }> = {
-  booked: { label: "Reserved seats", color: "#4F46E5" },
-  blocked: { label: "Blocked seats", color: "#F59E0B" },
-  available: { label: "Available seats", color: "#10B981" },
+  booked: { label: "Reserved spaces", color: "#4F46E5" },
+  blocked: { label: "Blocked spaces", color: "#F59E0B" },
+  available: { label: "Available spaces", color: "#10B981" },
 };
 
 export const TOP_OFFICES_PER_PAGE = 5;

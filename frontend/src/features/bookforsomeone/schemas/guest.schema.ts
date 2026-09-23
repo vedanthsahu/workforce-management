@@ -17,6 +17,9 @@ export const normalizeMobileNumber = (value: string) => {
   return parsed.number;
 };
 
+// Organization is alphanumeric + spaces only -- no punctuation/special characters.
+export const sanitizeOrganization = (value: string) => value.replace(/[^a-zA-Z0-9\s]/g, "");
+
 export const createGuestSchema = z.object({
   firstName: z.string().trim().min(1, "First name is required"),
   lastName: z.string().trim().min(1, "Last name is required"),
@@ -35,11 +38,8 @@ export const createGuestSchema = z.object({
   organization: z
     .string()
     .trim()
-    .refine((val) => !val || /^[a-zA-Z\s.,&'-]+$/.test(val), {
-      message: "Organization name must not contain special characters",
-    })
-    .refine((val) => !val || !/\d/.test(val), {
-      message: "Organization name must not contain numbers",
+    .refine((val) => !val || /^[a-zA-Z0-9\s]+$/.test(val), {
+      message: "Organization name can only contain letters and numbers",
     })
     .optional(),
 });

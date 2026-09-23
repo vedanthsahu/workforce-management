@@ -570,6 +570,125 @@ def deactivate_floors_by_building(
 
 
 
+def activate_buildings_by_ids(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+    building_ids: list[int],
+) -> int:
+    """Reactivate a chosen subset of a site's currently-INACTIVE buildings.
+
+    Counterpart to deactivate_buildings_by_site, but explicit/opt-in: callers
+    pass exactly the building ids the user selected in the reactivation
+    checklist, rather than every inactive building under the site.
+    """
+    if not building_ids:
+        return 0
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE buildings
+            SET status = 'ACTIVE', updated_at = NOW()
+            WHERE tenant_id = %s
+              AND site_id = %s
+              AND id = ANY(%s)
+              AND status = 'INACTIVE'
+            """,
+            (tenant_id, site_id, building_ids),
+        )
+        return cur.rowcount
+
+
+def activate_floors_by_ids_for_site(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+    floor_ids: list[int],
+) -> int:
+    """Reactivate a chosen subset of a site's currently-INACTIVE floors.
+
+    Only reaches floors whose building is ACTIVE (already, or just reactivated
+    by activate_buildings_by_ids earlier in the same transaction) -- a floor
+    can never end up ACTIVE while its own building is still INACTIVE, even if
+    the caller selected it.
+    """
+    if not floor_ids:
+        return 0
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE floors
+            SET status = 'ACTIVE', updated_at = NOW()
+            WHERE tenant_id = %s
+              AND site_id = %s
+              AND id = ANY(%s)
+              AND status = 'INACTIVE'
+              AND building_id IN (
+                  SELECT id FROM buildings
+                  WHERE tenant_id = %s AND site_id = %s AND status = 'ACTIVE'
+              )
+            """,
+            (tenant_id, site_id, floor_ids, tenant_id, site_id),
+        )
+        return cur.rowcount
+
+
+def activate_floors_by_ids_for_building(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    building_id: str,
+    floor_ids: list[int],
+) -> int:
+    """Reactivate a chosen subset of a building's currently-INACTIVE floors.
+
+    Caller must ensure the building itself is ACTIVE before calling this.
+    """
+    if not floor_ids:
+        return 0
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE floors
+            SET status = 'ACTIVE', updated_at = NOW()
+            WHERE tenant_id = %s
+              AND building_id = %s
+              AND id = ANY(%s)
+              AND status = 'INACTIVE'
+            """,
+            (tenant_id, building_id, floor_ids),
+        )
+        return cur.rowcount
+
+
+def activate_site_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+) -> int:
+    """Reactivate a single currently-INACTIVE site.
+
+    Used only when a caller has explicitly opted in to also reactivating a
+    building's parent office alongside the building itself (see
+    update_building_metadata) -- never invoked implicitly.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE sites
+            SET status = 'ACTIVE', updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+              AND status = 'INACTIVE'
+            """,
+            (tenant_id, site_id),
+        )
+        return cur.rowcount
+
+
 def fetch_building_by_id(
     conn: PGConnection,
     *,

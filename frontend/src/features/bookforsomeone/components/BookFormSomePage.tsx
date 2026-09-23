@@ -44,6 +44,8 @@ export default function BookForSomeonePage() {
 
   const searchParams = useSearchParams();
   const setFormState = useBookForSomeoneStore((s) => s.setFormState);
+  const awaitingSeatSelection = useBookForSomeoneStore((s) => s.awaitingSeatSelection);
+  const setAwaitingSeatSelection = useBookForSomeoneStore((s) => s.setAwaitingSeatSelection);
 
   const { step, bookingType, selectedEmployee, selectedGuest, visitDetails, seatRequired } = formState;
   const { sites, buildings, floors, isLoadingBuildings, isLoadingFloors } = useSiteBuildingOptions(visitDetails.siteId, visitDetails.buildingId);
@@ -73,13 +75,19 @@ export default function BookForSomeonePage() {
   // would otherwise still be there the next time this page is opened fresh.
   // Reset once per mount so every fresh entry (button, sidebar link) starts
   // clean at the type selector; skip it for an editVisitId deep link, which
-  // needs its own prefilled state instead.
+  // needs its own prefilled state instead -- and skip it when this remount
+  // is the user coming back from redirectToBookSeat's /book step (browser
+  // Back), which used to wipe out the employee/guest they'd already picked.
   const resetOnMountApplied = useRef(false);
   useEffect(() => {
     if (resetOnMountApplied.current) return;
     resetOnMountApplied.current = true;
+    if (awaitingSeatSelection) {
+      setAwaitingSeatSelection(false);
+      return;
+    }
     if (!editVisitId) resetWizard();
-  }, [editVisitId, resetWizard]);
+  }, [editVisitId, resetWizard, awaitingSeatSelection, setAwaitingSeatSelection]);
 
   useEffect(() => {
     if (!editVisitId || prefillApplied.current) return;
@@ -155,6 +163,21 @@ export default function BookForSomeonePage() {
       .catch(() => {});
   }, [visitDetails.hostEmployee?.id, bookingType, editVisitId, visitDetails.siteId, visitDetails.buildingId, visitDetails.floorId, updateVisitDetails]);
 
+  // Auto-select the only building/floor when there's nothing else to choose
+  // from — same "don't make them pick between one thing" pattern used in
+  // the admin Blocked Spaces flow (BlockedSeatsPage/BlockSeatsPage). Guarded
+  // on the field still being blank so this never overrides a location the
+  // host-prefs prefill above (or a manual pick) already set.
+  useEffect(() => {
+    if (visitDetails.buildingId || isLoadingBuildings || buildings.length !== 1) return;
+    updateVisitDetails({ buildingId: buildings[0].id, floorId: "" });
+  }, [visitDetails.buildingId, isLoadingBuildings, buildings, updateVisitDetails]);
+
+  useEffect(() => {
+    if (visitDetails.floorId || isLoadingFloors || floors.length !== 1) return;
+    updateVisitDetails({ floorId: floors[0].id });
+  }, [visitDetails.floorId, isLoadingFloors, floors, updateVisitDetails]);
+
   // Admin's "Booking Management" page links here with ?entry=employee or
   // ?entry=guest depending on which button was clicked — lock the wizard to
   // that type and disable the other card. Absent for every other entry point
@@ -228,13 +251,14 @@ export default function BookForSomeonePage() {
     }
 
     const query = params.toString();
+    setAwaitingSeatSelection(true);
     router.push(`/book${query ? `?${query}` : ""}`);
   };
 
   const steps =
     bookingType === "internal"
       ? ["Who"]
-      : ["Who", "Details", "Seat Required?", "Book Seat", "Confirm"];
+      : ["Who", "Details", "Space Required?", "Book Space", "Confirm"];
 
   const isSuccessStep = bookingType === "visitor" && step === 5;
 
@@ -290,7 +314,7 @@ export default function BookForSomeonePage() {
 
   const infoText =
     (bookingType === "internal" && step === 1) || (bookingType === "visitor" && step === 3 && seatRequired === "yes")
-      ? `After clicking "${submitLabel}", you will continue in the existing booking flow to select workspace, date, preferences and choose a seat.`
+      ? `After clicking "${submitLabel}", you will continue in the existing booking flow to select workspace, date, preferences and choose a space.`
       : (editVisitId && bookingType === "visitor" && step === 2 && visitDetailsRequiredFilled && !hasVisitChanges)
         ? "Change the host, date, location, or another detail to save changes."
         : editError ?? submitError;
@@ -442,13 +466,13 @@ export default function BookForSomeonePage() {
     bookingType === "internal"
       ? [
         { step: "1", title: "Choose who", desc: "Search and select the employee you're booking for." },
-        { step: "2", title: "Pick a seat", desc: "Continue to the booking flow to choose workspace, date and seat." },
+        { step: "2", title: "Pick a space", desc: "Continue to the booking flow to choose workspace, date and space." },
       ]
       : [
         { step: "1", title: "Choose who", desc: "Select a recent guest or create a new one." },
         { step: "2", title: "Fill in details", desc: "Set guest type, purpose, host employee and visit time." },
-        { step: "3", title: "Seat required?", desc: "Decide whether this guest needs a workspace." },
-        { step: "4", title: "Pick a seat", desc: "Continue to the booking flow to choose workspace and seat." },
+        { step: "3", title: "Space required?", desc: "Decide whether this guest needs a workspace." },
+        { step: "4", title: "Pick a space", desc: "Continue to the booking flow to choose workspace and space." },
         { step: "5", title: "Confirm", desc: "Review the details and send the invite." },
       ];
 
