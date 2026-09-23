@@ -53,6 +53,14 @@ BLOCK_TYPE_REASONS = {
     "Restricted": "Restricted",
     "Exclusive": "Exclusive",
 }
+ADMIN_SEAT_ACCESS_ROLES = {"PRODUCT_ADMIN", "TENANT_ADMIN"}
+
+
+def _can_use_non_bookable_seat(current_user: dict[str, Any]) -> bool:
+    role = str(
+        current_user.get("role_name") or current_user.get("role") or ""
+    ).strip().upper()
+    return role in ADMIN_SEAT_ACCESS_ROLES
 
 
 def _response(row: dict[str, Any]) -> BlockedSeatResponse:
@@ -351,13 +359,20 @@ def create_blocked_seats(
             seat["seat_code"]
             for seat in seats
             if seat["status"] != "ACTIVE"
+            or (
+                not seat["is_bookable"]
+                and not _can_use_non_bookable_seat(current_user)
+            )
         ]
         if unavailable:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
-                    "code": "seat_inactive",
-                    "message": f"Seats are not active: {', '.join(unavailable)}.",
+                    "code": "seat_not_available_for_role",
+                    "message": (
+                        "Seats are inactive or unavailable for your role: "
+                        f"{', '.join(unavailable)}."
+                    ),
                 },
             )
         booking_conflicts = fetch_conflicting_booking_seat_codes(
