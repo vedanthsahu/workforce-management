@@ -60,7 +60,9 @@ export default function AdminStats({ data, selectedDate }: Props) {
     },
     {
       title: "Total Spaces",
-      value: data?.total_seats ?? "-",
+      value: data
+        ? Math.max(data.total_seats - data.blocked_seats, 0)
+        : "-",
       subtitle: "Active spaces",
       icon: Armchair,
       accent: "orange" as Accent,
@@ -87,7 +89,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
     {
       title: "Blocked Spaces",
       value: data?.blocked_seats ?? "-",
-      subtitle: `Unavailable today`,
+      subtitle: `Active blocks for ${formattedSelectedDate}`,
       icon: Ban,
       accent: "purple" as Accent,
       href: "/admin/blocked-seats",

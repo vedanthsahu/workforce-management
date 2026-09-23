@@ -52,22 +52,22 @@ class FakeConnection:
         return self.cursor_instance
 
 
-class SeatQueriesOnlyConsiderPublishedLayoutTests(unittest.TestCase):
-    """Every query that decides which seats exist/are available/count for a
-    floor must be scoped to that floor's currently PUBLISHED layout --
-    otherwise seats left over from a superseded layout get double-counted
-    or become bookable as ghost seats."""
+class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
+    """Seat queries use the published or scheduled layout effective on the
+    requested date, excluding stale layout versions."""
 
     def test_fetch_seat_for_booking_requires_published_layout_and_active_chain(self) -> None:
         cursor = FakeCursor()
         fetch_seat_for_booking(
             FakeConnection(cursor),
             tenant_id="1", site_id="1", building_id="1", floor_id="1", seat_id="99",
+            booking_date=date(2026, 1, 1),
         )
         sql, _ = cursor.executions[0]
         self.assertIn("floor_layouts", sql)
-        self.assertIn("is_published = TRUE", sql)
-        self.assertIn("fl.status = 'PUBLISHED'", sql)
+        self.assertIn("fl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
+        self.assertIn("fl.effective_from <= %s", sql)
+        self.assertIn("fl.effective_till IS NULL OR fl.effective_till > %s", sql)
         self.assertIn("fl.id = s.layout_id", sql)
         self.assertIn("si.status = 'ACTIVE'", sql)
         self.assertIn("bu.status = 'ACTIVE'", sql)
@@ -83,12 +83,14 @@ class SeatQueriesOnlyConsiderPublishedLayoutTests(unittest.TestCase):
         )
         sql, _ = cursor.executions[0]
         self.assertIn("floor_layouts", sql)
-        self.assertIn("is_published = TRUE", sql)
-        self.assertIn("fl.status = 'PUBLISHED'", sql)
+        self.assertIn("fl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
+        self.assertIn("fl.effective_from <= rd.booking_date", sql)
+        self.assertIn("fl.effective_till IS NULL OR fl.effective_till > rd.booking_date", sql)
         self.assertIn("fl.id = s.layout_id", sql)
         self.assertIn("flr.status = 'ACTIVE'", sql)
         self.assertIn("bldg.status = 'ACTIVE'", sql)
         self.assertIn("st.status = 'ACTIVE'", sql)
+        self.assertIn("s.is_bookable IS NOT TRUE AND %s IS NOT TRUE", sql)
 
     def test_fetch_available_seats_single_date_requires_published_layout(self) -> None:
         cursor = FakeCursor()
@@ -98,8 +100,10 @@ class SeatQueriesOnlyConsiderPublishedLayoutTests(unittest.TestCase):
         )
         sql, _ = cursor.executions[0]
         self.assertIn("floor_layouts", sql)
-        self.assertIn("is_published = TRUE", sql)
+        self.assertIn("fl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
+        self.assertIn("fl.effective_from <= %s", sql)
         self.assertIn("fl.id = s.layout_id", sql)
+        self.assertIn("s.is_bookable IS NOT TRUE AND %s IS NOT TRUE", sql)
 
     def test_fetch_seat_configuration_default_ignores_layout_currency(self) -> None:
         """Admin seat-management must still be able to find a stale seat in
@@ -110,16 +114,20 @@ class SeatQueriesOnlyConsiderPublishedLayoutTests(unittest.TestCase):
         sql, _ = cursor.executions[0]
         self.assertNotIn("floor_layouts", sql)
 
-    def test_fetch_seat_configuration_opt_in_requires_published_layout(self) -> None:
-        """The booking-eligibility path opts in explicitly."""
+    def test_fetch_seat_configuration_uses_layout_effective_on_booking_date(self) -> None:
+        """The booking-eligibility path supplies its requested date."""
         cursor = FakeCursor()
         fetch_seat_configuration(
-            FakeConnection(cursor), tenant_id="1", seat_id="99", require_current_layout=True,
+            FakeConnection(cursor),
+            tenant_id="1",
+            seat_id="99",
+            booking_date=date(2026, 1, 1),
         )
         sql, _ = cursor.executions[0]
         self.assertIn("floor_layouts", sql)
-        self.assertIn("is_published = TRUE", sql)
-        self.assertIn("status = 'PUBLISHED'", sql)
+        self.assertIn("status IN ('PUBLISHED', 'SCHEDULED')", sql)
+        self.assertIn("effective_from <= %s", sql)
+        self.assertIn("effective_till IS NULL OR effective_till > %s", sql)
 
     def test_dashboard_summary_scopes_seats_to_published_layout(self) -> None:
         cursor = FakeCursor()
@@ -128,7 +136,8 @@ class SeatQueriesOnlyConsiderPublishedLayoutTests(unittest.TestCase):
         )
         sql, _ = cursor.executions[0]
         self.assertIn("floor_layouts", sql)
-        self.assertIn("sfl.is_published = TRUE", sql)
+        self.assertIn("sfl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
+        self.assertIn("sfl.effective_from <= %(selected_date)s", sql)
         self.assertIn("sfl.id = st.layout_id", sql)
 
     def test_site_detail_seat_counts_scoped_to_published_layout(self) -> None:

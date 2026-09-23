@@ -1,12 +1,17 @@
 import { axiosInstance } from "@/lib/http/axios";
 import type {
-  BlockCategory,
+  BlockListScope,
   BlockableFloorLayout,
   BlockedSeatFilters,
+  BlockedSeat,
+  BlockedSeatHistoryItem,
   BlockedSeatListResponse,
+  BlockedSeatSummary,
+  BlockedSeatConflict,
   CreateBlockedSeatsPayload,
+  FloorLayoutSchedule,
   LocationOption,
-  SeatOption,
+  UpdateBlockedSeatPayload,
 } from "../types/blockedSeats.types";
 
 interface CacheEntry<T> {
@@ -18,9 +23,12 @@ interface CacheEntry<T> {
 const LOCATION_CACHE_MS = 5 * 60 * 1000;
 const LAYOUT_CACHE_MS = 15 * 1000;
 const LIST_CACHE_MS = 15 * 1000;
+const SUMMARY_CACHE_MS = 30 * 1000;
 const locationCache = new Map<string, CacheEntry<LocationOption[]>>();
 const layoutCache = new Map<string, CacheEntry<BlockableFloorLayout>>();
 const listCache = new Map<string, CacheEntry<BlockedSeatListResponse>>();
+const summaryCache = new Map<string, CacheEntry<BlockedSeatSummary>>();
+const scheduleCache = new Map<string, CacheEntry<FloorLayoutSchedule>>();
 
 const cachedRequest = <T>(
   cache: Map<string, CacheEntry<T>>,
@@ -56,7 +64,7 @@ const cachedLocationValue = (key: string) => {
 };
 
 const blockedSeatListKey = (
-  category: BlockCategory,
+  category: BlockListScope,
   filters: BlockedSeatFilters,
   page: number,
   limit: number,
@@ -74,8 +82,42 @@ const blockedSeatListKey = (
   });
 
 export const blockedSeatsService = {
+  getCachedSummary(): BlockedSeatSummary | undefined {
+    const entry = summaryCache.get("summary");
+    return entry?.value && entry.expiresAt > Date.now()
+      ? entry.value
+      : undefined;
+  },
+  summary(refresh = false): Promise<BlockedSeatSummary> {
+    return cachedRequest(
+      summaryCache,
+      "summary",
+      SUMMARY_CACHE_MS,
+      async () => {
+        try {
+          const { data } = await axiosInstance.get("/admin/blocked-seats/summary");
+          return data;
+        } catch (error: unknown) {
+          const status = (error as { response?: { status?: number } }).response?.status;
+          if (status !== 404) throw error;
+          // Keep counts available while a frontend deployment is briefly served
+          // with an older backend that does not yet expose the summary endpoint.
+          const { data } = await axiosInstance.get("/admin/blocked-seats", {
+            params: {
+              category: "active",
+              page: 1,
+              limit: 1,
+              includeSummary: true,
+            },
+          });
+          return data.summary;
+        }
+      },
+      refresh,
+    );
+  },
   getCachedList(
-    category: BlockCategory,
+    category: BlockListScope,
     filters: BlockedSeatFilters,
     page = 1,
     limit = 10,
@@ -88,7 +130,7 @@ export const blockedSeatsService = {
       : undefined;
   },
   list(
-    category: BlockCategory,
+    category: BlockListScope,
     filters: BlockedSeatFilters,
     page = 1,
     limit = 10,
@@ -111,6 +153,7 @@ export const blockedSeatsService = {
             date: filters.date || undefined,
             page,
             limit,
+            includeSummary: false,
           },
         });
         return data;
@@ -121,14 +164,33 @@ export const blockedSeatsService = {
   async create(payload: CreateBlockedSeatsPayload): Promise<void> {
     await axiosInstance.post("/admin/blocked-seats", payload);
     listCache.clear();
+    summaryCache.clear();
     layoutCache.clear();
   },
   async cancel(blockId: string, reason: string): Promise<void> {
-    await axiosInstance.post(`/admin/blocked-seats/${blockId}/cancel`, {
-      reason,
-    });
+    await axiosInstance.post(`/admin/blocked-seats/${blockId}/cancel`, { reason });
     listCache.clear();
+    summaryCache.clear();
     layoutCache.clear();
+  },
+  async history(blockId: string): Promise<BlockedSeatHistoryItem[]> {
+    const { data } = await axiosInstance.get(
+      `/admin/blocked-seats/${blockId}/history`,
+    );
+    return data.items;
+  },
+  async update(
+    blockId: string,
+    payload: UpdateBlockedSeatPayload,
+  ): Promise<BlockedSeat> {
+    const { data } = await axiosInstance.patch(
+      `/admin/blocked-seats/${blockId}`,
+      payload,
+    );
+    listCache.clear();
+    summaryCache.clear();
+    layoutCache.clear();
+    return data;
   },
   getCachedSites(): LocationOption[] | undefined {
     return cachedLocationValue("sites");
@@ -182,78 +244,26 @@ export const blockedSeatsService = {
       }));
     });
   },
-  async getSeats(
-    floorId: string,
-    startDate: string,
-    endDate: string,
-  ): Promise<SeatOption[]> {
-    const { data } = await axiosInstance.get(`/floors/${floorId}/seats`, {
-      params: { start_date: startDate, end_date: endDate, calendar_mode: true },
-    });
-    return data.items.map(
-      (item: {
-        seat_id: string;
-        seat_code: string;
-        is_bookable?: boolean;
-        availability: {
-          booked_dates?: string[];
-          bookedDates?: string[];
-          blocked_dates?: string[];
-          blockedDates?: string[];
-          unavailable_dates?: string[];
-          unavailableDates?: string[];
-          daily_statuses?: Array<{ status: string }>;
-          dailyStatuses?: Array<{ status: string }>;
-        };
-      }) => {
-        const dailyStatuses =
-          item.availability.daily_statuses ??
-          item.availability.dailyStatuses ??
-          [];
-        const hasBooking = Boolean(
-          (item.availability.booked_dates ?? item.availability.bookedDates)
-            ?.length || dailyStatuses.some((day) => day.status === "BOOKED"),
-        );
-        const hasBlock = Boolean(
-          (item.availability.blocked_dates ?? item.availability.blockedDates)
-            ?.length || dailyStatuses.some((day) => day.status === "BLOCKED"),
-        );
-        const isUnavailable =
-          item.is_bookable === false ||
-          Boolean(
-            (
-              item.availability.unavailable_dates ??
-              item.availability.unavailableDates
-            )?.length,
-          ) ||
-          dailyStatuses.some((day) => day.status === "UNAVAILABLE");
-        return {
-          seat_id: item.seat_id,
-          seat_code: item.seat_code,
-          hasBooking,
-          hasBlock,
-          isUnavailable,
-          selectable: !hasBlock && !isUnavailable,
-        };
-      },
-    );
-  },
   async getConflicts(
     floorId: string,
+    seatIds: string[],
     blockedFrom: string,
     blockedTo: string,
-    page = 1,
-  ): Promise<BlockableFloorLayout> {
+    signal?: AbortSignal,
+  ): Promise<BlockedSeatConflict[]> {
+    const params = new URLSearchParams({ blockedFrom, blockedTo });
+    seatIds.forEach((seatId) => params.append("seatId", seatId));
+    params.append("view", "conflicts");
     const { data } = await axiosInstance.get(
       `/admin/blocked-seats/floors/${floorId}/layout-resources`,
-      { params: { blockedFrom, blockedTo, view: "conflicts", page, limit: 100 } },
+      { params, signal },
     );
-    if (!Array.isArray(data.conflicts) || typeof data.has_more_conflicts !== "boolean") {
+    if (!Array.isArray(data.conflicts)) {
       throw new Error(
         "The blocked-seat API is outdated. Restart or deploy the updated backend, then load the layout again.",
       );
     }
-    return data;
+    return data.conflicts;
   },
   getBlockableLayout(
     floorId: string,
@@ -261,6 +271,7 @@ export const blockedSeatsService = {
     blockedTo: string,
     refresh = false,
     view: "resources" | "metadata" = "resources",
+    signal?: AbortSignal,
   ): Promise<BlockableFloorLayout> {
     const key = `${view}:${floorId}:${blockedFrom}:${blockedTo}`;
     return cachedRequest(
@@ -270,11 +281,32 @@ export const blockedSeatsService = {
       async () => {
         const { data } = await axiosInstance.get(
           `/admin/blocked-seats/floors/${floorId}/layout-resources`,
-          { params: { blockedFrom, blockedTo, view } },
+          { params: { blockedFrom, blockedTo, view }, signal },
         );
         return data;
       },
       refresh,
+    );
+  },
+  getFloorLayoutSchedule(floorId: string): Promise<FloorLayoutSchedule> {
+    const currentDate = new Date().toLocaleDateString("en-CA");
+    return cachedRequest(
+      scheduleCache,
+      floorId,
+      LOCATION_CACHE_MS,
+      async () => {
+        const { data } = await axiosInstance.get(
+          `/admin/blocked-seats/floors/${floorId}/layout-resources`,
+          {
+            params: {
+              blockedFrom: currentDate,
+              blockedTo: currentDate,
+              view: "schedule",
+            },
+          },
+        );
+        return data;
+      },
     );
   },
 };

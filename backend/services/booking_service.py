@@ -101,6 +101,7 @@ GUEST_OPERATION_ROLES = {
     "FACILITATOR",
     "FRONT_OFFICE",
 }
+ADMIN_SEAT_ACCESS_ROLES = {"PRODUCT_ADMIN", "TENANT_ADMIN"}
 
 def _can_book_guest(current_user: dict[str, Any]) -> bool:
     return _user_role(current_user) in GUEST_OPERATION_ROLES
@@ -111,6 +112,10 @@ def _current_user_id(current_user: dict[str, Any]) -> str:
 
 def _user_role(user: dict[str, Any]) -> str:
     return str(user.get("role_name") or user.get("role") or "").strip().upper()
+
+
+def _can_use_non_bookable_seat(current_user: dict[str, Any] | None) -> bool:
+    return current_user is not None and _user_role(current_user) in ADMIN_SEAT_ACCESS_ROLES
 
 
 def _can_book_for_user(
@@ -488,7 +493,7 @@ def book_seat(
                     "message": "Bookings can only be created for ACTIVE seats.",
                 },
             )
-        if seat.get("is_bookable") is not True:
+        if seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(current_user):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -821,6 +826,7 @@ def get_available_seats(
             floor_id=floor_id,
             booking_date=booking_date,
             amenity_ids=normalized_amenity_ids,
+            allow_non_bookable=_can_use_non_bookable_seat(current_user),
         )
     except psycopg2.Error as exc:
         raise HTTPException(
@@ -1183,7 +1189,7 @@ def modify_booking(
                 },
             )
  
-        if target_seat.get("is_bookable") is not True:
+        if target_seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(current_user):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -1395,42 +1401,34 @@ def get_available_seats_by_range(
     normalized_amenity_ids = sorted(set(amenity_ids or []))
 
     try:
+        # Reject unauthorized guest-availability probes before performing
+        # any location lookups. Besides avoiding unnecessary database work,
+        # this prevents callers from inferring whether a floor exists.
+        if (
+            not calendar_mode
+            and is_guest_booking
+            and (current_user is None or not _can_book_guest(current_user))
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "guest_booking_not_allowed",
+                    "message": (
+                        "Only FACILITATOR and Tenant Admin users "
+                        "can check guest booking availability."
+                    ),
+                },
+            )
+
         # fetch_available_seats_by_range's own query INNER JOINs floors/
         # buildings/sites on status = 'ACTIVE', so an inactive office
         # silently comes back as zero seats — indistinguishable from "no
         # availability for these dates" (the check just below). Checking the
         # site's status explicitly here gives that case its own accurate
         # message instead of the generic "no seats available" one.
-        floor = fetch_floor_by_id(conn, tenant_id=tenant_id, floor_id=floor_id)
-        if floor and floor.get("site_id"):
-            site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=floor["site_id"])
-            if site and site.get("status") != "ACTIVE":
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail={
-                        "code": "office_inactive",
-                        "message": (
-                            "This office is currently inactive and unavailable "
-                            "for booking. Please select a different office."
-                        ),
-                    },
-                )
-
         # calendar_mode: caller only wants raw seat status (no booking-eligibility checks)
         if not calendar_mode:
             if is_guest_booking:
-                if current_user is None or not _can_book_guest(current_user):
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail={
-                            "code": "guest_booking_not_allowed",
-                            "message": (
-                                "Only FACILITATOR and Tenant Admin users "
-                                "can check guest booking availability."
-                            ),
-                        },
-                    )
-
                 if booked_for_guest_id is None:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
@@ -1496,6 +1494,25 @@ def get_available_seats_by_range(
                         "The booking owner already has an active booking in the requested date range.",
                     )
 
+        # The availability query joins only ACTIVE locations, so explicitly
+        # distinguish an inactive office from a floor with no free seats.
+        # Eligibility checks run first to avoid leaking location state and
+        # to skip this lookup when the booking subject already conflicts.
+        floor = fetch_floor_by_id(conn, tenant_id=tenant_id, floor_id=floor_id)
+        if floor and floor.get("site_id"):
+            site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=floor["site_id"])
+            if site and site.get("status") != "ACTIVE":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "office_inactive",
+                        "message": (
+                            "This office is currently inactive and unavailable "
+                            "for booking. Please select a different office."
+                        ),
+                    },
+                )
+
         seats = fetch_available_seats_by_range(
                 conn,
                 tenant_id=tenant_id,
@@ -1503,6 +1520,7 @@ def get_available_seats_by_range(
                 start_date=start_date,
                 end_date=end_date,
                 amenity_ids=normalized_amenity_ids,
+                allow_non_bookable=_can_use_non_bookable_seat(current_user),
                 exclude_booking_id=exclude_booking_id,
             )
 
@@ -1656,7 +1674,7 @@ def book_guest_seat(
                 },
             )
 
-        if seat.get("is_bookable") is not True:
+        if seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(current_user):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -2010,7 +2028,7 @@ payload: BookingEligibilityRequest,
                     "message": "Bookings can only be created for ACTIVE seats.",
                 },
             )
-        if seat.get("is_bookable") is not True:
+        if seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(current_user):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
