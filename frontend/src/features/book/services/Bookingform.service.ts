@@ -1,3 +1,4 @@
+import axios from "axios";
 import { axiosInstance } from "@/lib/http/axios";
 import {
   Site,
@@ -12,8 +13,32 @@ import {
   UiState,
   FetchSeatsParams,
   QuickPickSeat,
-  TomorrowBooking,
+  NextBooking,
 } from "../types/Bookingform.types";
+
+// Every backend error (whatever HTTPException it started as) is normalized
+// server-side into {"error": {"code", "message"}} (see main.py's
+// http_exception_handler) — but a caught error might still be a plain
+// string detail, a differently-shaped body, or no response at all (a
+// network failure). This pulls out the real message wherever it lives, so a
+// genuine business-rule conflict (e.g. "you already have a booking that
+// day" from the availability endpoint itself, not just from creating the
+// booking) never falls through to Axios's own generic
+// "Request failed with status code {n}".
+export function extractApiErrorMessage(err: unknown, fallback: string): string {
+  if (axios.isAxiosError(err)) {
+    const data = err.response?.data as
+      | { detail?: { message?: string } | string; message?: string; error?: { message?: string } }
+      | undefined;
+    const extracted =
+      (typeof data?.detail === "object" ? data?.detail?.message : typeof data?.detail === "string" ? data.detail : null)
+      ?? data?.error?.message
+      ?? data?.message
+      ?? null;
+    return extracted ?? fallback;
+  }
+  return err instanceof Error ? err.message : fallback;
+}
 
 // ── Raw API shapes ────────────────────────────────────────────────────────────
 
@@ -515,6 +540,7 @@ interface RawFavouriteSeat {
 interface RawDashboardMeFavourites {
   favorite_seat: RawFavouriteSeat | null;
   second_favorite_seat?: RawFavouriteSeat | null;
+  third_favorite_seat?: RawFavouriteSeat | null;
 }
 
 function toQuickPick(
@@ -533,15 +559,36 @@ function toQuickPick(
   };
 }
 
+// Up to 3 quick picks now (favourite + 2 "frequently booked" runners-up,
+// see fetch_favorite_seat's LIMIT 3 in user_repository.py) -- the 2nd and
+// 3rd share the same "frequent" styling, only the top seat gets the
+// distinct favourite treatment.
 export async function fetchQuickPickSeats(): Promise<QuickPickSeat[]> {
   const { data } = await axiosInstance.get<RawDashboardMeFavourites>("/dashboard/me");
   return [
     toQuickPick(data.favorite_seat, "favourite"),
     toQuickPick(data.second_favorite_seat ?? null, "frequent"),
+    toQuickPick(data.third_favorite_seat ?? null, "frequent"),
   ].filter((p): p is QuickPickSeat => p !== null);
 }
 
-// ── Sidebar: tomorrow's booking — GET /bookings/me/future ───────────────────
+// Whether a quick-pick seat is actually free for the given date(s) --
+// shared by useBookingSidebar (filters the list down to only seats worth
+// offering as a shortcut) and BookingSidebar's own click-time re-check
+// (guards against the date changing, or a race, between that filtering and
+// the actual click).
+export async function isQuickPickSeatAvailable(
+  seat: QuickPickSeat,
+  fromDate: string,
+  toDate: string
+): Promise<boolean> {
+  if (!seat.floorId) return false;
+  const seats = await fetchAvailability({ floorId: seat.floorId, fromDate, toDate });
+  const match = seats.find((s) => String(s.seat_id) === String(seat.id));
+  return match?.availability?.status === "FULLY_AVAILABLE";
+}
+
+// ── Sidebar: next booking — GET /bookings/me/future ─────────────────────────
 
 interface RawFutureBooking {
   booking_id: string;
@@ -555,27 +602,54 @@ interface RawFutureBooking {
   booking_status: string;
 }
 
-export async function fetchTomorrowBooking(): Promise<TomorrowBooking | null> {
+export async function fetchNextBooking(): Promise<NextBooking | null> {
   const { data } = await axiosInstance.get<RawFutureBooking[]>("/bookings/me/future");
 
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowIso = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
 
-  const match = data.find((b) => {
-    if ((b.booking_status ?? "").toUpperCase() === "CANCELLED") return false;
+  const active = data.filter((b) => (b.booking_status ?? "").toUpperCase() !== "CANCELLED");
+
+  const matchesDate = (b: RawFutureBooking, iso: string) => {
     const from = b.from_date ?? b.booking_date;
     const to = b.to_date ?? b.booking_date;
-    return tomorrowIso >= from && tomorrowIso <= to;
-  });
-  if (!match) return null;
+    return iso >= from && iso <= to;
+  };
+
+  // Prefer tomorrow specifically -- that's the common case and reads best
+  // ("Tomorrow's Booking"). If nothing lands there, fall back to whichever
+  // still-upcoming (today or later) booking starts soonest, so the sidebar
+  // has something useful to show instead of going empty the moment the
+  // admin's next booking is two days out rather than one.
+  const tomorrowMatch = active.find((b) => matchesDate(b, tomorrowIso));
+  if (tomorrowMatch) {
+    return {
+      bookingId: tomorrowMatch.booking_id,
+      seatCode: tomorrowMatch.seat_code ?? null,
+      siteName: tomorrowMatch.site_name ?? null,
+      buildingName: tomorrowMatch.building_name ?? null,
+      floorName: tomorrowMatch.floor_name ?? null,
+      bookingDate: tomorrowIso,
+      isTomorrow: true,
+    };
+  }
+
+  const upcoming = active
+    .filter((b) => (b.from_date ?? b.booking_date) >= todayIso)
+    .sort((a, b) => (a.from_date ?? a.booking_date).localeCompare(b.from_date ?? b.booking_date));
+  const next = upcoming[0];
+  if (!next) return null;
 
   return {
-    bookingId: match.booking_id,
-    seatCode: match.seat_code ?? null,
-    siteName: match.site_name ?? null,
-    buildingName: match.building_name ?? null,
-    floorName: match.floor_name ?? null,
-    bookingDate: tomorrowIso,
+    bookingId: next.booking_id,
+    seatCode: next.seat_code ?? null,
+    siteName: next.site_name ?? null,
+    buildingName: next.building_name ?? null,
+    floorName: next.floor_name ?? null,
+    bookingDate: next.from_date ?? next.booking_date,
+    isTomorrow: false,
   };
 }

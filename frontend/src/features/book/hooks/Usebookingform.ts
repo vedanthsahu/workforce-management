@@ -20,6 +20,7 @@ import {
   createGuestBooking,
   modifyBooking,
   modifyGuestBooking,
+  extractApiErrorMessage,
   fetchBuildings,
   fetchEmployeeWorkPreferences,
   fetchFloors,
@@ -270,6 +271,37 @@ export function useBookingForm() {
     setMyPreferencesApplied(false);
     setUserPrefsSettled(false);
     setSavedPreferenceNames({ siteName: null, buildingName: null, floorName: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.toString()]);
+
+  // ── Re-sync from a deep link pushed while this page is already mounted ───
+  // `form`/`step` above only read the URL through a lazy useState
+  // initializer, which runs exactly once at mount. A Quick Pick (or
+  // "Tomorrow's Booking") link in BookingSidebar calls router.push() to this
+  // SAME /book route with a new step/seatId/location — Next.js doesn't
+  // remount the page for a query-string-only navigation, so that initializer
+  // never re-runs and the click silently did nothing (the URL changed, the
+  // form/step didn't). This mirrors that same initial-read logic, just also
+  // triggered on later URL changes, guarded to skip whenever the URL is only
+  // echoing back the state this hook itself just pushed via navigateTo/goBack
+  // (which always update form/step before or alongside the push).
+  useEffect(() => {
+    if (!hasAnyParam) return;
+    const urlSeatId = searchParams.get("seatId");
+    const urlStep = parseInt(searchParams.get("step") ?? "1") as BookingStep;
+    if (urlSeatId === form.selectedSeatId && urlStep === step) return;
+
+    setForm((f) => ({
+      ...f,
+      siteId: searchParams.get("siteId") ?? f.siteId,
+      buildingId: searchParams.get("buildingId") ?? f.buildingId,
+      floorId: searchParams.get("floorId") ?? f.floorId,
+      fromDate: searchParams.get("fromDate") ?? f.fromDate,
+      toDate: searchParams.get("toDate") ?? f.toDate,
+      selectedSeatId: urlSeatId,
+      spaceType: (searchParams.get("spaceType") as BookingSpaceType | null) ?? f.spaceType,
+    }));
+    setStepState(urlStep);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.toString()]);
 
@@ -548,12 +580,6 @@ export function useBookingForm() {
   }, [buildings, prefillBuildingName]);
 
   useEffect(() => {
-    if (!prefillLocationName || prefillBuildingName || buildings.length !== 1 || form.buildingId) return;
-    setForm((f) => ({ ...f, buildingId: buildings[0].id }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buildings, prefillLocationName, prefillBuildingName]);
-
-  useEffect(() => {
     if (!prefillFloorName || floors.length === 0 || form.floorId) return;
     const match = floors.find(
       (f) => f.name.toLowerCase() === prefillFloorName.toLowerCase(),
@@ -561,6 +587,22 @@ export function useBookingForm() {
     if (match) setForm((f) => ({ ...f, floorId: match.id, selectedSeatId: null }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [floors, prefillFloorName]);
+
+  // Auto-select the only building/floor when there's nothing else to choose
+  // from — same "don't make them pick between one thing" pattern used in
+  // the admin Blocked Spaces flow (BlockedSeatsPage/BlockSeatsPage).
+  // Supersedes (and replaces) the old prefill-only single-building
+  // shortcut: this applies unconditionally whenever exactly one option
+  // exists, not just when a prefill name happens to be present.
+  useEffect(() => {
+    if (form.buildingId || loadingBuildings || buildings.length !== 1) return;
+    setForm((f) => ({ ...f, buildingId: buildings[0].id, floorId: "", selectedSeatId: null }));
+  }, [form.buildingId, loadingBuildings, buildings]);
+
+  useEffect(() => {
+    if (form.floorId || loadingFloors || floors.length !== 1) return;
+    setForm((f) => ({ ...f, floorId: floors[0].id, selectedSeatId: null }));
+  }, [form.floorId, loadingFloors, floors]);
 
   useEffect(() => {
     if (!prefillSeatLabel || seats.length === 0 || form.selectedSeatId) return;
@@ -592,11 +634,12 @@ export function useBookingForm() {
     [availablePreferences, form.spaceType],
   );
 
-  // ── Re-fetch seats on step 2 page refresh ────────────────────────────────
+  // ── Re-fetch seats on step 2 page refresh (and once on step 3, for a deep
+  // link that skipped step 2 entirely — see the conflict check below) ──────
 
   useEffect(() => {
     if (
-      step === 2 &&
+      (step === 2 || step === 3) &&
       seats.length === 0 &&
       form.floorId &&
       form.fromDate &&
@@ -620,11 +663,49 @@ export function useBookingForm() {
         spaceType: form.spaceType,
       })
         .then(setSeats)
-        .catch((e) => setError(e instanceof Error ? e.message : "Failed to load spaces"))
+        .catch((e) => {
+          // The availability endpoint can 409 for reasons that have nothing
+          // to do with a specific seat -- e.g. the admin already has another
+          // active booking in this date range (user_has_active_booking_in_range
+          // in booking_service.py runs before the seat-level query at all).
+          // extractApiErrorMessage surfaces that real message instead of
+          // Axios's generic "Request failed with status code 409". And for
+          // a deep link that skipped step 2 (Quick Pick, "Tomorrow's
+          // Booking"), this is discovered on landing at step 3 — same as a
+          // seat-specific conflict, that means back to step 1 with the
+          // error shown there, not a review summary sitting on top of it.
+          setError(extractApiErrorMessage(e, "Failed to load spaces"));
+          if (step === 3) {
+            const clearedForm = { ...form, selectedSeatId: null };
+            setForm(clearedForm);
+            navigateTo(1, clearedForm);
+          }
+        })
         .finally(() => setLoadingSeats(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, availablePreferences, userPrefsSettled]);
+
+  // ── Bounce off a conflict instead of ever showing Review & Confirm for it ──
+  // A seat reaching step 3 via a deep link (Quick Pick, "Tomorrow's Booking")
+  // skips step 2's own fetch entirely, so nothing had actually confirmed it
+  // was still bookable until the fetch above resolves. Rather than letting
+  // the review summary render for a seat that's no longer available (and
+  // only failing once the admin presses Confirm), this drops straight back
+  // to step 1 (Where & When — the Book a Space page itself) with the
+  // conflict explained at the top, same as a conflict caught before ever
+  // leaving that page (BookingSidebar's own pre-navigation check).
+  useEffect(() => {
+    if (step !== 3 || seats.length === 0 || !form.selectedSeatId) return;
+    const seat = seats.find((s) => s.id === form.selectedSeatId);
+    if (seat && seat.status !== "available" && seat.status !== "yours") {
+      const clearedForm = { ...form, selectedSeatId: null };
+      setError("This space is no longer available for the selected date(s). Please choose a different space.");
+      setForm(clearedForm);
+      navigateTo(1, clearedForm);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, seats, form.selectedSeatId]);
 
   // ── Field setters ─────────────────────────────────────────────────────────
 
@@ -657,7 +738,12 @@ export function useBookingForm() {
     setForm((f) => ({
       ...f,
       fromDate: v,
-      toDate: v,
+      // Keep the existing multi-day range's end date -- only pull it
+      // forward ("fall back") to match the new start when the start has
+      // moved past it, since To can never sit before From. Moving From
+      // earlier or within the current range should never silently
+      // collapse an already-selected multi-day range down to one day.
+      toDate: v > f.toDate ? v : f.toDate,
     }));
   };
 
@@ -826,13 +912,13 @@ export function useBookingForm() {
       setStepState(3);
     } catch (err) {
       if (axios.isAxiosError(err)) {
-        const data = err.response?.data as { detail?: { message?: string } | string; message?: string; error?: { message?: string } } | undefined;
-        const msg =
-          (typeof data?.detail === "object" ? data?.detail?.message : typeof data?.detail === "string" ? data.detail : null)
-          ?? data?.error?.message
-          ?? data?.message
-          ?? err.message;
-        setError(msg);
+        // A 409 specifically means this exact conflict check (the one that
+        // sent the admin here) lost a last-second race, so it gets its own
+        // clear fallback instead of the generic one below.
+        const fallback = err.response?.status === 409
+          ? "This space was just booked by someone else. Please go back and choose a different space."
+          : "Something went wrong. Please try again.";
+        setError(extractApiErrorMessage(err, fallback));
       } else {
         setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       }
@@ -853,7 +939,16 @@ export function useBookingForm() {
       return;
     }
     setError(null);
-    const prevStep = (step > 1 ? step - 1 : 1) as BookingStep;
+    // A Quick Pick (BookingSidebar) jumps straight to step 3 — or to step 2's
+    // floor map after a conflict — skipping the steps in between, the same
+    // shortcut the dashboard's Favourite Space dialog uses (source=dashboard,
+    // handled above). Back from either should return to step 1 (Where &
+    // When), not decrement into a step the admin never actually visited on
+    // the way in. `source` never survives a normal in-flow step transition
+    // (buildUrl doesn't carry it forward), so this only fires on the first
+    // Back click right after landing via the shortcut.
+    const cameFromShortcut = searchParams.get("source") === "book";
+    const prevStep = (cameFromShortcut ? 1 : step > 1 ? step - 1 : 1) as BookingStep;
     const clearedForm = prevStep < 2 ? { ...form, selectedSeatId: null } : form;
     setForm(clearedForm);
     navigateTo(prevStep, clearedForm);

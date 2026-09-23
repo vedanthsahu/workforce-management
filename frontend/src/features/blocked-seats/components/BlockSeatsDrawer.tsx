@@ -51,7 +51,7 @@ export default function BlockSeatsDrawer({
     blockedSeatsService
       .getSeats(floorId, from, to)
       .then(setAvailableSeats)
-      .catch(() => setError("Unable to load seats."))
+      .catch(() => setError("Unable to load spaces."))
       .finally(() => setLoadingSeats(false));
   }, [floorId, from, to, invalidDates]);
   const matchingSeats = useMemo(
@@ -90,7 +90,7 @@ export default function BlockSeatsDrawer({
   const submit = async () => {
     if (hasBookingConflict) {
       setError(
-        `Seat${bookedSeats.length === 1 ? "" : "s"} ${bookedSeats.map((seat) => seat.seat_code).join(", ")} ${bookedSeats.length === 1 ? "is" : "are"} already booked for the selected period. Modify or cancel the existing booking before blocking.`,
+        `Space${bookedSeats.length === 1 ? "" : "s"} ${bookedSeats.map((seat) => seat.seat_code).join(", ")} ${bookedSeats.length === 1 ? "is" : "are"} already booked for the selected period. Modify or cancel the existing booking before blocking.`,
       );
       return;
     }
@@ -102,7 +102,7 @@ export default function BlockSeatsDrawer({
       !reason.trim() ||
       invalidDates
     ) {
-      setError("Complete all required fields before blocking seats.");
+      setError("Complete all required fields before blocking spaces.");
       return;
     }
     setSubmitting(true);
@@ -133,7 +133,7 @@ export default function BlockSeatsDrawer({
       setError(
         responseData?.error?.message ??
           responseData?.detail?.message ??
-          "Unable to block the selected seats.",
+          "Unable to block the selected spaces.",
       );
     } finally {
       setSubmitting(false);
@@ -160,10 +160,10 @@ export default function BlockSeatsDrawer({
                 id="block-seats-title"
                 className="text-lg font-bold text-slate-900"
               >
-                Block Seats
+                Block Spaces
               </h2>
               <p className="mt-1 text-xs text-slate-500">
-                Block seats that will be unavailable for booking.
+                Block spaces that will be unavailable for booking.
               </p>
             </div>
             <button
@@ -224,7 +224,7 @@ export default function BlockSeatsDrawer({
             </select>
           </label>
           <label className="block text-xs font-semibold text-slate-800">
-            Select seats <span className="text-red-500">*</span>
+            Select spaces <span className="text-red-500">*</span>
             <div className="relative mt-1.5">
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -235,7 +235,7 @@ export default function BlockSeatsDrawer({
                 value={seatSearch}
                 disabled={!floorId || invalidDates}
                 onChange={(e) => setSeatSearch(e.target.value)}
-                placeholder={loadingSeats ? "Loading seats…" : "Search seat ID"}
+                placeholder={loadingSeats ? "Loading spaces…" : "Search space ID"}
               />
             </div>
           </label>
@@ -343,7 +343,7 @@ export default function BlockSeatsDrawer({
           </label>
           {hasBookingConflict && (
             <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800">
-              Seat{bookedSeats.length === 1 ? "" : "s"}{" "}
+              Space{bookedSeats.length === 1 ? "" : "s"}{" "}
               {bookedSeats.map((seat) => seat.seat_code).join(", ")}{" "}
               {bookedSeats.length === 1 ? "has" : "have"} an existing booking
               during this period. Modify or cancel the booking before blocking.
@@ -356,7 +356,7 @@ export default function BlockSeatsDrawer({
           )}
           <div className="flex gap-2 rounded-md bg-blue-50 p-3 text-xs text-blue-700">
             <Info size={16} className="shrink-0" />
-            <span>Selected seats cannot be booked during this period.</span>
+            <span>Selected spaces cannot be booked during this period.</span>
           </div>
         </div>
         <div className="grid grid-cols-[1fr_2fr] gap-3 border-t p-5">
@@ -378,7 +378,7 @@ export default function BlockSeatsDrawer({
           >
             {submitting
               ? "Blocking…"
-              : `Block ${selectedSeats.length} ${selectedSeats.length === 1 ? "Seat" : "Seats"}`}
+              : `Block ${selectedSeats.length} ${selectedSeats.length === 1 ? "Space" : "Spaces"}`}
           </button>
         </div>
       </aside>

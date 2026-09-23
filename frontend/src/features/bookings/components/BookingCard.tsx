@@ -191,7 +191,7 @@ export function BookingCard({
             }
             items={[
               { label: "Edit Visit", icon: <FileEdit className="size-3.5" />, onClick: () => onModifyVisit?.(booking) },
-              { label: "Edit Seat", icon: <Pencil className="size-3.5" />, onClick: () => onModifyClick(booking) },
+              { label: "Edit Space", icon: <Pencil className="size-3.5" />, onClick: () => onModifyClick(booking) },
             ]}
           />
           <MiniDropdown
@@ -203,7 +203,7 @@ export function BookingCard({
               </span>
             }
             items={[
-              { label: "Cancel Seat", icon: <X className="size-3.5" />, onClick: () => onCancelBooking?.(booking), className: "text-red-600" },
+              { label: "Cancel Space", icon: <X className="size-3.5" />, onClick: () => onCancelBooking?.(booking), className: "text-red-600" },
               { label: "Cancel Booking", icon: <X className="size-3.5" />, onClick: () => onCancelVisit?.(booking), className: "text-red-600" },
             ]}
           />
@@ -253,9 +253,9 @@ export function BookingCard({
           <p className="text-[14px] font-bold text-[#0f172a] truncate">{booking.location}</p>
 
           {isVisitOnly ? (
-            <p className="text-[12px] text-orange-500 mt-0.5">{booking.floor || "No seat reserved"}</p>
+            <p className="text-[12px] text-orange-500 mt-0.5">{booking.floor || "No space reserved"}</p>
           ) : (
-            <p className="text-[12px] text-gray-500 mt-0.5">{booking.floor} · Seat {booking.seat}</p>
+            <p className="text-[12px] text-gray-500 mt-0.5">{booking.floor} · Space {booking.seat}</p>
           )}
 
           <div className="flex items-center gap-1.5 mt-1.5 text-[12px] text-gray-500">

@@ -36,6 +36,13 @@ export interface SeatFilters {
   amenity:   string;   // "All" | preference_id
 }
 
+// The stat cards above the table (SpaceStatCards) are a single,
+// mutually-exclusive selection -- picking one clears any other -- kept
+// entirely separate from SeatFilters, which the filter bar's dropdowns
+// combine freely (multi-filter). AND'd together with SeatFilters in
+// filteredSeats, but neither reads or writes the other's state.
+export type SpaceCardFilter = "CONFIGURED" | "UNCONFIGURED" | "NON_BOOKABLE" | "INACTIVE" | null;
+
 export interface SeatUpdatePayload {
   seat_svg_id:  string;
   layout_id:    string;

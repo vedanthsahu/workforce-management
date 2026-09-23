@@ -312,7 +312,7 @@ export default function BlockSeatsPage() {
     try {
       const action =
         b.booking_type === "GUEST" ? cancelGuestBooking : cancelBooking;
-      await action(b.booking_id, "Seat required for an administrative block");
+      await action(b.booking_id, "Space required for an administrative block");
       resolveBooking(b);
     } catch (requestError: unknown) {
       setError(apiErrorMessage(requestError, "Unable to cancel this booking."));
@@ -363,7 +363,7 @@ export default function BlockSeatsPage() {
       setError(
         (e as { response?: { data?: { detail?: { message?: string } } } })
           .response?.data?.detail?.message ??
-          "Unable to block seats; reload to check for new conflicts.",
+          "Unable to block spaces; reload to check for new conflicts.",
       );
     } finally {
       setSaving(false);
@@ -389,10 +389,10 @@ export default function BlockSeatsPage() {
       <div className="mx-auto max-w-[1680px] space-y-4 sm:space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-[17px] font-bold leading-tight text-[#1A1A2E] sm:text-[20px]">Block Seats</h1>
+            <h1 className="text-[17px] font-bold leading-tight text-[#1A1A2E] sm:text-[20px]">Block Spaces</h1>
             <p className="mt-0.5 text-[11.5px] text-gray-400 sm:text-[12.5px]">
-              Select location, view available and booked seats, resolve
-              conflicts and block seats.
+              Select location, view available and booked spaces, resolve
+              conflicts and block spaces.
             </p>
           </div>
           <button
@@ -400,7 +400,7 @@ export default function BlockSeatsPage() {
             className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-[12.5px] font-medium text-gray-600 transition-colors hover:bg-gray-50 sm:w-auto"
           >
             <ArrowLeft size={16} />
-            Back to Blocked Seats
+            Back to Blocked Spaces
           </button>
         </header>
         <section className="rounded-xl border border-[#EBEBF5] bg-white p-4 sm:p-6">
@@ -674,7 +674,7 @@ export default function BlockSeatsPage() {
         {!loading && !!unresolvedConflictCount && (
           <section className="overflow-hidden rounded-xl border border-[#EBEBF5] bg-white">
             <h2 className="p-4 text-[14px] font-bold text-[#1A1A2E] sm:text-[15px]">
-              Conflicting Bookings ({unresolvedConflictCount} seats,{" "}
+              Conflicting Bookings ({unresolvedConflictCount} spaces,{" "}
               {conflicts.length} bookings)
             </h2>
             <div className="divide-y divide-[#EBEBF5] md:hidden">
@@ -699,7 +699,7 @@ export default function BlockSeatsPage() {
                         </div>
                       </dl>
                       <p className="break-words text-gray-500 [overflow-wrap:anywhere]">
-                        Reload seats to retrieve the conflicting booking details.
+                        Reload spaces to retrieve the conflicting booking details.
                       </p>
                     </article>
                   );
@@ -759,11 +759,11 @@ export default function BlockSeatsPage() {
               <thead className="bg-[#F7F8FC] text-[11px] font-semibold text-gray-500">
                 <tr>
                   {[
-                    "Seat",
+                    "Space",
                     "User",
                     "Booking Period",
                     "Action",
-                    "Suggested Seats",
+                    "Suggested Spaces",
                   ].map((x) => (
                     <th key={x} className="p-3">
                       {x}
@@ -782,7 +782,7 @@ export default function BlockSeatsPage() {
                         <td className="break-words p-3 align-top [overflow-wrap:anywhere]">{from} – {to}</td>
                         <td className="break-words p-3 align-top text-amber-700 [overflow-wrap:anywhere]">Resolution required</td>
                         <td className="break-words p-3 align-top text-muted-foreground [overflow-wrap:anywhere]">
-                          Reload seats to retrieve the conflicting booking details.
+                          Reload spaces to retrieve the conflicting booking details.
                         </td>
                       </tr>
                     );

@@ -14,7 +14,13 @@ export const useAmenities = () => {
 
   const [page, setPage] = useState(1);
 
-  const limit = 50;
+  // Backend's max page size (see preferences.py: le=200) -- fetched once
+  // up front so `search` can filter entirely client-side afterward, the
+  // same pattern useBuildings/useOffices use for their search boxes.
+  // Refetching from the server per keystroke (the previous behavior) put
+  // both AmenitiesCards and AmenitiesTable into their loading/skeleton
+  // state on every character typed, reading as the whole page reloading.
+  const limit = 200;
 
   const fetchAmenities = useCallback(async () => {
     try {
@@ -24,7 +30,6 @@ export const useAmenities = () => {
         await amenitiesService.getAmenities({
           page,
           limit,
-          search: search || undefined,
           status: status || undefined,
         });
 
@@ -37,7 +42,7 @@ export const useAmenities = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, search, status]);
+  }, [page, status]);
 
   useEffect(() => {
     fetchAmenities();

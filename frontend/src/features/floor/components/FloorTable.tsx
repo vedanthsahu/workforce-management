@@ -86,9 +86,9 @@ export default function FloorTable({ data, onEdit, highlightedId }: Props) {
               <th className="pl-13 px-3 py-3 text-left font-bold">Floor Code</th>
               <th className="pl-4 pr-3 py-3 text-left font-bold">Floor Name</th>
               <th className="pl-6 px-3 py-3 text-left font-bold">Building</th>
-              <th className="px-3 py-3 text-center font-bold">Seats</th>
-              <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Active Seats</th>
-              <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Bookable Seats</th>
+              <th className="px-3 py-3 text-center font-bold">Spaces</th>
+              <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Active Spaces</th>
+              <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Bookable Spaces</th>
               <th className="px-3 py-3 text-center font-bold">Layouts</th>
               <th className="px-3 py-3 text-center font-bold">Status</th>
               <th className="px-3 py-3 text-center font-bold">Actions</th>
