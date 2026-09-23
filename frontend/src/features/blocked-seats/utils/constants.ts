@@ -4,7 +4,7 @@ import type { BlockCategory, BlockedSeatFilters, BlockType, DisplayStatus } from
 export const EMPTY_FILTERS: BlockedSeatFilters = { search: "", siteId: "", buildingId: "", floorId: "", blockType: "", date: "" };
 export const SUMMARY_CARDS = [
   { id: "active" as const, summaryKey: "active_blocks" as const, label: "Active Blocks", icon: Ban, iconClass: "bg-primary/10 text-primary" },
-  { id: "today" as const, summaryKey: "seats_blocked_today" as const, label: "Seats Blocked Today", icon: CalendarDays, iconClass: "bg-blue-100 text-blue-600" },
+  { id: "today" as const, summaryKey: "seats_blocked_today" as const, label: "Spaces Blocked Today", icon: CalendarDays, iconClass: "bg-blue-100 text-blue-600" },
   { id: "upcoming" as const, summaryKey: "upcoming_blocks" as const, label: "Upcoming Blocks", icon: Clock3, iconClass: "bg-primary/10 text-primary" },
   { id: "expiring" as const, summaryKey: "expiring_soon" as const, label: "Expiring Soon", icon: CircleAlert, iconClass: "bg-orange-100 text-orange-500" },
   { id: "expired" as const, summaryKey: "expired" as const, label: "Expired", icon: TimerOff, iconClass: "bg-red-100 text-red-500" },

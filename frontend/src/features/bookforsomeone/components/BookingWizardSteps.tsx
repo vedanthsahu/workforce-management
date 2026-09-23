@@ -850,7 +850,7 @@ function LockedTooltip({ children, locked, message }: { children: React.ReactNod
 }
 
 export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildings, floors, isLoadingBuildings, isLoadingFloors, readOnlyLocation = false }: VisitDetailsStepProps) {
-  const lockedMessage = "This field cannot be changed because a seat booking is linked to this visit. To change location or dates, use 'Edit Booking' instead.";
+  const lockedMessage = "This field cannot be changed because a space booking is linked to this visit. To change location or dates, use 'Edit Booking' instead.";
   const maxVisitDate = maxGuestVisitDateIso();
   const visitDateTooFar = visitDetails.visitDate > maxVisitDate;
   const endDateTooFar = visitDetails.endDate > maxVisitDate;
@@ -1099,7 +1099,7 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
       <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#ecfdf5", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3" /><path d="M3 16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4z" /><path d="M5 18v2" /><path d="M19 18v2" /></svg>
       </div>
-      <h2 style={{ fontSize: "1.0625rem", fontWeight: 700, color: "#111827", marginBottom: 4 }}>Does this guest need a seat?</h2>
+      <h2 style={{ fontSize: "1.0625rem", fontWeight: 700, color: "#111827", marginBottom: 4 }}>Does this guest need a space?</h2>
       <p style={{ fontSize: "0.8125rem", color: "#6b7280", marginBottom: "1.75rem" }}>
         Choose the option that best fits this visitor&apos;s visit.
       </p>
@@ -1384,10 +1384,10 @@ export function ConfirmInviteStep({ guest, visitDetails, sites, buildings, seatL
     ["Visit Date", visitDetails.visitDate || "—"],
     ["End Date", visitDetails.endDate || "—"],
     ["Time", [visitDetails.startTime, visitDetails.endTime].filter(Boolean).join(" – ") || "—"],
-    ["Requires Seat", hasSeat ? "Yes" : "No"],
+    ["Requires Space", hasSeat ? "Yes" : "No"],
     ...(hasSeat ? ([
       ["Floor", floorName || "—"],
-      ["Seat", seatLabel || "—"],
+      ["Space", seatLabel || "—"],
     ] as [string, string][]) : []),
     ["Notes", visitDetails.additionalNotes || "—"],
   ];

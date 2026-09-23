@@ -37,7 +37,7 @@ export default function BlockedSeatsTable({
   onCancel,
 }: Props) {
   const headings = [
-    "Seat",
+    "Space",
     "Location",
     "Block Period",
     "Type",
@@ -189,8 +189,8 @@ export default function BlockedSeatsTable({
                     ) : (
                       <button
                         onClick={() => onCancel(row)}
-                        title="Unblock seat"
-                        aria-label={`Unblock seat ${row.seat_code}`}
+                        title="Unblock space"
+                        aria-label={`Unblock space ${row.seat_code}`}
                         className="rounded-md p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       >
                         <Ban size={16} />
@@ -204,12 +204,12 @@ export default function BlockedSeatsTable({
       </div>
       {loading ? (
         <p className="py-12 text-center text-sm text-muted-foreground">
-          Loading blocked seats…
+          Loading blocked spaces…
         </p>
       ) : (
         !rows.length && (
           <p className="py-12 text-center text-sm text-muted-foreground">
-            No blocked seats match the selected criteria.
+            No blocked spaces match the selected criteria.
           </p>
         )
       )}
