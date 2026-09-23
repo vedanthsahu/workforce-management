@@ -182,7 +182,11 @@ class BlockedSeatServiceTests(unittest.TestCase):
             tenant_id="1",
             block_id="10",
             reason="Maintenance completed",
-            current_user={"user_id": "7", "tenant_id": "1"},
+            current_user={
+                "user_id": "7",
+                "tenant_id": "1",
+                "role_name": "TENANT_ADMIN",
+            },
         )
 
         self.assertEqual(response.status, "CANCELLED")
@@ -320,7 +324,11 @@ class BlockedSeatServiceTests(unittest.TestCase):
                 blocked_to=start + timedelta(days=2),
                 reason="Repair",
             ),
-            current_user={"user_id": "7", "tenant_id": "1"},
+            current_user={
+                "user_id": "7",
+                "tenant_id": "1",
+                "role_name": "TENANT_ADMIN",
+            },
         )
         conn.commit.assert_called_once()
         self.assertEqual(insert.call_args.kwargs["reason"], "Operational block")
