@@ -58,6 +58,17 @@ const FALLBACK_FILL = {
 } as const;
 
 const ROOM_SVG_ID_PATTERN = /(^|[-_])(CBN|CFR|MR|TR)([-_]|$)/i;
+const SVG_CACHE_LIMIT = 4;
+const svgTextCache = new Map<string, string>();
+
+const cacheSvgText = (url: string, text: string) => {
+  svgTextCache.delete(url);
+  svgTextCache.set(url, text);
+  if (svgTextCache.size > SVG_CACHE_LIMIT) {
+    const oldestUrl = svgTextCache.keys().next().value;
+    if (oldestUrl) svgTextCache.delete(oldestUrl);
+  }
+};
 
 const isRoomResource = (resource: SeatOption) =>
   /CABIN|CONFERENCE|MEETING|TRAINING|ROOM/i.test(
@@ -163,6 +174,12 @@ export default function BlockableFloorMap({
   const [zoom, setZoom] = useState(1);
 
   useEffect(() => {
+    const cachedSvg = svgTextCache.get(layoutUrl);
+    if (cachedSvg) {
+      setSvgText(cachedSvg);
+      setLoadError("");
+      return;
+    }
     const controller = new AbortController();
     setSvgText("");
     setLoadError("");
@@ -171,7 +188,10 @@ export default function BlockableFloorMap({
         if (!response.ok) throw new Error("Floor layout could not be loaded.");
         return response.text();
       })
-      .then((text) => setSvgText(text))
+      .then((text) => {
+        cacheSvgText(layoutUrl, text);
+        setSvgText(text);
+      })
       .catch((error: unknown) => {
         if ((error as { name?: string }).name !== "AbortError") {
           setLoadError("Floor layout could not be loaded from storage.");

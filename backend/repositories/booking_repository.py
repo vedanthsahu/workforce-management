@@ -1753,6 +1753,7 @@ def fetch_available_seats_by_range(
     start_date: date,
     end_date: date,
     amenity_ids: list[int],
+    allow_non_bookable: bool = False,
     exclude_booking_id: str | None = None,
 ) -> list[dict[str, Any]]:
 
@@ -1922,7 +1923,7 @@ def fetch_available_seats_by_range(
                     CASE
 
                         WHEN s.status <> 'ACTIVE'
-                             OR s.is_bookable IS NOT TRUE
+                             OR (s.is_bookable IS NOT TRUE AND %s IS NOT TRUE)
                             THEN 'UNAVAILABLE'
 
                         WHEN bsd.seat_id IS NOT NULL
@@ -2153,6 +2154,7 @@ def fetch_available_seats_by_range(
 
                         tenant_id,
 
+                        allow_non_bookable,
                         tenant_id,
                         floor_id,
                     ),
@@ -2169,6 +2171,7 @@ def fetch_available_seats(
     floor_id: str,
     booking_date: date,
     amenity_ids: list[int],
+    allow_non_bookable: bool = False,
 ) -> list[dict[str, Any]]:
     """Fetch computed availability and preference state for floor seats."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -2229,7 +2232,8 @@ def fetch_available_seats(
                     COALESCE(am.matched_amenity_count, 0)::integer AS matched_amenity_count,
                     rc.requested_amenity_count,
                     CASE
-                        WHEN s.status <> 'ACTIVE' OR s.is_bookable IS NOT TRUE
+                        WHEN s.status <> 'ACTIVE'
+                             OR (s.is_bookable IS NOT TRUE AND %s IS NOT TRUE)
                             THEN 'UNAVAILABLE'
                         WHEN bs.seat_id IS NOT NULL
                             THEN 'BOOKED'
@@ -2326,6 +2330,7 @@ def fetch_available_seats(
                 floor_id,
                 booking_date,
                 booking_date,
+                allow_non_bookable,
                 tenant_id,
                 booking_date,
                 booking_date,
