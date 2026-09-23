@@ -4,7 +4,20 @@ export type BlockCategory =
   | "upcoming"
   | "expiring"
   | "expired";
-export type BlockType = "MAINTENANCE" | "RESERVED" | "ADMIN_BLOCK";
+export type BlockListScope = BlockCategory | "all";
+export type BlockType = "Operational block" | "Restricted" | "Exclusive";
+export type ModifyBlockReason =
+  | "Operational requirements changed"
+  | "Block period adjusted"
+  | "Access restriction changed"
+  | "Reservation details changed"
+  | "Correction to block details";
+export type UnblockReason =
+  | "Maintenance completed"
+  | "Restriction no longer required"
+  | "Reserved use completed"
+  | "Seat released for general use"
+  | "Block created by mistake";
 export type DisplayStatus = "ACTIVE" | "UPCOMING" | "EXPIRED";
 
 export interface LocationOption {
@@ -111,5 +124,34 @@ export interface CreateBlockedSeatsPayload {
   block_type: BlockType;
   blocked_from: string;
   blocked_to: string;
-  reason: string;
+}
+
+export interface FloorLayoutScheduleItem {
+  layout_id: string;
+  layout_name: string;
+  status: string;
+  effective_from: string | null;
+  effective_till: string | null;
+}
+
+export interface FloorLayoutSchedule {
+  layouts: FloorLayoutScheduleItem[];
+}
+
+export interface UpdateBlockedSeatPayload {
+  block_type?: BlockType;
+  blocked_from?: string;
+  blocked_to?: string;
+  reason: ModifyBlockReason;
+}
+
+export interface BlockedSeatHistoryItem {
+  id: string;
+  action: string;
+  actor_name: string | null;
+  actor_email: string | null;
+  old_values: Record<string, unknown> | null;
+  new_values: Record<string, unknown> | null;
+  changed_fields: string[] | null;
+  occurred_at: string;
 }

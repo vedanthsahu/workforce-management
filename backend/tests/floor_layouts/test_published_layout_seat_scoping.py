@@ -52,11 +52,9 @@ class FakeConnection:
         return self.cursor_instance
 
 
-class SeatQueriesOnlyConsiderPublishedLayoutTests(unittest.TestCase):
-    """Every query that decides which seats exist/are available/count for a
-    floor must be scoped to that floor's currently PUBLISHED layout --
-    otherwise seats left over from a superseded layout get double-counted
-    or become bookable as ghost seats."""
+class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
+    """Seat queries use the published or scheduled layout effective on the
+    requested date, excluding stale layout versions."""
 
     def test_fetch_seat_for_booking_requires_published_layout_and_active_chain(self) -> None:
         cursor = FakeCursor()
@@ -101,6 +99,7 @@ class SeatQueriesOnlyConsiderPublishedLayoutTests(unittest.TestCase):
         self.assertIn("flr.status = 'ACTIVE'", sql)
         self.assertIn("bldg.status = 'ACTIVE'", sql)
         self.assertIn("st.status = 'ACTIVE'", sql)
+        self.assertIn("s.is_bookable IS NOT TRUE AND %s IS NOT TRUE", sql)
 
     def test_fetch_available_seats_single_date_requires_published_layout(self) -> None:
         cursor = FakeCursor()
@@ -114,6 +113,7 @@ class SeatQueriesOnlyConsiderPublishedLayoutTests(unittest.TestCase):
         self.assertIn("fl.effective_from <= %s", sql)
         self.assertIn("fl.effective_till IS NULL OR fl.effective_till > %s", sql)
         self.assertIn("fl.id = s.layout_id", sql)
+        self.assertIn("s.is_bookable IS NOT TRUE AND %s IS NOT TRUE", sql)
 
     def test_fetch_seat_configuration_default_ignores_layout_currency(self) -> None:
         """Admin seat-management must still be able to find a stale seat in

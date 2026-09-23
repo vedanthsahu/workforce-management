@@ -46,7 +46,13 @@ class BookingEligibilitySeatTests(unittest.TestCase):
     the seat itself, on top of the pre-existing user/guest availability
     checks, which must keep working exactly as before."""
 
-    def _run(self, payload: BookingEligibilityRequest, **patches):
+    def _run(
+        self,
+        payload: BookingEligibilityRequest,
+        *,
+        current_user: dict[str, str] = CALLER,
+        **patches,
+    ):
         defaults = {
             "backend.services.booking_service._resolve_booked_for_user": patch(
                 "backend.services.booking_service._resolve_booked_for_user",
@@ -86,7 +92,7 @@ class BookingEligibilitySeatTests(unittest.TestCase):
             return check_booking_eligibility(
                 conn=object(),
                 tenant_id="1",
-                current_user=CALLER,
+                current_user=current_user,
                 payload=payload,
             )
 
@@ -94,7 +100,7 @@ class BookingEligibilitySeatTests(unittest.TestCase):
         result = self._run(_payload())
         self.assertTrue(result.eligible)
 
-    def test_seat_lookup_requires_current_published_layout(self) -> None:
+    def test_seat_lookup_uses_layout_effective_on_start_date(self) -> None:
         """A seat left over from a superseded layout must be treated as
         not-found here, same as the booking-creation path."""
         with patch(
@@ -166,6 +172,24 @@ class BookingEligibilitySeatTests(unittest.TestCase):
         self.assertEqual(context.exception.status_code, 400)
         self.assertEqual(context.exception.detail["code"], "booking_seat_not_bookable")
 
+    def test_tenant_admin_can_use_active_non_bookable_seat(self) -> None:
+        result = self._run(
+            _payload(),
+            current_user={
+                "tenant_id": "1",
+                "user_id": "7",
+                "role_name": "TENANT_ADMIN",
+            },
+            **{
+                "backend.services.booking_service.fetch_seat_configuration": patch(
+                    "backend.services.booking_service.fetch_seat_configuration",
+                    return_value={**ACTIVE_BOOKABLE_SEAT, "is_bookable": False},
+                )
+            },
+        )
+
+        self.assertTrue(result.eligible)
+
     def test_blocked_seat_raises_409(self) -> None:
         with self.assertRaises(HTTPException) as context:
             self._run(
@@ -179,6 +203,80 @@ class BookingEligibilitySeatTests(unittest.TestCase):
             )
         self.assertEqual(context.exception.status_code, 409)
         self.assertEqual(context.exception.detail["code"], "booking_seat_blocked")
+
+    def test_restricted_block_is_ignored_for_facilitator(self) -> None:
+        seen: dict[str, object] = {}
+
+        def block_check(*_args, **kwargs):
+            seen.update(kwargs)
+            return False
+
+        result = self._run(
+            _payload(),
+            current_user={
+                "tenant_id": "1",
+                "user_id": "39",
+                "role_name": "FACILITATOR",
+            },
+            **{
+                "backend.services.booking_service.seat_has_active_block_in_range": patch(
+                    "backend.services.booking_service.seat_has_active_block_in_range",
+                    side_effect=block_check,
+                )
+            },
+        )
+
+        self.assertTrue(result.eligible)
+        self.assertEqual(seen["allowed_block_types"], ("Restricted",))
+
+    def test_admin_can_pass_restricted_and_exclusive_blocks(self) -> None:
+        seen: dict[str, object] = {}
+
+        def block_check(*_args, **kwargs):
+            seen.update(kwargs)
+            return False
+
+        result = self._run(
+            _payload(),
+            current_user={
+                "tenant_id": "1",
+                "user_id": "8",
+                "role_name": "TENANT_ADMIN",
+            },
+            **{
+                "backend.services.booking_service.seat_has_active_block_in_range": patch(
+                    "backend.services.booking_service.seat_has_active_block_in_range",
+                    side_effect=block_check,
+                )
+            },
+        )
+
+        self.assertTrue(result.eligible)
+        self.assertEqual(
+            seen["allowed_block_types"],
+            ("Restricted", "Exclusive"),
+        )
+
+    def test_employee_cannot_pass_any_block_type(self) -> None:
+        seen: dict[str, object] = {}
+
+        def block_check(*_args, **kwargs):
+            seen.update(kwargs)
+            return True
+
+        with self.assertRaises(HTTPException) as context:
+            self._run(
+                _payload(),
+                **{
+                    "backend.services.booking_service.seat_has_active_block_in_range": patch(
+                        "backend.services.booking_service.seat_has_active_block_in_range",
+                        side_effect=block_check,
+                    )
+                },
+            )
+
+        self.assertEqual(context.exception.detail["code"], "booking_seat_blocked")
+        self.assertEqual(seen["allowed_block_types"], ())
 
     def test_overlapping_seat_booking_raises_409(self) -> None:
         with self.assertRaises(HTTPException) as context:

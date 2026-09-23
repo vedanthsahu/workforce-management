@@ -23,6 +23,8 @@ logger = logging.getLogger(f"{LOGGER_NAME}.sso")
 
 MICROSOFT_GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 MICROSOFT_TOKEN_BASE_URL = "https://login.microsoftonline.com"
+MICROSOFT_CONNECT_TIMEOUT_SECONDS = 2
+MICROSOFT_RESPONSE_TIMEOUT_SECONDS = 20
 STATE_TTL_SECONDS = 600
 MICROSOFT_SCOPES = (
     "openid",
@@ -129,7 +131,13 @@ def exchange_code_for_token(code: str) -> dict[str, str]:
                 "grant_type": "authorization_code",
                 "scope": " ".join(MICROSOFT_SCOPES),
             },
-            timeout=20,
+            # Requests applies the connect timeout to every resolved address.
+            # Keep it short so unreachable Microsoft IPs cannot consume the
+            # short-lived authorization code before a reachable IP is tried.
+            timeout=(
+                MICROSOFT_CONNECT_TIMEOUT_SECONDS,
+                MICROSOFT_RESPONSE_TIMEOUT_SECONDS,
+            ),
         )
 
         logger.debug("sso.token_exchange.response status=%s", response.status_code)

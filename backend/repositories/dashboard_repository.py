@@ -352,10 +352,8 @@ def fetch_admin_dashboard_summary(
             ),
 
             blocked_seat_counts AS (
-                SELECT COUNT(DISTINCT bs.seat_id) AS blocked_seats
+                SELECT COUNT(*) AS blocked_seats
                 FROM blocked_seats AS bs
-                INNER JOIN bookable_seats AS bks
-                    ON bks.id = bs.seat_id
                 WHERE bs.tenant_id = %(tenant_id)s
                   AND bs.status = 'ACTIVE'
                   AND %(selected_date)s BETWEEN bs.blocked_from AND bs.blocked_to
