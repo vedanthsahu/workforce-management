@@ -9,8 +9,29 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.schemas.pagination import PaginationMetadata
 
-BlockedSeatCategory = Literal["active", "today", "upcoming", "expiring", "expired"]
-BlockedSeatType = Literal["MAINTENANCE", "RESERVED", "ADMIN_BLOCK"]
+BlockedSeatCategory = Literal[
+    "all",
+    "active",
+    "today",
+    "upcoming",
+    "expiring",
+    "expired",
+]
+BlockedSeatType = Literal["Operational block", "Restricted", "Exclusive"]
+BlockedSeatModifyReason = Literal[
+    "Operational requirements changed",
+    "Block period adjusted",
+    "Access restriction changed",
+    "Reservation details changed",
+    "Correction to block details",
+]
+BlockedSeatUnblockReason = Literal[
+    "Maintenance completed",
+    "Restriction no longer required",
+    "Reserved use completed",
+    "Seat released for general use",
+    "Block created by mistake",
+]
 BlockedSeatDisplayStatus = Literal["ACTIVE", "UPCOMING", "EXPIRED"]
 
 
@@ -67,7 +88,6 @@ class CreateBlockedSeatsRequest(BaseModel):
     block_type: BlockedSeatType
     blocked_from: date
     blocked_to: date
-    reason: str = Field(min_length=1, max_length=500)
 
     @field_validator("seat_ids")
     @classmethod
@@ -77,14 +97,6 @@ class CreateBlockedSeatsRequest(BaseModel):
         if len(set(value)) != len(value):
             raise ValueError("seat_ids must not contain duplicates.")
         return value
-
-    @field_validator("reason")
-    @classmethod
-    def trim_reason(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("reason is required.")
-        return normalized
 
     @model_validator(mode="after")
     def validate_date_range(self) -> CreateBlockedSeatsRequest:
@@ -97,6 +109,34 @@ class CreateBlockedSeatsResponse(BaseModel):
     message: str
     created_count: int
     items: list[BlockedSeatResponse]
+
+
+class UpdateBlockedSeatRequest(BaseModel):
+    block_type: BlockedSeatType | None = None
+    blocked_from: date | None = None
+    blocked_to: date | None = None
+    reason: BlockedSeatModifyReason
+
+    @model_validator(mode="after")
+    def require_change(self) -> UpdateBlockedSeatRequest:
+        if not self.model_fields_set:
+            raise ValueError("At least one field must be provided.")
+        return self
+
+
+class BlockedSeatHistoryItemResponse(BaseModel):
+    id: str
+    action: str
+    actor_name: str | None = None
+    actor_email: str | None = None
+    old_values: dict[str, object] | None = None
+    new_values: dict[str, object] | None = None
+    changed_fields: list[str] | None = None
+    occurred_at: datetime
+
+
+class BlockedSeatHistoryResponse(BaseModel):
+    items: list[BlockedSeatHistoryItemResponse]
 
 
 class BlockableResourceResponse(BaseModel):
@@ -125,6 +165,18 @@ class BlockedSeatConflictResponse(BaseModel):
     booked_for_name: str | None = None
 
 
+class FloorLayoutScheduleItemResponse(BaseModel):
+    layout_id: str
+    layout_name: str
+    status: str
+    effective_from: date | None = None
+    effective_till: date | None = None
+
+
+class FloorLayoutScheduleResponse(BaseModel):
+    layouts: list[FloorLayoutScheduleItemResponse]
+
+
 class BlockableFloorLayoutResponse(BaseModel):
     layout_id: str
     layout_name: str
@@ -137,15 +189,7 @@ class BlockableFloorLayoutResponse(BaseModel):
 
 
 class CancelBlockedSeatRequest(BaseModel):
-    reason: str = Field(min_length=1, max_length=500)
-
-    @field_validator("reason")
-    @classmethod
-    def trim_reason(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("reason is required.")
-        return normalized
+    reason: BlockedSeatUnblockReason
 
 
 class CancelBlockedSeatResponse(BaseModel):

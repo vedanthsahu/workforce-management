@@ -23,6 +23,7 @@ import type {
   BlockType,
   BlockedSeatConflict,
   BlockableFloorLayout,
+  FloorLayoutScheduleItem,
   SeatOption,
 } from "../types/blockedSeats.types";
 import { BLOCK_TYPE_OPTIONS } from "../utils/constants";
@@ -73,6 +74,7 @@ export default function BlockSeatsPage() {
     loadingSites,
     loadingBuildings,
     loadingFloors,
+    locationError,
     loadBuildings,
     loadFloors,
     setBuildings,
@@ -82,14 +84,13 @@ export default function BlockSeatsPage() {
     [buildingId, setBuildingId] = useState(""),
     [floorId, setFloorId] = useState("");
   const [from, setFrom] = useState(today()),
-    [to, setTo] = useState(today()),
-    [reason, setReason] = useState("");
-  const [blockType, setBlockType] = useState<BlockType>("MAINTENANCE"),
+    [to, setTo] = useState(today());
+  const [blockType, setBlockType] = useState<BlockType>("Operational block"),
     [seats, setSeats] = useState<SeatOption[]>([]),
     [selected, setSelected] = useState<string[]>([]),
     [bookings, setBookings] = useState<BlockedSeatConflict[]>([]);
   const [layout, setLayout] = useState<BlockableFloorLayout | null>(null);
-  const [effectiveLayoutName, setEffectiveLayoutName] = useState("");
+  const [layoutSchedule, setLayoutSchedule] = useState<FloorLayoutScheduleItem[]>([]);
   const [layoutEndDate, setLayoutEndDate] = useState("");
   const [layoutDateError, setLayoutDateError] = useState("");
   const [checkingLayoutDates, setCheckingLayoutDates] = useState(false);
@@ -97,11 +98,20 @@ export default function BlockSeatsPage() {
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const [conflictPage, setConflictPage] = useState(1);
+  const [loadingConflictSeatIds, setLoadingConflictSeatIds] = useState<string[]>([]);
   const loadVersion = useRef(0);
+  const layoutRequest = useRef<AbortController | null>(null);
+  const conflictRequests = useRef(new Set<AbortController>());
+  const loadedConflictSeatIds = useRef(new Set<string>());
   useEffect(() => {
     loadVersion.current += 1;
+    layoutRequest.current?.abort();
+    conflictRequests.current.forEach((controller) => controller.abort());
+    conflictRequests.current.clear();
+    loadedConflictSeatIds.current.clear();
     setLoading(false);
     setBookings([]);
+    setLoadingConflictSeatIds([]);
     return () => {
       loadVersion.current += 1;
     };
@@ -130,8 +140,8 @@ export default function BlockSeatsPage() {
     }
   }, [buildingId, floorId, floors, loadingFloors]);
   useEffect(() => {
-    if (!floorId || !from) {
-      setEffectiveLayoutName("");
+    if (!floorId) {
+      setLayoutSchedule([]);
       setLayoutEndDate("");
       setLayoutDateError("");
       setCheckingLayoutDates(false);
@@ -142,29 +152,22 @@ export default function BlockSeatsPage() {
     setCheckingLayoutDates(true);
     setLayoutDateError("");
     void blockedSeatsService
-      .getBlockableLayout(floorId, from, from, false, "metadata")
-      .then((effectiveLayout) => {
+      .getFloorLayoutSchedule(floorId)
+      .then((schedule) => {
         if (cancelled) return;
-        void fetch(effectiveLayout.layout_file_url).catch(() => undefined);
-        const maximumDate = inclusiveLayoutEndDate(
-          effectiveLayout.effective_till,
-        );
-        setEffectiveLayoutName(effectiveLayout.layout_name);
-        setLayoutEndDate(maximumDate);
-        setTo((current) =>
-          current < from || (maximumDate && current > maximumDate)
-            ? from
-            : current,
-        );
+        setLayoutSchedule(schedule.layouts);
+        if (!schedule.layouts.length) {
+          setLayoutDateError("No current or future floor layouts are available.");
+        }
       })
       .catch((requestError: unknown) => {
         if (cancelled) return;
-        setEffectiveLayoutName("");
+        setLayoutSchedule([]);
         setLayoutEndDate("");
         setLayoutDateError(
           apiErrorMessage(
             requestError,
-            "No effective floor layout is available for the selected Block From date.",
+            "Unable to load current and future floor-layout details.",
           ),
         );
       })
@@ -175,7 +178,27 @@ export default function BlockSeatsPage() {
     return () => {
       cancelled = true;
     };
-  }, [floorId, from]);
+  }, [floorId]);
+  useEffect(() => {
+    if (!floorId || checkingLayoutDates || !layoutSchedule.length) return;
+    const effectiveLayout = layoutSchedule.find(
+      (item) =>
+        (!item.effective_from || item.effective_from <= from) &&
+        (!item.effective_till || item.effective_till > from),
+    );
+    if (!effectiveLayout) {
+      setLayoutEndDate("");
+      setLayoutDateError("No floor layout is effective for the selected Block From date.");
+      return;
+    }
+    const maximumDate = inclusiveLayoutEndDate(effectiveLayout.effective_till);
+    setLayoutEndDate(maximumDate);
+    setLayoutDateError("");
+    setTo((current) =>
+      current < from || (maximumDate && current > maximumDate) ? from : current,
+    );
+  }, [checkingLayoutDates, floorId, from, layoutSchedule]);
+  const pastDate = from < today();
   const invalid = to < from;
   const conflicts = useMemo(
     () =>
@@ -188,8 +211,11 @@ export default function BlockSeatsPage() {
     [bookings, selected],
   );
   const conflictSeats = new Set(conflicts.map((b) => String(b.seat_id)));
-  const selectedBookedSeats = seats.filter(
-    (seat) => selected.includes(seat.seat_id) && seat.hasBooking,
+  const selectedBookedSeats = useMemo(
+    () => seats.filter(
+      (seat) => selected.includes(seat.seat_id) && seat.hasBooking,
+    ),
+    [seats, selected],
   );
   const unresolvedConflictCount = new Set([
     ...conflictSeats,
@@ -215,6 +241,42 @@ export default function BlockSeatsPage() {
       setConflictPage(conflictTotalPages);
     }
   }, [conflictPage, conflictTotalPages]);
+  useEffect(() => {
+    if (!layout || invalid) return;
+    const pendingSeatIds = selectedBookedSeats
+      .map((seat) => seat.seat_id)
+      .filter((seatId) => !loadedConflictSeatIds.current.has(seatId));
+    if (!pendingSeatIds.length) return;
+
+    pendingSeatIds.forEach((seatId) => loadedConflictSeatIds.current.add(seatId));
+    setLoadingConflictSeatIds((current) => [...new Set([...current, ...pendingSeatIds])]);
+    const controller = new AbortController();
+    const version = loadVersion.current;
+    conflictRequests.current.add(controller);
+    void blockedSeatsService
+      .getConflicts(floorId, pendingSeatIds, from, to, controller.signal)
+      .then((rows) => {
+        if (version !== loadVersion.current) return;
+        setBookings((current) => {
+          const byId = new Map(current.map((row) => [row.booking_id, row]));
+          rows.forEach((row) => byId.set(row.booking_id, row));
+          return [...byId.values()];
+        });
+        setConflictPage(1);
+      })
+      .catch((requestError: unknown) => {
+        if (controller.signal.aborted || version !== loadVersion.current) return;
+        setError(apiErrorMessage(requestError, "Unable to load booking conflicts for the selected seats."));
+      })
+      .finally(() => {
+        conflictRequests.current.delete(controller);
+        if (version === loadVersion.current) {
+          setLoadingConflictSeatIds((current) =>
+            current.filter((seatId) => !pendingSeatIds.includes(seatId)),
+          );
+        }
+      });
+  }, [floorId, from, invalid, layout, selectedBookedSeats, to]);
   const resolveBooking = (booking: BlockedSeatConflict) => {
     const remaining = bookings.filter(
       (row) => row.booking_id !== booking.booking_id,
@@ -237,6 +299,9 @@ export default function BlockSeatsPage() {
   };
   const load = async () => {
     const version = ++loadVersion.current;
+    layoutRequest.current?.abort();
+    const controller = new AbortController();
+    layoutRequest.current = controller;
     setLayout(null);
     setSeats([]);
     setSelected([]);
@@ -244,47 +309,28 @@ export default function BlockSeatsPage() {
     setLoading(true);
     setError("");
     try {
-      const [, bookingPages] = await Promise.all([
-        blockedSeatsService
-          .getBlockableLayout(floorId, from, to, true)
-          .then((floorLayout) => {
-            if (version !== loadVersion.current) return;
-            setLayout(floorLayout);
-            setSeats(
-              floorLayout.resources.map((resource) => ({
-                seat_id: String(resource.resource_id),
-                seat_code: resource.resource_code,
-                resource_name: resource.resource_name,
-                resource_type: resource.resource_type,
-                svg_element_id: resource.svg_element_id,
-                capacity: resource.capacity,
-                hasBooking: resource.has_booking,
-                hasBlock: resource.has_block,
-                isUnavailable: !resource.is_active || !resource.is_bookable,
-                selectable:
-                  resource.is_active &&
-                  resource.is_bookable &&
-                  !resource.has_block,
-              })),
-            );
-          }),
-        (async () => {
-          const conflicts: BlockedSeatConflict[] = [];
-          let page = 1;
-          // SQL pagination and sequential pages keep database load bounded.
-          while (version === loadVersion.current) {
-            const result = await blockedSeatsService.getConflicts(floorId, from, to, page);
-            conflicts.push(...result.conflicts);
-            if (!result.has_more_conflicts) break;
-            page += 1;
-          }
-          return conflicts;
-        })(),
-      ]);
+      const floorLayout = await blockedSeatsService.getBlockableLayout(
+        floorId, from, to, true, "resources", controller.signal,
+      );
       if (version !== loadVersion.current) return;
-      setBookings(bookingPages);
+      setLayout(floorLayout);
+      setSeats(
+        floorLayout.resources.map((resource) => ({
+          seat_id: String(resource.resource_id),
+          seat_code: resource.resource_code,
+          resource_name: resource.resource_name,
+          resource_type: resource.resource_type,
+          svg_element_id: resource.svg_element_id,
+          capacity: resource.capacity,
+          hasBooking: resource.has_booking,
+          hasBlock: resource.has_block,
+          isUnavailable: !resource.is_active,
+          selectable: resource.is_active && !resource.has_block,
+        })),
+      );
       setConflictPage(1);
     } catch (requestError: unknown) {
+      if (controller.signal.aborted) return;
       if (version !== loadVersion.current) return;
       // Invalidate the other parallel request if one request failed.
       loadVersion.current += 1;
@@ -301,13 +347,15 @@ export default function BlockSeatsPage() {
       );
     } finally {
       if (version === loadVersion.current) setLoading(false);
+      if (layoutRequest.current === controller) layoutRequest.current = null;
     }
   };
   const cancel = async (b: BlockedSeatConflict) => {
-    if (
-      !b.booking_id ||
-      !confirm(`Cancel booking for ${b.seat_code} on ${b.booking_date}?`)
-    )
+    if (!b.booking_id) {
+      setError("Booking details are incomplete. Reload the seats and try again.");
+      return;
+    }
+    if (!confirm(`Cancel booking for ${b.seat_code} on ${b.booking_date}?`))
       return;
     try {
       const action =
@@ -325,8 +373,10 @@ export default function BlockSeatsPage() {
       !b.building_id ||
       !b.floor_id ||
       !b.booking_date
-    )
+    ) {
+      setError("Booking details are incomplete. Reload the seats and try again.");
       return;
+    }
     try {
       const action =
         b.booking_type === "GUEST" ? modifyGuestBooking : modifyBooking;
@@ -348,7 +398,7 @@ export default function BlockSeatsPage() {
     }
   };
   const submit = async () => {
-    if (loading || unresolvedConflictCount || !selected.length || !reason.trim()) return;
+    if (loading || unresolvedConflictCount || !selected.length) return;
     setSaving(true);
     try {
       await blockedSeatsService.create({
@@ -356,14 +406,14 @@ export default function BlockSeatsPage() {
         block_type: blockType,
         blocked_from: from,
         blocked_to: to,
-        reason: reason.trim(),
       });
       router.push("/admin/blocked-seats");
-    } catch (e: unknown) {
+    } catch (requestError: unknown) {
       setError(
-        (e as { response?: { data?: { detail?: { message?: string } } } })
-          .response?.data?.detail?.message ??
+        apiErrorMessage(
+          requestError,
           "Unable to block seats; reload to check for new conflicts.",
+        ),
       );
     } finally {
       setSaving(false);
@@ -464,7 +514,7 @@ export default function BlockSeatsPage() {
                   disabled={f.disabled}
                   onChange={(e) => void f.onChange(e.target.value)}
                 >
-                  <option value="">{f.placeholder}</option>
+                  <option value="" disabled hidden>{f.placeholder}</option>
                   {f.items.map((x) => (
                     <option key={x.id} value={x.id}>
                       {x.name}
@@ -493,6 +543,7 @@ export default function BlockSeatsPage() {
                 className={inputClass}
                 type="date"
                 value={from}
+                min={today()}
                 onChange={(e) => {
                   const selectedDate = e.target.value;
                   setFrom(selectedDate);
@@ -523,6 +574,7 @@ export default function BlockSeatsPage() {
             <button
               disabled={
                 !floorId ||
+                pastDate ||
                 invalid ||
                 loading ||
                 checkingLayoutDates ||
@@ -538,14 +590,6 @@ export default function BlockSeatsPage() {
               )}
             </button>
           </div>
-          <label className="mt-4 block text-[11px] font-medium text-gray-500">
-            Reason *
-            <textarea
-              className="mt-1.5 min-h-16 w-full rounded-lg border border-gray-200 bg-white p-3 text-[12.5px] text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 sm:text-[13px]"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-            />
-          </label>
           {invalid && (
             <p className="text-xs text-red-600">
               Block To must be on or after Block From.
@@ -553,15 +597,44 @@ export default function BlockSeatsPage() {
           )}
           {checkingLayoutDates && (
             <p className="mt-2 text-[11.5px] text-gray-400 sm:text-[12px]">
-              Checking the effective floor-layout period…
+              Loading current and future floor layouts…
             </p>
           )}
-          {!checkingLayoutDates && effectiveLayoutName && (
-            <p className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-[11.5px] text-indigo-700 sm:text-[12px]">
-              {layoutEndDate
-                ? `${effectiveLayoutName} is effective through ${displayDate(layoutEndDate)}. Block To is limited to this date.`
-                : `${effectiveLayoutName} has no scheduled end date.`}
+          {pastDate && (
+            <p className="text-xs text-red-600">
+              Block From cannot be a past date.
             </p>
+          )}
+          {!checkingLayoutDates && layoutSchedule.length > 0 && (
+            <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+              <p className="text-[11.5px] font-semibold text-gray-700 sm:text-[12px]">
+                Current and future floor layouts
+              </p>
+              <div className="mt-1.5 flex flex-col items-start gap-2">
+                {layoutSchedule.map((item) => {
+                  const endDate = inclusiveLayoutEndDate(item.effective_till);
+                  const periodLabel =
+                    item.effective_from && item.effective_from > today()
+                      ? "Future"
+                      : "Current";
+                  return (
+                    <span
+                      key={item.layout_id}
+                      className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] text-gray-600 sm:text-[11.5px]"
+                    >
+                      <strong className="text-gray-800">{item.layout_name}</strong>{" "}
+                      <span className="font-medium text-indigo-600">({periodLabel})</span>{" "}
+                      · {item.effective_from
+                        ? `from ${displayDate(item.effective_from)}`
+                        : "currently effective"}
+                      {endDate
+                        ? ` through ${displayDate(endDate)}`
+                        : " · no scheduled end"}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
           )}
           {layoutDateError && (
             <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11.5px] text-red-600 sm:text-[12px]">
@@ -569,9 +642,9 @@ export default function BlockSeatsPage() {
             </p>
           )}
         </section>
-        {error && (
+        {(locationError || error) && (
           <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {error}
+            {locationError || error}
           </p>
         )}
         {layout && loading && (
@@ -691,7 +764,11 @@ export default function BlockSeatsPage() {
                       <dl className="grid grid-cols-2 gap-3">
                         <div>
                           <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">User</dt>
-                          <dd className="mt-1 text-gray-600">Details unavailable</dd>
+                          <dd className="mt-1 text-gray-600">
+                            {loadingConflictSeatIds.includes(row.seat.seat_id)
+                              ? "Loading details…"
+                              : "Details unavailable"}
+                          </dd>
                         </div>
                         <div>
                           <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Period</dt>
@@ -699,7 +776,9 @@ export default function BlockSeatsPage() {
                         </div>
                       </dl>
                       <p className="break-words text-gray-500 [overflow-wrap:anywhere]">
-                        Reload seats to retrieve the conflicting booking details.
+                        {loadingConflictSeatIds.includes(row.seat.seat_id)
+                          ? "Please wait while the conflict details load."
+                          : "Reload seats to retrieve the conflicting booking details."}
                       </p>
                     </article>
                   );
@@ -778,11 +857,17 @@ export default function BlockSeatsPage() {
                     return (
                       <tr key={`missing-${seat.seat_id}`} className="border-t bg-amber-50/50">
                         <td className="break-words p-3 align-top font-semibold [overflow-wrap:anywhere]">{seat.seat_code}</td>
-                        <td className="break-words p-3 align-top text-muted-foreground [overflow-wrap:anywhere]">Booking details unavailable</td>
+                        <td className="break-words p-3 align-top text-muted-foreground [overflow-wrap:anywhere]">
+                          {loadingConflictSeatIds.includes(seat.seat_id)
+                            ? "Loading booking details…"
+                            : "Booking details unavailable"}
+                        </td>
                         <td className="break-words p-3 align-top [overflow-wrap:anywhere]">{from} – {to}</td>
                         <td className="break-words p-3 align-top text-amber-700 [overflow-wrap:anywhere]">Resolution required</td>
                         <td className="break-words p-3 align-top text-muted-foreground [overflow-wrap:anywhere]">
-                          Reload seats to retrieve the conflicting booking details.
+                          {loadingConflictSeatIds.includes(seat.seat_id)
+                            ? "Please wait while the conflict details load."
+                            : "Reload seats to retrieve the conflicting booking details."}
                         </td>
                       </tr>
                     );
@@ -871,7 +956,7 @@ export default function BlockSeatsPage() {
                   : "text-sm text-emerald-700"
               }
             >
-              {loading
+              {loading || loadingConflictSeatIds.length > 0
                 ? "Checking booking conflicts..."
                 : unresolvedConflictCount
                 ? `${unresolvedConflictCount} space conflict(s) must be resolved.`
@@ -879,7 +964,10 @@ export default function BlockSeatsPage() {
             </p>
             <button
               disabled={
-                loading || !!unresolvedConflictCount || !reason.trim() || saving
+                loading ||
+                loadingConflictSeatIds.length > 0 ||
+                !!unresolvedConflictCount ||
+                saving
               }
               onClick={() => void submit()}
               className="h-10 w-full rounded-lg bg-indigo-600 px-5 text-[12.5px] font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:text-[13px]"

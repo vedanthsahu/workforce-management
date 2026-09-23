@@ -278,6 +278,10 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
             return_value=False,
         ), patch.object(
             booking_service,
+            "seat_has_active_block_in_range",
+            return_value=False,
+        ), patch.object(
+            booking_service,
             "mark_booking_modified",
         ) as mark_modified, patch.object(
             booking_service,
