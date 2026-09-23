@@ -27,6 +27,17 @@ from backend.services.floor_layout_service import (
 _VISIBILITY_DAYS = {"DRAFT": 15, "ARCHIVED": 30, "DELETED": 5}
 
 
+def setUpModule() -> None:
+    # These service tests exercise layout lifecycle rules, not S3 URL signing.
+    # Keep response validation independent of application secrets and AWS.
+    unittest.enterModuleContext(
+        patch(
+            "backend.schemas.floor_layout.resolve_layout_file_url",
+            side_effect=lambda value: value,
+        )
+    )
+
+
 class FakeConnection:
     def __init__(self) -> None:
         self.commits = 0

@@ -1294,13 +1294,15 @@ def modify_booking(
             # otherwise a booking a facilitator made for someone else silently
             # looks self-booked (and vanishes from the facilitator's delegated-
             # bookings views) the moment anyone else modifies it. Who actually
-            # performed this edit is already captured correctly on the
-            # superseded row via mark_booking_modified's updated_by_user_id,
-            # and in the audit log below.
+            # performed this edit is also recorded in the audit log below, and
+            # on this new row's own updated_by_user_id -- the admin bookings
+            # screen only ever shows the active (replacement) row, never the
+            # superseded one, so that's the row that needs the attribution.
             booked_by_user_id=str(booking["booked_by_user_id"]),
             seat=target_seat,
             booking_date=payload.booking_date,
             modified_from_booking_id=booking_id,
+            updated_by_user_id=_current_user_id(current_user),
         )
 
         conn.commit()

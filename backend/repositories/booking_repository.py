@@ -1166,10 +1166,16 @@ def insert_booking(
     booking_date: date,
     source_channel: str = "WEB",
     modified_from_booking_id: str | None = None,
+    updated_by_user_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Insert an EMPLOYEE booking using hierarchy values
     derived from the seat row.
+
+    updated_by_user_id is only passed when this row is replacing a modified
+    booking (modify_booking) -- it records who performed the modification,
+    since this new row (not the superseded one) is what the admin bookings
+    screen shows as "Modified". Left unset for a plain new booking.
     """
 
     normalized_source = source_channel.strip().upper()
@@ -1202,7 +1208,9 @@ def insert_booking(
 
                 source_channel,
 
-                modified_from_booking_id
+                modified_from_booking_id,
+
+                updated_by_user_id
             )
             VALUES (
                 %s,
@@ -1220,6 +1228,8 @@ def insert_booking(
                 'EMPLOYEE',
 
                 'CONFIRMED',
+
+                %s,
 
                 %s,
 
@@ -1243,6 +1253,8 @@ def insert_booking(
                 normalized_source,
 
                 modified_from_booking_id,
+
+                updated_by_user_id,
             ),
         )
 
@@ -2364,9 +2376,15 @@ def insert_guest_booking(
     booking_date: date,
     source_channel: str = "WEB",
     modified_from_booking_id: str | None = None,
+    updated_by_user_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Insert a GUEST booking linked to a guest visit.
+
+    updated_by_user_id is only passed when this row is replacing a modified
+    booking -- it records who performed the modification, since this new
+    row (not the superseded one) is what the admin bookings screen shows as
+    "Modified". Left unset for a plain new booking.
     """
 
     normalized_source = source_channel.strip().upper()
@@ -2402,7 +2420,9 @@ def insert_guest_booking(
 
                 source_channel,
 
-                modified_from_booking_id
+                modified_from_booking_id,
+
+                updated_by_user_id
 
             )
             VALUES (
@@ -2424,6 +2444,8 @@ def insert_guest_booking(
                 'GUEST',
 
                 'CONFIRMED',
+
+                %s,
 
                 %s,
 
@@ -2449,6 +2471,8 @@ def insert_guest_booking(
                 normalized_source,
 
                 modified_from_booking_id,
+
+                updated_by_user_id,
             ),
         )
 

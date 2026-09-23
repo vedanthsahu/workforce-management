@@ -12,6 +12,7 @@ import { useAmenities } from "@/features/amenities/hooks/useAmenities";
 import { Amenity } from "@/features/amenities/types/amenities.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
 import { AMENITIES_PIN_DURATION as PIN_DURATION } from "@/features/amenities/utils/constants";
+import { searchMatchRank } from "@/lib/searchRank";
 
 function AmenitiesPage() {
   const router = useRouter();
@@ -75,17 +76,11 @@ function AmenitiesPage() {
   };
 
   // ─── Filter ───────────────────────────────────────────────────────────────
-  const filteredAmenities = (data?.items || []).filter((a) => {
-    const name = (a.amenity_name || "").toLowerCase();
-    const query = search.toLowerCase();
-    if (query.length === 0) return true;
-    let i = 0;
-    for (const char of name) {
-      if (char === query[i]) i++;
-      if (i === query.length) return true;
-    }
-    return false;
-  });
+  const filteredAmenities = (data?.items || [])
+    .map((a) => ({ amenity: a, rank: searchMatchRank(a.amenity_name || "", search) }))
+    .filter((x): x is { amenity: Amenity; rank: number } => x.rank !== null)
+    .sort((a, b) => a.rank - b.rank)
+    .map((x) => x.amenity);
 
   // ─── Pin the edited/added row to top temporarily ──────────────────────────
   const sortedAmenities = pinnedId

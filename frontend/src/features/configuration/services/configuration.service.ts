@@ -48,3 +48,25 @@ export async function updateLayoutPolicy(patch: {
   const { data } = await axiosInstance.patch<LayoutPolicy>("/business-rules/layout-policy", patch);
   return data;
 }
+
+export interface BlockedSeatPolicy {
+  // A block is flagged Upcoming/Expiring Soon if it starts/ends within
+  // this many days of today.
+  upcoming_days: number;
+  expiring_soon_days: number;
+  // Expired blocks shown in the Expired tab are restricted to the previous
+  // N days from today.
+  expired_window_days: number;
+}
+
+export async function fetchBlockedSeatPolicy(): Promise<BlockedSeatPolicy> {
+  const { data } = await axiosInstance.get<BlockedSeatPolicy>("/business-rules/blocked-seat-policy");
+  return data;
+}
+
+export async function updateBlockedSeatPolicy(
+  patch: Partial<BlockedSeatPolicy>,
+): Promise<BlockedSeatPolicy> {
+  const { data } = await axiosInstance.patch<BlockedSeatPolicy>("/business-rules/blocked-seat-policy", patch);
+  return data;
+}

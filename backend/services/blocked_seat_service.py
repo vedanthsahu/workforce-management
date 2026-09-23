@@ -47,6 +47,7 @@ from backend.schemas.blocked_seat import (
     UpdateBlockedSeatRequest,
 )
 from backend.schemas.pagination import PaginationMetadata
+from backend.services.business_rule_service import resolve_blocked_seat_days
 
 BLOCK_TYPE_REASONS = {
     "Operational block": "Operational block",
@@ -97,6 +98,7 @@ def get_blocked_seats(
     include_summary: bool = True,
 ) -> BlockedSeatListResponse:
     reference_date = date.today()
+    policy = resolve_blocked_seat_days(conn, tenant_id=tenant_id)
     try:
         rows, total = fetch_blocked_seats(
             conn,
@@ -105,16 +107,22 @@ def get_blocked_seats(
             reference_date=reference_date,
             page=page,
             limit=limit,
+            upcoming_days=policy["UPCOMING"],
+            expiring_soon_days=policy["EXPIRING_SOON"],
+            expired_window_days=policy["EXPIRED_WINDOW"],
         )
         summary = {}
         if include_summary:
             # Summary cards represent tenant-wide totals. Search and location/type/date
-            # filters apply only to the result table and its pagination.
+            # filters -- and the table's rolling display window -- apply only to the
+            # result table and its pagination, never to these counts.
             summary = fetch_blocked_seat_summary(
                 conn,
                 tenant_id=tenant_id,
                 query=BlockedSeatListQuery(category=query.category),
                 reference_date=reference_date,
+                upcoming_days=policy["UPCOMING"],
+                expiring_soon_days=policy["EXPIRING_SOON"],
             )
     except psycopg2.Error as exc:
         raise HTTPException(

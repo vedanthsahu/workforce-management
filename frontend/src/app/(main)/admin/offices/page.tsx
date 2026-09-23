@@ -11,6 +11,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { CheckCircle2, XCircle, X, Plus } from "lucide-react";
 import { Office } from "@/features/offices/types/office.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
+import { searchMatchRank } from "@/lib/searchRank";
 
 type BannerState = {
   type: "success" | "error";
@@ -63,20 +64,19 @@ function OfficesPage() {
   };
 
   const filteredOffices = offices
-    .filter((o) => {
-      const name = (o.site_name || "").toLowerCase();
-      const query = search.toLowerCase().trim();
-      return name.includes(query);
-    })
-    .filter((o) => !statusFilter || o.status === statusFilter)
+    .map((o) => ({ office: o, rank: searchMatchRank(o.site_name || "", search) }))
+    .filter((x): x is { office: Office; rank: number } => x.rank !== null)
+    .filter((x) => !statusFilter || x.office.status === statusFilter)
     .sort((a, b) => {
       // Always push the newly added/edited office to the top
       if (highlightedId) {
-        if (a.site_id === highlightedId) return -1;
-        if (b.site_id === highlightedId) return 1;
+        if (a.office.site_id === highlightedId) return -1;
+        if (b.office.site_id === highlightedId) return 1;
       }
-      return 0;
-    });
+      // Otherwise, the closer the match (starts-with > contains > fuzzy), the higher it ranks
+      return a.rank - b.rank;
+    })
+    .map((x) => x.office);
 
   const itemsPerPage = 10;
   const totalPages = Math.ceil(filteredOffices.length / itemsPerPage);

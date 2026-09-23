@@ -28,9 +28,34 @@ EMPLOYEE_CALLER = {"tenant_id": "1", "user_id": "7", "role_name": "EMPLOYEE"}
 GUEST_OPERATOR_CALLER = {"tenant_id": "1", "user_id": "7", "role_name": "FACILITATOR"}
 
 
+class _NoRowCursor:
+    """Simulates an unseeded business_rules table -- fetchone() returns
+    None, so resolve_booking_advance_days() falls back to its hardcoded
+    defaults (30 days employee, 15 days guest), which is exactly the
+    boundary these tests assert against."""
+
+    def __enter__(self) -> _NoRowCursor:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def execute(self, sql, params=None) -> None:
+        pass
+
+    def fetchone(self):
+        return None
+
+
 class FakeConnection:
     """Minimal conn stand-in for paths that reach the commit/rollback
-    try-block after clearing the past-date guard."""
+    try-block after clearing the past-date guard. Also answers .cursor()
+    since both the past-date guard and the max-advance guard now resolve
+    their limits via resolve_booking_advance_days(), which queries
+    business rules through conn.cursor()."""
+
+    def cursor(self, *args, **kwargs) -> _NoRowCursor:
+        return _NoRowCursor()
 
     def commit(self) -> None:
         pass
@@ -61,7 +86,7 @@ class BookSeatPastDateGuardTests(unittest.TestCase):
             "backend.services.booking_service._resolve_booked_for_user",
         ) as mock_resolve, self.assertRaises(HTTPException) as context:
             book_seat(
-                conn=object(),
+                conn=FakeConnection(),
                 current_user=EMPLOYEE_CALLER,
                 payload=self._payload(YESTERDAY),
             )
@@ -123,7 +148,7 @@ class BookSeatMaxAdvanceGuardTests(unittest.TestCase):
             "backend.services.booking_service._resolve_booked_for_user",
         ) as mock_resolve, self.assertRaises(HTTPException) as context:
             book_seat(
-                conn=object(),
+                conn=FakeConnection(),
                 current_user=EMPLOYEE_CALLER,
                 payload=self._payload(THIRTY_ONE_DAYS_OUT),
             )
@@ -164,7 +189,7 @@ class GuestVisitPastDateGuardTests(unittest.TestCase):
             "backend.services.guest_service._resolve_guest",
         ) as mock_resolve_guest, self.assertRaises(HTTPException) as context:
             create_guest_visit(
-                conn=object(),
+                conn=FakeConnection(),
                 current_user=GUEST_OPERATOR_CALLER,
                 payload=self._payload(YESTERDAY),
             )
@@ -179,7 +204,7 @@ class GuestVisitPastDateGuardTests(unittest.TestCase):
         authorization checks for anyone, including on invalid input."""
         with self.assertRaises(HTTPException) as context:
             create_guest_visit(
-                conn=object(),
+                conn=FakeConnection(),
                 current_user=EMPLOYEE_CALLER,
                 payload=self._payload(YESTERDAY),
             )
@@ -218,7 +243,7 @@ class GuestBookingPastDateGuardTests(unittest.TestCase):
             "backend.services.guest_service._resolve_guest",
         ) as mock_resolve_guest, self.assertRaises(HTTPException) as context:
             create_guest_booking(
-                conn=object(),
+                conn=FakeConnection(),
                 current_user=GUEST_OPERATOR_CALLER,
                 payload=self._payload(YESTERDAY),
             )
@@ -260,7 +285,7 @@ class GuestVisitMaxAdvanceGuardTests(unittest.TestCase):
             "backend.services.guest_service._resolve_guest",
         ) as mock_resolve_guest, self.assertRaises(HTTPException) as context:
             create_guest_visit(
-                conn=object(),
+                conn=FakeConnection(),
                 current_user=GUEST_OPERATOR_CALLER,
                 payload=self._payload(SIXTEEN_DAYS_OUT),
             )
@@ -306,7 +331,7 @@ class GuestBookingMaxAdvanceGuardTests(unittest.TestCase):
             "backend.services.guest_service._resolve_guest",
         ) as mock_resolve_guest, self.assertRaises(HTTPException) as context:
             create_guest_booking(
-                conn=object(),
+                conn=FakeConnection(),
                 current_user=GUEST_OPERATOR_CALLER,
                 payload=self._payload(SIXTEEN_DAYS_OUT),
             )
