@@ -68,6 +68,7 @@ import {
 } from "lucide-react";
 
 import { getInitials, type User } from "@/features/auth/types/auth.types";
+import { formatRoleLabel, getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
 import { cn } from "@/lib/utils";
 import { useBookForSomeoneStore } from "@/store/useBookForSomeoneStore";
 import { useUsersFilterStore } from "@/store/useUsersFilterStore";
@@ -220,15 +221,6 @@ const ROLE_LABELS: Record<string, string> = {
   FACILITIES: "Facilities",
 };
 
-const ROLE_BADGE_STYLES: Record<string, string> = {
-  TENANT_ADMIN: "bg-rose-50 text-rose-600 ring-rose-200",
-  MANAGER: "bg-violet-50 text-violet-600 ring-violet-200",
-  EMPLOYEE: "bg-blue-50 text-blue-600 ring-blue-200",
-  FACILITATOR: "bg-teal-50 text-teal-600 ring-teal-200",
-  FRONT_OFFICE: "bg-amber-50 text-amber-600 ring-amber-200",
-  FACILITIES: "bg-orange-50 text-orange-600 ring-orange-200",
-};
-
 function getRoleLabel(r: string) { return ROLE_LABELS[r] ?? r; }
 
 function resolveDisplayName(u: User) {
@@ -245,13 +237,12 @@ function resolveInitials(u: User) {
 // ─── RoleBadge ────────────────────────────────────────────────────────────────
 
 function RoleBadge({ role }: { role: string }) {
-  const styles = ROLE_BADGE_STYLES[role] ?? "bg-gray-50 text-gray-500 ring-gray-200";
   return (
     <span className={cn(
       "inline-flex items-center px-1.5 py-[2px] rounded-md text-[9px] font-semibold uppercase tracking-wide ring-1",
-      styles
+      getRoleBadgeClass(role)
     )}>
-      {getRoleLabel(role)}
+      {formatRoleLabel(role)}
     </span>
   );
 }

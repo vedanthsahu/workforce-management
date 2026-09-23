@@ -27,7 +27,7 @@ import {
   PURPOSE_OF_VISIT,
 } from "../constants/booking.constants";
 import { useGuestSearch } from "../hooks/useBooking";
-import { createGuestSchema, sanitizePhoneNumber } from "../schemas/guest.schema";
+import { createGuestSchema, sanitizePhoneNumber, sanitizeOrganization } from "../schemas/guest.schema";
 import {
   Building,
   CreateGuestInput,
@@ -576,18 +576,14 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
   const handleChange = (field: keyof typeof form) => (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const rawValue = e.target.value;
     const value = field === "phone"
       ? sanitizePhoneNumber(e.target.value)
       : field === "organization"
-        ? rawValue.replace(/\d/g, "")
+        ? sanitizeOrganization(e.target.value)
         : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
     if (!touched[field]) setTouched((prev) => ({ ...prev, [field]: true }));
     validateField(field, value);
-    if (field === "organization" && /\d/.test(rawValue)) {
-      setErrors((prev) => ({ ...prev, organization: "Organization name must not contain numbers" }));
-    }
   };
 
   const handleBlur = (field: keyof typeof form) => () => {
@@ -1231,17 +1227,13 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
   const canSave = isDirty && isValid && !saving;
 
   const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value;
     const value = field === "phone"
       ? sanitizePhoneNumber(e.target.value)
       : field === "organization"
-        ? rawValue.replace(/\d/g, "")
+        ? sanitizeOrganization(e.target.value)
         : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
     if (touched[field]) validateField(field, value);
-    if (field === "organization" && /\d/.test(rawValue)) {
-      setErrors((prev) => ({ ...prev, organization: "Organization name must not contain numbers" }));
-    }
   };
 
   const handlePhoneChange = (value: string) => {

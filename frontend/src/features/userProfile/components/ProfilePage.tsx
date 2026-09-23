@@ -34,6 +34,7 @@ import type {
 } from "../types/profile.types";
 import { SKILL_OPTIONS, type SkillOption } from "../constants/skills.constants";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
+import { getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -41,22 +42,14 @@ function getInitials(name: string) {
   return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
 }
 
-const ROLE_BADGE: Record<string, string> = {
-  TENANT_ADMIN: "bg-rose-50 text-rose-600 ring-rose-200",
-  MANAGER:      "bg-violet-50 text-violet-600 ring-violet-200",
-  EMPLOYEE:     "bg-blue-50 text-blue-600 ring-blue-200",
-  FACILITATOR:  "bg-teal-50 text-teal-600 ring-teal-200",
-  FRONT_OFFICE: "bg-amber-50 text-amber-600 ring-amber-200",
-  FACILITIES:   "bg-orange-50 text-orange-600 ring-orange-200",
-};
-
-// Same role→color mapping as ROLE_BADGE, but as a solid white pill for use
-// on top of the colorful identity banner (a tinted bg would be invisible there).
+// Same role->color mapping as ROLE_BADGE_STYLES (features/roles/utils/roles.utils.ts),
+// but as a solid white pill for use on top of the colorful identity banner
+// (a tinted bg would be invisible there).
 const ROLE_BADGE_ON_BANNER: Record<string, string> = {
-  TENANT_ADMIN: "bg-white text-rose-600",
+  TENANT_ADMIN: "bg-white text-emerald-600",
   MANAGER:      "bg-white text-violet-600",
   EMPLOYEE:     "bg-white text-blue-600",
-  FACILITATOR:  "bg-white text-teal-600",
+  FACILITATOR:  "bg-white text-purple-600",
   FRONT_OFFICE: "bg-white text-amber-600",
   FACILITIES:   "bg-white text-orange-600",
 };
@@ -64,7 +57,7 @@ const ROLE_BADGE_ON_BANNER: Record<string, string> = {
 function RolePill({ role, onBanner = false }: { role: string; onBanner?: boolean }) {
   const style = onBanner
     ? (ROLE_BADGE_ON_BANNER[role] ?? "bg-white text-gray-600")
-    : (ROLE_BADGE[role] ?? "bg-gray-50 text-gray-600 ring-gray-200");
+    : getRoleBadgeClass(role);
   const label = role.charAt(0) + role.slice(1).toLowerCase().replace(/_/g, " ");
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${onBanner ? "" : "ring-1"} ${style}`}>
@@ -1018,39 +1011,42 @@ export default function ProfilePage() {
               </div>
             </Card>
 
-            {/* Activity Summary — moved to left column */}
-            <Card className="overflow-hidden">
-              <div className="px-4 sm:px-5 py-3 bg-amber-50/60 border-b border-amber-100">
-                <SectionHeading icon={BarChart3} title="Activity Summary" color="bg-amber-100 text-amber-600" />
-              </div>
-              <div className="p-4 sm:p-5">
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  {[
-                    { icon: CalendarCheck2, value: activitySummary.totalBookings,    label: "Total Bookings",    bg: "bg-indigo-100", iconBg: "bg-indigo-500", num: "text-indigo-700", sub: "text-indigo-500" },
-                    { icon: CalendarClock,  value: activitySummary.upcomingBookings, label: "Upcoming Bookings", bg: "bg-amber-100",  iconBg: "bg-amber-500",  num: "text-amber-700",  sub: "text-amber-500" },
-                    { icon: History,        value: activitySummary.pastBookings,     label: "Past Bookings",     bg: "bg-violet-100", iconBg: "bg-violet-500", num: "text-violet-700", sub: "text-violet-500" },
-                  ].map(({ icon: Icon, value, label, bg, iconBg, num, sub }) => (
-                    <div key={label} className={`flex flex-col items-center justify-center p-3 rounded-xl ${bg} text-center hover:shadow-sm transition-shadow duration-200`}>
-                      <div className={`w-8 h-8 rounded-full ${iconBg} flex items-center justify-center mb-2`}>
-                        <Icon className="w-4 h-4 text-white" />
-                      </div>
-                      <p className={`text-[22px] font-bold ${num} leading-none`}>{value}</p>
-                      <p className={`text-[11px] ${sub} font-medium mt-1 leading-tight`}>{label}</p>
-                    </div>
-                  ))}
+            {/* Activity Summary — moved to left column. Front office has no
+               bookings of their own, so this section doesn't apply to them. */}
+            {profile.role !== "FRONT_OFFICE" && (
+              <Card className="overflow-hidden">
+                <div className="px-4 sm:px-5 py-3 bg-amber-50/60 border-b border-amber-100">
+                  <SectionHeading icon={BarChart3} title="Activity Summary" color="bg-amber-100 text-amber-600" />
                 </div>
-                <button
-                  onClick={() => setHistoryOpen(true)}
-                  className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 active:scale-[0.99] transition-all duration-200 group"
-                >
-                  <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center shrink-0">
-                    <History className="w-4 h-4 text-white" />
+                <div className="p-4 sm:p-5">
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    {[
+                      { icon: CalendarCheck2, value: activitySummary.totalBookings,    label: "Total Bookings",    bg: "bg-indigo-100", iconBg: "bg-indigo-500", num: "text-indigo-700", sub: "text-indigo-500" },
+                      { icon: CalendarClock,  value: activitySummary.upcomingBookings, label: "Upcoming Bookings", bg: "bg-amber-100",  iconBg: "bg-amber-500",  num: "text-amber-700",  sub: "text-amber-500" },
+                      { icon: History,        value: activitySummary.pastBookings,     label: "Past Bookings",     bg: "bg-violet-100", iconBg: "bg-violet-500", num: "text-violet-700", sub: "text-violet-500" },
+                    ].map(({ icon: Icon, value, label, bg, iconBg, num, sub }) => (
+                      <div key={label} className={`flex flex-col items-center justify-center p-3 rounded-xl ${bg} text-center hover:shadow-sm transition-shadow duration-200`}>
+                        <div className={`w-8 h-8 rounded-full ${iconBg} flex items-center justify-center mb-2`}>
+                          <Icon className="w-4 h-4 text-white" />
+                        </div>
+                        <p className={`text-[22px] font-bold ${num} leading-none`}>{value}</p>
+                        <p className={`text-[11px] ${sub} font-medium mt-1 leading-tight`}>{label}</p>
+                      </div>
+                    ))}
                   </div>
-                  <span className="flex-1 text-left text-[12.5px] font-semibold text-indigo-600">View Booking History</span>
-                  <ChevronRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-0.5 group-hover:text-indigo-600 transition-all shrink-0" />
-                </button>
-              </div>
-            </Card>
+                  <button
+                    onClick={() => setHistoryOpen(true)}
+                    className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 active:scale-[0.99] transition-all duration-200 group"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center shrink-0">
+                      <History className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="flex-1 text-left text-[12.5px] font-semibold text-indigo-600">View Booking History</span>
+                    <ChevronRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-0.5 group-hover:text-indigo-600 transition-all shrink-0" />
+                  </button>
+                </div>
+              </Card>
+            )}
           </div>
 
           {/* ── Right column ─────────────────────────────────────────────── */}

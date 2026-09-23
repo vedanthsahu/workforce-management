@@ -31,6 +31,12 @@ LAYOUT_VISIBILITY_DAYS_KEYS: dict[str, str] = {
     "DELETED": "floor_layouts.visibility_days.deleted",
 }
 
+BLOCKED_SEAT_DAYS_KEYS: dict[str, str] = {
+    "UPCOMING": "blocked_seats.upcoming_days",
+    "EXPIRING_SOON": "blocked_seats.expiring_soon_days",
+    "EXPIRED_WINDOW": "blocked_seats.expired_window_days",
+}
+
 # Hard floor for the buffer rule, enforced here AND at the DB level (see
 # chk_business_rules_scheduling_buffer_min / chk_tenant_business_rules_
 # scheduling_buffer_min) -- a zero or negative buffer would let an admin
@@ -52,6 +58,14 @@ _DEFAULT_LAYOUT_VISIBILITY_DAYS: dict[str, int] = {
     "DRAFT": 15,
     "ARCHIVED": 30,
     "DELETED": 5,
+}
+# Mirrors the values these replaced (the hardcoded "+ 3" in
+# blocked_seat_repository.py's "expiring" category, and the previously
+# unbounded "upcoming" category).
+_DEFAULT_BLOCKED_SEAT_DAYS: dict[str, int] = {
+    "UPCOMING": 1,
+    "EXPIRING_SOON": 3,
+    "EXPIRED_WINDOW": 10,
 }
 
 
@@ -184,6 +198,44 @@ def update_layout_visibility_days(
     conn.commit()
 
 
+def update_blocked_seat_days(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    setting_key: str,
+    new_value: int,
+    updated_by_user_id: str,
+) -> None:
+    """Update one of the Blocked Seats thresholds. `setting_key` is one of
+    BLOCKED_SEAT_DAYS_KEYS's keys ("UPCOMING"/"EXPIRING_SOON"/
+    "EXPIRED_WINDOW")."""
+    if setting_key not in BLOCKED_SEAT_DAYS_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_business_rule_value",
+                "message": f"Unknown blocked seat setting: {setting_key}",
+            },
+        )
+    if new_value < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_business_rule_value",
+                "message": "Value cannot be negative.",
+            },
+        )
+
+    _upsert_or_500(
+        conn,
+        tenant_id=tenant_id,
+        business_rule_key=BLOCKED_SEAT_DAYS_KEYS[setting_key],
+        value=str(new_value),
+        updated_by_user_id=updated_by_user_id,
+    )
+    conn.commit()
+
+
 def resolve_layout_scheduling_gap(conn: PGConnection, *, tenant_id: str) -> dict[str, Any]:
     """Return the employee booking window, the safety buffer, and their
     sum -- the minimum number of days out an admin must schedule a new
@@ -250,6 +302,21 @@ def resolve_layout_visibility_days(conn: PGConnection, *, tenant_id: str) -> dic
             )
         )
         for status_key, rule_key in LAYOUT_VISIBILITY_DAYS_KEYS.items()
+    }
+
+
+def resolve_blocked_seat_days(conn: PGConnection, *, tenant_id: str) -> dict[str, int]:
+    """Return the Blocked Seats thresholds: how soon a block counts as
+    Upcoming/Expiring Soon, and how far back the Expired tab should look
+    for records."""
+    return {
+        setting_key: int(
+            fetch_business_rule_value(
+                conn, tenant_id=tenant_id, business_rule_key=rule_key,
+                default=_DEFAULT_BLOCKED_SEAT_DAYS[setting_key],
+            )
+        )
+        for setting_key, rule_key in BLOCKED_SEAT_DAYS_KEYS.items()
     }
 
 

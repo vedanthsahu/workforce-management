@@ -29,16 +29,20 @@ from psycopg2.extensions import connection as PGConnection
 from backend.api.deps import get_current_user, require_any_permission
 from backend.db.connection import get_db
 from backend.schemas.business_rule import (
+    BlockedSeatPolicyResponse,
     BookingPolicyResponse,
     LayoutPolicyResponse,
     LayoutVisibilityDaysResponse,
+    UpdateBlockedSeatPolicyRequest,
     UpdateBookingPolicyRequest,
     UpdateLayoutPolicyRequest,
 )
 from backend.services.business_rule_service import (
+    resolve_blocked_seat_days,
     resolve_booking_advance_days,
     resolve_layout_scheduling_gap,
     resolve_layout_visibility_days,
+    update_blocked_seat_days,
     update_employee_max_advance_days,
     update_guest_max_advance_days,
     update_layout_scheduling_buffer_days,
@@ -77,6 +81,52 @@ def layout_policy(
             deleted=visibility_days["DELETED"],
         ),
     )
+
+
+def _blocked_seat_policy_response(policy: dict[str, int]) -> BlockedSeatPolicyResponse:
+    return BlockedSeatPolicyResponse(
+        upcoming_days=policy["UPCOMING"],
+        expiring_soon_days=policy["EXPIRING_SOON"],
+        expired_window_days=policy["EXPIRED_WINDOW"],
+    )
+
+
+@router.get("/blocked-seat-policy", response_model=BlockedSeatPolicyResponse)
+def blocked_seat_policy(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> BlockedSeatPolicyResponse:
+    tenant_id = str(current_user["tenant_id"])
+    return _blocked_seat_policy_response(resolve_blocked_seat_days(conn, tenant_id=tenant_id))
+
+
+@router.patch("/blocked-seat-policy", response_model=BlockedSeatPolicyResponse)
+def update_blocked_seat_policy(
+    payload: UpdateBlockedSeatPolicyRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_any_permission(["admin_dashboard:view"])),
+    ],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> BlockedSeatPolicyResponse:
+    tenant_id = str(current_user["tenant_id"])
+    user_id = str(current_user["user_id"])
+
+    fields = {
+        "UPCOMING": payload.upcoming_days,
+        "EXPIRING_SOON": payload.expiring_soon_days,
+        "EXPIRED_WINDOW": payload.expired_window_days,
+    }
+    for setting_key, new_value in fields.items():
+        if new_value is not None:
+            update_blocked_seat_days(
+                conn, tenant_id=tenant_id,
+                setting_key=setting_key,
+                new_value=new_value,
+                updated_by_user_id=user_id,
+            )
+
+    return _blocked_seat_policy_response(resolve_blocked_seat_days(conn, tenant_id=tenant_id))
 
 
 @router.patch("/booking-policy", response_model=BookingPolicyResponse)

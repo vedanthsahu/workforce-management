@@ -65,6 +65,9 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         )
         sql, _ = cursor.executions[0]
         self.assertIn("floor_layouts", sql)
+        # Eligible once the layout covering booking_date is PUBLISHED, or
+        # SCHEDULED with its effective_from already passed -- not just a
+        # flat "PUBLISHED" check.
         self.assertIn("fl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
         self.assertIn("fl.effective_from <= %s", sql)
         self.assertIn("fl.effective_till IS NULL OR fl.effective_till > %s", sql)
@@ -83,9 +86,15 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         )
         sql, _ = cursor.executions[0]
         self.assertIn("floor_layouts", sql)
+        # Correlated per-day against rd.booking_date (not a single flat
+        # date param) since a multi-day range can straddle a scheduled
+        # layout cutover -- eligible once PUBLISHED, or SCHEDULED with
+        # effective_from already passed for that specific day.
         self.assertIn("fl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
         self.assertIn("fl.effective_from <= rd.booking_date", sql)
-        self.assertIn("fl.effective_till IS NULL OR fl.effective_till > rd.booking_date", sql)
+        self.assertIn(
+            "fl.effective_till IS NULL OR fl.effective_till > rd.booking_date", sql
+        )
         self.assertIn("fl.id = s.layout_id", sql)
         self.assertIn("flr.status = 'ACTIVE'", sql)
         self.assertIn("bldg.status = 'ACTIVE'", sql)
@@ -102,6 +111,7 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         self.assertIn("floor_layouts", sql)
         self.assertIn("fl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
         self.assertIn("fl.effective_from <= %s", sql)
+        self.assertIn("fl.effective_till IS NULL OR fl.effective_till > %s", sql)
         self.assertIn("fl.id = s.layout_id", sql)
         self.assertIn("s.is_bookable IS NOT TRUE AND %s IS NOT TRUE", sql)
 
@@ -114,13 +124,14 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         sql, _ = cursor.executions[0]
         self.assertNotIn("floor_layouts", sql)
 
-    def test_fetch_seat_configuration_uses_layout_effective_on_booking_date(self) -> None:
-        """The booking-eligibility path supplies its requested date."""
+    def test_fetch_seat_configuration_opt_in_requires_published_layout(self) -> None:
+        """The booking-eligibility path opts in explicitly by passing
+        booking_date -- a seat that doesn't belong to whichever layout
+        covers that date (PUBLISHED, or SCHEDULED with effective_from
+        already passed) is treated as not found."""
         cursor = FakeCursor()
         fetch_seat_configuration(
-            FakeConnection(cursor),
-            tenant_id="1",
-            seat_id="99",
+            FakeConnection(cursor), tenant_id="1", seat_id="99",
             booking_date=date(2026, 1, 1),
         )
         sql, _ = cursor.executions[0]
@@ -138,6 +149,9 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         self.assertIn("floor_layouts", sql)
         self.assertIn("sfl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
         self.assertIn("sfl.effective_from <= %(selected_date)s", sql)
+        self.assertIn(
+            "sfl.effective_till IS NULL OR sfl.effective_till > %(selected_date)s", sql
+        )
         self.assertIn("sfl.id = st.layout_id", sql)
 
     def test_site_detail_seat_counts_scoped_to_published_layout(self) -> None:

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { getRoleBadgeClass, normalizeRoleKey } from "../utils/users.utils";
+import { formatRoleLabel, getRoleBadgeClass, normalizeRoleKey } from "../utils/users.utils";
 import type { RoleCount, RoleKey } from "../types/users.types";
 
 type Props = {
@@ -70,7 +70,7 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
   const label = selectedRoles.length === 0
     ? "All roles"
     : selectedRoles.length === 1
-      ? selectedRoles[0]
+      ? formatRoleLabel(selectedRoles[0])
       : `${selectedRoles.length} roles`;
 
   return (
@@ -149,7 +149,7 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
                     className="accent-blue-600 shrink-0"
                   />
                   <span className={`inline-flex items-center whitespace-nowrap px-1.5 py-0.5 rounded text-[11px] font-semibold ring-1 ${getRoleBadgeClass(roleName)}`}>
-                    {roleName}
+                    {formatRoleLabel(roleName)}
                   </span>
                 </span>
                 <span className="text-xs text-gray-400 shrink-0">{count}</span>

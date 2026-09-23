@@ -216,11 +216,16 @@ class BlockedSeatServiceTests(unittest.TestCase):
             context.exception.detail["code"], "layout_effective_period_crossed"
         )
 
+    @patch("backend.services.blocked_seat_service.resolve_blocked_seat_days")
     @patch("backend.services.blocked_seat_service.fetch_blocked_seat_summary")
     @patch("backend.services.blocked_seat_service.fetch_blocked_seats")
     def test_list_returns_summary_and_pagination(
-        self, fetch_rows: MagicMock, fetch_summary: MagicMock
+        self, fetch_rows: MagicMock, fetch_summary: MagicMock, resolve_policy: MagicMock
     ) -> None:
+        resolve_policy.return_value = {
+            "UPCOMING": 1, "EXPIRING_SOON": 3,
+            "EXPIRED_WINDOW": 10,
+        }
         fetch_rows.return_value = ([_row()], 1)
         fetch_summary.return_value = {
             "active_blocks": 1,
@@ -240,13 +245,54 @@ class BlockedSeatServiceTests(unittest.TestCase):
         self.assertEqual(response.summary.active_blocks, 1)
         self.assertEqual(response.items[0].seat_code, "3570")
 
+    @patch("backend.services.blocked_seat_service.resolve_blocked_seat_days")
+    @patch("backend.services.blocked_seat_service.fetch_blocked_seat_summary")
+    @patch("backend.services.blocked_seat_service.fetch_blocked_seats")
+    def test_expired_card_uses_previous_10_day_window(
+        self,
+        fetch_rows: MagicMock,
+        fetch_summary: MagicMock,
+        resolve_policy: MagicMock,
+    ) -> None:
+        resolve_policy.return_value = {
+            "UPCOMING": 1,
+            "EXPIRING_SOON": 3,
+            "EXPIRED_WINDOW": 10,
+        }
+        fetch_rows.return_value = ([], 0)
+        fetch_summary.return_value = {
+            "active_blocks": 0,
+            "seats_blocked_today": 0,
+            "upcoming_blocks": 0,
+            "expiring_soon": 0,
+            "expired": 2,
+        }
+
+        get_blocked_seats(
+            MagicMock(),
+            tenant_id="1",
+            query=BlockedSeatListQuery(category="expired"),
+            page=1,
+            limit=20,
+        )
+
+        self.assertEqual(fetch_rows.call_args.kwargs["expired_window_days"], 10)
+        self.assertNotIn("window_before_days", fetch_rows.call_args.kwargs)
+        self.assertNotIn("window_after_days", fetch_rows.call_args.kwargs)
+
+    @patch("backend.services.blocked_seat_service.resolve_blocked_seat_days")
     @patch("backend.services.blocked_seat_service.fetch_blocked_seat_summary")
     @patch("backend.services.blocked_seat_service.fetch_blocked_seats")
     def test_list_filters_do_not_change_summary_query(
         self,
         fetch_rows: MagicMock,
         fetch_summary: MagicMock,
+        resolve_policy: MagicMock,
     ) -> None:
+        resolve_policy.return_value = {
+            "UPCOMING": 1, "EXPIRING_SOON": 3,
+            "EXPIRED_WINDOW": 10,
+        }
         fetch_rows.return_value = ([], 0)
         fetch_summary.return_value = {
             "active_blocks": 5,

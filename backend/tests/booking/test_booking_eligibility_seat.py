@@ -123,10 +123,12 @@ class BookingEligibilitySeatTests(unittest.TestCase):
                 conn=object(), tenant_id="1", current_user=CALLER, payload=_payload(),
             )
 
-        self.assertEqual(
-            mock_fetch_seat.call_args.kwargs["booking_date"],
-            _payload().start_date,
-        )
+        # The seat lookup must be scoped to the layout covering the
+        # requested date (the current PUBLISHED one, or a SCHEDULED one
+        # whose effective_from has passed) -- passing booking_date is what
+        # makes fetch_seat_configuration exclude a seat left over from a
+        # superseded layout, same as the booking-creation path.
+        self.assertEqual(mock_fetch_seat.call_args.kwargs["booking_date"], TODAY)
 
     def test_seat_not_found_raises_404(self) -> None:
         with self.assertRaises(HTTPException) as context:

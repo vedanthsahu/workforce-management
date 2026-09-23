@@ -20,6 +20,7 @@ type StatProps = {
   bg: string;
   label: string;
   value: string;
+  sub: string;
   selected?: boolean;
   onClick?: () => void;
 };
@@ -40,6 +41,7 @@ export default function FloorCards({ stats, statusFilter = null, onStatusFilterC
         bg="bg-blue-100"
         label="Total Floors"
         value={stats.total_floors.toString()}
+        sub="Across all buildings"
         onClick={onStatusFilterChange ? () => onStatusFilterChange(null) : undefined}
       />
       <Stat
@@ -47,6 +49,7 @@ export default function FloorCards({ stats, statusFilter = null, onStatusFilterC
         bg="bg-green-100"
         label="Active Floors"
         value={stats.active_floors.toString()}
+        sub="Currently active"
         selected={statusFilter === "ACTIVE"}
         onClick={onStatusFilterChange ? () => toggle("ACTIVE") : undefined}
       />
@@ -55,6 +58,7 @@ export default function FloorCards({ stats, statusFilter = null, onStatusFilterC
         bg="bg-orange-100"
         label="Inactive Floors"
         value={stats.inactive_floors.toString()}
+        sub="Currently inactive"
         selected={statusFilter === "INACTIVE"}
         onClick={onStatusFilterChange ? () => toggle("INACTIVE") : undefined}
       />
@@ -63,7 +67,7 @@ export default function FloorCards({ stats, statusFilter = null, onStatusFilterC
   );
 }
 
-function Stat({ icon, bg, label, value, selected, onClick }: StatProps) {
+function Stat({ icon, bg, label, value, sub, selected, onClick }: StatProps) {
   return (
     <div
       onClick={onClick}
@@ -75,6 +79,7 @@ function Stat({ icon, bg, label, value, selected, onClick }: StatProps) {
       <div>
         <p className="text-xs sm:text-sm text-gray-500">{label}</p>
         <p className="text-lg sm:text-xl font-semibold text-gray-900">{value}</p>
+        <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
       </div>
     </div>
   );

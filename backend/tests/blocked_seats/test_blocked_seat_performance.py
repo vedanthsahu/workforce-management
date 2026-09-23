@@ -76,7 +76,9 @@ class BlockedSeatQueryTests(TestCase):
         self.cur.fetchone.return_value = {"total": 0}
         fetch_blocked_seats(self.conn, tenant_id="7",
                             query=BlockedSeatListQuery(search="repair", floor_id=16),
-                            reference_date=date(2026, 9, 10), page=1, limit=10)
+                            reference_date=date(2026, 9, 10), page=1, limit=10,
+                            upcoming_days=1, expiring_soon_days=3,
+                            expired_window_days=10)
         sql, params = self.cur.execute.call_args.args
         self.assertIn("JOIN seats", sql)
         self.assertIn("bs.floor_id = %s", sql)
@@ -97,6 +99,9 @@ class BlockedSeatQueryTests(TestCase):
             reference_date=date(2026, 9, 22),
             page=1,
             limit=10,
+            upcoming_days=1,
+            expiring_soon_days=3,
+            expired_window_days=10,
         )
 
         count_sql, count_params = self.cur.execute.call_args.args
@@ -108,7 +113,8 @@ class BlockedSeatQueryTests(TestCase):
     def test_summary_avoids_unneeded_joins(self):
         self.cur.fetchone.return_value = {"active_blocks": 1}
         fetch_blocked_seat_summary(self.conn, tenant_id="7",
-                                  query=BlockedSeatListQuery(), reference_date=date(2026, 9, 10))
+                                  query=BlockedSeatListQuery(), reference_date=date(2026, 9, 10),
+                                  upcoming_days=1, expiring_soon_days=3)
         sql, params = self.cur.execute.call_args.args
         self.assertNotIn("JOIN seats", sql)
         self.assertNotIn("JOIN app_users", sql)

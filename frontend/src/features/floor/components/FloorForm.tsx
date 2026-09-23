@@ -1,8 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useFloorForm } from "../hooks/useFloorForm";
 
 export default function FloorForm() {
@@ -34,18 +36,20 @@ export default function FloorForm() {
     }
   };
 
-  const inputClass =
-    "w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-150";
-
+  // Same visual chrome as <Input> (components/ui/input.tsx) -- kept as a class
+  // string instead of the component itself because this is a native <select>.
   const selectClass =
-    "w-full h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-150 cursor-pointer disabled:bg-gray-100 disabled:cursor-not-allowed";
+    "h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-2.5 py-1 text-sm shadow-xs transition-[color,box-shadow] outline-none cursor-pointer focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50";
 
-  const labelClass =
-    "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
+  // Shared field-label look across all "Add" forms (Office, Building, Floor, Amenity).
+  const labelClass = "text-xs font-semibold text-gray-500 uppercase tracking-wide";
+
+  // Read-only, derived fields (office/building/floor codes) share this look so
+  // it's visually obvious they can't be typed into.
+  const readOnlyInputClass = "bg-gray-50 text-gray-500 cursor-not-allowed";
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc]">
-
+    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 bg-[#f7f8fa]">
 
       {errorMessage && (
         <div className="mb-4 flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700 px-3.5 py-2.5 rounded-lg text-sm">
@@ -62,28 +66,26 @@ export default function FloorForm() {
         </div>
 
         <div className="flex items-center gap-2 sm:shrink-0">
-          <Link
-            href="/admin/floors"
-            className="h-9 px-4 text-sm font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all inline-flex items-center"
+          <Button
+            variant="outline"
+            className="h-9 px-4 rounded-lg"
+            onClick={() => router.push("/admin/floors")}
           >
             Cancel
-          </Link>
-          <button
+          </Button>
+          <Button
+            className="h-9 px-4 rounded-lg"
             onClick={saveFloor}
             onMouseEnter={() => router.prefetch("/admin/floors")}
             disabled={isDisabled || loading}
-            className={`h-9 px-4 text-sm font-medium rounded-lg text-white transition-all ${!isDisabled && !loading
-              ? "bg-blue-600 hover:bg-blue-700 shadow-sm shadow-blue-200"
-              : "bg-gray-300 cursor-not-allowed"
-              }`}
           >
             {loading ? "Saving..." : "Save Floor"}
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* CARD */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
         <div className="px-5 py-4 border-b border-gray-100">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Basic Information</p>
         </div>
@@ -91,10 +93,10 @@ export default function FloorForm() {
         <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
 
           {/* SITE */}
-          <div>
-            <label className={labelClass}>
+          <div className="space-y-1.5">
+            <Label className={labelClass}>
               Office <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
-            </label>
+            </Label>
             <select
               value={formData.site_id}
               onChange={(e) => handleChange("site_id", e.target.value)}
@@ -107,14 +109,14 @@ export default function FloorForm() {
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-gray-400 mt-1">Select the office/site</p>
+            <p className="text-[11px] text-gray-400">Select the office where this floor belongs</p>
           </div>
 
           {/* BUILDING */}
-          <div>
-            <label className={labelClass}>
+          <div className="space-y-1.5">
+            <Label className={labelClass}>
               Building <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
-            </label>
+            </Label>
             <select
               value={formData.building_id}
               disabled={!formData.site_id}
@@ -128,40 +130,39 @@ export default function FloorForm() {
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-gray-400 mt-1">Select the building</p>
-          </div>
-
-          {/* FLOOR CODE */}
-          <div>
-            <label className={labelClass}>
-              Floor Code <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
-            </label>
-            <input
-              value={formData.floor_code}
-              onChange={(e) => handleChange("floor_code", e.target.value)}
-              placeholder="Enter floor code"
-              className={inputClass}
-            />
-            <p className="text-[11px] text-gray-400 mt-1">Example: FLR-01</p>
+            <p className="text-[11px] text-gray-400">Select the building where this floor belongs</p>
           </div>
 
           {/* FLOOR NAME */}
-          <div>
-            <label className={labelClass}>
+          <div className="space-y-1.5">
+            <Label className={labelClass}>
               Floor Name <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
-            </label>
-            <input
+            </Label>
+            <Input
               value={formData.floor_name}
               onChange={(e) => handleChange("floor_name", e.target.value)}
-              placeholder="Enter floor name"
-              className={inputClass}
+              placeholder="e.g. Ground Floor"
             />
-            <p className="text-[11px] text-gray-400 mt-1">Example: Ground Floor</p>
+            {/* <p className="text-[11px] text-gray-400">Example: Ground Floor</p> */}
+          </div>
+
+          {/* FLOOR CODE */}
+          <div className="space-y-1.5">
+            <Label className={labelClass}>
+              Floor Code <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
+            </Label>
+            <Input
+              value={formData.floor_code}
+              readOnly
+              placeholder="Auto-generated from office + building + floor name"
+              className={readOnlyInputClass}
+            />
+            <p className="text-[11px] text-gray-400">Auto-generated from the office, building, and floor name</p>
           </div>
 
           {/* STATUS */}
-          <div>
-            <label className={labelClass}>Status</label>
+          <div className="space-y-1.5">
+            <Label className={labelClass}>Status</Label>
             <select
               value={formData.status}
               onChange={(e) => handleChange("status", e.target.value)}
@@ -170,7 +171,7 @@ export default function FloorForm() {
               <option value="ACTIVE">ACTIVE</option>
               <option value="INACTIVE">INACTIVE</option>
             </select>
-            <p className="text-[11px] text-gray-400 mt-1">
+            <p className="text-[11px] text-gray-400">
               Inactive floors will not be available for seat allocation
             </p>
           </div>
