@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from psycopg2.extensions import connection as PGConnection
@@ -11,7 +11,12 @@ from psycopg2.extras import RealDictCursor, execute_values
 from backend.schemas.blocked_seat import BlockedSeatListQuery
 
 
-def _filtered_base(query: BlockedSeatListQuery, *, details: bool = True) -> tuple[str, list[Any]]:
+def _filtered_base(
+    query: BlockedSeatListQuery,
+    *,
+    details: bool = True,
+    window: tuple[date, date] | None = None,
+) -> tuple[str, list[Any]]:
     sql = """
         FROM blocked_seats AS bs
         INNER JOIN seats AS st ON st.id = bs.seat_id AND st.tenant_id = bs.tenant_id
@@ -32,6 +37,13 @@ def _filtered_base(query: BlockedSeatListQuery, *, details: bool = True) -> tupl
             sql += " INNER JOIN seats AS st ON st.id = bs.seat_id AND st.tenant_id = bs.tenant_id"
         sql += " WHERE bs.tenant_id = %s AND bs.status <> 'CANCELLED'"
     params: list[Any] = []
+    if window is not None:
+        # Table listing only -- callers that want tenant-wide totals
+        # (fetch_blocked_seat_summary) never pass a window, so stat cards
+        # keep reflecting true totals regardless of this rolling cutoff.
+        window_start, window_end = window
+        sql += " AND bs.blocked_to >= %s AND bs.blocked_from <= %s"
+        params.extend([window_start, window_end])
     if query.search:
         sql += " AND (st.seat_code ILIKE %s OR COALESCE(bs.reason, '') ILIKE %s)"
         pattern = f"%{query.search.strip()}%"
@@ -57,10 +69,18 @@ def _category_condition(category: str) -> str:
     return {
         "active": "bs.status = 'ACTIVE' AND %s BETWEEN bs.blocked_from AND bs.blocked_to",
         "today": "bs.status = 'ACTIVE' AND (bs.created_at AT TIME ZONE COALESCE(si.timezone, 'UTC'))::date = %s",
-        "upcoming": "bs.status = 'ACTIVE' AND bs.blocked_from > %s",
-        "expiring": "bs.status = 'ACTIVE' AND bs.blocked_to BETWEEN %s AND (%s + 3)",
+        "upcoming": "bs.status = 'ACTIVE' AND bs.blocked_from > %s AND bs.blocked_from <= (%s + %s)",
+        "expiring": "bs.status = 'ACTIVE' AND bs.blocked_to BETWEEN %s AND (%s + %s)",
         "expired": "bs.blocked_to < %s",
     }[category]
+
+
+def _category_params(category: str, *, reference_date: date, upcoming_days: int, expiring_soon_days: int) -> list[Any]:
+    if category == "upcoming":
+        return [reference_date, reference_date, upcoming_days]
+    if category == "expiring":
+        return [reference_date, reference_date, expiring_soon_days]
+    return [reference_date]
 
 
 def fetch_blocked_seats(
@@ -71,13 +91,22 @@ def fetch_blocked_seats(
     reference_date: date,
     page: int,
     limit: int,
+    upcoming_days: int,
+    expiring_soon_days: int,
+    expired_window_days: int,
 ) -> tuple[list[dict[str, Any]], int]:
-    base, filter_params = _filtered_base(query)
+    if query.category == "expired":
+        window = (
+            reference_date - timedelta(days=expired_window_days),
+            reference_date,
+        )
+    else:
+        window = None
+    base, filter_params = _filtered_base(query, window=window)
     category_sql = _category_condition(query.category)
-    category_params = (
-        [reference_date, reference_date]
-        if query.category == "expiring"
-        else [reference_date]
+    category_params = _category_params(
+        query.category, reference_date=reference_date,
+        upcoming_days=upcoming_days, expiring_soon_days=expiring_soon_days,
     )
     select = """
         SELECT bs.id::text AS block_id, bs.seat_id::text AS seat_id,
@@ -105,7 +134,7 @@ def fetch_blocked_seats(
         + f" AND {category_sql} ORDER BY bs.blocked_from DESC, bs.id DESC LIMIT %s OFFSET %s"
     )
     params.extend([limit, (page - 1) * limit])
-    count_base, _ = _filtered_base(query, details=False)
+    count_base, _ = _filtered_base(query, details=False, window=window)
     count_sql = "SELECT COUNT(*)::integer AS total " + count_base + f" AND {category_sql}"
     count_params: list[Any] = [tenant_id, *filter_params, *category_params]
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -122,20 +151,31 @@ def fetch_blocked_seat_summary(
     tenant_id: str,
     query: BlockedSeatListQuery,
     reference_date: date,
+    upcoming_days: int,
+    expiring_soon_days: int,
 ) -> dict[str, int]:
+    # No window here, deliberately -- these are tenant-wide totals for the
+    # stat cards, unaffected by the table's rolling display window.
     base, filter_params = _filtered_base(query, details=False)
     sql = (
         """
         SELECT
           COUNT(*) FILTER (WHERE bs.status = 'ACTIVE' AND %s BETWEEN bs.blocked_from AND bs.blocked_to)::integer AS active_blocks,
           COUNT(*) FILTER (WHERE bs.status = 'ACTIVE' AND (bs.created_at AT TIME ZONE COALESCE(si.timezone, 'UTC'))::date = %s)::integer AS seats_blocked_today,
-          COUNT(*) FILTER (WHERE bs.status = 'ACTIVE' AND bs.blocked_from > %s)::integer AS upcoming_blocks,
-          COUNT(*) FILTER (WHERE bs.status = 'ACTIVE' AND bs.blocked_to BETWEEN %s AND (%s + 3))::integer AS expiring_soon,
+          COUNT(*) FILTER (WHERE bs.status = 'ACTIVE' AND bs.blocked_from > %s AND bs.blocked_from <= (%s + %s))::integer AS upcoming_blocks,
+          COUNT(*) FILTER (WHERE bs.status = 'ACTIVE' AND bs.blocked_to BETWEEN %s AND (%s + %s))::integer AS expiring_soon,
           COUNT(*) FILTER (WHERE bs.blocked_to < %s)::integer AS expired
     """
         + base
     )
-    params: list[Any] = [reference_date] * 6 + [tenant_id, *filter_params]
+    params: list[Any] = [
+        reference_date,
+        reference_date,
+        reference_date, reference_date, upcoming_days,
+        reference_date, reference_date, expiring_soon_days,
+        reference_date,
+        tenant_id, *filter_params,
+    ]
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(sql, params)
         return dict(cur.fetchone())

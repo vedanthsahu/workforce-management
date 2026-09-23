@@ -6,6 +6,7 @@ import {
   FileText,
   Archive,
   Trash2,
+  Ban,
 } from "lucide-react";
 import type {
   ConfigurationField,
@@ -162,6 +163,26 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
     describeRule: (fields) =>
       `Draft layouts hide after ${getField(fields, "draftDays")} days, Archived after ${getField(fields, "archivedDays")} days, and Discarded after ${getField(fields, "discardedDays")} days of inactivity.`,
   },
+  {
+    id: "blocked-seat-policy",
+    name: "Blocked Seat Policy",
+    description: "Configure the Upcoming/Expiring Soon thresholds and how many previous days of expired records the UI should keep visible.",
+    icon: Ban,
+    iconBg: "bg-rose-100",
+    iconColor: "text-rose-600",
+    // Real values currently enforced server-side -- see
+    // BLOCKED_SEAT_DAYS_KEYS / resolve_blocked_seat_days in
+    // backend/services/business_rule_service.py.
+    fields: [
+      field("upcomingDays", "Upcoming Threshold (Days)", "Upcoming", 1, "days", "A block is flagged Upcoming if it starts within this many days from today."),
+      field("expiringSoonDays", "Expiring Soon Threshold (Days)", "Expiring Soon", 3, "days", "A block is flagged Expiring Soon if it ends within this many days from today."),
+      field("expiredWindowDays", "Expired Record Window (Days)", "Expired Window", 10, "days", "The Expired tab only shows records from the previous N days, ending on today."),
+    ],
+    lastUpdatedAt: "2026-05-02T10:30:00Z",
+    lastUpdatedBy: "Admin User",
+    describeRule: (fields) =>
+      `Blocks are flagged Upcoming within ${getField(fields, "upcomingDays")} day(s), Expiring Soon within ${getField(fields, "expiringSoonDays")} day(s), and the Expired tab keeps only the previous ${getField(fields, "expiredWindowDays")} day(s) of records.`,
+  },
 ];
 
 export const CONFIGURATION_SECTIONS: ConfigurationSection[] = [
@@ -189,5 +210,10 @@ export const CONFIGURATION_SECTIONS: ConfigurationSection[] = [
     id: "layout-visibility",
     title: "Layout Visibility",
     itemIds: ["layout-visibility"],
+  },
+  {
+    id: "blocked-seat",
+    title: "Blocked Seat",
+    itemIds: ["blocked-seat-policy"],
   },
 ];

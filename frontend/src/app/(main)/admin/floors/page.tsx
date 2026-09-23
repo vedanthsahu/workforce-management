@@ -14,7 +14,7 @@ import EditFloorModal from "@/features/floor/components/EditFloorModal";
 import { useFloors } from "@/features/floor/hooks/useFloors";
 import { Floor } from "@/features/floor/types/floor.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
-import { bestSearchMatchRank, searchMatchRank } from "@/lib/searchRank";
+import { searchMatchRank } from "@/lib/searchRank";
 
 function FloorsPage() {
   const {
@@ -70,10 +70,7 @@ function FloorsPage() {
     const ranked = floors
       .map((floor) => ({
         floor,
-        rank: bestSearchMatchRank(
-          searchMatchRank(floor.floor_name || "", search),
-          searchMatchRank(floor.floor_code || "", search),
-        ),
+        rank: searchMatchRank(floor.floor_name || "", search),
       }))
       .filter((x): x is { floor: Floor; rank: number } => x.rank !== null)
       .filter((x) => !statusFilter || x.floor.status === statusFilter)

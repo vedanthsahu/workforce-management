@@ -7,8 +7,10 @@ import { ConfigurationSkeleton } from "./ConfigurationSkeleton";
 import { CONFIGURATION_SECTIONS, INITIAL_CONFIGURATIONS } from "../utils/configurationData";
 import type { ConfigurationField, ConfigurationItem } from "../types/configuration.types";
 import {
+  fetchBlockedSeatPolicy,
   fetchBookingPolicy,
   fetchLayoutPolicy,
+  updateBlockedSeatPolicy,
   updateBookingPolicy,
   updateLayoutPolicy,
 } from "../services/configuration.service";
@@ -25,6 +27,7 @@ const BACKED_ITEM_IDS = new Set([
   "booking-calendar-employee",
   "visitor-booking",
   "layout-visibility",
+  "blocked-seat-policy",
 ]);
 
 function withFieldValue(fields: ConfigurationField[], key: string, value: number): ConfigurationField[] {
@@ -110,8 +113,8 @@ export default function ConfigurationsListPage() {
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([fetchBookingPolicy(), fetchLayoutPolicy()])
-      .then(([booking, layout]) => {
+    Promise.all([fetchBookingPolicy(), fetchLayoutPolicy(), fetchBlockedSeatPolicy()])
+      .then(([booking, layout, blockedSeat]) => {
         if (cancelled) return;
         setConfigurations((prev) =>
           prev.map((c) => {
@@ -130,6 +133,12 @@ export default function ConfigurationsListPage() {
               let fields = withFieldValue(c.fields, "draftDays", layout.visibility_days.draft);
               fields = withFieldValue(fields, "archivedDays", layout.visibility_days.archived);
               fields = withFieldValue(fields, "discardedDays", layout.visibility_days.deleted);
+              return { ...c, fields };
+            }
+            if (c.id === "blocked-seat-policy") {
+              let fields = withFieldValue(c.fields, "upcomingDays", blockedSeat.upcoming_days);
+              fields = withFieldValue(fields, "expiringSoonDays", blockedSeat.expiring_soon_days);
+              fields = withFieldValue(fields, "expiredWindowDays", blockedSeat.expired_window_days);
               return { ...c, fields };
             }
             return c;
@@ -241,6 +250,18 @@ export default function ConfigurationsListPage() {
             resolvedFields = withFieldValue(fieldsWithDraft, "draftDays", result.visibility_days.draft);
             resolvedFields = withFieldValue(resolvedFields, "archivedDays", result.visibility_days.archived);
             resolvedFields = withFieldValue(resolvedFields, "discardedDays", result.visibility_days.deleted);
+          } else if (itemId === "blocked-seat-policy") {
+            const upcomingDays = fieldsWithDraft.find((f) => f.key === "upcomingDays")?.value;
+            const expiringSoonDays = fieldsWithDraft.find((f) => f.key === "expiringSoonDays")?.value;
+            const expiredWindowDays = fieldsWithDraft.find((f) => f.key === "expiredWindowDays")?.value;
+            const result = await updateBlockedSeatPolicy({
+              upcoming_days: upcomingDays,
+              expiring_soon_days: expiringSoonDays,
+              expired_window_days: expiredWindowDays,
+            });
+            resolvedFields = withFieldValue(fieldsWithDraft, "upcomingDays", result.upcoming_days);
+            resolvedFields = withFieldValue(resolvedFields, "expiringSoonDays", result.expiring_soon_days);
+            resolvedFields = withFieldValue(resolvedFields, "expiredWindowDays", result.expired_window_days);
           }
         }
 
