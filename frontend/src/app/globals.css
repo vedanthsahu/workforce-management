@@ -190,19 +190,23 @@
 }
 
 /* Chromium highlights whichever date-input segment (month/day/year) is
-   currently active with its own blue selection background -- most visible
-   when a modal auto-focuses a date field on open. Neutralized app-wide so
-   every native date input reads the same as its own border/ring focus
-   style, not this separate per-segment highlight underneath it. */
+   currently active with its own blue background -- most visible when a
+   modal auto-focuses a date field on open. This is NOT a real :focus
+   state on the segment itself (these sub-fields aren't independently
+   focusable), so `::-webkit-datetime-edit-month-field:focus` never
+   matches -- the :focus has to sit on the real input, with the pseudo-
+   element as its descendant. Kept app-wide so every native date input
+   reads the same as its own border/ring focus style, not this separate
+   per-segment highlight underneath it. */
 input[type="date"]::-webkit-datetime-edit-fields-wrapper > * {
   background-color: transparent;
 }
-input[type="date"]::-webkit-datetime-edit-month-field:focus,
-input[type="date"]::-webkit-datetime-edit-day-field:focus,
-input[type="date"]::-webkit-datetime-edit-year-field:focus {
+input[type="date"]:focus::-webkit-datetime-edit-month-field,
+input[type="date"]:focus::-webkit-datetime-edit-day-field,
+input[type="date"]:focus::-webkit-datetime-edit-year-field,
+input[type="date"]:focus::-webkit-datetime-edit-text {
   background-color: transparent;
   color: inherit;
-  outline: none;
 }
 
 .animate-fade-in-up {
