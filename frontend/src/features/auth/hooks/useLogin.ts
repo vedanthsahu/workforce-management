@@ -12,7 +12,7 @@ export function useLogin() {
   });
 
   const onSubmit = (data: EmailFormValues) => {
-    authService.loginWithEmail(data.email);
+    authService.login(data.email);
   };
 
   return {

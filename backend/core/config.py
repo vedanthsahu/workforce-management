@@ -106,6 +106,16 @@ class Settings(BaseSettings):
     layout_cutover_enabled: bool = True
     layout_cutover_interval_minutes: int = 5
 
+    # Which login email domain (if any) gets routed to apps.solugenix.com's
+    # SSO gateway (see /auth/login) instead of the direct Microsoft OAuth
+    # flow. Unset/empty by default -- safe-merged: every email uses the
+    # direct flow against this tenant's own CLIENT_ID/TENANT_ID. Set to a
+    # real domain (e.g. "solugenix.com") only once the gateway's target
+    # tenant is meant to be split off and actually has data. DB-driven,
+    # per-tenant routing (storing domains on the tenants table) is a
+    # planned future replacement for this -- skipped for now.
+    gateway_sso_hostname: str | None = None
+
     app_log_level: str = "INFO"
     app_trace_functions: bool = False
 
@@ -200,6 +210,13 @@ class Settings(BaseSettings):
             graph_group_id or None,
         )
 
+        gateway_sso_hostname = str(self.gateway_sso_hostname or "").strip().lower()
+        object.__setattr__(
+            self,
+            "gateway_sso_hostname",
+            gateway_sso_hostname or None,
+        )
+
         return self
 
     @property
@@ -213,6 +230,16 @@ class Settings(BaseSettings):
     @property
     def jwks_url(self) -> str:
         return f"https://login.microsoftonline.com/{self.tenant_id}/discovery/v2.0/keys"
+
+    @property
+    def backend_base_url(self) -> str:
+        """This backend's own public base URL, derived from redirect_uri
+        (which is always "{backend_base_url}/auth/callback") rather than a
+        separate configured value that could drift out of sync with it."""
+        suffix = "/auth/callback"
+        if self.redirect_uri.endswith(suffix):
+            return self.redirect_uri[: -len(suffix)]
+        return self.redirect_uri.rsplit("/", 1)[0]
 
     @property
     def cors_allowed_origins(self) -> tuple[str, ...]:
