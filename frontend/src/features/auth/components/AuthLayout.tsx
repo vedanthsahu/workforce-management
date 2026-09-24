@@ -104,7 +104,7 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
                 <span className="text-[8px] text-gray-400">Mon, 20 Apr 2026</span>
               </div>
               <div className="flex justify-between items-center mb-2">
-                <span className="text-[8px] uppercase tracking-wide text-gray-400 font-medium">Seat Availability</span>
+                <span className="text-[8px] uppercase tracking-wide text-gray-400 font-medium">Space Availability</span>
                 <span className="text-[8px] font-semibold text-emerald-500">48 of 64 Free</span>
               </div>
               <div className="grid grid-cols-8 gap-1">

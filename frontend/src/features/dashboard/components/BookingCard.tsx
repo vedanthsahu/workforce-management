@@ -34,7 +34,7 @@ export function BookingCard({ booking, onCancel, onModify, canCancelOwn, canBook
         {/* Main info */}
         <div className="min-w-0">
           <p className="text-[13px] font-bold text-[#0f172a] truncate">{booking.location}</p>
-          <p className="text-[11.5px] text-gray-600 mt-0.5">{booking.floor} · Seat {booking.seatId}</p>
+          <p className="text-[11.5px] text-gray-600 mt-0.5">{booking.floor} · Space {booking.seatId}</p>
           <div className="flex items-center gap-1.5 mt-1.5 text-[11.5px] text-gray-600">
             <Calendar className="size-3 text-blue-500 shrink-0" />
             <span>{booking.date} · {booking.startTime} – {booking.endTime}</span>

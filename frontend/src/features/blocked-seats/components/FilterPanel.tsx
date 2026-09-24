@@ -164,7 +164,7 @@ export default function FilterPanel({
             <input
               value={filters.search}
               onChange={(event) => onChange("search", event.target.value)}
-              placeholder="Search by seat ID or reason"
+              placeholder="Search by space ID or reason"
               className={controlClass}
             />
           </span>

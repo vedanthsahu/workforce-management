@@ -101,6 +101,7 @@ GUEST_OPERATION_ROLES = {
     "FACILITATOR",
     "FRONT_OFFICE",
 }
+ADMIN_SEAT_ACCESS_ROLES = {"PRODUCT_ADMIN", "TENANT_ADMIN"}
 
 def _can_book_guest(current_user: dict[str, Any]) -> bool:
     return _user_role(current_user) in GUEST_OPERATION_ROLES
@@ -111,6 +112,32 @@ def _current_user_id(current_user: dict[str, Any]) -> str:
 
 def _user_role(user: dict[str, Any]) -> str:
     return str(user.get("role_name") or user.get("role") or "").strip().upper()
+
+
+def _can_use_non_bookable_seat(current_user: dict[str, Any] | None) -> bool:
+    return current_user is not None and _user_role(current_user) in ADMIN_SEAT_ACCESS_ROLES
+
+
+def _allowed_block_types(current_user: dict[str, Any] | None) -> tuple[str, ...]:
+    """Return block types the caller is permitted to book through."""
+    if current_user is None:
+        return ()
+    role = _user_role(current_user)
+    if role in ADMIN_SEAT_ACCESS_ROLES:
+        return ("Restricted", "Exclusive")
+    if role == "FACILITATOR":
+        return ("Restricted",)
+    return ()
+
+
+def _raise_blocked_seat_conflict() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "booking_seat_blocked",
+            "message": "The requested seat is blocked for your role during the requested date range.",
+        },
+    )
 
 
 def _can_book_for_user(
@@ -488,7 +515,7 @@ def book_seat(
                     "message": "Bookings can only be created for ACTIVE seats.",
                 },
             )
-        if seat.get("is_bookable") is not True:
+        if seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(current_user):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -529,6 +556,15 @@ def book_seat(
                     "message": "The requested seat already has an active booking for that day.",
                 },
             )
+        if seat_has_active_block_in_range(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+            start_date=payload.booking_date,
+            end_date=payload.booking_date,
+            allowed_block_types=_allowed_block_types(current_user),
+        ):
+            _raise_blocked_seat_conflict()
 
         booking = insert_booking(
             conn,
@@ -821,6 +857,8 @@ def get_available_seats(
             floor_id=floor_id,
             booking_date=booking_date,
             amenity_ids=normalized_amenity_ids,
+            allow_non_bookable=_can_use_non_bookable_seat(current_user),
+            allowed_block_types=_allowed_block_types(current_user),
         )
     except psycopg2.Error as exc:
         raise HTTPException(
@@ -1183,7 +1221,7 @@ def modify_booking(
                 },
             )
  
-        if target_seat.get("is_bookable") is not True:
+        if target_seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(current_user):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -1225,6 +1263,15 @@ def modify_booking(
                     "message": "The requested seat already has an active booking.",
                 },
             )
+        if seat_has_active_block_in_range(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+            start_date=payload.booking_date,
+            end_date=payload.booking_date,
+            allowed_block_types=_allowed_block_types(current_user),
+        ):
+            _raise_blocked_seat_conflict()
  
         mark_booking_modified(
             conn,
@@ -1247,13 +1294,15 @@ def modify_booking(
             # otherwise a booking a facilitator made for someone else silently
             # looks self-booked (and vanishes from the facilitator's delegated-
             # bookings views) the moment anyone else modifies it. Who actually
-            # performed this edit is already captured correctly on the
-            # superseded row via mark_booking_modified's updated_by_user_id,
-            # and in the audit log below.
+            # performed this edit is also recorded in the audit log below, and
+            # on this new row's own updated_by_user_id -- the admin bookings
+            # screen only ever shows the active (replacement) row, never the
+            # superseded one, so that's the row that needs the attribution.
             booked_by_user_id=str(booking["booked_by_user_id"]),
             seat=target_seat,
             booking_date=payload.booking_date,
             modified_from_booking_id=booking_id,
+            updated_by_user_id=_current_user_id(current_user),
         )
 
         conn.commit()
@@ -1514,6 +1563,8 @@ def get_available_seats_by_range(
                 start_date=start_date,
                 end_date=end_date,
                 amenity_ids=normalized_amenity_ids,
+                allow_non_bookable=_can_use_non_bookable_seat(current_user),
+                allowed_block_types=_allowed_block_types(current_user),
                 exclude_booking_id=exclude_booking_id,
             )
 
@@ -1667,7 +1718,7 @@ def book_guest_seat(
                 },
             )
 
-        if seat.get("is_bookable") is not True:
+        if seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(current_user):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -2021,7 +2072,7 @@ payload: BookingEligibilityRequest,
                     "message": "Bookings can only be created for ACTIVE seats.",
                 },
             )
-        if seat.get("is_bookable") is not True:
+        if seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(current_user):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -2035,14 +2086,9 @@ payload: BookingEligibilityRequest,
             seat_id=str(payload.seat_id),
             start_date=payload.start_date,
             end_date=payload.end_date,
+            allowed_block_types=_allowed_block_types(current_user),
         ):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "code": "booking_seat_blocked",
-                    "message": "The requested seat is blocked during the requested date range.",
-                },
-            )
+            _raise_blocked_seat_conflict()
         if seat_has_active_booking_in_range(
             conn,
             tenant_id=tenant_id,
