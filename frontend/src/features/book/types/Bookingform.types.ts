@@ -166,16 +166,19 @@ export interface CreateBookingResponse {
 
 export type BookingStep = 1 | 2 | 3;
 
-// ── Booking sidebar (Step 1 "Tomorrow" + "Quick picks") ───────────────────────
+// ── Booking sidebar (Step 1 "Tomorrow"/"Next booking" + "Quick picks") ────────
 
-export interface TomorrowBooking {
+export interface NextBooking {
   bookingId: string;
   seatCode: string | null;
   siteName: string | null;
   buildingName: string | null;
   floorName: string | null;
-  /** ISO date string (YYYY-MM-DD) for tomorrow */
+  /** ISO date string (YYYY-MM-DD) of the booking shown */
   bookingDate: string;
+  /** True only when bookingDate is literally tomorrow — false for a later
+   * upcoming booking shown as a fallback when there's nothing tomorrow. */
+  isTomorrow: boolean;
 }
 
 export interface QuickPickSeat {

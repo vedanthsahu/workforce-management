@@ -4,7 +4,20 @@ export type BlockCategory =
   | "upcoming"
   | "expiring"
   | "expired";
-export type BlockType = "MAINTENANCE" | "RESERVED" | "ADMIN_BLOCK";
+export type BlockListScope = BlockCategory | "all";
+export type BlockType = "Operational block" | "Restricted" | "Exclusive";
+export type ModifyBlockReason =
+  | "Operational requirements changed"
+  | "Block period adjusted"
+  | "Access restriction changed"
+  | "Reservation details changed"
+  | "Correction to block details";
+export type UnblockReason =
+  | "Maintenance completed"
+  | "Restriction no longer required"
+  | "Reserved use completed"
+  | "Seat released for general use"
+  | "Block created by mistake";
 export type DisplayStatus = "ACTIVE" | "UPCOMING" | "EXPIRED";
 
 export interface LocationOption {
@@ -111,7 +124,6 @@ export interface CreateBlockedSeatsPayload {
   block_type: BlockType;
   blocked_from: string;
   blocked_to: string;
-  reason: string;
 }
 
 export interface FloorLayoutScheduleItem {
@@ -130,7 +142,7 @@ export interface UpdateBlockedSeatPayload {
   block_type?: BlockType;
   blocked_from?: string;
   blocked_to?: string;
-  reason?: string;
+  reason: ModifyBlockReason;
 }
 
 export interface BlockedSeatHistoryItem {

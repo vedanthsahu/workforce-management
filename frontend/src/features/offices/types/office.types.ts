@@ -23,6 +23,8 @@ export interface UpdateOfficePayload {
   address_line1: string;
   address_line2: string | null;
   status: "ACTIVE" | "INACTIVE";
+  reactivate_building_ids?: number[];
+  reactivate_floor_ids?: number[];
 }
 export interface OfficeStatsSummary {
   total_offices: number;

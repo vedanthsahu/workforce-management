@@ -14,6 +14,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Office, UpdateOfficePayload } from "../types/office.types";
 import { officeService } from "../services/office.service";
+import { buildingService } from "@/features/building/services/buildingService";
+import { floorService } from "@/features/floor/services/floorService";
+import ReactivateChecklist, {
+  ReactivateChecklistFloor,
+  ReactivateChecklistItem,
+} from "./ReactivateChecklist";
 
 interface EditOfficeModalProps {
   office: Office;
@@ -35,6 +41,16 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
     status: "ACTIVE",
   });
 
+  // Inactive buildings/floors offered for reactivation when the office is
+  // being switched from INACTIVE back to ACTIVE — these were cascade
+  // -deactivated when the office itself went inactive (or were already
+  // inactive for their own reasons), and reactivating the office alone
+  // deliberately does not resurrect them (see location_service.py).
+  const [inactiveBuildings, setInactiveBuildings] = useState<ReactivateChecklistItem[]>([]);
+  const [inactiveFloors, setInactiveFloors] = useState<ReactivateChecklistFloor[]>([]);
+  const [selectedBuildingIds, setSelectedBuildingIds] = useState<string[]>([]);
+  const [selectedFloorIds, setSelectedFloorIds] = useState<string[]>([]);
+
   // Re-sync from the source office every time the modal opens — not just
   // when `office` changes — so a Cancel discards any unsaved status/field
   // edits instead of leaving them staged for the next open. The modal stays
@@ -51,8 +67,53 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
         address_line2: office.address_line2 || "",
         status: office.status || "ACTIVE",
       });
+      setSelectedBuildingIds([]);
+      setSelectedFloorIds([]);
+      setInactiveBuildings([]);
+      setInactiveFloors([]);
     }
   }, [open, office]);
+
+  const isReactivating = open && office.status === "INACTIVE" && formData.status === "ACTIVE";
+
+  // Fetch the office's currently-inactive buildings/floors only when the
+  // user actually flips the switch back to ACTIVE, not on every open.
+  useEffect(() => {
+    if (!isReactivating) {
+      setSelectedBuildingIds([]);
+      setSelectedFloorIds([]);
+      setInactiveBuildings([]);
+      setInactiveFloors([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [buildings, floors] = await Promise.all([
+          buildingService.getBuildings({ site_id: Number(office.site_id), status: "INACTIVE" }),
+          floorService.getAllFloors({ site_id: office.site_id, status: "INACTIVE" }),
+        ]);
+        if (cancelled) return;
+        setInactiveBuildings(buildings.map((b) => ({ id: b.building_id, name: b.building_name })));
+        setInactiveFloors(
+          floors.map((f) => ({ id: f.floor_id, name: f.floor_name, buildingId: f.building_id }))
+        );
+      } catch (err) {
+        console.error(err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isReactivating, office.site_id]);
+
+  const toggleBuilding = (id: string) => {
+    setSelectedBuildingIds((prev) => (prev.includes(id) ? prev.filter((b) => b !== id) : [...prev, id]));
+  };
+
+  const toggleFloor = (id: string) => {
+    setSelectedFloorIds((prev) => (prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]));
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -61,7 +122,16 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
   const handleSubmit = async () => {
     try {
       setLoading(true);
-      await officeService.updateSite(office.site_id, formData);
+      const payload: UpdateOfficePayload = { ...formData };
+      if (isReactivating) {
+        if (selectedBuildingIds.length > 0) {
+          payload.reactivate_building_ids = selectedBuildingIds.map(Number);
+        }
+        if (selectedFloorIds.length > 0) {
+          payload.reactivate_floor_ids = selectedFloorIds.map(Number);
+        }
+      }
+      await officeService.updateSite(office.site_id, payload);
       onClose();
       onSuccess(office.site_id);
     } catch (err) {
@@ -124,6 +194,25 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
               <option value="INACTIVE">INACTIVE</option>
             </select>
           </div>
+
+          {isReactivating && (inactiveBuildings.length > 0 || inactiveFloors.length > 0) && (
+            <div className="space-y-1.5">
+              <Label>Reactivate associated buildings/floors</Label>
+              <p className="text-xs text-gray-500">
+                This office has {inactiveBuildings.length} inactive building(s) and {inactiveFloors.length}{" "}
+                inactive floor(s). Select any you&apos;d like to reactivate along with the office — the rest
+                will stay inactive.
+              </p>
+              <ReactivateChecklist
+                buildings={inactiveBuildings}
+                floors={inactiveFloors}
+                selectedBuildingIds={selectedBuildingIds}
+                selectedFloorIds={selectedFloorIds}
+                onToggleBuilding={toggleBuilding}
+                onToggleFloor={toggleFloor}
+              />
+            </div>
+          )}
         </div>
 
         <DialogFooter>

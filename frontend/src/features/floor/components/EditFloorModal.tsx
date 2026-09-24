@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label";
 
 import { Floor } from "../types/floor.types";
 import { useEditFloor } from "../hooks/useEditFloor";
+import AncestorStatusRow from "@/features/offices/components/AncestorStatusRow";
+import ReactivateChecklist from "@/features/offices/components/ReactivateChecklist";
 
 type Props = {
   floor: Floor;
@@ -28,7 +30,18 @@ export default function EditFloorModal({
   onClose,
   onSuccess,
 }: Props) {
-  const { loading, formData, handleChange, handleUpdate } = useEditFloor(floor, open);
+  const {
+    loading,
+    formData,
+    officeInfo,
+    buildingInfo,
+    ancestorsLoading,
+    isReactivating,
+    officeNeedsReactivation,
+    buildingNeedsReactivation,
+    handleChange,
+    handleUpdate,
+  } = useEditFloor(floor, open);
 
   const hasChanges =
     formData.floor_name !== floor.floor_name ||
@@ -43,6 +56,21 @@ export default function EditFloorModal({
         </DialogHeader>
 
         <div className="space-y-5">
+          <div className="space-y-2">
+            <AncestorStatusRow
+              label="Office"
+              name={officeInfo?.name ?? "—"}
+              status={officeInfo?.status ?? ""}
+              loading={ancestorsLoading || !officeInfo}
+            />
+            <AncestorStatusRow
+              label="Building"
+              name={buildingInfo?.name ?? floor.building_name}
+              status={buildingInfo?.status ?? ""}
+              loading={ancestorsLoading || !buildingInfo}
+            />
+          </div>
+
           <div className="space-y-1.5">
             <Label>Floor Name</Label>
             <Input
@@ -63,6 +91,34 @@ export default function EditFloorModal({
               <option value="INACTIVE">INACTIVE</option>
             </select>
           </div>
+
+          {isReactivating && (officeNeedsReactivation || buildingNeedsReactivation) && (
+            <div className="space-y-1.5">
+              <Label>Reactivate associated items</Label>
+              <p className="text-xs text-gray-500">
+                This floor&apos;s {officeNeedsReactivation && buildingNeedsReactivation
+                  ? "office and building are"
+                  : officeNeedsReactivation
+                    ? "office is"
+                    : "building is"}{" "}
+                currently inactive and will be reactivated automatically so the floor can go active.
+              </p>
+              <ReactivateChecklist
+                office={officeNeedsReactivation && officeInfo ? { id: floor.site_id, name: officeInfo.name } : null}
+                lockedBuilding={
+                  buildingNeedsReactivation && buildingInfo
+                    ? { id: floor.building_id, name: buildingInfo.name }
+                    : null
+                }
+                buildings={[]}
+                floors={[]}
+                selectedBuildingIds={[]}
+                selectedFloorIds={[]}
+                onToggleBuilding={() => {}}
+                onToggleFloor={() => {}}
+              />
+            </div>
+          )}
         </div>
 
         <DialogFooter>

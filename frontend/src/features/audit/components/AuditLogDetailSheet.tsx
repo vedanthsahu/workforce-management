@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Globe, GripVertical, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
+import { formatRoleLabel, getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
 import AuditChangesSection from "./AuditChangesSection";
 import { AuditLog } from "../types/audit.types";
 import {
@@ -164,7 +164,7 @@ export default function AuditLogDetailSheet({ open, log, loading, error, onOpenC
                       <span
                         className={`inline-flex px-1.5 py-px rounded text-[9px] font-semibold uppercase tracking-wide ring-1 ${getRoleBadgeClass(log.actorRole)}`}
                       >
-                        {log.actorRole}
+                        {formatRoleLabel(log.actorRole)}
                       </span>
                     )}
                   </div>

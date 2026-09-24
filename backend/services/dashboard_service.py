@@ -127,7 +127,7 @@ def get_dashboard_for_user(
             user_id=user_id,
         )
 
-        favorite_seat, second_favorite_seat = fetch_favorite_seat(
+        favorite_seat, second_favorite_seat, third_favorite_seat = fetch_favorite_seat(
             conn,
             tenant_id=tenant_id,
             user_id=user_id,
@@ -203,6 +203,7 @@ def get_dashboard_for_user(
         ),
         favorite_seat=favorite_seat,
         second_favorite_seat=second_favorite_seat,
+        third_favorite_seat=third_favorite_seat,
         days_in_office_total=days_in_office_total,
         days_in_office_current_month=days_in_office_current_month,
         days_in_office_current_year=days_in_office_current_year,

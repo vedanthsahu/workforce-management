@@ -49,3 +49,18 @@ class UpdateLayoutVisibilityDaysRequest(BaseModel):
 class UpdateLayoutPolicyRequest(BaseModel):
     buffer_days: int | None = None
     visibility_days: UpdateLayoutVisibilityDaysRequest | None = None
+
+
+class BlockedSeatPolicyResponse(BaseModel):
+    # A block is flagged Upcoming/Expiring Soon if it starts/ends within
+    # this many days of today.
+    upcoming_days: int
+    expiring_soon_days: int
+    # The Expired tab only shows records from the previous N days.
+    expired_window_days: int
+
+
+class UpdateBlockedSeatPolicyRequest(BaseModel):
+    upcoming_days: int | None = None
+    expiring_soon_days: int | None = None
+    expired_window_days: int | None = None

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { AlertTriangle, Check, X } from "lucide-react";
-import { getRoleBadgeClass, ROLE_CHANGE_CONSEQUENCES, STATUS_CHANGE_CONSEQUENCES } from "../utils/users.utils";
+import { formatRoleLabel, getRoleBadgeClass, ROLE_CHANGE_CONSEQUENCES, STATUS_CHANGE_CONSEQUENCES } from "../utils/users.utils";
 import type { User, UserStatus } from "../types/users.types";
 
 type Props = {
@@ -92,14 +92,14 @@ export default function ConfirmRoleChangeModal({ open, user, newRole, newStatus,
             <div className="flex-1">
               <p className="text-xs text-gray-400">Role — From:</p>
               <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ring-1 mt-1 ${getRoleBadgeClass(user.currentRole)}`}>
-                {user.currentRole}
+                {formatRoleLabel(user.currentRole)}
               </span>
             </div>
             <span className="text-gray-300">→</span>
             <div className="flex-1">
               <p className="text-xs text-gray-400">To:</p>
               <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ring-1 mt-1 ${getRoleBadgeClass(newRole)}`}>
-                {newRole}
+                {formatRoleLabel(newRole)}
               </span>
             </div>
           </div>

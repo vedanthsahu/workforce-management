@@ -84,9 +84,8 @@ export default function BlockSeatsPage() {
     [buildingId, setBuildingId] = useState(""),
     [floorId, setFloorId] = useState("");
   const [from, setFrom] = useState(today()),
-    [to, setTo] = useState(today()),
-    [reason, setReason] = useState("");
-  const [blockType, setBlockType] = useState<BlockType>("MAINTENANCE"),
+    [to, setTo] = useState(today());
+  const [blockType, setBlockType] = useState<BlockType>("Operational block"),
     [seats, setSeats] = useState<SeatOption[]>([]),
     [selected, setSelected] = useState<string[]>([]),
     [bookings, setBookings] = useState<BlockedSeatConflict[]>([]);
@@ -325,8 +324,8 @@ export default function BlockSeatsPage() {
           capacity: resource.capacity,
           hasBooking: resource.has_booking,
           hasBlock: resource.has_block,
-          isUnavailable: !resource.is_active || !resource.is_bookable,
-          selectable: resource.is_active && resource.is_bookable && !resource.has_block,
+          isUnavailable: !resource.is_active,
+          selectable: resource.is_active && !resource.has_block,
         })),
       );
       setConflictPage(1);
@@ -361,7 +360,7 @@ export default function BlockSeatsPage() {
     try {
       const action =
         b.booking_type === "GUEST" ? cancelGuestBooking : cancelBooking;
-      await action(b.booking_id, "Seat required for an administrative block");
+      await action(b.booking_id, "Space required for an administrative block");
       resolveBooking(b);
     } catch (requestError: unknown) {
       setError(apiErrorMessage(requestError, "Unable to cancel this booking."));
@@ -399,7 +398,7 @@ export default function BlockSeatsPage() {
     }
   };
   const submit = async () => {
-    if (loading || unresolvedConflictCount || !selected.length || !reason.trim()) return;
+    if (loading || unresolvedConflictCount || !selected.length) return;
     setSaving(true);
     try {
       await blockedSeatsService.create({
@@ -407,7 +406,6 @@ export default function BlockSeatsPage() {
         block_type: blockType,
         blocked_from: from,
         blocked_to: to,
-        reason: reason.trim(),
       });
       router.push("/admin/blocked-seats");
     } catch (requestError: unknown) {
@@ -441,10 +439,10 @@ export default function BlockSeatsPage() {
       <div className="mx-auto max-w-[1680px] space-y-4 sm:space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-[17px] font-bold leading-tight text-[#1A1A2E] sm:text-[20px]">Block Seats</h1>
+            <h1 className="text-[17px] font-bold leading-tight text-[#1A1A2E] sm:text-[20px]">Block Spaces</h1>
             <p className="mt-0.5 text-[11.5px] text-gray-400 sm:text-[12.5px]">
-              Select location, view available and booked seats, resolve
-              conflicts and block seats.
+              Select location, view available and booked spaces, resolve
+              conflicts and block spaces.
             </p>
           </div>
           <button
@@ -452,7 +450,7 @@ export default function BlockSeatsPage() {
             className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-[12.5px] font-medium text-gray-600 transition-colors hover:bg-gray-50 sm:w-auto"
           >
             <ArrowLeft size={16} />
-            Back to Blocked Seats
+            Back to Blocked Spaces
           </button>
         </header>
         <section className="rounded-xl border border-[#EBEBF5] bg-white p-4 sm:p-6">
@@ -592,14 +590,6 @@ export default function BlockSeatsPage() {
               )}
             </button>
           </div>
-          <label className="mt-4 block text-[11px] font-medium text-gray-500">
-            Reason *
-            <textarea
-              className="mt-1.5 min-h-16 w-full rounded-lg border border-gray-200 bg-white p-3 text-[12.5px] text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 sm:text-[13px]"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-            />
-          </label>
           {invalid && (
             <p className="text-xs text-red-600">
               Block To must be on or after Block From.
@@ -757,7 +747,7 @@ export default function BlockSeatsPage() {
         {!loading && !!unresolvedConflictCount && (
           <section className="overflow-hidden rounded-xl border border-[#EBEBF5] bg-white">
             <h2 className="p-4 text-[14px] font-bold text-[#1A1A2E] sm:text-[15px]">
-              Conflicting Bookings ({unresolvedConflictCount} seats,{" "}
+              Conflicting Bookings ({unresolvedConflictCount} spaces,{" "}
               {conflicts.length} bookings)
             </h2>
             <div className="divide-y divide-[#EBEBF5] md:hidden">
@@ -848,11 +838,11 @@ export default function BlockSeatsPage() {
               <thead className="bg-[#F7F8FC] text-[11px] font-semibold text-gray-500">
                 <tr>
                   {[
-                    "Seat",
+                    "Space",
                     "User",
                     "Booking Period",
                     "Action",
-                    "Suggested Seats",
+                    "Suggested Spaces",
                   ].map((x) => (
                     <th key={x} className="p-3">
                       {x}
@@ -977,7 +967,6 @@ export default function BlockSeatsPage() {
                 loading ||
                 loadingConflictSeatIds.length > 0 ||
                 !!unresolvedConflictCount ||
-                !reason.trim() ||
                 saving
               }
               onClick={() => void submit()}

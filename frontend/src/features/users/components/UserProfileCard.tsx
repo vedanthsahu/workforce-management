@@ -1,5 +1,5 @@
 import { Briefcase, Building2, Hash, MapPin, Phone, type LucideIcon } from "lucide-react";
-import { getRoleBadgeClass } from "../utils/users.utils";
+import { formatRoleLabel, getRoleBadgeClass } from "../utils/users.utils";
 import type { User } from "../types/users.types";
 
 export default function UserProfileCard({ user }: { user: User }) {
@@ -38,7 +38,7 @@ export default function UserProfileCard({ user }: { user: User }) {
         <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 flex items-center justify-between">
           <span className="text-xs font-medium text-gray-500">Current Role</span>
           <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold ring-1 ${getRoleBadgeClass(user.currentRole)}`}>
-            {user.currentRole}
+            {formatRoleLabel(user.currentRole)}
           </span>
         </div>
       </div>

@@ -28,6 +28,8 @@ from backend.core.sso import (
     GraphAPIError,
     SSOError,
     build_auth_url,
+    build_gateway_sso_url,
+    decode_gateway_token,
     exchange_code_for_token,
     fetch_graph_groups,
     fetch_graph_manager,
@@ -40,6 +42,7 @@ from backend.repositories.user_repository import (
     create_app_user_from_graph,
     create_auth_identity_for_user,
     fetch_active_tenant_for_login,
+    fetch_tenant_by_azure_tenant_id,
     fetch_user_by_id,
     fetch_user_by_microsoft_object_id,
     sync_app_user_from_graph,
@@ -61,8 +64,31 @@ MICROSOFT_PROVIDER = "MICROSOFT"
 
 
 @router.get("/auth/login", response_model=None)
-def auth_login():
-    """Start the Microsoft OAuth login flow."""
+def auth_login(email: str | None = None):
+    """Start login. One entry point for both SSO paths -- decides
+    direct-vs-gateway based on the EMAIL DOMAIN typed into the login form
+    (there's one single deployed frontend; no separate sgxdev/solugenix
+    URLs to route by).
+
+    Compares the submitted email's domain against GATEWAY_SSO_HOSTNAME:
+    a match redirects into apps.solugenix.com's SSO gateway (tenant 4).
+    Unset/empty GATEWAY_SSO_HOSTNAME (the default), or no/malformed email,
+    falls through to the direct Microsoft OAuth flow below (tenant 3) --
+    safe-merged by default, separate only once that env var is set.
+
+    Future: this domain->flow decision is meant to move into the tenants
+    table (one row per tenant, one email domain each) so adding a tenant is
+    a DB insert, not a code change. GATEWAY_SSO_HOSTNAME is the interim,
+    single-tenant version of that.
+    """
+    settings = get_settings()
+    gateway_hostname = settings.gateway_sso_hostname
+
+    if gateway_hostname and email and "@" in email:
+        email_domain = email.rsplit("@", 1)[-1].strip().lower()
+        if email_domain == gateway_hostname:
+            return RedirectResponse(url=build_gateway_sso_url(), status_code=status.HTTP_302_FOUND)
+
     try:
         auth_url, state = build_auth_url()
     except SSOError as exc:
@@ -283,6 +309,158 @@ def graph_me(
         return fetch_graph_me(_require_graph_access_token(request))
     except GraphAPIError as exc:
         return _error_response(exc.status_code, exc.code, exc.message, exc.details)
+
+
+@router.get("/auth/sso-gateway-callback", response_model=None)
+def auth_sso_gateway_callback(
+    request: Request,
+    conn: Annotated[PGConnection, Depends(get_db)],
+    token: str | None = None,
+):
+    """Callback for apps.solugenix.com's SSO gateway (the redirectUI target).
+
+    The gateway wraps Microsoft sign-in behind its own HS256 token, signed
+    with a secret this service does not hold. Trust is established
+    downstream instead of by verifying that signature: the embedded Graph
+    access token is only acted on after ``fetch_graph_me`` proves Microsoft
+    itself accepts it, mirroring how ``auth_callback`` trusts Microsoft's own
+    id_token signature rather than anything the client supplied.
+    """
+
+    def debug(msg):
+        logger.warning("sso.gateway_callback %s", msg)
+
+    debug("=== gateway callback started ===")
+
+    try:
+        gateway = decode_gateway_token(token or "")
+    except SSOError as exc:
+        debug(f"SSOError decoding gateway token: {exc.code} - {exc.message}")
+        return _error_response(exc.status_code, exc.code, exc.message, exc.details)
+
+    access_token = gateway["graph_access_token"]
+    azure_tenant_id = gateway["azure_tenant_id"]
+    debug(f"azure_tenant_id={azure_tenant_id!r}")
+
+    try:
+        debug("Fetching Graph /me to verify token...")
+        graph_profile = fetch_graph_me(access_token)
+        debug(f"Graph /me keys: {list(graph_profile.keys())}")
+    except GraphAPIError as exc:
+        debug(f"GraphAPIError verifying token: {exc.code} - {exc.message}")
+        return _error_response(exc.status_code, exc.code, exc.message, exc.details)
+
+    try:
+        debug("Fetching tenant (exact tenant_key match required, no default-tenant fallback -- "
+              "the gateway's own Microsoft login isn't scoped to our tenant the way "
+              "login.microsoftonline.com/{our_tenant_id} is for /auth/callback)...")
+        tenant = fetch_tenant_by_azure_tenant_id(conn, azure_tenant_id)
+        debug(f"Tenant result: {tenant}")
+        if tenant is None:
+            return _error_response(401, "unknown_tenant", "No active tenant found for this Azure tenant.")
+    except Exception as exc:
+        debug(f"Exception in tenant fetch: {type(exc).__name__}: {exc}")
+        return _error_response(500, "tenant_resolution_failed", f"{type(exc).__name__}: {exc!s}")
+
+    tenant_id = str(tenant["tenant_id"])
+    debug(f"tenant_id={tenant_id}")
+
+    try:
+        microsoft_object_id = _resolve_graph_object_id(graph_profile)
+    except ValueError as exc:
+        return _error_response(400, "invalid_graph_profile", str(exc))
+    debug(f"microsoft_object_id={microsoft_object_id!r}")
+
+    try:
+        user = fetch_user_by_microsoft_object_id(conn, tenant_id=tenant_id, microsoft_object_id=microsoft_object_id)
+        debug(f"User by oid: {user}")
+
+        if user is None:
+            debug("Provisioning first-time user...")
+            graph_manager = _fetch_graph_payload(fetch_graph_manager, access_token, required=False)
+            debug(f"Graph manager keys: {list(graph_manager.keys())}")
+            user = _provision_first_time_user(
+                conn,
+                tenant_id=tenant_id,
+                azure_tenant_id=azure_tenant_id,
+                microsoft_object_id=microsoft_object_id,
+                claims={},
+                graph_profile=graph_profile,
+                graph_manager=graph_manager,
+                access_token=access_token,
+            )
+            debug(f"Provisioned user: {user}")
+        else:
+            debug("Resyncing department team for returning user...")
+            _sync_existing_user_department_team(
+                conn,
+                tenant_id=tenant_id,
+                user=user,
+                graph_profile=graph_profile,
+                access_token=access_token,
+            )
+
+        if user is None:
+            raise LookupError("User could not be resolved after provisioning.")
+        if user.get("status") != "ACTIVE":
+            raise PermissionError(f"User status is {user.get('status')!r}, not ACTIVE.")
+
+        debug("Issuing tokens...")
+        auth_tokens = issue_tokens_for_user(
+            conn,
+            user,
+            user_agent=request.headers.get("user-agent"),
+            ip_address=request.client.host if request.client else None,
+            commit=False,
+        )
+        debug("Tokens issued OK, committing...")
+        conn.commit()
+        debug("Commit OK")
+        safe_write_audit_log(
+            conn,
+            action=USER_LOGIN,
+            tenant_id=str(user["tenant_id"]),
+            actor_user_id=user.get("user_id"),
+            actor_email=user.get("email"),
+            actor_role=str(user.get("role_name") or "").upper() or None,
+            resource_type="session",
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+
+    except PermissionError as exc:
+        conn.rollback()
+        debug(f"PermissionError: {exc}")
+        settings = get_settings()
+        return RedirectResponse(
+            url=f"{settings.frontend_url}/login?error=inactive_user",
+            status_code=status.HTTP_302_FOUND,
+        )
+    except (LookupError, ValueError) as exc:
+        conn.rollback()
+        debug(f"LookupError/ValueError: {exc}")
+        return _error_response(409, "sso_identity_conflict", str(exc))
+    except GraphAPIError as exc:
+        conn.rollback()
+        debug(f"GraphAPIError: {exc.code} - {exc.message}")
+        return _error_response(exc.status_code, exc.code, exc.message, exc.details)
+    except Exception as exc:
+        conn.rollback()
+        debug(f"Unexpected exception: {type(exc).__name__}: {exc}")
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return _error_response(500, "sso_failed", f"{type(exc).__name__}: {exc!s}")
+
+    settings = get_settings()
+    response = RedirectResponse(url=settings.frontend_url, status_code=status.HTTP_302_FOUND)
+    _set_auth_cookies(response, auth_tokens)
+    response.set_cookie(
+        key=SESSION_TOKEN_COOKIE_NAME,
+        value=access_token,
+        **build_auth_cookie_settings(max_age=settings.session_ttl),
+    )
+    debug("=== gateway callback complete, redirecting ===")
+    return response
 
 
 @router.get("/graph/groups", response_model=None)

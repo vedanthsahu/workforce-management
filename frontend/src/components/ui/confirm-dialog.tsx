@@ -2,15 +2,14 @@
 
 import type { ReactNode } from "react";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -29,9 +28,13 @@ interface ConfirmDialogProps {
   children?: ReactNode;
 }
 
-// Generic "are you sure?" dialog on the same AlertDialog primitives/styling
-// used across the app (see CancelBookingDialog) — for simple confirm/cancel
-// flows with no extra form fields.
+// Generic "are you sure?" dialog on the same Dialog primitives/styling used
+// across the app (see CancelBookingDialog) — for simple confirm/cancel flows
+// with no extra form fields. Built on Dialog rather than AlertDialog
+// specifically so it closes on an outside click like every other dialog in
+// the app, instead of requiring an explicit Cancel/Confirm press —
+// AlertDialog hardcodes `disablePointerDismissal`, with no prop to turn it
+// off (see @base-ui/react/alert-dialog's AlertDialogRoot.js).
 export function ConfirmDialog({
   open,
   title,
@@ -49,20 +52,20 @@ export function ConfirmDialog({
   };
 
   return (
-    <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent className="max-w-md mx-4 sm:mx-auto">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="text-[#1A1A2E]">{title}</AlertDialogTitle>
-          <AlertDialogDescription className="text-gray-500 text-[13px]">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="max-w-md mx-4 sm:mx-auto" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle className="text-[#1A1A2E]">{title}</DialogTitle>
+          <DialogDescription className="text-gray-500 text-[13px]">
             {description}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
+          </DialogDescription>
+        </DialogHeader>
         {children && <div className="py-2">{children}</div>}
-        <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:gap-3">
-          <AlertDialogCancel onClick={onClose} className="text-[12.5px] w-full sm:w-auto">
+        <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:gap-3">
+          <Button variant="outline" onClick={onClose} className="text-[12.5px] w-full sm:w-auto">
             {cancelLabel}
-          </AlertDialogCancel>
-          <AlertDialogAction
+          </Button>
+          <Button
             onClick={onConfirm}
             disabled={loading}
             className={`text-[12.5px] disabled:opacity-50 w-full sm:w-auto ${
@@ -72,9 +75,9 @@ export function ConfirmDialog({
             }`}
           >
             {confirmLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

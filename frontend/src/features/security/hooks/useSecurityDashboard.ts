@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import { securityService } from "../services/security.service";
 import { mapApiGuestVisitToVisitor, mapApiSummary } from "../utils/security.utils";
-import { useDebouncedValue } from "./Usedebouncedvalue";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import type { SecurityDashboardSummary, Site, Visitor } from "../types/security.types";
 
 const PAGE_SIZE = 10;

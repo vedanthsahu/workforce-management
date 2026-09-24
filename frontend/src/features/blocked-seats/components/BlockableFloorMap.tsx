@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import type { SeatOption } from "../types/blockedSeats.types";
 
@@ -108,11 +108,39 @@ const applyResourceColor = (
     ),
   ];
   let matchedChairPalette = false;
+
+  // Some uploaded layouts put fill/stroke on the wrapping <g> instead of on
+  // each child shape. Resolve that inherited paint before applying a state
+  // colour so those seats also visibly react when selected.
+  const originalPaint = (
+    shape: SVGElement,
+    property: "fill" | "stroke",
+  ) => {
+    const dataKey = property === "fill" ? "originalFill" : "originalStroke";
+    const cached = shape.dataset[dataKey];
+    if (cached !== undefined) return cached;
+
+    let current: SVGElement | null = shape;
+    while (current) {
+      const inlineValue =
+        property === "fill" ? current.style.fill : current.style.stroke;
+      const value = current.getAttribute(property) || inlineValue;
+      if (value) {
+        const normalized = value.toLowerCase();
+        shape.dataset[dataKey] = normalized;
+        return normalized;
+      }
+      if (current === element) break;
+      current = current.parentElement as SVGElement | null;
+    }
+
+    shape.dataset[dataKey] = "";
+    return "";
+  };
+
   shapes.forEach((shape) => {
-    const fill = (shape.dataset.originalFill ??=
-      shape.getAttribute("fill") ?? shape.style.fill).toLowerCase();
-    const stroke = (shape.dataset.originalStroke ??=
-      shape.getAttribute("stroke") ?? shape.style.stroke).toLowerCase();
+    const fill = originalPaint(shape, "fill");
+    const stroke = originalPaint(shape, "stroke");
 
     if (fill === "#c8c8c8") {
       shape.style.fill = colors.body;
@@ -138,7 +166,7 @@ const applyResourceColor = (
   // groups reach this branch; room/cabin artwork is protected above.
   if (!matchedChairPalette) {
     shapes.forEach((shape) => {
-      const fill = shape.getAttribute("fill") ?? shape.style.fill;
+      const fill = originalPaint(shape, "fill");
       if (!fill || fill.toLowerCase() === "none") return;
       shape.style.fill = FALLBACK_FILL[state];
       shape.style.stroke = "#000000";
@@ -146,7 +174,7 @@ const applyResourceColor = (
     });
   }
   element.style.filter = selected
-    ? `drop-shadow(0 0 5px ${colors.bodyStroke})`
+    ? `drop-shadow(0 0 5px ${colors.bodyStroke}) drop-shadow(0 0 9px ${colors.bodyStroke})`
     : "none";
 };
 
@@ -167,8 +195,6 @@ export default function BlockableFloorMap({
   onToggle,
 }: BlockableFloorMapProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<HTMLDivElement>(null);
-  const previousSelection = useRef(new Set<string>());
   const [svgText, setSvgText] = useState("");
   const [loadError, setLoadError] = useState("");
   const [zoom, setZoom] = useState(1);
@@ -202,6 +228,7 @@ export default function BlockableFloorMap({
 
   const renderedSvg = useMemo(() => {
     if (!svgText || typeof DOMParser === "undefined") return "";
+    const selected = new Set(selectedIds);
     const document = new DOMParser().parseFromString(svgText, "image/svg+xml");
     document
       .querySelectorAll("script, foreignObject")
@@ -239,39 +266,15 @@ export default function BlockableFloorMap({
       element.setAttribute("aria-label", hoverLabel);
       element.style.cursor = disabled ? "not-allowed" : "pointer";
       element.style.opacity = disabled ? "0.55" : "1";
-      applyResourceColor(element, resource, false);
+      applyResourceColor(element, resource, selected.has(resource.seat_id));
     }
     return new XMLSerializer().serializeToString(root);
-  }, [resources, svgText]);
+  }, [resources, selectedIds, svgText]);
 
   const resourceById = useMemo(
     () => new Map(resources.map((resource) => [resource.seat_id, resource])),
     [resources],
   );
-  const resourceElements = useRef(new Map<string, SVGElement>());
-  useLayoutEffect(() => {
-    resourceElements.current.clear();
-    mapRef.current
-      ?.querySelectorAll<SVGElement>("[data-block-resource-id]")
-      .forEach((element) => {
-        resourceElements.current.set(element.dataset.blockResourceId!, element);
-      });
-    previousSelection.current = new Set();
-  }, [renderedSvg]);
-
-  // Selection changes only repaint affected seats; the SVG stays mounted.
-  useLayoutEffect(() => {
-    const selected = new Set(selectedIds);
-    for (const id of new Set([...previousSelection.current, ...selected])) {
-      if (previousSelection.current.has(id) === selected.has(id)) continue;
-      const element = resourceElements.current.get(id);
-      const resource = resourceById.get(id);
-      if (element && resource)
-        applyResourceColor(element, resource, selected.has(id));
-    }
-    previousSelection.current = selected;
-  }, [selectedIds, resourceById, renderedSvg]);
-
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target as Element;
     const resourceElement = target.closest<SVGElement>(
@@ -350,7 +353,6 @@ export default function BlockableFloorMap({
         )}
         {renderedSvg && (
           <div
-            ref={mapRef}
             className="min-h-[700px] min-w-full p-2 transition-[width,height] duration-150"
             style={{
               width: `${zoom * 100}%`,

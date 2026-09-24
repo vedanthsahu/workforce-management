@@ -101,7 +101,7 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
               <th className="pl-13 px-3 py-3 text-left font-bold">Description</th>
               <th className="px-3 py-3 text-center font-bold">Status</th>
               <th className="px-3 py-3 text-center font-bold">Space Type</th>
-              <th className="px-3 py-3 text-center font-bold">Assigned Seats</th>
+              <th className="px-3 py-3 text-center font-bold">Assigned Spaces</th>
               <th className="px-3 py-3 text-center font-bold">Actions</th>
             </tr>
           </thead>
@@ -125,7 +125,7 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
                     </span>
                   </td>
                   <td className="px-3 py-3 text-black max-w-0">
-                    <span className="block truncate">{amenity.description}</span>
+                    <span className="block line-clamp-2">{amenity.description}</span>
                   </td>
                   <td className="px-3 py-3 text-center">
                     <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap ${

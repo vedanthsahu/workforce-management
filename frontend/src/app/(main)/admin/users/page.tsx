@@ -11,6 +11,7 @@ import { useUsers } from "@/features/users/hooks/useUsers";
 import type { User } from "@/features/users/types/users.types";
 import { TableSkeleton, TableBodySkeleton } from "@/components/ui/table-skeleton";
 import {
+  formatRoleLabel,
   normalizeRoleKey,
   USERS_PIN_DURATION as PIN_DURATION,
   USERS_PAGE_SIZES as PAGE_SIZES,
@@ -58,9 +59,9 @@ function UserManagementPage() {
     const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
     let message = "Changes saved successfully.";
     if (newRole && newStatus) {
-      message = `Role changed successfully to ${newRole} and status changed successfully to ${capitalize(newStatus)}.`;
+      message = `Role changed successfully to ${formatRoleLabel(newRole)} and status changed successfully to ${capitalize(newStatus)}.`;
     } else if (newRole) {
-      message = `Role changed successfully to ${newRole}.`;
+      message = `Role changed successfully to ${formatRoleLabel(newRole)}.`;
     } else if (newStatus) {
       message = `Status changed successfully to ${capitalize(newStatus)}.`;
     }

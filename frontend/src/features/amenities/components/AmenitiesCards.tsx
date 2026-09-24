@@ -82,7 +82,7 @@ export default function AmenitiesCards({
       <Stat
         icon={<Tag className="text-purple-600" />}
         bg="bg-purple-100"
-        label="Assigned To Seats"
+        label="Assigned To Spaces"
         value={stats.assigned_amenities.toString()}
         sub="Amenities in use"
       />

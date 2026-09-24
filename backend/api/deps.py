@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 import psycopg2
 from fastapi import Depends, HTTPException, Request, Response, status
+from psycopg2.extensions import TRANSACTION_STATUS_IDLE
 from psycopg2.extensions import connection as PGConnection
 
+from backend.core.app_logging import LOGGER_NAME
 from backend.core.config import get_settings
 from backend.core.security import (
     ACCESS_TOKEN_COOKIE_NAME,
@@ -21,13 +25,25 @@ from backend.core.security import (
     is_microsoft_token,
 )
 from backend.db.connection import get_db
-from backend.repositories.token_repository import fetch_active_session
+from backend.repositories.token_repository import (
+    extend_session_activity,
+    fetch_active_session,
+)
 from backend.repositories.user_repository import fetch_user_by_id
 from backend.services.auth_service import (
     AuthTokens,
     attach_permissions_to_user,
     refresh_auth_tokens,
 )
+
+logger = logging.getLogger(f"{LOGGER_NAME}.deps")
+
+# How stale last_used_at must be before a request bothers extending the
+# session -- keeps an active user's refresh token from ever hitting its TTL
+# (see extend_session_activity), without writing to user_sessions on every
+# single request in a burst. Well under the refresh-token TTL itself, so
+# activity always wins the race against expiry.
+SESSION_ACTIVITY_TOUCH_INTERVAL_SECONDS = 60
 
 
 def get_auth_context(
@@ -114,6 +130,34 @@ def get_auth_context(
                     "message": "Session has been revoked.",
                 },
             )
+
+        # A request under a still-valid access token doesn't otherwise touch
+        # user_sessions at all -- only an access-token-expiry-triggered
+        # refresh (above) does. Without this, an active user's refresh
+        # token would only ever get extended in ~jwt_access_token_ttl-sized
+        # jumps instead of tracking actual request activity. Throttled, not
+        # per-request: see SESSION_ACTIVITY_TOUCH_INTERVAL_SECONDS.
+        #
+        # Best-effort: this must never fail the request it's riding along
+        # with. Commits on its own (matching refresh_auth_tokens' own
+        # internal commit above) since get_db leaves commit/rollback to
+        # callers, and a route that never writes anything itself would
+        # otherwise have this silently discarded when the connection closes.
+        try:
+            settings = get_settings()
+            extend_session_activity(
+                conn,
+                tenant_id=claims["tenant_id"],
+                user_id=claims["user_id"],
+                session_id=session_id,
+                new_expires_at=datetime.now(UTC) + timedelta(seconds=settings.jwt_refresh_token_ttl),
+                min_touch_interval_seconds=SESSION_ACTIVITY_TOUCH_INTERVAL_SECONDS,
+            )
+            conn.commit()
+        except psycopg2.Error:
+            logger.exception("auth.session_activity_touch_failed session_id=%s", session_id)
+            if conn.get_transaction_status() != TRANSACTION_STATUS_IDLE:
+                conn.rollback()
     request.state.auth_claims = claims
     return {
         "claims": claims,

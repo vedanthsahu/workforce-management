@@ -40,7 +40,7 @@ export default function BlockedSeatsTable({
   onAction,
 }: Props) {
   const headings = [
-    "Seat",
+    "Space",
     "Location",
     "Block Period",
     "Type",
@@ -188,12 +188,12 @@ export default function BlockedSeatsTable({
       </div>
       {loading ? (
         <p className="py-12 text-center text-sm text-muted-foreground">
-          Loading blocked seats…
+          Loading blocked spaces…
         </p>
       ) : (
         !rows.length && (
           <p className="py-12 text-center text-sm text-muted-foreground">
-            No blocked seats match the selected criteria.
+            No blocked spaces match the selected criteria.
           </p>
         )
       )}

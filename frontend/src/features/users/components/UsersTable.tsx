@@ -1,7 +1,7 @@
 "use client";
 
 import { Eye } from "lucide-react";
-import { getRoleBadgeClass } from "../utils/users.utils";
+import { formatRoleLabel, getRoleBadgeClass } from "../utils/users.utils";
 import UserRowMenu from "./UserRowMenu";
 import type { User } from "../types/users.types";
 
@@ -55,7 +55,7 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
                         user.currentRole
                       )}`}
                     >
-                      {user.currentRole}
+                      {formatRoleLabel(user.currentRole)}
                     </span>
                     <span
                       className={`inline-flex items-center gap-1 text-xs font-medium ${user.status === "active" ? "text-emerald-600" : "text-gray-400"
@@ -129,7 +129,7 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
                         user.currentRole
                       )}`}
                     >
-                      {user.currentRole}
+                      {formatRoleLabel(user.currentRole)}
                     </span>
                   </td>
                   <td className="py-3 pl-8 pr-4 w-[14%]">

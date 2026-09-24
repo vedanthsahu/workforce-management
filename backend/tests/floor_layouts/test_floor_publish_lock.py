@@ -14,6 +14,18 @@ from backend.services.floor_layout_service import activate_floor_layout
 
 CALLER = {"tenant_id": "1", "user_id": "5", "role_name": "TENANT_ADMIN"}
 
+
+def setUpModule() -> None:
+    # These tests exercise publish locking, not S3 URL signing.
+    # Keep response validation independent of application secrets and AWS.
+    unittest.enterModuleContext(
+        patch(
+            "backend.schemas.floor_layout.resolve_layout_file_url",
+            side_effect=lambda value: value,
+        )
+    )
+
+
 DRAFT_LAYOUT = {
     "layout_id": "10",
     "tenant_id": "1",
