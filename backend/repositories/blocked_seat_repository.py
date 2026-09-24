@@ -62,6 +62,12 @@ def _filtered_base(
     if query.selected_date is not None:
         sql += " AND %s BETWEEN bs.blocked_from AND bs.blocked_to"
         params.append(query.selected_date)
+    if query.start_date is not None:
+        sql += " AND bs.blocked_to >= %s"
+        params.append(query.start_date)
+    if query.end_date is not None:
+        sql += " AND bs.blocked_from <= %s"
+        params.append(query.end_date)
     return sql, params
 
 
@@ -154,9 +160,11 @@ def fetch_blocked_seat_summary(
     reference_date: date,
     upcoming_days: int,
     expiring_soon_days: int,
+    expired_window_days: int,
 ) -> dict[str, int]:
-    # No window here, deliberately -- these are tenant-wide totals for the
-    # stat cards, unaffected by the table's rolling display window.
+    # Summary cards are tenant-wide totals. The expired card is the exception
+    # to an unlimited time horizon: it must match the configured rolling
+    # window used by the expired table.
     base, filter_params = _filtered_base(query, details=False)
     sql = (
         """
@@ -165,7 +173,10 @@ def fetch_blocked_seat_summary(
           COUNT(*) FILTER (WHERE bs.status = 'ACTIVE' AND (bs.created_at AT TIME ZONE COALESCE(si.timezone, 'UTC'))::date = %s)::integer AS seats_blocked_today,
           COUNT(*) FILTER (WHERE bs.status = 'ACTIVE' AND bs.blocked_from > %s AND bs.blocked_from <= (%s + %s))::integer AS upcoming_blocks,
           COUNT(*) FILTER (WHERE bs.status = 'ACTIVE' AND bs.blocked_to BETWEEN %s AND (%s + %s))::integer AS expiring_soon,
-          COUNT(*) FILTER (WHERE bs.blocked_to < %s)::integer AS expired
+          COUNT(*) FILTER (
+            WHERE bs.blocked_to >= (%s - %s)
+              AND bs.blocked_to < %s
+          )::integer AS expired
     """
         + base
     )
@@ -174,7 +185,7 @@ def fetch_blocked_seat_summary(
         reference_date,
         reference_date, reference_date, upcoming_days,
         reference_date, reference_date, expiring_soon_days,
-        reference_date,
+        reference_date, expired_window_days, reference_date,
         tenant_id, *filter_params,
     ]
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
