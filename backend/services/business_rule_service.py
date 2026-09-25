@@ -77,12 +77,12 @@ def update_employee_max_advance_days(
     updated_by_user_id: str,
 ) -> None:
     """Update a tenant's employee booking-advance-window rule."""
-    if new_value < 0:
+    if new_value <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "invalid_business_rule_value",
-                "message": "Booking advance window cannot be negative.",
+                "message": "Value should be greater than 0.",
             },
         )
 
@@ -114,12 +114,7 @@ def update_layout_scheduling_buffer_days(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "invalid_business_rule_value",
-                "message": (
-                    f"The layout scheduling buffer cannot be less than "
-                    f"{MIN_LAYOUT_SCHEDULING_BUFFER_DAYS} day -- a zero or "
-                    "negative buffer would let a layout be scheduled to take "
-                    "effect immediately, with no safety margin at all."
-                ),
+                "message": "Value should be greater than 0.",
             },
         )
 
@@ -141,12 +136,12 @@ def update_guest_max_advance_days(
     updated_by_user_id: str,
 ) -> None:
     """Update a tenant's guest booking-advance-window rule."""
-    if new_value < 0:
+    if new_value <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "invalid_business_rule_value",
-                "message": "Booking advance window cannot be negative.",
+                "message": "Value should be greater than 0.",
             },
         )
 
@@ -179,12 +174,12 @@ def update_layout_visibility_days(
                 "message": f"Unknown layout visibility status: {status_key}",
             },
         )
-    if new_value < 0:
+    if new_value <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "invalid_business_rule_value",
-                "message": "Visibility window cannot be negative.",
+                "message": "Value should be greater than 0.",
             },
         )
 
@@ -217,12 +212,12 @@ def update_blocked_seat_days(
                 "message": f"Unknown blocked seat setting: {setting_key}",
             },
         )
-    if new_value < 0:
+    if new_value <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "invalid_business_rule_value",
-                "message": "Value cannot be negative.",
+                "message": "Value should be greater than 0.",
             },
         )
 
