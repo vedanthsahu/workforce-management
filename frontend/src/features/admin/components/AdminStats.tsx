@@ -45,6 +45,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
     {
       title: "Total Offices",
       value: data?.total_offices ?? "-",
+      count: data?.total_offices ?? null,
       subtitle: "All locations",
       icon: Building2,
       accent: "blue" as Accent,
@@ -53,6 +54,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
     {
       title: "Total Floors",
       value: data?.total_floors ?? "-",
+      count: data?.total_floors ?? null,
       subtitle: "Across all offices",
       icon: Layers,
       accent: "green" as Accent,
@@ -63,6 +65,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
       value: data
         ? Math.max(data.total_seats - data.blocked_seats, 0)
         : "-",
+      count: data ? Math.max(data.total_seats - data.blocked_seats, 0) : null,
       subtitle: "Active seats",
       icon: Armchair,
       accent: "orange" as Accent,
@@ -73,6 +76,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
     {
       title: "Employee Seats Reserved",
       value: data?.employee_bookings_today ?? "-",
+      count: data?.employee_bookings_today ?? null,
       subtitle: `For ${formattedSelectedDate}`,
       icon: UserRound,
       accent: "blue" as Accent,
@@ -81,6 +85,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
     {
       title: "Guest Visits",
       value: data?.guest_bookings_today ?? "-",
+      count: data?.guest_bookings_today ?? null,
       subtitle: `${data?.guest_visit_booking_with_seat_today ?? 0} with seats • ${data?.guest_visit_today ?? 0} invite only`,
       icon: UserRoundPlus,
       accent: "rose" as Accent,
@@ -89,6 +94,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
     {
       title: "Blocked Seats",
       value: data?.blocked_seats ?? "-",
+      count: data?.blocked_seats ?? null,
       subtitle: `Active blocks for ${formattedSelectedDate}`,
       icon: Ban,
       accent: "purple" as Accent,
@@ -105,7 +111,8 @@ export default function AdminStats({ data, selectedDate }: Props) {
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
       {stats.map((item, index) => {
         const Icon = item.icon;
-        const clickable = !!item.href;
+        const isZeroCount = item.count === 0;
+        const clickable = !!item.href && !isZeroCount;
         const accent = ACCENTS[item.accent];
 
         return (
@@ -131,7 +138,9 @@ export default function AdminStats({ data, selectedDate }: Props) {
                     "cursor-pointer transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.97] active:duration-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40",
                     accent.glow
                   )
-                : "transition-colors duration-200"
+                : isZeroCount
+                  ? "cursor-not-allowed opacity-80 transition-colors duration-200"
+                  : "transition-colors duration-200"
             )}
           >
 
@@ -143,7 +152,8 @@ export default function AdminStats({ data, selectedDate }: Props) {
 
               <div
                 className={cn(
-                  "w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-transform duration-200 group-hover:scale-105",
+                  "w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-transform duration-200",
+                  clickable && "group-hover:scale-105",
                   accent.icon
                 )}
               >

@@ -56,7 +56,7 @@ export default function EditFloorModal({
         </DialogHeader>
 
         <div className="space-y-5">
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <AncestorStatusRow
               label="Office"
               name={officeInfo?.name ?? "—"}
