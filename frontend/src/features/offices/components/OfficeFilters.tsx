@@ -16,7 +16,7 @@ export default function OfficeFilters({ search, setSearch }: OfficeFiltersProps)
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="pl-9 focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500"
-        placeholder="Search offices..."
+        placeholder="Search by office name..."
       />
     </div>
   );

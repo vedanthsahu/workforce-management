@@ -17,9 +17,9 @@ type Props = {
 // language across the app).
 export default function AncestorStatusRow({ label, name, status, loading }: Props) {
   return (
-    <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
-      <div className="min-w-0">
-        <span className="text-[11px] uppercase tracking-wide text-gray-400 font-medium">{label}</span>
+    <div className="flex items-center justify-between gap-3 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-100">
+      <div className="min-w-0 flex items-baseline gap-1.5">
+        <span className="shrink-0 text-[10px] uppercase tracking-wide text-gray-400 font-medium">{label}</span>
         <p className="text-sm text-gray-700 truncate">{name || "—"}</p>
       </div>
       {loading ? (
