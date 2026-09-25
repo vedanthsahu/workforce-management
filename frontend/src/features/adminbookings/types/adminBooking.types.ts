@@ -209,6 +209,7 @@ export interface AdminBookingRaw {
 export interface AdminBookingSummary {
   total_bookings: number;
   confirmed_bookings: number;
+  not_checked_in_bookings: number;
   cancelled_bookings: number;
   modified_bookings: number;
   completed_bookings: number;
