@@ -66,7 +66,7 @@ function InOfficeBadge({ inOffice }: { inOffice: boolean }) {
   return inOffice ? (
     <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-      In Office
+      Booked Today
     </span>
   ) : (
     <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
@@ -124,7 +124,7 @@ function TeamGroupCard({
         </div>
         {/* <div className="flex items-center gap-2">
           <span className="text-[11px] text-emerald-600 font-medium bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
-            {inOfficeCount} in office
+            {inOfficeCount} booked today
           </span>
           <span className="text-[11px] text-gray-400">
             {group.total_members} members
@@ -211,7 +211,7 @@ function TeamOverview({
         <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
           <span className="w-2 h-2 rounded-full bg-emerald-500" />
           <span className="text-[12px] font-semibold text-emerald-700">{totalInOffice}</span>
-          <span className="text-[11.5px] text-emerald-600">in office today</span>
+          <span className="text-[11.5px] text-emerald-600">booked today</span>
         </div>
         <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
           <span className="w-2 h-2 rounded-full bg-amber-300" />

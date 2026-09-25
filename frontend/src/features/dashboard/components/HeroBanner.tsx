@@ -38,12 +38,12 @@ export function HeroBanner({
             No space booked for today, {userName} 👋
           </p>
           <p className="text-indigo-300 text-[11.5px] mt-1 mb-3 leading-snug">
-            Your team is mostly in — {teamInOfficeCount} teammate{teamInOfficeCount !== 1 ? "s" : ""} present today
+            Your team is mostly booked — {teamInOfficeCount} teammate{teamInOfficeCount !== 1 ? "s" : ""} booked today
           </p>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-sm text-indigo-100 text-[10.5px] font-medium px-2.5 py-[5px] rounded-full border border-white/10 transition-all hover:bg-white/20">
               <Users className="w-3 h-3 shrink-0" />
-              {teamInOfficeCount} teammate{teamInOfficeCount !== 1 ? "s" : ""} in office
+              {teamInOfficeCount} teammate{teamInOfficeCount !== 1 ? "s" : ""} booked today
             </span>
             {nextBookingDate !== "—" && (
               <span className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-sm text-indigo-100 text-[10.5px] font-medium px-2.5 py-[5px] rounded-full border border-white/10">
@@ -75,12 +75,12 @@ export function HeroBanner({
           {getGreeting()}, {userName} 👋
         </p>
         <p className="text-indigo-300/80 text-[11.5px] leading-snug">
-          {todayBooking.floor ?? "Office"} · {teamInOfficeCount} teammate{teamInOfficeCount !== 1 ? "s" : ""} in office
+          {todayBooking.floor ?? "Office"} · {teamInOfficeCount} teammate{teamInOfficeCount !== 1 ? "s" : ""} booked today
         </p>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="inline-flex items-center gap-1.5 bg-white/10 text-indigo-100 text-[10.5px] font-medium px-2.5 py-[5px] rounded-full border border-white/10 hover:bg-white/20 transition-colors">
             <Users className="w-3 h-3 shrink-0" />
-            {teamInOfficeCount} teammate{teamInOfficeCount !== 1 ? "s" : ""} in office
+            {teamInOfficeCount} teammate{teamInOfficeCount !== 1 ? "s" : ""} booked today
           </span>
           {nextBookingDate !== "—" && (
             <span className="inline-flex items-center gap-1.5 bg-white/10 text-indigo-100 text-[10.5px] font-medium px-2.5 py-[5px] rounded-full border border-white/10">

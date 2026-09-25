@@ -256,11 +256,15 @@ export default function AdminBookingsPage() {
         const checkedInCount = matchingItems.filter((item) => !!item.check_in_at).length;
         const checkedOutCount = matchingItems.filter((item) => !!item.checked_out_at).length;
         const guestCount = matchingItems.filter((item) => item.booking_type === "GUEST").length;
+        const confirmedCount = matchingItems.filter((item) => {
+          const status = resolveStatus(item);
+          return status === "Confirmed" || status === "Modified";
+        }).length;
 
         setAllBookings(matchingItems);
         setSummary({
           total_bookings: matchingItems.length,
-          confirmed_bookings: matchingItems.length - checkedInCount,
+          confirmed_bookings: confirmedCount,
           cancelled_bookings: matchingItems.filter((item) => resolveStatus(item) === "Cancelled").length,
           modified_bookings: matchingItems.filter((item) => resolveStatus(item) === "Modified").length,
           completed_bookings: matchingItems.filter((item) => resolveStatus(item) === "Completed").length,

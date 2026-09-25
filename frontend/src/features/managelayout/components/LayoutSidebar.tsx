@@ -361,8 +361,8 @@ export default function LayoutSidebar({
             </span>
           </InfoRow>
 
-          {layout.status === "SCHEDULED" && layout.effective_from && (
-            <InfoRow label="Effective">{formatDate(layout.effective_from)}</InfoRow>
+          {layout.effective_from && (
+            <InfoRow label="Effective from">{formatDate(layout.effective_from)}</InfoRow>
           )}
 
           <InfoRow label="Uploaded By">{layout.uploaded_by_name ?? "—"}</InfoRow>

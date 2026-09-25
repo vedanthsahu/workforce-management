@@ -16,7 +16,7 @@ function normaliseStatus(raw: RawBooking): "confirmed" | "modified" | "cancelled
   // modified_from_guest_visit_id) is the authoritative signal, same as the
   // admin bookings list already does.
   if (s === "MODIFIED" || raw.is_modified)   return "modified";
-  if (s === "CONFIRMED" || s === "ACTIVE")   return "confirmed";
+  if (["CONFIRMED", "CHECKED_IN", "COMPLETED", "ACTIVE"].includes(s)) return "confirmed";
   return "pending";
 }
 

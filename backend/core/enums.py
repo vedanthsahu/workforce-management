@@ -20,6 +20,15 @@ NON_DELETED_LAYOUT_STATUSES: tuple[str, ...] = (
     LayoutStatus.PUBLISHED.value,
 )
 
+ATTENDANCE_BOOKING_STATUSES: tuple[str, ...] = (
+    "CONFIRMED",
+    "CHECKED_IN",
+    "COMPLETED",
+)
+ATTENDANCE_BOOKING_STATUSES_SQL = ", ".join(
+    repr(value) for value in ATTENDANCE_BOOKING_STATUSES
+)
+
 # Every status, including DELETED. Used only by read/list surfaces that show
 # a deleted layout as a view-only historical entry — never by anything that
 # resolves "the" active layout for a floor or that can act on a layout

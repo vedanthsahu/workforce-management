@@ -147,12 +147,10 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         )
         sql, _ = cursor.executions[0]
         self.assertIn("floor_layouts", sql)
-        self.assertIn("sfl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
-        self.assertIn("sfl.effective_from <= %(selected_date)s", sql)
-        self.assertIn(
-            "sfl.effective_till IS NULL OR sfl.effective_till > %(selected_date)s", sql
-        )
+        self.assertIn("sfl.status = 'PUBLISHED'", sql)
+        self.assertIn("sfl.is_published = TRUE", sql)
         self.assertIn("sfl.id = st.layout_id", sql)
+        self.assertNotIn("sfl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
 
     def test_site_detail_seat_counts_scoped_to_published_layout(self) -> None:
         cursor = FakeCursor()

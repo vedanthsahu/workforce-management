@@ -81,10 +81,10 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
 
   // BACKEND DATA
   const totalSeats = data.total_seats;
-  const booked = data.booked_seats_today;
+  const booked = data.occupied_seats_count;
   const blocked = data.blocked_seats;
-  const available = Math.max(totalSeats - booked - blocked, 0);
-  const occupancy = ceilPercentage((booked / Math.max(totalSeats, 1)) * 100);
+  const available = Math.max(data.available_seats - booked, 0);
+  const occupancy = ceilPercentage(data.occupancy_percentage);
 
   // Booked/blocked percentages are each rounded independently, so the
   // available share is the remainder rather than its own independent

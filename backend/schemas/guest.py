@@ -228,7 +228,7 @@ class GuestVisitSummary(BaseModel):
     checked_out: int = 0
     cancelled: int = 0
     modified: int = 0
-    overdue: int = 2
+    overdue: int = 0
 
 
 class GuestVisitListResponse(BaseModel):

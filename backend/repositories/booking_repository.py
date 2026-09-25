@@ -8,6 +8,8 @@ from typing import Any
 from psycopg2.extensions import connection as PGConnection
 from psycopg2.extras import RealDictCursor
 
+from backend.core.enums import ATTENDANCE_BOOKING_STATUSES_SQL
+
 SOURCE_CHANNELS = {"WEB", "MOBILE", "ADMIN", "API"}
 
 # Advisory-lock "classes" (the first key of the two-key lock) keep
@@ -1436,7 +1438,7 @@ def fetch_past_bookings_for_user(
         {BOOKING_SELECT_FROM}
         WHERE b.booked_for_user_id = %s
           AND b.tenant_id = %s
-          AND b.booking_status = 'CONFIRMED'
+          AND b.booking_status IN ({ATTENDANCE_BOOKING_STATUSES_SQL})
           AND b.booking_date < CURRENT_DATE
     """
     params: list[Any] = [user_id, tenant_id]

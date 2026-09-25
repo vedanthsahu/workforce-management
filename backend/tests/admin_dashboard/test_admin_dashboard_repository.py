@@ -92,12 +92,14 @@ class AdminDashboardRepositoryTests(unittest.TestCase):
         self.assertIn("guest_visit_booking_with_seat_today", sql)
         self.assertIn("SELECT DISTINCT b.seat_id", sql)
         self.assertIn("b.seat_id IS NOT NULL", sql)
-        self.assertIn("SELECT COUNT(*) AS blocked_seats", sql)
+        self.assertIn("SELECT COUNT(DISTINCT bs.seat_id) AS blocked_seats", sql)
         blocked_count_sql = sql.split("blocked_seat_counts AS (", 1)[1].split(
             "),\n\n", 1
         )[0]
-        self.assertNotIn("JOIN bookable_seats AS bks", blocked_count_sql)
+        self.assertIn("JOIN bookable_seats AS bks", blocked_count_sql)
         self.assertIn("blocked_seats AS blocked_seats_today", sql)
+        self.assertIn("occupied_seats_count", sql)
+        self.assertIn("available_seats", sql)
         self.assertEqual(params["tenant_id"], "1")
         self.assertEqual(result["booked_today"], 3)
         self.assertEqual(result["active_seats"], 10)
@@ -176,7 +178,10 @@ class AdminDashboardRepositoryTests(unittest.TestCase):
         params = cursor.executions[0][1]
         self.assertIn("generate_series", sql)
         self.assertIn("b.tenant_id = %(tenant_id)s", sql)
-        self.assertIn("COUNT(DISTINCT b.seat_id)", sql)
+        self.assertIn("SELECT DISTINCT", sql)
+        self.assertIn("JOIN filtered_seats AS fs", sql)
+        self.assertIn("b.booking_status = 'CONFIRMED'", sql)
+        self.assertIn("gv.requires_seat = TRUE", sql)
         self.assertIn("COUNT(DISTINCT bs.seat_id)", sql)
         self.assertEqual(params["tenant_id"], "1")
         self.assertEqual(params["floor_id"], "4")

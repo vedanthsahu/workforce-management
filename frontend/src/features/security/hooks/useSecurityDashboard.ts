@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import { securityService } from "../services/security.service";
 import { mapApiGuestVisitToVisitor, mapApiSummary } from "../utils/security.utils";
@@ -33,6 +33,8 @@ export const useSecurityDashboard = () => {
   const debouncedSearch = useDebouncedValue(search, 350);
 
   const [page, setPage] = useState(1);
+  const [totalVisitors, setTotalVisitors] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,19 +66,21 @@ export const useSecurityDashboard = () => {
         visit_scope: "CURRENT",
         site_id: selectedSiteId,
         search: debouncedSearch || undefined,
-        limit: 100,
-        offset: 0,
+        limit: PAGE_SIZE,
+        page,
       });
 
       setSummary(mapApiSummary(res.summary));
       setVisitors(res.items.map(mapApiGuestVisitToVisitor));
+      setTotalVisitors(res.pagination?.total ?? res.summary.total);
+      setTotalPages(Math.max(1, res.pagination?.total_pages ?? 1));
     } catch (err) {
       console.error("Error fetching guest visits", err);
       setError("Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
-  }, [selectedSiteId, debouncedSearch]);
+  }, [selectedSiteId, debouncedSearch, page]);
 
   // Wait for the site list to resolve (and auto-select) before fetching, so
   // this never briefly fetches an unscoped "all sites" result first.
@@ -91,23 +95,16 @@ export const useSecurityDashboard = () => {
   }, [debouncedSearch, selectedSiteId]);
 
   // ── Client-side pagination over the fetched batch ────────────────────────
-  const total = visitors.length;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const pageStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const pageEnd = Math.min(page * PAGE_SIZE, total);
-
-  const pagedVisitors = useMemo(
-    () => visitors.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [visitors, page]
-  );
+  const pageStart = totalVisitors === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const pageEnd = Math.min(page * PAGE_SIZE, totalVisitors);
 
   return {
     summary,
     sites,
     selectedSiteId,
     setSelectedSiteId,
-    expectedVisitors: pagedVisitors,
-    totalVisitors: total,
+    expectedVisitors: visitors,
+    totalVisitors,
     totalPages,
     page,
     setPage,

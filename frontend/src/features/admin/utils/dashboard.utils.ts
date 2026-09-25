@@ -13,11 +13,23 @@ function isMonthPeriod(period: TrendPeriod): boolean {
   return period === "this-month" || period === "last-month";
 }
 
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseLocalDate(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export function getTrendRange(
   period: TrendPeriod,
   centerDate?: string
 ): { startDate: string; endDate: string; targetDate: Date } {
-  const base = centerDate ? new Date(centerDate) : new Date();
+  const base = centerDate ? parseLocalDate(centerDate) : new Date();
 
   if (isMonthPeriod(period)) {
     const target = new Date(base.getFullYear(), base.getMonth(), 1);
@@ -27,8 +39,8 @@ export function getTrendRange(
     const end = new Date(target.getFullYear(), target.getMonth() + 1, 0); // last day of month
 
     return {
-      startDate: start.toISOString().split("T")[0],
-      endDate: end.toISOString().split("T")[0],
+      startDate: formatLocalDate(start),
+      endDate: formatLocalDate(end),
       targetDate: target,
     };
   }
@@ -45,8 +57,8 @@ export function getTrendRange(
   end.setDate(targetDate.getDate() + 3);
 
   return {
-    startDate: start.toISOString().split("T")[0],
-    endDate: end.toISOString().split("T")[0],
+    startDate: formatLocalDate(start),
+    endDate: formatLocalDate(end),
     targetDate,
   };
 }
@@ -71,7 +83,7 @@ export function mapOccupancyRangeToTrend(
 
     for (let day = 1; day <= daysInMonth; day++) {
       const d = new Date(year, month, day);
-      const isoDate = d.toISOString().split("T")[0];
+      const isoDate = formatLocalDate(d);
       const found = items.find((x) => x.date.split("T")[0] === isoDate);
 
       allDays.push({
@@ -94,7 +106,7 @@ export function mapOccupancyRangeToTrend(
   for (let i = -3; i <= 3; i++) {
     const d = new Date(targetDate);
     d.setDate(targetDate.getDate() + i);
-    const isoDate = d.toISOString().split("T")[0];
+    const isoDate = formatLocalDate(d);
 
     const found = items.find((x) => x.date.split("T")[0] === isoDate);
 

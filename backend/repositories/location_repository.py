@@ -1754,7 +1754,7 @@ def update_seat_configuration(
     seat_id: str,
     updates: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """Update soft seat configuration flags only."""
+    """Update soft seat configuration flags and return the source mapping."""
     assignments: list[str] = []
     params: list[Any] = []
     for field_name, value in updates.items():
@@ -1778,7 +1778,8 @@ def update_seat_configuration(
                 layout_id::text AS layout_id,
                 seat_code,
                 status,
-                is_bookable
+                is_bookable,
+                source_layout_mapping_id::text AS source_layout_mapping_id
             """,
             params,
         )

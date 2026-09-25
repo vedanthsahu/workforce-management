@@ -1216,6 +1216,72 @@ def update_floor_metadata(
     return _build_floor_response(updated_floor)
 
 
+def _is_layout_published(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    layout_id: str,
+    status_cache: dict[str, bool],
+) -> bool:
+    if layout_id not in status_cache:
+        layout = fetch_floor_layout_by_id(
+            conn,
+            tenant_id=tenant_id,
+            layout_id=layout_id,
+        )
+        status_cache[layout_id] = bool(
+            layout
+            and layout.get("status") == LayoutStatus.PUBLISHED.value
+            and layout.get("is_published") is True
+        )
+    return status_cache[layout_id]
+
+
+def _sync_published_seat_mapping(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    updated_seat: dict[str, Any],
+    updates: dict[str, Any],
+    current_user: dict[str, Any],
+    status_cache: dict[str, bool],
+) -> None:
+    """Keep a published operational seat and its source mapping consistent."""
+    layout_id = updated_seat.get("layout_id")
+    mapping_id = updated_seat.get("source_layout_mapping_id")
+    if layout_id is None or mapping_id is None:
+        return
+    if not _is_layout_published(
+        conn,
+        tenant_id=tenant_id,
+        layout_id=str(layout_id),
+        status_cache=status_cache,
+    ):
+        return
+
+    try:
+        update_layout_seat_mapping_configuration(
+            conn,
+            tenant_id=tenant_id,
+            layout_seat_mapping_id=str(mapping_id),
+            seat_name=None,
+            seat_type=None,
+            status=updates.get("status"),
+            is_bookable=updates.get("is_bookable"),
+            is_reserved=None,
+            amenity_ids=None,
+            updated_by=str(current_user["user_id"]),
+        )
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "seat_mapping_sync_failed",
+                "message": "Failed to synchronize the published seat configuration.",
+            },
+        ) from exc
+
+
 def update_seat_configuration_metadata(
     conn: PGConnection,
     *,
@@ -1254,6 +1320,14 @@ def update_seat_configuration_metadata(
                 tenant_id=tenant_id,
                 layout_id=str(updated_seat["layout_id"]),
                 updated_by_user_id=str(current_user["user_id"]),
+            )
+            _sync_published_seat_mapping(
+                conn,
+                tenant_id=tenant_id,
+                updated_seat=updated_seat,
+                updates=updates,
+                current_user=current_user,
+                status_cache={},
             )
 
         conn.commit()
@@ -1315,6 +1389,7 @@ def update_seats_configuration_bulk(
     audit_entries: list[tuple[str, dict[str, Any]]] = []
     responses: list[SeatConfigurationResponse] = []
     touched_layout_ids: set[str] = set()
+    layout_status_cache: dict[str, bool] = {}
 
     try:
         for seat_id in seat_ids:
@@ -1337,6 +1412,14 @@ def update_seats_configuration_bulk(
 
             if updated_seat.get("layout_id") is not None:
                 touched_layout_ids.add(str(updated_seat["layout_id"]))
+                _sync_published_seat_mapping(
+                    conn,
+                    tenant_id=tenant_id,
+                    updated_seat=updated_seat,
+                    updates=updates,
+                    current_user=current_user,
+                    status_cache=layout_status_cache,
+                )
 
             audit_entries.append((seat_id, seat))
             responses.append(SeatConfigurationResponse(**updated_seat))
