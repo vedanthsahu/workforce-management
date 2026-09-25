@@ -3,29 +3,39 @@ import {
   BookingFormState,
   VisitDetails,
 } from "@/features/bookforsomeone/types/booking";
+import { todayIso } from "@/features/bookforsomeone/constants/booking.constants";
 
-const initialVisitDetails: VisitDetails = {
-  guestType: "INTERVIEW_CANDIDATE",
-  purposeOfVisit: "INTERVIEW",
-  hostEmployee: null,
-  siteId: "",
-  buildingId: "",
-  floorId: "",
-  visitDate: "",
-  endDate: "",
-  startTime: "",
-  endTime: "",
-  additionalNotes: "",
-};
+// Functions, not static objects -- visitDate/endDate must be "today" at the
+// moment the wizard is actually opened/reset, not frozen to whatever day
+// this module first loaded (a tab left open across midnight would otherwise
+// keep defaulting to yesterday).
+function createInitialVisitDetails(): VisitDetails {
+  const today = todayIso();
+  return {
+    guestType: "INTERVIEW_CANDIDATE",
+    purposeOfVisit: "INTERVIEW",
+    hostEmployee: null,
+    siteId: "",
+    buildingId: "",
+    floorId: "",
+    visitDate: today,
+    endDate: today,
+    startTime: "",
+    endTime: "",
+    additionalNotes: "",
+  };
+}
 
-export const initialBookForSomeoneFormState: BookingFormState = {
-  step: 1,
-  bookingType: "internal",
-  selectedEmployee: null,
-  selectedGuest: null,
-  visitDetails: initialVisitDetails,
-  seatRequired: null,
-};
+export function createInitialBookForSomeoneFormState(): BookingFormState {
+  return {
+    step: 1,
+    bookingType: "internal",
+    selectedEmployee: null,
+    selectedGuest: null,
+    visitDetails: createInitialVisitDetails(),
+    seatRequired: null,
+  };
+}
 
 interface BookForSomeoneStore {
   formState: BookingFormState;
@@ -36,7 +46,7 @@ interface BookForSomeoneStore {
 }
 
 export const useBookForSomeoneStore = create<BookForSomeoneStore>((set) => ({
-  formState: initialBookForSomeoneFormState,
+  formState: createInitialBookForSomeoneFormState(),
 
   setFormState: (updater) =>
     set((state) => ({
@@ -45,5 +55,5 @@ export const useBookForSomeoneStore = create<BookForSomeoneStore>((set) => ({
     })),
 
   resetFormState: () =>
-    set({ formState: initialBookForSomeoneFormState }),
+    set({ formState: createInitialBookForSomeoneFormState() }),
 }));

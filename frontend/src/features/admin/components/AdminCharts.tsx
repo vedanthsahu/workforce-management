@@ -11,6 +11,7 @@ import {
   Area,
   XAxis,
   YAxis,
+  CartesianGrid,
 } from "recharts";
 
 import {
@@ -99,10 +100,15 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
     available: availablePct,
   };
 
-  const donutLegend = [
-    { label: "Reserved seats", value: booked, dot: "bg-indigo-500" },
+  // Employees/Guests are a breakdown of Reserved seats (booked = employee +
+  // guest), so they render as an indented sub-list under that row instead of
+  // as their own top-level legend entries.
+  const reservedBreakdown = [
     { label: "Employees", value: data.employee_bookings_today, dot: "bg-purple-400" },
     { label: "Guests", value: data.guest_visit_booking_with_seat_today, dot: "bg-pink-400" },
+  ];
+
+  const donutLegend = [
     { label: "Blocked seats", value: blocked, dot: "bg-amber-400" },
     { label: "Available seats", value: available, dot: "bg-emerald-500" },
   ];
@@ -146,7 +152,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="flex flex-col sm:flex-row items-center justify-center gap-6">
+        <CardContent className="flex flex-col sm:flex-row items-center justify-start gap-4 sm:gap-2 px-4 sm:px-6">
 
           <div className="relative w-40 h-40 shrink-0">
             <ChartContainer
@@ -205,21 +211,41 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
             </div>
           </div>
 
-          <div className="w-full space-y-2.5 text-sm">
-            {donutLegend.map((row) => (
-              <div key={row.label} className="flex items-center justify-between gap-3">
+          <div className="w-full min-w-0 space-y-2.5 text-sm">
+            {/* Reserved seats, with Employees/Guests as its breakdown */}
+            <div className="space-y-1.5">
+              <div className="flex items-start justify-between gap-3">
                 <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                  <span className={cn("h-2 w-2 shrink-0 rounded-full", row.dot)} />
-                  <span className="truncate">{row.label}</span>
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-indigo-500 mt-px" />
+                  <span>Reserved seats</span>
                 </span>
-                <span
-                  className={cn(
-                    "shrink-0 tabular-nums text-gray-900",
-                    row.label === "Reserved seats"
-                      ? "text-base font-extrabold text-black"
-                      : "text-sm font-medium"
-                  )}
-                >
+                <span className="shrink-0 tabular-nums text-base font-extrabold text-black">
+                  {booked}
+                </span>
+              </div>
+
+              <div className="ml-1 space-y-1 border-l border-dashed border-gray-200 pl-3">
+                {reservedBreakdown.map((row) => (
+                  <div key={row.label} className="flex items-start justify-between gap-3">
+                    <span className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+                      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", row.dot, "mt-px")} />
+                      <span>{row.label}</span>
+                    </span>
+                    <span className="shrink-0 tabular-nums text-xs font-medium text-gray-900">
+                      {row.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {donutLegend.map((row) => (
+              <div key={row.label} className="flex items-start justify-between gap-3">
+                <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                  <span className={cn("h-2 w-2 shrink-0 rounded-full", row.dot, "mt-px")} />
+                  <span>{row.label}</span>
+                </span>
+                <span className="shrink-0 tabular-nums text-sm font-medium text-gray-900">
                   {row.value}
                 </span>
               </div>
@@ -233,7 +259,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
 
         </CardContent>
 
-        <div className="mx-6 mb-5 mt-2 flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-600 ring-1 ring-inset ring-blue-100">
+        <div className="mx-4 sm:mx-6 mb-5 mt-2 flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-600 ring-1 ring-inset ring-blue-100">
           <Info className="w-4 h-4 shrink-0" />
           Occupancy rate is calculated based on all bookable seats.
         </div>
@@ -283,9 +309,10 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
                   <stop offset="100%" stopColor="#818CF8" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
+              <CartesianGrid vertical horizontal={false} stroke="#E5E7EB" strokeDasharray="3 3" />
               <XAxis
                 dataKey="day"
-                axisLine={false}
+                axisLine={{ stroke: "#E5E7EB" }}
                 tickLine={false}
                 interval={0}
                 ticks={
@@ -297,7 +324,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
               <YAxis
                 domain={[0, 25]}
                 ticks={[0, 5, 10, 15, 20, 25]}
-                axisLine={false}
+                axisLine={{ stroke: "#E5E7EB" }}
                 tickLine={false}
                 width={40}
               />

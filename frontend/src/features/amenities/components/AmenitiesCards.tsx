@@ -16,6 +16,7 @@ type StatProps = {
   value: string;
   sub: string;
   selected?: boolean;
+  disabled?: boolean;
   onClick?: () => void;
 };
 
@@ -52,7 +53,8 @@ export default function AmenitiesCards({
         label="Total Amenities"
         value={stats.total_amenities.toString()}
         sub="Across all tenants"
-        onClick={onStatusFilterChange ? () => onStatusFilterChange(null) : undefined}
+        disabled={stats.total_amenities === 0}
+        onClick={onStatusFilterChange && stats.total_amenities > 0 ? () => onStatusFilterChange(null) : undefined}
       />
 
       <Stat
@@ -64,7 +66,8 @@ export default function AmenitiesCards({
         value={stats.active_amenities.toString()}
         sub="Currently active"
         selected={statusFilter === "ACTIVE"}
-        onClick={onStatusFilterChange ? () => toggle("ACTIVE") : undefined}
+        disabled={stats.active_amenities === 0}
+        onClick={onStatusFilterChange && stats.active_amenities > 0 ? () => toggle("ACTIVE") : undefined}
       />
 
       <Stat
@@ -76,7 +79,8 @@ export default function AmenitiesCards({
         value={stats.inactive_amenities.toString()}
         sub="Currently inactive"
         selected={statusFilter === "INACTIVE"}
-        onClick={onStatusFilterChange ? () => toggle("INACTIVE") : undefined}
+        disabled={stats.inactive_amenities === 0}
+        onClick={onStatusFilterChange && stats.inactive_amenities > 0 ? () => toggle("INACTIVE") : undefined}
       />
 
       <Stat
@@ -97,13 +101,15 @@ function Stat({
   value,
   sub,
   selected,
+  disabled,
   onClick,
 }: StatProps) {
+  const clickable = !!onClick && !disabled;
   return (
     <div
-      onClick={onClick}
-      className={`group flex items-center gap-3 p-3 sm:p-5 bg-white border rounded-2xl shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-gray-300 ${
-        onClick ? "cursor-pointer" : ""
+      onClick={clickable ? onClick : undefined}
+      className={`group flex items-center gap-3 p-3 sm:p-5 bg-white border rounded-2xl shadow-sm transition-all duration-200 ${
+        clickable ? "cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:border-gray-300" : disabled ? "cursor-not-allowed opacity-80" : ""
       } ${selected ? "border-2 border-blue-500 ring-2 ring-blue-100 shadow-md" : ""}`}
     >
       <div className={`p-2 sm:p-3 rounded-xl shrink-0 transition-transform duration-200 group-hover:scale-110 ${bg}`}>{icon}</div>
