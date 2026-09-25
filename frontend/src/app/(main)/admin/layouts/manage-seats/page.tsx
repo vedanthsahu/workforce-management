@@ -250,7 +250,18 @@ function ManageSeatsPage() {
             onCardFilterChange={setCardFilter}
           />
 
-          {/* FILTERS + VIEW TOGGLE */}
+          {/* FILTERS + VIEW TOGGLE — the filters (Status/Bookable/Amenities)
+              only make sense once at least one space in this tab is
+              actually configured. On an all-unconfigured tab, none of them
+              have anything real to match yet (an unconfigured space has no
+              status/bookable/amenity value), so picking any filter would
+              just empty the list and read as "the filter is broken" rather
+              than "there's nothing configured yet". Masked (greyed out,
+              non-interactive) rather than hidden, so the admin can still
+              see these filters exist -- just not use them until
+              categoryStats.configured says otherwise. The view toggle
+              stays fully available regardless, since switching map/list
+              isn't affected by this. */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
             <div className="min-w-0 flex-1">
               <SeatFiltersBar
@@ -259,9 +270,11 @@ function ManageSeatsPage() {
                 onUpdate={updateFilter}
                 onReset={resetFilters}
                 searchPlaceholder={`Search by ${SPACE_CATEGORY_LABELS[activeCategory].singular.toLowerCase()} code…`}
+                disabled={categoryStats.configured === 0}
+                searchDisabled={view === "map" && categoryStats.configured === 0}
               />
             </div>
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0 ml-auto">
               <ViewToggle view={view} onChange={setView} />
             </div>
           </div>
