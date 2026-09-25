@@ -584,7 +584,7 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                   onClick={handleDownloadSvg}
                   disabled={downloading || !coloredSvg}
                   className="p-2 border rounded-md hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="Download SVG with seat colors"
+                  title="Download SVG with space colors"
                 >
                   {downloading
                     ? <span className="w-4 h-4 block border-2 border-gray-400 border-t-gray-600 rounded-full animate-spin" />

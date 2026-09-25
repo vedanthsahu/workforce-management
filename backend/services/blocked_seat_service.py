@@ -147,12 +147,15 @@ def get_blocked_seats(
 def get_blocked_seat_summary(
     conn: PGConnection, *, tenant_id: str
 ) -> BlockedSeatSummaryResponse:
+    policy = resolve_blocked_seat_days(conn, tenant_id=tenant_id)
     try:
         summary = fetch_blocked_seat_summary(
             conn,
             tenant_id=tenant_id,
             query=BlockedSeatListQuery(),
             reference_date=date.today(),
+            upcoming_days=policy["UPCOMING"],
+            expiring_soon_days=policy["EXPIRING_SOON"],
         )
     except psycopg2.Error as exc:
         raise HTTPException(

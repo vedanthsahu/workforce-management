@@ -135,7 +135,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
           <span className="text-muted-foreground">{meta?.label ?? name}</span>
         </div>
         <div className="mt-1 font-mono font-medium tabular-nums text-foreground">
-          {value} seats <span className="text-muted-foreground">({pct}%)</span>
+          {value} spaces <span className="text-muted-foreground">({pct}%)</span>
         </div>
       </div>
     );
@@ -148,7 +148,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
       <Card className="transition-shadow duration-200 hover:shadow-md">
         <CardHeader>
           <CardTitle className="text-sm font-semibold">
-            Today&apos;s Seat Overview
+            Today&apos;s Space Overview
           </CardTitle>
         </CardHeader>
 
@@ -206,7 +206,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
                 {occupancy}%
               </p>
               <p className="text-xs font-medium text-black">
-                Seat occupancy
+                Space occupancy
               </p>
             </div>
           </div>
@@ -245,14 +245,21 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
                   <span className={cn("h-2 w-2 shrink-0 rounded-full", row.dot, "mt-px")} />
                   <span>{row.label}</span>
                 </span>
-                <span className="shrink-0 tabular-nums text-sm font-medium text-gray-900">
+                <span
+                  className={cn(
+                    "shrink-0 tabular-nums text-gray-900",
+                    row.label === "Reserved spaces"
+                      ? "text-base font-extrabold text-black"
+                      : "text-sm font-medium"
+                  )}
+                >
                   {row.value}
                 </span>
               </div>
             ))}
 
             <div className="mt-1 flex items-center justify-between gap-3 border-t border-dashed border-gray-200 pt-2.5">
-              <span className="text-xs font-medium text-muted-foreground">Total seats</span>
+              <span className="text-xs font-medium text-muted-foreground">Total Spaces</span>
               <span className="font-semibold tabular-nums text-gray-900">{totalSeats}</span>
             </div>
           </div>
@@ -261,7 +268,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
 
         <div className="mx-4 sm:mx-6 mb-5 mt-2 flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-600 ring-1 ring-inset ring-blue-100">
           <Info className="w-4 h-4 shrink-0" />
-          Occupancy rate is calculated based on all bookable seats.
+          Occupancy rate is calculated based on all bookable spaces.
         </div>
       </Card>
 
@@ -345,7 +352,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
                       return (
                         <div className="flex w-full flex-col gap-0.5">
                           <span>
-                            Occupancy: {value}% ({bookedSeats} seats)
+                            Occupancy: {value}% ({bookedSeats} spaces)
                           </span>
                           <span className="text-muted-foreground">
                             Employees: {employeeBookedSeats} · Guests: {guestBookedSeats}

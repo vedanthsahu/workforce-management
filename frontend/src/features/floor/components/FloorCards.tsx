@@ -66,7 +66,13 @@ export default function FloorCards({ stats, statusFilter = null, onStatusFilterC
         disabled={stats.inactive_floors === 0}
         onClick={onStatusFilterChange && stats.inactive_floors > 0 ? () => toggle("INACTIVE") : undefined}
       />
-      <Stat icon={<Armchair className="text-purple-600" />} bg="bg-purple-100" label="Total Seats" value={stats.total_seats.toString()} sub="Across all floors" />
+      <Stat
+        icon={<Armchair className="text-purple-600" />}
+        bg="bg-purple-100"
+        label="Total Spaces"
+        value={stats.total_seats.toString()}
+        sub="Across all floors"
+      />
     </div>
   );
 }

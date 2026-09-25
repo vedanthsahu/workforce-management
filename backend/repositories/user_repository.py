@@ -1137,10 +1137,10 @@ def fetch_favorite_seat(
     *,
     tenant_id: str,
     user_id: str,
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    """Return the top two most-booked seats that exist in the current published layout.
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
+    """Return the top three most-booked seats that exist in the current published layout.
 
-    Returns a (first, second) tuple; either element may be None.
+    Returns a (first, second, third) tuple; any element may be None.
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -1197,14 +1197,15 @@ def fetch_favorite_seat(
                 s.floor_id,
                 fl.floor_name
             ORDER BY booking_count DESC, last_booked_date DESC, s.id
-            LIMIT 2
+            LIMIT 3
             """,
             (tenant_id, user_id),
         )
         rows = cur.fetchall()
     first  = dict(rows[0]) if len(rows) > 0 else None
     second = dict(rows[1]) if len(rows) > 1 else None
-    return first, second
+    third  = dict(rows[2]) if len(rows) > 2 else None
+    return first, second, third
 
 
 def fetch_days_in_office(
