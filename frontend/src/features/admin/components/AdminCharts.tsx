@@ -11,7 +11,6 @@ import {
   Area,
   XAxis,
   YAxis,
-  CartesianGrid,
 } from "recharts";
 
 import {
@@ -316,7 +315,6 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
                   <stop offset="100%" stopColor="#818CF8" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
-              <CartesianGrid vertical horizontal={false} stroke="#E5E7EB" strokeDasharray="3 3" />
               <XAxis
                 dataKey="day"
                 axisLine={{ stroke: "#E5E7EB" }}
