@@ -22,7 +22,7 @@ import {
   searchUsers,
 } from "../services/booking.service";
 import {
-  initialBookForSomeoneFormState,
+  createInitialBookForSomeoneFormState,
   useBookForSomeoneStore,
 } from "@/store/useBookForSomeoneStore";
 
@@ -37,7 +37,7 @@ export function useBookingForm() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const setBookingType = useCallback((type: BookingType) => {
-    setFormState(() => ({ ...initialBookForSomeoneFormState, bookingType: type }));
+    setFormState(() => ({ ...createInitialBookForSomeoneFormState(), bookingType: type }));
   }, [setFormState]);
 
   const setSelectedEmployee = useCallback((employee: Employee | null) => {
@@ -84,7 +84,7 @@ export function useBookingForm() {
   }, [setFormState]);
 
   const handleCancel = useCallback(() => {
-    setFormState((prev) => ({ ...initialBookForSomeoneFormState, bookingType: prev.bookingType }));
+    setFormState((prev) => ({ ...createInitialBookForSomeoneFormState(), bookingType: prev.bookingType }));
     setSubmitError(null);
   }, [setFormState]);
 

@@ -53,8 +53,8 @@ export default function BlockedSeatsTable({
   const start = total ? (page - 1) * pageSize + 1 : 0;
 
   return (
-    <section className="rounded-xl border border-[#EBEBF5] bg-white text-gray-900">
-      <h2 className="border-b border-[#EBEBF5] px-4 py-4 text-[14px] font-bold text-[#1A1A2E] sm:px-6 sm:text-[15px]">
+    <section className="rounded-2xl border border-gray-200 bg-white text-gray-900 shadow-sm">
+      <h2 className="border-b border-gray-200 px-4 py-4 text-sm font-semibold text-gray-800 sm:px-6 sm:text-base">
         {title} ({total})
       </h2>
       {!loading && !!rows.length && (
@@ -63,41 +63,56 @@ export default function BlockedSeatsTable({
             <article key={row.block_id} className="space-y-3 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-[#1A1A2E]">
+                  <p className="truncate text-sm font-medium text-gray-900">
                     {row.seat_code}
                   </p>
-                  <p className="mt-1 break-words text-xs text-gray-600 [overflow-wrap:anywhere]">
+                  <p className="mt-1 break-words text-xs text-gray-700 [overflow-wrap:anywhere]">
                     {row.site_name}
                   </p>
                   <p className="mt-0.5 break-words text-xs text-gray-400 [overflow-wrap:anywhere]">
                     {row.building_name} · {row.floor_name}
                   </p>
                 </div>
-                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium ${STATUS_STYLES[row.display_status]}`}>
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium ${STATUS_STYLES[row.display_status]}`}
+                >
                   {STATUS_LABELS[row.display_status]}
                 </span>
               </div>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
                 <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Block period</dt>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    Block period
+                  </dt>
                   <dd className="mt-1 text-gray-600">
-                    {displayDate(row.blocked_from)} – {displayDate(row.blocked_to)}
+                    {displayDate(row.blocked_from)} –{" "}
+                    {displayDate(row.blocked_to)}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Type</dt>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    Type
+                  </dt>
                   <dd className="mt-1">
-                    <span className={`inline-block rounded-full px-2.5 py-1 text-[10px] font-medium ${TYPE_STYLES[row.block_type]}`}>
+                    <span
+                      className={`inline-block rounded-full px-2.5 py-1 text-[10px] font-medium ${TYPE_STYLES[row.block_type]}`}
+                    >
                       {TYPE_LABELS[row.block_type]}
                     </span>
                   </dd>
                 </div>
                 <div className="col-span-2">
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Reason</dt>
-                  <dd className="mt-1 break-words text-gray-600 [overflow-wrap:anywhere]">{row.reason}</dd>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    Reason
+                  </dt>
+                  <dd className="mt-1 break-words text-gray-600 [overflow-wrap:anywhere]">
+                    {row.reason}
+                  </dd>
                 </div>
                 <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Blocked by</dt>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    Blocked by
+                  </dt>
                   <dd className="mt-1 break-words text-gray-600 [overflow-wrap:anywhere]">
                     {row.blocked_by.name ?? "—"}
                   </dd>
@@ -110,8 +125,11 @@ export default function BlockedSeatsTable({
           ))}
         </div>
       )}
-      <div className="hidden md:block">
-        <table className="w-full table-fixed text-left text-[10px] sm:text-[11px] lg:text-[12.5px]">
+      <div className="hidden overflow-x-auto md:block">
+        <table
+          className="w-full table-fixed text-left text-xs text-gray-700"
+          style={{ minWidth: "980px" }}
+        >
           <colgroup>
             <col className="w-[13%]" />
             <col className="w-[20%]" />
@@ -122,15 +140,15 @@ export default function BlockedSeatsTable({
             <col className="w-[10%]" />
             <col className="w-[5%]" />
           </colgroup>
-          <thead className="bg-blue-100/80 text-[11px] font-semibold text-blue-600">
+          <thead className="sticky top-0 z-10 border-b bg-blue-100 text-xs text-blue-600">
             <tr>
               {headings.map((heading) => (
                 <th
                   key={heading}
                   className={
                     heading === "Actions"
-                      ? "whitespace-nowrap px-1 py-3 text-center"
-                      : "break-words px-2 py-3 [overflow-wrap:anywhere] lg:px-4"
+                      ? "whitespace-nowrap px-1 py-3 text-center font-bold"
+                      : "break-words px-2 py-3 font-bold [overflow-wrap:anywhere] lg:px-4"
                   }
                 >
                   {heading}
@@ -138,14 +156,14 @@ export default function BlockedSeatsTable({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#EBEBF5]">
+          <tbody className="divide-y divide-gray-100">
             {!loading &&
               rows.map((row) => (
                 <tr
                   key={row.block_id}
-                  className="text-gray-500 hover:bg-gray-50"
+                  className="text-gray-700 hover:bg-gray-50"
                 >
-                  <td className="whitespace-nowrap px-2 py-3 align-top font-semibold text-[#1A1A2E] lg:px-4">
+                  <td className="whitespace-nowrap px-2 py-3 align-top font-medium text-gray-900 lg:px-4">
                     {row.seat_code}
                   </td>
                   <td className="px-2 py-3 align-top lg:px-4">
@@ -156,14 +174,19 @@ export default function BlockedSeatsTable({
                       <span className="min-w-0 break-words [overflow-wrap:anywhere]">
                         {row.building_name}
                       </span>
-                      <span className="whitespace-nowrap">· {row.floor_name}</span>
+                      <span className="whitespace-nowrap">
+                        · {row.floor_name}
+                      </span>
                     </span>
                   </td>
                   <td className="break-words px-2 py-3 align-top [overflow-wrap:anywhere] lg:px-4">
-                    {displayDate(row.blocked_from)} – {displayDate(row.blocked_to)}
+                    {displayDate(row.blocked_from)} –{" "}
+                    {displayDate(row.blocked_to)}
                   </td>
                   <td className="px-1 py-3 align-top lg:px-3">
-                    <span className={`inline-block max-w-full break-words rounded-full px-1.5 py-1 text-[9px] font-medium [overflow-wrap:anywhere] lg:px-2.5 lg:text-[11px] ${TYPE_STYLES[row.block_type]}`}>
+                    <span
+                      className={`inline-block max-w-full break-words rounded-full px-1.5 py-1 text-[9px] font-medium [overflow-wrap:anywhere] lg:px-2.5 lg:text-[11px] ${TYPE_STYLES[row.block_type]}`}
+                    >
                       {TYPE_LABELS[row.block_type]}
                     </span>
                   </td>
@@ -171,7 +194,9 @@ export default function BlockedSeatsTable({
                     {row.reason}
                   </td>
                   <td className="px-1 py-3 align-top lg:px-3">
-                    <span className={`inline-block max-w-full break-words rounded-full px-1.5 py-1 text-[9px] font-medium [overflow-wrap:anywhere] lg:px-2.5 lg:text-[11px] ${STATUS_STYLES[row.display_status]}`}>
+                    <span
+                      className={`inline-block max-w-full break-words rounded-full px-1.5 py-1 text-[9px] font-medium [overflow-wrap:anywhere] lg:px-2.5 lg:text-[11px] ${STATUS_STYLES[row.display_status]}`}
+                    >
                       {STATUS_LABELS[row.display_status]}
                     </span>
                   </td>
@@ -197,9 +222,11 @@ export default function BlockedSeatsTable({
           </p>
         )
       )}
-      <footer className="flex flex-col gap-3 border-t border-[#EBEBF5] px-4 py-4 text-[11.5px] text-gray-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:text-[12px]">
+      <footer className="flex flex-col gap-3 border-t border-gray-200 px-4 py-4 text-xs text-gray-500 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <span>
-          Showing {start} to {total ? Math.min(start + rows.length - 1, total) : 0} of {total} entries
+          Showing {start} to{" "}
+          {total ? Math.min(start + rows.length - 1, total) : 0} of {total}{" "}
+          entries
         </span>
         {total > pageSize && (
           <div className="flex items-center gap-2 self-center sm:self-auto">

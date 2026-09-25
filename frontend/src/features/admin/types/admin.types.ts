@@ -48,6 +48,11 @@ export interface OccupancyHierarchyItem {
   employeeBookedSeats: number;
   guestBookedSeats: number;
   totalSeats: number;
+  // Active seats minus any currently-blocked ones -- this, not totalSeats,
+  // is what occupancyRate is itself computed against on the backend (see
+  // fetch_hierarchy_occupancy), so it's also what the "X out of Y" denominator
+  // shown for Top Offices must use to stay consistent with the percentage.
+  availableSeats: number;
 }
 
 export interface TopOffice {

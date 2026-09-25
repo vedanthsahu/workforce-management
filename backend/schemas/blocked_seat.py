@@ -43,6 +43,18 @@ class BlockedSeatListQuery(BaseModel):
     floor_id: int | None = Field(default=None, gt=0)
     block_type: BlockedSeatType | None = None
     selected_date: date | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+
+    @model_validator(mode="after")
+    def validate_date_range(self) -> BlockedSeatListQuery:
+        if (
+            self.start_date is not None
+            and self.end_date is not None
+            and self.start_date > self.end_date
+        ):
+            raise ValueError("start_date must be earlier than or equal to end_date")
+        return self
 
 
 class BlockedSeatActorResponse(BaseModel):
