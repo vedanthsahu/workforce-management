@@ -802,16 +802,16 @@ export function useBookingForm() {
   // move together as a single day. "From" is the anchor: changing it always
   // sticks and pulls "To" along with it, but changing "To" to a genuinely
   // different day does NOT stick -- it falls back to matching "From"
-  // instead of overwriting it. Either way this isn't a failure, so it goes
-  // through dateRangeNotice (a quiet inline note by the date fields), never
-  // the page's error banner.
+  // instead of overwriting it. Only an attempted change to "To" should show
+  // the multi-day notice; changing the anchor date is a normal single-day
+  // selection and silently moves both fields together.
   const setFromDate = (v: string) => {
     if (v > maxBookableDateIso()) {
       setError(BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE);
       return;
     }
     setError(null);
-    setDateRangeNotice(v !== form.toDate ? MULTI_DAY_BOOKING_NOT_SUPPORTED_MESSAGE : null);
+    setDateRangeNotice(null);
     setForm((f) => ({ ...f, fromDate: v, toDate: v }));
   };
 
