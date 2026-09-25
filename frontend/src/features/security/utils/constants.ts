@@ -52,7 +52,7 @@ export const VISITOR_TABLE_HEADERS = [
   "Host",
   "Visit Time",
   "Location",
-  "Seat Booked",
+  "Space Booked",
   "Status",
   "Actions",
 ];

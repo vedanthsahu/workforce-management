@@ -6,6 +6,7 @@ import { Building, Floor, Layout, Site } from "../types/layout.types";
 function versionLabel(l: Layout): string {
   if (l.is_published)      return `v${l.version_no} (Active)`;
   if (l.status === "ARCHIVED") return `v${l.version_no} (Archived)`;
+  if (l.status === "SCHEDULED") return `v${l.version_no} (Scheduled)`;
   return `v${l.version_no} (Draft)`;
 }
 

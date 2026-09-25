@@ -66,7 +66,7 @@ export default function BuildingCards({
         disabled={stats.inactive_buildings === 0}
         onClick={onStatusFilterChange && stats.inactive_buildings > 0 ? () => toggle("INACTIVE") : undefined}
       />
-      <Stat icon={<Armchair className="text-purple-600" />} bg="bg-purple-100" label="Total Seats" value={stats.total_seats.toString()} sub="Across all buildings" />
+      <Stat icon={<Armchair className="text-purple-600" />} bg="bg-purple-100" label="Total Spaces" value={stats.total_seats.toString()} sub="Across all buildings" />
     </div>
   );
 }

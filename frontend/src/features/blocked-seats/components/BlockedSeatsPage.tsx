@@ -128,7 +128,7 @@ export default function BlockedSeatsPage() {
       .catch((requestError: unknown) => {
         if (!cancelled) {
           setResponse(EMPTY_RESPONSE);
-          setError(apiErrorMessage(requestError, "Unable to load blocked seats."));
+          setError(apiErrorMessage(requestError, "Unable to load blocked spaces."));
         }
       })
       .finally(() => {
@@ -206,10 +206,10 @@ export default function BlockedSeatsPage() {
         <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-[17px] font-bold leading-tight text-[#1A1A2E] sm:text-[20px]">
-              Blocked Seats
+              Blocked Spaces
             </h1>
             <p className="mt-0.5 text-[11.5px] text-gray-400 sm:text-[12.5px]">
-              Block and manage seats that are unavailable for booking.
+              Block and manage spaces that are unavailable for booking.
             </p>
           </div>
           <button
@@ -217,7 +217,7 @@ export default function BlockedSeatsPage() {
             className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-lg bg-indigo-600 px-4 text-[12.5px] font-semibold text-white transition-colors hover:bg-indigo-700 sm:self-auto sm:text-[13px]"
           >
             <Plus size={17} />
-            Block Seats
+            Block Spaces
           </button>
         </header>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
