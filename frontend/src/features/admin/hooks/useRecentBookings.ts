@@ -7,7 +7,7 @@ import type { RecentBooking } from "../types/admin.types";
 
 const RECENT_BOOKINGS_LIMIT = 20;
 
-export function useRecentBookings() {
+export function useRecentBookings(date?: string) {
   const [recentBookings, setRecentBookings] = useState<RecentBooking[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -16,7 +16,7 @@ export function useRecentBookings() {
     setLoading(true);
 
     adminService
-      .getAdminActivities()
+      .getAdminActivities(date ? { date } : undefined)
       .then((res) => {
         if (cancelled) return;
         setRecentBookings(mapActivitiesToRecent(res.items).slice(0, RECENT_BOOKINGS_LIMIT));
@@ -29,7 +29,7 @@ export function useRecentBookings() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [date]);
 
   return { recentBookings, loading };
 }

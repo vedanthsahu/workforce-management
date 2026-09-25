@@ -8,6 +8,8 @@ from typing import Any
 from psycopg2.extensions import connection as PGConnection
 from psycopg2.extras import Json, RealDictCursor
 
+from backend.core.enums import ATTENDANCE_BOOKING_STATUSES_SQL
+
 USER_SELECT_FIELDS = """
     au.id::text AS user_id,
     au.tenant_id::text AS tenant_id,
@@ -1145,61 +1147,62 @@ def fetch_favorite_seat(
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
+            WITH current_published_seats AS (
+                SELECT ps.*
+                FROM seats AS ps
+                INNER JOIN floor_layouts AS published_layout
+                    ON published_layout.id = ps.layout_id
+                   AND published_layout.tenant_id = ps.tenant_id
+                   AND published_layout.floor_id = ps.floor_id
+                   AND published_layout.status = 'PUBLISHED'
+                   AND published_layout.is_published = TRUE
+                WHERE ps.tenant_id = %s
+            )
             SELECT
-                s.id::text AS seat_id,
-                s.seat_code,
-                s.site_id::text AS site_id,
+                current_seat.id::text AS seat_id,
+                current_seat.seat_code,
+                current_seat.site_id::text AS site_id,
                 si.site_name,
-                s.building_id::text AS building_id,
+                current_seat.building_id::text AS building_id,
                 bu.building_name,
-                s.floor_id::text AS floor_id,
+                current_seat.floor_id::text AS floor_id,
                 fl.floor_name,
                 COUNT(*) AS booking_count,
                 MAX(b.booking_date) AS last_booked_date
             FROM bookings b
-            JOIN seats s
-                ON s.id = b.seat_id
-                AND s.tenant_id = b.tenant_id
+            INNER JOIN seats AS booked_seat
+                ON booked_seat.id = b.seat_id
+               AND booked_seat.tenant_id = b.tenant_id
+            INNER JOIN current_published_seats AS current_seat
+                ON current_seat.tenant_id = booked_seat.tenant_id
+               AND current_seat.floor_id = booked_seat.floor_id
+               AND current_seat.seat_code = booked_seat.seat_code
             LEFT JOIN sites si
-                ON si.id = s.site_id
-               AND si.tenant_id = s.tenant_id
+                ON si.id = current_seat.site_id
+               AND si.tenant_id = current_seat.tenant_id
             LEFT JOIN buildings bu
-                ON bu.id = s.building_id
-               AND bu.tenant_id = s.tenant_id
+                ON bu.id = current_seat.building_id
+               AND bu.tenant_id = current_seat.tenant_id
             LEFT JOIN floors fl
-                ON fl.id = s.floor_id
-               AND fl.tenant_id = s.tenant_id
+                ON fl.id = current_seat.floor_id
+               AND fl.tenant_id = current_seat.tenant_id
             WHERE b.tenant_id = %s
               AND b.booked_for_user_id = %s
               AND b.booking_type = 'EMPLOYEE'
               AND b.booking_status = 'CONFIRMED'
-              AND EXISTS (
-                  SELECT 1
-                  FROM floor_layouts fla
-                  JOIN layout_seat_mappings lsm
-                      ON lsm.layout_id = fla.id
-                     AND lsm.tenant_id = fla.tenant_id
-                     AND lsm.floor_id  = s.floor_id
-                     AND lsm.seat_code = s.seat_code
-                  WHERE fla.floor_id  = s.floor_id
-                    AND fla.tenant_id = s.tenant_id
-                    AND fla.is_published = TRUE
-                    AND fla.status = 'PUBLISHED'
-                    AND b.created_at >= fla.published_at
-              )
             GROUP BY
-                s.id,
-                s.seat_code,
-                s.site_id,
+                current_seat.id,
+                current_seat.seat_code,
+                current_seat.site_id,
                 si.site_name,
-                s.building_id,
+                current_seat.building_id,
                 bu.building_name,
-                s.floor_id,
+                current_seat.floor_id,
                 fl.floor_name
-            ORDER BY booking_count DESC, last_booked_date DESC, s.id
+            ORDER BY booking_count DESC, last_booked_date DESC, current_seat.id
             LIMIT 3
             """,
-            (tenant_id, user_id),
+            (tenant_id, tenant_id, user_id),
         )
         rows = cur.fetchall()
     first  = dict(rows[0]) if len(rows) > 0 else None
@@ -1216,13 +1219,13 @@ def fetch_days_in_office(
 ) -> int:
     with conn.cursor() as cur:
         cur.execute(
-            """
+            f"""
             SELECT COUNT(DISTINCT booking_date)
             FROM bookings
             WHERE tenant_id = %s
               AND booked_for_user_id = %s
               AND booking_type = 'EMPLOYEE'
-              AND booking_status = 'CONFIRMED'
+              AND booking_status IN ({ATTENDANCE_BOOKING_STATUSES_SQL})
               AND booking_date <= CURRENT_DATE
             """,
             (tenant_id, user_id),
@@ -1237,13 +1240,13 @@ def fetch_days_in_office_current_month(
 ) -> int:
     with conn.cursor() as cur:
         cur.execute(
-            """
+            f"""
             SELECT COUNT(DISTINCT booking_date)
             FROM bookings
             WHERE tenant_id = %s
               AND booked_for_user_id = %s
               AND booking_type = 'EMPLOYEE'
-              AND booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
+              AND booking_status IN ({ATTENDANCE_BOOKING_STATUSES_SQL})
               AND booking_date <= CURRENT_DATE
               AND DATE_TRUNC('month', booking_date)
                     = DATE_TRUNC('month', CURRENT_DATE)
@@ -1262,13 +1265,13 @@ def fetch_days_in_office_current_year(
 ) -> int:
     with conn.cursor() as cur:
         cur.execute(
-            """
+            f"""
             SELECT COUNT(DISTINCT booking_date)
             FROM bookings
             WHERE tenant_id = %s
               AND booked_for_user_id = %s
               AND booking_type = 'EMPLOYEE'
-              AND booking_status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')
+              AND booking_status IN ({ATTENDANCE_BOOKING_STATUSES_SQL})
               AND booking_date <= CURRENT_DATE
               AND DATE_TRUNC('year', booking_date)
                     = DATE_TRUNC('year', CURRENT_DATE)
@@ -1287,7 +1290,7 @@ def fetch_team_rank_current_year(
 ) -> dict[str, int | None]:
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            """
+            f"""
             WITH primary_team AS (
                 SELECT MIN(tm.team_id) AS team_id
                 FROM team_members tm
@@ -1304,11 +1307,7 @@ def fetch_team_rank_current_year(
                     ON b.booked_for_user_id = tm.user_id
                    AND b.tenant_id = tm.tenant_id
                    AND b.booking_type = 'EMPLOYEE'
-                   AND b.booking_status IN (
-                        'CONFIRMED',
-                        'CHECKED_IN',
-                        'COMPLETED'
-                   )
+                   AND b.booking_status IN ({ATTENDANCE_BOOKING_STATUSES_SQL})
                    AND b.booking_date <= CURRENT_DATE
                    AND DATE_TRUNC('year', b.booking_date)
                         = DATE_TRUNC('year', CURRENT_DATE)

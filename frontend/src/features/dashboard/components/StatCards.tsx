@@ -45,13 +45,13 @@ export function StatCards({
       <div className="group bg-white border border-emerald-100 rounded-2xl p-3 relative overflow-hidden shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-fade-in-up" style={{ animationDelay: "160ms" }}>
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-emerald-500 to-transparent" />
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wide">Team present</p>
+          <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wide">Team booked</p>
           <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0 group-hover:bg-emerald-200 transition-colors duration-200">
             <Users className="w-3.5 h-3.5 text-emerald-600" />
           </div>
         </div>
         <p className="text-[24px] font-bold text-gray-900 leading-none">{teamInOffice}</p>
-        <p className="text-[10.5px] text-gray-400 mt-1">in office today</p>
+        <p className="text-[10.5px] text-gray-400 mt-1">with a booking today</p>
         <div className="inline-flex items-center gap-1.5 mt-1.5">
           <span className="relative flex h-1.5 w-1.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />

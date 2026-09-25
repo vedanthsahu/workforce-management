@@ -45,6 +45,8 @@ class AdminDashboardSummaryResponse(BaseModel):
     blocked_seats: int = 0
     booked_seats_today: int = 0
     blocked_seats_today: int = 0
+    occupied_seats_count: int = 0
+    available_seats: int = 0
 
     occupancy_percentage: float = 0.0
 
@@ -341,4 +343,3 @@ class AdminActivityListResponse(CamelModel):
             }
         },
     )
- 

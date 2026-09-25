@@ -407,8 +407,11 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
                               <span className="text-xs text-gray-700 whitespace-nowrap">{text}</span>
                             </span>
-                            {row.status === "SCHEDULED" && row.effective_from && (
-                              <span className="text-[10px] text-sky-600 whitespace-nowrap">
+                            {row.effective_from && (
+                              <span
+                                className="text-[10px] text-sky-600 whitespace-nowrap"
+                                title={`Effective from ${new Date(row.effective_from).toLocaleString()}`}
+                              >
                                 from {formatDateOnly(row.effective_from)}
                               </span>
                             )}

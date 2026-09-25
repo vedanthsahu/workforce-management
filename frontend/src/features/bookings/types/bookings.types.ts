@@ -76,7 +76,7 @@ export interface RawBooking {
   booking_date:         string;
   from_date?:           string;
   to_date?:             string;
-  booking_status:       "CONFIRMED" | "MODIFIED" | "CANCELLED" | "PENDING" | "ACTIVE";
+  booking_status:       "CONFIRMED" | "CHECKED_IN" | "COMPLETED" | "MODIFIED" | "CANCELLED" | "PENDING" | "ACTIVE";
   booking_type?:        "EMPLOYEE" | "GUEST";
   source_channel:       string;
   check_in_at:          string | null;

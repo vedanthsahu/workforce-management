@@ -19,6 +19,7 @@ export const securityService = {
         visit_scope: params.visit_scope ?? "CURRENT",
         limit: params.limit ?? 100,
         offset: params.offset ?? 0,
+        ...(params.page ? { page: params.page } : {}),
         ...(params.site_id ? { site_id: params.site_id } : {}),
         ...(params.visit_status && params.visit_status !== "ALL"
           ? { visit_status: params.visit_status }

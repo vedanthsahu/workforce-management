@@ -22,8 +22,6 @@ export const useAmenities = () => {
 
   const [status, setStatus] = useState("");
 
-  const [page, setPage] = useState(1);
-
   // Backend's max page size (see preferences.py: le=200) -- fetched once
   // up front so `search` can filter entirely client-side afterward, the
   // same pattern useBuildings/useOffices use for their search boxes.
@@ -34,14 +32,28 @@ export const useAmenities = () => {
 
   const fetchAmenities = useCallback(async () => {
     try {
-      const response =
-        await amenitiesService.getAmenities({
-          page,
-          limit,
-          status: status || undefined,
-        });
+      const firstPage = await amenitiesService.getAmenities({
+        page: 1,
+        limit,
+        status: status || undefined,
+      });
+      const remainingPages = await Promise.all(
+        Array.from({ length: Math.max(firstPage.total_pages - 1, 0) }, (_, index) =>
+          amenitiesService.getAmenities({
+            page: index + 2,
+            limit,
+            status: status || undefined,
+          })
+        )
+      );
 
-      setData(response);
+      setData({
+        ...firstPage,
+        items: [firstPage, ...remainingPages].flatMap((response) => response.items),
+        page: 1,
+        limit: firstPage.total || limit,
+        total_pages: firstPage.total ? 1 : 0,
+      });
     } catch (error) {
       console.error(
         "Error fetching amenities",
@@ -50,7 +62,7 @@ export const useAmenities = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, status]);
+  }, [status]);
 
   useEffect(() => {
     fetchAmenities();
@@ -65,9 +77,6 @@ export const useAmenities = () => {
 
     status,
     setStatus,
-
-    page,
-    setPage,
 
     fetchAmenities,
   };

@@ -10,6 +10,8 @@ export type DashboardSummary = {
   guest_visit_booking_with_seat_today: number;
   blocked_seats: number;
   occupancy_percentage: number;
+  occupied_seats_count: number;
+  available_seats: number;
 };
 
 export type TrendPeriod = "this-week" | "last-week" | "this-month" | "last-month";

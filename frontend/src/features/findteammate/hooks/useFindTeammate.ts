@@ -80,14 +80,18 @@ export function useFindTeammate() {
   const visibleTeamGroups = useMemo(() => {
     const uid = user?.user_id;
     return teamGroups.map((g) => {
+      const excludedSelf = uid ? g.members.find((m) => m.user_id === uid) : undefined;
       const members = sortMembers(
         uid ? g.members.filter((m) => m.user_id !== uid) : g.members
       );
       return {
         ...g,
         members,
-        total_members: members.length,
-        booked_today_count: members.filter((m) => m.has_booking_today).length,
+        total_members: Math.max(g.total_members - (excludedSelf ? 1 : 0), 0),
+        booked_today_count: Math.max(
+          g.booked_today_count - (excludedSelf?.has_booking_today ? 1 : 0),
+          0
+        ),
       };
     });
   }, [teamGroups, user?.user_id]);

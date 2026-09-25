@@ -83,6 +83,12 @@ export interface ApiGuestVisitsSummary {
 export interface ApiGuestVisitsResponse {
   summary: ApiGuestVisitsSummary;
   items: ApiGuestVisit[];
+  pagination?: {
+    total: number;
+    page: number;
+    limit: number;
+    total_pages: number;
+  };
 }
 
 /** Shape returned by POST /guest-visits/{id}/check-in and /check-out */
@@ -108,6 +114,7 @@ export interface GuestVisitsQueryParams {
   search?: string;
   limit?: number;
   offset?: number;
+  page?: number;
 }
 
 // ─── Frontend display types (camelCase) ──────────────────────────────────────

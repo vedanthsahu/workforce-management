@@ -375,11 +375,19 @@ def fetch_guest_visit_summary(
                           AND mb.booking_status = 'MODIFIED'
                    )
             )::integer AS modified,
-            2::integer AS overdue
+            COUNT(*) FILTER (
+                WHERE gv.visit_status NOT IN ('CANCELLED', 'CHECKED_OUT')
+                  AND gv.checked_out_at IS NULL
+                  AND (gv.visit_date + COALESCE(gv.end_time, TIME '23:59:59'))
+                      AT TIME ZONE COALESCE(s.timezone, 'UTC') < NOW()
+            )::integer AS overdue
         FROM guest_visits gv
         INNER JOIN guests g
             ON g.id = gv.guest_id
            AND g.tenant_id = gv.tenant_id
+        LEFT JOIN sites s
+            ON s.id = gv.site_id
+           AND s.tenant_id = gv.tenant_id
         WHERE gv.tenant_id = %s
     """
     params: list[Any] = [tenant_id]
@@ -404,7 +412,7 @@ def fetch_guest_visit_summary(
         "checked_out": 0,
         "cancelled": 0,
         "modified": 0,
-        "overdue": 2,
+        "overdue": 0,
     }
 
 

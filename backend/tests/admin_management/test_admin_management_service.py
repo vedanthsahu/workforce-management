@@ -421,6 +421,66 @@ class AdminManagementServiceTests(unittest.TestCase):
         mock_touch.assert_not_called()
         self.assertEqual(conn.commits, 1)
 
+    def test_published_seat_configuration_syncs_its_source_mapping(self) -> None:
+        conn = FakeConnection()
+        payload = SeatConfigurationUpdateRequest(status="INACTIVE")
+        seat_row = {
+            "seat_id": "4",
+            "site_id": "1",
+            "building_id": "1",
+            "floor_id": "12",
+            "layout_id": "100",
+            "source_layout_mapping_id": "900",
+            "seat_code": "SEAT-4",
+            "status": "ACTIVE",
+            "is_bookable": True,
+        }
+
+        with (
+            patch(
+                "backend.services.location_service.fetch_seat_configuration",
+                return_value=seat_row,
+            ),
+            patch(
+                "backend.services.location_service.update_seat_configuration",
+                return_value={**seat_row, "status": "INACTIVE"},
+            ),
+            patch(
+                "backend.services.location_service.fetch_floor_layout_by_id",
+                return_value={
+                    "layout_id": "100",
+                    "status": "PUBLISHED",
+                    "is_published": True,
+                },
+            ),
+            patch(
+                "backend.services.location_service.update_layout_seat_mapping_configuration",
+            ) as mock_sync,
+            patch("backend.services.location_service.touch_floor_layout_updated_by"),
+            patch("backend.services.location_service.safe_write_audit_log"),
+        ):
+            update_seat_configuration_metadata(
+                conn,
+                tenant_id="1",
+                seat_id="4",
+                payload=payload,
+                current_user=self.current_user,
+            )
+
+        mock_sync.assert_called_once_with(
+            conn,
+            tenant_id="1",
+            layout_seat_mapping_id="900",
+            seat_name=None,
+            seat_type=None,
+            status="INACTIVE",
+            is_bookable=None,
+            is_reserved=None,
+            amenity_ids=None,
+            updated_by="5",
+        )
+        self.assertEqual(conn.commits, 1)
+
     def test_create_amenity_rejects_cross_tenant_or_missing_category(self) -> None:
         conn = FakeConnection()
         payload = CreateAmenityRequest(
