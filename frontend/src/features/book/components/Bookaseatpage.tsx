@@ -166,6 +166,7 @@ const BookASeatPage: React.FC = () => {
     confirmation,
     error,
     setError,
+    dateRangeNotice,
     loadingSites,
     loadingBuildings,
     loadingFloors,
@@ -487,6 +488,17 @@ const BookASeatPage: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {/* A collapsed multi-day pick -- never a failure, so this is
+                  its own quiet note beside the date fields, not routed
+                  through the page's red error banner (see dateRangeNotice
+                  in Usebookingform.ts). */}
+              {dateRangeNotice && (
+                <div className="mt-2.5 bg-blue-50 border border-blue-100 rounded-xl px-3.5 py-2.5 flex items-start gap-2">
+                  <span className="text-blue-500 text-[11px] mt-0.5">ℹ️</span>
+                  <p className="text-[11.5px] text-blue-600 leading-relaxed">{dateRangeNotice}</p>
+                </div>
+              )}
             </section>
           </div>
 
