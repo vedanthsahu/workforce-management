@@ -26,6 +26,21 @@ interface Props {
   onUpdate: <K extends keyof SeatFilters>(key: K, value: SeatFilters[K]) => void;
   onReset: () => void;
   searchPlaceholder?: string;
+  // Masks (greys out, non-interactive) rather than hiding the bar entirely
+  // -- an admin should still see these filters exist, just not be able to
+  // use them yet, when there's nothing configured in this tab for them to
+  // meaningfully filter. Deliberately does NOT cover Search -- searching by
+  // code is meaningful even on an unconfigured seat, unlike Status/Bookable/
+  // Amenities, which have nothing real to match yet.
+  disabled?: boolean;
+  // Search DOES drive the map's highlight pulse, same as the other filters
+  // -- but only once something in this tab is actually configured (an
+  // unconfigured seat has no real values to match against on the map
+  // either). Passed separately from `disabled` because, unlike Status/
+  // Bookable/Amenities, Search stays enabled in List view regardless of
+  // configuration -- searching by code is still meaningful there even for
+  // unconfigured seats, since the table shows them as rows either way.
+  searchDisabled?: boolean;
 }
 
 function FilterSelect({
@@ -33,11 +48,13 @@ function FilterSelect({
   value,
   options,
   onChange,
+  disabled,
 }: {
   label: string;
   value: string;
   options: { value: string; label: string; dotColor?: string }[];
   onChange: (v: string) => void;
+  disabled?: boolean;
 }) {
   // "All"-ish is always the first option — anything else counts as active
   // and gets an inline clear (x) instead of relying on a separate,
@@ -49,11 +66,18 @@ function FilterSelect({
       <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
         {label}
       </label>
-      <div className="relative">
+      {/* title sits on this wrapper, not the <select> itself -- most
+          browsers (Chrome included) silently swallow a `title` on a
+          disabled form control and never show the hover tooltip at all. */}
+      <div
+        className="relative"
+        title={disabled ? "Configure at least one space in this tab to use this filter" : undefined}
+      >
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="h-9 w-full pl-3 pr-8 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer"
+          disabled={disabled}
+          className="h-9 w-full pl-3 pr-8 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
           style={{
             // The clear (x) button takes over this exact spot when a filter
             // is active, so only one icon ever occupies the corner — showing
@@ -98,11 +122,13 @@ function AmenityFilterSelect({
   value,
   options,
   onChange,
+  disabled,
 }: {
   label: string;
   value: string;
   options: { value: string; label: string; dotColor?: string }[];
   onChange: (v: string) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const isActive = value !== options[0]?.value;
@@ -114,11 +140,20 @@ function AmenityFilterSelect({
         {label}
       </label>
       <div className="relative">
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={disabled ? false : open} onOpenChange={disabled ? undefined : setOpen}>
           <PopoverTrigger
             nativeButton={false}
+            disabled={disabled}
             render={
-              <div className="h-9 w-full pl-3 pr-8 flex items-center text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:border-gray-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30">
+              <div
+                className={cn(
+                  "h-9 w-full pl-3 pr-8 flex items-center text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30",
+                  disabled
+                    ? "opacity-50 cursor-not-allowed bg-gray-50"
+                    : "cursor-pointer hover:border-gray-300"
+                )}
+                title={disabled ? "Configure at least one space in this tab to use this filter" : undefined}
+              >
                 <span className="truncate flex items-center gap-1.5">
                   {selected?.dotColor && (
                     <span
@@ -190,6 +225,8 @@ export default function SeatFiltersBar({
   onUpdate,
   onReset,
   searchPlaceholder = "Search by code…",
+  disabled = false,
+  searchDisabled = false,
 }: Props) {
   const activeCount = [
     filters.search.trim() !== "",
@@ -214,7 +251,13 @@ export default function SeatFiltersBar({
         <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
           Search
         </label>
-        <div className="relative">
+        {/* title sits on this wrapper, not the <input> itself -- most
+            browsers (Chrome included) silently swallow a `title` on a
+            disabled form control and never show the hover tooltip. */}
+        <div
+          className="relative"
+          title={searchDisabled ? "Configure at least one space in this tab to use this filter" : undefined}
+        >
           <Search
             size={13}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -224,7 +267,8 @@ export default function SeatFiltersBar({
             placeholder={searchPlaceholder}
             value={filters.search}
             onChange={(e) => onUpdate("search", e.target.value)}
-            className={`h-9 pl-8 ${filters.search ? "pr-7" : "pr-3"} w-44 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400`}
+            disabled={searchDisabled}
+            className={`h-9 pl-8 ${filters.search ? "pr-7" : "pr-3"} w-44 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50`}
           />
           {filters.search && (
             <button
@@ -249,6 +293,7 @@ export default function SeatFiltersBar({
           // { value: "Maintenance", label: "Maintenance" },
         ]}
         onChange={(v) => onUpdate("status", v)}
+        disabled={disabled}
       />
 
       <FilterSelect
@@ -260,6 +305,7 @@ export default function SeatFiltersBar({
           { value: "No", label: "No" },
         ]}
         onChange={(v) => onUpdate("bookable", v)}
+        disabled={disabled}
       />
 
       <AmenityFilterSelect
@@ -267,6 +313,7 @@ export default function SeatFiltersBar({
         value={filters.amenity}
         options={amenityOptions}
         onChange={(v) => onUpdate("amenity", v)}
+        disabled={disabled}
       />
 
       {/* Reset all — each field clears itself inline now, this is just a

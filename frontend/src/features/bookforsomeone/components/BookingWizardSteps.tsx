@@ -27,7 +27,7 @@ import {
   PURPOSE_OF_VISIT,
 } from "../constants/booking.constants";
 import { useGuestSearch } from "../hooks/useBooking";
-import { createGuestSchema, sanitizePhoneNumber, sanitizeOrganization } from "../schemas/guest.schema";
+import { createGuestSchema, sanitizePhoneNumber } from "../schemas/guest.schema";
 import {
   Building,
   CreateGuestInput,
@@ -576,11 +576,7 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
   const handleChange = (field: keyof typeof form) => (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const value = field === "phone"
-      ? sanitizePhoneNumber(e.target.value)
-      : field === "organization"
-        ? sanitizeOrganization(e.target.value)
-        : e.target.value;
+    const value = field === "phone" ? sanitizePhoneNumber(e.target.value) : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
     if (!touched[field]) setTouched((prev) => ({ ...prev, [field]: true }));
     validateField(field, value);
@@ -1227,11 +1223,7 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
   const canSave = isDirty && isValid && !saving;
 
   const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = field === "phone"
-      ? sanitizePhoneNumber(e.target.value)
-      : field === "organization"
-        ? sanitizeOrganization(e.target.value)
-        : e.target.value;
+    const value = field === "phone" ? sanitizePhoneNumber(e.target.value) : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
     if (touched[field]) validateField(field, value);
   };
