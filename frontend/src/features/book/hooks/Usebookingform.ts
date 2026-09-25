@@ -32,7 +32,7 @@ import {
   resolveFloorLayoutUrl,
 } from "../services/Bookingform.service";
 import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
-import { BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE, maxBookableDateIso } from "../utils/constants";
+import { BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE, MULTI_DAY_BOOKING_NOT_SUPPORTED_MESSAGE, maxBookableDateIso } from "../utils/constants";
 import { amenityAppliesTo, BookingSpaceType } from "../utils/spaceType";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -238,15 +238,28 @@ export function useBookingForm() {
   const [submitting, setSubmitting] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
+  // Separate from `error` -- this is never a failure, just letting the
+  // admin know why the date they picked got adjusted. Shown as a quiet
+  // inline note next to the date fields, not the page's error banner (see
+  // setFromDate/setToDate below).
+  const [dateRangeNotice, setDateRangeNotice] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<CreateBookingResponse | null>(null);
 
   const [myPreferencesApplied, setMyPreferencesApplied] = useState(false);
   const [userPrefsSettled, setUserPrefsSettled] = useState(false);
+  // Carries both the saved preference's ids AND names -- the synthetic-
+  // placeholder-injection effects below need the ids to confirm they're
+  // still labeling the SAME location the preference actually pointed at,
+  // not just tagging whatever is currently selected with these (fixed,
+  // never-updated) names once the admin picks something else entirely.
   const [savedPreferenceNames, setSavedPreferenceNames] = useState<{
+    siteId: string | null;
     siteName: string | null;
+    buildingId: string | null;
     buildingName: string | null;
+    floorId: string | null;
     floorName: string | null;
-  }>({ siteName: null, buildingName: null, floorName: null });
+  }>({ siteId: null, siteName: null, buildingId: null, buildingName: null, floorId: null, floorName: null });
 
   // ── Reset on clean /book navigation ──────────────────────────────────────
   // This only fires once the URL has genuinely settled to a param-less
@@ -270,7 +283,7 @@ export function useBookingForm() {
     setError(null);
     setMyPreferencesApplied(false);
     setUserPrefsSettled(false);
-    setSavedPreferenceNames({ siteName: null, buildingName: null, floorName: null });
+    setSavedPreferenceNames({ siteId: null, siteName: null, buildingId: null, buildingName: null, floorId: null, floorName: null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.toString()]);
 
@@ -372,8 +385,11 @@ export function useBookingForm() {
           .filter((key): key is string => Boolean(key));
 
         setSavedPreferenceNames({
+          siteId: prefs.siteId,
           siteName: prefs.siteName,
+          buildingId: prefs.buildingId,
           buildingName: prefs.buildingName,
+          floorId: prefs.floorId,
           floorName: prefs.floorName,
         });
 
@@ -442,25 +458,38 @@ export function useBookingForm() {
       .finally(() => setLoadingPreferences(false));
   }, []);
 
+  // `cancelled` guards against an out-of-order response: switching Office A
+  // (many buildings, not yet cached, slow) -> Office B (one building,
+  // cached, fast) can let B's fetch land and auto-select its one building
+  // first, only for A's earlier, slower fetch to resolve afterward and
+  // overwrite it with A's stale building list -- the dropdown then shows
+  // A's old options while `form.siteId` already points at B. The cleanup
+  // below marks the previous effect run's callbacks as stale the moment
+  // `form.siteId` changes again, so a late response is simply discarded
+  // instead of clobbering whatever the current site actually resolved to.
   useEffect(() => {
     if (!form.siteId) { setBuildings([]); setFloors([]); return; }
+    let cancelled = false;
     setBuildings([]);
     setFloors([]);
     setLoadingBuildings(true);
     fetchBuildings(form.siteId)
-      .then(setBuildings)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoadingBuildings(false));
+      .then((data) => { if (!cancelled) setBuildings(data); })
+      .catch((e) => { if (!cancelled) setError(e.message); })
+      .finally(() => { if (!cancelled) setLoadingBuildings(false); });
+    return () => { cancelled = true; };
   }, [form.siteId]);
 
   useEffect(() => {
     if (!form.buildingId) { setFloors([]); return; }
+    let cancelled = false;
     setFloors([]);
     setLoadingFloors(true);
     fetchFloors(form.buildingId)
-      .then(setFloors)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoadingFloors(false));
+      .then((data) => { if (!cancelled) setFloors(data); })
+      .catch((e) => { if (!cancelled) setError(e.message); })
+      .finally(() => { if (!cancelled) setLoadingFloors(false); });
+    return () => { cancelled = true; };
   }, [form.buildingId]);
 
   // ── Guarantee the selects can always render a saved-preference id ───────
@@ -491,7 +520,10 @@ export function useBookingForm() {
     checkedSiteIdsRef.current.add(form.siteId);
 
     const missingSiteId = form.siteId;
-    const siteName = savedPreferenceNames.siteName;
+    // Only label it from the saved preference if this missing id IS that
+    // preference's own site -- otherwise some other site that's merely
+    // missing/inactive would get mislabeled with an unrelated saved name.
+    const siteName = missingSiteId === savedPreferenceNames.siteId ? savedPreferenceNames.siteName : null;
     const injectPlaceholder = () => {
       if (!siteName) return;
       setSites((prev) =>
@@ -524,10 +556,23 @@ export function useBookingForm() {
         injectPlaceholder();
       })
       .catch(injectPlaceholder);
-  }, [loadingSites, form.siteId, savedPreferenceNames.siteName]);
+  }, [loadingSites, form.siteId, savedPreferenceNames.siteId, savedPreferenceNames.siteName]);
 
+  // Same "only label it if this IS the saved preference's own id" guard as
+  // the site effect above -- without it, changing Building/Floor away from
+  // the saved preference (e.g. switching to a different office entirely)
+  // kept mislabeling whatever the NEW current buildingId/floorId happened
+  // to be with the OLD preference's name, since savedPreferenceNames itself
+  // never changes after the initial prefill. That showed up as the old
+  // preference's building appearing as a second, wrongly-labeled option
+  // alongside the new office's real (and correctly auto-selected) building.
   useEffect(() => {
-    if (loadingBuildings || !form.buildingId || !savedPreferenceNames.buildingName) return;
+    if (
+      loadingBuildings ||
+      !form.buildingId ||
+      form.buildingId !== savedPreferenceNames.buildingId ||
+      !savedPreferenceNames.buildingName
+    ) return;
     const buildingName = savedPreferenceNames.buildingName;
     setBuildings((prev) => {
       if (prev.some((b) => b.id === form.buildingId)) return prev;
@@ -536,10 +581,15 @@ export function useBookingForm() {
         { id: form.buildingId, siteId: form.siteId, name: buildingName },
       ];
     });
-  }, [buildings, loadingBuildings, form.buildingId, form.siteId, savedPreferenceNames.buildingName]);
+  }, [buildings, loadingBuildings, form.buildingId, form.siteId, savedPreferenceNames.buildingId, savedPreferenceNames.buildingName]);
 
   useEffect(() => {
-    if (loadingFloors || !form.floorId || !savedPreferenceNames.floorName) return;
+    if (
+      loadingFloors ||
+      !form.floorId ||
+      form.floorId !== savedPreferenceNames.floorId ||
+      !savedPreferenceNames.floorName
+    ) return;
     const floorName = savedPreferenceNames.floorName;
     setFloors((prev) => {
       if (prev.some((f) => f.id === form.floorId)) return prev;
@@ -548,7 +598,7 @@ export function useBookingForm() {
         { id: form.floorId, buildingId: form.buildingId, name: floorName, number: 0 },
       ];
     });
-  }, [floors, loadingFloors, form.floorId, form.buildingId, savedPreferenceNames.floorName]);
+  }, [floors, loadingFloors, form.floorId, form.buildingId, savedPreferenceNames.floorId, savedPreferenceNames.floorName]);
 
   // ── Derive floor layout URL from the selected floor ───────────────────────
 
@@ -594,15 +644,34 @@ export function useBookingForm() {
   // Supersedes (and replaces) the old prefill-only single-building
   // shortcut: this applies unconditionally whenever exactly one option
   // exists, not just when a prefill name happens to be present.
+  //
+  // The `buildings[0].siteId === form.siteId` check is required, not
+  // optional: switching Office fires the siteId-change effect (which
+  // resets `buildings` to [] and refetches) in the SAME commit as this
+  // effect, since setSiteId also clears form.buildingId in that same
+  // update. React runs both effects off that one commit's snapshot, so
+  // this effect can observe `buildings` still holding the PREVIOUS site's
+  // (stale, not-yet-cleared) single building at the exact moment
+  // form.buildingId has already gone blank -- and without this guard it
+  // "auto-selects" that stale building, from the wrong site entirely.
+  // Confirmed via reproduction: switching a multi-building office to a
+  // single-building one re-selected the OLD office's building because its
+  // `buildings` array (length 1) hadn't been cleared yet in that render.
   useEffect(() => {
     if (form.buildingId || loadingBuildings || buildings.length !== 1) return;
+    if (buildings[0].siteId !== form.siteId) return;
     setForm((f) => ({ ...f, buildingId: buildings[0].id, floorId: "", selectedSeatId: null }));
-  }, [form.buildingId, loadingBuildings, buildings]);
+  }, [form.buildingId, form.siteId, loadingBuildings, buildings]);
 
+  // Same stale-snapshot race as the building effect above, one level down:
+  // switching Building clears form.floorId in the same commit that resets
+  // `floors`, so this must confirm the single floor actually belongs to
+  // the CURRENT building before auto-selecting it.
   useEffect(() => {
     if (form.floorId || loadingFloors || floors.length !== 1) return;
+    if (floors[0].buildingId !== form.buildingId) return;
     setForm((f) => ({ ...f, floorId: floors[0].id, selectedSeatId: null }));
-  }, [form.floorId, loadingFloors, floors]);
+  }, [form.floorId, form.buildingId, loadingFloors, floors]);
 
   useEffect(() => {
     if (!prefillSeatLabel || seats.length === 0 || form.selectedSeatId) return;
@@ -729,22 +798,21 @@ export function useBookingForm() {
     setForm((f) => ({ ...f, floorId: v ?? "", selectedSeatId: null }));
   };
 
+  // Multi-day bookings aren't supported this release -- From and To always
+  // move together as a single day. "From" is the anchor: changing it always
+  // sticks and pulls "To" along with it, but changing "To" to a genuinely
+  // different day does NOT stick -- it falls back to matching "From"
+  // instead of overwriting it. Either way this isn't a failure, so it goes
+  // through dateRangeNotice (a quiet inline note by the date fields), never
+  // the page's error banner.
   const setFromDate = (v: string) => {
     if (v > maxBookableDateIso()) {
       setError(BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE);
       return;
     }
     setError(null);
-    setForm((f) => ({
-      ...f,
-      fromDate: v,
-      // Keep the existing multi-day range's end date -- only pull it
-      // forward ("fall back") to match the new start when the start has
-      // moved past it, since To can never sit before From. Moving From
-      // earlier or within the current range should never silently
-      // collapse an already-selected multi-day range down to one day.
-      toDate: v > f.toDate ? v : f.toDate,
-    }));
+    setDateRangeNotice(v !== form.toDate ? MULTI_DAY_BOOKING_NOT_SUPPORTED_MESSAGE : null);
+    setForm((f) => ({ ...f, fromDate: v, toDate: v }));
   };
 
   const setToDate = (v: string) => {
@@ -753,7 +821,10 @@ export function useBookingForm() {
       return;
     }
     setError(null);
-    setForm((f) => ({ ...f, toDate: v }));
+    setDateRangeNotice(v !== form.fromDate ? MULTI_DAY_BOOKING_NOT_SUPPORTED_MESSAGE : null);
+    // Falls back to "From", discarding the picked value -- not
+    // { ...f, toDate: v }, which would let "To" win instead.
+    setForm((f) => ({ ...f, toDate: f.fromDate }));
   };
 
   const togglePreference = (key: string) => {
@@ -970,7 +1041,7 @@ export function useBookingForm() {
     // reuses this same mount instead of remounting.
     setMyPreferencesApplied(false);
     setUserPrefsSettled(false);
-    setSavedPreferenceNames({ siteName: null, buildingName: null, floorName: null });
+    setSavedPreferenceNames({ siteId: null, siteName: null, buildingId: null, buildingName: null, floorId: null, floorName: null });
     if (isModifyMode) {
       const forSomeone = isBookingForSomeone || isGuestModify || Boolean(bookedForUserId);
       router.push(forSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings");
@@ -1029,6 +1100,7 @@ export function useBookingForm() {
     confirmation,
     error,
     setError,
+    dateRangeNotice,
     loadingSites,
     loadingBuildings,
     loadingFloors,

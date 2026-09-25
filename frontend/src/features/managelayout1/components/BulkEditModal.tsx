@@ -210,7 +210,14 @@ export default function BulkEditModal({
 
       <div>
         <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Bookable</label>
+        {/* An empty `fields.bookable` genuinely means "not touched, excluded
+            from the payload" (see buildPayload's `if (f.bookable)` guard) --
+            but a <select> with no option matching its current value falls
+            back to displaying the FIRST option as if selected, so this was
+            visually showing "Yes" as chosen while the field was actually
+            untouched. This placeholder gives "" somewhere real to render. */}
         <select value={fields.bookable} onChange={(e) => onBookableChange(e.target.value)} className={selectClass} style={dropdownStyle}>
+          <option value="" disabled>Select…</option>
           <option value="Yes">Yes</option>
           <option value="No">No</option>
         </select>
@@ -219,6 +226,7 @@ export default function BulkEditModal({
       <div>
         <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Status</label>
         <select value={fields.status} onChange={(e) => onStatusChange(e.target.value)} className={selectClass} style={dropdownStyle}>
+          <option value="" disabled>Select…</option>
           {SEAT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
