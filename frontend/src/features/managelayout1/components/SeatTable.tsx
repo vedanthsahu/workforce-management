@@ -370,9 +370,12 @@ export default function SeatTable({
           </td>
         );
       case "bookable":
-        return <td key={key} className="px-4 py-3"><BookablePill bookable={seat.is_bookable} /></td>;
+        // Hide the backend's default value for unconfigured seats — show
+        // "—" instead of "Yes", matching how Amenities renders when empty.
+        return <td key={key} className="px-4 py-3"><BookablePill bookable={seat.is_configured ? seat.is_bookable : null} /></td>;
       case "status":
-        return <td key={key} className="px-4 py-3"><StatusPill status={seat.status} /></td>;
+        // Same: mask the default "ACTIVE" for unconfigured seats.
+        return <td key={key} className="px-4 py-3"><StatusPill status={seat.is_configured ? seat.status : null} /></td>;
       case "configuration":
         return (
           <td key={key} className="px-4 py-3">

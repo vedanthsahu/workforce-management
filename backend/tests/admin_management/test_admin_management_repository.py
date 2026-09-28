@@ -288,7 +288,19 @@ class SearchUsersRepositoryTests(unittest.TestCase):
         sql, params = cursor.executions[0]
         self.assertIn("au.tenant_id = %s", sql)
         self.assertIn("LIKE '%% ' || %s || '%%'", sql)
-        self.assertEqual(params, ("1", "vedanth sahu", "vedanth sahu", "vedanth sahu", "vedanth sahu", 20))
+        self.assertIn("WHERE w.word LIKE %s || '%%'", sql)
+        self.assertEqual(
+            params,
+            (
+                "1",
+                "vedanth sahu",
+                "vedanth sahu",
+                "vedanth sahu",
+                "vedanth sahu",
+                "vedanth sahu",
+                20,
+            ),
+        )
 
     def test_search_wildcards_are_literal(self) -> None:
         cursor = FakeCursor(fetchall_values=[[]])

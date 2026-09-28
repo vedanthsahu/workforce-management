@@ -124,20 +124,20 @@ export default function AdminStats({ data, selectedDate }: Props) {
             onKeyDown={
               clickable
                 ? (e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      router.push(item.href!);
-                    }
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    router.push(item.href!);
                   }
+                }
                 : undefined
             }
             className={cn(
               "group relative",
               clickable
                 ? cn(
-                    "cursor-pointer transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.97] active:duration-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40",
-                    accent.glow
-                  )
+                  "cursor-pointer transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.97] active:duration-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40",
+                  accent.glow
+                )
                 : isZeroCount
                   ? "cursor-not-allowed opacity-80 transition-colors duration-200"
                   : "transition-colors duration-200"
@@ -147,8 +147,8 @@ export default function AdminStats({ data, selectedDate }: Props) {
             {/* HEADER */}
             <CardHeader className="flex h-[50px] flex-row items-center justify-between pb-2">
               <CardTitle className={`min-w-0 text-sm font-semibold text-gray-700 ${item.title === "Employee Spaces Reserved" ? "-ml-1" : ""}`}>
-  {item.title}
-</CardTitle>
+                {item.title}
+              </CardTitle>
 
               <div
                 className={cn(

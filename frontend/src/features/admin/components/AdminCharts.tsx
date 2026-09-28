@@ -245,14 +245,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
                   <span className={cn("h-2 w-2 shrink-0 rounded-full", row.dot, "mt-px")} />
                   <span>{row.label}</span>
                 </span>
-                <span
-                  className={cn(
-                    "shrink-0 tabular-nums text-gray-900",
-                    row.label === "Reserved spaces"
-                      ? "text-base font-extrabold text-black"
-                      : "text-sm font-medium"
-                  )}
-                >
+                <span className="shrink-0 tabular-nums text-sm font-medium text-gray-900">
                   {row.value}
                 </span>
               </div>
@@ -438,6 +431,6 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
       </Card>
 
     </div>
-    
+
   );
 }

@@ -123,10 +123,12 @@ export default function BulkEditModal({
   const fieldsFilled = (f: TabFields, group: GroupKey) =>
     !!f.bookable || !!f.status || f.amenityIds.length > 0 || (group === "CONFERENCE_ROOMS" && !!f.capacity);
 
+  const requiredFieldsFilled = (f: TabFields) => !!f.bookable && !!f.status;
+
   const buildGroupPayload = (group: GroupKey): BulkUpdatePayload | null => {
     const rows = groups[group];
     const f = fieldsByGroup[group];
-    if (rows.length === 0 || !fieldsFilled(f, group)) return null;
+    if (rows.length === 0 || !fieldsFilled(f, group) || !requiredFieldsFilled(f)) return null;
 
     const payload: BulkUpdatePayload = {
       seat_svg_ids: rows.map((s) => s.seat_svg_id),
@@ -139,11 +141,17 @@ export default function BulkEditModal({
     return payload;
   };
 
-  const isFixedTypeFilled = !!bookable || !!status || amenityIds.length > 0 || (isConferenceRoom && !!capacity);
-  const anyGroupFilled = GROUP_KEYS.some((g) => fieldsFilled(fieldsByGroup[g], g) && groups[g].length > 0);
-  const nothingToApply = isFixedType ? !isFixedTypeFilled : !anyGroupFilled;
+  const fixedRequiredFieldsFilled = !!bookable && !!status;
+  const editedGroups = GROUP_KEYS.filter(
+    (group) => groups[group].length > 0 && fieldsFilled(fieldsByGroup[group], group),
+  );
+  const groupedSelectionIsValid =
+    editedGroups.length > 0 &&
+    editedGroups.every((group) => requiredFieldsFilled(fieldsByGroup[group]));
+  const canApply = isFixedType ? fixedRequiredFieldsFilled : groupedSelectionIsValid;
 
   const handleSave = async () => {
+    if (!canApply) return;
     setSaving(true); setSaveError(false);
     try {
       let payloads: BulkUpdatePayload[];
@@ -209,16 +217,24 @@ export default function BulkEditModal({
       )}
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Bookable</label>
+        <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Bookable <span className="text-red-500">*</span></label>
+        {/* An empty `fields.bookable` genuinely means "not touched, excluded
+            from the payload" (see buildPayload's `if (f.bookable)` guard) --
+            but a <select> with no option matching its current value falls
+            back to displaying the FIRST option as if selected, so this was
+            visually showing "Yes" as chosen while the field was actually
+            untouched. This placeholder gives "" somewhere real to render. */}
         <select value={fields.bookable} onChange={(e) => onBookableChange(e.target.value)} className={selectClass} style={dropdownStyle}>
+          <option value="" disabled>Select…</option>
           <option value="Yes">Yes</option>
           <option value="No">No</option>
         </select>
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Status</label>
+        <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Status <span className="text-red-500">*</span></label>
         <select value={fields.status} onChange={(e) => onStatusChange(e.target.value)} className={selectClass} style={dropdownStyle}>
+          <option value="" disabled>Select…</option>
           {SEAT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
@@ -330,6 +346,9 @@ export default function BulkEditModal({
         <div className="px-5 py-3 border-t flex items-center justify-between gap-3 bg-white">
           <div className="text-xs">
             {saveError && <span className="text-red-500">Save failed. Try again.</span>}
+            {!saveError && !canApply && (
+              <span className="text-amber-600">Bookable and Status are required.</span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button onClick={handleClose} className="px-4 py-1.5 text-xs font-medium border border-gray-200 bg-white text-gray-600 rounded-md hover:bg-gray-50 transition-colors">
@@ -337,7 +356,7 @@ export default function BulkEditModal({
             </button>
             <button
               onClick={handleSave}
-              disabled={saving || nothingToApply}
+              disabled={saving || !canApply}
               className="px-4 py-1.5 text-xs font-semibold bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors"
             >
               {saving ? "Saving…" : "Apply Changes"}
