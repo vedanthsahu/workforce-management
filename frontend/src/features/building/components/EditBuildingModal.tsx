@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -49,6 +50,17 @@ export default function EditBuildingModal({
     formData.building_name !== building.building_name ||
     formData.status !== building.status;
 
+  // Once the reactivate checklist has loaded, scroll it into view — it sits
+  // below the fold, so otherwise the admin may not notice it appeared.
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const showChecklist =
+    isReactivating && !floorsChecklistLoading && (officeNeedsReactivation || inactiveFloors.length > 0);
+  useEffect(() => {
+    if (!showChecklist) return;
+    const el = scrollAreaRef.current;
+    el?.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [showChecklist]);
+
   return (
     <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
       <DialogContent className="sm:max-w-2xl">
@@ -57,7 +69,12 @@ export default function EditBuildingModal({
           <DialogDescription>Update building details and save changes.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5">
+        {/* Scrolls when the reactivate checklist makes the form taller than the screen. */}
+        <div
+          ref={scrollAreaRef}
+          className="space-y-5 max-h-[65vh] overflow-y-auto p-1 -m-1 pr-3 -mr-3"
+          style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
+        >
           <AncestorStatusRow
             label="Office"
             name={officeInfo?.name ?? building.site_name}
@@ -65,13 +82,25 @@ export default function EditBuildingModal({
             loading={officeInfoLoading || !officeInfo}
           />
 
-          <div className="space-y-1.5">
-            <Label>Building Name</Label>
-            <Input
-              value={formData.building_name}
-              onChange={(e) => handleChange("building_name", e.target.value)}
-              placeholder="Enter building name"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div className="space-y-1.5">
+              <Label>Building Name</Label>
+              <Input
+                value={formData.building_name}
+                onChange={(e) => handleChange("building_name", e.target.value)}
+                placeholder="Enter building name"
+              />
+            </div>
+
+            {/* Floors are managed from their own page — shown here for context only. */}
+            <div className="space-y-1.5">
+              <Label>Floors</Label>
+              <Input
+                value={building.floor_count ?? 0}
+                readOnly
+                className="bg-gray-50 text-gray-500 cursor-not-allowed"
+              />
+            </div>
           </div>
 
           <div className="space-y-1.5">
@@ -90,7 +119,7 @@ export default function EditBuildingModal({
             <p className="text-xs text-gray-500">Checking for inactive floors…</p>
           )}
 
-          {isReactivating && !floorsChecklistLoading && (officeNeedsReactivation || inactiveFloors.length > 0) && (
+          {showChecklist && (
             <div className="space-y-1.5">
               <Label>Reactivate associated items</Label>
               <p className="text-xs text-gray-500">

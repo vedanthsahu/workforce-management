@@ -10,7 +10,8 @@ import { useRouter } from "next/navigation";
 import { fetchLayoutSeats } from "@/features/managelayout1/services/seatService";
 import { deleteLayout, rescheduleLayout } from "@/features/adminlayouts1/services/locationService";
 import type { Seat } from "@/features/managelayout1/types/seat.types";
-import { ROOM_SVG_ID_PATTERN, LEGEND, HIDE_AFTER_DAYS } from "../utils/layoutTable.utils";
+import { ROOM_SVG_ID_PATTERN, LEGEND } from "../utils/layoutTable.utils";
+import { useLayoutVisibilityDays } from "@/features/configuration/hooks/useLayoutVisibilityDays";
 
 function extractApiErrorMessage(err: unknown, fallback: string): string {
   return (
@@ -113,21 +114,24 @@ function daysSince(iso: string): number {
   return (Date.now() - new Date(iso).getTime()) / 86_400_000;
 }
 
-function hideThresholdDays(row: LayoutApiResponse): number | null {
-  if (row.status === "PUBLISHED") return null;
-  return HIDE_AFTER_DAYS[row.status] ?? null;
+// Thresholds come from Configuration → Layout Visibility (null while loading).
+type VisibilityDays = Partial<Record<string, number>> | null;
+
+function hideThresholdDays(row: LayoutApiResponse, visibilityDays: VisibilityDays): number | null {
+  if (!visibilityDays || row.status === "PUBLISHED") return null;
+  return visibilityDays[row.status] ?? null;
 }
 
-function isAutoHidden(row: LayoutApiResponse): boolean {
-  const threshold = hideThresholdDays(row);
+function isAutoHidden(row: LayoutApiResponse, visibilityDays: VisibilityDays): boolean {
+  const threshold = hideThresholdDays(row, visibilityDays);
   if (threshold === null) return false;
   const reference = row.updated_at ?? row.created_at;
   if (!reference) return false;
   return daysSince(reference) >= threshold;
 }
 
-function hideCountdownLabel(row: LayoutApiResponse): string | null {
-  const threshold = hideThresholdDays(row);
+function hideCountdownLabel(row: LayoutApiResponse, visibilityDays: VisibilityDays): string | null {
+  const threshold = hideThresholdDays(row, visibilityDays);
   if (threshold === null) return null;
   const reference = row.updated_at ?? row.created_at;
   if (!reference) return null;
@@ -159,6 +163,7 @@ function formatDateOnly(iso: string): string {
 export default function LayoutTable({ selection, selectedLayoutId }: Props) {
   const { layouts, loading, fetchLayouts, invalidateFloor } = useLayoutsStore();
   const router = useRouter();
+  const visibilityDays = useLayoutVisibilityDays();
 
   // ── Preview state ─────────────────────────────────────────────────────────
   const [previewLayout, setPreviewLayout] = useState<LayoutApiResponse | null>(null);
@@ -322,7 +327,10 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
     }
   }, [rescheduleTarget, rescheduleDate, invalidateFloor, fetchLayouts]);
 
-  const visibleLayouts = useMemo(() => layouts.filter((row) => !isAutoHidden(row)), [layouts]);
+  const visibleLayouts = useMemo(
+    () => layouts.filter((row) => !isAutoHidden(row, visibilityDays)),
+    [layouts, visibilityDays]
+  );
   const { page, rowsPerPage, total, paginated, setPage } = useLayoutsTable(visibleLayouts);
 
   return (
@@ -400,7 +408,7 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
                         // Suppress only for rows optimistically masked right after
                         // a Discard click (about to vanish on refetch, not aging
                         // out) — an actual DELETED-status row still counts down.
-                        const countdown = discardedIds.has(row.layout_id) ? null : hideCountdownLabel(row);
+                        const countdown = discardedIds.has(row.layout_id) ? null : hideCountdownLabel(row, visibilityDays);
                         return (
                           <div className="flex flex-col gap-0.5">
                             <span className="inline-flex items-center gap-1.5">

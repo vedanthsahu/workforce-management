@@ -18,16 +18,10 @@ export const PURPOSE_OF_VISIT: { value: PurposeOfVisit; label: string }[] = [
   { value: "OTHER",          label: "Other" },
 ];
 
-export const MAX_GUEST_VISIT_ADVANCE_DAYS = 15;
-
-export const GUEST_VISIT_TOO_FAR_IN_ADVANCE_MESSAGE =
-  "Guest visits can only be booked up to 15 days in advance. Please select a date within the next 15 days.";
-
-export function maxGuestVisitDateIso(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + MAX_GUEST_VISIT_ADVANCE_DAYS);
-  return d.toISOString().slice(0, 10);
-}
+// The advance window itself is tenant-configured (Configuration → Visitor
+// Booking) and read via useBookingPolicy; only the wording lives here.
+export const guestVisitTooFarInAdvanceMessage = (days: number) =>
+  `Guest visits can only be booked up to ${days} days in advance. Please select a date within the next ${days} days.`;
 
 export function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
