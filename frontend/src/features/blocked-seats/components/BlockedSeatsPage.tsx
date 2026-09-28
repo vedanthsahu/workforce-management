@@ -117,9 +117,10 @@ export default function BlockedSeatsPage() {
     if (cached) setResponse(cached);
     setLoading(!cached);
     setError("");
-    if (cached) return () => {
-      cancelled = true;
-    };
+    if (cached)
+      return () => {
+        cancelled = true;
+      };
     blockedSeatsService
       .list(listScope, appliedFilters, page)
       .then((data) => {
@@ -128,7 +129,9 @@ export default function BlockedSeatsPage() {
       .catch((requestError: unknown) => {
         if (!cancelled) {
           setResponse(EMPTY_RESPONSE);
-          setError(apiErrorMessage(requestError, "Unable to load blocked spaces."));
+          setError(
+            apiErrorMessage(requestError, "Unable to load blocked spaces."),
+          );
         }
       })
       .finally(() => {
@@ -201,80 +204,80 @@ export default function BlockedSeatsPage() {
     setSelectedAction({ action, row });
   };
   return (
-    <main className="min-h-0 flex-1 overflow-y-auto bg-[#F7F8FC] p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-[1500px] space-y-4 sm:space-y-6">
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-[17px] font-bold leading-tight text-[#1A1A2E] sm:text-[20px]">
-              Blocked Spaces
-            </h1>
-            <p className="mt-0.5 text-[11.5px] text-gray-400 sm:text-[12.5px]">
-              Block and manage spaces that are unavailable for booking.
-            </p>
-          </div>
-          <button
-            onClick={() => router.push("/admin/blocked-seats/block")}
-            className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-lg bg-indigo-600 px-4 text-[12.5px] font-semibold text-white transition-colors hover:bg-indigo-700 sm:self-auto sm:text-[13px]"
-          >
-            <Plus size={17} />
-            Block Spaces
-          </button>
-        </header>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          {SUMMARY_CARDS.map((card) => (
-            <SummaryCard
-              key={card.id}
-              label={card.label}
-              icon={card.icon}
-              iconClass={card.iconClass}
-              count={summary[card.summaryKey]}
-              selected={listScope !== "all" && category === card.id}
-              onClick={() => {
-                setCategory(card.id);
-                setListScope(card.id);
-                setPage(1);
-              }}
-            />
-          ))}
-        </div>
-        <FilterPanel
-          filters={filters}
-          sites={sites}
-          buildings={buildings}
-          floors={floors}
-          loadingSites={loadingSites}
-          loadingBuildings={loadingBuildings}
-          loadingFloors={loadingFloors}
-          onChange={updateFilter}
-          enabled={hasCriteria}
-          onClear={() => {
-            setFilters(EMPTY_FILTERS);
-            setAppliedFilters(EMPTY_FILTERS);
-            setListScope(category);
-            setPage(1);
-          }}
-          onSearch={() => {
-            setAppliedFilters(filters);
-            setListScope("all");
-            setPage(1);
-          }}
-        />
-        {(locationError || error) && (
-          <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {locationError || error}
+    <main className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc]">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900 sm:text-2xl">
+            Blocked Spaces
+          </h1>
+          <p className="mt-1 text-xs text-gray-500 sm:text-sm">
+            Block and manage spaces that are unavailable for booking.
           </p>
-        )}
-        <BlockedSeatsTable
-          title={listScope === "all" ? "Filtered Blocks" : CATEGORY_LABELS[category]}
-          rows={response.items}
-          total={response.pagination.total}
-          page={page}
-          totalPages={Math.max(1, response.pagination.total_pages)}
-          loading={loading}
-          onPageChange={setPage}
-          onAction={handleAction}
-        />
+        </div>
+        <button
+          onClick={() => router.push("/admin/blocked-seats/block")}
+          className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-lg bg-indigo-600 px-4 text-[12.5px] font-semibold text-white transition-colors hover:bg-indigo-700 sm:self-auto sm:text-[13px]"
+        >
+          <Plus size={17} />
+          Block Spaces
+        </button>
+      </header>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {SUMMARY_CARDS.map((card) => (
+          <SummaryCard
+            key={card.id}
+            label={card.label}
+            icon={card.icon}
+            iconClass={card.iconClass}
+            count={summary[card.summaryKey]}
+            selected={listScope !== "all" && category === card.id}
+            onClick={() => {
+              setCategory(card.id);
+              setListScope(card.id);
+              setPage(1);
+            }}
+          />
+        ))}
       </div>
+      <FilterPanel
+        filters={filters}
+        sites={sites}
+        buildings={buildings}
+        floors={floors}
+        loadingSites={loadingSites}
+        loadingBuildings={loadingBuildings}
+        loadingFloors={loadingFloors}
+        onChange={updateFilter}
+        enabled={hasCriteria}
+        onClear={() => {
+          setFilters(EMPTY_FILTERS);
+          setAppliedFilters(EMPTY_FILTERS);
+          setListScope(category);
+          setPage(1);
+        }}
+        onSearch={() => {
+          setAppliedFilters(filters);
+          setListScope("all");
+          setPage(1);
+        }}
+      />
+      {(locationError || error) && (
+        <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {locationError || error}
+        </p>
+      )}
+      <BlockedSeatsTable
+        title={
+          listScope === "all" ? "Filtered Blocks" : CATEGORY_LABELS[category]
+        }
+        rows={response.items}
+        total={response.pagination.total}
+        page={page}
+        totalPages={Math.max(1, response.pagination.total_pages)}
+        loading={loading}
+        onPageChange={setPage}
+        onAction={handleAction}
+      />
       {selectedAction && (
         <BlockedSeatActionPanel
           action={selectedAction.action}

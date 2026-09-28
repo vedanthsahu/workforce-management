@@ -40,6 +40,7 @@ export default function EditBuildingModal({
     officeInfo,
     officeInfoLoading,
     officeNeedsReactivation,
+    floorsChecklistLoading,
     handleChange,
     handleUpdate,
   } = useEditBuilding(building, onSuccess, open);
@@ -85,7 +86,11 @@ export default function EditBuildingModal({
             </select>
           </div>
 
-          {isReactivating && (officeNeedsReactivation || inactiveFloors.length > 0) && (
+          {isReactivating && floorsChecklistLoading && (
+            <p className="text-xs text-gray-500">Checking for inactive floors…</p>
+          )}
+
+          {isReactivating && !floorsChecklistLoading && (officeNeedsReactivation || inactiveFloors.length > 0) && (
             <div className="space-y-1.5">
               <Label>Reactivate associated items</Label>
               <p className="text-xs text-gray-500">
@@ -124,7 +129,7 @@ export default function EditBuildingModal({
               await handleUpdate();
               onClose();
             }}
-            disabled={loading || !hasChanges}
+            disabled={loading || (isReactivating && (officeInfoLoading || floorsChecklistLoading)) || !hasChanges}
           >
             {loading ? "Saving..." : "Save Changes"}
           </Button>

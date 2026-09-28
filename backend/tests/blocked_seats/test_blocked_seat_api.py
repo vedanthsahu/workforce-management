@@ -48,6 +48,13 @@ def _row(block_id: str = "10") -> dict[str, object]:
 
 
 class BlockedSeatSchemaTests(unittest.TestCase):
+    def test_list_query_rejects_reversed_date_range(self) -> None:
+        with self.assertRaises(ValidationError):
+            BlockedSeatListQuery(
+                start_date=date(2026, 9, 12),
+                end_date=date(2026, 9, 10),
+            )
+
     def test_create_request_rejects_invalid_date_range(self) -> None:
         with self.assertRaises(ValidationError):
             CreateBlockedSeatsRequest(
@@ -118,6 +125,7 @@ class BlockedSeatServiceTests(unittest.TestCase):
         self.assertEqual(response.active_blocks, 3)
         self.assertEqual(fetch_summary.call_args.kwargs["upcoming_days"], 1)
         self.assertEqual(fetch_summary.call_args.kwargs["expiring_soon_days"], 3)
+        self.assertEqual(fetch_summary.call_args.kwargs["expired_window_days"], 10)
 
     def test_create_rejects_past_block_date(self) -> None:
         yesterday = date.today() - timedelta(days=1)
@@ -304,6 +312,7 @@ class BlockedSeatServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(fetch_rows.call_args.kwargs["expired_window_days"], 10)
+        self.assertEqual(fetch_summary.call_args.kwargs["expired_window_days"], 10)
         self.assertNotIn("window_before_days", fetch_rows.call_args.kwargs)
         self.assertNotIn("window_after_days", fetch_rows.call_args.kwargs)
 

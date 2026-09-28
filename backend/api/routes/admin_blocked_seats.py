@@ -56,6 +56,8 @@ def admin_blocked_seats(
     floor_id: Annotated[int | None, Query(alias="floorId", gt=0)] = None,
     block_type: Annotated[BlockedSeatType | None, Query(alias="blockType")] = None,
     selected_date: Annotated[date | None, Query(alias="date")] = None,
+    start_date: Annotated[date | None, Query(alias="startDate")] = None,
+    end_date: Annotated[date | None, Query(alias="endDate")] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     include_summary: Annotated[bool, Query(alias="includeSummary")] = True,
@@ -68,6 +70,8 @@ def admin_blocked_seats(
         floor_id=floor_id,
         block_type=block_type,
         selected_date=selected_date,
+        start_date=start_date,
+        end_date=end_date,
     )
     return get_blocked_seats(
         conn,

@@ -116,7 +116,8 @@ export interface BlockedSeatFilters {
   buildingId: string;
   floorId: string;
   blockType: string;
-  date: string;
+  dateFrom: string;
+  dateTo: string;
 }
 
 export interface CreateBlockedSeatsPayload {

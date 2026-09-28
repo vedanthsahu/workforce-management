@@ -34,6 +34,10 @@ export const useEditBuilding = (
   // up to its floors (see location_service.py).
   const [inactiveFloors, setInactiveFloors] = useState<ReactivateChecklistItem[]>([]);
   const [selectedFloorIds, setSelectedFloorIds] = useState<string[]>([]);
+  // True only while the inactive-floors fetch below is in flight -- Save
+  // must stay disabled until it settles, otherwise a fast click submits
+  // before the admin ever had a chance to see/check any reactivate options.
+  const [floorsChecklistLoading, setFloorsChecklistLoading] = useState(false);
 
   // Read-only ancestor context: which office this building belongs to, and
   // its current status. Purely informational -- a building can't reactivate
@@ -86,9 +90,11 @@ export const useEditBuilding = (
     if (!isReactivating) {
       setSelectedFloorIds([]);
       setInactiveFloors([]);
+      setFloorsChecklistLoading(false);
       return;
     }
     let cancelled = false;
+    setFloorsChecklistLoading(true);
     (async () => {
       try {
         const floors = await floorService.getFloors(Number(building.building_id), "INACTIVE");
@@ -96,6 +102,8 @@ export const useEditBuilding = (
         setInactiveFloors(floors.map((f) => ({ id: f.floor_id, name: f.floor_name })));
       } catch (error) {
         console.error(error);
+      } finally {
+        if (!cancelled) setFloorsChecklistLoading(false);
       }
     })();
     return () => {
@@ -151,6 +159,7 @@ export const useEditBuilding = (
     officeInfo,
     officeInfoLoading,
     officeNeedsReactivation,
+    floorsChecklistLoading,
 
     handleChange,
     handleUpdate,

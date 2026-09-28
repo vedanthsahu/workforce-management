@@ -349,7 +349,10 @@ export default function BookingManagementFilters({
   useEffect(() => {
     const employeeStatusValues = ["All", "Confirmed", "Cancelled", "Modified"];
     const allStatusValues = BOOKING_STATUS_OPTIONS.map((o) => o.value);
-    const guestStatusValues = allStatusValues.filter((v) => v !== "No Show");
+    // "Not Checked In" isn't a real BookingStatus -- it's the Guest tab's
+    // Not Checked In card, which filters to Scheduled + Confirmed combined
+    // (see the matchingItems filter in AdminBookingsPage.tsx).
+    const guestStatusValues = [...allStatusValues.filter((v) => v !== "No Show"), "Not Checked In"];
 
     const allowed =
       filters.bookingType === "Employee"
@@ -470,7 +473,10 @@ export default function BookingManagementFilters({
                 { value: "Modified", label: "Modified" },
               ];
             } else if (filters.bookingType === "Guest") {
-              statusOptions = BOOKING_STATUS_OPTIONS.filter((o) => o.value !== "No Show");
+              statusOptions = [
+                ...BOOKING_STATUS_OPTIONS.filter((o) => o.value !== "No Show"),
+                { value: "Not Checked In", label: "Not Checked In" },
+              ];
             } else {
               statusOptions = BOOKING_STATUS_OPTIONS;
             }

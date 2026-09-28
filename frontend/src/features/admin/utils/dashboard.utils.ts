@@ -123,7 +123,11 @@ export function mapHierarchyToTopOffices(items: OccupancyHierarchyItem[]): TopOf
       bookedSeats: item.bookedSeats,
       employeeBookedSeats: item.employeeBookedSeats,
       guestBookedSeats: item.guestBookedSeats,
-      totalSeats: item.totalSeats,
+      // availableSeats (active seats, minus any currently-blocked ones), not
+      // the raw totalSeats -- occupancyRate above is itself booked/available,
+      // so the "X out of Y" shown alongside it must use the same denominator
+      // or the two numbers won't agree.
+      totalSeats: item.availableSeats,
     }))
     .sort((a, b) => b.value - a.value);
 }

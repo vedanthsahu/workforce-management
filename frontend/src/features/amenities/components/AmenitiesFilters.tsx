@@ -21,7 +21,7 @@ export default function AmenitiesFilters({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full sm:w-auto pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Search amenities..."
+          placeholder="Search by amenity name..."
         />
       </div>
     </div>

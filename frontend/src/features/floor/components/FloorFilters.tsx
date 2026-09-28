@@ -57,7 +57,7 @@ export default function FloorFilters({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="h-9 w-50 pl-9 pr-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Search floor..."
+          placeholder="Search by floor name..."
         />
       </div>
 

@@ -10,6 +10,9 @@ export const MAX_ADVANCE_BOOKING_DAYS = 30;
 export const BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE =
   "Bookings can only be made up to 30 days in advance. Please select a date within the next 30 days.";
 
+export const MULTI_DAY_BOOKING_NOT_SUPPORTED_MESSAGE =
+  "Multi-day booking isn’t available yet. Your booking has been set for the selected date only.";
+
 export function maxBookableDateIso(): string {
   const d = new Date();
   d.setDate(d.getDate() + MAX_ADVANCE_BOOKING_DAYS);

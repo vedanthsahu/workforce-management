@@ -50,6 +50,10 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
   const [inactiveFloors, setInactiveFloors] = useState<ReactivateChecklistFloor[]>([]);
   const [selectedBuildingIds, setSelectedBuildingIds] = useState<string[]>([]);
   const [selectedFloorIds, setSelectedFloorIds] = useState<string[]>([]);
+  // True only while the inactive-buildings/floors fetch below is in flight --
+  // Save must stay disabled until it settles, otherwise a fast click submits
+  // before the admin ever had a chance to see/check any reactivate options.
+  const [checklistLoading, setChecklistLoading] = useState(false);
 
   // Re-sync from the source office every time the modal opens — not just
   // when `office` changes — so a Cancel discards any unsaved status/field
@@ -84,9 +88,11 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
       setSelectedFloorIds([]);
       setInactiveBuildings([]);
       setInactiveFloors([]);
+      setChecklistLoading(false);
       return;
     }
     let cancelled = false;
+    setChecklistLoading(true);
     (async () => {
       try {
         const [buildings, floors] = await Promise.all([
@@ -100,6 +106,8 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
         );
       } catch (err) {
         console.error(err);
+      } finally {
+        if (!cancelled) setChecklistLoading(false);
       }
     })();
     return () => {
@@ -195,7 +203,11 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
             </select>
           </div>
 
-          {isReactivating && (inactiveBuildings.length > 0 || inactiveFloors.length > 0) && (
+          {isReactivating && checklistLoading && (
+            <p className="text-xs text-gray-500">Checking for inactive buildings/floors…</p>
+          )}
+
+          {isReactivating && !checklistLoading && (inactiveBuildings.length > 0 || inactiveFloors.length > 0) && (
             <div className="space-y-1.5">
               <Label>Reactivate associated buildings/floors</Label>
               <p className="text-xs text-gray-500">
@@ -219,7 +231,7 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={loading || !hasChanges}>
+          <Button onClick={handleSubmit} disabled={loading || checklistLoading || !hasChanges}>
             {loading ? "Saving..." : "Save Changes"}
           </Button>
         </DialogFooter>

@@ -109,7 +109,7 @@ export default function FloorTable({ data, onEdit, highlightedId }: Props) {
                       <span className="font-medium">{floor.floor_code}</span>
                     </div>
                   </td>
-                  <td className="pl-5 pr-3 py-3 max-w-0"><span className="block font-medium truncate">{floor.floor_name}</span></td>
+                  <td className="pl-5 pr-3 py-3 max-w-0"><span className="block font-medium line-clamp-2">{floor.floor_name}</span></td>
                   <td className="px-3 py-3 max-w-0"><span className="block line-clamp-2">{floor.building_name}</span></td>
                   <td className="px-3 py-3 text-center">{floor.seat_count}</td>
                   <td className="px-3 py-3 text-center">{floor.active_seat_count}</td>

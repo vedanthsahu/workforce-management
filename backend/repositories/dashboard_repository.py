@@ -1191,9 +1191,24 @@ def fetch_hierarchy_occupancy(
                 FROM groups AS g
                 INNER JOIN seats AS s
                     ON s.{group_seat_column} = g.group_id
+                -- Only seats belonging to the floor's currently published
+                -- layout count toward Top Offices -- otherwise a seat left
+                -- over from a superseded layout inflates total_seats past
+                -- what the office/building/floor admin lists show (those
+                -- already scope to the published layout; see
+                -- _SEAT_IN_PUBLISHED_LAYOUT_SQL in location_repository.py).
+                INNER JOIN floor_layouts AS pfl
+                    ON pfl.floor_id = s.floor_id
+                   AND pfl.tenant_id = s.tenant_id
+                   AND pfl.is_published = TRUE
+                   AND pfl.status = 'PUBLISHED'
+                   AND pfl.id = s.layout_id
+                -- No is_bookable filter here -- total_seats must match the
+                -- office/building/floor admin lists' "Active Seats" count
+                -- (active_seat_count, which doesn't require is_bookable
+                -- either), not their separate "Bookable Seats" count.
                 WHERE s.tenant_id = %(tenant_id)s
                   AND s.status = 'ACTIVE'
-                  AND s.is_bookable = TRUE
             ),
 
             seat_counts AS (

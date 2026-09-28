@@ -9,7 +9,7 @@ rules catalog rows.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class BookingPolicyResponse(BaseModel):
@@ -36,18 +36,18 @@ class UpdateBookingPolicyRequest(BaseModel):
     """Each field is optional so a caller can update just one rule without
     resending values it isn't touching."""
 
-    employee_max_advance_days: int | None = None
-    guest_max_advance_days: int | None = None
+    employee_max_advance_days: int | None = Field(default=None, gt=0)
+    guest_max_advance_days: int | None = Field(default=None, gt=0)
 
 
 class UpdateLayoutVisibilityDaysRequest(BaseModel):
-    draft: int | None = None
-    archived: int | None = None
-    deleted: int | None = None
+    draft: int | None = Field(default=None, gt=0)
+    archived: int | None = Field(default=None, gt=0)
+    deleted: int | None = Field(default=None, gt=0)
 
 
 class UpdateLayoutPolicyRequest(BaseModel):
-    buffer_days: int | None = None
+    buffer_days: int | None = Field(default=None, gt=0)
     visibility_days: UpdateLayoutVisibilityDaysRequest | None = None
 
 
@@ -61,6 +61,6 @@ class BlockedSeatPolicyResponse(BaseModel):
 
 
 class UpdateBlockedSeatPolicyRequest(BaseModel):
-    upcoming_days: int | None = None
-    expiring_soon_days: int | None = None
-    expired_window_days: int | None = None
+    upcoming_days: int | None = Field(default=None, gt=0)
+    expiring_soon_days: int | None = Field(default=None, gt=0)
+    expired_window_days: int | None = Field(default=None, gt=0)

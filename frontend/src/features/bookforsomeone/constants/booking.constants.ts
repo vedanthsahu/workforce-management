@@ -28,3 +28,7 @@ export function maxGuestVisitDateIso(): string {
   d.setDate(d.getDate() + MAX_GUEST_VISIT_ADVANCE_DAYS);
   return d.toISOString().slice(0, 10);
 }
+
+export function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
