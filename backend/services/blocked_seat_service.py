@@ -123,6 +123,7 @@ def get_blocked_seats(
                 reference_date=reference_date,
                 upcoming_days=policy["UPCOMING"],
                 expiring_soon_days=policy["EXPIRING_SOON"],
+                expired_window_days=policy["EXPIRED_WINDOW"],
             )
     except psycopg2.Error as exc:
         raise HTTPException(
@@ -156,6 +157,7 @@ def get_blocked_seat_summary(
             reference_date=date.today(),
             upcoming_days=policy["UPCOMING"],
             expiring_soon_days=policy["EXPIRING_SOON"],
+            expired_window_days=policy["EXPIRED_WINDOW"],
         )
     except psycopg2.Error as exc:
         raise HTTPException(

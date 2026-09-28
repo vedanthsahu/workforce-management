@@ -76,7 +76,8 @@ const blockedSeatListKey = (
     buildingId: filters.buildingId,
     floorId: filters.floorId,
     blockType: filters.blockType,
-    date: filters.date,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
     page,
     limit,
   });
@@ -95,10 +96,13 @@ export const blockedSeatsService = {
       SUMMARY_CACHE_MS,
       async () => {
         try {
-          const { data } = await axiosInstance.get("/admin/blocked-seats/summary");
+          const { data } = await axiosInstance.get(
+            "/admin/blocked-seats/summary",
+          );
           return data;
         } catch (error: unknown) {
-          const status = (error as { response?: { status?: number } }).response?.status;
+          const status = (error as { response?: { status?: number } }).response
+            ?.status;
           if (status !== 404) throw error;
           // Keep counts available while a frontend deployment is briefly served
           // with an older backend that does not yet expose the summary endpoint.
@@ -150,7 +154,8 @@ export const blockedSeatsService = {
             buildingId: filters.buildingId || undefined,
             floorId: filters.floorId || undefined,
             blockType: filters.blockType || undefined,
-            date: filters.date || undefined,
+            startDate: filters.dateFrom || undefined,
+            endDate: filters.dateTo || undefined,
             page,
             limit,
             includeSummary: false,
@@ -168,7 +173,9 @@ export const blockedSeatsService = {
     layoutCache.clear();
   },
   async cancel(blockId: string, reason: string): Promise<void> {
-    await axiosInstance.post(`/admin/blocked-seats/${blockId}/cancel`, { reason });
+    await axiosInstance.post(`/admin/blocked-seats/${blockId}/cancel`, {
+      reason,
+    });
     listCache.clear();
     summaryCache.clear();
     layoutCache.clear();

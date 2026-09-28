@@ -7,6 +7,11 @@ import { Layout } from "../types/layout.types";
 
 interface ManageLayoutHeaderProps {
   layout?: Layout | null;
+  // A floor can only have one SCHEDULED layout queued up at a time --
+  // uploading another on top of it would leave two competing "next"
+  // layouts for the same floor. Same rule, same reasoning as the Upload
+  // button on the Floor Layout Management list page (FloorLayoutsPage.tsx).
+  hasScheduledLayout?: boolean;
 }
 
 function UploadIcon() {
@@ -20,7 +25,7 @@ function UploadIcon() {
   );
 }
 
-export default function ManageLayoutHeader({ layout }: ManageLayoutHeaderProps) {
+export default function ManageLayoutHeader({ layout, hasScheduledLayout = false }: ManageLayoutHeaderProps) {
   const router       = useRouter();
   const searchParams = useSearchParams();
 
@@ -82,9 +87,11 @@ export default function ManageLayoutHeader({ layout }: ManageLayoutHeaderProps) 
         </button>
 
         <button
-          onClick={handleUpload}
-          onMouseEnter={() => router.prefetch("/admin/layouts/upload")}
-          className="flex items-center gap-1.5 border border-gray-300 bg-white text-gray-700 px-3 py-2 rounded-md text-sm hover:bg-gray-50 transition-colors"
+          onClick={hasScheduledLayout ? undefined : handleUpload}
+          onMouseEnter={hasScheduledLayout ? undefined : () => router.prefetch("/admin/layouts/upload")}
+          disabled={hasScheduledLayout}
+          title={hasScheduledLayout ? "This floor already has a scheduled layout queued up -- cancel it or wait for it to take effect before uploading a new one." : undefined}
+          className="flex items-center gap-1.5 border border-gray-300 bg-white text-gray-700 px-3 py-2 rounded-md text-sm hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
         >
           <UploadIcon />
           <span className="hidden sm:inline">Upload New Layout</span>

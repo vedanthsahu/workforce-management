@@ -110,15 +110,45 @@ class BlockedSeatQueryTests(TestCase):
         self.assertNotIn("BETWEEN bs.blocked_from AND bs.blocked_to", count_sql)
         self.assertEqual(count_params, ["7", 4])
 
+    def test_date_range_returns_blocks_that_overlap_the_range(self):
+        self.cur.fetchall.return_value = []
+        self.cur.fetchone.return_value = {"total": 0}
+        start_date = date(2026, 9, 10)
+        end_date = date(2026, 9, 12)
+
+        fetch_blocked_seats(
+            self.conn,
+            tenant_id="7",
+            query=BlockedSeatListQuery(
+                category="all",
+                start_date=start_date,
+                end_date=end_date,
+            ),
+            reference_date=date(2026, 9, 10),
+            page=1,
+            limit=10,
+            upcoming_days=1,
+            expiring_soon_days=3,
+            expired_window_days=10,
+        )
+
+        count_sql, count_params = self.cur.execute.call_args.args
+        self.assertIn("bs.blocked_to >= %s", count_sql)
+        self.assertIn("bs.blocked_from <= %s", count_sql)
+        self.assertEqual(count_params, ["7", start_date, end_date])
+
     def test_summary_avoids_unneeded_joins(self):
         self.cur.fetchone.return_value = {"active_blocks": 1}
         fetch_blocked_seat_summary(self.conn, tenant_id="7",
                                   query=BlockedSeatListQuery(), reference_date=date(2026, 9, 10),
-                                  upcoming_days=1, expiring_soon_days=3)
+                                  upcoming_days=1, expiring_soon_days=3,
+                                  expired_window_days=10)
         sql, params = self.cur.execute.call_args.args
         self.assertNotIn("JOIN seats", sql)
         self.assertNotIn("JOIN app_users", sql)
         self.assertIn("JOIN sites", sql)  # Site timezone is needed for today's count.
+        self.assertIn("bs.blocked_to >= (%s - %s)", sql)
+        self.assertEqual(params[-4:-1], [date(2026, 9, 10), 10, date(2026, 9, 10)])
         self.assertEqual(params[-1], "7")
 
     @patch("backend.repositories.blocked_seat_repository.execute_values")
