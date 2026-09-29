@@ -45,8 +45,8 @@ export const usersService = {
     }
   },
 
-  async searchUsers(q: string, limit = 20): Promise<ApiUserSearchResult[]> {
-    const { data } = await axiosInstance.get("/users", { params: { q, limit } });
+  async searchUsers(q: string, limit = 20, includeInactive = false): Promise<ApiUserSearchResult[]> {
+    const { data } = await axiosInstance.get("/users", { params: { q, limit, include_inactive: includeInactive } });
     return data;
   },
 

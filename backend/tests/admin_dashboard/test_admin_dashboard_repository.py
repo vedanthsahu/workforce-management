@@ -139,6 +139,7 @@ class AdminDashboardRepositoryTests(unittest.TestCase):
         self.assertIn("b.floor_id = %(floor_id)s::bigint", combined_sql)
         self.assertIn("FROM guest_visits gv", combined_sql)
         self.assertIn("LEFT JOIN LATERAL", combined_sql)
+        self.assertIn("guest_booking.booking_status <> 'MODIFIED'", combined_sql)
         self.assertIn("COALESCE(b.floor_id, gv.floor_id)", combined_sql)
         self.assertEqual([row["activity_id"] for row in result], [
             "guest-booking-20",
@@ -146,6 +147,41 @@ class AdminDashboardRepositoryTests(unittest.TestCase):
         ])
         self.assertEqual(cursor.executions[0][1]["tenant_id"], "1")
         self.assertEqual(cursor.executions[1][1]["tenant_id"], "1")
+
+    def test_activity_list_represents_seat_cancellation_as_modified_visit(self) -> None:
+        cursor = FakeCursor(
+            fetchall_values=[
+                [],
+                [
+                    {
+                        "activity_id": "guest-visit-30",
+                        "activity_type": "GUEST_VISIT",
+                        "activity_status": "MODIFIED",
+                        "guest_visit_id": "30",
+                        "booking_id": None,
+                        "seat_id": None,
+                        "created_at": "2026-05-22T08:00:00",
+                        "updated_at": "2026-05-22T08:45:00",
+                    }
+                ],
+            ],
+        )
+
+        result = fetch_admin_activity_list(
+            FakeConnection(cursor),
+            tenant_id="1",
+            activity_date=date(2026, 5, 22),
+        )
+
+        self.assertEqual(
+            [(row["activity_id"], row["activity_status"]) for row in result],
+            [
+                ("guest-visit-30", "MODIFIED"),
+            ],
+        )
+        guest_sql = cursor.executions[1][0]
+        self.assertIn("WHEN b.booking_status = 'CANCELLED' THEN 'MODIFIED'", guest_sql)
+        self.assertIn("ELSE 'GUEST_VISIT'", guest_sql)
 
     def test_date_range_occupancy_query_uses_generate_series_and_grouped_counts(self) -> None:
         cursor = FakeCursor(

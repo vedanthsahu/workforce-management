@@ -251,7 +251,17 @@ def fetch_future_delegated_guest_visits_without_booking(
                 f.floor_name,
 
                 gv.visit_date AS booking_date,
-                gv.visit_status AS booking_status,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM bookings cancelled_booking
+                        WHERE cancelled_booking.guest_visit_id = gv.id
+                          AND cancelled_booking.tenant_id = gv.tenant_id
+                          AND cancelled_booking.booking_type = 'GUEST'
+                          AND cancelled_booking.booking_status = 'CANCELLED'
+                    ) THEN 'MODIFIED'
+                    ELSE gv.visit_status
+                END AS booking_status,
 
                 NULL AS source_channel,
 
@@ -390,7 +400,17 @@ def fetch_current_delegated_guest_visits_without_booking(
                 f.floor_name,
 
                 gv.visit_date AS booking_date,
-                gv.visit_status AS booking_status,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM bookings cancelled_booking
+                        WHERE cancelled_booking.guest_visit_id = gv.id
+                          AND cancelled_booking.tenant_id = gv.tenant_id
+                          AND cancelled_booking.booking_type = 'GUEST'
+                          AND cancelled_booking.booking_status = 'CANCELLED'
+                    ) THEN 'MODIFIED'
+                    ELSE gv.visit_status
+                END AS booking_status,
 
                 NULL AS source_channel,
 
@@ -530,7 +550,17 @@ def fetch_past_delegated_guest_visits_without_booking(
                 f.floor_name,
 
                 gv.visit_date AS booking_date,
-                gv.visit_status AS booking_status,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM bookings cancelled_booking
+                        WHERE cancelled_booking.guest_visit_id = gv.id
+                          AND cancelled_booking.tenant_id = gv.tenant_id
+                          AND cancelled_booking.booking_type = 'GUEST'
+                          AND cancelled_booking.booking_status = 'CANCELLED'
+                    ) THEN 'MODIFIED'
+                    ELSE gv.visit_status
+                END AS booking_status,
 
                 NULL AS source_channel,
 
@@ -630,6 +660,7 @@ def fetch_admin_guest_visits_without_booking(
     building_id: str | None = None,
     floor_id: str | None = None,
     visit_status: str | None = None,
+    booking_status: str | None = None,
     search: str | None = None,
     booked_by_user_id: str | None = None,
 ) -> list[dict[str, Any]]:
@@ -646,6 +677,14 @@ def fetch_admin_guest_visits_without_booking(
         "gv.tenant_id = %s",
         "b.id IS NULL",
         "gv.visit_status <> 'MODIFIED'",
+        # A fully cancelled visit keeps its cancelled booking row (and its
+        # seat details) in fetch_admin_bookings; do not add a second visit row.
+        "NOT (gv.visit_status = 'CANCELLED' AND EXISTS ("
+        "SELECT 1 FROM bookings cancelled_booking "
+        "WHERE cancelled_booking.guest_visit_id = gv.id "
+        "AND cancelled_booking.tenant_id = gv.tenant_id "
+        "AND cancelled_booking.booking_type = 'GUEST' "
+        "AND cancelled_booking.booking_status = 'CANCELLED'))",
     ]
     params: list[Any] = [tenant_id]
 
@@ -667,6 +706,18 @@ def fetch_admin_guest_visits_without_booking(
     if visit_status is not None:
         conditions.append("gv.visit_status = %s")
         params.append(visit_status)
+    if booking_status == "MODIFIED":
+        conditions.append(
+            "EXISTS (SELECT 1 FROM bookings cancelled_booking "
+            "WHERE cancelled_booking.guest_visit_id = gv.id "
+            "AND cancelled_booking.tenant_id = gv.tenant_id "
+            "AND cancelled_booking.booking_type = 'GUEST' "
+            "AND cancelled_booking.booking_status = 'CANCELLED')"
+        )
+    elif booking_status is not None:
+        # This source represents only Visit Only rows. Other status filters
+        # are satisfied by the bookings-table query.
+        conditions.append("FALSE")
     if booked_by_user_id is not None:
         conditions.append("gv.created_by_user_id = %s")
         params.append(booked_by_user_id)
@@ -716,7 +767,17 @@ def fetch_admin_guest_visits_without_booking(
                 f.floor_name,
 
                 gv.visit_date AS booking_date,
-                gv.visit_status AS booking_status,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM bookings cancelled_booking
+                        WHERE cancelled_booking.guest_visit_id = gv.id
+                          AND cancelled_booking.tenant_id = gv.tenant_id
+                          AND cancelled_booking.booking_type = 'GUEST'
+                          AND cancelled_booking.booking_status = 'CANCELLED'
+                    ) THEN 'MODIFIED'
+                    ELSE gv.visit_status
+                END AS booking_status,
 
                 NULL AS source_channel,
 
@@ -2595,7 +2656,16 @@ def _build_admin_booking_filters(
     row's own visit_status (see BOOKING_SELECT_FROM's gv join). Since only
     GUEST-type rows have a guest_visit at all, a visit_status filter
     naturally excludes EMPLOYEE rows (gv is NULL for those)."""
-    conditions = ["b.tenant_id = %s"]
+    conditions = [
+        "b.tenant_id = %s",
+        # A seat-only cancellation is represented as one seatless MODIFIED
+        # guest-visit row. Keep the cancelled booking only when its guest
+        # visit was cancelled too, so that row retains the booking details.
+        "NOT (b.booking_type = 'GUEST' "
+        "AND b.booking_status = 'CANCELLED' "
+        "AND gv.visit_status IS NOT NULL "
+        "AND gv.visit_status <> 'CANCELLED')",
+    ]
     params: list[Any] = [tenant_id]
 
     if start_date is not None:

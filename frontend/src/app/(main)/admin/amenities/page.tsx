@@ -175,6 +175,15 @@ function AmenitiesPage() {
               data={paginatedAmenities}
               onEdit={handleEdit}
               highlightedAmenityId={highlightedId}
+              emptyMessage={
+                search
+                  ? `No amenities match "${search}".`
+                  : statusFilter === "ACTIVE"
+                    ? "No active amenities found."
+                    : statusFilter === "INACTIVE"
+                      ? "No inactive amenities found."
+                      : "No amenities found."
+              }
             />
           )}
         </div>
