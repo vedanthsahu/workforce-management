@@ -679,12 +679,14 @@ def fetch_admin_guest_visits_without_booking(
         "gv.visit_status <> 'MODIFIED'",
         # A fully cancelled visit keeps its cancelled booking row (and its
         # seat details) in fetch_admin_bookings; do not add a second visit row.
-        "NOT (gv.visit_status = 'CANCELLED' AND EXISTS ("
-        "SELECT 1 FROM bookings cancelled_booking "
-        "WHERE cancelled_booking.guest_visit_id = gv.id "
-        "AND cancelled_booking.tenant_id = gv.tenant_id "
-        "AND cancelled_booking.booking_type = 'GUEST' "
-        "AND cancelled_booking.booking_status = 'CANCELLED'))",
+        (
+            "NOT (gv.visit_status = 'CANCELLED' AND EXISTS ("
+            "SELECT 1 FROM bookings cancelled_booking "
+            "WHERE cancelled_booking.guest_visit_id = gv.id "
+            "AND cancelled_booking.tenant_id = gv.tenant_id "
+            "AND cancelled_booking.booking_type = 'GUEST' "
+            "AND cancelled_booking.booking_status = 'CANCELLED'))"
+        ),
     ]
     params: list[Any] = [tenant_id]
 
@@ -2661,10 +2663,12 @@ def _build_admin_booking_filters(
         # A seat-only cancellation is represented as one seatless MODIFIED
         # guest-visit row. Keep the cancelled booking only when its guest
         # visit was cancelled too, so that row retains the booking details.
-        "NOT (b.booking_type = 'GUEST' "
-        "AND b.booking_status = 'CANCELLED' "
-        "AND gv.visit_status IS NOT NULL "
-        "AND gv.visit_status <> 'CANCELLED')",
+        (
+            "NOT (b.booking_type = 'GUEST' "
+            "AND b.booking_status = 'CANCELLED' "
+            "AND gv.visit_status IS NOT NULL "
+            "AND gv.visit_status <> 'CANCELLED')"
+        ),
     ]
     params: list[Any] = [tenant_id]
 
