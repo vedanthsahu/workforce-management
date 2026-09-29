@@ -193,6 +193,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
                   cornerRadius={0}
                   stroke="none"
                 >
+                  {/* chandana */}
                   <Cell className="cursor-pointer transition-opacity hover:opacity-80" fill="url(#donut-booked)" />
                   <Cell className="cursor-pointer transition-opacity hover:opacity-80" fill="url(#donut-blocked)" />
                   <Cell className="cursor-pointer transition-opacity hover:opacity-80" fill="#10B981" />
