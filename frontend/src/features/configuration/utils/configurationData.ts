@@ -34,17 +34,17 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
   {
     id: "activity-table-record-count",
     name: "Activity Table Record Count",
-    description: "Configure the default number of records to display in activity tables.",
+    description: "Configure the number of records shown in the admin dashboard's Recent Activities table.",
     icon: ListChecks,
     iconBg: "bg-indigo-100",
     iconColor: "text-indigo-600",
     fields: [
-      field("records", "Record Count", "Record Count", 50, "records", "Number of rows shown per page in activity/recent-activity tables."),
+      field("records", "Record Count", "Record Count", 20, "records", "Number of most recent records shown in the admin dashboard's Recent Activities table."),
     ],
     lastUpdatedAt: "2026-05-02T10:30:00Z",
     lastUpdatedBy: "Admin User",
     describeRule: (fields) =>
-      `Activity tables will show ${getField(fields, "records")} records per page by default.`,
+      `The Recent Activities table will show the ${getField(fields, "records")} most recent records.`,
   },
   {
     id: "new-layout-publishing",
@@ -174,9 +174,9 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
     // BLOCKED_SEAT_DAYS_KEYS / resolve_blocked_seat_days in
     // backend/services/business_rule_service.py.
     fields: [
-      field("upcomingDays", "Upcoming Threshold (Days)", "Upcoming", 1, "days", "A block is flagged Upcoming if it starts within this many days from today."),
-      field("expiringSoonDays", "Expiring Soon Threshold (Days)", "Expiring Soon", 3, "days", "A block is flagged Expiring Soon if it ends within this many days from today."),
-      field("expiredWindowDays", "Expired Record Window (Days)", "Expired Window", 10, "days", "The Expired tab only shows records from the previous N days, ending on today."),
+      field("upcomingDays", "Upcoming Threshold", "Upcoming", 1, "days", "A block is flagged Upcoming if it starts within this many days from today."),
+      field("expiringSoonDays", "Expiring Soon Threshold", "Expiring Soon", 3, "days", "A block is flagged Expiring Soon if it ends within this many days from today."),
+      field("expiredWindowDays", "Expired Record Window", "Expired Window", 10, "days", "The Expired tab only shows records from the previous N days, ending on today."),
     ],
     lastUpdatedAt: "2026-05-02T10:30:00Z",
     lastUpdatedBy: "Admin User",

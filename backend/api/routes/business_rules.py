@@ -29,19 +29,23 @@ from psycopg2.extensions import connection as PGConnection
 from backend.api.deps import get_current_user, require_any_permission
 from backend.db.connection import get_db
 from backend.schemas.business_rule import (
+    ActivityPolicyResponse,
     BlockedSeatPolicyResponse,
     BookingPolicyResponse,
     LayoutPolicyResponse,
     LayoutVisibilityDaysResponse,
+    UpdateActivityPolicyRequest,
     UpdateBlockedSeatPolicyRequest,
     UpdateBookingPolicyRequest,
     UpdateLayoutPolicyRequest,
 )
 from backend.services.business_rule_service import (
+    resolve_activity_record_count,
     resolve_blocked_seat_days,
     resolve_booking_advance_days,
     resolve_layout_scheduling_gap,
     resolve_layout_visibility_days,
+    update_activity_record_count,
     update_blocked_seat_days,
     update_employee_max_advance_days,
     update_guest_max_advance_days,
@@ -80,6 +84,40 @@ def layout_policy(
             archived=visibility_days["ARCHIVED"],
             deleted=visibility_days["DELETED"],
         ),
+    )
+
+
+@router.get("/activity-policy", response_model=ActivityPolicyResponse)
+def activity_policy(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> ActivityPolicyResponse:
+    tenant_id = str(current_user["tenant_id"])
+    return ActivityPolicyResponse(
+        record_count=resolve_activity_record_count(conn, tenant_id=tenant_id),
+    )
+
+
+@router.patch("/activity-policy", response_model=ActivityPolicyResponse)
+def update_activity_policy(
+    payload: UpdateActivityPolicyRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_any_permission(["admin_dashboard:view"])),
+    ],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> ActivityPolicyResponse:
+    tenant_id = str(current_user["tenant_id"])
+
+    if payload.record_count is not None:
+        update_activity_record_count(
+            conn, tenant_id=tenant_id,
+            new_value=payload.record_count,
+            updated_by_user_id=str(current_user["user_id"]),
+        )
+
+    return ActivityPolicyResponse(
+        record_count=resolve_activity_record_count(conn, tenant_id=tenant_id),
     )
 
 
