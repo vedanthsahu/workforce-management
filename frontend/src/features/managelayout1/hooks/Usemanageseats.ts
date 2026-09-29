@@ -174,7 +174,11 @@ export function useManageSeats() {
       if (query && !s.seat_code.toLowerCase().includes(query))                                                    return false;
       if (filters.seat_type !== "All" && (s.seat_type ?? "").toUpperCase() !== filters.seat_type.toUpperCase()) return false;
       if (filters.status    !== "All" && (s.status    ?? "").toUpperCase() !== filters.status.toUpperCase())    return false;
-      if (filters.bookable  !== "All" && s.is_bookable !== (filters.bookable === "Yes"))                        return false;
+      // Inactive spaces are always non-bookable by rule, so the "No" option
+      // is scoped to active spaces only — otherwise it would also surface
+      // inactive rows, which belong under the Inactive filter/card instead.
+      if (filters.bookable  === "Yes" && !s.is_bookable)                                                        return false;
+      if (filters.bookable  === "No"  && (s.is_bookable || (s.status ?? "").toUpperCase() !== "ACTIVE"))        return false;
       if (filters.amenity   !== "All" && !s.amenity_ids.includes(filters.amenity))                              return false;
       if (cardFilter === "CONFIGURED"    && !s.is_configured)                                                   return false;
       if (cardFilter === "UNCONFIGURED"  && s.is_configured)                                                    return false;
