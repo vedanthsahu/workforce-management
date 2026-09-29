@@ -723,45 +723,37 @@ def _fetch_guest_activity_rows(
     building_id: str | None = None,
     floor_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """
-    Fetch guest visit activities.
-    """
+    """Fetch one current activity row for each guest visit."""
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
             SELECT
                 CASE
-                    WHEN b.id IS NULL
-                        THEN CONCAT('guest-visit-', gv.id::text)
-                    ELSE CONCAT('guest-booking-', b.id::text)
+                    WHEN gv.visit_status = 'CANCELLED' AND b.id IS NOT NULL
+                        THEN CONCAT('guest-booking-', b.id::text)
+                    ELSE CONCAT('guest-visit-', gv.id::text)
                 END AS activity_id,
-
                 CASE
-                    WHEN b.id IS NULL THEN 'GUEST_VISIT'
-                    ELSE 'GUEST_BOOKING'
+                    WHEN gv.visit_status = 'CANCELLED' AND b.id IS NOT NULL
+                        THEN 'GUEST_BOOKING'
+                    WHEN b.booking_status = 'CONFIRMED' THEN 'GUEST_BOOKING'
+                    ELSE 'GUEST_VISIT'
                 END AS activity_type,
+                (b.booking_status = 'CONFIRMED' OR (
+                    gv.visit_status = 'CANCELLED' AND b.id IS NOT NULL
+                )) AS has_booking,
 
-                (b.id IS NOT NULL) AS has_booking,
-
-                CASE
-                    WHEN b.id IS NULL
-                        THEN CONCAT('guest-visit-', gv.id::text)
-                    ELSE CONCAT('guest-booking-', b.id::text)
-                END AS activity_id,
-
-                CASE
-                    WHEN b.id IS NULL THEN 'GUEST_VISIT'
-                    ELSE 'GUEST_BOOKING'
-                END AS activity_type,
-
-                (b.id IS NOT NULL) AS has_booking,
-
-                b.id::text AS booking_id,
-
+                CASE WHEN b.booking_status = 'CONFIRMED'
+                    OR (gv.visit_status = 'CANCELLED' AND b.id IS NOT NULL)
+                    THEN b.id::text END AS booking_id,
                 gv.id::text AS guest_visit_id,
-
-                gv.visit_status AS activity_status,
+                CASE
+                    WHEN gv.visit_status = 'CANCELLED'
+                        THEN COALESCE(b.booking_status, gv.visit_status)
+                    WHEN b.booking_status = 'CANCELLED' THEN 'MODIFIED'
+                    ELSE gv.visit_status
+                END AS activity_status,
 
                 b.modified_from_booking_id::text AS modified_from_booking_id,
                 gv.modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
@@ -781,42 +773,16 @@ def _fetch_guest_activity_rows(
                 NULL::text AS booked_for_role,
                 NULL::text AS booked_for_department,
                 NULL::text AS booked_for_job_title,
-
                 gv.guest_type AS booked_for_guest_type,
 
-                gv.id::text AS guest_visit_id,
-
-                gv.visit_status AS activity_status,
-
-                b.modified_from_booking_id::text AS modified_from_booking_id,
-                gv.modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
-
-                COALESCE(b.booking_date, gv.visit_date) AS activity_date,
-
-                booked_by.id::text AS booked_by_id,
-                booked_by.full_name AS booked_by_name,
-                booked_by.email AS booked_by_email,
-                UPPER(REPLACE(booked_by.role_name, ' ', '_')) AS booked_by_role,
-                booked_by.department AS booked_by_department,
-                booked_by.job_title AS booked_by_job_title,
-
-                g.id::text AS booked_for_id,
-                g.full_name AS booked_for_name,
-                g.email AS booked_for_email,
-                NULL::text AS booked_for_role,
-                NULL::text AS booked_for_department,
-                NULL::text AS booked_for_job_title,
-
-                gv.guest_type AS booked_for_guest_type,
-
-                s.id::text AS seat_id,
-                s.seat_code,
-                s.seat_type,
-                s.seat_neighborhood,
-                s.id::text AS seat_id,
-                s.seat_code,
-                s.seat_type,
-                s.seat_neighborhood,
+                CASE WHEN b.booking_status = 'CONFIRMED'
+                    OR gv.visit_status = 'CANCELLED' THEN s.id::text END AS seat_id,
+                CASE WHEN b.booking_status = 'CONFIRMED'
+                    OR gv.visit_status = 'CANCELLED' THEN s.seat_code END AS seat_code,
+                CASE WHEN b.booking_status = 'CONFIRMED'
+                    OR gv.visit_status = 'CANCELLED' THEN s.seat_type END AS seat_type,
+                CASE WHEN b.booking_status = 'CONFIRMED'
+                    OR gv.visit_status = 'CANCELLED' THEN s.seat_neighborhood END AS seat_neighborhood,
 
                 si.id::text AS site_id,
                 si.site_code,
@@ -830,8 +796,8 @@ def _fetch_guest_activity_rows(
                 fl.floor_code,
                 fl.floor_name,
 
-                gv.checked_in_at AS check_in_at,
-                gv.checked_out_at,
+                COALESCE(b.check_in_at, gv.checked_in_at) AS check_in_at,
+                COALESCE(b.checked_out_at, gv.checked_out_at) AS checked_out_at,
                 COALESCE(b.created_at, gv.created_at) AS created_at,
                 COALESCE(b.updated_at, gv.updated_at) AS updated_at
 
@@ -847,17 +813,13 @@ def _fetch_guest_activity_rows(
                 WHERE guest_booking.guest_visit_id = gv.id
                   AND guest_booking.tenant_id = gv.tenant_id
                   AND guest_booking.booking_type = 'GUEST'
-                ORDER BY
-                    guest_booking.created_at DESC,
-                    guest_booking.id DESC
+                  AND guest_booking.booking_status <> 'MODIFIED'
+                ORDER BY guest_booking.updated_at DESC, guest_booking.id DESC
                 LIMIT 1
             ) b ON TRUE
 
             LEFT JOIN app_users booked_by
-                ON booked_by.id = COALESCE(
-                    b.booked_by_user_id,
-                    gv.created_by_user_id
-                )
+                ON booked_by.id = COALESCE(b.booked_by_user_id, gv.created_by_user_id)
                AND booked_by.tenant_id = gv.tenant_id
 
             LEFT JOIN seats s
@@ -883,32 +845,23 @@ def _fetch_guest_activity_rows(
                AND fl.building_id = bu.id
 
             WHERE gv.tenant_id = %(tenant_id)s
-
-            -- A superseded guest visit (replaced by a reschedule/modify)
-            -- must not show up as its own separate activity row -- only
-            -- the active visit it was replaced by should appear.
-            AND gv.visit_status <> 'MODIFIED'
-
-            AND (%(activity_date)s IS NULL
+              AND gv.visit_status <> 'MODIFIED'
+              AND (%(activity_date)s IS NULL
                 OR COALESCE(b.booking_date, gv.visit_date) = %(activity_date)s)
               AND (
                     %(site_id)s IS NULL
                     OR COALESCE(b.site_id, gv.site_id) = %(site_id)s::bigint
               )
-
               AND (
                     %(building_id)s IS NULL
                     OR COALESCE(b.building_id, gv.building_id) = %(building_id)s::bigint
               )
-
               AND (
                     %(floor_id)s IS NULL
                     OR COALESCE(b.floor_id, gv.floor_id) = %(floor_id)s::bigint
               )
 
-            ORDER BY
-                COALESCE(b.updated_at, gv.updated_at) DESC,
-                gv.id DESC
+            ORDER BY COALESCE(b.updated_at, gv.updated_at) DESC, gv.id DESC
             LIMIT 100
             """,
             {
@@ -919,8 +872,6 @@ def _fetch_guest_activity_rows(
                 "floor_id": floor_id,
             },
         )
-
-
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]

@@ -2334,13 +2334,13 @@ def get_admin_bookings(
         summary = fetch_admin_bookings_summary(conn, **filters)
 
         guest_visits: list[dict[str, Any]] = []
-        # A guest visit without a booking can never have a seat_code, a
-        # booking_status (it has no bookings row at all), and is never an
-        # EMPLOYEE booking_type, so skip the query for those filters.
+        # A guest Visit Only row cannot have a seat_code or be an EMPLOYEE.
+        # It normally has no booking status, except that a cancelled seat
+        # booking is displayed as MODIFIED on the remaining guest visit.
         if (
             filters["booking_type"] != "EMPLOYEE"
             and filters["seat_code"] is None
-            and filters["booking_status"] is None
+            and filters["booking_status"] in (None, "MODIFIED")
         ):
             guest_visits = fetch_admin_guest_visits_without_booking(
                 conn,
@@ -2351,6 +2351,7 @@ def get_admin_bookings(
                 building_id=filters["building_id"],
                 floor_id=filters["floor_id"],
                 visit_status=filters["visit_status"],
+                booking_status=filters["booking_status"],
                 search=filters["search"],
                 booked_by_user_id=filters["booked_by_user_id"],
             )

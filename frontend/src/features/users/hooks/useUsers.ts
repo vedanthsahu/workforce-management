@@ -54,18 +54,28 @@ export const useUsers = () => {
   // GET /users?q= now matches name AND email (word-prefix on both, see
   // search_users in user_repository.py), so one call covers both -- no more
   // fetching every user in the tenant just to filter by email client-side.
+  //
+  // The endpoint defaults to active-only (include_inactive=false) -- without
+  // passing this, search silently dropped every inactive user regardless of
+  // the Status filter dropdown. There's no "inactive only" mode on the
+  // backend, just include/exclude, so an INACTIVE-only filter still has to
+  // fetch both and narrow client-side.
   const fetchSearch = useCallback(async (q: string) => {
     try {
       setLoading(true);
-      const results = await usersService.searchUsers(q, 50);
-      setUsers(results.map(mapSearchResultToUser));
+      const includeInactive = statusFilter !== "ACTIVE";
+      const results = await usersService.searchUsers(q, 50, includeInactive);
+      const scoped = statusFilter === "INACTIVE"
+        ? results.filter((r) => r.status === "INACTIVE")
+        : results;
+      setUsers(scoped.map(mapSearchResultToUser));
       setSummary(null);
     } catch (error) {
       console.error("Error searching users", error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [statusFilter]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);

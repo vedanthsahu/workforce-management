@@ -364,6 +364,7 @@ const BookASeatPage: React.FC = () => {
             STEP 1 – Workspace & Preferences
         ════════════════════════════════════════════════════ */}
         {step === 1 && (
+          <div className="flex flex-col gap-3 sm:gap-4">
           <div className={cn("grid grid-cols-1 gap-3 sm:gap-4", showSidebar && "lg:grid-cols-[1fr_336px] lg:items-start")}>
           <div className="flex flex-col gap-3 sm:gap-4 min-w-0">
 
@@ -685,35 +686,45 @@ const BookASeatPage: React.FC = () => {
             </section>
           </div>
 
-            {/* Actions */}
-            <div className="flex justify-end items-center">
-              <Button
-                onClick={findAvailableSeats}
-                disabled={!step1Valid || loadingSeats}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-6 gap-2 text-[12.5px] sm:text-[13px] font-semibold"
-              >
-                {loadingSeats ? "Finding spaces…" : "Find Available Spaces"}
-                {!loadingSeats && <ChevronRight size={14} />}
-              </Button>
-            </div>
-
-            <div className="bg-[#F7F8FC] border border-[#EBEBF5] rounded-xl px-4 sm:px-5 py-3 flex items-start gap-3">
-              <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 mt-0.5">
-                <span className="text-indigo-600 text-[10px] font-bold">i</span>
-              </div>
-              <div>
-                <p className="text-[12px] sm:text-[12.5px] font-semibold text-[#1A1A2E]">What happens next?</p>
-                <p className="text-[11.5px] sm:text-[12px] text-gray-400 mt-0.5">
-                  {isModifyMode
-                    ? "You'll see the floor map to pick your new space. Once you confirm, your original booking will be cancelled and the new one created."
-                    : "You'll be taken to the floor map to view and select your preferred space based on availability and your preferences."}
-                </p>
-              </div>
-            </div>
-
           </div>
 
           {showSidebar && <BookingSidebar fromDate={form.fromDate} toDate={form.toDate} onConflict={setError} />}
+          </div>
+
+          {/* What happens next -- moved next to the button it explains,
+              rather than sitting mid-page separated from it by the sidebar's
+              Tomorrow's Booking / Quick Picks cards. White card background
+              (was the page's own bg-[#F7F8FC]) so it reads as its own card
+              like everything else here, instead of blending into the page. */}
+          <div className="bg-white border border-[#EBEBF5] rounded-xl px-4 sm:px-5 py-3 flex items-start gap-3">
+            <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-indigo-600 text-[10px] font-bold">i</span>
+            </div>
+            <div>
+              <p className="text-[12px] sm:text-[12.5px] font-semibold text-[#1A1A2E]">What happens next?</p>
+              <p className="text-[11.5px] sm:text-[12px] text-gray-400 mt-0.5">
+                {isModifyMode
+                  ? "You'll see the floor map to pick your new space. Once you confirm, your original booking will be cancelled and the new one created."
+                  : "You'll be taken to the floor map to view and select your preferred space based on availability and your preferences."}
+              </p>
+            </div>
+          </div>
+
+          {/* Find Available Spaces -- kept as the final action for this step,
+              placed after every card above (including the sidebar's Tomorrow's
+              Booking / Quick Picks) so it always reads as the one clear next
+              step once everything has stacked into a single column on mobile,
+              rather than sitting mid-page above content that follows it. */}
+          <div className="flex justify-end items-center">
+            <Button
+              onClick={findAvailableSeats}
+              disabled={!step1Valid || loadingSeats}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-6 gap-2 text-[12.5px] sm:text-[13px] font-semibold"
+            >
+              {loadingSeats ? "Finding spaces…" : "Find Available Spaces"}
+              {!loadingSeats && <ChevronRight size={14} />}
+            </Button>
+          </div>
           </div>
         )}
 
