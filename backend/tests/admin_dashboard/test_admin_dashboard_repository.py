@@ -58,6 +58,7 @@ class AdminDashboardRepositoryTests(unittest.TestCase):
                     "total_offices": 1,
                     "total_floors": 2,
                     "total_seats": 10,
+                    "non_bookable_seats": 2,
                     "booked_today": 3,
                     "blocked_seats": 1,
                     "booked_seats_today": 3,
@@ -92,12 +93,13 @@ class AdminDashboardRepositoryTests(unittest.TestCase):
         self.assertIn("guest_visit_booking_with_seat_today", sql)
         self.assertIn("SELECT DISTINCT b.seat_id", sql)
         self.assertIn("b.seat_id IS NOT NULL", sql)
-        self.assertIn("SELECT COUNT(*) AS blocked_seats", sql)
+        self.assertIn("SELECT COUNT(DISTINCT bs.seat_id) AS blocked_seats", sql)
         blocked_count_sql = sql.split("blocked_seat_counts AS (", 1)[1].split(
             "),\n\n", 1
         )[0]
-        self.assertNotIn("JOIN bookable_seats AS bks", blocked_count_sql)
+        self.assertIn("JOIN bookable_seats AS bks", blocked_count_sql)
         self.assertIn("blocked_seats AS blocked_seats_today", sql)
+        self.assertIn("non_bookable_seats", sql)
         self.assertEqual(params["tenant_id"], "1")
         self.assertEqual(result["booked_today"], 3)
         self.assertEqual(result["active_seats"], 10)

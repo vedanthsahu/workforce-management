@@ -64,7 +64,7 @@ export default function AdminStats({ data, selectedDate }: Props) {
       title: "Total Spaces",
       value: data?.active_seats ?? "-",
       count: data?.active_seats ?? null,
-      subtitle: "Active seats",
+      subtitle: "Active spaces",
       icon: Armchair,
       accent: "orange" as Accent,
       // No dedicated seats management page yet -- wire this up once one
