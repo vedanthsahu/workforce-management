@@ -7,6 +7,7 @@ import { useScheduledLayoutActions } from "../hooks/useLayoutDetails";
 import { STATIC_PREFETCH_ROUTES } from "../utils/layoutPreview.utils";
 import { fetchLayoutPolicy } from "../services/layoutService";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { indiaDateIsoAfterDays, timestampToIndiaDateIso } from "@/lib/indiaDate";
 
 // Fallback only -- used for the one render before the real tenant value
 // (GET /business-rules/layout-policy) has loaded, and if that call fails.
@@ -15,22 +16,14 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 const FALLBACK_EMPLOYEE_MAX_ADVANCE_DAYS = 30;
 
 function minEffectiveDateIso(minAdvanceDays: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + minAdvanceDays);
-  return d.toISOString().slice(0, 10);
+  return indiaDateIsoAfterDays(minAdvanceDays);
 }
 
-// effective_from is stored as midnight in the site's own timezone, so its
-// UTC calendar date is a day behind local for any site ahead of UTC (e.g.
-// IST) -- slicing the raw ISO string grabs that UTC date instead of the
-// local one. Building the YYYY-MM-DD from the Date object's own local
-// getters keeps this in sync with how the rest of the UI displays the date.
+// effective_from is an absolute timestamp. Convert it to the India calendar
+// date before putting it in a date input; slicing the raw ISO value would use
+// UTC and can display the previous day.
 function toLocalDateInputValue(iso: string): string {
-  const d = new Date(iso);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return timestampToIndiaDateIso(iso);
 }
 
 interface LayoutSidebarProps {
