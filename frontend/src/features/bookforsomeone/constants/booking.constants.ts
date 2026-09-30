@@ -1,4 +1,5 @@
 import { GuestType, PurposeOfVisit } from "../types/booking";
+import { todayIsoInIndia } from "@/lib/indiaDate";
 
 export const GUEST_TYPES: { value: GuestType; label: string }[] = [
   { value: "INTERVIEW_CANDIDATE", label: "Interview Candidate" },
@@ -24,5 +25,5 @@ export const guestVisitTooFarInAdvanceMessage = (days: number) =>
   `Guest visits can only be booked up to ${days} days in advance. Please select a date within the next ${days} days.`;
 
 export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayIsoInIndia();
 }

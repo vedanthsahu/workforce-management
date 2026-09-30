@@ -208,12 +208,26 @@ def fetch_admin_dashboard_summary(
                 -- PUBLISHED one, or a SCHEDULED one if selected_date falls
                 -- on/after its effective_from. Seats left over from a
                 -- superseded layout must not inflate total/available counts.
+                --
+                -- selected_date is a bare calendar date with no timezone of
+                -- its own -- casting it straight to timestamptz would
+                -- implicitly use the DB session's timezone (UTC), silently
+                -- shifting the day boundary. This demo deployment anchors
+                -- dashboard days to Asia/Kolkata. effective_from is compared
+                -- against the START of the NEXT day (India-local),
+                -- not selected_date's own midnight -- a direct publish's
+                -- effective_from is the real-time instant it was published
+                -- at (see activate_floor_layout), almost never midnight, so
+                -- comparing against that day's own midnight would make a
+                -- same-day publish look "not yet effective" and undercount
+                -- its seats. See booking_repository.fetch_seat_for_booking
+                -- for the fuller version of this comment.
                 INNER JOIN floor_layouts AS sfl
                     ON sfl.floor_id = st.floor_id
                    AND sfl.tenant_id = st.tenant_id
                    AND sfl.status IN ('PUBLISHED', 'SCHEDULED')
-                   AND sfl.effective_from <= %(selected_date)s
-                   AND (sfl.effective_till IS NULL OR sfl.effective_till > %(selected_date)s)
+                   AND sfl.effective_from < ((%(selected_date)s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')
+                   AND (sfl.effective_till IS NULL OR sfl.effective_till > (%(selected_date)s::timestamp AT TIME ZONE 'Asia/Kolkata'))
                    AND sfl.id = st.layout_id
                 WHERE st.tenant_id = %(tenant_id)s
                   AND (

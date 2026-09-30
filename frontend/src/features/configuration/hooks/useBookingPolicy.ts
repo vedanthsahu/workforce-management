@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { indiaDateIsoAfterDays } from "@/lib/indiaDate";
 import { fetchBookingPolicy } from "../services/configuration.service";
 
 /**
@@ -33,7 +34,5 @@ export function useBookingPolicy() {
 /** Today + `days` as YYYY-MM-DD, or undefined while the policy is loading. */
 export function maxDateIsoFromToday(days: number | null): string | undefined {
   if (days == null) return undefined;
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return indiaDateIsoAfterDays(days);
 }
