@@ -2,6 +2,7 @@ export type DashboardSummary = {
   total_offices: number;
   total_floors: number;
   total_seats: number;
+  active_seats: number;
   booked_today: number;
   booked_seats_today: number;
   employee_bookings_today: number;

@@ -158,6 +158,20 @@ function formatDateOnly(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// effective_from is stored as midnight in the site's own timezone, so its
+// UTC calendar date is a day behind local for any site ahead of UTC (e.g.
+// IST) -- slicing the raw ISO string grabs that UTC date instead of the
+// local one, showing the reschedule dialog a day earlier than the list
+// above (which correctly goes through toLocaleDateString). Building the
+// YYYY-MM-DD from the Date object's own local getters keeps both in sync.
+function toLocalDateInputValue(iso: string): string {
+  const d = new Date(iso);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function LayoutTable({ selection, selectedLayoutId }: Props) {
@@ -307,7 +321,7 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
   const handleRescheduleClick = useCallback((row: LayoutApiResponse) => {
     setOpenMenuId(null);
     setRescheduleTarget(row);
-    setRescheduleDate(row.effective_from ? row.effective_from.slice(0, 10) : "");
+    setRescheduleDate(row.effective_from ? toLocalDateInputValue(row.effective_from) : "");
     setRescheduleError(null);
   }, []);
 

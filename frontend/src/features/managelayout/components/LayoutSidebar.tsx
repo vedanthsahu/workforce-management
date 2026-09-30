@@ -20,6 +20,19 @@ function minEffectiveDateIso(minAdvanceDays: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+// effective_from is stored as midnight in the site's own timezone, so its
+// UTC calendar date is a day behind local for any site ahead of UTC (e.g.
+// IST) -- slicing the raw ISO string grabs that UTC date instead of the
+// local one. Building the YYYY-MM-DD from the Date object's own local
+// getters keeps this in sync with how the rest of the UI displays the date.
+function toLocalDateInputValue(iso: string): string {
+  const d = new Date(iso);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 interface LayoutSidebarProps {
   layout: Layout | null;
   selectedLayoutId: string;
@@ -157,7 +170,7 @@ function StatusBadge({ status, isPublished }: { status: string; isPublished: boo
 // inline controls, not a full modal -- good enough to unblock admins
 // today, worth a nicer dialog later if this gets heavy use.
 function ScheduleActionsCard({ layout, onChanged }: { layout: Layout; onChanged: () => void }) {
-  const currentEffectiveDate = layout.effective_from ? layout.effective_from.slice(0, 10) : "";
+  const currentEffectiveDate = layout.effective_from ? toLocalDateInputValue(layout.effective_from) : "";
   const [newDate, setNewDate] = useState(currentEffectiveDate);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   // Deliberately the employee window alone, not the full admin
