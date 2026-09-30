@@ -32,19 +32,20 @@ export default function FloorFilters({
         onChange={(e) => onSiteChange(e.target.value)}
         className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
       >
-        <option value="" disabled hidden>All Sites</option>
+        <option value="">All Offices</option>
         {sites.map((site) => (
           <option key={site.site_id} value={site.site_id} className="text-gray-900">{site.site_name}</option>
         ))}
       </select>
-        
+
       <select
-        value={selectedBuilding}  
+        value={selectedBuilding}
         disabled={!selectedSite}
         onChange={(e) => onBuildingChange(e.target.value)}
+        title={selectedSite ? undefined : "Select an Office first to filter by building"}
         className="h-10 px-4 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-gray-900"
       >
-        <option value="" disabled hidden>All Buildings</option>
+        <option value="">All Buildings</option>
         {buildings.map((building) => (
           <option key={building.building_id} value={building.building_id}>{building.building_name}</option>
         ))}
@@ -56,7 +57,7 @@ export default function FloorFilters({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="h-9 w-50 pl-9 pr-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Search floor..."
+          placeholder="Search by floor name..."
         />
       </div>
 

@@ -7,13 +7,21 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
+from backend.repositories.guest_repository import search_guests
 from backend.repositories.location_repository import (
+    deactivate_buildings_by_site,
+    deactivate_floors_by_building,
+    deactivate_floors_by_site,
     fetch_buildings_by_site,
     fetch_floors_by_building,
     fetch_sites,
 )
 from backend.repositories.preferences_repository import fetch_amenities
-from backend.repositories.user_repository import fetch_admin_user_directory, search_users
+from backend.repositories.team_repository import search_team_members
+from backend.repositories.user_repository import (
+    fetch_admin_user_directory,
+    search_users,
+)
 
 
 class FakeCursor:
@@ -22,10 +30,12 @@ class FakeCursor:
         *,
         fetchone_values: list[dict[str, Any]] | None = None,
         fetchall_values: list[list[dict[str, Any]]] | None = None,
+        rowcount: int = 0,
     ) -> None:
         self.fetchone_values = fetchone_values or []
         self.fetchall_values = fetchall_values or []
         self.executions: list[tuple[str, Any]] = []
+        self.rowcount = rowcount
 
     def __enter__(self) -> FakeCursor:
         return self
@@ -126,9 +136,54 @@ class AdminManagementRepositoryTests(unittest.TestCase):
         self.assertIn("f.floor_name ILIKE %s", sql)
         self.assertEqual(
             params[:2],
-            [["DRAFT", "ARCHIVED", "PUBLISHED"], ["DRAFT", "ARCHIVED", "PUBLISHED"]],
+            [
+                ["DRAFT", "SCHEDULED", "ARCHIVED", "PUBLISHED"],
+                ["DRAFT", "SCHEDULED", "ARCHIVED", "PUBLISHED"],
+            ],
         )
-        self.assertEqual(params[2:4], ["3", "1"])
+        self.assertEqual(params[2:4], ["1", "3"])
+
+    def test_deactivate_buildings_by_site_only_touches_active_rows_in_scope(self) -> None:
+        cursor = FakeCursor(rowcount=2)
+        conn = FakeConnection(cursor)
+
+        result = deactivate_buildings_by_site(conn, tenant_id="1", site_id="5")
+
+        sql, params = cursor.executions[0]
+        self.assertIn("UPDATE buildings", sql)
+        self.assertIn("SET status = 'INACTIVE'", sql)
+        self.assertIn("site_id = %s", sql)
+        self.assertIn("status = 'ACTIVE'", sql)
+        self.assertEqual(params, ("1", "5"))
+        self.assertEqual(result, 2)
+
+    def test_deactivate_floors_by_site_filters_on_floors_own_site_id(self) -> None:
+        cursor = FakeCursor(rowcount=4)
+        conn = FakeConnection(cursor)
+
+        result = deactivate_floors_by_site(conn, tenant_id="1", site_id="5")
+
+        sql, params = cursor.executions[0]
+        self.assertIn("UPDATE floors", sql)
+        self.assertIn("SET status = 'INACTIVE'", sql)
+        self.assertIn("site_id = %s", sql)
+        self.assertIn("status = 'ACTIVE'", sql)
+        self.assertEqual(params, ("1", "5"))
+        self.assertEqual(result, 4)
+
+    def test_deactivate_floors_by_building_only_touches_active_rows_in_scope(self) -> None:
+        cursor = FakeCursor(rowcount=1)
+        conn = FakeConnection(cursor)
+
+        result = deactivate_floors_by_building(conn, tenant_id="1", building_id="3")
+
+        sql, params = cursor.executions[0]
+        self.assertIn("UPDATE floors", sql)
+        self.assertIn("SET status = 'INACTIVE'", sql)
+        self.assertIn("building_id = %s", sql)
+        self.assertIn("status = 'ACTIVE'", sql)
+        self.assertEqual(params, ("1", "3"))
+        self.assertEqual(result, 1)
 
     def test_amenity_listing_returns_metrics_and_assignment_counts(self) -> None:
         cursor = FakeCursor(
@@ -163,7 +218,16 @@ class AdminManagementRepositoryTests(unittest.TestCase):
 
         combined_sql = " ".join(sql for sql, _ in cursor.executions)
         self.assertIn("assigned_seat_count", combined_sql)
-        self.assertIn("COUNT(DISTINCT sa.amenity_id)", combined_sql)
+        self.assertIn("FROM seat_amenities AS sa", combined_sql)
+        self.assertIn("INNER JOIN seats AS s", combined_sql)
+        self.assertIn("fl.is_published = TRUE", combined_sql)
+        self.assertIn("fl.status = 'PUBLISHED'", combined_sql)
+        # GROUP BY amenity_id (computed once for the whole tenant) joined
+        # back by id, rather than a LATERAL correlated subquery re-run once
+        # per amenity row -- same published-seats-only scoping, one pass
+        # over seat_amenities instead of N.
+        self.assertIn("GROUP BY sa.amenity_id", combined_sql)
+        self.assertIn("assignments.amenity_id = a.id", combined_sql)
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["active_amenities"], 1)
         self.assertEqual(result["items"][0]["assigned_seat_count"], 3)
@@ -215,26 +279,48 @@ class AdminManagementRepositoryTests(unittest.TestCase):
 
 
 class SearchUsersRepositoryTests(unittest.TestCase):
-    """A word must match at the START of a name token to count -- 'K'
-    matches 'Kishore' (token 1) and 'Kumar' (token 2 of 'Amit Kumar'), and
-    whichever match sits earliest in its own name ranks first. This is the
-    same match_position ranking search_team_members already used; search_
-    guests uses the identical pattern for the same reason."""
+    """Name searches preserve word boundaries and normalize typed whitespace."""
 
-    def test_orders_by_earliest_matching_word_position(self) -> None:
+    def test_normalizes_full_name_search_and_keeps_tenant_scope(self) -> None:
         cursor = FakeCursor(fetchall_values=[[]])
         conn = FakeConnection(cursor)
-
-        search_users(conn, tenant_id="1", search_text="K", limit=20)
-
+        search_users(conn, tenant_id="1", search_text="  Vedanth   Sahu  ", limit=20)
         sql, params = cursor.executions[0]
-        self.assertIn("WITH ORDINALITY", sql)
-        self.assertIn("word LIKE %s || '%%'", sql)
-        self.assertIn("COALESCE(mp.match_position, 999)", sql)
-        self.assertIn("mp.match_position IS NOT NULL", sql)
-        # Search text feeds the LATERAL join first (it appears earliest in
-        # the SQL text), then tenant_id, then the remaining WHERE clauses.
-        self.assertEqual(params, ("k", "1", "k", "k", 20))
+        self.assertIn("au.tenant_id = %s", sql)
+        self.assertIn("LIKE '%% ' || %s || '%%'", sql)
+        self.assertIn("WHERE w.word LIKE %s || '%%'", sql)
+        self.assertEqual(
+            params,
+            (
+                "1",
+                "vedanth sahu",
+                "vedanth sahu",
+                "vedanth sahu",
+                "vedanth sahu",
+                "vedanth sahu",
+                20,
+            ),
+        )
+
+    def test_search_wildcards_are_literal(self) -> None:
+        cursor = FakeCursor(fetchall_values=[[]])
+        search_users(FakeConnection(cursor), tenant_id="1", search_text="a%b_c")
+        self.assertEqual(cursor.executions[0][1][1], r"a\%b\_c")
+
+    def test_guest_full_name_search_normalizes_whitespace(self) -> None:
+        cursor = FakeCursor(fetchall_values=[[]])
+        search_guests(FakeConnection(cursor), tenant_id="1", search_text=" Vedanth  Sahu ")
+        sql, params = cursor.executions[0]
+        self.assertIn("g.tenant_id = %s", sql)
+        self.assertEqual(params[0], "vedanth sahu")
+
+    def test_team_full_name_search_retains_membership_scope(self) -> None:
+        cursor = FakeCursor(fetchall_values=[[]])
+        search_team_members(FakeConnection(cursor), tenant_id="1", user_id="2", search_text=" Vedanth  Sahu ")
+        sql, params = cursor.executions[0]
+        self.assertIn("tm_target.user_id = %s", sql)
+        self.assertIn("tm_target.tenant_id = %s", sql)
+        self.assertEqual(params[:3], ("vedanth sahu", "2", "1"))
 
     def test_include_inactive_drops_status_filter(self) -> None:
         cursor = FakeCursor(fetchall_values=[[]])

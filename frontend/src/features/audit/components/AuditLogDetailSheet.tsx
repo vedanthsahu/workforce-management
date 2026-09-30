@@ -4,10 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Globe, GripVertical, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
+import { formatRoleLabel, getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
 import AuditChangesSection from "./AuditChangesSection";
 import { AuditLog } from "../types/audit.types";
-import { AUDIT_STATUS_STYLES } from "../utils/constants";
+import {
+  AUDIT_STATUS_STYLES,
+  AUDIT_DETAIL_DEFAULT_PANEL_WIDTH as DEFAULT_PANEL_WIDTH,
+  AUDIT_DETAIL_MIN_PANEL_WIDTH as MIN_PANEL_WIDTH,
+} from "../utils/constants";
 import { describeAuditAction, formatAuditDateTime, hasNoChangesData, initialsOf } from "../utils/mapAuditLog";
 
 type Props = {
@@ -35,11 +39,6 @@ function InfoField({ label, value }: { label: string; value: React.ReactNode }) 
     </div>
   );
 }
-
-// Matches the old sm:max-w-md cap this panel used before it became
-// resizable, so the default look is unchanged.
-const DEFAULT_PANEL_WIDTH = 448;
-const MIN_PANEL_WIDTH = 320;
 
 export default function AuditLogDetailSheet({ open, log, loading, error, onOpenChange }: Props) {
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
@@ -165,7 +164,7 @@ export default function AuditLogDetailSheet({ open, log, loading, error, onOpenC
                       <span
                         className={`inline-flex px-1.5 py-px rounded text-[9px] font-semibold uppercase tracking-wide ring-1 ${getRoleBadgeClass(log.actorRole)}`}
                       >
-                        {log.actorRole}
+                        {formatRoleLabel(log.actorRole)}
                       </span>
                     )}
                   </div>

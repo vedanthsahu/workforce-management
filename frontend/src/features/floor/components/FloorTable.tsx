@@ -86,9 +86,9 @@ export default function FloorTable({ data, onEdit, highlightedId }: Props) {
               <th className="pl-13 px-3 py-3 text-left font-bold">Floor Code</th>
               <th className="pl-4 pr-3 py-3 text-left font-bold">Floor Name</th>
               <th className="pl-6 px-3 py-3 text-left font-bold">Building</th>
-              <th className="px-3 py-3 text-center font-bold">Seats</th>
-              <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Active Seats</th>
-              <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Bookable Seats</th>
+              <th className="px-3 py-3 text-center font-bold">Spaces</th>
+              <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Active Spaces</th>
+              <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Bookable Spaces</th>
               <th className="px-3 py-3 text-center font-bold">Layouts</th>
               <th className="px-3 py-3 text-center font-bold">Status</th>
               <th className="px-3 py-3 text-center font-bold">Actions</th>
@@ -109,8 +109,8 @@ export default function FloorTable({ data, onEdit, highlightedId }: Props) {
                       <span className="font-medium">{floor.floor_code}</span>
                     </div>
                   </td>
-                  <td className="pl-5 pr-3 py-3 max-w-0"><span className="block font-medium truncate">{floor.floor_name}</span></td>
-                  <td className="px-3 py-3 max-w-0"><span className="block truncate">{floor.building_name}</span></td>
+                  <td className="pl-5 pr-3 py-3 max-w-0"><span className="block font-medium line-clamp-2">{floor.floor_name}</span></td>
+                  <td className="px-3 py-3 max-w-0"><span className="block line-clamp-2">{floor.building_name}</span></td>
                   <td className="px-3 py-3 text-center">{floor.seat_count}</td>
                   <td className="px-3 py-3 text-center">{floor.active_seat_count}</td>
                   <td className="px-3 py-3 text-center">{floor.bookable_seat_count}</td>

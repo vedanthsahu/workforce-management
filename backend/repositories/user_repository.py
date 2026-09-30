@@ -23,6 +23,8 @@ USER_SELECT_FIELDS = """
     au.job_title,
     au.company_name,
     au.employee_id,
+    au.bio,
+    au.skills,
     au.microsoft_object_id,
     au.user_principal_name,
     au.manager_user_id::text AS manager_user_id,
@@ -52,6 +54,8 @@ USER_RETURNING_FIELDS = """
     job_title,
     company_name,
     employee_id,
+    bio,
+    skills,
     microsoft_object_id,
     user_principal_name,
     manager_user_id::text AS manager_user_id,
@@ -124,6 +128,52 @@ def _normalize_text(value: str | None, *, max_length: int | None = None) -> str 
     if max_length is not None and len(normalized) > max_length:
         raise ValueError(f"Value exceeds schema limit of {max_length} characters.")
     return normalized
+
+
+def _normalize_skills(value: Any) -> list[str]:
+    """Return app_users.skills as clean strings regardless of driver format."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if not isinstance(value, str):
+        return [str(value).strip()]
+
+    text = value.strip()
+    if not text or text == "{}":
+        return []
+    if not (text.startswith("{") and text.endswith("}")):
+        return [text]
+
+    items: list[str] = []
+    current: list[str] = []
+    quoted = False
+    escaped = False
+    for char in text[1:-1]:
+        if escaped:
+            current.append(char)
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == '"':
+            quoted = not quoted
+        elif char == "," and not quoted:
+            item = "".join(current).strip()
+            if item:
+                items.append(item)
+            current = []
+        else:
+            current.append(char)
+
+    item = "".join(current).strip()
+    if item:
+        items.append(item)
+    return items
+
+
+def _normalize_user_record(record: dict[str, Any]) -> dict[str, Any]:
+    record["skills"] = _normalize_skills(record.get("skills"))
+    return record
 
 
 def _required_text(value: str | None, *, field_name: str, max_length: int) -> str:
@@ -236,7 +286,37 @@ def fetch_user_by_email(
             (tenant_id, _normalize_email(email)),
         )
         result = cur.fetchone()
-    return dict(result) if result else None
+    return _normalize_user_record(dict(result)) if result else None
+
+
+def fetch_user_by_phone(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    phone: str,
+) -> dict[str, Any] | None:
+    """Fetch one ACTIVE user whose mobile_phone matches by last-10-digits.
+
+    mobile_phone has no format convention enforced anywhere (populated from
+    Microsoft Graph's mobilePhone claim or free-typed via profile self-edit),
+    so this normalizes both sides down to their last 10 digits — the same
+    approach guest_repository.fetch_guest_by_phone uses — rather than an
+    exact string match that a "+91" prefix or spacing difference would defeat.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {USER_SELECT_FIELDS}
+            {USER_SELECT_FROM}
+            WHERE au.tenant_id = %s
+              AND au.mobile_phone IS NOT NULL
+              AND RIGHT(REGEXP_REPLACE(au.mobile_phone, '\\D', '', 'g'), 10) = RIGHT(REGEXP_REPLACE(%s, '\\D', '', 'g'), 10)
+              AND au.status = 'ACTIVE'
+            """,
+            (tenant_id, phone),
+        )
+        result = cur.fetchone()
+    return _normalize_user_record(dict(result)) if result else None
 
 
 def fetch_user_by_id(
@@ -257,7 +337,7 @@ def fetch_user_by_id(
             (tenant_id, user_id),
         )
         result = cur.fetchone()
-    return dict(result) if result else None
+    return _normalize_user_record(dict(result)) if result else None
 
 
 def fetch_tenant_name_by_id(
@@ -334,7 +414,7 @@ def fetch_user_profile_context(
             (tenant_id, user_id),
         )
         row = cur.fetchone()
-    return dict(row) if row else None
+    return _normalize_user_record(dict(row)) if row else None
 
 
 def fetch_admin_notification_emails(
@@ -808,6 +888,10 @@ def update_user_profile(
     display_name: str | None = None,
     mobile_phone: str | None = None,
     office_location: str | None = None,
+    bio: str | None = None,
+    skills: list[str] | None = None,
+    bio_provided: bool = False,
+    skills_provided: bool = False,
 ) -> dict[str, Any] | None:
     """Update self-editable profile fields."""
 
@@ -820,6 +904,8 @@ def update_user_profile(
                 display_name = COALESCE(%s, display_name),
                 mobile_phone = COALESCE(%s, mobile_phone),
                 office_location = COALESCE(%s, office_location),
+                bio = CASE WHEN %s THEN %s ELSE bio END,
+                skills = CASE WHEN %s THEN %s ELSE skills END,
                 updated_at = NOW()
             WHERE tenant_id = %s
               AND id = %s
@@ -830,6 +916,10 @@ def update_user_profile(
                 _normalize_text(display_name, max_length=200),
                 _normalize_text(mobile_phone, max_length=50),
                 _normalize_text(office_location, max_length=200),
+                bio_provided,
+                _normalize_text(bio, max_length=2000),
+                skills_provided,
+                skills if skills is not None else None,
                 tenant_id,
                 user_id,
             ),
@@ -1049,10 +1139,10 @@ def fetch_favorite_seat(
     *,
     tenant_id: str,
     user_id: str,
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    """Return the top two most-booked seats that exist in the current published layout.
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
+    """Return the top three most-booked seats that exist in the current published layout.
 
-    Returns a (first, second) tuple; either element may be None.
+    Returns a (first, second, third) tuple; any element may be None.
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -1109,14 +1199,15 @@ def fetch_favorite_seat(
                 s.floor_id,
                 fl.floor_name
             ORDER BY booking_count DESC, last_booked_date DESC, s.id
-            LIMIT 2
+            LIMIT 3
             """,
             (tenant_id, user_id),
         )
         rows = cur.fetchall()
     first  = dict(rows[0]) if len(rows) > 0 else None
     second = dict(rows[1]) if len(rows) > 1 else None
-    return first, second
+    third  = dict(rows[2]) if len(rows) > 2 else None
+    return first, second, third
 
 
 def fetch_days_in_office(
@@ -1276,7 +1367,18 @@ def search_users(
     include_inactive: bool = False,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
-    search_text = search_text.strip().lower()
+    def sql_escape(value: str) -> str:
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    normalized = " ".join(search_text.lower().split())
+    search_text = sql_escape(normalized)
+    # The email column is compared in its word-normalized form (non-
+    # alphanumeric -> space, see the WHERE clause below), so the query must
+    # go through the exact same normalization -- otherwise a query that
+    # still has its punctuation (e.g. "alen.walker@sgxdev.com") can never
+    # match "alen walker sgxdev com" and email search silently finds nothing
+    # for anything but a single bare word.
+    email_search_text = sql_escape(re.sub(r"[^a-z0-9]+", " ", normalized).strip())
 
     status_clause = ""
     if not include_inactive:
@@ -1287,39 +1389,56 @@ def search_users(
             fr"""
             SELECT {USER_SELECT_FIELDS}
             {USER_SELECT_FROM}
-            LEFT JOIN LATERAL (
-                SELECT MIN(pos) AS match_position
-                FROM unnest(
-                    regexp_split_to_array(
-                        lower(coalesce(au.full_name, '')),
-                        '\s+'
-                    )
-                ) WITH ORDINALITY AS t(word, pos)
-                WHERE word LIKE %s || '%%'
-            ) mp ON TRUE
             WHERE au.tenant_id = %s
             {status_clause}
               AND (
-                    mp.match_position IS NOT NULL
+                    (' ' || regexp_replace(lower(coalesce(au.full_name, '')), '\s+', ' ', 'g'))
+                        LIKE '%% ' || %s || '%%'
+                 -- Email, word-prefix matched the same way as full_name --
+                 -- non-alphanumeric characters (., @, _, -) count as word
+                 -- breaks, so "gowda" matches "chandana.gowda@company.com".
+                 OR (' ' || regexp_replace(lower(coalesce(au.email, '')), '[^a-z0-9]+', ' ', 'g'))
+                        LIKE '%% ' || %s || '%%'
                  OR lower(coalesce(au.employee_id, ''))
                         LIKE %s || '%%'
                  OR coalesce(au.mobile_phone, '')
                         LIKE %s || '%%'
               )
             ORDER BY
-                COALESCE(mp.match_position, 999),
+                -- Rank by which word of full_name the query matched (0 = the
+                -- first word), not just "matched somewhere vs. not" -- so
+                -- e.g. searching "i" ranks "Indore" (word 0) above "Hyderabad
+                -- Irrum Manzil" (word 1) instead of leaving that tie to
+                -- alphabetical order. A match that's only in email/
+                -- employee_id/mobile_phone (no full_name word match) sorts
+                -- after every full_name match.
+                COALESCE(
+                    (
+                        SELECT MIN(w.ord) - 1
+                        FROM unnest(
+                            regexp_split_to_array(
+                                regexp_replace(lower(coalesce(au.full_name, '')), '\s+', ' ', 'g'),
+                                ' '
+                            )
+                        ) WITH ORDINALITY AS w(word, ord)
+                        WHERE w.word LIKE %s || '%%'
+                    ),
+                    999
+                ),
                 au.full_name,
                 au.id
             LIMIT %s
             """,
             (
-                # LATERAL match_position
-                search_text,
-
                 tenant_id,
 
                 # WHERE
                 search_text,
+                email_search_text,
+                search_text,
+                search_text,
+
+                # ORDER BY
                 search_text,
 
                 limit,

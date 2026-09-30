@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 
-import FloorCards from "@/features/floor/components/FloorCards";
+import FloorCards, { FloorStatusFilter } from "@/features/floor/components/FloorCards";
 import FloorFilters from "@/features/floor/components/FloorFilters";
 import FloorPagination from "@/features/floor/components/FloorPagination";
 import FloorTable from "@/features/floor/components/FloorTable";
@@ -14,6 +14,7 @@ import EditFloorModal from "@/features/floor/components/EditFloorModal";
 import { useFloors } from "@/features/floor/hooks/useFloors";
 import { Floor } from "@/features/floor/types/floor.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
+import { searchMatchRank } from "@/lib/searchRank";
 
 function FloorsPage() {
   const {
@@ -40,6 +41,7 @@ function FloorsPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [pinnedFloorId, setPinnedFloorId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<FloorStatusFilter>(null);
 
   useEffect(() => {
     const addedFloorId = searchParams.get("added");
@@ -65,19 +67,23 @@ function FloorsPage() {
   };
 
   const filteredFloors = useMemo(() => {
-    const filtered = floors.filter(
-      (floor) =>
-        floor.floor_name?.toLowerCase().includes(search.toLowerCase()) ||
-        floor.floor_code?.toLowerCase().includes(search.toLowerCase())
-    );
+    const ranked = floors
+      .map((floor) => ({
+        floor,
+        rank: searchMatchRank(floor.floor_name || "", search),
+      }))
+      .filter((x): x is { floor: Floor; rank: number } => x.rank !== null)
+      .filter((x) => !statusFilter || x.floor.status === statusFilter)
+      .sort((a, b) => a.rank - b.rank)
+      .map((x) => x.floor);
 
-    if (!pinnedFloorId) return filtered;
+    if (!pinnedFloorId) return ranked;
 
     return [
-      ...filtered.filter((f) => String(f.floor_id) === pinnedFloorId),
-      ...filtered.filter((f) => String(f.floor_id) !== pinnedFloorId),
+      ...ranked.filter((f) => String(f.floor_id) === pinnedFloorId),
+      ...ranked.filter((f) => String(f.floor_id) !== pinnedFloorId),
     ];
-  }, [floors, search, pinnedFloorId]);
+  }, [floors, search, statusFilter, pinnedFloorId]);
 
   const itemsPerPage = 10;
   const totalPages = Math.ceil(filteredFloors.length / itemsPerPage);
@@ -112,7 +118,18 @@ function FloorsPage() {
       </div>
 
       {/* CARDS */}
-      {loading ? <StatCardsSkeleton /> : <FloorCards stats={stats} />}
+      {loading ? (
+        <StatCardsSkeleton />
+      ) : (
+        <FloorCards
+          stats={stats}
+          statusFilter={statusFilter}
+          onStatusFilterChange={(filter) => {
+            setStatusFilter(filter);
+            setCurrentPage(1);
+          }}
+        />
+      )}
 
       {/* TABLE CARD */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
@@ -138,10 +155,6 @@ function FloorsPage() {
             <TableBodySkeleton columns={5} rows={4} />
           ) : error ? (
             <div className="p-6 text-sm text-red-500">{error}</div>
-          ) : !selectedBuilding ? (
-            <div className="p-10 text-center text-gray-500">
-              
-            </div>
           ) : (
             <FloorTable
               data={paginatedFloors}

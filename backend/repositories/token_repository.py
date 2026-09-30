@@ -46,6 +46,49 @@ def revoke_all_user_sessions(
         return cur.rowcount
 
 
+def extend_session_activity(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    session_id: str,
+    new_expires_at: datetime,
+    min_touch_interval_seconds: int,
+) -> bool:
+    """Push an active session's expiry forward because a request just used it.
+
+    Throttled by min_touch_interval_seconds so a burst of requests from one
+    active user doesn't turn into a write per request -- only touches the
+    row (and reports a touch happened) when last_used_at is already stale
+    by more than that interval. Silent no-op (returns False) for a revoked
+    or already-expired session; the caller's own access-token/session
+    checks are what actually reject those, not this function.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE user_sessions
+            SET expires_at = %s,
+                last_used_at = NOW(),
+                updated_at = NOW()
+            WHERE tenant_id = %s
+              AND user_id = %s
+              AND session_id = %s
+              AND revoked_at IS NULL
+              AND expires_at > NOW()
+              AND last_used_at < NOW() - make_interval(secs => %s)
+            """,
+            (
+                new_expires_at,
+                tenant_id,
+                user_id,
+                session_id,
+                min_touch_interval_seconds,
+            ),
+        )
+        return cur.rowcount > 0
+
+
 def fetch_active_session(
     conn: PGConnection,
     *,
