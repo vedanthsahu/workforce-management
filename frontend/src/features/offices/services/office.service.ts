@@ -65,7 +65,7 @@ export const officeService = {
       total_offices: data.total_offices,
       active_sites: data.active_sites,
       inactive_sites: data.inactive_sites,
-      total_seats: data.total_seats,
+      active_seats: data.active_seats,
     };
   },
 };

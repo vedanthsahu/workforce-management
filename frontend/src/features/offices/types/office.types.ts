@@ -30,7 +30,7 @@ export interface OfficeStatsSummary {
   total_offices: number;
   active_sites: number;
   inactive_sites: number;
-  total_seats: number;
+  active_seats: number;
 }
 export interface CreateOfficePayload {
   site_code: string;

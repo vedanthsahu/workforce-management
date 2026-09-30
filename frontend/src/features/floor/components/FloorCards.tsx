@@ -9,7 +9,7 @@ type Props = {
     total_floors: number;
     active_floors: number;
     inactive_floors: number;
-    total_seats: number;
+    active_seats: number;
   } | null;
   statusFilter?: FloorStatusFilter;
   onStatusFilterChange?: (filter: FloorStatusFilter) => void;
@@ -70,7 +70,7 @@ export default function FloorCards({ stats, statusFilter = null, onStatusFilterC
         icon={<Armchair className="text-purple-600" />}
         bg="bg-purple-100"
         label="Total Spaces"
-        value={stats.total_seats.toString()}
+        value={stats.active_seats.toString()}
         sub="Across all floors"
       />
     </div>
