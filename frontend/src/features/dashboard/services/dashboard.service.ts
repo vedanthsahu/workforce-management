@@ -35,12 +35,13 @@ export type DashboardResult =
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function mapBookingStatus(status: string): "Confirmed" | "Pending" | "Cancelled" {
+function mapBookingStatus(status: string, isModified: boolean): "Confirmed" | "Pending" | "Cancelled" | "Modified" {
   const s = status.toUpperCase();
-  // MODIFIED is still an active, confirmed booking (just with a modification
-  // history) — this widget has no separate "Modified" badge state, unlike
-  // My Bookings, so it's treated the same as Confirmed here.
-  if (s === "CONFIRMED" || s === "ACTIVE" || s === "MODIFIED") return "Confirmed";
+  // A modified row's successor is still literally CONFIRMED/ACTIVE --
+  // is_modified (derived from modified_from_booking_id) is the authoritative
+  // signal, same as My Bookings (see bookings.service.ts normaliseStatus).
+  if (s === "MODIFIED" || isModified)                         return "Modified";
+  if (s === "CONFIRMED" || s === "ACTIVE")                     return "Confirmed";
   if (s === "CANCELLED" || s === "CANCELED")                  return "Cancelled";
   return "Pending";
 }
@@ -116,7 +117,7 @@ function mapApiBooking(b: ApiBooking, currentUserId: string): Booking {
     toDate,
     startTime:   DEFAULT_BOOKING_START_TIME,
     endTime:     DEFAULT_BOOKING_END_TIME,
-    status:      mapBookingStatus(b.booking_status),
+    status:      mapBookingStatus(b.booking_status, b.is_modified ?? false),
     isRecurring: false,
     seatId:      b.seat_code ?? b.seat_id,
     rawSeatId:   b.seat_id  ? String(b.seat_id)  : undefined,
@@ -128,6 +129,10 @@ function mapApiBooking(b: ApiBooking, currentUserId: string): Booking {
     bookingType:   isSelf ? "self" : "on_behalf",
     bookedByName:  isSelf ? undefined : (b.booked_by_name ?? undefined),
     bookedByEmail: isSelf ? undefined : (b.booked_by_email ?? undefined),
+    updatedByUserId: b.updated_user_id ?? undefined,
+    updatedByName:   b.updated_by_name ?? undefined,
+    bookedByUserId:  bookedById,
+    bookedForUserId: bookedForId,
   };
 }
 
