@@ -1218,9 +1218,13 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
   const [apiError, setApiError] = useState<string | null>(null);
 
   const isDirty = (Object.keys(initialFormRef.current) as (keyof typeof form)[]).some((key) => {
-    const currentValue = typeof form[key] === "string" ? form[key].trim() : form[key];
-    const initialValue = typeof initialFormRef.current[key] === "string" ? initialFormRef.current[key].trim() : initialFormRef.current[key];
-    return currentValue !== initialValue;
+    // Phone is compared with all whitespace stripped, not just trimmed --
+    // the field's own onChange always reconstructs "+<code> <digits>" with
+    // an internal space, while the backend returns E.164 (no space), so a
+    // plain trim() would flag the field dirty on a no-op edit.
+    const normalize = (value: typeof form[typeof key]) =>
+      typeof value === "string" ? value.replace(key === "phone" ? /\s+/g : /^\s+|\s+$/g, "") : value;
+    return normalize(form[key]) !== normalize(initialFormRef.current[key]);
   });
   const isValid = createGuestSchema.safeParse(form).success;
   const canSave = isDirty && isValid && !saving;

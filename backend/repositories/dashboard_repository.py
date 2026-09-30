@@ -352,8 +352,10 @@ def fetch_admin_dashboard_summary(
             ),
 
             blocked_seat_counts AS (
-                SELECT COUNT(*) AS blocked_seats
+                SELECT COUNT(DISTINCT bs.seat_id) AS blocked_seats
                 FROM blocked_seats AS bs
+                INNER JOIN bookable_seats AS bks
+                    ON bks.id = bs.seat_id
                 WHERE bs.tenant_id = %(tenant_id)s
                   AND bs.status = 'ACTIVE'
                   AND %(selected_date)s BETWEEN bs.blocked_from AND bs.blocked_to
@@ -405,8 +407,21 @@ def fetch_admin_dashboard_summary(
 
                     (
                         SELECT COUNT(*)
-                        FROM bookable_seats
+                        FROM scoped_seats
+                        WHERE status = 'ACTIVE'
                     ) AS total_seats,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM bookable_seats
+                    ) AS bookable_seats,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM scoped_seats
+                        WHERE status = 'ACTIVE'
+                          AND is_bookable = FALSE
+                    ) AS non_bookable_seats,
 
                     (
                         SELECT COUNT(*)
@@ -511,13 +526,13 @@ def fetch_admin_dashboard_summary(
             utilization_metrics AS (
                 SELECT
                     *,
-                    GREATEST(total_seats - blocked_seats, 0) AS available_seats,
+                    GREATEST(bookable_seats - blocked_seats, 0) AS available_seats,
                     COALESCE(
                         ROUND(
                             (
-                                booked_seats_count::numeric
+                                actual_booked_seats_today::numeric
                                 /
-                                NULLIF(GREATEST(total_seats - blocked_seats, 0), 0)
+                                NULLIF(GREATEST(bookable_seats - blocked_seats, 0), 0)
                             ) * 100,
                             1
                         ),
@@ -531,6 +546,7 @@ def fetch_admin_dashboard_summary(
                 total_buildings,
                 total_floors,
                 total_seats,
+                non_bookable_seats,
                 booked_seats_count AS booked_today,
                 actual_booked_seats_today AS booked_seats_today,
                 blocked_seats,
