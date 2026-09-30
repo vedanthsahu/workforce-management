@@ -1728,15 +1728,27 @@ def fetch_seat_configuration(
     """
     params: list[Any] = [tenant_id, seat_id]
     if booking_date is not None:
+        # booking_date is a bare calendar date with no timezone of its own --
+        # casting it straight to timestamptz would implicitly use the DB
+        # session's timezone (UTC), silently shifting the day boundary. This
+        # demo deployment anchors booking days to Asia/Kolkata. effective_from
+        # is compared against the START of the NEXT day (India-local), not
+        # booking_date's own midnight -- a direct publish's effective_from
+        # is the real-time instant it was published at (see
+        # activate_floor_layout), almost never midnight, so comparing
+        # against that day's own midnight would make a same-day publish
+        # look "not yet effective." See
+        # booking_repository.fetch_seat_for_booking for the fuller version
+        # of this comment.
         query += """
           AND layout_id = (
-              SELECT id
-              FROM floor_layouts
-              WHERE floor_id = seats.floor_id
-                AND tenant_id = seats.tenant_id
-                AND status IN ('PUBLISHED', 'SCHEDULED')
-                AND effective_from <= %s
-                AND (effective_till IS NULL OR effective_till > %s)
+              SELECT fl.id
+              FROM floor_layouts fl
+              WHERE fl.floor_id = seats.floor_id
+                AND fl.tenant_id = seats.tenant_id
+                AND fl.status IN ('PUBLISHED', 'SCHEDULED')
+                AND fl.effective_from < ((%s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')
+                AND (fl.effective_till IS NULL OR fl.effective_till > (%s::timestamp AT TIME ZONE 'Asia/Kolkata'))
           )
         """
         params.extend([booking_date, booking_date])

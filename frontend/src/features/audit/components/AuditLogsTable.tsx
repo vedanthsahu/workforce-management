@@ -32,11 +32,9 @@ function ActorCell({ log }: { log: AuditLogListItem }) {
   );
 }
 
-export default function AuditLogsTable({ data, selectedId, onSelect }: Props) {
-  if (data.length === 0) {
-    return <p className="px-6 py-12 text-center text-gray-400 text-sm">No audit events found.</p>;
-  }
+const AUDIT_COLUMN_COUNT = 9;
 
+export default function AuditLogsTable({ data, selectedId, onSelect }: Props) {
   return (
     <>
       <style>{`
@@ -70,6 +68,13 @@ export default function AuditLogsTable({ data, selectedId, onSelect }: Props) {
             className="audit-tbody-scroll block w-full max-h-140 divide-y divide-gray-100 overflow-y-auto"
             style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
           >
+            {data.length === 0 && (
+              <tr className="table w-full" style={{ tableLayout: "fixed" }}>
+                <td colSpan={AUDIT_COLUMN_COUNT} className="py-16 text-center text-sm text-gray-400">
+                  No audit events found.
+                </td>
+              </tr>
+            )}
             {data.map((log) => {
               const isSelected = log.id === selectedId;
               return (

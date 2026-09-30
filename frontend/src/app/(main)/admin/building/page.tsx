@@ -162,6 +162,15 @@ function BuildingsPage() {
               data={paginatedBuildings}
               onEdit={handleEdit}
               highlightedId={highlightedId}
+              emptyMessage={
+                search
+                  ? `No buildings match "${search}".`
+                  : statusFilter === "ACTIVE"
+                    ? "No active buildings found."
+                    : statusFilter === "INACTIVE"
+                      ? "No inactive buildings found."
+                      : "No buildings found."
+              }
             />
           )}
         </div>

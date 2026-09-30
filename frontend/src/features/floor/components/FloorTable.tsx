@@ -8,13 +8,14 @@ type Props = {
   data: Floor[];
   onEdit: (floor: Floor) => void;
   highlightedId?: string | null;
+  /** Shown in place of the rows when `data` is empty -- e.g. "No inactive
+   * floors found." when the status card filter is set to Inactive. */
+  emptyMessage?: string;
 };
 
-export default function FloorTable({ data, onEdit, highlightedId }: Props) {
-  if (data.length === 0) {
-    return <p className="px-6 py-12 text-center text-gray-400 text-sm">No floors found.</p>;
-  }
+const FLOOR_COLUMN_COUNT = 9;
 
+export default function FloorTable({ data, onEdit, highlightedId, emptyMessage = "No floors found." }: Props) {
   return (
     <>
       <style>{`
@@ -28,6 +29,9 @@ export default function FloorTable({ data, onEdit, highlightedId }: Props) {
 
       {/* ── Mobile card list (hidden on md+) ──────────────── */}
       <div className="md:hidden divide-y">
+        {data.length === 0 && (
+          <p className="px-6 py-12 text-center text-gray-400 text-sm">{emptyMessage}</p>
+        )}
         {data.map((floor) => {
           const isHighlighted = highlightedId === floor.floor_id;
           return (
@@ -95,6 +99,13 @@ export default function FloorTable({ data, onEdit, highlightedId }: Props) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
+            {data.length === 0 && (
+              <tr>
+                <td colSpan={FLOOR_COLUMN_COUNT} className="py-16 text-center text-sm text-gray-400">
+                  {emptyMessage}
+                </td>
+              </tr>
+            )}
             {data.map((floor) => {
               const isHighlighted = highlightedId === floor.floor_id;
               return (

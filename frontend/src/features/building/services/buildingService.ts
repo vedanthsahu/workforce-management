@@ -62,7 +62,7 @@ export const buildingService = {
       total_buildings: data.total_buildings,
       active_buildings: data.active_buildings,
       inactive_buildings: data.inactive_buildings,
-      total_seats: data.total_seats,
+      active_seats: data.active_seats,
     };
   },
 };

@@ -18,7 +18,7 @@ export interface BuildingStatsSummary {
   total_buildings: number;
   active_buildings: number;
   inactive_buildings: number;
-  total_seats: number;
+  active_seats: number;
 }
 
 export interface SiteOption {

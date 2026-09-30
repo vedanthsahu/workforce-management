@@ -49,6 +49,23 @@ export async function updateLayoutPolicy(patch: {
   return data;
 }
 
+export interface ActivityPolicy {
+  // Rows shown in the admin dashboard's Recent Activities table.
+  record_count: number;
+}
+
+export async function fetchActivityPolicy(): Promise<ActivityPolicy> {
+  const { data } = await axiosInstance.get<ActivityPolicy>("/business-rules/activity-policy");
+  return data;
+}
+
+export async function updateActivityPolicy(
+  patch: Partial<ActivityPolicy>,
+): Promise<ActivityPolicy> {
+  const { data } = await axiosInstance.patch<ActivityPolicy>("/business-rules/activity-policy", patch);
+  return data;
+}
+
 export interface BlockedSeatPolicy {
   // A block is flagged Upcoming/Expiring Soon if it starts/ends within
   // this many days of today.

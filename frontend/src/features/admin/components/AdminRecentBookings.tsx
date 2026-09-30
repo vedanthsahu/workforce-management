@@ -35,7 +35,13 @@ export default function AdminRecentBookings({ bookings }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm font-semibold">Recent Activities</CardTitle>
+        {/* Count badge matches the Role Management table header. */}
+        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          Recent Activities
+          <span className="text-[11px] font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
+            {bookings.length}
+          </span>
+        </CardTitle>
       </CardHeader>
 
       <CardContent className="p-0">

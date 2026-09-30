@@ -18,6 +18,18 @@ type BookingCardProps = {
 
 export function BookingCard({ booking, onCancel, onModify, canCancelOwn, canBookSelf }: BookingCardProps) {
   const isConfirmed = booking.status === "Confirmed";
+  const isModified  = booking.status === "Modified";
+  // "(self)" only applies to a genuine self-booking (booked by and for the
+  // same person) that its own owner then modified themselves, same rule the
+  // admin bookings list and My Bookings page use.
+  const isGenuineSelfBooking =
+    !!booking.bookedForUserId && booking.bookedForUserId === booking.bookedByUserId;
+  const isSelfModified =
+    isModified &&
+    isGenuineSelfBooking &&
+    !!booking.updatedByUserId &&
+    booking.updatedByUserId === booking.bookedForUserId;
+  const showModifiedBy = isModified && !!booking.updatedByName;
 
   return (
     <div className={cn(
@@ -60,6 +72,12 @@ export function BookingCard({ booking, onCancel, onModify, canCancelOwn, canBook
               </span>
             )}
           </div>
+          {showModifiedBy && (
+            <p className="text-[11px] font-medium text-gray-500 mt-1.5">
+              Modified by <span className="font-bold text-gray-600">{booking.updatedByName}</span>
+              {isSelfModified && " (self)"}
+            </p>
+          )}
         </div>
 
         {/* Right column: Booking ID + Booked on */}

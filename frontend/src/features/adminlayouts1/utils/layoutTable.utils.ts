@@ -13,16 +13,6 @@ export const LEGEND = [
   { label: "Unconfigured", color: "#D1D5DB" },
 ] as const;
 
-// Non-published layouts fall out of this list on their own once they've sat
-// untouched (by updated_at) past their status's threshold — otherwise old
-// drafts/archived rows accumulate forever. Published layouts are exempt and
-// never auto-hide.
-export const HIDE_AFTER_DAYS: Partial<Record<string, number>> = {
-  DRAFT: 15,
-  ARCHIVED: 30,
-  DELETED: 5,
-};
-
 // ─── FloorLayoutsPage default selection ─────────────────────────────────────
 export const DEFAULT_LAYOUT_SELECTION: LayoutSelection = {
   siteId: "", buildingId: "", floorId: "",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,24 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxItem,
+} from "@/components/ui/combobox";
 import { Office, UpdateOfficePayload } from "../types/office.types";
+import {
+  findStateOfCity,
+  getCities,
+  getStatesOfCountry,
+} from "../utils/office.utils";
+
+// Same looks as the Add Office form: read-only fields (code, counts) and
+// dropdowns waiting on a parent field (State, City).
+const readOnlyInputClass = "bg-gray-50 text-gray-500 cursor-not-allowed";
+const comboInputClass =
+  "placeholder:text-muted-foreground! disabled:opacity-100 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed";
 import { officeService } from "../services/office.service";
 import { buildingService } from "@/features/building/services/buildingService";
 import { floorService } from "@/features/floor/services/floorService";
@@ -71,6 +88,7 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
         address_line2: office.address_line2 || "",
         status: office.status || "ACTIVE",
       });
+      setSelectedState(findStateOfCity(office.country || "", office.city || ""));
       setSelectedBuildingIds([]);
       setSelectedFloorIds([]);
       setInactiveBuildings([]);
@@ -115,6 +133,17 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
     };
   }, [isReactivating, office.site_id]);
 
+  // Once the reactivate checklist has loaded, scroll it into view — it sits
+  // below the fold, so otherwise the admin may not notice it appeared.
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const showChecklist =
+    isReactivating && !checklistLoading && (inactiveBuildings.length > 0 || inactiveFloors.length > 0);
+  useEffect(() => {
+    if (!showChecklist) return;
+    const el = scrollAreaRef.current;
+    el?.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [showChecklist]);
+
   const toggleBuilding = (id: string) => {
     setSelectedBuildingIds((prev) => (prev.includes(id) ? prev.filter((b) => b !== id) : [...prev, id]));
   };
@@ -122,6 +151,18 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
   const toggleFloor = (id: string) => {
     setSelectedFloorIds((prev) => (prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]));
   };
+
+  // State only narrows the city list; the site record has no state column,
+  // so it stays out of formData (and the update payload).
+  const [selectedState, setSelectedState] = useState("");
+  const stateOptions = useMemo(() => getStatesOfCountry(formData.country), [formData.country]);
+  const cityOptions = useMemo(
+    () => getCities(formData.country, selectedState),
+    [formData.country, selectedState]
+  );
+  // City is pickable once a state is chosen, or right away for countries
+  // that have no states in the dataset.
+  const cityStepReady = !!formData.country && (!!selectedState || stateOptions.length === 0);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -158,6 +199,13 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
     formData.address_line2 !== (office.address_line2 || "") ||
     formData.status !== (office.status || "ACTIVE");
 
+  // Changing country/state clears City, so block saving a half-filled location.
+  const isFormValid =
+    !!formData.site_name.trim() &&
+    !!formData.country.trim() &&
+    !!formData.city.trim() &&
+    !!formData.timezone.trim();
+
   return (
     <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
       <DialogContent className="sm:max-w-2xl">
@@ -166,8 +214,13 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
           <DialogDescription>Update office details and save changes.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5">
-          <div className="grid grid-cols-2 gap-5">
+        {/* Scrolls when the reactivate checklist makes the form taller than the screen. */}
+        <div
+          ref={scrollAreaRef}
+          className="space-y-5 max-h-[65vh] overflow-y-auto p-1 -m-1 pr-3 -mr-3"
+          style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div className="space-y-1.5">
               <Label>Office Name</Label>
               <Input
@@ -179,13 +232,107 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
             </div>
 
             <div className="space-y-1.5">
-              <Label>City</Label>
-              <Input
-                name="city"
-                value={formData.city || ""}
-                onChange={handleChange}
-                placeholder="Enter city"
-              />
+              <Label>Office Code</Label>
+              <Input value={office.site_code || ""} readOnly className={readOnlyInputClass} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Country</Label>
+              <Input value={formData.country || ""} readOnly className={readOnlyInputClass} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>State</Label>
+              <Combobox
+                items={stateOptions}
+                value={selectedState || null}
+                disabled={!formData.country || stateOptions.length === 0}
+                onValueChange={(value) => {
+                  setSelectedState(value ?? "");
+                  setFormData((prev) => ({ ...prev, city: "" }));
+                }}
+              >
+                <ComboboxInput
+                  placeholder={
+                    !formData.country
+                      ? "Select a country first"
+                      : stateOptions.length === 0
+                        ? "No states for this country"
+                        : "Select a state"
+                  }
+                  className={comboInputClass}
+                />
+                <ComboboxContent>
+                  {(state: string) => (
+                    <ComboboxItem key={state} value={state}>
+                      {state}
+                    </ComboboxItem>
+                  )}
+                </ComboboxContent>
+              </Combobox>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>
+                City
+                {!cityStepReady && (
+                  <span className="text-[11px] font-normal text-gray-400">
+                    (Select a state to edit city)
+                  </span>
+                )}
+              </Label>
+              {cityStepReady && cityOptions.length === 0 ? (
+                // Some states have no cities in the dataset — let the admin type one.
+                <Input
+                  name="city"
+                  value={formData.city || ""}
+                  onChange={handleChange}
+                  placeholder="Enter city"
+                />
+              ) : (
+                <Combobox
+                  items={cityOptions}
+                  value={formData.city || null}
+                  disabled={!cityStepReady}
+                  onValueChange={(value) =>
+                    setFormData((prev) => ({ ...prev, city: value ?? "" }))
+                  }
+                >
+                  <ComboboxInput
+                    placeholder={
+                      !formData.country
+                        ? "Select a country first"
+                        : !cityStepReady
+                          ? "Select a state first"
+                          : "Select a city"
+                    }
+                    className={comboInputClass}
+                  />
+                  <ComboboxContent>
+                    {(city: string) => (
+                      <ComboboxItem key={city} value={city}>
+                        {city}
+                      </ComboboxItem>
+                    )}
+                  </ComboboxContent>
+                </Combobox>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Timezone</Label>
+              <Input value={formData.timezone || ""} readOnly className={readOnlyInputClass} />
+            </div>
+
+            {/* Buildings/floors are managed from their own pages — shown here for context only. */}
+            <div className="space-y-1.5">
+              <Label>Buildings</Label>
+              <Input value={office.building_count ?? 0} readOnly className={readOnlyInputClass} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Floors</Label>
+              <Input value={office.floor_count ?? 0} readOnly className={readOnlyInputClass} />
             </div>
           </div>
 
@@ -207,7 +354,7 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
             <p className="text-xs text-gray-500">Checking for inactive buildings/floors…</p>
           )}
 
-          {isReactivating && !checklistLoading && (inactiveBuildings.length > 0 || inactiveFloors.length > 0) && (
+          {showChecklist && (
             <div className="space-y-1.5">
               <Label>Reactivate associated buildings/floors</Label>
               <p className="text-xs text-gray-500">
@@ -231,7 +378,7 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={loading || checklistLoading || !hasChanges}>
+          <Button onClick={handleSubmit} disabled={loading || checklistLoading || !hasChanges || !isFormValid}>
             {loading ? "Saving..." : "Save Changes"}
           </Button>
         </DialogFooter>

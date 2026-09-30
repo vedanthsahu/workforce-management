@@ -40,6 +40,7 @@ class AdminDashboardSummaryResponse(BaseModel):
     total_buildings : int = 0
     total_floors: int = 0
     total_seats: int = 0
+    non_bookable_seats: int = 0
 
     booked_today: int = 0
     blocked_seats: int = 0

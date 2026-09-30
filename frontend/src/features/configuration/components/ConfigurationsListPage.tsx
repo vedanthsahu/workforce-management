@@ -13,9 +13,11 @@ import type {
   ConfigurationItem,
 } from "../types/configuration.types";
 import {
+  fetchActivityPolicy,
   fetchBlockedSeatPolicy,
   fetchBookingPolicy,
   fetchLayoutPolicy,
+  updateActivityPolicy,
   updateBlockedSeatPolicy,
   updateBookingPolicy,
   updateLayoutPolicy,
@@ -26,9 +28,9 @@ import {
 // "max bookings within N days" concepts were removed from this page
 // entirely -- nothing in the booking flow actually enforces either of
 // them, they were mock-only placeholders with no server-side counterpart
-// (see the Configuration-page audit that found this). Only
-// activity-table-record-count remains an unbacked, local-only mock.
+// (see the Configuration-page audit that found this).
 const BACKED_ITEM_IDS = new Set([
+  "activity-table-record-count",
   "new-layout-publishing",
   "booking-calendar-employee",
   "visitor-booking",
@@ -147,11 +149,18 @@ export default function ConfigurationsListPage() {
       fetchBookingPolicy(),
       fetchLayoutPolicy(),
       fetchBlockedSeatPolicy(),
+      fetchActivityPolicy(),
     ])
-      .then(([booking, layout, blockedSeat]) => {
+      .then(([booking, layout, blockedSeat, activity]) => {
         if (cancelled) return;
         setConfigurations((prev) =>
           prev.map((c) => {
+            if (c.id === "activity-table-record-count") {
+              return {
+                ...c,
+                fields: withFieldValue(c.fields, "records", activity.record_count),
+              };
+            }
             if (c.id === "new-layout-publishing") {
               let fields = withFieldValue(c.fields, "days", layout.buffer_days);
               fields = withFieldValue(
@@ -317,7 +326,15 @@ export default function ConfigurationsListPage() {
         let resolvedFields = fieldsWithDraft;
 
         if (BACKED_ITEM_IDS.has(itemId)) {
-          if (itemId === "new-layout-publishing") {
+          if (itemId === "activity-table-record-count") {
+            const records = fieldsWithDraft.find((f) => f.key === "records")?.value;
+            const result = await updateActivityPolicy({ record_count: records });
+            resolvedFields = withFieldValue(
+              fieldsWithDraft,
+              "records",
+              result.record_count,
+            );
+          } else if (itemId === "new-layout-publishing") {
             const days = fieldsWithDraft.find((f) => f.key === "days")?.value;
             const result = await updateLayoutPolicy({ buffer_days: days });
             resolvedFields = withFieldValue(

@@ -51,6 +51,15 @@ class UpdateLayoutPolicyRequest(BaseModel):
     visibility_days: UpdateLayoutVisibilityDaysRequest | None = None
 
 
+class ActivityPolicyResponse(BaseModel):
+    # Rows shown in the admin dashboard's Recent Activities table.
+    record_count: int
+
+
+class UpdateActivityPolicyRequest(BaseModel):
+    record_count: int | None = Field(default=None, gt=0)
+
+
 class BlockedSeatPolicyResponse(BaseModel):
     # A block is flagged Upcoming/Expiring Soon if it starts/ends within
     # this many days of today.

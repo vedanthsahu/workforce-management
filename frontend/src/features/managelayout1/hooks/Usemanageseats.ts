@@ -174,11 +174,19 @@ export function useManageSeats() {
       if (query && !s.seat_code.toLowerCase().includes(query))                                                    return false;
       if (filters.seat_type !== "All" && (s.seat_type ?? "").toUpperCase() !== filters.seat_type.toUpperCase()) return false;
       if (filters.status    !== "All" && (s.status    ?? "").toUpperCase() !== filters.status.toUpperCase())    return false;
-      if (filters.bookable  !== "All" && s.is_bookable !== (filters.bookable === "Yes"))                        return false;
+      // Inactive spaces are always non-bookable by rule, so the "No" option
+      // is scoped to active spaces only — otherwise it would also surface
+      // inactive rows, which belong under the Inactive filter/card instead.
+      if (filters.bookable  === "Yes" && !s.is_bookable)                                                        return false;
+      if (filters.bookable  === "No"  && (s.is_bookable || (s.status ?? "").toUpperCase() !== "ACTIVE"))        return false;
       if (filters.amenity   !== "All" && !s.amenity_ids.includes(filters.amenity))                              return false;
       if (cardFilter === "CONFIGURED"    && !s.is_configured)                                                   return false;
       if (cardFilter === "UNCONFIGURED"  && s.is_configured)                                                    return false;
-      if (cardFilter === "NON_BOOKABLE"  && s.is_bookable !== false)                                            return false;
+      // Inactive spaces are always non-bookable by rule, so this card
+      // (like its count in categoryStats) is scoped to active spaces only —
+      // otherwise clicking it would pull in inactive rows the card's own
+      // number never counted, showing more rows than the count promised.
+      if (cardFilter === "NON_BOOKABLE"  && (s.is_bookable !== false || s.status !== "ACTIVE"))                 return false;
       if (cardFilter === "INACTIVE"      && (s.status ?? "").toUpperCase() !== "INACTIVE")                      return false;
       return true;
     });
@@ -200,7 +208,10 @@ export function useManageSeats() {
     total:         categorySeats.length,
     configured:    categorySeats.filter((s) => s.is_configured).length,
     unconfigured:  categorySeats.filter((s) => !s.is_configured).length,
-    nonBookable:   categorySeats.filter((s) => s.is_bookable === false).length,
+    // Inactive spaces are always non-bookable by rule (see EditSeatPanel/
+    // BulkEditModal), so counting them here too would just double-count
+    // against the "Inactive" card. Scope this to active spaces only.
+    nonBookable:   categorySeats.filter((s) => s.status === "ACTIVE" && s.is_bookable === false).length,
     inactive:      categorySeats.filter((s) => s.status === "INACTIVE").length,
     totalCapacity: activeCategory === "CONFERENCE_ROOMS"
       ? categorySeats.reduce((sum, s) => sum + (s.capacity ?? 0), 0)

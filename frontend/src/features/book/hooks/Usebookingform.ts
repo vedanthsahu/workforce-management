@@ -32,13 +32,15 @@ import {
   resolveFloorLayoutUrl,
 } from "../services/Bookingform.service";
 import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
-import { BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE, MULTI_DAY_BOOKING_NOT_SUPPORTED_MESSAGE, maxBookableDateIso } from "../utils/constants";
+import { bookingTooFarInAdvanceMessage, MULTI_DAY_BOOKING_NOT_SUPPORTED_MESSAGE } from "../utils/constants";
+import { maxDateIsoFromToday, useBookingPolicy } from "@/features/configuration/hooks/useBookingPolicy";
+import { todayIsoInIndia } from "@/lib/indiaDate";
 import { amenityAppliesTo, BookingSpaceType } from "../utils/spaceType";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayIsoInIndia();
 }
 
 // ── Default state ─────────────────────────────────────────────────────────────
@@ -238,6 +240,9 @@ export function useBookingForm() {
   const [submitting, setSubmitting] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
+
+  const { employeeMaxAdvanceDays } = useBookingPolicy();
+  const maxBookableDate = maxDateIsoFromToday(employeeMaxAdvanceDays);
   // Separate from `error` -- this is never a failure, just letting the
   // admin know why the date they picked got adjusted. Shown as a quiet
   // inline note next to the date fields, not the page's error banner (see
@@ -806,8 +811,8 @@ export function useBookingForm() {
   // the multi-day notice; changing the anchor date is a normal single-day
   // selection and silently moves both fields together.
   const setFromDate = (v: string) => {
-    if (v > maxBookableDateIso()) {
-      setError(BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE);
+    if (maxBookableDate && employeeMaxAdvanceDays != null && v > maxBookableDate) {
+      setError(bookingTooFarInAdvanceMessage(employeeMaxAdvanceDays));
       return;
     }
     setError(null);
@@ -816,8 +821,8 @@ export function useBookingForm() {
   };
 
   const setToDate = (v: string) => {
-    if (v > maxBookableDateIso()) {
-      setError(BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE);
+    if (maxBookableDate && employeeMaxAdvanceDays != null && v > maxBookableDate) {
+      setError(bookingTooFarInAdvanceMessage(employeeMaxAdvanceDays));
       return;
     }
     setError(null);
@@ -1114,7 +1119,7 @@ export function useBookingForm() {
     dayCount,
     step1Valid,
     hasBookingChanges,
-    maxBookableDate: maxBookableDateIso(),
+    maxBookableDate,
     isModifyMode,
     isAdminFlow,
     isBookingForSomeone,

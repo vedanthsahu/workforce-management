@@ -34,6 +34,10 @@ export interface ApiBooking {
   booked_by_email?: string | null;
   booked_for_user_id?: string | null;
   booked_for_name?: string | null;
+  is_modified?: boolean;
+  modified_from_booking_id?: string | null;
+  updated_user_id?: string | null;
+  updated_by_name?: string | null;
 }
 
 export interface ApiTeamMemberSeat {
@@ -102,7 +106,7 @@ export interface Booking {
   toDate?: string;
   startTime: string;
   endTime: string;
-  status: "Confirmed" | "Pending" | "Cancelled";
+  status: "Confirmed" | "Pending" | "Cancelled" | "Modified";
   isRecurring: boolean;
   /** Display seat label shown in the card */
   seatId: string;
@@ -114,6 +118,10 @@ export interface Booking {
   bookingType?: "self" | "on_behalf";
   bookedByName?: string;
   bookedByEmail?: string;
+  updatedByUserId?: string;
+  updatedByName?: string;
+  bookedByUserId?: string;
+  bookedForUserId?: string;
 }
 
 export interface TeamMember {

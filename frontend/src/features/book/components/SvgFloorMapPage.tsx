@@ -68,7 +68,7 @@ function parseSvgDimensions(svgText: string): { w: number; h: number } {
 // per status instead.
 const FALLBACK_FILL: Record<string, string> = {
   available: "#22C55E",
-  yours: "#22C55E",
+  yours: "#3B82F6",
   selected: "#6366f1",
   best_match: "#EAB308",
   partial_match: "#FDE047",

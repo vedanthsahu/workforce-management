@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import { adminService } from "../services/admin.service";
 import { mapActivitiesToRecent } from "../utils/dashboard.utils";
+import { fetchActivityPolicy } from "@/features/configuration/services/configuration.service";
 import type { RecentBooking } from "../types/admin.types";
-
-const RECENT_BOOKINGS_LIMIT = 20;
 
 export function useRecentBookings() {
   const [recentBookings, setRecentBookings] = useState<RecentBooking[]>([]);
@@ -15,11 +14,19 @@ export function useRecentBookings() {
     let cancelled = false;
     setLoading(true);
 
-    adminService
-      .getAdminActivities()
-      .then((res) => {
+    // Row count is Configuration → Activity Table Record Count. If that
+    // lookup fails, show every activity rather than an arbitrary cut-off.
+    Promise.all([
+      adminService.getAdminActivities(),
+      fetchActivityPolicy().catch((err) => {
+        console.error("Failed to load activity policy", err);
+        return null;
+      }),
+    ])
+      .then(([res, policy]) => {
         if (cancelled) return;
-        setRecentBookings(mapActivitiesToRecent(res.items).slice(0, RECENT_BOOKINGS_LIMIT));
+        const rows = mapActivitiesToRecent(res.items);
+        setRecentBookings(policy ? rows.slice(0, policy.record_count) : rows);
       })
       .catch((err) => console.error(err))
       .finally(() => {

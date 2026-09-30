@@ -20,13 +20,14 @@ type Props = {
   data: Amenity[];
   onEdit: (amenity: Amenity) => void;
   highlightedAmenityId?: string | null;
+  /** Shown in place of the rows when `data` is empty -- e.g. "No inactive
+   * amenities found." when the status card filter is set to Inactive. */
+  emptyMessage?: string;
 };
 
-export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: Props) {
-  if (data.length === 0) {
-    return <p className="px-6 py-12 text-center text-gray-400 text-sm">No amenities found.</p>;
-  }
+const AMENITY_COLUMN_COUNT = 7;
 
+export default function AmenitiesTable({ data, onEdit, highlightedAmenityId, emptyMessage = "No amenities found." }: Props) {
   return (
     <>
       <style>{`
@@ -40,6 +41,9 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
 
       {/* ── Mobile card list (hidden on md+) ──────────────── */}
       <div className="md:hidden divide-y">
+        {data.length === 0 && (
+          <p className="px-6 py-12 text-center text-gray-400 text-sm">{emptyMessage}</p>
+        )}
         {data.map((amenity) => {
           const color = getCategoryColor(amenity.category_name);
           const Icon = color.icon;
@@ -106,6 +110,13 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
+            {data.length === 0 && (
+              <tr>
+                <td colSpan={AMENITY_COLUMN_COUNT} className="py-16 text-center text-sm text-gray-400">
+                  {emptyMessage}
+                </td>
+              </tr>
+            )}
             {data.map((amenity) => {
               const color = getCategoryColor(amenity.category_name);
               const Icon = color.icon;

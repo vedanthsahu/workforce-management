@@ -314,11 +314,11 @@ export async function fetchSeatsWithAvailability(
 
     const status = (() => {
       const raw = normalizeRangeStatus(a.availability?.status);
-      if (
-        currentSeatId &&
-        String(a.seat_id) === String(currentSeatId) &&
-        raw === "unavailable"
-      ) {
+      // When modifying a booking, the backend excludes that booking from its
+      // own conflict check (see exclude_booking_id in locations.py), so the
+      // seat comes back "available", not "unavailable" -- match on
+      // currentSeatId alone rather than requiring raw === "unavailable".
+      if (currentSeatId && String(a.seat_id) === String(currentSeatId)) {
         return "yours" as const;
       }
       return raw;

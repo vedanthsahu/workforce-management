@@ -68,7 +68,7 @@ function BookingStatsCards({ summary, delegatedCount, showOnBehalf }: { summary:
       <StatCard
         label="Completed"
         value={summary.completedThisMonth}
-        subLabel={`${summary.daysInOffice} days in office`}
+        subLabel={`${summary.daysInOffice} onsite days in this month`}
         icon={<CheckCircle2 className="size-5 text-emerald-600" />}
         iconBg="bg-emerald-100"
         accentBorder="border-l-emerald-500"

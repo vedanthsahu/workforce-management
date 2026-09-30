@@ -846,6 +846,28 @@ export default function ProfilePage() {
   const { profile, preferences, activitySummary, bookings } = data;
   const initials = getInitials(profile.displayName);
   const prefErr  = errors.find((e) => e.section === "preferences");
+  // Front office has no bookings of their own, and admins don't book seats
+  // for themselves through this app -- Activity Summary doesn't apply to
+  // either, so it's dropped for both. When it's gone, Work Details moves
+  // into the left column in its place (see the main grid below) so that
+  // column doesn't fall noticeably shorter than the right one.
+  const hasActivitySummary = profile.role !== "FRONT_OFFICE" && profile.role !== "TENANT_ADMIN";
+
+  // Shared between both columns -- which one it renders in depends on
+  // hasActivitySummary (see the main grid below).
+  const workDetailsCard = (
+    <Card className="overflow-hidden">
+      <div className="px-4 sm:px-5 py-3 bg-emerald-50/60 border-b border-emerald-100">
+        <SectionHeading icon={Briefcase} title="Work Details" color="bg-emerald-100 text-emerald-600" />
+      </div>
+      <div className="px-4 sm:px-5 py-1">
+        <PrefDisplayRow icon={Building2}  label="Department"    value={profile.department}   color="bg-emerald-100" iconColor="text-emerald-600" />
+        <PrefDisplayRow icon={Briefcase}  label="Designation"   value={profile.jobTitle}     color="bg-blue-100"    iconColor="text-blue-600" />
+        <PrefDisplayRow icon={MapPin}     label="Work Location" value={profile.workLocation} color="bg-rose-100"    iconColor="text-rose-600" />
+        <PrefDisplayRow icon={UserCheck}  label="Manager"       value={profile.reportingManager} color="bg-amber-100" iconColor="text-amber-600" />
+      </div>
+    </Card>
+  );
 
   return (
     <>
@@ -1011,9 +1033,14 @@ export default function ProfilePage() {
               </div>
             </Card>
 
-            {/* Activity Summary — moved to left column. Front office has no
-               bookings of their own, so this section doesn't apply to them. */}
-            {profile.role !== "FRONT_OFFICE" && (
+            {/* Work Details -- normally sits in the right column, but when
+               there's no Activity Summary below to fill this column out,
+               it moves up here instead so the two columns end at roughly
+               the same height. */}
+            {!hasActivitySummary && workDetailsCard}
+
+            {/* Activity Summary — moved to left column. */}
+            {hasActivitySummary && (
               <Card className="overflow-hidden">
                 <div className="px-4 sm:px-5 py-3 bg-amber-50/60 border-b border-amber-100">
                   <SectionHeading icon={BarChart3} title="Activity Summary" color="bg-amber-100 text-amber-600" />
@@ -1052,18 +1079,7 @@ export default function ProfilePage() {
           {/* ── Right column ─────────────────────────────────────────────── */}
           <div className="space-y-5">
 
-            {/* Work Details */}
-            <Card className="overflow-hidden">
-              <div className="px-4 sm:px-5 py-3 bg-emerald-50/60 border-b border-emerald-100">
-                <SectionHeading icon={Briefcase} title="Work Details" color="bg-emerald-100 text-emerald-600" />
-              </div>
-              <div className="px-4 sm:px-5 py-1">
-                <PrefDisplayRow icon={Building2}  label="Department"    value={profile.department}   color="bg-emerald-100" iconColor="text-emerald-600" />
-                <PrefDisplayRow icon={Briefcase}  label="Designation"   value={profile.jobTitle}     color="bg-blue-100"    iconColor="text-blue-600" />
-                <PrefDisplayRow icon={MapPin}     label="Work Location" value={profile.workLocation} color="bg-rose-100"    iconColor="text-rose-600" />
-                <PrefDisplayRow icon={UserCheck}  label="Manager"       value={profile.reportingManager} color="bg-amber-100" iconColor="text-amber-600" />
-              </div>
-            </Card>
+            {hasActivitySummary && workDetailsCard}
 
             {/* Preferences — moved to right column */}
             <Card className="overflow-hidden">
