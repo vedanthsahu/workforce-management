@@ -109,18 +109,21 @@ export function BookingCard({
   variant = "my",
 }: BookingCardProps) {
   const isCancelled = booking.status === "cancelled";
+  const isModified  = booking.status === "modified";
   // "(self)" only applies to a genuine self-booking (booked by and for the
-  // same person) that its own owner then cancelled themselves. Guests have
-  // no user account, so bookedForUserId is always undefined for guest/visit
-  // bookings — they never qualify and always show the actual actor's name.
+  // same person) that its own owner then cancelled/modified themselves. Guests
+  // have no user account, so bookedForUserId is always undefined for guest/
+  // visit bookings — they never qualify and always show the actual actor's
+  // name (same rule the admin bookings list uses, see mapAdminBooking.ts).
   const isGenuineSelfBooking =
     !!booking.bookedForUserId && booking.bookedForUserId === booking.bookedByUserId;
-  const isSelfCancel =
-    isCancelled &&
+  const isSelfActed =
+    (isCancelled || isModified) &&
     isGenuineSelfBooking &&
     !!booking.updatedByUserId &&
     booking.updatedByUserId === booking.bookedForUserId;
   const showCancelledBy = isCancelled && !!booking.updatedByName;
+  const showModifiedBy  = isModified  && !!booking.updatedByName;
   const bType = booking.bookingType ?? "self";
   const isVisitOnly = bType === "visit";
   const isGuest = bType === "guest";
@@ -283,7 +286,14 @@ export function BookingCard({
           {showCancelledBy && (
             <p className="text-[13px] font-medium text-gray-500 mt-1.5">
               Cancelled by <span className="font-bold text-gray-600">{booking.updatedByName}</span>
-              {isSelfCancel && " (self)"}
+              {isSelfActed && " (self)"}
+            </p>
+          )}
+
+          {showModifiedBy && (
+            <p className="text-[13px] font-medium text-gray-500 mt-1.5">
+              Modified by <span className="font-bold text-gray-600">{booking.updatedByName}</span>
+              {isSelfActed && " (self)"}
             </p>
           )}
         </div>

@@ -232,6 +232,7 @@ export const TREND_PERIOD_OPTIONS: { value: TrendPeriod; label: string }[] = [
 export const DONUT_META: Record<string, { label: string; color: string }> = {
   booked: { label: "Reserved spaces", color: "#4F46E5" },
   blocked: { label: "Blocked spaces", color: "#F59E0B" },
+  nonBookable: { label: "Non-bookable spaces", color: "#94A3B8" },
   available: { label: "Available spaces", color: "#10B981" },
 };
 
