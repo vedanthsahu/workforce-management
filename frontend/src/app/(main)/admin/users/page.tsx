@@ -36,6 +36,17 @@ function UserManagementPage() {
   const pinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const roleFilterAppliedRef = useRef(false);
 
+  // Only the very first fetch (nothing has ever been shown yet) gets the
+  // full page-level skeleton, with its own placeholder header. Every fetch
+  // after that -- a search keystroke, a filter change, a page change --
+  // keeps rendering the real UsersTable (passing `loading` through for its
+  // own row-level skeleton), so the real header stays mounted the whole
+  // time instead of unmounting for the fake one and flashing back.
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  useEffect(() => {
+    if (!loading) setHasLoadedOnce(true);
+  }, [loading]);
+
   // Reset search/role/status filters on every mount so the page always starts
   // clean, without wiping the page/rows-per-page the user had set — those
   // should survive round-trips like navigating to change-role and back.
@@ -180,13 +191,23 @@ function UserManagementPage() {
         </div>
 
         <div className="w-full h-full overflow-x-auto flex-1 min-h-0">
-          {loading ? (
+          {!hasLoadedOnce && loading ? (
             <TableBodySkeleton columns={5} rows={5} />
           ) : (
             <UsersTable
               users={users}
               highlightedUserId={highlightedId}
               onChangeRole={handleChangeRole}
+              loading={loading}
+              emptyMessage={
+                isSearchMode
+                  ? `No users match "${search}".`
+                  : statusFilter === "ACTIVE"
+                    ? "No active users found."
+                    : statusFilter === "INACTIVE"
+                      ? "No inactive users found."
+                      : "No users found."
+              }
             />
           )}
         </div>

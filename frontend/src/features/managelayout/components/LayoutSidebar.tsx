@@ -7,6 +7,7 @@ import { useScheduledLayoutActions } from "../hooks/useLayoutDetails";
 import { STATIC_PREFETCH_ROUTES } from "../utils/layoutPreview.utils";
 import { fetchLayoutPolicy } from "../services/layoutService";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { indiaDateIsoAfterDays, timestampToIndiaDateIso } from "@/lib/indiaDate";
 
 // Fallback only -- used for the one render before the real tenant value
 // (GET /business-rules/layout-policy) has loaded, and if that call fails.
@@ -15,9 +16,14 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 const FALLBACK_EMPLOYEE_MAX_ADVANCE_DAYS = 30;
 
 function minEffectiveDateIso(minAdvanceDays: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + minAdvanceDays);
-  return d.toISOString().slice(0, 10);
+  return indiaDateIsoAfterDays(minAdvanceDays);
+}
+
+// effective_from is an absolute timestamp. Convert it to the India calendar
+// date before putting it in a date input; slicing the raw ISO value would use
+// UTC and can display the previous day.
+function toLocalDateInputValue(iso: string): string {
+  return timestampToIndiaDateIso(iso);
 }
 
 interface LayoutSidebarProps {
@@ -157,7 +163,7 @@ function StatusBadge({ status, isPublished }: { status: string; isPublished: boo
 // inline controls, not a full modal -- good enough to unblock admins
 // today, worth a nicer dialog later if this gets heavy use.
 function ScheduleActionsCard({ layout, onChanged }: { layout: Layout; onChanged: () => void }) {
-  const currentEffectiveDate = layout.effective_from ? layout.effective_from.slice(0, 10) : "";
+  const currentEffectiveDate = layout.effective_from ? toLocalDateInputValue(layout.effective_from) : "";
   const [newDate, setNewDate] = useState(currentEffectiveDate);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   // Deliberately the employee window alone, not the full admin

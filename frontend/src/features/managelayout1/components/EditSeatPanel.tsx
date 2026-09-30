@@ -40,8 +40,12 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
     // For unconfigured seats the backend may still return default values
     // (e.g. is_bookable=true, status="ACTIVE"). Don't pre-fill those — the
     // admin must make an explicit choice before saving, so start blank.
-    setBookable(seat.is_configured ? seat.is_bookable : null);
-    setStatus(seat.is_configured ? (seat.status as SeatStatus | null) : null);
+    const initialStatus = seat.is_configured ? (seat.status as SeatStatus | null) : null;
+    setStatus(initialStatus);
+    // Inactive spaces are never bookable — force it regardless of whatever
+    // was previously saved, matching the same rule enforced below whenever
+    // the admin switches status to Inactive in this panel.
+    setBookable(initialStatus === "INACTIVE" ? false : seat.is_configured ? seat.is_bookable : null);
     setAmenityIds([...seat.amenity_ids]);
     setNotes(seat.notes ?? "");
     setCapacity(seat.capacity ?? null);
@@ -117,7 +121,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
           <div className="space-y-3">
             {/* Space Type — auto-categorized, read-only */}
             <div>
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1 block">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1 block">
                 Space Type
               </label>
               <div className="w-full h-9 px-3 flex items-center text-xs font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-lg">
@@ -128,7 +132,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
             {/* Capacity — Conference Rooms only */}
             {isConferenceRoom && (
               <div>
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1 block">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1 block">
                   Capacity <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -153,38 +157,23 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
               </div>
             )}
 
-            {/* Bookable */}
-            <div>
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1 block">
-                Bookable <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={bookable === null ? "" : bookable ? "Yes" : "No"}
-                onChange={(e) => { setBookable(e.target.value === "Yes"); setSaved(false); }}
-                className={`w-full h-9 px-3 text-xs font-medium bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
-                  bookable === null ? "text-gray-400" : "text-gray-700"
-                }`}
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
-                  backgroundRepeat: "no-repeat",
-                  backgroundPosition: "right 10px center",
-                }}
-              >
-                <option value="" disabled>Select…</option>
-                <option value="Yes" className="text-gray-900">Yes</option>
-                <option value="No" className="text-gray-900">No</option>
-              </select>
-            </div>
-
             {/* Status */}
             <div>
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1 block">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1 block">
                 Status <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <select
                   value={status ?? ""}
-                  onChange={(e) => { setStatus(e.target.value as SeatStatus); setSaved(false); }}
+                  onChange={(e) => {
+                    const next = e.target.value as SeatStatus;
+                    setStatus(next);
+                    // Inactive spaces are never bookable -- force it here too,
+                    // not just on initial load, so flipping Active -> Inactive
+                    // mid-edit immediately locks Bookable to No.
+                    if (next === "INACTIVE") setBookable(false);
+                    setSaved(false);
+                  }}
                   className={`w-full h-9 pl-7 pr-3 text-xs font-medium bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
                     status === null ? "text-gray-400" : "text-gray-700"
                   }`}
@@ -201,6 +190,32 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
                   status === "ACTIVE" ? "bg-emerald-500" : "bg-gray-400"
                 }`} />
               </div>
+            </div>
+
+            {/* Bookable -- locked to No whenever Status is Inactive, since an
+                inactive space can never be booked. */}
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1 block">
+                Bookable <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={status === "INACTIVE" ? "No" : bookable === null ? "" : bookable ? "Yes" : "No"}
+                onChange={(e) => { setBookable(e.target.value === "Yes"); setSaved(false); }}
+                disabled={status === "INACTIVE"}
+                title={status === "INACTIVE" ? "Inactive spaces can't be bookable" : undefined}
+                className={`w-full h-9 px-3 text-xs font-medium bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                  status === "INACTIVE" ? "bg-gray-50 text-gray-400 cursor-not-allowed" : bookable === null ? "text-gray-400" : "text-gray-700"
+                }`}
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                  backgroundRepeat: "no-repeat",
+                  backgroundPosition: "right 10px center",
+                }}
+              >
+                <option value="" disabled>Select…</option>
+                <option value="Yes" className="text-gray-900">Yes</option>
+                <option value="No" className="text-gray-900">No</option>
+              </select>
             </div>
           </div>
         </section>

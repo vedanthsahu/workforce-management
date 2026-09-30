@@ -11,7 +11,8 @@ import axios from "axios";
 import { cn } from "@/lib/utils";
 import type { FavouriteSeat } from "../types/dashboard.types";
 import { fetchAvailability } from "@/features/book/services/Bookingform.service";
-import { BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE, maxBookableDateIso } from "@/features/book/utils/constants";
+import { bookingTooFarInAdvanceMessage } from "@/features/book/utils/constants";
+import { maxDateIsoFromToday, useBookingPolicy } from "@/features/configuration/hooks/useBookingPolicy";
 import { axiosInstance } from "@/lib/http/axios";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -118,7 +119,8 @@ interface CalendarProps {
 
 function BookingCalendar({ selected, onSelect, month, onMonthChange, dayStatuses, loading }: CalendarProps) {
   const today = todayDate();
-  const maxDate = maxBookableDateIso();
+  const { employeeMaxAdvanceDays } = useBookingPolicy();
+  const maxDate = maxDateIsoFromToday(employeeMaxAdvanceDays);
   const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
   const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0);
 
@@ -169,7 +171,7 @@ function BookingCalendar({ selected, onSelect, month, onMonthChange, dayStatuses
 
           const dateStr = toDateStr(date);
           const isPast = date < today;
-          const isTooFarAhead = dateStr > maxDate;
+          const isTooFarAhead = maxDate !== undefined && dateStr > maxDate;
           const isToday = date.getTime() === today.getTime();
           const isSelected = selected ? toDateStr(selected) === dateStr : false;
           const status = dayStatuses.get(dateStr);
@@ -198,7 +200,7 @@ function BookingCalendar({ selected, onSelect, month, onMonthChange, dayStatuses
                 !isSelected && !isTooFarAhead && isBlocked && "text-gray-300",
                 !isSelected && !isPast && !isTooFarAhead && !isAvail && !isBooked && !isBlocked && "text-gray-700",
               )}
-              title={isTooFarAhead ? BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE : undefined}
+              title={isTooFarAhead && employeeMaxAdvanceDays != null ? bookingTooFarInAdvanceMessage(employeeMaxAdvanceDays) : undefined}
             >
               {date.getDate()}
               {/* Status dot */}
@@ -230,7 +232,11 @@ function BookingCalendar({ selected, onSelect, month, onMonthChange, dayStatuses
           Selected
         </span>
       </div>
-      <p className="text-[9.5px] text-gray-400 mt-1 px-1">Bookings can only be made up to 30 days in advance.</p>
+      {employeeMaxAdvanceDays != null && (
+        <p className="text-[9.5px] text-gray-400 mt-1 px-1">
+          Bookings can only be made up to {employeeMaxAdvanceDays} days in advance.
+        </p>
+      )}
     </div>
   );
 }

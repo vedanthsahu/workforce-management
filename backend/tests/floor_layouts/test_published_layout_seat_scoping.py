@@ -9,6 +9,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from backend.repositories.booking_repository import (
+    cancel_future_guest_bookings_for_guest,
     fetch_available_seats,
     fetch_available_seats_by_range,
     fetch_seat_for_booking,
@@ -27,6 +28,7 @@ from backend.repositories.location_repository import (
 class FakeCursor:
     def __init__(self) -> None:
         self.executions: list[tuple[str, Any]] = []
+        self.rowcount = 0
 
     def __enter__(self) -> FakeCursor:
         return self
@@ -69,8 +71,16 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         # SCHEDULED with its effective_from already passed -- not just a
         # flat "PUBLISHED" check.
         self.assertIn("fl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
-        self.assertIn("fl.effective_from <= %s", sql)
-        self.assertIn("fl.effective_till IS NULL OR fl.effective_till > %s", sql)
+        # booking_date is anchored to India time, not the DB session's UTC
+        # boundary. effective_from is compared against the START of the NEXT
+        # day (India-local) since a direct
+        # publish's effective_from is a real-time instant, not midnight.
+        self.assertIn("fl.effective_from < ((%s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')", sql)
+        self.assertIn(
+            "fl.effective_till IS NULL OR fl.effective_till > "
+            "(%s::timestamp AT TIME ZONE 'Asia/Kolkata')",
+            sql,
+        )
         self.assertIn("fl.id = s.layout_id", sql)
         self.assertIn("si.status = 'ACTIVE'", sql)
         self.assertIn("bu.status = 'ACTIVE'", sql)
@@ -91,9 +101,14 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         # layout cutover -- eligible once PUBLISHED, or SCHEDULED with
         # effective_from already passed for that specific day.
         self.assertIn("fl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
-        self.assertIn("fl.effective_from <= rd.booking_date", sql)
+        # Anchored to India time, not the DB session's UTC day boundary.
         self.assertIn(
-            "fl.effective_till IS NULL OR fl.effective_till > rd.booking_date", sql
+            "fl.effective_from < ((rd.booking_date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')", sql
+        )
+        self.assertIn(
+            "fl.effective_till IS NULL OR fl.effective_till > "
+            "(rd.booking_date::timestamp AT TIME ZONE 'Asia/Kolkata')",
+            sql,
         )
         self.assertIn("fl.id = s.layout_id", sql)
         self.assertIn("flr.status = 'ACTIVE'", sql)
@@ -110,8 +125,12 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         sql, _ = cursor.executions[0]
         self.assertIn("floor_layouts", sql)
         self.assertIn("fl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
-        self.assertIn("fl.effective_from <= %s", sql)
-        self.assertIn("fl.effective_till IS NULL OR fl.effective_till > %s", sql)
+        self.assertIn("fl.effective_from < ((%s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')", sql)
+        self.assertIn(
+            "fl.effective_till IS NULL OR fl.effective_till > "
+            "(%s::timestamp AT TIME ZONE 'Asia/Kolkata')",
+            sql,
+        )
         self.assertIn("fl.id = s.layout_id", sql)
         self.assertIn("s.is_bookable IS NOT TRUE AND %s IS NOT TRUE", sql)
 
@@ -137,8 +156,12 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         sql, _ = cursor.executions[0]
         self.assertIn("floor_layouts", sql)
         self.assertIn("status IN ('PUBLISHED', 'SCHEDULED')", sql)
-        self.assertIn("effective_from <= %s", sql)
-        self.assertIn("effective_till IS NULL OR effective_till > %s", sql)
+        self.assertIn("fl.effective_from < ((%s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')", sql)
+        self.assertIn(
+            "fl.effective_till IS NULL OR fl.effective_till > "
+            "(%s::timestamp AT TIME ZONE 'Asia/Kolkata')",
+            sql,
+        )
 
     def test_dashboard_summary_scopes_seats_to_published_layout(self) -> None:
         cursor = FakeCursor()
@@ -148,11 +171,31 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         sql, _ = cursor.executions[0]
         self.assertIn("floor_layouts", sql)
         self.assertIn("sfl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
-        self.assertIn("sfl.effective_from <= %(selected_date)s", sql)
         self.assertIn(
-            "sfl.effective_till IS NULL OR sfl.effective_till > %(selected_date)s", sql
+            "sfl.effective_from < ((%(selected_date)s::date + 1)::timestamp "
+            "AT TIME ZONE 'Asia/Kolkata')",
+            sql,
+        )
+        self.assertIn(
+            "sfl.effective_till IS NULL OR sfl.effective_till > "
+            "(%(selected_date)s::timestamp AT TIME ZONE 'Asia/Kolkata')",
+            sql,
         )
         self.assertIn("sfl.id = st.layout_id", sql)
+
+    def test_guest_deactivation_uses_india_today_for_future_bookings(self) -> None:
+        cursor = FakeCursor()
+        cancel_future_guest_bookings_for_guest(
+            FakeConnection(cursor),
+            tenant_id="1",
+            guest_id="2",
+            updated_by_user_id="3",
+        )
+        sql, _ = cursor.executions[0]
+        self.assertIn(
+            "booking_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date",
+            sql,
+        )
 
     def test_site_detail_seat_counts_scoped_to_published_layout(self) -> None:
         cursor = FakeCursor()

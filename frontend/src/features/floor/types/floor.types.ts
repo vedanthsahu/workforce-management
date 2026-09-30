@@ -50,5 +50,5 @@ export interface FloorStatsSummary {
   total_floors: number;
   active_floors: number;
   inactive_floors: number;
-  total_seats: number;
+  active_seats: number;
 }

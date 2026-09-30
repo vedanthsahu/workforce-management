@@ -89,7 +89,7 @@ export default function OfficeStats({ stats, statusFilter = null, onStatusFilter
         icon={<Armchair className="text-purple-600" />}
         bg="bg-purple-100"
         label="Total Spaces"
-        value={stats.total_seats.toString()}
+        value={stats.active_seats.toString()}
         sub="Across all offices"
       />
     </div>

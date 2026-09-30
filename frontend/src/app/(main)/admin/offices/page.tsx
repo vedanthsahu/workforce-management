@@ -164,6 +164,15 @@ function OfficesPage() {
               data={paginatedOffices}
               onEdit={handleEdit}
               highlightedId={highlightedId}
+              emptyMessage={
+                search
+                  ? `No offices match "${search}".`
+                  : statusFilter === "ACTIVE"
+                    ? "No active offices found."
+                    : statusFilter === "INACTIVE"
+                      ? "No inactive offices found."
+                      : "No offices found."
+              }
             />
           )}
         </div>

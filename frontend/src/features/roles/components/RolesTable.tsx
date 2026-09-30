@@ -10,11 +10,9 @@ type Props = {
   activeRoleKey?: string | null;
 };
 
-export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) {
-  if (roles.length === 0) {
-    return <p className="px-6 py-12 text-center text-gray-400 text-sm">No roles found.</p>;
-  }
+const ROLE_COLUMN_COUNT = 5;
 
+export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) {
   return (
     <>
       <style>{`
@@ -38,6 +36,13 @@ export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) 
             className="roles-tbody-scroll block w-full max-h-125 divide-y divide-gray-100 overflow-y-auto"
             style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
           >
+            {roles.length === 0 && (
+              <tr className="table w-full" style={{ tableLayout: "fixed" }}>
+                <td colSpan={ROLE_COLUMN_COUNT} className="py-16 text-center text-sm text-gray-400">
+                  No roles found.
+                </td>
+              </tr>
+            )}
             {roles.map((role) => (
               <tr
                 key={role.roleId}

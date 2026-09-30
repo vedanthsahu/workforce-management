@@ -62,11 +62,9 @@ export default function AdminStats({ data, selectedDate }: Props) {
     },
     {
       title: "Total Spaces",
-      value: data
-        ? Math.max(data.total_seats - data.blocked_seats, 0)
-        : "-",
-      count: data ? Math.max(data.total_seats - data.blocked_seats, 0) : null,
-      subtitle: "Active seats",
+      value: data?.active_seats ?? "-",
+      count: data?.active_seats ?? null,
+      subtitle: "Active spaces",
       icon: Armchair,
       accent: "orange" as Accent,
       // No dedicated seats management page yet -- wire this up once one

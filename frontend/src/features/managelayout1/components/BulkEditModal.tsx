@@ -217,6 +217,25 @@ export default function BulkEditModal({
       )}
 
       <div>
+        <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Status <span className="text-red-500">*</span></label>
+        <select
+          value={fields.status}
+          onChange={(e) => {
+            const next = e.target.value;
+            onStatusChange(next);
+            // Inactive spaces are never bookable -- force it for this
+            // group/tab the moment Status is set to Inactive here.
+            if (next === "INACTIVE") onBookableChange("No");
+          }}
+          className={selectClass}
+          style={dropdownStyle}
+        >
+          <option value="" disabled>Select…</option>
+          {SEAT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+
+      <div>
         <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Bookable <span className="text-red-500">*</span></label>
         {/* An empty `fields.bookable` genuinely means "not touched, excluded
             from the payload" (see buildPayload's `if (f.bookable)` guard) --
@@ -224,18 +243,17 @@ export default function BulkEditModal({
             back to displaying the FIRST option as if selected, so this was
             visually showing "Yes" as chosen while the field was actually
             untouched. This placeholder gives "" somewhere real to render. */}
-        <select value={fields.bookable} onChange={(e) => onBookableChange(e.target.value)} className={selectClass} style={dropdownStyle}>
+        <select
+          value={fields.status === "INACTIVE" ? "No" : fields.bookable}
+          onChange={(e) => onBookableChange(e.target.value)}
+          disabled={fields.status === "INACTIVE"}
+          title={fields.status === "INACTIVE" ? "Inactive spaces can't be bookable" : undefined}
+          className={`${selectClass} ${fields.status === "INACTIVE" ? "bg-gray-50 text-gray-400 cursor-not-allowed" : ""}`}
+          style={dropdownStyle}
+        >
           <option value="" disabled>Select…</option>
           <option value="Yes">Yes</option>
           <option value="No">No</option>
-        </select>
-      </div>
-
-      <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Status <span className="text-red-500">*</span></label>
-        <select value={fields.status} onChange={(e) => onStatusChange(e.target.value)} className={selectClass} style={dropdownStyle}>
-          <option value="" disabled>Select…</option>
-          {SEAT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
 

@@ -236,17 +236,36 @@ export default function AdminBookingsPage() {
           allItems = allItems.concat(next.items);
         }
 
-        // Prefer the BOOKING row over a same-visit GUEST_VISIT row so a
-        // cancelled/modified booking's guest visit doesn't get counted twice.
-        const byKey = new Map<string, (typeof allItems)[number]>();
-        allItems.forEach((item, index) => {
-          const key = item.guest_visit_id ?? item.booking_id ?? `${item.activity_source}-${index}`;
-          const existing = byKey.get(key);
-          if (!existing || (item.activity_source === "BOOKING" && existing.activity_source !== "BOOKING")) {
-            byKey.set(key, item);
-          }
+        // A BOOKING row and a same-visit GUEST_VISIT row only ever coexist
+        // when there's no *active* (CONFIRMED) booking for that visit (see
+        // fetch_admin_guest_visits_without_booking's join) -- which happens
+        // in exactly two situations: the whole visit was cancelled together
+        // with its seat (both rows describe the very same cancelled event,
+        // so showing one is correct), or only the seat was cancelled via
+        // "Cancel Booking" while the guest visit itself is still active
+        // (two genuinely different, non-redundant states -- a dead seat
+        // booking and a live, still-modifiable visit -- that must both stay
+        // visible, or the admin loses any sign the visit is still on).
+        // Grouping by guest_visit_id and only collapsing a group when every
+        // row in it is actually Cancelled tells those two cases apart.
+        const byGuestVisit = new Map<string, (typeof allItems)>();
+        const standaloneItems: typeof allItems = [];
+        allItems.forEach((item) => {
+          if (!item.guest_visit_id) { standaloneItems.push(item); return; }
+          const group = byGuestVisit.get(item.guest_visit_id) ?? [];
+          group.push(item);
+          byGuestVisit.set(item.guest_visit_id, group);
         });
-        const dedupedItems = [...byKey.values()];
+
+        const dedupedItems: typeof allItems = [...standaloneItems];
+        byGuestVisit.forEach((group) => {
+          if (group.length === 1 || !group.every((item) => resolveStatus(item) === "Cancelled")) {
+            dedupedItems.push(...group);
+            return;
+          }
+          // Same cancelled event, told twice -- keep just the BOOKING row.
+          dedupedItems.push(group.find((item) => item.activity_source === "BOOKING") ?? group[0]);
+        });
 
         // "Confirmed" stays a superset that includes Modified rows too.
         // "Not Checked In" (the Guest tab's card, not a real BookingStatus)

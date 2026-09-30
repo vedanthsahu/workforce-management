@@ -1,4 +1,5 @@
 import { axiosInstance } from "@/lib/http/axios";
+import { todayIsoInIndia } from "@/lib/indiaDate";
 import { Booking, BookingSummary, RawBooking } from "../types/bookings.types";
 import type { ApiTeamGroup } from "@/features/dashboard/types/dashboard.types";
 import type { User } from "@/features/auth/types/auth.types";
@@ -249,7 +250,7 @@ export function deriveBookingSummary(
   teamGroups:    ApiTeamGroup[] = [],
   currentUserId: string        = "",
 ): BookingSummary {
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayIsoInIndia();
 
   // All non-cancelled upcoming (current + future), sorted ascending by date
   const upcoming = [...current, ...future]

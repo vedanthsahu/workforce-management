@@ -118,13 +118,20 @@ export function mapAdminBookingRawToUiBooking(raw: AdminBookingRaw): AdminBookin
     booked_on: raw.created_at ? formatDateTime(raw.created_at) : "",
     check_in_time: raw.check_in_at ? formatTimeOnly(raw.check_in_at) : undefined,
     // Only surfaced for Cancelled/Modified rows. Always the actor's name;
-    // suffixed with "(self)" only for a genuine self-booking cancelled by
+    // suffixed with "(self)" only for a genuine self-booking acted on by
     // its own owner (see isGenuineSelfBooking above).
-    cancelled_by: !isCancelledOrModified || !raw.updated_by_name
+    // Fallback: for older Modified self-booking rows where updated_by_name
+    // was not yet recorded in the DB, show booked_for_name + "(self)" so
+    // the admin always sees *someone* rather than a blank attribution.
+    cancelled_by: !isCancelledOrModified
       ? undefined
       : isSelfActed
         ? `${raw.updated_by_name} (self)`
-        : raw.updated_by_name,
+        : raw.updated_by_name
+          ? raw.updated_by_name
+          : isGenuineSelfBooking && raw.booked_for_name
+            ? `${raw.booked_for_name} (self)`
+            : undefined,
     amenities: [],
     notes: raw.notes ?? undefined,
 

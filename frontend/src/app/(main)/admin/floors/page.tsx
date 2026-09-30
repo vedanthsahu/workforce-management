@@ -160,6 +160,15 @@ function FloorsPage() {
               data={paginatedFloors}
               onEdit={handleEdit}
               highlightedId={highlightedId}
+              emptyMessage={
+                search
+                  ? `No floors match "${search}".`
+                  : statusFilter === "ACTIVE"
+                    ? "No active floors found."
+                    : statusFilter === "INACTIVE"
+                      ? "No inactive floors found."
+                      : "No floors found."
+              }
             />
           )}
         </div>

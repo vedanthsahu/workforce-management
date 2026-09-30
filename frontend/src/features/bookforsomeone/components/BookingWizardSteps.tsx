@@ -22,10 +22,10 @@ import {
 } from "./BookForSomeone";
 import {
   GUEST_TYPES,
-  GUEST_VISIT_TOO_FAR_IN_ADVANCE_MESSAGE,
-  maxGuestVisitDateIso,
+  guestVisitTooFarInAdvanceMessage,
   PURPOSE_OF_VISIT,
 } from "../constants/booking.constants";
+import { maxDateIsoFromToday } from "@/features/configuration/hooks/useBookingPolicy";
 import { useGuestSearch } from "../hooks/useBooking";
 import { createGuestSchema, sanitizePhoneNumber } from "../schemas/guest.schema";
 import {
@@ -789,6 +789,8 @@ interface VisitDetailsStepProps {
   isLoadingBuildings: boolean;
   isLoadingFloors: boolean;
   readOnlyLocation?: boolean;
+  // Configuration → Visitor Booking window; null until the policy loads.
+  guestMaxAdvanceDays: number | null;
 }
 
 // ── Time slot dropdown ───────────────────────────────────────────────────────
@@ -866,11 +868,12 @@ function LockedTooltip({ children, locked, message }: { children: React.ReactNod
   );
 }
 
-export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildings, floors, isLoadingBuildings, isLoadingFloors, readOnlyLocation = false }: VisitDetailsStepProps) {
+export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildings, floors, isLoadingBuildings, isLoadingFloors, readOnlyLocation = false, guestMaxAdvanceDays }: VisitDetailsStepProps) {
   const lockedMessage = "This field cannot be changed because a space booking is linked to this visit. To change location or dates, use 'Edit Booking' instead.";
-  const maxVisitDate = maxGuestVisitDateIso();
-  const visitDateTooFar = visitDetails.visitDate > maxVisitDate;
-  const endDateTooFar = visitDetails.endDate > maxVisitDate;
+  const maxVisitDate = maxDateIsoFromToday(guestMaxAdvanceDays);
+  const tooFarMessage = guestMaxAdvanceDays != null ? guestVisitTooFarInAdvanceMessage(guestMaxAdvanceDays) : "";
+  const visitDateTooFar = !!maxVisitDate && visitDetails.visitDate > maxVisitDate;
+  const endDateTooFar = !!maxVisitDate && visitDetails.endDate > maxVisitDate;
   return (
     <div>
       <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Visit Details</h2>
@@ -1018,14 +1021,14 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
             onKeyDown={(e) => e.preventDefault()}
             onChange={(e) => {
               const val = e.target.value;
-              if (val > maxVisitDate) return;
+              if (maxVisitDate && val > maxVisitDate) return;
               const updates: Partial<VisitDetails> = { visitDate: val };
               if (!visitDetails.endDate || visitDetails.endDate < val) updates.endDate = val;
               onChange(updates);
             }}
           />
           {visitDateTooFar && (
-            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{GUEST_VISIT_TOO_FAR_IN_ADVANCE_MESSAGE}</p>
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{tooFarMessage}</p>
           )}
         </LockedTooltip>
         <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
@@ -1040,12 +1043,12 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
             disabled={readOnlyLocation}
             onKeyDown={(e) => e.preventDefault()}
             onChange={(e) => {
-              if (e.target.value > maxVisitDate) return;
+              if (maxVisitDate && e.target.value > maxVisitDate) return;
               onChange({ endDate: e.target.value });
             }}
           />
           {endDateTooFar && (
-            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{GUEST_VISIT_TOO_FAR_IN_ADVANCE_MESSAGE}</p>
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{tooFarMessage}</p>
           )}
         </LockedTooltip>
       </div>
@@ -1215,9 +1218,13 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
   const [apiError, setApiError] = useState<string | null>(null);
 
   const isDirty = (Object.keys(initialFormRef.current) as (keyof typeof form)[]).some((key) => {
-    const currentValue = typeof form[key] === "string" ? form[key].trim() : form[key];
-    const initialValue = typeof initialFormRef.current[key] === "string" ? initialFormRef.current[key].trim() : initialFormRef.current[key];
-    return currentValue !== initialValue;
+    // Phone is compared with all whitespace stripped, not just trimmed --
+    // the field's own onChange always reconstructs "+<code> <digits>" with
+    // an internal space, while the backend returns E.164 (no space), so a
+    // plain trim() would flag the field dirty on a no-op edit.
+    const normalize = (value: typeof form[typeof key]) =>
+      typeof value === "string" ? value.replace(key === "phone" ? /\s+/g : /^\s+|\s+$/g, "") : value;
+    return normalize(form[key]) !== normalize(initialFormRef.current[key]);
   });
   const isValid = createGuestSchema.safeParse(form).success;
   const canSave = isDirty && isValid && !saving;
