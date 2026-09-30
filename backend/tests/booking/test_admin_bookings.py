@@ -74,6 +74,8 @@ class AdminBookingsRepositoryFilterTests(unittest.TestCase):
         sql, params = cursor.executions[0]
         self.assertIn("WHERE b.tenant_id = %s", sql)
         self.assertIn("b.booking_status <> 'MODIFIED'", sql)
+        self.assertIn("b.booking_status = 'CANCELLED'", sql)
+        self.assertIn("gv.visit_status <> 'CANCELLED'", sql)
         self.assertNotIn("AND b.site_id", sql)
         self.assertNotIn("ILIKE", sql)
         self.assertNotIn("LIMIT", sql)
@@ -208,6 +210,8 @@ class AdminGuestVisitsWithoutBookingRepositoryTests(unittest.TestCase):
         self.assertIn("gv.tenant_id = %s", sql)
         self.assertIn("b.id IS NULL", sql)
         self.assertIn("gv.visit_status <> 'MODIFIED'", sql)
+        self.assertIn("cancelled_booking.booking_status = 'CANCELLED'", sql)
+        self.assertIn("THEN 'MODIFIED'", sql)
         self.assertEqual(list(params), ["3"])
 
     def test_filters_are_applied_independently(self) -> None:
@@ -336,9 +340,8 @@ class AdminBookingsServiceTests(unittest.TestCase):
         self.assertTrue(response.items[0].guest_visit_id)
 
     def test_skips_guest_visit_lookup_for_filters_a_booking_less_visit_cant_match(self) -> None:
-        """A booking-less guest visit can never be EMPLOYEE type, have a
-        seat_code, or have a bookings.booking_status (it has no bookings
-        row at all), so those filters should short-circuit the extra query."""
+        """A Visit Only row cannot be EMPLOYEE, have a seat, or match normal
+        booking statuses, so those filters should skip the extra query."""
         for kwargs in (
             {"booking_type": "EMPLOYEE"},
             {"seat_code": "A1"},
@@ -363,6 +366,28 @@ class AdminBookingsServiceTests(unittest.TestCase):
                         limit=20,
                     )
                 mock_fetch_visits.assert_not_called()
+
+    def test_modified_filter_includes_cancelled_seat_guest_visits(self) -> None:
+        query = AdminBookingListQuery(booking_status="MODIFIED")
+        with patch(
+            "backend.services.booking_service.fetch_admin_bookings",
+            return_value=[],
+        ), patch(
+            "backend.services.booking_service.fetch_admin_guest_visits_without_booking",
+            return_value=[],
+        ) as mock_fetch_visits, patch(
+            "backend.services.booking_service.fetch_admin_bookings_summary",
+            return_value=EMPTY_SUMMARY,
+        ):
+            get_admin_bookings(
+                conn=object(),
+                tenant_id="3",
+                query=query,
+                page=1,
+                limit=20,
+            )
+
+        self.assertEqual(mock_fetch_visits.call_args.kwargs["booking_status"], "MODIFIED")
 
 
 if __name__ == "__main__":

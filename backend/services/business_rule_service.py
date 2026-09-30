@@ -24,6 +24,7 @@ from backend.repositories.business_rule_repository import (
 EMPLOYEE_MAX_ADVANCE_DAYS_KEY = "booking.max_advance_days.employee"
 GUEST_MAX_ADVANCE_DAYS_KEY = "booking.max_advance_days.guest"
 LAYOUT_SCHEDULING_BUFFER_DAYS_KEY = "floor_layouts.min_advance_days.buffer"
+ACTIVITY_RECORD_COUNT_KEY = "activity.recent_record_count"
 
 LAYOUT_VISIBILITY_DAYS_KEYS: dict[str, str] = {
     "DRAFT": "floor_layouts.visibility_days.draft",
@@ -54,6 +55,9 @@ MIN_LAYOUT_SCHEDULING_BUFFER_DAYS = 1
 _DEFAULT_EMPLOYEE_MAX_ADVANCE_DAYS = 30
 _DEFAULT_GUEST_MAX_ADVANCE_DAYS = 15
 _DEFAULT_LAYOUT_SCHEDULING_BUFFER_DAYS = 15
+# Mirrors the RECENT_BOOKINGS_LIMIT the admin dashboard hardcoded before
+# this rule existed.
+_DEFAULT_ACTIVITY_RECORD_COUNT = 20
 _DEFAULT_LAYOUT_VISIBILITY_DAYS: dict[str, int] = {
     "DRAFT": 15,
     "ARCHIVED": 30,
@@ -149,6 +153,34 @@ def update_guest_max_advance_days(
         conn,
         tenant_id=tenant_id,
         business_rule_key=GUEST_MAX_ADVANCE_DAYS_KEY,
+        value=str(new_value),
+        updated_by_user_id=updated_by_user_id,
+    )
+    conn.commit()
+
+
+def update_activity_record_count(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    new_value: int,
+    updated_by_user_id: str,
+) -> None:
+    """Update how many rows the admin dashboard's Recent Activities table
+    shows."""
+    if new_value <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_business_rule_value",
+                "message": "Value should be greater than 0.",
+            },
+        )
+
+    _upsert_or_500(
+        conn,
+        tenant_id=tenant_id,
+        business_rule_key=ACTIVITY_RECORD_COUNT_KEY,
         value=str(new_value),
         updated_by_user_id=updated_by_user_id,
     )
@@ -282,6 +314,17 @@ def resolve_booking_advance_days(conn: PGConnection, *, tenant_id: str) -> dict[
             )
         ),
     }
+
+
+def resolve_activity_record_count(conn: PGConnection, *, tenant_id: str) -> int:
+    """Return how many rows the admin dashboard's Recent Activities table
+    shows for a tenant."""
+    return int(
+        fetch_business_rule_value(
+            conn, tenant_id=tenant_id, business_rule_key=ACTIVITY_RECORD_COUNT_KEY,
+            default=_DEFAULT_ACTIVITY_RECORD_COUNT,
+        )
+    )
 
 
 def resolve_layout_visibility_days(conn: PGConnection, *, tenant_id: str) -> dict[str, int]:
