@@ -25,9 +25,11 @@ from backend.core.audit_actions import FLOOR_LAYOUT_UPLOADED
 from backend.db.connection import get_db
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.schemas.floor_layout import (
+    ActivateFloorLayoutRequest,
     CreateFloorLayoutRequest,
     FloorLayoutResponse,
     LayoutSeatListResponse,
+    RescheduleFloorLayoutRequest,
 )
 from backend.services.floor_layout_service import (
     activate_floor_layout,
@@ -35,6 +37,7 @@ from backend.services.floor_layout_service import (
     delete_floor_layout,
     get_floor_layout_seats,
     get_floor_layouts_by_floor,
+    reschedule_floor_layout,
 )
 
 router = APIRouter(
@@ -141,6 +144,10 @@ def activate_floor_layout_route(
     ],
 
     conn: Annotated[PGConnection, Depends(get_db)],
+
+    # Optional and defaulted so existing callers that send no body at all
+    # keep publishing immediately, exactly as before this field existed.
+    payload: ActivateFloorLayoutRequest | None = None,
 ) -> FloorLayoutResponse:
 
     result = activate_floor_layout(
@@ -148,8 +155,35 @@ def activate_floor_layout_route(
         current_user=current_user,
         layout_id=str(layout_id),
         background_tasks=background_tasks,
+        effective_date=payload.effective_date if payload is not None else None,
     )
     return result
+
+
+@router.patch(
+    "/{layout_id}/schedule",
+    response_model=FloorLayoutResponse,
+)
+def reschedule_floor_layout_route(
+    layout_id: Annotated[int, Path(gt=0)],
+
+    payload: RescheduleFloorLayoutRequest,
+
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_permission("layout:publish")),
+    ],
+
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> FloorLayoutResponse:
+
+    return reschedule_floor_layout(
+        conn,
+        current_user=current_user,
+        layout_id=str(layout_id),
+        effective_date=payload.effective_date,
+    )
+
 
 @router.delete(
     "/{layout_id}",

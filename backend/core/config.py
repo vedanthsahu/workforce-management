@@ -80,6 +80,11 @@ class Settings(BaseSettings):
     aws_s3_bucket_name: str
     aws_s3_public_base_url: str
     aws_s3_max_retries: int = 3
+    # How long a presigned floor-layout SVG URL stays valid, generated
+    # fresh on every read (see storage.resolve_layout_file_url) -- not a
+    # session length, just how long that one link keeps working if saved
+    # or reloaded from a cached page.
+    s3_presigned_url_ttl_seconds: int = 3600
 
     aws_ses_sender_email: str
     aws_ses_max_retries: int = 3
@@ -97,6 +102,19 @@ class Settings(BaseSettings):
 
     graph_team_sync_enabled: bool = False
     graph_team_sync_interval_minutes: int = 60
+
+    layout_cutover_enabled: bool = True
+    layout_cutover_interval_minutes: int = 5
+
+    # Which login email domain (if any) gets routed to apps.solugenix.com's
+    # SSO gateway (see /auth/login) instead of the direct Microsoft OAuth
+    # flow. Unset/empty by default -- safe-merged: every email uses the
+    # direct flow against this tenant's own CLIENT_ID/TENANT_ID. Set to a
+    # real domain (e.g. "solugenix.com") only once the gateway's target
+    # tenant is meant to be split off and actually has data. DB-driven,
+    # per-tenant routing (storing domains on the tenants table) is a
+    # planned future replacement for this -- skipped for now.
+    gateway_sso_hostname: str | None = None
 
     app_log_level: str = "INFO"
     app_trace_functions: bool = False
@@ -164,6 +182,8 @@ class Settings(BaseSettings):
 
         if self.aws_s3_max_retries < 0:
             raise ValueError("aws_s3_max_retries must be greater than or equal to zero")
+        if self.s3_presigned_url_ttl_seconds <= 0:
+            raise ValueError("s3_presigned_url_ttl_seconds must be greater than zero")
         if self.aws_ses_max_retries < 0:
             raise ValueError("aws_ses_max_retries must be greater than or equal to zero")
         if self.aws_retry_initial_delay_seconds <= 0:
@@ -180,12 +200,21 @@ class Settings(BaseSettings):
             raise ValueError("graph_role_sync_interval_minutes must be greater than zero")
         if self.graph_team_sync_interval_minutes <= 0:
             raise ValueError("graph_team_sync_interval_minutes must be greater than zero")
+        if self.layout_cutover_interval_minutes <= 0:
+            raise ValueError("layout_cutover_interval_minutes must be greater than zero")
 
         graph_group_id = str(self.graph_facilitator_group_id or "").strip()
         object.__setattr__(
             self,
             "graph_facilitator_group_id",
             graph_group_id or None,
+        )
+
+        gateway_sso_hostname = str(self.gateway_sso_hostname or "").strip().lower()
+        object.__setattr__(
+            self,
+            "gateway_sso_hostname",
+            gateway_sso_hostname or None,
         )
 
         return self
@@ -201,6 +230,16 @@ class Settings(BaseSettings):
     @property
     def jwks_url(self) -> str:
         return f"https://login.microsoftonline.com/{self.tenant_id}/discovery/v2.0/keys"
+
+    @property
+    def backend_base_url(self) -> str:
+        """This backend's own public base URL, derived from redirect_uri
+        (which is always "{backend_base_url}/auth/callback") rather than a
+        separate configured value that could drift out of sync with it."""
+        suffix = "/auth/callback"
+        if self.redirect_uri.endswith(suffix):
+            return self.redirect_uri[: -len(suffix)]
+        return self.redirect_uri.rsplit("/", 1)[0]
 
     @property
     def cors_allowed_origins(self) -> tuple[str, ...]:

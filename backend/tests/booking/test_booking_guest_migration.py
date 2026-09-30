@@ -22,6 +22,24 @@ from backend.schemas.guest import (
 from backend.services import booking_service, guest_service
 
 
+class _NoRowCursor:
+    """Simulates an unseeded business_rules table -- fetchone() returns
+    None, so resolve_booking_advance_days() falls back to its hardcoded
+    defaults (30 days employee, 15 days guest)."""
+
+    def __enter__(self) -> _NoRowCursor:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def execute(self, sql, params=None) -> None:
+        pass
+
+    def fetchone(self):
+        return None
+
+
 class FakeConnection:
     def __init__(self) -> None:
         self.commits = 0
@@ -32,6 +50,19 @@ class FakeConnection:
 
     def rollback(self) -> None:
         self.rollbacks += 1
+
+
+class GuestFakeConnection(FakeConnection):
+    """FakeConnection variant that also answers .cursor() -- needed because
+    create_guest_visit/create_guest_booking now resolve their advance-days
+    limit via resolve_booking_advance_days(), which queries business rules
+    through conn.cursor(). Only used within GuestBookingMigrationTests,
+    whose setUp already mocks out safe_write_audit_log entirely, so this
+    doesn't risk the audit-log's own internal commit() double-counting
+    conn.commits the way it would for EmployeeBookingMigrationTests above."""
+
+    def cursor(self, *args, **kwargs) -> _NoRowCursor:
+        return _NoRowCursor()
 
 
 class RecordingCursor:
@@ -247,6 +278,10 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
             return_value=False,
         ), patch.object(
             booking_service,
+            "seat_has_active_block_in_range",
+            return_value=False,
+        ), patch.object(
+            booking_service,
             "mark_booking_modified",
         ) as mark_modified, patch.object(
             booking_service,
@@ -337,7 +372,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
         self.assertEqual(context.exception.status_code, 403)
 
     def test_guest_visit_only_commits_without_booking(self) -> None:
-        conn = FakeConnection()
+        conn = GuestFakeConnection()
         payload = CreateGuestVisitRequest(
             guest_id=50,
             host_user_id=20,
@@ -396,7 +431,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
         self.assertEqual(conn.commits, 1)
 
     def test_guest_booking_creation_is_atomic(self) -> None:
-        conn = FakeConnection()
+        conn = GuestFakeConnection()
         guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
         with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
             guest_service,
@@ -431,7 +466,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
         self.assertEqual(conn.rollbacks, 0)
 
     def test_guest_visit_insert_failure_rolls_back_before_booking(self) -> None:
-        conn = FakeConnection()
+        conn = GuestFakeConnection()
         guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
         with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
             guest_service,
@@ -460,7 +495,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
         self.assertEqual(conn.rollbacks, 1)
 
     def test_guest_booking_insert_failure_rolls_back_visit(self) -> None:
-        conn = FakeConnection()
+        conn = GuestFakeConnection()
         guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
         with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
             guest_service,
@@ -492,7 +527,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
         self.assertEqual(conn.rollbacks, 1)
 
     def test_guest_conflict_prevents_inserts(self) -> None:
-        conn = FakeConnection()
+        conn = GuestFakeConnection()
         guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
         with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
             guest_service,
@@ -516,7 +551,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
         insert_visit.assert_not_called()
 
     def test_seat_conflict_prevents_inserts(self) -> None:
-        conn = FakeConnection()
+        conn = GuestFakeConnection()
         guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
         with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
             guest_service,
@@ -541,7 +576,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
         insert_visit.assert_not_called()
 
     def test_guest_cancel_uses_guest_owner_not_audit_user(self) -> None:
-        conn = FakeConnection()
+        conn = GuestFakeConnection()
         cancelled = _guest_booking(
             booking_status="CANCELLED",
             cancellation_reason="Visit changed",
@@ -581,7 +616,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
         self.assertEqual(conn.commits, 1)
 
     def test_guest_modify_preserves_visit_and_marks_old_booking_modified(self) -> None:
-        conn = FakeConnection()
+        conn = GuestFakeConnection()
         # booked_by_user_id ("77") deliberately differs from self.current_user
         # ("10") -- regression guard for the bug where a modify replaced the
         # delegate identity with whoever performed the edit.

@@ -21,7 +21,7 @@ export function VisitorSearchBar({
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
         placeholder={placeholder}
-        className="pl-9 h-9 text-sm w-60"
+        className="pl-9 h-9 text-sm w-60 focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500"
       />
     </div>
   );

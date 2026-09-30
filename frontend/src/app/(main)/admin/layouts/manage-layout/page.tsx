@@ -122,7 +122,10 @@ function ManageLayoutPage() {
       <div className="flex flex-col flex-1 min-w-0">
         <main className="flex-1 bg-gray-50 p-6 space-y-5 overflow-y-auto">
 
-          <ManageLayoutHeader layout={selectedLayout} />
+          <ManageLayoutHeader
+            layout={selectedLayout}
+            hasScheduledLayout={layouts.some((l) => l.status === "SCHEDULED")}
+          />
 
           <LayoutFilters
             sites={sites}

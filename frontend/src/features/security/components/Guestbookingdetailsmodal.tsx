@@ -179,11 +179,11 @@ export function GuestBookingDetailsModal({ visitor, onClose }: Props) {
               <InfoRow icon={Hash} label="Floor" value={visitor.floorName} />
               <InfoRow
                 icon={Armchair}
-                label="Seat"
+                label="Space"
                 value={
                   visitor.seatBooked
                     ? visitor.seatCode
-                      ? `Seat ${visitor.seatCode}`
+                      ? `Space ${visitor.seatCode}`
                       : "Booked"
                     : "Not required"
                 }

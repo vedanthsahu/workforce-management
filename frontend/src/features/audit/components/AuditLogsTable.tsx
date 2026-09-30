@@ -1,31 +1,15 @@
 "use client";
 
 import { ChevronRight } from "lucide-react";
-import { getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
+import { formatRoleLabel, getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
 import { AuditLogListItem } from "../types/audit.types";
-import { AUDIT_STATUS_STYLES, methodBadgeStyle, moduleBadgeStyle } from "../utils/constants";
+import { AUDIT_STATUS_STYLES, AUDIT_TABLE_COL as COL, methodBadgeStyle, moduleBadgeStyle } from "../utils/constants";
 import { formatAuditDateTime, initialsOf } from "../utils/mapAuditLog";
 
 type Props = {
   data: AuditLogListItem[];
   selectedId?: string | null;
   onSelect: (log: AuditLogListItem) => void;
-};
-
-// Shared per-column widths -- declared once so the header row and every body
-// row stay in lockstep (each row is its own independent "table" layout
-// context once thead/tbody go display:block, so widths can't be set via a
-// single <colgroup> the way a normal table would).
-const COL = {
-  actor: "w-[15%]",
-  time: "w-[11%]",
-  action: "w-[15%]",
-  module: "w-[10%]",
-  entity: "w-[10%]",
-  status: "w-[9%]",
-  method: "w-[9%]",
-  source: "w-[8%]",
-  view: "w-[6%]",
 };
 
 function ActorCell({ log }: { log: AuditLogListItem }) {
@@ -40,7 +24,7 @@ function ActorCell({ log }: { log: AuditLogListItem }) {
           <span
             className={`inline-flex px-1.5 py-px mt-0.5 rounded text-[9px] font-semibold uppercase tracking-wide ring-1 ${getRoleBadgeClass(log.actorRole)}`}
           >
-            {log.actorRole}
+            {formatRoleLabel(log.actorRole)}
           </span>
         )}
       </div>

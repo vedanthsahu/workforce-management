@@ -49,6 +49,13 @@ export const officeService = {
     return data;
   },
 
+  // GET SINGLE SITE (for read-only ancestor context in Building/Floor modals)
+  async getSiteById(site_id: string): Promise<Office> {
+    const { data } = await axiosInstance.get(`/sites/${site_id}`);
+
+    return data;
+  },
+
   async getOfficeStats(): Promise<OfficeStatsSummary> {
     const { data } = await axiosInstance.get(
       "/admin/dashboard/summary"

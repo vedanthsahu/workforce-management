@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { auditService } from "../services/audit.service";
 import { AuditLogFilters, AuditLogListResponse } from "../types/audit.types";
-import { AUDIT_PAGE_SIZES } from "../utils/constants";
-
-// The table has no sort-by-column UI -- always newest first.
-const SORT_BY = "occurred_at";
-const SORT_DIR = "desc";
+import {
+  AUDIT_PAGE_SIZES,
+  AUDIT_DEFAULT_SORT_BY as SORT_BY,
+  AUDIT_DEFAULT_SORT_DIR as SORT_DIR,
+} from "../utils/constants";
 
 export function useAuditLogs(appliedFilters: AuditLogFilters) {
   const [response, setResponse] = useState<AuditLogListResponse | null>(null);

@@ -806,6 +806,7 @@ def fetch_seat_for_booking(
     building_id: str,
     floor_id: str,
     seat_id: str,
+    booking_date: date,
 ) -> dict[str, Any] | None:
     """Fetch a tenant-scoped seat matching the requested hierarchy."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -843,14 +844,17 @@ def fetch_seat_for_booking(
             AND f.tenant_id = s.tenant_id
             AND f.status = 'ACTIVE'
 
-            -- A seat is only bookable if it belongs to the floor's
-            -- currently published layout. Seats left over from a
-            -- superseded layout (retired or not) must never match here.
+            -- A seat is only bookable if it belongs to whichever layout
+            -- covers the requested booking_date -- the currently PUBLISHED
+            -- one, or a SCHEDULED one if booking_date is on/after its
+            -- effective_from. Seats left over from a superseded layout
+            -- (retired or not) must never match here.
             JOIN floor_layouts fl
                 ON fl.floor_id = s.floor_id
             AND fl.tenant_id = s.tenant_id
-            AND fl.is_published = TRUE
-            AND fl.status = 'PUBLISHED'
+            AND fl.status IN ('PUBLISHED', 'SCHEDULED')
+            AND fl.effective_from <= %s
+            AND (fl.effective_till IS NULL OR fl.effective_till > %s)
             AND fl.id = s.layout_id
 
             WHERE s.id = %s
@@ -859,7 +863,7 @@ def fetch_seat_for_booking(
             AND s.site_id = %s
             AND s.tenant_id = %s
             """,
-            (seat_id, floor_id, building_id, site_id, tenant_id),
+            (booking_date, booking_date, seat_id, floor_id, building_id, site_id, tenant_id),
         )
         row = cur.fetchone()
     return dict(row) if row else None
@@ -1129,8 +1133,9 @@ def seat_has_active_block_in_range(
     seat_id: str,
     start_date: date,
     end_date: date,
+    allowed_block_types: tuple[str, ...] = (),
 ) -> bool:
-    """Return whether a seat has an ACTIVE block overlapping a date range."""
+    """Return whether a role-blocking ACTIVE block overlaps a date range."""
     query = """
         SELECT 1
         FROM blocked_seats
@@ -1139,11 +1144,15 @@ def seat_has_active_block_in_range(
           AND status = 'ACTIVE'
           AND blocked_from <= %s
           AND blocked_to >= %s
+          AND NOT (block_type = ANY(%s::text[]))
         LIMIT 1
     """
 
     with conn.cursor() as cur:
-        cur.execute(query, (tenant_id, seat_id, end_date, start_date))
+        cur.execute(
+            query,
+            (tenant_id, seat_id, end_date, start_date, list(allowed_block_types)),
+        )
         return cur.fetchone() is not None
 
 
@@ -1157,10 +1166,16 @@ def insert_booking(
     booking_date: date,
     source_channel: str = "WEB",
     modified_from_booking_id: str | None = None,
+    updated_by_user_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Insert an EMPLOYEE booking using hierarchy values
     derived from the seat row.
+
+    updated_by_user_id is only passed when this row is replacing a modified
+    booking (modify_booking) -- it records who performed the modification,
+    since this new row (not the superseded one) is what the admin bookings
+    screen shows as "Modified". Left unset for a plain new booking.
     """
 
     normalized_source = source_channel.strip().upper()
@@ -1193,7 +1208,9 @@ def insert_booking(
 
                 source_channel,
 
-                modified_from_booking_id
+                modified_from_booking_id,
+
+                updated_by_user_id
             )
             VALUES (
                 %s,
@@ -1211,6 +1228,8 @@ def insert_booking(
                 'EMPLOYEE',
 
                 'CONFIRMED',
+
+                %s,
 
                 %s,
 
@@ -1234,6 +1253,8 @@ def insert_booking(
                 normalized_source,
 
                 modified_from_booking_id,
+
+                updated_by_user_id,
             ),
         )
 
@@ -1749,6 +1770,8 @@ def fetch_available_seats_by_range(
     start_date: date,
     end_date: date,
     amenity_ids: list[int],
+    allow_non_bookable: bool = False,
+    allowed_block_types: tuple[str, ...] = (),
     exclude_booking_id: str | None = None,
 ) -> list[dict[str, Any]]:
 
@@ -1787,14 +1810,19 @@ def fetch_available_seats_by_range(
                 FROM seats s
                 CROSS JOIN requested_dates rd
 
-                -- Only seats belonging to the floor's currently published
-                -- layout, on an active site/building/floor, are ever
-                -- eligible -- everything else is a stale/orphaned row.
+                -- Only seats belonging to whichever layout covers each
+                -- individual date in the range are eligible -- correlated
+                -- against rd.booking_date, not a single flat "PUBLISHED"
+                -- check, since a multi-day range can straddle a scheduled
+                -- layout cutover: early dates in the range may resolve to
+                -- the current PUBLISHED layout while later ones resolve to
+                -- a SCHEDULED one. Everything else is a stale/orphaned row.
                 INNER JOIN floor_layouts fl
                     ON fl.floor_id = s.floor_id
                    AND fl.tenant_id = s.tenant_id
-                   AND fl.is_published = TRUE
-                   AND fl.status = 'PUBLISHED'
+                   AND fl.status IN ('PUBLISHED', 'SCHEDULED')
+                   AND fl.effective_from <= rd.booking_date
+                   AND (fl.effective_till IS NULL OR fl.effective_till > rd.booking_date)
                    AND fl.id = s.layout_id
                 INNER JOIN floors flr
                     ON flr.id = s.floor_id
@@ -1844,6 +1872,7 @@ def fetch_available_seats_by_range(
                     ON bl.seat_id = sd.seat_id
                    AND bl.tenant_id = %s
                    AND bl.status = 'ACTIVE'
+                   AND NOT (bl.block_type = ANY(%s::text[]))
                    AND sd.booking_date
                         BETWEEN bl.blocked_from
                         AND bl.blocked_to
@@ -1913,7 +1942,7 @@ def fetch_available_seats_by_range(
                     CASE
 
                         WHEN s.status <> 'ACTIVE'
-                             OR s.is_bookable IS NOT TRUE
+                             OR (s.is_bookable IS NOT TRUE AND %s IS NOT TRUE)
                             THEN 'UNAVAILABLE'
 
                         WHEN bsd.seat_id IS NOT NULL
@@ -2141,9 +2170,11 @@ def fetch_available_seats_by_range(
                         exclude_booking_id,
 
                         tenant_id,
+                        list(allowed_block_types),
 
                         tenant_id,
 
+                        allow_non_bookable,
                         tenant_id,
                         floor_id,
                     ),
@@ -2160,6 +2191,8 @@ def fetch_available_seats(
     floor_id: str,
     booking_date: date,
     amenity_ids: list[int],
+    allow_non_bookable: bool = False,
+    allowed_block_types: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     """Fetch computed availability and preference state for floor seats."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -2186,6 +2219,7 @@ def fetch_available_seats(
                 WHERE bl.tenant_id = %s
                   AND bl.floor_id = %s
                   AND bl.status = 'ACTIVE'
+                  AND NOT (bl.block_type = ANY(%s::text[]))
                   AND bl.blocked_from <= %s
                   AND bl.blocked_to >= %s
             ),
@@ -2220,7 +2254,8 @@ def fetch_available_seats(
                     COALESCE(am.matched_amenity_count, 0)::integer AS matched_amenity_count,
                     rc.requested_amenity_count,
                     CASE
-                        WHEN s.status <> 'ACTIVE' OR s.is_bookable IS NOT TRUE
+                        WHEN s.status <> 'ACTIVE'
+                             OR (s.is_bookable IS NOT TRUE AND %s IS NOT TRUE)
                             THEN 'UNAVAILABLE'
                         WHEN bs.seat_id IS NOT NULL
                             THEN 'BOOKED'
@@ -2236,13 +2271,20 @@ def fetch_available_seats(
                     ON bls.seat_id = s.id
                 LEFT JOIN amenity_matches AS am
                     ON am.seat_id = s.id
-                -- Only seats belonging to the floor's currently published
-                -- layout, on an active site/building/floor, are eligible.
+                -- Only seats belonging to whichever layout actually covers
+                -- the requested booking_date are eligible -- the currently
+                -- PUBLISHED one, or a SCHEDULED one if booking_date falls
+                -- on/after its effective_from. This is the date the seat
+                -- would actually be used on, not "today" -- a booking made
+                -- now for a date inside a SCHEDULED layout's window must
+                -- see that layout's seats, not the one about to be
+                -- superseded.
                 INNER JOIN floor_layouts fl
                     ON fl.floor_id = s.floor_id
                    AND fl.tenant_id = s.tenant_id
-                   AND fl.is_published = TRUE
-                   AND fl.status = 'PUBLISHED'
+                   AND fl.status IN ('PUBLISHED', 'SCHEDULED')
+                   AND fl.effective_from <= %s
+                   AND (fl.effective_till IS NULL OR fl.effective_till > %s)
                    AND fl.id = s.layout_id
                 INNER JOIN floors flr
                     ON flr.id = s.floor_id
@@ -2308,9 +2350,13 @@ def fetch_available_seats(
                 booking_date,
                 tenant_id,
                 floor_id,
+                list(allowed_block_types),
                 booking_date,
                 booking_date,
+                allow_non_bookable,
                 tenant_id,
+                booking_date,
+                booking_date,
                 tenant_id,
                 floor_id,
             ),
@@ -2330,9 +2376,15 @@ def insert_guest_booking(
     booking_date: date,
     source_channel: str = "WEB",
     modified_from_booking_id: str | None = None,
+    updated_by_user_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Insert a GUEST booking linked to a guest visit.
+
+    updated_by_user_id is only passed when this row is replacing a modified
+    booking -- it records who performed the modification, since this new
+    row (not the superseded one) is what the admin bookings screen shows as
+    "Modified". Left unset for a plain new booking.
     """
 
     normalized_source = source_channel.strip().upper()
@@ -2368,7 +2420,9 @@ def insert_guest_booking(
 
                 source_channel,
 
-                modified_from_booking_id
+                modified_from_booking_id,
+
+                updated_by_user_id
 
             )
             VALUES (
@@ -2390,6 +2444,8 @@ def insert_guest_booking(
                 'GUEST',
 
                 'CONFIRMED',
+
+                %s,
 
                 %s,
 
@@ -2415,6 +2471,8 @@ def insert_guest_booking(
                 normalized_source,
 
                 modified_from_booking_id,
+
+                updated_by_user_id,
             ),
         )
 

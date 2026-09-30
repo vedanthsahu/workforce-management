@@ -267,6 +267,41 @@ def floors_by_office(
     )
 
 
+@router.get(
+    "/floors",
+    response_model=list[FloorResponse],
+)
+def floors(
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(get_current_user),
+    ],
+
+    conn: Annotated[
+        PGConnection,
+        Depends(get_db),
+    ],
+
+    site_id: Annotated[int | None, Query(gt=0)] = None,
+    building_id: Annotated[int | None, Query(gt=0)] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int | None, Query(ge=1, le=200)] = None,
+    search: Annotated[str | None, Query()] = None,
+    status_filter: Annotated[str | None, Query(alias="status")] = None,
+) -> list[FloorResponse]:
+    """List floors for the tenant, optionally narrowed to one site and/or building."""
+    return get_floors_by_building(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        building_id=str(building_id) if building_id is not None else None,
+        site_id=str(site_id) if site_id is not None else None,
+        page=page,
+        limit=limit,
+        search=search,
+        status_filter=status_filter,
+    )
+
+
 @router.post(
     "/floors",
     response_model=FloorResponse,

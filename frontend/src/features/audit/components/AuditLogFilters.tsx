@@ -69,7 +69,7 @@ function DateRangeField({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="h-10 px-3 flex items-center gap-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors w-full"
+        className="h-10 px-3 flex items-center gap-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors w-full"
       >
         <CalendarDays size={14} className="text-gray-400 shrink-0" />
         <span className="flex-1 text-left truncate">{label}</span>
@@ -96,7 +96,7 @@ function DateRangeField({
                 if (!["Tab", "Escape", "Shift"].includes(e.key)) e.preventDefault();
               }}
               onPaste={(e) => e.preventDefault()}
-              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -110,7 +110,7 @@ function DateRangeField({
                 if (!["Tab", "Escape", "Shift"].includes(e.key)) e.preventDefault();
               }}
               onPaste={(e) => e.preventDefault()}
-              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="flex items-center justify-between gap-2 pt-1">
@@ -229,7 +229,7 @@ function CustomSelect({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="h-10 pl-3 pr-8 relative flex items-center text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors w-full text-left"
+        className="h-10 pl-3 pr-8 relative flex items-center text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors w-full text-left"
       >
         <span className="flex-1 truncate">{selectedLabel}</span>
         <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -292,7 +292,7 @@ function RelativeTimeField({ value, onChange }: { value: number | null; onChange
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="h-10 pl-9 pr-8 flex items-center text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors w-full text-left"
+        className="h-10 pl-9 pr-8 flex items-center text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors w-full text-left"
       >
         <span className="flex-1 truncate">{label}</span>
       </button>
@@ -413,7 +413,7 @@ function UserSearchField({ value, onChange }: { value: string; onChange: (name: 
         onKeyDown={(e) => {
           if (e.key === "Escape") setOpen(false);
         }}
-        className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400"
+        className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400"
       />
       {value && (
         <button

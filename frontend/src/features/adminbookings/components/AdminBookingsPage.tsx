@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Download, MoreHorizontal } from "lucide-react";
 import BookingManagementFilters from "./BookingManagementFilters";
 import BookingStatCards from "./BookingStatCards";
@@ -10,13 +10,12 @@ import BookingDetailsPanel from "./BookingDetailsPanel";
 import { AdminBookingsSkeleton } from "./AdminBookingsSkeleton";
 import AmenitiesPagination from "@/features/amenities/components/AmenitiesPagination";
 import { CancelBookingDialog } from "@/features/bookings/components/CancelBookingDialog";
-import { AdminBooking, AdminBookingListResponse, defaultAdminBookingFilters } from "../types/adminBooking.types";
+import { AdminBooking, AdminBookingRaw, AdminBookingSummary, defaultAdminBookingFilters } from "../types/adminBooking.types";
 import { useAdminBookingLocations } from "../hooks/useAdminBookingLocations";
 import { useAdminBookingActions } from "../hooks/useAdminBookingActions";
 import { adminBookingsService } from "../services/adminBookings.service";
 import { getBookingRowKey, mapAdminBookingRawToUiBooking, mapAdminBookingToDialogBooking, resolveStatus } from "../utils/mapAdminBooking";
 import {
-  BOOKING_STATUS_PARAM,
   BOOKING_PAGE_SIZES,
   ADMIN_BOOKINGS_SEARCH_STATE_KEY,
   ADMIN_BOOKINGS_EXPECT_RETURN_KEY,
@@ -31,15 +30,41 @@ type PersistedSearchState = {
   hasApplied: boolean;
 };
 
+// updated_at is already the unified field the backend sends for BOTH row
+// sources (b.updated_at for a BOOKING row, gv.updated_at for a bare
+// GUEST_VISIT row -- see fetch_admin_bookings/
+// fetch_admin_guest_visits_without_booking), so no per-type branching is
+// needed here. Falls back to created_at, then epoch 0, so a row missing
+// updated_at doesn't crash the sort or win a tiebreak it shouldn't.
+function lastModifiedMs(item: AdminBookingRaw): number {
+  const iso = item.updated_at ?? item.created_at;
+  if (!iso) return 0;
+  const ms = new Date(iso).getTime();
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
 export default function AdminBookingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Landing here from a link like /admin/bookings?type=guest (e.g. the
+  // dashboard's Guest Visits card) pre-selects that Employee/Guest tab
+  // instead of always starting on the Employee default.
+  const initialFilters = useMemo(() => {
+    const defaults = defaultAdminBookingFilters();
+    const type = searchParams.get("type");
+    if (type === "guest") return { ...defaults, bookingType: "Guest" };
+    if (type === "employee") return { ...defaults, bookingType: "Employee" };
+    return defaults;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // `filters` is the draft state the filter form is bound to — editing it
   // (typing, picking a dropdown) never fetches or refilters anything.
   // `appliedFilters` is only replaced on an explicit Search click (or Clear),
   // and it alone drives the data fetch + table/card filtering below.
-  const [filters, setFilters] = useState(defaultAdminBookingFilters());
-  const [appliedFilters, setAppliedFilters] = useState(defaultAdminBookingFilters());
+  const [filters, setFilters] = useState(initialFilters);
+  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(BOOKING_PAGE_SIZES[0]);
   const [selectedBooking, setSelectedBooking] = useState<AdminBooking | null>(null);
@@ -103,11 +128,16 @@ export default function AdminBookingsPage() {
     sessionStorage.setItem(ADMIN_BOOKINGS_SEARCH_STATE_KEY, JSON.stringify(state));
   }, [filters, appliedFilters, currentPage, itemsPerPage, hasApplied]);
 
-  // The backend now owns every filter (date range, hierarchy, type, status,
-  // search, seat code) plus pagination and the summary counts — this page
-  // just forwards appliedFilters as query params and renders what comes back.
-  const [bookingsResponse, setBookingsResponse] = useState<AdminBookingListResponse | null>(null);
+  // The backend owns every filter (date range, hierarchy, type, status,
+  // search, seat code) but NOT sorting or pagination — those need to apply
+  // across the whole filtered set, not just whichever backend page happens
+  // to come back, so this page fetches every matching row (looping backend
+  // pages, same as the old status-filter-only path used to) and then sorts
+  // + paginates client-side. See the fetch effect below for why.
+  const [allBookings, setAllBookings] = useState<AdminBookingRaw[]>([]);
+  const [summary, setSummary] = useState<AdminBookingSummary | null>(null);
   const [activitiesLoading, setActivitiesLoading] = useState(true);
+  const [dateSort, setDateSort] = useState<"asc" | "desc">("asc");
 
   // Bumped after a successful cancel to force the list to refetch, since the
   // applied filters/page/pageSize otherwise wouldn't have changed.
@@ -131,7 +161,8 @@ export default function AdminBookingsPage() {
 
   useEffect(() => {
     if (!hasApplied) {
-      setBookingsResponse(null);
+      setAllBookings([]);
+      setSummary(null);
       setActivitiesLoading(false);
       return;
     }
@@ -155,142 +186,147 @@ export default function AdminBookingsPage() {
       seatCode: appliedFilters.seatNumber.trim() || undefined,
     };
 
-    if (appliedFilters.status !== "All") {
-      // The backend can't filter by status in a single dimension for every
-      // case: Guest rows are split across bookings.booking_status
-      // (guest-with-seat bookings) and guest_visits.visit_status (the visit
-      // itself, including guest visits with no seat at all — which the
-      // backend only returns when bookingStatus is omitted entirely). And
-      // "Modified" specifically can never be matched server-side at all for
-      // Employee/Guest bookings either way: the currently-active successor
-      // booking is still stored as booking_status='CONFIRMED' (flagged via
-      // is_modified) — literal booking_status='MODIFIED' rows are superseded
-      // history that fetch_admin_bookings unconditionally excludes.
-      //
-      // So for any specific status (Employee or Guest tab, or the combined
-      // "All" tab): pull every row, status-unfiltered, across all backend
-      // pages (booking_status='MODIFIED'/visit_status='MODIFIED' superseded-
-      // history rows are still excluded server-side same as always — see
-      // fetch_admin_bookings/fetch_admin_guest_visits_without_booking),
-      // de-duplicate a guest visit that appears both as its BOOKING row and
-      // again as a bare GUEST_VISIT row (happens once that booking is
-      // cancelled — the visit then has no *active* booking anymore, so both
-      // queries return it), then filter and paginate using the exact same
-      // resolveStatus the table renders with — so what's on screen always
-      // matches the selected filter regardless of which backend field the
-      // status actually lives in.
-      const FETCH_LIMIT = 100;
-      (async () => {
-        try {
-          const first = await adminBookingsService.list({
+    // The backend can't filter by status in a single dimension for every
+    // case: Guest rows are split across bookings.booking_status
+    // (guest-with-seat bookings) and guest_visits.visit_status (the visit
+    // itself, including guest visits with no seat at all — which the
+    // backend only returns when bookingStatus is omitted entirely). And
+    // "Modified" specifically can never be matched server-side at all for
+    // Employee/Guest bookings either way: the currently-active successor
+    // booking is still stored as booking_status='CONFIRMED' (flagged via
+    // is_modified) — literal booking_status='MODIFIED' rows are superseded
+    // history that fetch_admin_bookings unconditionally excludes.
+    //
+    // So regardless of status: pull every row, status-unfiltered, across all
+    // backend pages (booking_status='MODIFIED'/visit_status='MODIFIED'
+    // superseded-history rows are still excluded server-side same as always
+    // — see fetch_admin_bookings/fetch_admin_guest_visits_without_booking),
+    // de-duplicate a guest visit that appears both as its BOOKING row and
+    // again as a bare GUEST_VISIT row (happens once that booking is
+    // cancelled — the visit then has no *active* booking anymore, so both
+    // queries return it), then filter using the exact same resolveStatus the
+    // table renders with — so what's on screen always matches the selected
+    // filter regardless of which backend field the status actually lives in.
+    //
+    // Fetching the WHOLE filtered set (rather than just the current backend
+    // page) also lets date-sort and pagination apply correctly across every
+    // page instead of only re-ordering whatever 10-50 rows happened to load —
+    // sorting/paginating a single backend page can never produce a globally
+    // sorted result.
+    const FETCH_LIMIT = 100;
+    (async () => {
+      try {
+        const first = await adminBookingsService.list({
+          ...baseParams,
+          page: 1,
+          limit: FETCH_LIMIT,
+        });
+        if (cancelled) return;
+
+        let allItems = first.items;
+        const totalPages = first.pagination.total_pages;
+        for (let p = 2; p <= totalPages; p += 1) {
+          if (cancelled) return;
+          const next = await adminBookingsService.list({
             ...baseParams,
-            page: 1,
+            page: p,
             limit: FETCH_LIMIT,
           });
           if (cancelled) return;
-
-          let allItems = first.items;
-          const totalPages = first.pagination.total_pages;
-          for (let p = 2; p <= totalPages; p += 1) {
-            if (cancelled) return;
-            const next = await adminBookingsService.list({
-              ...baseParams,
-              page: p,
-              limit: FETCH_LIMIT,
-            });
-            if (cancelled) return;
-            allItems = allItems.concat(next.items);
-          }
-
-          // Prefer the BOOKING row over a same-visit GUEST_VISIT row so a
-          // cancelled/modified booking's guest visit doesn't get counted twice.
-          const byKey = new Map<string, (typeof allItems)[number]>();
-          allItems.forEach((item, index) => {
-            const key = item.guest_visit_id ?? item.booking_id ?? `${item.activity_source}-${index}`;
-            const existing = byKey.get(key);
-            if (!existing || (item.activity_source === "BOOKING" && existing.activity_source !== "BOOKING")) {
-              byKey.set(key, item);
-            }
-          });
-          const dedupedItems = [...byKey.values()];
-
-          // "Confirmed" stays a superset that includes Modified rows too — same as
-          // the Employee tab's plain bookingStatus=CONFIRMED fetch below, which
-          // never excludes is_modified rows either (only the "Modified" filter
-          // itself drills down to just those). Every other status is an exact match.
-          const matchingItems = dedupedItems.filter((item) => {
-            const status = resolveStatus(item);
-            if (appliedFilters.status === "Confirmed") {
-              return status === "Confirmed" || status === "Modified";
-            }
-            return status === appliedFilters.status;
-          });
-          const total = matchingItems.length;
-          const start = (currentPage - 1) * itemsPerPage;
-          const pageItems = matchingItems.slice(start, start + itemsPerPage);
-
-          // Derive every stat card number from the filtered set itself — the
-          // backend's own summary is computed over the unfiltered dataset and
-          // would misreport Checked In/Not Checked In/Guests otherwise.
-          const checkedInCount = matchingItems.filter((item) => !!item.check_in_at).length;
-          const checkedOutCount = matchingItems.filter((item) => !!item.checked_out_at).length;
-          const guestCount = matchingItems.filter((item) => item.booking_type === "GUEST").length;
-
-          setBookingsResponse({
-            items: pageItems,
-            summary: {
-              total_bookings: total,
-              confirmed_bookings: total - checkedInCount,
-              cancelled_bookings: appliedFilters.status === "Cancelled" ? total : 0,
-              modified_bookings: appliedFilters.status === "Modified" ? total : 0,
-              completed_bookings: appliedFilters.status === "Completed" ? total : 0,
-              no_show_bookings: appliedFilters.status === "No Show" ? total : 0,
-              employee_bookings: total - guestCount,
-              guest_bookings: guestCount,
-              checked_in_bookings: checkedInCount,
-              checked_out_bookings: checkedOutCount,
-            },
-            pagination: {
-              total,
-              page: currentPage,
-              limit: itemsPerPage,
-              total_pages: total ? Math.ceil(total / itemsPerPage) : 0,
-            },
-          });
-        } catch (error) {
-          console.error(error);
-          if (!cancelled) setBookingsResponse(null);
-        } finally {
-          if (!cancelled) setActivitiesLoading(false);
+          allItems = allItems.concat(next.items);
         }
-      })();
 
-      return () => {
-        cancelled = true;
-      };
-    }
+        // Prefer the BOOKING row over a same-visit GUEST_VISIT row so a
+        // cancelled/modified booking's guest visit doesn't get counted twice.
+        const byKey = new Map<string, (typeof allItems)[number]>();
+        allItems.forEach((item, index) => {
+          const key = item.guest_visit_id ?? item.booking_id ?? `${item.activity_source}-${index}`;
+          const existing = byKey.get(key);
+          if (!existing || (item.activity_source === "BOOKING" && existing.activity_source !== "BOOKING")) {
+            byKey.set(key, item);
+          }
+        });
+        const dedupedItems = [...byKey.values()];
 
-    adminBookingsService
-      .list({
-        ...baseParams,
-        bookingStatus: BOOKING_STATUS_PARAM[appliedFilters.status],
-        page: currentPage,
-        limit: itemsPerPage,
-      })
-      .then((res) => {
-        if (!cancelled) setBookingsResponse(res);
-      })
-      .catch((error) => {
+        // "Confirmed" stays a superset that includes Modified rows too.
+        // "Not Checked In" (the Guest tab's card, not a real BookingStatus)
+        // is Scheduled + Confirmed + Modified combined -- a Modified booking
+        // hasn't been checked in either, same as Confirmed's own definition
+        // below. Every other specific status is an exact match; "All" keeps
+        // everything.
+        const matchingItems =
+          appliedFilters.status === "All"
+            ? dedupedItems
+            : dedupedItems.filter((item) => {
+                const status = resolveStatus(item);
+                if (appliedFilters.status === "Confirmed") {
+                  return status === "Confirmed" || status === "Modified";
+                }
+                if (appliedFilters.status === "Not Checked In") {
+                  return status === "Scheduled" || status === "Confirmed" || status === "Modified";
+                }
+                return status === appliedFilters.status;
+              });
+
+        // Derive every stat card number from the filtered set itself, using
+        // resolveStatus throughout — this also just works for "All" (real
+        // counts across every status) as well as a single-status filter
+        // (every other bucket naturally comes out 0 since matchingItems only
+        // contains that one status).
+        const checkedInCount = matchingItems.filter((item) => !!item.check_in_at).length;
+        const checkedOutCount = matchingItems.filter((item) => !!item.checked_out_at).length;
+        const guestCount = matchingItems.filter((item) => item.booking_type === "GUEST").length;
+        // Scheduled + Confirmed + Modified, minus whichever of those have
+        // since been checked in -- resolveStatus already only returns
+        // "Scheduled"/"Confirmed"/"Modified" for a row with no check_in_at
+        // (Checked In/Checked Out take priority over the raw booking_status),
+        // so this is naturally "not yet checked in" without needing an
+        // explicit subtraction. Matches the "Not Checked In" click-filter's
+        // own definition above -- the card's count and what clicking it
+        // actually shows in the table must always agree.
+        const notCheckedInCount = matchingItems.filter((item) => {
+          const status = resolveStatus(item);
+          return status === "Scheduled" || status === "Confirmed" || status === "Modified";
+        }).length;
+
+        setAllBookings(matchingItems);
+        setSummary({
+          total_bookings: matchingItems.length,
+          // Matches the "Confirmed" click-filter's own definition above
+          // (status === "Confirmed" || "Modified") -- the card's count and
+          // what clicking it actually shows in the table must always agree.
+          confirmed_bookings: matchingItems.filter((item) => {
+            const status = resolveStatus(item);
+            return status === "Confirmed" || status === "Modified";
+          }).length,
+          not_checked_in_bookings: notCheckedInCount,
+          cancelled_bookings: matchingItems.filter((item) => resolveStatus(item) === "Cancelled").length,
+          modified_bookings: matchingItems.filter((item) => resolveStatus(item) === "Modified").length,
+          completed_bookings: matchingItems.filter((item) => resolveStatus(item) === "Completed").length,
+          no_show_bookings: matchingItems.filter((item) => resolveStatus(item) === "No Show").length,
+          employee_bookings: matchingItems.length - guestCount,
+          guest_bookings: guestCount,
+          checked_in_bookings: checkedInCount,
+          checked_out_bookings: checkedOutCount,
+        });
+      } catch (error) {
         console.error(error);
-        if (!cancelled) setBookingsResponse(null);
-      })
-      .finally(() => {
+        if (!cancelled) {
+          setAllBookings([]);
+          setSummary(null);
+        }
+      } finally {
         if (!cancelled) setActivitiesLoading(false);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
+    // currentPage/itemsPerPage/dateSort are deliberately NOT deps — the
+    // effect always fetches the whole filtered set; paging/sorting it is
+    // pure client-side work below, so changing page/size/sort never needs
+    // a re-fetch.
   }, [
     hasApplied,
     appliedFilters.site,
@@ -302,31 +338,49 @@ export default function AdminBookingsPage() {
     appliedFilters.status,
     appliedFilters.search,
     appliedFilters.seatNumber,
-    currentPage,
-    itemsPerPage,
     refreshKey,
   ]);
 
+  // Sort the FULL filtered set by date before paginating, so page 2's rows
+  // are correct relative to page 1's regardless of dateSort direction —
+  // sorting only the current page's rows (the previous behavior) broke as
+  // soon as there was more than one page.
+  //
+  // Same booking_date is broken by updated_at DESC (most recently modified
+  // first, via lastModifiedMs above) -- this always runs newest-first
+  // regardless of dateSort, since it's a same-day tiebreak, not itself
+  // something the toggle should flip.
+  const sortedBookings = useMemo(() => {
+    const items = [...allBookings];
+    items.sort((a, b) => {
+      const aDate = new Date(a.booking_date ?? 0).getTime();
+      const bDate = new Date(b.booking_date ?? 0).getTime();
+      const dateDiff = aDate - bDate;
+      if (dateDiff !== 0) return dateSort === "asc" ? dateDiff : -dateDiff;
+      return lastModifiedMs(b) - lastModifiedMs(a);
+    });
+    return items;
+  }, [allBookings, dateSort]);
+
+  const totalBookings = sortedBookings.length;
+  const totalPages = Math.max(1, Math.ceil(totalBookings / itemsPerPage));
+  const startIndex = (currentPage - 1) * itemsPerPage;
   const mappedBookings = useMemo(
-    () => (bookingsResponse?.items ?? []).map(mapAdminBookingRawToUiBooking),
-    [bookingsResponse],
+    () => sortedBookings.slice(startIndex, startIndex + itemsPerPage).map(mapAdminBookingRawToUiBooking),
+    [sortedBookings, startIndex, itemsPerPage],
   );
 
-  const stats = useMemo(() => {
-    const summary = bookingsResponse?.summary;
-    return {
+  const stats = useMemo(
+    () => ({
       todays_bookings: summary?.total_bookings ?? 0,
       checked_in: summary?.checked_in_bookings ?? 0,
-      not_checked_in: summary?.confirmed_bookings ?? 0,
+      not_checked_in: summary?.not_checked_in_bookings ?? 0,
+      confirmed: summary?.confirmed_bookings ?? 0,
       cancelled: summary?.cancelled_bookings ?? 0,
       guests: summary?.guest_bookings ?? 0,
-    };
-  }, [bookingsResponse]);
-
-  const pagination = bookingsResponse?.pagination;
-  const totalBookings = pagination?.total ?? 0;
-  const totalPages = Math.max(1, pagination?.total_pages ?? 1);
-  const startIndex = (currentPage - 1) * itemsPerPage;
+    }),
+    [summary],
+  );
 
   const handleUpdateFilter = <K extends keyof typeof filters>(key: K, value: (typeof filters)[K]) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -377,8 +431,11 @@ export default function AdminBookingsPage() {
   // Clicking a stat card is a shortcut for "pick this Status and Search" --
   // applies immediately instead of just populating the dropdown, so the
   // table always lands on the same rows the clicked count summarizes.
+  // Clicking the already-active card toggles the filter back off (status
+  // "All"), matching the Offices/Buildings/Floors stat-card behavior.
   const handleStatCardFilter = (status: string) => {
-    const nextFilters = { ...filters, status };
+    const nextStatus = appliedFilters.status === status ? "All" : status;
+    const nextFilters = { ...filters, status: nextStatus };
     setFilters(nextFilters);
     setSearchError(false);
     setAppliedFilters(nextFilters);
@@ -411,7 +468,7 @@ export default function AdminBookingsPage() {
   // with today's default filters) — later re-fetches (page change, new
   // search) keep the filters bar interactive and just show the lighter
   // inline loading state in the table body below.
-  if (activitiesLoading && !bookingsResponse) {
+  if (activitiesLoading && !summary) {
     return <AdminBookingsSkeleton />;
   }
 
@@ -433,11 +490,19 @@ export default function AdminBookingsPage() {
             <Plus size={15} />
             Book for Someone
           </button>
-          <button className="inline-flex items-center gap-2 h-9 px-4 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-sm font-medium">
+          <button
+            disabled
+            aria-disabled="true"
+            className="inline-flex items-center gap-2 h-9 px-4 bg-white border border-gray-200 text-gray-400 rounded-xl text-sm font-medium cursor-not-allowed opacity-60"
+          >
             <Download size={15} />
             Export
           </button>
-          <button className="h-9 w-9 flex items-center justify-center bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-xl">
+          <button
+            disabled
+            aria-disabled="true"
+            className="h-9 w-9 flex items-center justify-center bg-white border border-gray-200 text-gray-400 rounded-xl cursor-not-allowed opacity-60"
+          >
             <MoreHorizontal size={16} />
           </button>
         </div>
@@ -467,7 +532,12 @@ export default function AdminBookingsPage() {
       {hasApplied && (
         <>
           {/* STATS */}
-          <BookingStatCards stats={stats} onFilterClick={handleStatCardFilter} />
+          <BookingStatCards
+            stats={stats}
+            bookingType={appliedFilters.bookingType}
+            onFilterClick={handleStatCardFilter}
+            activeStatus={appliedFilters.status}
+          />
 
           {/* TABLE */}
           <div className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
@@ -482,6 +552,8 @@ export default function AdminBookingsPage() {
             ) : (
               <BookingsTable
                   data={mappedBookings}
+                  dateSort={dateSort}
+                  onToggleDateSort={() => setDateSort((prev) => (prev === "asc" ? "desc" : "asc"))}
                   selectedRowKey={selectedBooking ? getBookingRowKey(selectedBooking) : undefined}
                   onView={setSelectedBooking}
                   onModifySeat={modifySeat}
@@ -509,7 +581,7 @@ export default function AdminBookingsPage() {
                         setItemsPerPage(Number(e.target.value));
                         setCurrentPage(1);
                       }}
-                      className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       {BOOKING_PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
                     </select>

@@ -57,6 +57,7 @@ AMENITY_UPDATE_FIELDS = {
     "icon_name",
     "category_id",
     "is_active",
+    "applicable_seat_types",
 }
 AMENITY_NON_NULL_FIELDS = {"amenity_name", "category_id", "is_active"}
 AMENITY_FORBIDDEN_UPDATE_FIELDS = {
@@ -611,6 +612,7 @@ def create_amenity(
             category_id=str(payload.category_id),
             category_name=str(category["category_name"]),
             is_active=payload.is_active,
+            applicable_seat_types=list(payload.applicable_seat_types),
         )
         conn.commit()
     except HTTPException:

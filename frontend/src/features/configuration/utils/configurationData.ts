@@ -1,12 +1,12 @@
 import {
   ListChecks,
   CalendarClock,
-  UsersRound,
   CalendarRange,
   UserRound,
   FileText,
   Archive,
   Trash2,
+  Ban,
 } from "lucide-react";
 import type {
   ConfigurationField,
@@ -20,9 +20,10 @@ function field(
   statLabel: string,
   value: number,
   unit: string,
-  helperText: string
+  helperText: string,
+  readOnly = false,
 ): ConfigurationField {
-  return { key, label, statLabel, value, unit, helperText };
+  return { key, label, statLabel, value, unit, helperText, readOnly };
 }
 
 function getField(fields: ConfigurationField[], key: string): number {
@@ -48,69 +49,62 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
   {
     id: "new-layout-publishing",
     name: "New Layout Publishing",
-    description: "Set the number of days after which a newly published layout will take effect in the application.",
+    description: "Set the safety buffer added on top of the employee booking window before a newly scheduled layout can take effect.",
     icon: CalendarClock,
     iconBg: "bg-emerald-100",
     iconColor: "text-emerald-600",
     fields: [
-      field("days", "Days", "Effective After", 3, "days", "Number of days after publishing before the layout becomes the active one."),
+      field("days", "Safety Buffer (Days)", "Buffer", 15, "days", "Days added on top of the employee booking window below, so a layout can never be scheduled to take effect before every booking against the old layout has passed."),
+      // Derived, not stored: buffer + the Employee Booking Window rule
+      // (below) -- shown so "Effective After" never gets confused with
+      // the buffer alone again. Refreshed from the server after every
+      // save (this card's own or the booking window's), not
+      // recalculated live while typing.
+      field("totalDays", "Effective After (Total)", "Effective After", 30, "days", "The actual earliest a newly scheduled layout can take effect: the employee booking window plus this buffer.", true),
     ],
     lastUpdatedAt: "2026-05-02T10:30:00Z",
     lastUpdatedBy: "Admin User",
-    describeRule: (fields) =>
-      `A newly published layout will take effect ${getField(fields, "days")} day(s) after it is published.`,
-  },
-  {
-    id: "booking-future-bookings-employee",
-    name: "Future Bookings (Employee)",
-    description: "Define how many future bookings an employee can create.",
-    icon: UsersRound,
-    iconBg: "bg-blue-100",
-    iconColor: "text-blue-600",
-    fields: [
-      field("bookings", "Future Bookings", "Max Future Bookings", 10, "bookings", "Maximum number of upcoming (not yet occurred) bookings an employee may hold at once."),
-    ],
-    lastUpdatedAt: "2026-05-02T10:30:00Z",
-    lastUpdatedBy: "Admin User",
-    describeRule: (fields) =>
-      `Employees will be able to hold up to ${getField(fields, "bookings")} future bookings at a time.`,
+    describeRule: (fields) => {
+      const buffer = getField(fields, "days");
+      const total = getField(fields, "totalDays");
+      const employeeWindow = Math.max(total - buffer, 0);
+      return `A newly scheduled layout must be at least ${total} day(s) out -- the employee booking window (${employeeWindow} days) plus this ${buffer}-day safety buffer.`;
+    },
   },
   {
     id: "booking-calendar-employee",
     name: "Booking Calendar (Employee)",
-    description: "Set the maximum number of bookings an employee can make within a configurable future duration.",
+    description: "Set how far in advance an employee can make bookings.",
     icon: CalendarRange,
     iconBg: "bg-orange-100",
     iconColor: "text-orange-600",
     fields: [
-      field("maxBookings", "Maximum Bookings", "Max Bookings", 7, "bookings", "Maximum number of bookings an employee can make."),
       field("durationDays", "Future Duration (Days)", "Duration", 30, "days", "Bookings are allowed within this number of days from today."),
     ],
     lastUpdatedAt: "2026-05-02T10:30:00Z",
     lastUpdatedBy: "Admin User",
     describeRule: (fields) =>
-      `Employees will be able to create up to ${getField(fields, "maxBookings")} bookings within the next ${getField(fields, "durationDays")} days from the current date.`,
+      `Employees will be able to create bookings within the next ${getField(fields, "durationDays")} days from the current date.`,
   },
   {
     id: "visitor-booking",
-    name: "Visitor Booking",
-    description: "Set the maximum number of visitor bookings within a configurable future duration.",
+    name: "Guest Booking Window",
+    description: "How many days in advance a host can book for a guest.",
     icon: UserRound,
     iconBg: "bg-violet-100",
     iconColor: "text-violet-600",
     fields: [
-      field("maxBookings", "Maximum Bookings", "Max Bookings", 5, "bookings", "Maximum number of visitor bookings a host can make."),
-      field("durationDays", "Future Duration (Days)", "Duration", 30, "days", "Visitor bookings are allowed within this number of days from today."),
+      field("durationDays", "Advance Window (Days)", "Advance Window", 30, "days", "Guest visits/bookings can be made up to this many days from today."),
     ],
     lastUpdatedAt: "2026-05-02T10:30:00Z",
     lastUpdatedBy: "Admin User",
     describeRule: (fields) =>
-      `Hosts will be able to create up to ${getField(fields, "maxBookings")} visitor bookings within the next ${getField(fields, "durationDays")} days from the current date.`,
+      `Hosts can book a guest for any date up to ${getField(fields, "durationDays")} days from today.`,
   },
   {
     id: "layout-visibility",
     name: "Layout Visibility",
-    description: "Configure how long layouts with different statuses remain visible in the UI before being automatically hidden.",
+    description: "Configure how long layouts with different statuses remain available in the UI before being automatically hidden.",
     icon: FileText,
     iconBg: "bg-gray-100",
     iconColor: "text-gray-600",
@@ -129,7 +123,9 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
         iconBg: "bg-amber-100",
         iconColor: "text-amber-600",
         cardTitle: "Draft",
-        cardDescription: "Layouts in draft state will be hidden from the UI after the configured number of days.",
+        cardDescription: "Layouts in draft state will remain available in the UI for the configured number of days.",
+        lastUpdatedAt: "2026-05-02T10:30:00Z",
+        lastUpdatedBy: "Admin User",
       },
       {
         key: "archivedDays",
@@ -142,7 +138,9 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
         iconBg: "bg-blue-100",
         iconColor: "text-blue-600",
         cardTitle: "Archived",
-        cardDescription: "Archived layouts will be hidden from the UI after the configured number of days.",
+        cardDescription: "Archived layouts will remain available in the UI for the configured number of days.",
+        lastUpdatedAt: "2026-05-02T10:30:00Z",
+        lastUpdatedBy: "Admin User",
       },
       {
         key: "discardedDays",
@@ -155,7 +153,9 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
         iconBg: "bg-red-100",
         iconColor: "text-red-600",
         cardTitle: "Discarded",
-        cardDescription: "Discarded layouts will be hidden from the UI after the configured number of days.",
+        cardDescription: "Discarded layouts will remain available in the UI for the configured number of days.",
+        lastUpdatedAt: "2026-05-02T10:30:00Z",
+        lastUpdatedBy: "Admin User",
       },
     ],
     lastUpdatedAt: "2026-05-02T10:30:00Z",
@@ -163,37 +163,57 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
     describeRule: (fields) =>
       `Draft layouts hide after ${getField(fields, "draftDays")} days, Archived after ${getField(fields, "archivedDays")} days, and Discarded after ${getField(fields, "discardedDays")} days of inactivity.`,
   },
+  {
+    id: "blocked-seat-policy",
+    name: "Blocked Seat Policy",
+    description: "Configure the Upcoming/Expiring Soon thresholds and how many previous days of expired records the UI should keep visible.",
+    icon: Ban,
+    iconBg: "bg-rose-100",
+    iconColor: "text-rose-600",
+    // Real values currently enforced server-side -- see
+    // BLOCKED_SEAT_DAYS_KEYS / resolve_blocked_seat_days in
+    // backend/services/business_rule_service.py.
+    fields: [
+      field("upcomingDays", "Upcoming Threshold (Days)", "Upcoming", 1, "days", "A block is flagged Upcoming if it starts within this many days from today."),
+      field("expiringSoonDays", "Expiring Soon Threshold (Days)", "Expiring Soon", 3, "days", "A block is flagged Expiring Soon if it ends within this many days from today."),
+      field("expiredWindowDays", "Expired Record Window (Days)", "Expired Window", 10, "days", "The Expired tab only shows records from the previous N days, ending on today."),
+    ],
+    lastUpdatedAt: "2026-05-02T10:30:00Z",
+    lastUpdatedBy: "Admin User",
+    describeRule: (fields) =>
+      `Blocks are flagged Upcoming within ${getField(fields, "upcomingDays")} day(s), Expiring Soon within ${getField(fields, "expiringSoonDays")} day(s), and the Expired tab keeps only the previous ${getField(fields, "expiredWindowDays")} day(s) of records.`,
+  },
 ];
 
 export const CONFIGURATION_SECTIONS: ConfigurationSection[] = [
   {
     id: "activity",
     title: "Activity",
-    subtitle: "Control the data displayed in activity tables across the application.",
     itemIds: ["activity-table-record-count"],
   },
   {
     id: "layout-management",
     title: "Layout Management",
-    subtitle: "Configure layout related settings and publishing rules.",
     itemIds: ["new-layout-publishing"],
   },
   {
     id: "employee-booking",
     title: "Employee Booking",
-    subtitle: "Configure booking limits and duration for employees.",
-    itemIds: ["booking-future-bookings-employee", "booking-calendar-employee"],
+    itemIds: ["booking-calendar-employee"],
   },
   {
     id: "visitor-booking",
     title: "Visitor Booking",
-    subtitle: "Configure booking limits for visitors.",
     itemIds: ["visitor-booking"],
   },
   {
     id: "layout-visibility",
     title: "Layout Visibility",
-    subtitle: "Configure how long layouts with different statuses remain visible in the UI before being automatically hidden.",
     itemIds: ["layout-visibility"],
+  },
+  {
+    id: "blocked-seat",
+    title: "Blocked Seat",
+    itemIds: ["blocked-seat-policy"],
   },
 ];

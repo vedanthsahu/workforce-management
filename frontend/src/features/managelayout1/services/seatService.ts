@@ -19,6 +19,7 @@ interface RawSeatItem {
   amenity_ids?:    (string | number)[] | null;
   layout_id:       string | number;
   notes?:          string | null;
+  capacity?:       number | null;
 }
 
 function mapApiItemToSeat(item: RawSeatItem, forceConfigured = false): Seat {
@@ -37,6 +38,7 @@ function mapApiItemToSeat(item: RawSeatItem, forceConfigured = false): Seat {
     amenity_ids:            (item.amenity_ids ?? []).map(String),
     layout_id:              String(item.layout_id),
     notes:                  item.notes ?? "",
+    capacity:               item.capacity ?? null,
   };
 }
 
@@ -82,6 +84,7 @@ export interface SeatConfigPayload {
   is_bookable: boolean;
   is_reserved: boolean;
   amenity_ids: number[];
+  capacity?:   number | null;
 }
 
 export async function configureSeat(
@@ -119,6 +122,7 @@ export interface SeatBulkEntry {
   is_bookable?: boolean;
   is_reserved?: boolean;
   amenity_ids?: number[];
+  capacity?:    number | null;
 }
 
 export interface BulkConfigureSeatsPayload {

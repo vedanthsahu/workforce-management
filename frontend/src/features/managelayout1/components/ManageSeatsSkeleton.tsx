@@ -20,6 +20,19 @@ export function ManageSeatsSkeleton() {
             </div>
           </div>
 
+          {/* Space category tabs */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3.5">
+                <Skeleton className="w-10 h-10 rounded-[10px]" />
+                <div className="space-y-1.5">
+                  <Skeleton className="h-3.5 w-16" />
+                  <Skeleton className="h-2.5 w-12" />
+                </div>
+              </div>
+            ))}
+          </div>
+
           {/* Stat cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[1, 2, 3, 4].map((i) => (

@@ -52,6 +52,7 @@ def _updated_row(mapping_id: str, **overrides) -> dict[str, object]:
         "is_bookable": True,
         "is_reserved": False,
         "amenity_ids": [],
+        "capacity": None,
     }
     base.update(overrides)
     return base
@@ -228,6 +229,90 @@ class UpdateLayoutSeatConfigurationPublishedCascadeTests(unittest.TestCase):
         mock_upsert.assert_not_called()
         mock_replace_amenities.assert_not_called()
         self.assertEqual(conn.commits, 1)
+
+
+class UpdateLayoutSeatConfigurationCapacityTests(unittest.TestCase):
+    """`capacity` (conference rooms) round-trips through the same
+    COALESCE-based partial-update path as every other field on this
+    endpoint, and cascades into the live `seats` row on a PUBLISHED layout
+    exactly like status/amenities already do."""
+
+    def test_capacity_is_passed_through_to_the_mapping_update_and_response(
+        self,
+    ) -> None:
+        conn = FakeConnection()
+        current_user = {"tenant_id": "1", "user_id": "5"}
+        payload = LayoutSeatConfigurationUpdateRequest(
+            seat_type="CONFERENCE_ROOM", capacity=12
+        )
+
+        with (
+            patch(
+                "backend.services.location_service.fetch_layout_seat_mapping_by_id",
+                return_value=_mapping_row("20", layout_id="100"),
+            ),
+            patch(
+                "backend.services.location_service.update_layout_seat_mapping_configuration",
+                return_value=_updated_row(
+                    "20", seat_type="CONFERENCE_ROOM", capacity=12
+                ),
+            ) as mock_update,
+            patch(
+                "backend.services.location_service.fetch_floor_layout_by_id",
+                return_value=_draft_layout(),
+            ),
+            patch("backend.services.location_service.touch_floor_layout_updated_by"),
+        ):
+            response = update_layout_seat_configuration(
+                conn,
+                tenant_id=str(current_user["tenant_id"]),
+                layout_seat_mapping_id="20",
+                payload=payload,
+                current_user=current_user,
+            )
+
+        self.assertEqual(mock_update.call_args.kwargs["capacity"], 12)
+        self.assertEqual(response.capacity, 12)
+        self.assertEqual(response.seat_type, "CONFERENCE_ROOM")
+
+    def test_capacity_cascades_into_the_live_seat_on_a_published_layout(
+        self,
+    ) -> None:
+        conn = FakeConnection()
+        current_user = {"tenant_id": "1", "user_id": "5"}
+        payload = LayoutSeatConfigurationUpdateRequest(capacity=8)
+
+        with (
+            patch(
+                "backend.services.location_service.fetch_layout_seat_mapping_by_id",
+                return_value=_mapping_row("20", layout_id="100"),
+            ),
+            patch(
+                "backend.services.location_service.update_layout_seat_mapping_configuration",
+                return_value=_updated_row(
+                    "20", seat_type="CONFERENCE_ROOM", capacity=8
+                ),
+            ),
+            patch(
+                "backend.services.location_service.fetch_floor_layout_by_id",
+                return_value=_published_layout(),
+            ),
+            patch(
+                "backend.services.location_service.upsert_operational_seat",
+                return_value={"seat_id": "999"},
+            ) as mock_upsert,
+            patch("backend.services.location_service.replace_seat_amenities"),
+            patch("backend.services.location_service.touch_floor_layout_updated_by"),
+        ):
+            update_layout_seat_configuration(
+                conn,
+                tenant_id=str(current_user["tenant_id"]),
+                layout_seat_mapping_id="20",
+                payload=payload,
+                current_user=current_user,
+            )
+
+        self.assertEqual(mock_upsert.call_args.kwargs["capacity"], 8)
 
 
 if __name__ == "__main__":

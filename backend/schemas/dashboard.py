@@ -67,6 +67,7 @@ class DashboardMeResponse(BaseModel):
 
     favorite_seat: FavoriteSeatResponse | None = None
     second_favorite_seat: FavoriteSeatResponse | None = None
+    third_favorite_seat: FavoriteSeatResponse | None = None
 
     days_in_office_total: int = 0
     days_in_office_current_month: int = 0

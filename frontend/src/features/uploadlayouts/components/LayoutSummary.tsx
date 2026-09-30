@@ -8,6 +8,7 @@ import SVGPreviewModal from "@/features/uploadlayouts/components/Svgpreviewmodal
 import { LayoutSummaryData, FloorLayoutInfo } from "../types/layout.types";
 import { fetchLayoutSeats } from "@/features/managelayout1/services/seatService";
 import type { Seat } from "@/features/managelayout1/types/seat.types";
+import { ROOM_SVG_ID_PATTERN, LEGEND } from "../utils/layoutSummary.utils";
 
 // ── seat coloring (same logic as LayoutPreview / LayoutTable) ─────────────────
 
@@ -19,12 +20,6 @@ function resolveSeatFill(seat: Seat): string {
   if (!seat.is_bookable)          return "#F59E0B";
   return "#22C55E";
 }
-
-// Cabin/conference/meeting/training room seats are grouped under one svg id
-// containing a "CBN"/"CFR"/"MR"/"TR" segment (e.g. "HYD-PRV-F11-CBN-04",
-// "HYD-PRV-F11-CFR-02", "HYD-PRV-F11-MR-01", "HYD-PRV-F11-TR-01"), not a
-// dedicated field.
-const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr|tr)([-_]|$)/i;
 
 function isRoomSvgId(svgId: string): boolean {
   return ROOM_SVG_ID_PATTERN.test(svgId);
@@ -72,13 +67,6 @@ function applyColors(svgText: string, seats: Seat[]): string {
   }
   return result;
 }
-
-const LEGEND = [
-  { label: "Bookable",     color: "#22C55E" },
-  { label: "Non-bookable", color: "#F59E0B" },
-  { label: "Inactive",     color: "#EF4444" },
-  { label: "Unconfigured", color: "#D1D5DB" },
-] as const;
 
 type Props = {
   formData: LayoutSummaryData;
