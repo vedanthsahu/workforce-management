@@ -1,3 +1,5 @@
+import { todayIsoInIndia } from "@/lib/indiaDate";
+
 // The real values safe_write_audit_log writes across the backend -- NOT
 // "FAILED" (see backend/schemas/audit.py's AuditEventStatus).
 export type AuditEventStatus = "SUCCESS" | "FAILURE" | "DENIED";
@@ -105,7 +107,7 @@ export interface AuditLogFilters {
 export function defaultAuditLogFilters(): AuditLogFilters {
   // Date Range defaults to today so the page loads showing today's audit
   // events without the admin needing to pick a date first.
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayIsoInIndia();
   return {
     search: "",
     action: "All",

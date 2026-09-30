@@ -81,10 +81,12 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
 
   // BACKEND DATA
   const totalSeats = data.total_seats;
+  const nonBookable = data.non_bookable_seats;
+  const bookableSeats = Math.max(totalSeats - nonBookable, 0);
   const booked = data.booked_seats_today;
   const blocked = data.blocked_seats;
-  const available = Math.max(totalSeats - booked - blocked, 0);
-  const occupancy = ceilPercentage((booked / Math.max(totalSeats, 1)) * 100);
+  const available = Math.max(bookableSeats - booked - blocked, 0);
+  const occupancy = ceilPercentage((booked / Math.max(bookableSeats - blocked, 1)) * 100);
 
   // Booked/blocked percentages are each rounded independently, so the
   // available share is the remainder rather than its own independent
@@ -92,10 +94,12 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
   // than 100% (e.g. 1% + 1% + 100%).
   const bookedPct = ceilPercentage((booked / Math.max(totalSeats, 1)) * 100);
   const blockedPct = ceilPercentage((blocked / Math.max(totalSeats, 1)) * 100);
-  const availablePct = Math.max(100 - bookedPct - blockedPct, 0);
+  const nonBookablePct = ceilPercentage((nonBookable / Math.max(totalSeats, 1)) * 100);
+  const availablePct = Math.max(100 - bookedPct - blockedPct - nonBookablePct, 0);
   const donutPctByName: Record<string, number> = {
     booked: bookedPct,
     blocked: blockedPct,
+    nonBookable: nonBookablePct,
     available: availablePct,
   };
 
@@ -108,8 +112,9 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
   ];
 
   const donutLegend = [
-    { label: "Blocked seats", value: blocked, dot: "bg-amber-400" },
-    { label: "Available seats", value: available, dot: "bg-emerald-500" },
+    { label: "Blocked space", value: blocked, dot: "bg-amber-400" },
+    { label: "Non-bookable space", value: nonBookable, dot: "bg-slate-400" },
+    { label: "Available space", value: available, dot: "bg-emerald-500" },
   ];
 
   const renderDonutTooltip: NonNullable<ComponentProps<typeof ChartTooltip>["content"]> = ({
@@ -158,6 +163,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
               config={{
                 booked: { label: "Reserved", color: "#6366F1" },
                 blocked: { label: "Blocked", color: "#FBBF24" },
+                nonBookable: { label: "Non-bookable", color: "#94A3B8" },
                 available: { label: "Available", color: "#E5E7EB" },
               }}
               className="h-full w-full"
@@ -182,6 +188,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
                   data={[
                     { name: "booked", value: booked },
                     { name: "blocked", value: blocked },
+                    { name: "nonBookable", value: nonBookable },
                     { name: "available", value: available },
                   ]}
                   dataKey="value"
@@ -193,8 +200,10 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
                   cornerRadius={0}
                   stroke="none"
                 >
+                  {/* chandana */}
                   <Cell className="cursor-pointer transition-opacity hover:opacity-80" fill="url(#donut-booked)" />
                   <Cell className="cursor-pointer transition-opacity hover:opacity-80" fill="url(#donut-blocked)" />
+                  <Cell className="cursor-pointer transition-opacity hover:opacity-80" fill="#94A3B8" />
                   <Cell className="cursor-pointer transition-opacity hover:opacity-80" fill="#10B981" />
                 </Pie>
               </PieChart>
@@ -216,7 +225,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
               <div className="flex items-start justify-between gap-3">
                 <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                   <span className="h-2 w-2 shrink-0 rounded-full bg-indigo-500 mt-px" />
-                  <span>Reserved seats</span>
+                  <span>Reserved space</span>
                 </span>
                 <span className="shrink-0 tabular-nums text-base font-extrabold text-black">
                   {booked}

@@ -20,11 +20,13 @@ import {
 } from "./BookingWizardSteps";
 import { useDashboard } from "@/features/dashboard/hooks/useDashboard";
 import { useBookForSomeoneStore } from "@/store/useBookForSomeoneStore";
+import { useBookingPolicy } from "@/features/configuration/hooks/useBookingPolicy";
 
 export default function BookForSomeonePage() {
   const router = useRouter();
   const { data } = useDashboard();
   const currentUserId = data?.user.user_id;
+  const { guestMaxAdvanceDays } = useBookingPolicy();
   const {
     formState,
     isSubmitting,
@@ -442,6 +444,7 @@ export default function BookForSomeonePage() {
           isLoadingBuildings={isLoadingBuildings}
           isLoadingFloors={isLoadingFloors}
           readOnlyLocation={!!hasLinkedBooking}
+          guestMaxAdvanceDays={guestMaxAdvanceDays}
         />
       );
     } else if (step === 3) {
@@ -586,8 +589,10 @@ export default function BookForSomeonePage() {
                 Booking policy
               </p>
               <p className="text-[11.5px] text-indigo-500 leading-relaxed">
-                You can book a space up to 30 days in advance. Visitors must be
-                accompanied by a host employee at all times.
+                {guestMaxAdvanceDays != null && (
+                  <>You can book a space up to {guestMaxAdvanceDays} days in advance. </>
+                )}
+                Visitors must be accompanied by a host employee at all times.
               </p>
             </div>
           </aside>

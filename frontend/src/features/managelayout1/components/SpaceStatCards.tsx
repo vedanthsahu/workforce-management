@@ -83,6 +83,7 @@ export default function SpaceStatCards({ category, stats, loading, cardFilter = 
       label:      `Total ${plural}`,
       value:      stats.total,
       sub:        null as string | null,
+      hint:       null as string | null,
       icon:       CATEGORY_ICON[category],
       iconBg:     "bg-indigo-50 text-indigo-500",
       valueColor: "text-gray-900",
@@ -93,6 +94,7 @@ export default function SpaceStatCards({ category, stats, loading, cardFilter = 
       label:      "Configured",
       value:      stats.configured,
       sub:        pct(stats.configured, stats.total),
+      hint:       null as string | null,
       icon:       <CheckCircle2 className="w-5 h-5" strokeWidth={2} />,
       iconBg:     "bg-emerald-50 text-emerald-500",
       valueColor: "text-emerald-600",
@@ -103,6 +105,7 @@ export default function SpaceStatCards({ category, stats, loading, cardFilter = 
       label:      "Unconfigured",
       value:      stats.unconfigured,
       sub:        pct(stats.unconfigured, stats.total),
+      hint:       null as string | null,
       icon:       <AlertCircle className="w-5 h-5" strokeWidth={2} />,
       iconBg:     "bg-amber-50 text-amber-500",
       valueColor: "text-amber-600",
@@ -113,6 +116,11 @@ export default function SpaceStatCards({ category, stats, loading, cardFilter = 
       label:      "Non-bookable",
       value:      stats.nonBookable,
       sub:        pct(stats.nonBookable, stats.total),
+      // Scoped to active spaces only -- an inactive space is always
+      // non-bookable by rule, so counting it here too would just double it
+      // against the Inactive card below. Called out as a hint, not folded
+      // into the label itself, so "Non-bookable" stays the primary word.
+      hint:       "Active spaces" as string | null,
       icon:       <Lock className="w-5 h-5" strokeWidth={2} />,
       iconBg:     "bg-red-50 text-red-400",
       valueColor: "text-red-500",
@@ -123,6 +131,7 @@ export default function SpaceStatCards({ category, stats, loading, cardFilter = 
       label:      "Inactive",
       value:      stats.inactive,
       sub:        pct(stats.inactive, stats.total),
+      hint:       null as string | null,
       icon:       <PowerOff className="w-5 h-5" strokeWidth={2} />,
       iconBg:     "bg-gray-100 text-gray-500",
       valueColor: "text-gray-600",
@@ -134,6 +143,7 @@ export default function SpaceStatCards({ category, stats, loading, cardFilter = 
           label:      "Total Capacity",
           value:      stats.totalCapacity ?? 0,
           sub:        null as string | null,
+          hint:       null as string | null,
           icon:       <Users className="w-5 h-5" strokeWidth={1.8} />,
           iconBg:     "bg-violet-50 text-violet-500",
           valueColor: "text-violet-600",
@@ -157,8 +167,11 @@ export default function SpaceStatCards({ category, stats, loading, cardFilter = 
             {card.icon}
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-gray-500 font-medium mb-0.5 truncate">{card.label}</p>
-            <p className={`text-lg sm:text-xl font-semibold leading-none ${card.valueColor}`}>
+            <p className="text-xs text-gray-500 font-medium truncate">{card.label}</p>
+            {card.hint && (
+              <p className="text-[9.5px] font-normal text-gray-400 truncate leading-tight">({card.hint})</p>
+            )}
+            <p className={`text-lg sm:text-xl font-semibold leading-none mt-0.5 ${card.valueColor}`}>
               {card.value}
               {card.sub && (
                 <span className="text-xs font-normal text-gray-400 ml-1">{card.sub}</span>
