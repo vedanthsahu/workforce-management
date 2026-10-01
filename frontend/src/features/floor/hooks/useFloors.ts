@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { floorService } from "../services/floorService";
 import {
@@ -9,8 +9,19 @@ import {
 } from "../types/floor.types";
 
 export const useFloors = () => {
+  // Table skeleton -- first load only. Later fetches (office/building filter,
+  // post-edit refresh) keep the current rows on screen until the new ones
+  // arrive, so the table never blanks out while filtering.
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Cards have their own API, so their skeleton is tied to it alone --
+  // filtering the table never touches the cards.
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  // Ignore responses from superseded requests (e.g. fast filter switching).
+  const latestFloorsRequest = useRef(0);
+  const latestBuildingsRequest = useRef(0);
 
   const [sites, setSites] = useState<FloorSite[]>([]);
   const [buildings, setBuildings] = useState<FloorBuilding[]>([]);
@@ -50,12 +61,16 @@ export const useFloors = () => {
       setStats(response);
     } catch (error) {
       console.error(error);
+    } finally {
+      setStatsLoading(false);
     }
   };
 
   const fetchBuildings = async (siteId: string) => {
+    const requestId = ++latestBuildingsRequest.current;
     try {
       const response = await floorService.getBuildings(Number(siteId));
+      if (requestId !== latestBuildingsRequest.current) return;
       setBuildings(response);
     } catch (error) {
       console.error(error);
@@ -63,20 +78,21 @@ export const useFloors = () => {
   };
 
   const fetchFloors = async (siteId?: string, buildingId?: string) => {
+    const requestId = ++latestFloorsRequest.current;
     try {
-      setLoading(true);
-
       const response = await floorService.getAllFloors({
         site_id: siteId,
         building_id: buildingId,
       });
+      if (requestId !== latestFloorsRequest.current) return;
       setFloors(response);
       setError("");
     } catch (error) {
+      if (requestId !== latestFloorsRequest.current) return;
       console.error(error);
       setError("Failed to load floors");
     } finally {
-      setLoading(false);
+      if (requestId === latestFloorsRequest.current) setLoading(false);
     }
   };
 
@@ -131,6 +147,7 @@ export const useFloors = () => {
     floors,
 
     stats,
+    statsLoading,
 
     selectedSite,
     selectedBuilding,

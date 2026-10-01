@@ -18,7 +18,7 @@ type BannerState = { type: "success" | "error"; message: string } | null;
 
 function BuildingsPage() {
   const {
-    buildings, sites, stats, loading, error,
+    buildings, sites, stats, statsLoading, loading, error,
     search, setSearch, selectedSiteId, setSelectedSiteId, fetchBuildings, fetchStats,
     
   } = useBuildings();
@@ -61,6 +61,20 @@ function BuildingsPage() {
   const handleEditSuccess = async (updatedBuildingId?: string) => {
     await Promise.all([fetchBuildings(selectedSiteId), fetchStats()]);
     showBannerWithHighlight("Building updated successfully.", updatedBuildingId);
+  };
+
+  // Cards and the office dropdown are mutually exclusive filters: the cards
+  // count across all offices, so using one resets the other to its default.
+  // Card click -> office back to "All Offices".
+  const handleStatusFilterChange = (filter: BuildingStatusFilter) => {
+    setSelectedSiteId("");
+    setStatusFilter(filter);
+  };
+
+  // Office selection -> cards back to "Total Buildings" (no status filter).
+  const handleSiteChange = (siteId: string) => {
+    setStatusFilter(null);
+    setSelectedSiteId(siteId);
   };
 
   const filteredBuildings = buildings
@@ -121,13 +135,13 @@ function BuildingsPage() {
       )}
 
       {/* STATS */}
-      {loading ? (
+      {statsLoading ? (
         <StatCardsSkeleton />
       ) : (
         <BuildingCards
           stats={stats}
           statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
+          onStatusFilterChange={handleStatusFilterChange}
         />
       )}
 
@@ -141,7 +155,7 @@ function BuildingsPage() {
             <BuildingFilters
               sites={sites}
               selectedSiteId={selectedSiteId}
-              setSelectedSiteId={setSelectedSiteId}
+              setSelectedSiteId={handleSiteChange}
               search={search}
               setSearch={(value) => {
                 setSearch(value);
