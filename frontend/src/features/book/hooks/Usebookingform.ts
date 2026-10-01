@@ -34,12 +34,13 @@ import {
 import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
 import { bookingTooFarInAdvanceMessage, MULTI_DAY_BOOKING_NOT_SUPPORTED_MESSAGE } from "../utils/constants";
 import { maxDateIsoFromToday, useBookingPolicy } from "@/features/configuration/hooks/useBookingPolicy";
+import { todayIsoInIndia } from "@/lib/indiaDate";
 import { amenityAppliesTo, BookingSpaceType } from "../utils/spaceType";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayIsoInIndia();
 }
 
 // ── Default state ─────────────────────────────────────────────────────────────

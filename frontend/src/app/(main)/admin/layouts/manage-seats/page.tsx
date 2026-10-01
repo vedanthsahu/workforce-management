@@ -21,6 +21,7 @@ import { ManageSeatsSkeleton } from "@/features/managelayout1/components/ManageS
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { useNavigationGuardStore } from "@/store/useNavigationGuardStore";
+import { indiaDateIsoAfterDays } from "@/lib/indiaDate";
 
 // Fallback only -- used for the one render before the real tenant value
 // (GET /business-rules/layout-policy) has loaded, and if that call fails.
@@ -29,9 +30,7 @@ import { useNavigationGuardStore } from "@/store/useNavigationGuardStore";
 const FALLBACK_MIN_ADVANCE_DAYS = 45;
 
 function minEffectiveDateIso(minAdvanceDays: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + minAdvanceDays);
-  return d.toISOString().slice(0, 10);
+  return indiaDateIsoAfterDays(minAdvanceDays);
 }
 
 function ManageSeatsPage() {

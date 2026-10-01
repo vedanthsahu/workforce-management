@@ -22,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { todayIsoInIndia } from "@/lib/indiaDate";
 import { cn } from "@/lib/utils";
 
 import { useBookingForm } from "../hooks/Usebookingform";
@@ -235,7 +236,7 @@ const BookASeatPage: React.FC = () => {
     }
   }, [error]);
 
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayIsoInIndia();
 
   // A native <select> falls back to displaying its FIRST option whenever
   // the bound `value` doesn't match any <option> currently rendered. When a
