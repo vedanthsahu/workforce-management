@@ -23,7 +23,6 @@ from backend.core.security import (
     SESSION_TOKEN_COOKIE_NAME,
     build_auth_cookie_settings,
 )
-from backend.core.text import titlecase_name
 from backend.core.sso import (
     STATE_TTL_SECONDS,
     GraphAPIError,
@@ -37,6 +36,7 @@ from backend.core.sso import (
     fetch_graph_me,
     verify_id_token,
 )
+from backend.core.text import titlecase_name
 from backend.db.connection import get_db
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.user_repository import (
