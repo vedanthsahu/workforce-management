@@ -50,6 +50,7 @@ def bulk_insert_layout_seat_mappings(
                     svg_element_id,
                     seat_code,
                     seat_type,
+                    capacity,
                     created_by
                 )
                 VALUES (
@@ -61,6 +62,7 @@ def bulk_insert_layout_seat_mappings(
                     %s,
                     %s,
                     %s,
+                    NULL,
                     %s
                 )
                 RETURNING

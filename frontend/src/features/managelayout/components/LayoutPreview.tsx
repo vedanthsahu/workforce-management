@@ -392,7 +392,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
     setStatus((seat.status as SeatStatus) ?? "ACTIVE");
     setAmenityIds([...seat.amenity_ids]);
     setNotes(seat.notes ?? "");
-    setCapacity(seat.capacity ?? null);
+    setCapacity(seat.capacity ?? (((seat.seat_type as SeatType) ?? suggestSeatType(seat.seat_svg_id)) === "CONFERENCE_ROOM" ? 1 : null));
     setSaved(false);
     setSaveError(false);
   }, [seat]);

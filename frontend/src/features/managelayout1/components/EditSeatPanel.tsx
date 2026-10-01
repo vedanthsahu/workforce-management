@@ -48,7 +48,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
     setBookable(initialStatus === "INACTIVE" ? false : seat.is_configured ? seat.is_bookable : null);
     setAmenityIds([...seat.amenity_ids]);
     setNotes(seat.notes ?? "");
-    setCapacity(seat.capacity ?? null);
+    setCapacity(seat.capacity ?? (((seat.seat_type as SeatType) ?? suggestSeatType(seat.seat_svg_id)) === "CONFERENCE_ROOM" ? 1 : null));
     setSaved(false);
     setSaveError(false);
   }, [seat]);

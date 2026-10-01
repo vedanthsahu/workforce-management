@@ -41,6 +41,9 @@ interface Props {
   // configuration -- searching by code is still meaningful there even for
   // unconfigured seats, since the table shows them as rows either way.
   searchDisabled?: boolean;
+  // Type (Seat/Cabin/Conference Room) only makes sense on the All tab, where
+  // rows are mixed -- every other tab is already a single type.
+  showTypeFilter?: boolean;
 }
 
 function FilterSelect({
@@ -227,9 +230,11 @@ export default function SeatFiltersBar({
   searchPlaceholder = "Search by code…",
   disabled = false,
   searchDisabled = false,
+  showTypeFilter = false,
 }: Props) {
   const activeCount = [
     filters.search.trim() !== "",
+    showTypeFilter && filters.seat_type !== "All",
     filters.status !== "All",
     filters.bookable !== "All",
     filters.amenity !== "All",
@@ -283,6 +288,20 @@ export default function SeatFiltersBar({
         </div>
       </div>
 
+      {showTypeFilter && (
+        <FilterSelect
+          label="Type"
+          value={filters.seat_type}
+          options={[
+            { value: "All", label: "All Types" },
+            { value: "SEAT", label: "Seat" },
+            { value: "CABIN", label: "Cabin" },
+            { value: "CONFERENCE_ROOM", label: "Conference Room" },
+          ]}
+          onChange={(v) => onUpdate("seat_type", v)}
+        />
+      )}
+
       <FilterSelect
         label="Status"
         value={filters.status}
@@ -292,21 +311,28 @@ export default function SeatFiltersBar({
           { value: "Inactive", label: "Inactive" },
           // { value: "Maintenance", label: "Maintenance" },
         ]}
-        onChange={(v) => onUpdate("status", v)}
+        onChange={(v) => {
+          onUpdate("status", v);
+          // Inactive spaces are always non-bookable, so the Bookable filter is
+          // hidden for them -- clear it so a hidden value can't keep filtering.
+          if (v === "Inactive") onUpdate("bookable", "All");
+        }}
         disabled={disabled}
       />
 
-      <FilterSelect
-        label="Bookable"
-        value={filters.bookable}
-        options={[
-          { value: "All", label: "All" },
-          { value: "Yes", label: "Yes" },
-          { value: "No", label: "No" },
-        ]}
-        onChange={(v) => onUpdate("bookable", v)}
-        disabled={disabled}
-      />
+      {filters.status !== "Inactive" && (
+        <FilterSelect
+          label="Bookable"
+          value={filters.bookable}
+          options={[
+            { value: "All", label: "All" },
+            { value: "Yes", label: "Yes" },
+            { value: "No", label: "No" },
+          ]}
+          onChange={(v) => onUpdate("bookable", v)}
+          disabled={disabled}
+        />
+      )}
 
       <AmenityFilterSelect
         label="Amenities"

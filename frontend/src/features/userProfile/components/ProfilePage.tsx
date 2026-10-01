@@ -163,9 +163,10 @@ function SkillTag({ label }: { label: string }) {
 // ─── Cascade Select ───────────────────────────────────────────────────────────
 
 function CascadeSelect({
-  label, value, onChange, options, disabled, loading, placeholder,
+  label, value, onChange, options, disabled, loading, placeholder, required,
 }: {
   label:        string;
+  required?:    boolean;
   value:        string;
   onChange:     (val: string) => void;
   options:      { value: string; label: string }[];
@@ -175,7 +176,7 @@ function CascadeSelect({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-[12px]">{label}</Label>
+      <Label className="text-[12px]">{label}{required && <span className="text-red-500"> *</span>}</Label>
       <div className="relative">
         <select
           value={value}
@@ -577,7 +578,13 @@ function EditPreferencesDialog({
   useEffect(() => {
     if (!selectedBuildingId) { setFloors([]); return; }
     setLoadingFloors(true);
-    getFloorsByBuilding(selectedBuildingId).then((data) => { setFloors(data); setLoadingFloors(false); });
+    getFloorsByBuilding(selectedBuildingId).then((data) => {
+      setFloors(data);
+      // A floor id left over from a previous building/record must never
+      // survive -- drop it if it isn't one of this building's floors.
+      setSelectedFloorId((prev) => (prev && !data.some((f) => f.floor_id === prev) ? "" : prev));
+      setLoadingFloors(false);
+    });
   }, [selectedBuildingId]);
 
   const handleSiteChange = (id: string) => {
@@ -591,8 +598,14 @@ function EditPreferencesDialog({
     setSelectedFloorId("");
   };
 
+  const locationComplete = !!selectedSiteId && !!selectedBuildingId && !!selectedFloorId;
+
   const handleSubmit = async () => {
     setError("");
+    if (!locationComplete) {
+      setError("Please select an office, building and floor.");
+      return;
+    }
     try {
       await onSave({
         preferredOfficeId:   selectedSiteId,
@@ -626,6 +639,7 @@ function EditPreferencesDialog({
           {/* Office (Site) */}
           <CascadeSelect
             label="Select Office"
+            required
             value={selectedSiteId}
             onChange={handleSiteChange}
             options={siteOptions}
@@ -636,6 +650,7 @@ function EditPreferencesDialog({
           {/* Building */}
           <CascadeSelect
             label="Select Building"
+            required
             value={selectedBuildingId}
             onChange={handleBuildingChange}
             options={buildingOptions}
@@ -647,6 +662,7 @@ function EditPreferencesDialog({
           {/* Floor */}
           <CascadeSelect
             label="Select Floor"
+            required
             value={selectedFloorId}
             onChange={setSelectedFloorId}
             options={floorOptions}
@@ -684,7 +700,7 @@ function EditPreferencesDialog({
           <Button variant="outline" size="sm" className="flex-1 sm:flex-none text-[12.5px]" disabled={isSaving} onClick={onClose}>
             Cancel
           </Button>
-          <Button size="sm" className="flex-1 sm:flex-none text-[12.5px] bg-indigo-600 hover:bg-indigo-700 gap-1.5" onClick={handleSubmit} disabled={isSaving}>
+          <Button size="sm" className="flex-1 sm:flex-none text-[12.5px] bg-indigo-600 hover:bg-indigo-700 gap-1.5" onClick={handleSubmit} disabled={isSaving || !locationComplete}>
             {isSaving
               ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Saving…</>
               : <><Save className="w-3.5 h-3.5" />Save changes</>}

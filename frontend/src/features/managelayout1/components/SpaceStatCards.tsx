@@ -47,12 +47,11 @@ function pct(part: number, total: number): string {
 }
 
 export default function SpaceStatCards({ category, stats, loading, cardFilter = null, onCardFilterChange }: SpaceStatCardsProps) {
-  const showCapacity = category === "CONFERENCE_ROOMS" && stats?.totalCapacity !== null;
-  const cardCount = showCapacity ? 6 : 5;
+  const cardCount = 5;
 
   if (loading || !stats) {
     return (
-      <div className={`grid grid-cols-2 sm:grid-cols-3 ${cardCount === 6 ? "lg:grid-cols-6" : "lg:grid-cols-5"} gap-3 sm:gap-4`}>
+      <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4`}>
         {Array.from({ length: cardCount }).map((_, i) => (
           <div key={i} className="bg-white rounded-xl border border-gray-100 p-3 sm:p-4 h-[76px] sm:h-[84px] animate-pulse">
             <div className="h-2.5 w-20 bg-gray-100 rounded mb-3" />
@@ -138,23 +137,10 @@ export default function SpaceStatCards({ category, stats, loading, cardFilter = 
       selected:   cardFilter === "INACTIVE",
       onClick:    interactive ? () => toggle("INACTIVE") : undefined,
     },
-    ...(showCapacity
-      ? [{
-          label:      "Total Capacity",
-          value:      stats.totalCapacity ?? 0,
-          sub:        null as string | null,
-          hint:       null as string | null,
-          icon:       <Users className="w-5 h-5" strokeWidth={1.8} />,
-          iconBg:     "bg-violet-50 text-violet-500",
-          valueColor: "text-violet-600",
-          selected:   false,
-          onClick:    undefined,
-        }]
-      : []),
   ];
 
   return (
-    <div className={`grid grid-cols-2 sm:grid-cols-3 ${cardCount === 6 ? "lg:grid-cols-6" : "lg:grid-cols-5"} gap-3 sm:gap-4`}>
+    <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4`}>
       {cards.map((card) => (
         <div
           key={card.label}

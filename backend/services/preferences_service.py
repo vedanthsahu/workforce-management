@@ -262,6 +262,14 @@ def _validate_preference_location(
     building_id: str | None,
     floor_id: str | None,
 ) -> None:
+    if site_id is None or building_id is None or floor_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_preference_location",
+                "message": "siteId, buildingId and floorId are all required.",
+            },
+        )
     if building_id is not None and site_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
