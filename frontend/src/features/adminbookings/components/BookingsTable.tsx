@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Eye, MoreVertical, Penci
 import type { LucideIcon } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
+import { todayIsoInIndia } from "@/lib/indiaDate";
 import { AdminBooking } from "../types/adminBooking.types";
 import { BOOKING_STATUS_STYLES } from "../utils/constants";
 import { getBookingRowKey } from "../utils/mapAdminBooking";
@@ -48,7 +49,7 @@ function RowMenu({
   const isGuest = booking.person_type === "Guest";
   const hasVisit = isGuest && !!booking.guest_visit_id;
   const hasBooking = !!booking.booking_id;
-  const canMutate = booking.status !== "Cancelled" && booking.activity_date > new Date().toISOString().slice(0, 10);
+  const canMutate = booking.status !== "Cancelled" && booking.activity_date > todayIsoInIndia();
   const hasBothActions = canMutate && hasVisit && hasBooking;
 
   const openMenu = () => {
