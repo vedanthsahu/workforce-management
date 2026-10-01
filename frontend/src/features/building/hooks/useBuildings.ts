@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 
 import { buildingService } from "../services/buildingService";
@@ -24,6 +24,9 @@ export const useBuildings = () => {
   const [search, setSearch] =
     useState("");
 
+  // Table skeleton -- first load only. Later fetches (office filter,
+  // post-edit refresh) keep the current rows on screen until the new
+  // ones arrive, so the user never sees the table blank out.
   const [loading, setLoading] =
     useState(true);
 
@@ -34,6 +37,14 @@ export const useBuildings = () => {
     useState<BuildingStatsSummary | null>(
       null
     );
+
+  // Cards have their own API, so their skeleton is tied to it alone --
+  // filtering the table never touches the cards.
+  const [statsLoading, setStatsLoading] =
+    useState(true);
+
+  // Ignore responses from superseded requests (e.g. fast office switching).
+  const latestBuildingsRequest = useRef(0);
 
   // FETCH SITES
   const fetchSites = async () => {
@@ -53,10 +64,8 @@ export const useBuildings = () => {
   const fetchBuildings = async (
   siteId?: string
 ) => {
+  const requestId = ++latestBuildingsRequest.current;
   try {
-    setLoading(true);
-    setError("");
-
     const data =
       await buildingService.getBuildings({
         site_id: siteId
@@ -65,12 +74,15 @@ export const useBuildings = () => {
         page: 1,
       });
 
+    if (requestId !== latestBuildingsRequest.current) return;
+    setError("");
     setBuildings(data);
   } catch (err) {
+    if (requestId !== latestBuildingsRequest.current) return;
     const message = axios.isAxiosError(err) ? err.message : undefined;
     setError(message || "Failed to fetch buildings");
   } finally {
-    setLoading(false);
+    if (requestId === latestBuildingsRequest.current) setLoading(false);
   }
 };
 
@@ -83,14 +95,16 @@ export const useBuildings = () => {
       setStats(data);
     } catch (err) {
       console.error(err);
+    } finally {
+      setStatsLoading(false);
     }
   };
 
   // INITIAL LOAD
+  // Buildings are loaded by the site effect below (it also runs on mount).
   useEffect(() => {
     fetchSites();
     fetchStats();
-    fetchBuildings(); 
   }, []);
 
   // FETCH BUILDINGS WHEN SITE CHANGES
@@ -107,6 +121,7 @@ export const useBuildings = () => {
     sites,
 
     stats,
+    statsLoading,
 
     loading,
     error,

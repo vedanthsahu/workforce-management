@@ -33,7 +33,7 @@ function getField(fields: ConfigurationField[], key: string): number {
 export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
   {
     id: "activity-table-record-count",
-    name: "Activity Table Record Count",
+    name: "Recent Activity Table Record Count",
     description: "Configure the number of records shown in the admin dashboard's Recent Activities table.",
     icon: ListChecks,
     iconBg: "bg-indigo-100",
@@ -188,7 +188,7 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
 export const CONFIGURATION_SECTIONS: ConfigurationSection[] = [
   {
     id: "activity",
-    title: "Activity",
+    title: "Recent Activity",
     itemIds: ["activity-table-record-count"],
   },
   {

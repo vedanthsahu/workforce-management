@@ -22,6 +22,7 @@ function FloorsPage() {
     loading,
     error,
     stats,
+    statsLoading,
     sites,
     buildings,
     selectedSite,
@@ -64,6 +65,28 @@ function FloorsPage() {
   const handleEdit = (floor: Floor) => {
     setSelectedFloor(floor);
     setOpen(true);
+  };
+
+  // Cards and the office/building dropdowns are mutually exclusive filters:
+  // the cards count across all offices, so using one resets the other.
+  // Card click -> office and building back to "All".
+  const handleStatusFilterChange = (filter: FloorStatusFilter) => {
+    setStatusFilter(filter);
+    setCurrentPage(1);
+    if (selectedSite) handleSiteChange("");
+  };
+
+  // Office / building selection -> cards back to "Total" (no status filter).
+  const handleTableSiteChange = (siteId: string) => {
+    setStatusFilter(null);
+    setCurrentPage(1);
+    handleSiteChange(siteId);
+  };
+
+  const handleTableBuildingChange = (buildingId: string) => {
+    setStatusFilter(null);
+    setCurrentPage(1);
+    handleBuildingChange(buildingId);
   };
 
   const filteredFloors = useMemo(() => {
@@ -118,16 +141,13 @@ function FloorsPage() {
       </div>
 
       {/* CARDS */}
-      {loading ? (
+      {statsLoading ? (
         <StatCardsSkeleton />
       ) : (
         <FloorCards
           stats={stats}
           statusFilter={statusFilter}
-          onStatusFilterChange={(filter) => {
-            setStatusFilter(filter);
-            setCurrentPage(1);
-          }}
+          onStatusFilterChange={handleStatusFilterChange}
         />
       )}
 
@@ -142,8 +162,8 @@ function FloorsPage() {
             buildings={buildings}
             selectedSite={selectedSite}
             selectedBuilding={selectedBuilding}
-            onSiteChange={handleSiteChange}
-            onBuildingChange={handleBuildingChange}
+            onSiteChange={handleTableSiteChange}
+            onBuildingChange={handleTableBuildingChange}
             search={search}
             setSearch={setSearch}
           />

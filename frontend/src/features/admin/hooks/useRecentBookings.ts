@@ -14,7 +14,7 @@ export function useRecentBookings() {
     let cancelled = false;
     setLoading(true);
 
-    // Row count is Configuration → Activity Table Record Count. If that
+    // Row count is Configuration → Recent Activity Table Record Count. If that
     // lookup fails, show every activity rather than an arbitrary cut-off.
     Promise.all([
       adminService.getAdminActivities(),

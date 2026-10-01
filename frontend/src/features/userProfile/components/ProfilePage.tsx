@@ -163,7 +163,7 @@ function SkillTag({ label }: { label: string }) {
 // ─── Cascade Select ───────────────────────────────────────────────────────────
 
 function CascadeSelect({
-  label, value, onChange, options, disabled, loading, placeholder, required,
+  label, value, onChange, options, disabled, loading, placeholder, disabledPlaceholder, required,
 }: {
   label:        string;
   required?:    boolean;
@@ -173,23 +173,36 @@ function CascadeSelect({
   disabled?:    boolean;
   loading?:     boolean;
   placeholder?: string;
+  // Shown while disabled because the parent field isn't chosen yet
+  // (e.g. "Select an office first") -- mirrors the guest booking form.
+  disabledPlaceholder?: string;
 }) {
+  // While loading, hide the previous parent's options so they can't flash.
+  const shownPlaceholder = loading
+    ? "Loading…"
+    : disabled && disabledPlaceholder
+      ? disabledPlaceholder
+      : placeholder ?? "";
+
   return (
     <div className="space-y-1.5">
       <Label className="text-[12px]">{label}{required && <span className="text-red-500"> *</span>}</Label>
       <div className="relative">
         <select
-          value={value}
+          value={loading ? "" : value}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled || loading}
+          aria-busy={loading || undefined}
           className="w-full h-9 rounded-md border border-gray-200 bg-white pl-3 pr-8 text-[13px] text-gray-800 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {!value && <option value="" disabled hidden>{placeholder ?? ""}</option>}
-          {options.map((o) => (
+          {(loading || !value) && <option value="" disabled hidden>{shownPlaceholder}</option>}
+          {!loading && options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
-        <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+        {loading
+          ? <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 animate-spin pointer-events-none" />
+          : <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />}
       </div>
     </div>
   );
@@ -527,6 +540,8 @@ function EditPreferencesDialog({
   // ── Amenities ──────────────────────────────────────────────────────────
   const [availableAmenities, setAvailableAmenities] = useState<ApiAmenity[]>([]);
   const [selectedAmenityIds, setSelectedAmenityIds] = useState<string[]>([]);
+  // Amenity ids as hydrated on open -- the baseline for the "changed?" check.
+  const [initialAmenityIds,  setInitialAmenityIds]  = useState<string[]>([]);
   const [loadingAmenities,   setLoadingAmenities]   = useState(false);
   const [amenitiesError,     setAmenitiesError]     = useState(false);
 
@@ -543,7 +558,14 @@ function EditPreferencesDialog({
 
     // Sites
     setLoadingSites(true);
-    getSites().then((data) => { setSites(data); setLoadingSites(false); });
+    getSites()
+      .then((data) => {
+        setSites(data);
+        // Only one office -> pick it, unless a saved office is already set.
+        if (data.length === 1) setSelectedSiteId((prev) => prev || data[0].site_id);
+      })
+      .catch(() => setSites([]))
+      .finally(() => setLoadingSites(false));
 
     // Amenities
     setLoadingAmenities(true);
@@ -552,7 +574,9 @@ function EditPreferencesDialog({
       .then((list) => {
         setAvailableAmenities(list);
         const currentIds = new Set(preferences.preferredAmenities.map((a) => a.id));
-        setSelectedAmenityIds(list.filter((a) => currentIds.has(a.id)).map((a) => a.id));
+        const hydratedIds = list.filter((a) => currentIds.has(a.id)).map((a) => a.id);
+        setSelectedAmenityIds(hydratedIds);
+        setInitialAmenityIds(hydratedIds);
       })
       .catch(() => setAmenitiesError(true))
       .finally(() => setLoadingAmenities(false));
@@ -566,25 +590,47 @@ function EditPreferencesDialog({
 
   // Fetch the building list for the selected site. Selection resets are
   // handled explicitly by handleSiteChange (user-driven only) — this effect
-  // must never touch selectedBuildingId/selectedFloorId, otherwise it races
+  // must never reset selectedBuildingId/selectedFloorId, otherwise it races
   // with the [open] hydration effect above and clobbers the restored value.
+  // It may only *fill an empty* selection (single-building auto-select).
   useEffect(() => {
     if (!selectedSiteId) { setBuildings([]); return; }
+    // Drop responses for an office the user has already moved away from.
+    let active = true;
     setLoadingBuildings(true);
-    getBuildingsBySite(selectedSiteId).then((data) => { setBuildings(data); setLoadingBuildings(false); });
+    getBuildingsBySite(selectedSiteId)
+      .then((data) => {
+        if (!active) return;
+        setBuildings(data);
+        // Only one building -> pick it (its floors load via the effect below).
+        if (data.length === 1) setSelectedBuildingId((prev) => prev || data[0].building_id);
+      })
+      .catch(() => { if (active) setBuildings([]); })
+      .finally(() => { if (active) setLoadingBuildings(false); });
+    return () => { active = false; };
   }, [selectedSiteId]);
 
-  // Fetch the floor list for the selected building — same rule: no selection resets here.
+  // Fetch the floor list for the selected building — same rule: no selection
+  // resets here beyond dropping a floor that doesn't belong to this building.
   useEffect(() => {
     if (!selectedBuildingId) { setFloors([]); return; }
+    let active = true;
     setLoadingFloors(true);
-    getFloorsByBuilding(selectedBuildingId).then((data) => {
-      setFloors(data);
-      // A floor id left over from a previous building/record must never
-      // survive -- drop it if it isn't one of this building's floors.
-      setSelectedFloorId((prev) => (prev && !data.some((f) => f.floor_id === prev) ? "" : prev));
-      setLoadingFloors(false);
-    });
+    getFloorsByBuilding(selectedBuildingId)
+      .then((data) => {
+        if (!active) return;
+        setFloors(data);
+        setSelectedFloorId((prev) => {
+          // A floor id left over from a previous building/record must never
+          // survive -- drop it if it isn't one of this building's floors.
+          const kept = prev && data.some((f) => f.floor_id === prev) ? prev : "";
+          // Only one floor -> pick it.
+          return kept || (data.length === 1 ? data[0].floor_id : "");
+        });
+      })
+      .catch(() => { if (active) setFloors([]); })
+      .finally(() => { if (active) setLoadingFloors(false); });
+    return () => { active = false; };
   }, [selectedBuildingId]);
 
   const handleSiteChange = (id: string) => {
@@ -598,12 +644,29 @@ function EditPreferencesDialog({
     setSelectedFloorId("");
   };
 
-  const locationComplete = !!selectedSiteId && !!selectedBuildingId && !!selectedFloorId;
+  // All four are mandatory: office, building, floor and at least one amenity.
+  const formComplete =
+    !!selectedSiteId && !!selectedBuildingId && !!selectedFloorId && selectedAmenityIds.length > 0;
+
+  // Save stays disabled on open and only enables once the user has changed
+  // something -- re-saving the stored preferences unchanged is a no-op.
+  const amenitiesChanged =
+    selectedAmenityIds.length !== initialAmenityIds.length ||
+    selectedAmenityIds.some((id) => !initialAmenityIds.includes(id));
+  const isDirty =
+    selectedSiteId     !== (preferences.preferredOfficeId   ?? "") ||
+    selectedBuildingId !== (preferences.preferredBuildingId ?? "") ||
+    selectedFloorId    !== (preferences.preferredFloorId    ?? "") ||
+    amenitiesChanged;
+
+  const canSave =
+    formComplete && isDirty && !loadingAmenities && !amenitiesError &&
+    !loadingBuildings && !loadingFloors;
 
   const handleSubmit = async () => {
     setError("");
-    if (!locationComplete) {
-      setError("Please select an office, building and floor.");
+    if (!formComplete) {
+      setError("Please select an office, building, floor and at least one amenity.");
       return;
     }
     try {
@@ -657,6 +720,7 @@ function EditPreferencesDialog({
             disabled={!selectedSiteId}
             loading={loadingBuildings}
             placeholder="Select building"
+            disabledPlaceholder="Select an office first"
           />
 
           {/* Floor */}
@@ -669,11 +733,12 @@ function EditPreferencesDialog({
             disabled={!selectedBuildingId}
             loading={loadingFloors}
             placeholder="Select floor"
+            disabledPlaceholder="Select a building first"
           />
 
           {/* Amenities */}
           <div className="space-y-1.5">
-            <Label className="text-[12px]">Default Amenity Preferences</Label>
+            <Label className="text-[12px]">Default Amenity Preferences<span className="text-red-500"> *</span></Label>
             {amenitiesError ? (
               <div className="flex items-center gap-2 text-[12px] text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
                 <TriangleAlert className="w-3.5 h-3.5 shrink-0" />
@@ -700,7 +765,7 @@ function EditPreferencesDialog({
           <Button variant="outline" size="sm" className="flex-1 sm:flex-none text-[12.5px]" disabled={isSaving} onClick={onClose}>
             Cancel
           </Button>
-          <Button size="sm" className="flex-1 sm:flex-none text-[12.5px] bg-indigo-600 hover:bg-indigo-700 gap-1.5" onClick={handleSubmit} disabled={isSaving || !locationComplete}>
+          <Button size="sm" className="flex-1 sm:flex-none text-[12.5px] bg-indigo-600 hover:bg-indigo-700 gap-1.5" onClick={handleSubmit} disabled={isSaving || !canSave}>
             {isSaving
               ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Saving…</>
               : <><Save className="w-3.5 h-3.5" />Save changes</>}
