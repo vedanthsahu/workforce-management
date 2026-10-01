@@ -23,6 +23,7 @@ from backend.core.security import (
     SESSION_TOKEN_COOKIE_NAME,
     build_auth_cookie_settings,
 )
+from backend.core.text import titlecase_name
 from backend.core.sso import (
     STATE_TTL_SECONDS,
     GraphAPIError,
@@ -689,7 +690,12 @@ def _resolve_display_name(claims: dict[str, Any], graph_profile: dict[str, Any])
         if normalized:
             if len(normalized) > 200:
                 raise ValueError("displayName exceeds schema length.")
-            return normalized
+            # Graph/Entra directory entries are inconsistently cased
+            # ("JOHN DOE", "john doe", etc.) -- normalize to Title Case so
+            # app_users.display_name (and full_name, which falls back to
+            # this value below) read consistently regardless of how the
+            # name was entered in the directory.
+            return titlecase_name(normalized)
     return None
 
 

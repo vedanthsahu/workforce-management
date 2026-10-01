@@ -320,7 +320,7 @@ export default function SeatTable({
       case "capacity":
         return (
           <td key={key} className="px-4 py-3 text-gray-700 text-xs font-semibold">
-            {seat.capacity != null ? `${seat.capacity} people` : <Dash />}
+            {seat.is_configured && seat.capacity != null ? `${seat.capacity} people` : <Dash />}
           </td>
         );
       case "amenities":
