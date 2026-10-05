@@ -85,6 +85,16 @@ Parameters:
     Description: Optional Microsoft Graph group ID for managed role mapping
     Default: ""
 
+  GatewaySsoHostname:
+    Type: String
+    Description: Optional email domain that routes login through the apps.solugenix.com SSO gateway instead of direct Microsoft OAuth
+    Default: "solugenix.com"
+
+  JwtRefreshTokenTtl:
+    Type: Number
+    Description: Refresh token lifetime in seconds
+    Default: 3600
+
   LogRetentionDays:
     Type: Number
     Description: CloudWatch log retention period
@@ -193,7 +203,7 @@ Resources:
 
           JWT_ALGORITHM: HS256
           JWT_ACCESS_TOKEN_TTL: "900"
-          JWT_REFRESH_TOKEN_TTL: "2592000"
+          JWT_REFRESH_TOKEN_TTL: !Ref JwtRefreshTokenTtl
           JWT_ALLOWED_CLAIMS: user_id,sub,email,role,tenant_id,session_id,iat,exp
 
           AUTH_COOKIE_SECURE: "true"
@@ -204,6 +214,7 @@ Resources:
           REDIRECT_URI: !Ref RedirectUri
           FRONTEND_URL: !Ref FrontendUrl
           ADDITIONAL_FRONTEND_URLS: !Ref AdditionalFrontendUrls
+          GATEWAY_SSO_HOSTNAME: !Ref GatewaySsoHostname
           SESSION_TTL: "3600"
 
           AWS_S3_BUCKET_NAME: !Ref S3BucketName
