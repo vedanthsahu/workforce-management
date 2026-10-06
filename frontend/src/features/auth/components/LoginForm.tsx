@@ -7,9 +7,42 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLogin } from "../hooks/useLogin";
 
+// User-facing messages only -- say what happened to the user and what to do
+// next, never which backend step failed (no status codes, no "token
+// exchange", no raw exception text). Grouped by what the user should do
+// about it, not by the technical error code, since several unrelated
+// failures share the same correct next step. Anything not listed here falls
+// back to the generic message below (see errorMessage state).
 const LOGIN_ERROR_MESSAGES: Record<string, string> = {
   inactive_user:
     "Your account is inactive. Please contact your administrator for access.",
+
+  // Tenant/organization not recognized or not active for sign-in.
+  unknown_tenant:
+    "Your organization isn't set up for sign-in yet. Please contact your administrator.",
+  tenant_resolution_ambiguous:
+    "Your organization isn't set up for sign-in yet. Please contact your administrator.",
+
+  // Sign-in link was stale, already used, or the back/forward button was
+  // used mid-flow -- restarting from the login page resolves all of these.
+  missing_code: "Your sign-in link has expired or already been used. Please try signing in again.",
+  missing_state: "Your sign-in link has expired or already been used. Please try signing in again.",
+  invalid_state: "Your sign-in link has expired or already been used. Please try signing in again.",
+
+  // Couldn't finish linking/creating the account -- not something a retry
+  // alone fixes.
+  sso_identity_conflict:
+    "We couldn't sign you in with this account. Please contact your administrator.",
+  invalid_graph_profile:
+    "We couldn't sign you in with this account. Please contact your administrator.",
+
+  // Transient failures talking to Microsoft or our own sign-in service --
+  // genuinely retry-able.
+  microsoft_auth_error: "We couldn't sign you in. Please try again in a moment.",
+  missing_tenant_claim: "We couldn't sign you in. Please try again in a moment.",
+  tenant_resolution_failed: "We couldn't sign you in. Please try again in a moment.",
+  token_exchange_failed: "We couldn't sign you in. Please try again in a moment.",
+  sso_failed: "We couldn't sign you in. Please try again in a moment.",
 };
 
 export function LoginForm() {
