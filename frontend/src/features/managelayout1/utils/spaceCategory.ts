@@ -90,3 +90,17 @@ export function suggestSeatType(svgId: string): string {
   if (c === "seat") return "SEAT";
   return "CONFERENCE_ROOM"; // conference + meeting + training all collapse
 }
+
+/** Hide the machine-readable capacity segment in room labels. */
+export function displaySpaceCode(code: string, seatType?: string | null): string {
+  const type = seatType ?? suggestSeatType(code);
+  if (type !== "CONFERENCE_ROOM") return code;
+  return code.replace(/[-_]C[1-9]\d{0,2}(?=[-_]|$)/i, "");
+}
+
+/** Return the capacity encoded in a conference-room SVG id (MR-C6-01 -> 6). */
+export function capacityFromSvgId(svgId: string): number | null {
+  if (suggestSeatType(svgId) !== "CONFERENCE_ROOM") return null;
+  const match = svgId.match(/(?:^|[-_])C([1-9]\d{0,2})(?=[-_]|$)/i);
+  return match ? Number(match[1]) : null;
+}

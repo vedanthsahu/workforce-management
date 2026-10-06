@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import Link from "next/link";
 import { CalendarDays, Users } from "lucide-react";
 
@@ -93,7 +94,7 @@ export function HeroBanner({
       <div className="flex flex-col items-end gap-2 z-10 shrink-0 self-start sm:self-auto">
         <div className="bg-white/10 border border-white/25 rounded-2xl px-5 py-3 text-center min-w-[88px] hover:bg-white/15 transition-colors duration-200 cursor-default">
           <p className="text-indigo-300/70 text-[9px] uppercase tracking-widest mb-1 font-medium">Space</p>
-          <p className="text-white font-bold text-[24px] leading-none tracking-tight">{todayBooking.seatCode}</p>
+          <p className="text-white font-bold text-[24px] leading-none tracking-tight">{displaySpaceCode(todayBooking.seatCode)}</p>
           <p className="text-indigo-300/60 text-[9px] mt-1">{todayBooking.floor ?? "Office"}</p>
         </div>
       </div>

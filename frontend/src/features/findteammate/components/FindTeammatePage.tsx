@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useRef, useEffect, useState } from "react";
 import {
   Search, X, MapPin, Users,
@@ -157,7 +158,7 @@ function TeamGroupCard({
                 <div className="w-[116px] flex justify-end">
                   {member.seat?.seat_code ? (
                     <span className="text-[10.5px] text-gray-400 font-mono">
-                      {member.seat.seat_code}
+                      {displaySpaceCode(member.seat.seat_code)}
                     </span>
                   ) : (
                     <span className="text-[10.5px] text-amber-500 italic">No space booked</span>
@@ -295,7 +296,7 @@ function SeatDetailsGrid({ booking }: { booking: RawTeammateBooking }) {
   const cells: { label: string; value: React.ReactNode }[] = [
     { label: "Building", value: booking.building_name ?? "—" },
     { label: "Floor", value: booking.floor_name ?? "—" },
-    { label: "Space Number", value: booking.seat_code ?? "—" },
+    { label: "Space Number", value: displaySpaceCode(booking.seat_code) ?? "—" },
     { label: "Booking Source", value: booking.source_channel ?? "—" },
     { label: "Start Time", value: formatTime(booking.start_time) },
     { label: "End Time", value: formatTime(booking.end_time) },

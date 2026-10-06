@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useState, useRef, useEffect } from "react";
 import { Calendar, Hash, Clock, Pencil, X, ChevronDown, CalendarPlus, FileEdit } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -258,7 +259,7 @@ export function BookingCard({
           {isVisitOnly ? (
             <p className="text-[12px] text-orange-500 mt-0.5">{booking.floor || "No space reserved"}</p>
           ) : (
-            <p className="text-[12px] text-gray-500 mt-0.5">{booking.floor} · Space {booking.seat}</p>
+            <p className="text-[12px] text-gray-500 mt-0.5">{booking.floor} · Space {displaySpaceCode(booking.seat)}</p>
           )}
 
           <div className="flex items-center gap-1.5 mt-1.5 text-[12px] text-gray-500">

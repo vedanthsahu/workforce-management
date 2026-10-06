@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useState, useCallback } from "react";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -75,7 +76,7 @@ export function CancelBookingDialog({ open, booking, onConfirm, onClose }: Cance
               <span>
                 Are you sure you want to cancel your booking at{" "}
                 <strong className="text-gray-700">
-                  {booking.location} · {booking.floor} · Space {booking.seatId}
+                  {booking.location} · {booking.floor} · Space {displaySpaceCode(booking.seatId)}
                 </strong>{" "}
                 on <strong className="text-gray-700">{booking.date}</strong>?
                 This action cannot be undone.

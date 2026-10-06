@@ -10,6 +10,24 @@ export const axiosInstance = axios.create({
 
 let _refreshing: Promise<boolean> | null = null;
 
+// Whether this tab has ever confirmed an authenticated user (AuthContext
+// calls markSessionEstablished() once its initial /auth/me succeeds, and
+// clearSessionEstablished() on logout). A 401 on the very first request of
+// a fresh page load -- e.g. reopening the app days later with a long-since
+// expired or absent refresh-token cookie -- is "not logged in", not "your
+// active session just expired", and should fall straight through to /login
+// with no explanation needed. The "Session expired" dialog is reserved for
+// a session that was actually live in this tab and then lapsed mid-use.
+let _hasEstablishedSession = false;
+
+export function markSessionEstablished(): void {
+  _hasEstablishedSession = true;
+}
+
+export function clearSessionEstablished(): void {
+  _hasEstablishedSession = false;
+}
+
 // ── Cross-tab refresh coordination ──────────────────────────────────────────
 // _refreshing above only de-dupes concurrent refresh attempts *within one
 // tab* (it's a plain module variable, so a second tab has its own separate
@@ -199,8 +217,16 @@ axiosInstance.interceptors.response.use(
         typeof window !== "undefined" &&
         !window.location.pathname.includes("/login")
       ) {
-        try { await axios.post(`${BACKEND_URL}/auth/logout`, {}, { withCredentials: true }); } catch {}
-        dispatchSessionExpired();
+        if (_hasEstablishedSession) {
+          try { await axios.post(`${BACKEND_URL}/auth/logout`, {}, { withCredentials: true }); } catch {}
+          dispatchSessionExpired();
+        }
+        // Else: never had a live session in this tab to begin with (e.g. the
+        // app was reopened after the refresh-token cookie had long since
+        // expired/gone) -- nothing to log out of, and no "your session
+        // expired" dialog to show. AuthContext's own failed-/me handling
+        // leaves `user` unset, and MainLayout's existing no-user redirect
+        // sends this straight to /login.
       }
     }
 
