@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Plus, CheckCircle2, XCircle, X } from "lucide-react";
@@ -59,28 +59,44 @@ function BuildingsPage() {
   };
 
   const handleEditSuccess = async (updatedBuildingId?: string) => {
-    await Promise.all([fetchBuildings(selectedSiteId), fetchStats()]);
+    await Promise.all([fetchBuildings(), fetchStats()]);
     showBannerWithHighlight("Building updated successfully.", updatedBuildingId);
   };
 
-  // Cards and the office dropdown are mutually exclusive filters: the cards
-  // count across all offices, so using one resets the other to its default.
-  // Card click -> office back to "All Offices".
-  const handleStatusFilterChange = (filter: BuildingStatusFilter) => {
-    setSelectedSiteId("");
-    setStatusFilter(filter);
-  };
+  // Status cards are the parent filter, the office dropdown is the child:
+  // with a card selected, the dropdown only lists offices that have at least
+  // one building of that status ("Total" lists every office).
+  const statusMatchedBuildings = useMemo(
+    () => buildings.filter((b) => !statusFilter || b.status === statusFilter),
+    [buildings, statusFilter],
+  );
 
-  // Office selection -> cards back to "Total Buildings" (no status filter).
+  const siteOptions = useMemo(() => {
+    if (!statusFilter) return sites;
+    const siteIds = new Set(statusMatchedBuildings.map((b) => String(b.site_id)));
+    return sites.filter((s) => siteIds.has(String(s.site_id)));
+  }, [sites, statusFilter, statusMatchedBuildings]);
+
+  // If the selected office has no buildings for the current card (after a
+  // card switch or an edit), fall back to "All Offices".
+  useEffect(() => {
+    if (!statusFilter || !selectedSiteId || loading) return;
+    const hasMatch = statusMatchedBuildings.some((b) => String(b.site_id) === selectedSiteId);
+    if (!hasMatch) setSelectedSiteId("");
+  }, [statusFilter, selectedSiteId, statusMatchedBuildings, loading, setSelectedSiteId]);
+
+  // Picking "All Offices" in the dropdown clears every filter, so the cards
+  // go back to "Total Buildings" too. (The automatic fallback above sets
+  // the office directly and deliberately keeps the card.)
   const handleSiteChange = (siteId: string) => {
-    setStatusFilter(null);
+    if (!siteId) setStatusFilter(null);
     setSelectedSiteId(siteId);
   };
 
-  const filteredBuildings = buildings
+  const filteredBuildings = statusMatchedBuildings
+    .filter((building) => !selectedSiteId || String(building.site_id) === selectedSiteId)
     .map((building) => ({ building, rank: searchMatchRank(building.building_name || "", search) }))
     .filter((x): x is { building: Building; rank: number } => x.rank !== null)
-    .filter((x) => !statusFilter || x.building.status === statusFilter)
     .sort((a, b) => {
       if (highlightedId) {
         if (a.building.building_id === highlightedId) return -1;
@@ -141,7 +157,7 @@ function BuildingsPage() {
         <BuildingCards
           stats={stats}
           statusFilter={statusFilter}
-          onStatusFilterChange={handleStatusFilterChange}
+          onStatusFilterChange={setStatusFilter}
         />
       )}
 
@@ -153,9 +169,16 @@ function BuildingsPage() {
           <h2 className="text-sm sm:text-base font-semibold text-gray-800">Buildings List</h2>
           <div className="w-full sm:w-auto">
             <BuildingFilters
-              sites={sites}
+              sites={siteOptions}
               selectedSiteId={selectedSiteId}
               setSelectedSiteId={handleSiteChange}
+              scopedAllLabel={
+                statusFilter === "ACTIVE"
+                  ? "All Active Offices"
+                  : statusFilter === "INACTIVE"
+                    ? "All Inactive Offices"
+                    : undefined
+              }
               search={search}
               setSearch={(value) => {
                 setSearch(value);

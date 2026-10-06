@@ -399,7 +399,7 @@ const BookASeatPage: React.FC = () => {
                         instead — which is exactly what made the field
                         flash an unrelated, wrong office name before
                         settling on the real (possibly inactive) one. */}
-                    <option value="" disabled>{loadingSites ? "Loading…" : "Select office"}</option>
+                    <option value="" disabled hidden>{loadingSites ? "Loading…" : "Select office"}</option>
                     {officeOptions.map((s) => (
                       // An inactive office stays as the current value (so the
                       // field still shows its name, matching the "this

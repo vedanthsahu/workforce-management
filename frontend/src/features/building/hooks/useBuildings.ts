@@ -24,9 +24,9 @@ export const useBuildings = () => {
   const [search, setSearch] =
     useState("");
 
-  // Table skeleton -- first load only. Later fetches (office filter,
-  // post-edit refresh) keep the current rows on screen until the new
-  // ones arrive, so the user never sees the table blank out.
+  // Table skeleton -- first load only. Later fetches (post-edit refresh)
+  // keep the current rows on screen until the new ones arrive, so the user
+  // never sees the table blank out.
   const [loading, setLoading] =
     useState(true);
 
@@ -43,7 +43,7 @@ export const useBuildings = () => {
   const [statsLoading, setStatsLoading] =
     useState(true);
 
-  // Ignore responses from superseded requests (e.g. fast office switching).
+  // Ignore responses from superseded requests (e.g. overlapping refreshes).
   const latestBuildingsRequest = useRef(0);
 
   // FETCH SITES
@@ -61,16 +61,15 @@ export const useBuildings = () => {
   };
 
 // FETCH BUILDINGS
-  const fetchBuildings = async (
-  siteId?: string
-) => {
+  // Always loads every building for the tenant. The office filter and the
+  // office dropdown's options are derived client-side on the page (the
+  // status cards narrow which offices are listed), so filtering never
+  // needs a refetch.
+  const fetchBuildings = async () => {
   const requestId = ++latestBuildingsRequest.current;
   try {
     const data =
       await buildingService.getBuildings({
-        site_id: siteId
-          ? Number(siteId)
-          : undefined,
         page: 1,
       });
 
@@ -101,20 +100,11 @@ export const useBuildings = () => {
   };
 
   // INITIAL LOAD
-  // Buildings are loaded by the site effect below (it also runs on mount).
   useEffect(() => {
     fetchSites();
     fetchStats();
+    fetchBuildings();
   }, []);
-
-  // FETCH BUILDINGS WHEN SITE CHANGES
-  useEffect(() => {
-    
-      fetchBuildings(
-        selectedSiteId || undefined
-      );
-    
-  }, [selectedSiteId]);
 
   return {
     buildings,
