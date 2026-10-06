@@ -1,3 +1,4 @@
+import { displaySpaceCode } from "@/lib/spaceCode";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { Seat, Preference } from "../types/Bookingform.types";
@@ -137,11 +138,13 @@ function withAddedAttrs(openTag: string, className: string, extraStyle: string):
 
 function getPaletteKey(seat: SeatWithSvgId, isSelected: boolean): string {
   if (isSelected) return "selected";
+  // In modify mode the booking's own seat arrives pre-selected, which is what
+  // shows it in blue. It must NOT keep a permanent "yours" colour: once the
+  // user picks a different seat, this one goes back to its normal state.
   if (seat.status !== "available" && seat.status !== "yours") return seat.status;
   const match = seat.preferenceMatchStatus;
   if (match === "FULL_MATCH" || seat.uiState === "BEST_MATCH") return "best_match";
   if (match === "PARTIAL_MATCH") return "partial_match";
-  if (seat.status === "yours") return "yours";
   return "available";
 }
 
@@ -648,7 +651,7 @@ const SeatTooltip: React.FC<{
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 800, color: "#111827", letterSpacing: "-0.02em" }}>
-              {seat.label}
+              {displaySpaceCode(seat.label)}
             </div>
             {seat.status === "yours" && (
               <div style={{ fontSize: 10, color: "#6b7280", marginTop: 1 }}>Your booking</div>

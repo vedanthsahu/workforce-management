@@ -31,6 +31,7 @@ export default function BookForSomeonePage() {
     formState,
     isSubmitting,
     submitError,
+    clearSubmitError,
     setBookingType,
     setSelectedEmployee,
     selectGuest,
@@ -170,15 +171,25 @@ export default function BookForSomeonePage() {
   // the admin Blocked Spaces flow (BlockedSeatsPage/BlockSeatsPage). Guarded
   // on the field still being blank so this never overrides a location the
   // host-prefs prefill above (or a manual pick) already set.
+  //
+  // The `siteId`/`buildingId` ownership checks are required, not optional:
+  // switching Office clears the building in the same commit that this effect
+  // runs, while `buildings` still holds the PREVIOUS office's (not yet
+  // refetched) list. Without them, a single stale building/floor from the
+  // old selection gets "auto-selected" into the new office -- the form then
+  // holds ids from two different offices while the dropdowns just display
+  // each list's first option.
   useEffect(() => {
     if (visitDetails.buildingId || isLoadingBuildings || buildings.length !== 1) return;
+    if (buildings[0].siteId !== visitDetails.siteId) return;
     updateVisitDetails({ buildingId: buildings[0].id, floorId: "" });
-  }, [visitDetails.buildingId, isLoadingBuildings, buildings, updateVisitDetails]);
+  }, [visitDetails.buildingId, visitDetails.siteId, isLoadingBuildings, buildings, updateVisitDetails]);
 
   useEffect(() => {
     if (visitDetails.floorId || isLoadingFloors || floors.length !== 1) return;
+    if (floors[0].buildingId !== visitDetails.buildingId) return;
     updateVisitDetails({ floorId: floors[0].id });
-  }, [visitDetails.floorId, isLoadingFloors, floors, updateVisitDetails]);
+  }, [visitDetails.floorId, visitDetails.buildingId, isLoadingFloors, floors, updateVisitDetails]);
 
   // Admin's "Booking Management" page links here with ?entry=employee or
   // ?entry=guest depending on which button was clicked — lock the wizard to
@@ -216,13 +227,30 @@ export default function BookForSomeonePage() {
     setEligibilityError(null);
   }, [visitDetails.visitDate, visitDetails.endDate, selectedGuest]);
 
-  // When an eligibility error appears, scroll it into view so the user
-  // doesn't miss it if they're scrolled down past the footer.
+  // A failure belongs to the step it happened on: moving to another step must
+  // not carry it along.
   useEffect(() => {
-    if (eligibilityError) {
+    setEligibilityError(null);
+    setEditError(null);
+    clearSubmitError();
+  }, [step, clearSubmitError]);
+
+  // One red banner at the top for any failure (eligibility check, sending the
+  // invite, modifying a visit).
+  const bannerError = eligibilityError ?? editError ?? submitError;
+  const dismissBannerError = () => {
+    setEligibilityError(null);
+    setEditError(null);
+    clearSubmitError();
+  };
+
+  // When an error appears, scroll it into view so the user doesn't miss it if
+  // they're scrolled down past the footer.
+  useEffect(() => {
+    if (bannerError) {
       errorBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, [eligibilityError]);
+  }, [bannerError]);
 
   const redirectToBookSeat = () => {
     const fromDate = visitDetails.visitDate;
@@ -319,7 +347,7 @@ export default function BookForSomeonePage() {
       ? `After clicking "${submitLabel}", you will continue in the existing booking flow to select workspace, date, preferences and choose a space.`
       : (editVisitId && bookingType === "visitor" && step === 2 && visitDetailsRequiredFilled && !hasVisitChanges)
         ? "Change the host, date, location, or another detail to save changes."
-        : editError ?? submitError;
+        : null;
 
   const handlePrimaryAction = async () => {
     if (bookingType === "internal" && step === 1) {
@@ -497,14 +525,14 @@ export default function BookForSomeonePage() {
 
       {/* ── Scrollable content ── */}
       <div ref={scrollAreaRef} className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
-        {eligibilityError && (
+        {bannerError && (
           <div
             ref={errorBannerRef}
             className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 sm:px-5 py-3 text-red-600 text-[12.5px] sm:text-[13px] flex items-start gap-3"
           >
             <svg className="w-4 h-4 mt-0.5 shrink-0" viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm9-3a1 1 0 00-2 0v3a1 1 0 002 0V5zm-.25 5.75a.75.75 0 10-1.5 0 .75.75 0 001.5 0z" /></svg>
-            <span className="flex-1">{eligibilityError}</span>
-            <button onClick={() => setEligibilityError(null)} className="text-red-400 hover:text-red-600 shrink-0">
+            <span className="flex-1">{bannerError}</span>
+            <button onClick={dismissBannerError} className="text-red-400 hover:text-red-600 shrink-0">
               <svg className="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 1l12 12M13 1L1 13" /></svg>
             </button>
           </div>

@@ -9,6 +9,7 @@ import {
   useCallback,
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { markSessionEstablished, clearSessionEstablished } from "@/lib/http/axios";
 import { authService } from "../services/auth.service";
 import type { AuthContextType, User } from "../types/auth.types";
 import {
@@ -74,6 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .getMe()
       .then((u) => {
         setUser(u);
+        markSessionEstablished();
       })
       .catch((err) => {
         const status         = err?.response?.status;
@@ -150,6 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const handleSessionExpiredAcknowledge = useCallback(() => {
     clearPerAccountClientCache();
+    clearSessionEstablished();
     setUser(null);
     setSessionExpired(false);
     router.replace("/login");
@@ -159,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     await authService.logout().catch(() => {});
     clearPerAccountClientCache();
+    clearSessionEstablished();
     setUser(null);
     router.replace("/login");
   }, [router]);

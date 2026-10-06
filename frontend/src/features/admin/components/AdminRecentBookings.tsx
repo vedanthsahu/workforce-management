@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import {
   Card,
   CardHeader,
@@ -70,7 +71,7 @@ export default function AdminRecentBookings({ bookings }: Props) {
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                     <span className="text-xs text-gray-500">{item.office}</span>
                     <span className="text-xs text-gray-400">·</span>
-                    <span className="text-xs text-gray-500">{item.seat}</span>
+                    <span className="text-xs text-gray-500">{displaySpaceCode(item.seat)}</span>
                     <span className="text-xs text-gray-400">·</span>
                     <span className="text-xs text-gray-500">{item.date}</span>
                   </div>
@@ -123,7 +124,7 @@ export default function AdminRecentBookings({ bookings }: Props) {
                     <div>{item.office}</div>
                   </td>
                   <td className="px-4 py-4 align-middle text-center w-[17%]">
-                    <div>{item.seat}</div>
+                    <div>{displaySpaceCode(item.seat)}</div>
                   </td>
                   <td className="px-4 py-4 align-middle text-center whitespace-nowrap w-[12%]">{item.date}</td>
                   <td className="px-4 py-4 align-middle text-center w-[10%]">

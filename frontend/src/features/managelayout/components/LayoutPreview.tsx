@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, ZoomIn, ZoomOut, Layers } from "lucide-react";
 import {
@@ -445,7 +446,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
             Configure {categoryOf(seat.seat_type) === "SEATS" ? "Seat" : categoryOf(seat.seat_type) === "CABINS" ? "Cabin" : "Conference Room"}
           </p>
           <DialogTitle className="text-base font-bold text-indigo-600">
-            {seat.seat_code}
+            {displaySpaceCode(seat.seat_code)}
           </DialogTitle>
         </DialogHeader>
 
@@ -1077,7 +1078,7 @@ export default function LayoutPreview({
                   className="absolute z-30 pointer-events-none bg-white border border-gray-200 rounded-lg shadow-md px-2.5 py-2 min-w-[140px] max-w-[200px]"
                   style={{ left: tooltip.x, top: tooltip.y }}
                 >
-                  <p className="text-[11px] font-semibold text-gray-800">{tooltip.seat.seat_code}</p>
+                  <p className="text-[11px] font-semibold text-gray-800">{displaySpaceCode(tooltip.seat.seat_code)}</p>
                   {tooltip.seat.is_configured ? (
                     <div className="mt-1 space-y-0.5">
                       <p className="text-[10px] text-gray-500 flex items-center gap-1">

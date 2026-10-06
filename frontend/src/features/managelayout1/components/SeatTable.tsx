@@ -5,7 +5,7 @@ import { Pencil, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from "lucide-re
 import { Seat } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
-import { SpaceCategory, SPACE_CATEGORY_LABELS, SPACE_CATEGORY_COLOR, categoryOf } from "../utils/spaceCategory";
+import { SpaceCategory, SPACE_CATEGORY_LABELS, SPACE_CATEGORY_COLOR, categoryOf, displaySpaceCode } from "../utils/spaceCategory";
 import { SEAT_TABLE_PAGE_SIZES as PAGE_SIZES } from "../utils/seatOptions.utils";
 
 interface Props {
@@ -293,7 +293,7 @@ export default function SeatTable({
               onClick={() => onEditSeat(seat)}
               className="text-indigo-600 font-semibold hover:text-indigo-800 hover:underline transition-colors text-sm"
             >
-              {seat.seat_code}
+              {displaySpaceCode(seat.seat_code, seat.seat_type)}
             </button>
           </td>
         );
@@ -320,7 +320,7 @@ export default function SeatTable({
       case "capacity":
         return (
           <td key={key} className="px-4 py-3 text-gray-700 text-xs font-semibold">
-            {seat.is_configured && seat.capacity != null ? `${seat.capacity} people` : <Dash />}
+            {seat.capacity != null ? `${seat.capacity} people` : <Dash />}
           </td>
         );
       case "amenities":

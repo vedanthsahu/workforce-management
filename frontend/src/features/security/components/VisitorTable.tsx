@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useState } from "react";
 import { Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -155,7 +156,7 @@ export function VisitorTable({
                     <td className="py-3 px-4 text-center">
                       {v.seatBooked ? (
                         <span className="text-sm font-medium text-emerald-600">
-                          Yes {v.seatCode ? `(${v.seatCode})` : ""}
+                          Yes {v.seatCode ? `(${displaySpaceCode(v.seatCode)})` : ""}
                         </span>
                       ) : (
                         <span className="text-sm text-gray-400">No (Visitor Only)</span>
@@ -258,7 +259,7 @@ export function VisitorTable({
                     <p className="text-gray-400">Space Booked</p>
                     {v.seatBooked ? (
                       <p className="text-emerald-600 font-medium">
-                        Yes {v.seatCode ? `(${v.seatCode})` : ""}
+                        Yes {v.seatCode ? `(${displaySpaceCode(v.seatCode)})` : ""}
                       </p>
                     ) : (
                       <p className="text-gray-400 font-medium">No</p>

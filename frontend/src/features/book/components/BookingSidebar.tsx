@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, CalendarClock, CalendarPlus, History, Info, Sparkles, Star } from "lucide-react";
@@ -120,7 +121,7 @@ export const BookingSidebar: React.FC<Props> = ({ fromDate, toDate, onConflict }
       }
       // Stay on this page — report the conflict to the page's own top
       // banner instead of navigating anywhere.
-      onConflict(`Space ${seat.label} is already booked for the selected date(s). Please choose a different space.`);
+      onConflict(`Space ${displaySpaceCode(seat.label)} is already booked for the selected date(s). Please choose a different space.`);
     } catch (err) {
       // The availability endpoint itself can 409 for reasons that have
       // nothing to do with this specific seat (e.g. the admin already has
@@ -169,7 +170,7 @@ export const BookingSidebar: React.FC<Props> = ({ fromDate, toDate, onConflict }
               Already booked
             </div>
             <p className="text-[15px] font-bold leading-tight">
-              Space {nextBooking.seatCode ?? "—"}
+              Space {displaySpaceCode(nextBooking.seatCode) ?? "—"}
               {nextBooking.floorName ? `, ${nextBooking.floorName}` : ""}
             </p>
             <p className="text-[12px] text-indigo-100 mt-0.5">
@@ -222,8 +223,8 @@ export const BookingSidebar: React.FC<Props> = ({ fromDate, toDate, onConflict }
                     <Icon size={17} className={seat.tag === "favourite" ? "fill-current" : ""} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-bold text-[#1A1A2E] truncate" title={`Space ${seat.label}`}>
-                      Space {seat.label}
+                    <p className="text-[13px] font-bold text-[#1A1A2E] truncate" title={`Space ${displaySpaceCode(seat.label)}`}>
+                      Space {displaySpaceCode(seat.label)}
                     </p>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0", style.tagBg, style.tagText)}>

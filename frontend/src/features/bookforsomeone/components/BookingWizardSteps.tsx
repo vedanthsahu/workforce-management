@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
@@ -1404,7 +1405,7 @@ export function ConfirmInviteStep({ guest, visitDetails, sites, buildings, seatL
     ["Requires Space", hasSeat ? "Yes" : "No"],
     ...(hasSeat ? ([
       ["Floor", floorName || "—"],
-      ["Space", seatLabel || "—"],
+      ["Space", displaySpaceCode(seatLabel) || "—"],
     ] as [string, string][]) : []),
     ["Notes", visitDetails.additionalNotes || "—"],
   ];
