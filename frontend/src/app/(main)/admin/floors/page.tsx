@@ -67,36 +67,70 @@ function FloorsPage() {
     setOpen(true);
   };
 
-  // Cards and the office/building dropdowns are mutually exclusive filters:
-  // the cards count across all offices, so using one resets the other.
-  // Card click -> office and building back to "All".
+  // Status cards are the parent filter, the office/building dropdowns are
+  // children: with a card selected, the dropdowns only list offices/buildings
+  // that have at least one floor of that status ("Total" lists everything).
   const handleStatusFilterChange = (filter: FloorStatusFilter) => {
     setStatusFilter(filter);
     setCurrentPage(1);
-    if (selectedSite) handleSiteChange("");
   };
 
-  // Office / building selection -> cards back to "Total" (no status filter).
+  // Picking "All Offices" in the dropdown clears every filter, so the cards
+  // go back to "Total" too. (The automatic fallback below calls the hook's
+  // handleSiteChange directly and deliberately keeps the card.)
   const handleTableSiteChange = (siteId: string) => {
-    setStatusFilter(null);
+    if (!siteId) setStatusFilter(null);
     setCurrentPage(1);
     handleSiteChange(siteId);
   };
 
   const handleTableBuildingChange = (buildingId: string) => {
-    setStatusFilter(null);
     setCurrentPage(1);
     handleBuildingChange(buildingId);
   };
 
+  const statusMatchedFloors = useMemo(
+    () => floors.filter((f) => !statusFilter || f.status === statusFilter),
+    [floors, statusFilter],
+  );
+
+  const siteOptions = useMemo(() => {
+    if (!statusFilter) return sites;
+    const siteIds = new Set(statusMatchedFloors.map((f) => String(f.site_id)));
+    return sites.filter((s) => siteIds.has(String(s.site_id)));
+  }, [sites, statusFilter, statusMatchedFloors]);
+
+  const buildingOptions = useMemo(() => {
+    if (!statusFilter) return buildings;
+    const buildingIds = new Set(statusMatchedFloors.map((f) => String(f.building_id)));
+    return buildings.filter((b) => buildingIds.has(String(b.building_id)));
+  }, [buildings, statusFilter, statusMatchedFloors]);
+
+  // If the selected office/building has no floors for the current card
+  // (after a card switch or an edit), fall back to "All".
+  useEffect(() => {
+    if (!statusFilter || loading) return;
+    if (selectedSite && !statusMatchedFloors.some((f) => String(f.site_id) === selectedSite)) {
+      handleSiteChange("");
+    } else if (
+      selectedBuilding &&
+      !statusMatchedFloors.some((f) => String(f.building_id) === selectedBuilding)
+    ) {
+      handleBuildingChange("");
+    }
+    // handleSiteChange/handleBuildingChange are recreated every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, selectedSite, selectedBuilding, statusMatchedFloors, loading]);
+
   const filteredFloors = useMemo(() => {
-    const ranked = floors
+    const ranked = statusMatchedFloors
+      .filter((floor) => !selectedSite || String(floor.site_id) === selectedSite)
+      .filter((floor) => !selectedBuilding || String(floor.building_id) === selectedBuilding)
       .map((floor) => ({
         floor,
         rank: searchMatchRank(floor.floor_name || "", search),
       }))
       .filter((x): x is { floor: Floor; rank: number } => x.rank !== null)
-      .filter((x) => !statusFilter || x.floor.status === statusFilter)
       .sort((a, b) => a.rank - b.rank)
       .map((x) => x.floor);
 
@@ -106,7 +140,7 @@ function FloorsPage() {
       ...ranked.filter((f) => String(f.floor_id) === pinnedFloorId),
       ...ranked.filter((f) => String(f.floor_id) !== pinnedFloorId),
     ];
-  }, [floors, search, statusFilter, pinnedFloorId]);
+  }, [statusMatchedFloors, selectedSite, selectedBuilding, search, pinnedFloorId]);
 
   const itemsPerPage = 10;
   const totalPages = Math.ceil(filteredFloors.length / itemsPerPage);
@@ -158,11 +192,18 @@ function FloorsPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center px-6 py-4 border-b">
           <h2 className="text-sm sm:text-base font-semibold text-gray-800">Floors List</h2>
           <FloorFilters
-            sites={sites}
-            buildings={buildings}
+            sites={siteOptions}
+            buildings={buildingOptions}
             selectedSite={selectedSite}
             selectedBuilding={selectedBuilding}
             onSiteChange={handleTableSiteChange}
+            scopedAllLabel={
+              statusFilter === "ACTIVE"
+                ? "All Active Offices"
+                : statusFilter === "INACTIVE"
+                  ? "All Inactive Offices"
+                  : undefined
+            }
             onBuildingChange={handleTableBuildingChange}
             search={search}
             setSearch={setSearch}

@@ -9,9 +9,9 @@ import {
 } from "../types/floor.types";
 
 export const useFloors = () => {
-  // Table skeleton -- first load only. Later fetches (office/building filter,
-  // post-edit refresh) keep the current rows on screen until the new ones
-  // arrive, so the table never blanks out while filtering.
+  // Table skeleton -- first load only. Later fetches (post-edit refresh)
+  // keep the current rows on screen until the new ones arrive, so the
+  // table never blanks out.
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -77,13 +77,14 @@ export const useFloors = () => {
     }
   };
 
-  const fetchFloors = async (siteId?: string, buildingId?: string) => {
+  // Always loads every floor for the tenant. The office/building filters and
+  // the dropdowns' options are derived client-side on the page (the status
+  // cards narrow which offices/buildings are listed), so filtering never
+  // needs a refetch.
+  const fetchFloors = async () => {
     const requestId = ++latestFloorsRequest.current;
     try {
-      const response = await floorService.getAllFloors({
-        site_id: siteId,
-        building_id: buildingId,
-      });
+      const response = await floorService.getAllFloors();
       if (requestId !== latestFloorsRequest.current) return;
       setFloors(response);
       setError("");
@@ -101,21 +102,19 @@ export const useFloors = () => {
     setSelectedBuilding("");
     setBuildings([]);
 
+    // Only the building dropdown's list needs the server; the table is
+    // filtered client-side from the full floor list.
     if (siteId) {
       await fetchBuildings(siteId);
     }
-
-    await fetchFloors(siteId || undefined, undefined);
   };
 
-  const handleBuildingChange = async (buildingId: string) => {
+  const handleBuildingChange = (buildingId: string) => {
     setSelectedBuilding(buildingId);
-
-    await fetchFloors(selectedSite || undefined, buildingId || undefined);
   };
 
   const refreshFloors = async () => {
-    await fetchFloors(selectedSite || undefined, selectedBuilding || undefined);
+    await fetchFloors();
     await fetchDashboardSummary();
   };
 
@@ -130,7 +129,7 @@ export const useFloors = () => {
         await fetchBuildings(site_id);
       }
 
-      await fetchFloors(site_id || undefined, building_id || undefined);
+      await fetchFloors();
 
       sessionStorage.removeItem("floorSelection");
     } catch (error) {
