@@ -58,6 +58,9 @@ _DEFAULT_LAYOUT_SCHEDULING_BUFFER_DAYS = 15
 # Mirrors the RECENT_BOOKINGS_LIMIT the admin dashboard hardcoded before
 # this rule existed.
 _DEFAULT_ACTIVITY_RECORD_COUNT = 20
+# Upper bound for the rule: GET /admin/activities never returns more than
+# 100 rows, so a larger count could never be filled.
+MAX_ACTIVITY_RECORD_COUNT = 100
 _DEFAULT_LAYOUT_VISIBILITY_DAYS: dict[str, int] = {
     "DRAFT": 15,
     "ARCHIVED": 30,
@@ -168,12 +171,15 @@ def update_activity_record_count(
 ) -> None:
     """Update how many rows the admin dashboard's Recent Activities table
     shows."""
-    if new_value <= 0:
+    if new_value <= 0 or new_value > MAX_ACTIVITY_RECORD_COUNT:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "invalid_business_rule_value",
-                "message": "Value should be greater than 0.",
+                "message": (
+                    "Value should be greater than 0 and less than or equal "
+                    f"to {MAX_ACTIVITY_RECORD_COUNT}."
+                ),
             },
         )
 

@@ -59,11 +59,15 @@ export default function RoleManagementPage() {
         </div>
 
         <div className="w-full overflow-x-auto">
-          {loading ? (
-            <div className="p-6 text-sm text-gray-500">Loading...</div>
-          ) : (
-            <RolesTable roles={roles} onViewRole={setSelectedRole} activeRoleKey={null} />
-          )}
+          {/* Always render the table so the column header stays visible
+              while loading and when a search matches nothing. */}
+          <RolesTable
+            roles={roles}
+            onViewRole={setSelectedRole}
+            activeRoleKey={null}
+            loading={loading}
+            emptyMessage={search.trim() ? `No roles match "${search.trim()}".` : "No roles found."}
+          />
         </div>
 
         <div className="px-4 sm:px-6 py-3 border-t shrink-0 text-xs sm:text-sm text-gray-500">
