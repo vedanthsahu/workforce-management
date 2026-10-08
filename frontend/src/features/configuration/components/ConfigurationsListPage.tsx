@@ -241,6 +241,11 @@ export default function ConfigurationsListPage() {
                 "expiredWindowDays",
                 blockedSeat.expired_window_days,
               );
+              fields = withFieldValue(
+                fields,
+                "maxAdvanceDays",
+                blockedSeat.max_advance_days,
+              );
               return { ...c, fields };
             }
             return c;
@@ -456,10 +461,14 @@ export default function ConfigurationsListPage() {
             const expiredWindowDays = fieldsWithDraft.find(
               (f) => f.key === "expiredWindowDays",
             )?.value;
+            const maxAdvanceDays = fieldsWithDraft.find(
+              (f) => f.key === "maxAdvanceDays",
+            )?.value;
             const result = await updateBlockedSeatPolicy({
               upcoming_days: upcomingDays,
               expiring_soon_days: expiringSoonDays,
               expired_window_days: expiredWindowDays,
+              max_advance_days: maxAdvanceDays,
             });
             resolvedFields = withFieldValue(
               fieldsWithDraft,
@@ -475,6 +484,11 @@ export default function ConfigurationsListPage() {
               resolvedFields,
               "expiredWindowDays",
               result.expired_window_days,
+            );
+            resolvedFields = withFieldValue(
+              resolvedFields,
+              "maxAdvanceDays",
+              result.max_advance_days,
             );
           }
         }

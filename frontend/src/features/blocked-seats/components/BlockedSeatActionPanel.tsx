@@ -13,7 +13,8 @@ import type {
 } from "../types/blockedSeats.types";
 import { BLOCK_TYPE_OPTIONS, MODIFY_REASON_OPTIONS, STATUS_LABELS, STATUS_STYLES, TYPE_LABELS, UNBLOCK_REASON_OPTIONS } from "../utils/constants";
 import type { BlockedSeatAction } from "./BlockedSeatActionMenu";
-import { maxBlockDate } from "../utils/blockDates";
+import { daysLabel } from "../utils/blockDates";
+import { useBlockWindow } from "../hooks/useBlockWindow";
 
 interface Props {
   action: BlockedSeatAction;
@@ -71,6 +72,7 @@ export default function BlockedSeatActionPanel({
   onChanged,
 }: Props) {
   const reblock = action === "reblock";
+  const { days: windowDays, latestBlockDate } = useBlockWindow();
   const editing = action === "modify" || reblock;
   const [blockType, setBlockType] = useState<BlockType>(row.block_type);
   const [from, setFrom] = useState(reblock ? today() : row.blocked_from);
@@ -115,9 +117,9 @@ export default function BlockedSeatActionPanel({
     }
     // The date inputs' min/max can be bypassed by typing a date, so enforce the
     // same window here: no past dates (an unchanged existing date is kept) and
-    // nothing beyond six months from today.
+    // nothing beyond the configured window from today.
     const earliest = today();
-    const latest = maxBlockDate();
+    const latest = latestBlockDate;
     const startChanged = reblock || from !== row.blocked_from;
     const endChanged = reblock || to !== row.blocked_to;
     if ((startChanged && from < earliest) || (endChanged && to < earliest)) {
@@ -125,7 +127,7 @@ export default function BlockedSeatActionPanel({
       return;
     }
     if (from > latest || to > latest) {
-      setError("Block dates can only be set up to six months from today.");
+      setError(`Block dates can only be set up to ${daysLabel(windowDays)} from today.`);
       return;
     }
     setSaving(true);
@@ -253,7 +255,7 @@ export default function BlockedSeatActionPanel({
                   type="date"
                   value={from}
                   min={today()}
-                  max={maxBlockDate()}
+                  max={latestBlockDate}
                   onChange={(event) => {
                     const selectedDate = event.target.value;
                     setFrom(selectedDate);
@@ -264,7 +266,7 @@ export default function BlockedSeatActionPanel({
               </label>
               <label className="text-sm font-medium text-gray-700">
                 Block To
-                <input type="date" value={to} min={from > today() ? from : today()} max={maxBlockDate()} onChange={(event) => setTo(event.target.value)} className={fieldClass} />
+                <input type="date" value={to} min={from > today() ? from : today()} max={latestBlockDate} onChange={(event) => setTo(event.target.value)} className={fieldClass} />
               </label>
               {!reblock && (
                 <label className="text-sm font-medium text-gray-700 sm:col-span-2">
