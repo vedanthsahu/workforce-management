@@ -166,7 +166,7 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
   {
     id: "blocked-seat-policy",
     name: "Blocked Seat Policy",
-    description: "Configure the Upcoming/Expiring Soon thresholds and how many previous days of expired records the UI should keep visible.",
+    description: "Configure the Upcoming/Expiring Soon thresholds, how many previous days of expired records the UI should keep visible, and how far ahead a seat can be blocked.",
     icon: Ban,
     iconBg: "bg-rose-100",
     iconColor: "text-rose-600",
@@ -177,11 +177,12 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
       field("upcomingDays", "Upcoming Threshold", "Upcoming", 1, "days", "A block is flagged Upcoming if it starts within this many days from today."),
       field("expiringSoonDays", "Expiring Soon Threshold", "Expiring Soon", 3, "days", "A block is flagged Expiring Soon if it ends within this many days from today."),
       field("expiredWindowDays", "Expired Record Window", "Expired Window", 10, "days", "The Expired tab only shows records from the previous N days, ending on today."),
+      field("maxAdvanceDays", "Maximum Block Window", "Block Window", 180, "days", "How many days ahead a seat can be blocked, when creating, modifying or re-blocking a block (1 to 730)."),
     ],
     lastUpdatedAt: "2026-05-02T10:30:00Z",
     lastUpdatedBy: "Admin User",
     describeRule: (fields) =>
-      `Blocks are flagged Upcoming within ${getField(fields, "upcomingDays")} day(s), Expiring Soon within ${getField(fields, "expiringSoonDays")} day(s), and the Expired tab keeps only the previous ${getField(fields, "expiredWindowDays")} day(s) of records.`,
+      `Blocks are flagged Upcoming within ${getField(fields, "upcomingDays")} day(s), Expiring Soon within ${getField(fields, "expiringSoonDays")} day(s), and the Expired tab keeps only the previous ${getField(fields, "expiredWindowDays")} day(s) of records. Blocks can be set up to ${getField(fields, "maxAdvanceDays")} day(s) ahead.`,
   },
 ];
 

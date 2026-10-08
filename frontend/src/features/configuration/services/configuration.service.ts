@@ -74,6 +74,8 @@ export interface BlockedSeatPolicy {
   // Expired blocks shown in the Expired tab are restricted to the previous
   // N days from today.
   expired_window_days: number;
+  // How many days ahead a block can be created, modified or re-blocked.
+  max_advance_days: number;
 }
 
 export async function fetchBlockedSeatPolicy(): Promise<BlockedSeatPolicy> {

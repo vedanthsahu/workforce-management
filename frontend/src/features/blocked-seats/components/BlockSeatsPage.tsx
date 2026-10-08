@@ -28,7 +28,8 @@ import type {
   SeatOption,
 } from "../types/blockedSeats.types";
 import { BLOCK_TYPE_OPTIONS } from "../utils/constants";
-import { maxBlockDate } from "../utils/blockDates";
+import { daysLabel } from "../utils/blockDates";
+import { useBlockWindow } from "../hooks/useBlockWindow";
 import BlockableFloorMap from "./BlockableFloorMap";
 
 const today = () => new Date().toLocaleDateString("en-CA");
@@ -202,8 +203,8 @@ export default function BlockSeatsPage() {
   }, [checkingLayoutDates, floorId, from, layoutSchedule]);
   const pastDate = from < today();
   const invalid = to < from;
-  // Blocks can only be set up to six months ahead.
-  const latestBlockDate = maxBlockDate();
+  // Blocks can only be set up to the configured number of days ahead.
+  const { days: windowDays, latestBlockDate } = useBlockWindow();
   const beyondWindow = from > latestBlockDate || to > latestBlockDate;
   const conflicts = useMemo(
     () =>
@@ -618,7 +619,7 @@ export default function BlockSeatsPage() {
           )}
           {beyondWindow && (
             <p className="text-xs text-red-600">
-              Block dates can only be set up to six months from today.
+              Block dates can only be set up to {daysLabel(windowDays)} from today.
             </p>
           )}
           {!checkingLayoutDates && layoutSchedule.length > 0 && (
