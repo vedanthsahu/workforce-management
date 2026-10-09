@@ -24,6 +24,7 @@ import {
 import { useSeatsStore } from "@/store/seatStore";
 import {
   categoryOf,
+  CATEGORY_TO_APPLICABLE_SEAT_TYPE,
   SpaceCategory,
 } from "../utils/spaceCategory";
 
@@ -172,7 +173,7 @@ export function useManageSeats() {
     const query = debouncedSearch.trim().toLowerCase();
     return categorySeats.filter((s) => {
       if (query && !s.seat_code.toLowerCase().includes(query))                                                    return false;
-      if (filters.seat_type !== "All" && (s.seat_type ?? "").toUpperCase() !== filters.seat_type.toUpperCase()) return false;
+      if (filters.seat_type !== "All" && CATEGORY_TO_APPLICABLE_SEAT_TYPE[categoryOf(s.seat_type)] !== filters.seat_type.toUpperCase()) return false;
       if (filters.status    !== "All" && (s.status    ?? "").toUpperCase() !== filters.status.toUpperCase())    return false;
       // Inactive spaces are always non-bookable by rule, so the "No" option
       // is scoped to active spaces only — otherwise it would also surface

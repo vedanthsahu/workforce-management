@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -27,6 +28,8 @@ import type {
   SeatOption,
 } from "../types/blockedSeats.types";
 import { BLOCK_TYPE_OPTIONS } from "../utils/constants";
+import { daysLabel } from "../utils/blockDates";
+import { useBlockWindow } from "../hooks/useBlockWindow";
 import BlockableFloorMap from "./BlockableFloorMap";
 
 const today = () => new Date().toLocaleDateString("en-CA");
@@ -200,6 +203,9 @@ export default function BlockSeatsPage() {
   }, [checkingLayoutDates, floorId, from, layoutSchedule]);
   const pastDate = from < today();
   const invalid = to < from;
+  // Blocks can only be set up to the configured number of days ahead.
+  const { days: windowDays, latestBlockDate } = useBlockWindow();
+  const beyondWindow = from > latestBlockDate || to > latestBlockDate;
   const conflicts = useMemo(
     () =>
       bookings.filter(
@@ -355,7 +361,7 @@ export default function BlockSeatsPage() {
       setError("Booking details are incomplete. Reload the seats and try again.");
       return;
     }
-    if (!confirm(`Cancel booking for ${b.seat_code} on ${b.booking_date}?`))
+    if (!confirm(`Cancel booking for ${displaySpaceCode(b.seat_code)} on ${b.booking_date}?`))
       return;
     try {
       const action =
@@ -544,6 +550,7 @@ export default function BlockSeatsPage() {
                 type="date"
                 value={from}
                 min={today()}
+                max={latestBlockDate}
                 onChange={(e) => {
                   const selectedDate = e.target.value;
                   setFrom(selectedDate);
@@ -561,7 +568,11 @@ export default function BlockSeatsPage() {
                 type="date"
                 value={to}
                 min={from}
-                max={layoutEndDate || undefined}
+                max={
+                  layoutEndDate && layoutEndDate < latestBlockDate
+                    ? layoutEndDate
+                    : latestBlockDate
+                }
                 disabled={checkingLayoutDates || Boolean(layoutDateError)}
                 onChange={(e) => {
                   setTo(e.target.value);
@@ -576,6 +587,7 @@ export default function BlockSeatsPage() {
                 !floorId ||
                 pastDate ||
                 invalid ||
+                beyondWindow ||
                 loading ||
                 checkingLayoutDates ||
                 Boolean(layoutDateError)
@@ -603,6 +615,11 @@ export default function BlockSeatsPage() {
           {pastDate && (
             <p className="text-xs text-red-600">
               Block From cannot be a past date.
+            </p>
+          )}
+          {beyondWindow && (
+            <p className="text-xs text-red-600">
+              Block dates can only be set up to {daysLabel(windowDays)} from today.
             </p>
           )}
           {!checkingLayoutDates && layoutSchedule.length > 0 && (
@@ -706,7 +723,7 @@ export default function BlockSeatsPage() {
                             className="grid grid-cols-[minmax(0,1fr)_auto_30px] items-center gap-1.5 px-2.5 py-3 text-[10px]"
                           >
                             <span className="truncate font-semibold text-foreground">
-                              {s.seat_code}
+                              {displaySpaceCode(s.seat_code)}
                               <small className="block truncate font-normal text-muted-foreground">
                                 {(s.resource_type ?? "STANDARD").replaceAll("_", " ")}
                                 {s.capacity ? ` · Capacity ${s.capacity}` : ""}
@@ -756,7 +773,7 @@ export default function BlockSeatsPage() {
                   return (
                     <article key={`mobile-missing-${row.seat.seat_id}`} className="space-y-3 bg-amber-50/50 p-4 text-xs">
                       <div className="flex items-start justify-between gap-3">
-                        <p className="font-semibold text-gray-900">{row.seat.seat_code}</p>
+                        <p className="font-semibold text-gray-900">{displaySpaceCode(row.seat.seat_code)}</p>
                         <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-medium text-amber-700">
                           Resolution required
                         </span>
@@ -792,7 +809,7 @@ export default function BlockSeatsPage() {
                   <article key={`mobile-${booking.booking_id}`} className="space-y-3 p-4 text-xs">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="font-semibold text-gray-900">{booking.seat_code}</p>
+                        <p className="font-semibold text-gray-900">{displaySpaceCode(booking.seat_code)}</p>
                         <p className="mt-1 break-words text-gray-600 [overflow-wrap:anywhere]">
                           {booking.booked_for_name}
                         </p>
@@ -813,7 +830,7 @@ export default function BlockSeatsPage() {
                             className="rounded-lg border border-border px-3 py-2 font-medium text-primary hover:bg-primary/10"
                             onClick={() => void move(booking, seat)}
                           >
-                            Move to {seat.seat_code}
+                            Move to {displaySpaceCode(seat.seat_code)}
                           </button>
                         ))}
                       </div>
@@ -856,7 +873,7 @@ export default function BlockSeatsPage() {
                     const seat = row.seat;
                     return (
                       <tr key={`missing-${seat.seat_id}`} className="border-t bg-amber-50/50">
-                        <td className="break-words p-3 align-top font-semibold [overflow-wrap:anywhere]">{seat.seat_code}</td>
+                        <td className="break-words p-3 align-top font-semibold [overflow-wrap:anywhere]">{displaySpaceCode(seat.seat_code)}</td>
                         <td className="break-words p-3 align-top text-muted-foreground [overflow-wrap:anywhere]">
                           {loadingConflictSeatIds.includes(seat.seat_id)
                             ? "Loading booking details…"
@@ -878,7 +895,7 @@ export default function BlockSeatsPage() {
                   );
                   return (
                     <tr key={booking.booking_id} className="border-t">
-                      <td className="break-words p-3 align-top font-semibold [overflow-wrap:anywhere]">{booking.seat_code}</td>
+                      <td className="break-words p-3 align-top font-semibold [overflow-wrap:anywhere]">{displaySpaceCode(booking.seat_code)}</td>
                       <td className="break-words p-3 align-top [overflow-wrap:anywhere]">{booking.booked_for_name}</td>
                       <td className="break-words p-3 align-top [overflow-wrap:anywhere]">{booking.booking_date}</td>
                       <td className="break-words p-3 align-top [overflow-wrap:anywhere]">
@@ -898,7 +915,7 @@ export default function BlockSeatsPage() {
                               className="mr-2 rounded-md border border-border px-2 py-1 text-primary hover:bg-primary/10"
                               onClick={() => void move(booking, seat)}
                             >
-                              Move to {seat.seat_code}
+                              Move to {displaySpaceCode(seat.seat_code)}
                             </button>
                           ))
                         ) : (

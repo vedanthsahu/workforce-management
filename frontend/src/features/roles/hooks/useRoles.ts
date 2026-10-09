@@ -7,7 +7,9 @@ import { searchMatchRank } from "@/lib/searchRank";
 export const useRoles = () => {
   const [roles, setRoles] = useState<Role[]>([]);
 
-  const [loading, setLoading] = useState(false);
+  // Start true so the table shows skeleton rows (not "No roles found.")
+  // before the first fetch kicks off.
+  const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
 

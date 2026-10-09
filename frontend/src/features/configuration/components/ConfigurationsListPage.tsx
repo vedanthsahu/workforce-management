@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Info, X } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ConfigurationSkeleton } from "./ConfigurationSkeleton";
@@ -59,6 +59,16 @@ type ChangedRow = {
 };
 
 const POSITIVE_VALUE_ERROR = "Value should be greater than 0.";
+
+// Per-field upper bounds, keyed by draftKey(itemId, fieldKey). Fields not
+// listed here only need to be > 0. The activity record count is capped at
+// 100 because the admin activities API never returns more than 100 rows.
+const FIELD_MAX_VALUES: Record<string, number> = {
+  "activity-table-record-count:records": 100,
+};
+
+const rangeError = (max: number) =>
+  `Value should be greater than 0 and less than or equal to ${max}.`;
 
 /** One editable setting row: label + helper text on the left, a compact
  * number input + unit on the right. Layout Visibility's fields use their
@@ -136,6 +146,13 @@ export default function ConfigurationsListPage() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // The page scrolls, so an error banner at the top can be off-screen when
+  // the user saved from further down -- bring it into view when it appears.
+  const errorBannerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (errorMessage) errorBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [errorMessage]);
   const [loading, setLoading] = useState(true);
 
   // Replace the hardcoded mock values for backend-backed items with the
@@ -224,6 +241,11 @@ export default function ConfigurationsListPage() {
                 "expiredWindowDays",
                 blockedSeat.expired_window_days,
               );
+              fields = withFieldValue(
+                fields,
+                "maxAdvanceDays",
+                blockedSeat.max_advance_days,
+              );
               return { ...c, fields };
             }
             return c;
@@ -267,22 +289,26 @@ export default function ConfigurationsListPage() {
   }, [configurations, draft]);
 
   const hasChanges = changedRows.length > 0;
-  const invalidFieldKeys = useMemo(() => {
-    const keys = new Set<string>();
+  // draftKey -> error message for every field whose current value is invalid.
+  const fieldErrors = useMemo(() => {
+    const errors = new Map<string, string>();
     for (const item of configurations) {
       for (const field of item.fields) {
         if (field.readOnly) continue;
         const key = draftKey(item.id, field.key);
         const rawValue = key in draft ? draft[key] : String(field.value);
         const value = Number(rawValue);
-        if (rawValue.trim() === "" || !Number.isFinite(value) || value <= 0) {
-          keys.add(key);
+        const max = FIELD_MAX_VALUES[key];
+        const tooLow = rawValue.trim() === "" || !Number.isFinite(value) || value <= 0;
+        const tooHigh = max !== undefined && value > max;
+        if (tooLow || tooHigh) {
+          errors.set(key, max !== undefined ? rangeError(max) : POSITIVE_VALUE_ERROR);
         }
       }
     }
-    return keys;
+    return errors;
   }, [configurations, draft]);
-  const hasInvalidValues = invalidFieldKeys.size > 0;
+  const hasInvalidValues = fieldErrors.size > 0;
 
   const handleFieldChange = (itemId: string, fieldKey: string, raw: string) => {
     const normalized = raw.replace(/^0+(?=\d)/, "");
@@ -300,7 +326,7 @@ export default function ConfigurationsListPage() {
   // previous per-item modal's behavior now folded into one multi-item save.
   const confirmApply = async () => {
     if (hasInvalidValues) {
-      setErrorMessage(POSITIVE_VALUE_ERROR);
+      setErrorMessage(fieldErrors.values().next().value ?? POSITIVE_VALUE_ERROR);
       setShowConfirm(false);
       return;
     }
@@ -435,10 +461,14 @@ export default function ConfigurationsListPage() {
             const expiredWindowDays = fieldsWithDraft.find(
               (f) => f.key === "expiredWindowDays",
             )?.value;
+            const maxAdvanceDays = fieldsWithDraft.find(
+              (f) => f.key === "maxAdvanceDays",
+            )?.value;
             const result = await updateBlockedSeatPolicy({
               upcoming_days: upcomingDays,
               expiring_soon_days: expiringSoonDays,
               expired_window_days: expiredWindowDays,
+              max_advance_days: maxAdvanceDays,
             });
             resolvedFields = withFieldValue(
               fieldsWithDraft,
@@ -454,6 +484,11 @@ export default function ConfigurationsListPage() {
               resolvedFields,
               "expiredWindowDays",
               result.expired_window_days,
+            );
+            resolvedFields = withFieldValue(
+              resolvedFields,
+              "maxAdvanceDays",
+              result.max_advance_days,
             );
           }
         }
@@ -476,6 +511,9 @@ export default function ConfigurationsListPage() {
       setSavedMessage("Configuration updated successfully.");
       setTimeout(() => setSavedMessage(null), 4000);
     } catch {
+      // Close the confirm dialog in the same update as raising the error so
+      // the banner isn't hidden behind the modal.
+      setShowConfirm(false);
       setErrorMessage(
         "Failed to save one or more configuration changes. Please try again.",
       );
@@ -509,7 +547,11 @@ export default function ConfigurationsListPage() {
         )}
 
         {errorMessage && (
-          <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-sm font-medium text-red-700">
+          <div
+            ref={errorBannerRef}
+            role="alert"
+            className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-sm font-medium text-red-700"
+          >
             <div className="flex items-center gap-2">
               <Info size={16} />
               {errorMessage}
@@ -580,11 +622,7 @@ export default function ConfigurationsListPage() {
                           description={description}
                           value={value}
                           unit={f.unit}
-                          error={
-                            invalidFieldKeys.has(key)
-                              ? POSITIVE_VALUE_ERROR
-                              : undefined
-                          }
+                          error={fieldErrors.get(key)}
                           readOnly={f.readOnly}
                           onChange={(raw) =>
                             handleFieldChange(item.id, f.key, raw)

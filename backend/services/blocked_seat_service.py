@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import psycopg2
@@ -47,7 +47,10 @@ from backend.schemas.blocked_seat import (
     UpdateBlockedSeatRequest,
 )
 from backend.schemas.pagination import PaginationMetadata
-from backend.services.business_rule_service import resolve_blocked_seat_days
+from backend.services.business_rule_service import (
+    resolve_blocked_seat_days,
+    resolve_blocked_seat_max_advance_days,
+)
 
 BLOCK_TYPE_REASONS = {
     "Operational block": "Operational block",
@@ -55,6 +58,29 @@ BLOCK_TYPE_REASONS = {
     "Exclusive": "Exclusive",
 }
 ADMIN_SEAT_ACCESS_ROLES = {"PRODUCT_ADMIN", "TENANT_ADMIN"}
+
+
+def _ensure_within_block_window(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    dates: list[date],
+) -> None:
+    """Reject a block date later than today plus the tenant's configured
+    maximum advance window (Configuration -> Blocked Seat Policy)."""
+    days = resolve_blocked_seat_max_advance_days(conn, tenant_id=tenant_id)
+    latest = date.today() + timedelta(days=days)
+    if any(value > latest for value in dates):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "block_window_exceeded",
+                "message": (
+                    f"Block dates can only be set up to {days} "
+                    f"day{'s' if days != 1 else ''} from today."
+                ),
+            },
+        )
 
 
 def _can_use_non_bookable_seat(current_user: dict[str, Any]) -> bool:
@@ -249,6 +275,7 @@ def get_blockable_floor_layout(
                 "message": "Block To must be on or after Block From.",
             },
         )
+    _ensure_within_block_window(conn, tenant_id=tenant_id, dates=[blocked_from, blocked_to])
     try:
         layout = fetch_blockable_floor_layout(
             conn,
@@ -316,6 +343,11 @@ def create_blocked_seats(
                 "message": "Seats cannot be blocked for a past date.",
             },
         )
+    _ensure_within_block_window(
+        conn,
+        tenant_id=tenant_id,
+        dates=[payload.blocked_from, payload.blocked_to],
+    )
     seat_ids = payload.seat_ids
     resource_id = ",".join(str(value) for value in seat_ids)
     try:
@@ -578,6 +610,23 @@ def update_seat_block(
                 "message": "Block To must be on or after Block From.",
             },
         )
+    # Only dates the admin is actually changing are checked: a block that
+    # already started in the past, or already ends beyond a since-shortened
+    # window, can still be edited without touching those dates.
+    changed_dates = []
+    if blocked_from != existing.blocked_from:
+        changed_dates.append(blocked_from)
+    if blocked_to != existing.blocked_to:
+        changed_dates.append(blocked_to)
+    if any(value < date.today() for value in changed_dates):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "past_block_date",
+                "message": "Seats cannot be blocked for a past date.",
+            },
+        )
+    _ensure_within_block_window(conn, tenant_id=tenant_id, dates=changed_dates)
 
     old_values = {
         "block_type": existing.block_type,

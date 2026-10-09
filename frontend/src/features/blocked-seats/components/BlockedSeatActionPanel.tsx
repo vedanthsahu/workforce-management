@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useEffect, useState } from "react";
 import { Ban, Loader2, X } from "lucide-react";
 import { blockedSeatsService } from "../services/blockedSeatsService";
@@ -12,6 +13,8 @@ import type {
 } from "../types/blockedSeats.types";
 import { BLOCK_TYPE_OPTIONS, MODIFY_REASON_OPTIONS, STATUS_LABELS, STATUS_STYLES, TYPE_LABELS, UNBLOCK_REASON_OPTIONS } from "../utils/constants";
 import type { BlockedSeatAction } from "./BlockedSeatActionMenu";
+import { daysLabel } from "../utils/blockDates";
+import { useBlockWindow } from "../hooks/useBlockWindow";
 
 interface Props {
   action: BlockedSeatAction;
@@ -69,6 +72,7 @@ export default function BlockedSeatActionPanel({
   onChanged,
 }: Props) {
   const reblock = action === "reblock";
+  const { days: windowDays, latestBlockDate } = useBlockWindow();
   const editing = action === "modify" || reblock;
   const [blockType, setBlockType] = useState<BlockType>(row.block_type);
   const [from, setFrom] = useState(reblock ? today() : row.blocked_from);
@@ -109,6 +113,21 @@ export default function BlockedSeatActionPanel({
       setError(
         to < from ? "Enter a valid date range." : "Select a reason for modifying the block.",
       );
+      return;
+    }
+    // The date inputs' min/max can be bypassed by typing a date, so enforce the
+    // same window here: no past dates (an unchanged existing date is kept) and
+    // nothing beyond the configured window from today.
+    const earliest = today();
+    const latest = latestBlockDate;
+    const startChanged = reblock || from !== row.blocked_from;
+    const endChanged = reblock || to !== row.blocked_to;
+    if ((startChanged && from < earliest) || (endChanged && to < earliest)) {
+      setError("Block dates cannot be in the past.");
+      return;
+    }
+    if (from > latest || to > latest) {
+      setError(`Block dates can only be set up to ${daysLabel(windowDays)} from today.`);
       return;
     }
     setSaving(true);
@@ -166,7 +185,7 @@ export default function BlockedSeatActionPanel({
           </header>
           <div className="space-y-4 p-5">
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-              Are you sure you want to unblock <strong>{row.seat_code}</strong>? This seat will become available for booking.
+              Are you sure you want to unblock <strong>{displaySpaceCode(row.seat_code)}</strong>? This seat will become available for booking.
             </div>
             <label className="block text-sm font-medium text-gray-700">
               Reason for unblocking *
@@ -204,7 +223,7 @@ export default function BlockedSeatActionPanel({
                   : "Modify Block"
                 : "Blocked Seat Audit History"}
             </h2>
-            <p className="mt-1 text-sm text-gray-500">{row.seat_code}</p>
+            <p className="mt-1 text-sm text-gray-500">{displaySpaceCode(row.seat_code)}</p>
           </div>
           <button onClick={onClose} aria-label="Close"><X size={20} /></button>
         </header>
@@ -235,7 +254,8 @@ export default function BlockedSeatActionPanel({
                 <input
                   type="date"
                   value={from}
-                  min={reblock ? today() : undefined}
+                  min={today()}
+                  max={latestBlockDate}
                   onChange={(event) => {
                     const selectedDate = event.target.value;
                     setFrom(selectedDate);
@@ -246,7 +266,7 @@ export default function BlockedSeatActionPanel({
               </label>
               <label className="text-sm font-medium text-gray-700">
                 Block To
-                <input type="date" value={to} min={from} onChange={(event) => setTo(event.target.value)} className={fieldClass} />
+                <input type="date" value={to} min={from > today() ? from : today()} max={latestBlockDate} onChange={(event) => setTo(event.target.value)} className={fieldClass} />
               </label>
               {!reblock && (
                 <label className="text-sm font-medium text-gray-700 sm:col-span-2">

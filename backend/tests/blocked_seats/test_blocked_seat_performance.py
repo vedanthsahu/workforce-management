@@ -180,6 +180,14 @@ class ConflictPermissionTests(TestCase):
 
 
 class BatchRollbackTests(TestCase):
+    def setUp(self):
+        patcher = patch(
+            "backend.services.blocked_seat_service.resolve_blocked_seat_max_advance_days",
+            return_value=180,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_batch_conflict_rolls_back_without_partial_commit(self):
         from contextlib import ExitStack
 

@@ -1,3 +1,4 @@
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { BlockedSeat } from "../types/blockedSeats.types";
 import BlockedSeatActionMenu, {
@@ -64,7 +65,7 @@ export default function BlockedSeatsTable({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-gray-900">
-                    {row.seat_code}
+                    {displaySpaceCode(row.seat_code)}
                   </p>
                   <p className="mt-1 break-words text-xs text-gray-700 [overflow-wrap:anywhere]">
                     {row.site_name}
@@ -164,7 +165,7 @@ export default function BlockedSeatsTable({
                   className="text-gray-700 hover:bg-gray-50"
                 >
                   <td className="whitespace-nowrap px-2 py-3 align-top font-medium text-gray-900 lg:px-4">
-                    {row.seat_code}
+                    {displaySpaceCode(row.seat_code)}
                   </td>
                   <td className="px-2 py-3 align-top lg:px-4">
                     <span className="block break-words [overflow-wrap:anywhere]">

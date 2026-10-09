@@ -1,4 +1,5 @@
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import type {
   AdminActivityItem,
   OccupancyHierarchyItem,
@@ -166,7 +167,7 @@ export function mapActivitiesToRecent(items: AdminActivityItem[]): RecentBooking
       name: item.bookedFor.name,
       email: item.bookedFor.email,
       office: item.site?.siteName ?? "",
-      seat: item.hasBooking ? item.seat?.seatCode ?? "—" : "Only Visit",
+      seat: item.hasBooking ? displaySpaceCode(item.seat?.seatCode) ?? "—" : "Only Visit",
       date: new Date(item.activityDate).toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
