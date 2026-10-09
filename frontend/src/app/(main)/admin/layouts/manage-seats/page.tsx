@@ -270,7 +270,7 @@ function ManageSeatsPage() {
             stats={categoryStats}
             loading={statsLoading}
             cardFilter={cardFilter}
-            onCardFilterChange={setCardFilter}
+            onCardFilterChange={(f) => { setCardFilter(f); setView("list"); }}
           />
 
           {/* FILTERS + VIEW TOGGLE — the filters (Status/Bookable/Amenities)
@@ -295,6 +295,7 @@ function ManageSeatsPage() {
                 searchPlaceholder={`Search by ${SPACE_CATEGORY_LABELS[activeCategory].singular.toLowerCase()} code…`}
                 disabled={categoryStats.configured === 0}
                 searchDisabled={view === "map" && categoryStats.configured === 0}
+                showTypeFilter={activeCategory === "ALL"}
               />
             </div>
             <div className="flex-shrink-0 ml-auto">

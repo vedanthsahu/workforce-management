@@ -26,6 +26,12 @@ GUEST_MAX_ADVANCE_DAYS_KEY = "booking.max_advance_days.guest"
 LAYOUT_SCHEDULING_BUFFER_DAYS_KEY = "floor_layouts.min_advance_days.buffer"
 ACTIVITY_RECORD_COUNT_KEY = "activity.recent_record_count"
 
+# How far ahead (in days) a seat block can be set -- applies to creating,
+# modifying and re-blocking. A separate key, not part of
+# BLOCKED_SEAT_DAYS_KEYS, because those drive the list's status tabs while
+# this one limits the dates an admin can pick.
+BLOCKED_SEAT_MAX_ADVANCE_DAYS_KEY = "blocked_seats.max_advance_days"
+
 LAYOUT_VISIBILITY_DAYS_KEYS: dict[str, str] = {
     "DRAFT": "floor_layouts.visibility_days.draft",
     "ARCHIVED": "floor_layouts.visibility_days.archived",
@@ -58,6 +64,13 @@ _DEFAULT_LAYOUT_SCHEDULING_BUFFER_DAYS = 15
 # Mirrors the RECENT_BOOKINGS_LIMIT the admin dashboard hardcoded before
 # this rule existed.
 _DEFAULT_ACTIVITY_RECORD_COUNT = 20
+# Upper bound for the rule: GET /admin/activities never returns more than
+# 100 rows, so a larger count could never be filled.
+MAX_ACTIVITY_RECORD_COUNT = 100
+# Used when the rule hasn't been seeded in the catalog yet (about six months).
+_DEFAULT_BLOCKED_SEAT_MAX_ADVANCE_DAYS = 180
+# Upper bound so a typo can't turn the window into "effectively unlimited".
+MAX_BLOCKED_SEAT_ADVANCE_DAYS = 730
 _DEFAULT_LAYOUT_VISIBILITY_DAYS: dict[str, int] = {
     "DRAFT": 15,
     "ARCHIVED": 30,
@@ -168,12 +181,15 @@ def update_activity_record_count(
 ) -> None:
     """Update how many rows the admin dashboard's Recent Activities table
     shows."""
-    if new_value <= 0:
+    if new_value <= 0 or new_value > MAX_ACTIVITY_RECORD_COUNT:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "invalid_business_rule_value",
-                "message": "Value should be greater than 0.",
+                "message": (
+                    "Value should be greater than 0 and less than or equal "
+                    f"to {MAX_ACTIVITY_RECORD_COUNT}."
+                ),
             },
         )
 
@@ -261,6 +277,46 @@ def update_blocked_seat_days(
         updated_by_user_id=updated_by_user_id,
     )
     conn.commit()
+
+
+def update_blocked_seat_max_advance_days(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    new_value: int,
+    updated_by_user_id: str,
+) -> None:
+    """Update how many days ahead a seat block can be set."""
+    if new_value <= 0 or new_value > MAX_BLOCKED_SEAT_ADVANCE_DAYS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_business_rule_value",
+                "message": (
+                    "Value should be greater than 0 and less than or equal "
+                    f"to {MAX_BLOCKED_SEAT_ADVANCE_DAYS}."
+                ),
+            },
+        )
+
+    _upsert_or_500(
+        conn,
+        tenant_id=tenant_id,
+        business_rule_key=BLOCKED_SEAT_MAX_ADVANCE_DAYS_KEY,
+        value=str(new_value),
+        updated_by_user_id=updated_by_user_id,
+    )
+    conn.commit()
+
+
+def resolve_blocked_seat_max_advance_days(conn: PGConnection, *, tenant_id: str) -> int:
+    """Return how many days ahead a seat block can be set for a tenant."""
+    return int(
+        fetch_business_rule_value(
+            conn, tenant_id=tenant_id, business_rule_key=BLOCKED_SEAT_MAX_ADVANCE_DAYS_KEY,
+            default=_DEFAULT_BLOCKED_SEAT_MAX_ADVANCE_DAYS,
+        )
+    )
 
 
 def resolve_layout_scheduling_gap(conn: PGConnection, *, tenant_id: str) -> dict[str, Any]:

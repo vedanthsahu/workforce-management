@@ -88,6 +88,8 @@ export function useBookingForm() {
     setSubmitError(null);
   }, [setFormState]);
 
+  const clearSubmitError = useCallback(() => setSubmitError(null), []);
+
   const resetWizard = useCallback(() => {
     resetFormState();
     setSubmitError(null);
@@ -129,6 +131,7 @@ export function useBookingForm() {
     formState,
     isSubmitting,
     submitError,
+    clearSubmitError,
     setBookingType,
     setSelectedEmployee,
     selectGuest,

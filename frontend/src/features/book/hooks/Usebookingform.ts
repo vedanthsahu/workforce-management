@@ -251,6 +251,14 @@ export function useBookingForm() {
   const [confirmation, setConfirmation] = useState<CreateBookingResponse | null>(null);
 
   const [myPreferencesApplied, setMyPreferencesApplied] = useState(false);
+  // Selected preferences that don't apply to the currently-selected space
+  // type. Kept aside (not discarded) so switching Seat -> Cabin -> Seat gives
+  // the user's seat preferences back instead of silently clearing them.
+  const stashedPreferencesRef = useRef<string[]>([]);
+  // True once the user has clicked a seat on the map themselves -- from then
+  // on the modify-mode pre-selection below must never override their choice
+  // (including deselecting everything).
+  const userPickedSeatRef = useRef(false);
   const [userPrefsSettled, setUserPrefsSettled] = useState(false);
   // Carries both the saved preference's ids AND names -- the synthetic-
   // placeholder-injection effects below need the ids to confirm they're
@@ -287,6 +295,8 @@ export function useBookingForm() {
     setConfirmation(null);
     setError(null);
     setMyPreferencesApplied(false);
+    stashedPreferencesRef.current = [];
+    userPickedSeatRef.current = false;
     setUserPrefsSettled(false);
     setSavedPreferenceNames({ siteId: null, siteName: null, buildingId: null, buildingName: null, floorId: null, floorName: null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -414,7 +424,14 @@ export function useBookingForm() {
           }),
           // Always apply current profile amenities; they reflect what the user
           // has set now, which is exactly what should show when modifying.
-          preferences: preferenceKeys.length > 0 ? preferenceKeys : f.preferences,
+          ...(preferenceKeys.length > 0 && (() => {
+            const fits = (key: string) => amenityAppliesTo(
+              availablePreferences.find((p) => p.key === key)?.applicable_seat_types,
+              f.spaceType as BookingSpaceType,
+            );
+            stashedPreferencesRef.current = preferenceKeys.filter((k) => !fits(k));
+            return { preferences: preferenceKeys.filter(fits) };
+          })()),
         }));
       })
       .catch(() => { })
@@ -630,7 +647,9 @@ export function useBookingForm() {
     const match = buildings.find(
       (b) => b.name.toLowerCase() === prefillBuildingName.toLowerCase(),
     );
-    if (match) setForm((f) => ({ ...f, buildingId: match.id, floorId: "", selectedSeatId: null }));
+    // selectedSeatId is deliberately kept: in modify mode it's the booking's
+    // own seat from the URL, and this only resolves names -> ids for it.
+    if (match) setForm((f) => ({ ...f, buildingId: match.id, floorId: "" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildings, prefillBuildingName]);
 
@@ -639,7 +658,7 @@ export function useBookingForm() {
     const match = floors.find(
       (f) => f.name.toLowerCase() === prefillFloorName.toLowerCase(),
     );
-    if (match) setForm((f) => ({ ...f, floorId: match.id, selectedSeatId: null }));
+    if (match) setForm((f) => ({ ...f, floorId: match.id }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [floors, prefillFloorName]);
 
@@ -678,11 +697,23 @@ export function useBookingForm() {
     setForm((f) => ({ ...f, floorId: floors[0].id, selectedSeatId: null }));
   }, [form.floorId, form.buildingId, loadingFloors, floors]);
 
+  // Modify mode: the booking's own seat (flagged "yours" by the availability
+  // call) is the selected seat until the user picks something else. Keyed on
+  // selectedSeatId too, because the step-2 URL change can sync an empty
+  // seatId back into the form after the seat was first selected.
+  useEffect(() => {
+    if (!isModifyMode || userPickedSeatRef.current || form.selectedSeatId) return;
+    const own = seats.find((s) => s.status === "yours");
+    if (own) setForm((f) => ({ ...f, selectedSeatId: own.id }));
+  }, [isModifyMode, seats, form.selectedSeatId]);
+
   useEffect(() => {
     if (!prefillSeatLabel || seats.length === 0 || form.selectedSeatId) return;
-    const match = seats.find(
-      (s) => s.label.toLowerCase() === prefillSeatLabel.toLowerCase(),
-    );
+    // In modify mode the booking's own seat comes back flagged "yours" --
+    // the most reliable match, since the label can differ from the code.
+    const match =
+      seats.find((s) => s.status === "yours") ??
+      seats.find((s) => s.label.toLowerCase() === prefillSeatLabel.toLowerCase());
     if (match) setForm((f) => ({ ...f, selectedSeatId: match.id }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seats, prefillSeatLabel]);
@@ -844,21 +875,22 @@ export function useBookingForm() {
 
   const clearAll = () => setForm((f) => ({ ...f, preferences: [] }));
 
-  // Switching space type drops any already-selected preference that no
-  // longer applies under the new type (e.g. a Cabin-only amenity like "Desk
-  // Phone" selected while Cabin was active shouldn't silently keep filtering
-  // the search after switching to Conference Room, where it's not even
-  // shown as an option anymore).
+  // Switching space type stops applying any selected preference that doesn't
+  // fit the new type (e.g. a Cabin-only amenity like "Desk Phone" shouldn't
+  // keep filtering the search on Conference Room, where it's not even shown).
+  // Those selections are stashed rather than lost, and come back when the
+  // user switches to a type they apply to again.
   const setSpaceType = (next: BookingSpaceType) => {
     setError(null);
-    setForm((f) => ({
-      ...f,
-      spaceType: next,
-      preferences: f.preferences.filter((key) => {
-        const pref = availablePreferences.find((p) => p.key === key);
-        return amenityAppliesTo(pref?.applicable_seat_types, next);
-      }),
-    }));
+    setForm((f) => {
+      // Everything the user has picked, whether currently shown or stashed
+      // from an earlier type switch.
+      const all = Array.from(new Set([...f.preferences, ...stashedPreferencesRef.current]));
+      const fits = (key: string) =>
+        amenityAppliesTo(availablePreferences.find((p) => p.key === key)?.applicable_seat_types, next);
+      stashedPreferencesRef.current = all.filter((k) => !fits(k));
+      return { ...f, spaceType: next, preferences: all.filter(fits) };
+    });
   };
 
   // ── Step 1 → Step 2 ───────────────────────────────────────────────────────
@@ -912,6 +944,7 @@ export function useBookingForm() {
   // ── Step 2: select seat ───────────────────────────────────────────────────
 
   const selectSeat = (seatId: string | null) => {
+    userPickedSeatRef.current = true;
     setError(null);
     setForm((f) => ({ ...f, selectedSeatId: seatId }));
   };
@@ -1045,6 +1078,7 @@ export function useBookingForm() {
     // it's a one-shot guard per component mount, and "Book Another Seat"
     // reuses this same mount instead of remounting.
     setMyPreferencesApplied(false);
+    stashedPreferencesRef.current = [];
     setUserPrefsSettled(false);
     setSavedPreferenceNames({ siteId: null, siteName: null, buildingId: null, buildingName: null, floorId: null, floorName: null });
     if (isModifyMode) {

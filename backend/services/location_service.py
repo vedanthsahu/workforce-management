@@ -21,6 +21,7 @@ from backend.core.audit_actions import (
     SITE_UPDATED,
 )
 from backend.core.enums import LayoutStatus
+from backend.core.seat_categorization import capacity_from_svg_element_id
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.floor_layout_repository import (
     fetch_floor_layout_by_id,
@@ -398,6 +399,16 @@ def update_layout_seat_configuration(
 
         amenity_ids = payload.amenity_ids or []
 
+        # Conference-room capacity belongs to the SVG naming convention, not
+        # the client request.  This prevents an API caller from changing the
+        # value displayed by a room id such as MR-C6-01.
+        derived_capacity = capacity_from_svg_element_id(str(mapping["svg_element_id"]))
+        effective_capacity = (
+            derived_capacity
+            if derived_capacity is not None
+            else mapping.get("capacity")
+        )
+
         updated_mapping = update_layout_seat_mapping_configuration(
                 conn,
                 tenant_id=tenant_id,
@@ -409,7 +420,7 @@ def update_layout_seat_configuration(
                 is_reserved=payload.is_reserved,
                 amenity_ids=amenity_ids,
                 updated_by=str(current_user["user_id"]),
-                capacity=payload.capacity,
+                capacity=effective_capacity,
             )
 
         # Draft isolation only holds for DRAFT/ARCHIVED layouts. A PUBLISHED
@@ -564,8 +575,12 @@ def update_layout_seat_configurations_bulk(
                     },
                 )
 
-        update_entries = [
-            {
+        update_entries = []
+        for entry in payload.seats:
+            mapping_id = str(entry.layout_seat_mapping_id)
+            mapping = mappings_by_id[mapping_id]
+            derived_capacity = capacity_from_svg_element_id(str(mapping["svg_element_id"]))
+            update_entries.append({
                 "layout_seat_mapping_id": str(entry.layout_seat_mapping_id),
                 "seat_name": _resolve_bulk_field(entry.seat_name, defaults.seat_name if defaults else None),
                 "seat_type": _resolve_bulk_field(entry.seat_type, defaults.seat_type if defaults else None),
@@ -575,10 +590,12 @@ def update_layout_seat_configurations_bulk(
                 "amenity_ids": _resolve_bulk_field(
                     entry.amenity_ids, defaults.amenity_ids if defaults else None
                 ),
-                "capacity": _resolve_bulk_field(entry.capacity, defaults.capacity if defaults else None),
+                # Like the single-seat endpoint, ignore a capacity supplied
+                # by the browser and retain legacy values only where an SVG
+                # has not yet adopted the MR-C<number>-... convention.
+                "capacity": derived_capacity if derived_capacity is not None else mapping.get("capacity"),
             }
-            for entry in payload.seats
-        ]
+            )
 
         updated_mappings_by_id = update_layout_seat_mapping_configurations_bulk(
             conn,

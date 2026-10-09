@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useEffect, useRef, useState } from "react";
 import { adminBookingsService } from "../services/adminBookings.service";
 import { mapAdminBookingRawToUiBooking } from "../utils/mapAdminBooking";
@@ -670,7 +671,7 @@ export default function BookingManagementFilters({
                           }}
                           className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-indigo-50 transition-colors text-left"
                         >
-                          <span className="text-[13px] font-medium text-gray-800">{b.seat_code}</span>
+                          <span className="text-[13px] font-medium text-gray-800">{displaySpaceCode(b.seat_code)}</span>
                           <span className="text-[11px] text-gray-400">{b.seat_type}</span>
                         </button>
                       </li>

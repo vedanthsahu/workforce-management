@@ -147,7 +147,6 @@ function MyBookingsToolbar({
     { label: "All",       value: "all"       },
     { label: "Confirmed", value: "confirmed" },
     { label: "Modified",  value: "modified"  },
-    { label: "Pending",   value: "pending"   },
   ];
 
   return (
@@ -662,9 +661,6 @@ export default function MyBookingsPage() {
             </span>
             <span className="flex items-center gap-1.5 text-[12px] text-gray-500">
               <span className="w-2 h-2 rounded-full bg-amber-500" />Modified
-            </span>
-            <span className="flex items-center gap-1.5 text-[12px] text-gray-500">
-              <span className="w-2 h-2 rounded-full bg-amber-500" />Pending
             </span>
             <span className="flex items-center gap-1.5 text-[12px] text-gray-500">
               <span className="w-2 h-2 rounded-full bg-red-500" />Cancelled

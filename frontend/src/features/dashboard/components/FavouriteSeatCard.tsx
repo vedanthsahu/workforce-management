@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useState, useEffect } from "react";
 import { Star, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -47,10 +48,11 @@ export function FavouriteSeatCard({ seat, secondFavSeat, canBookSelf }: Favourit
     );
   }
   // For "IDR-BR-F1-A-101" → take last two segments → "A101"
-  const parts = seat.label.split("-");
+  const shownLabel = displaySpaceCode(seat.label);
+  const parts = shownLabel.split("-");
   const avatarLabel = parts.length >= 2
     ? (parts[parts.length - 2] + parts[parts.length - 1]).slice(0, 4)
-    : seat.label.replace(/^seat\s*/i, "").slice(0, 4);
+    : shownLabel.replace(/^seat\s*/i, "").slice(0, 4);
 
   return (
     <>
@@ -114,7 +116,7 @@ function FavouriteSeatTile({ seat, avatarLabel, onClick }: FavouriteSeatTileProp
       {/* Text — grid col gets fixed 1fr width so both rows are guaranteed same left edge */}
       <div className="overflow-hidden">
         <div className="flex items-center gap-1.5">
-          <p className="flex-1 min-w-0 text-[12.5px] font-bold text-gray-900 truncate leading-snug">{seat.label.trim()}</p>
+          <p className="flex-1 min-w-0 text-[12.5px] font-bold text-gray-900 truncate leading-snug">{displaySpaceCode(seat.label).trim()}</p>
           <Star className="w-3 h-3 text-amber-400 fill-amber-400 shrink-0 group-hover:scale-125 transition-transform duration-200" />
         </div>
         <div className="flex items-center gap-1 mt-0.5">

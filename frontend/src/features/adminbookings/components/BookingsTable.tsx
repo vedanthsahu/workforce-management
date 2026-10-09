@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Eye, MoreVertical, Pencil, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -266,7 +267,7 @@ export default function BookingsTable({
                 <td className="pl-1 pr-3 py-3">
                   {booking.seat_code ? (
                     <>
-                      <p className="text-gray-900 font-medium">{booking.seat_code}</p>
+                      <p className="text-gray-900 font-medium">{displaySpaceCode(booking.seat_code)}</p>
                       <p className="text-[11px] text-gray-400">{booking.seat_type}</p>
                     </>
                   ) : (

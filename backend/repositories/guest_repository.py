@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from psycopg2.extensions import connection as PGConnection
@@ -101,6 +102,18 @@ def search_guests(
     limit: int = 20,
 ) -> list[dict[str, Any]]:
     search_text = " ".join(search_text.lower().split())
+
+    # Phone search ignores formatting and the country code, so "8147837541",
+    # "+91 81478 37541" and "+918147837541" all find the same guest. Only a
+    # phone-looking query (digits plus + - ( ) . spaces) is treated as a
+    # phone search; the last 10 digits are the national number, matching the
+    # duplicate-phone rule in fetch_guest_by_phone below.
+    phone_digits = (
+        re.sub(r"\D", "", search_text)
+        if re.fullmatch(r"[\d\s()+\-.]+", search_text)
+        else ""
+    ) or None
+
     search_text = search_text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     status_clause = ""
@@ -117,8 +130,25 @@ def search_guests(
               AND (
                     (' ' || regexp_replace(lower(coalesce(g.full_name, '')), '\s+', ' ', 'g'))
                         LIKE '%% ' || %s || '%%'
-                 OR coalesce(g.phone, '')
-                        LIKE %s || '%%'
+                 OR (
+                        %s::text IS NOT NULL
+                    AND (
+                            -- Typed the same way it's stored (both with, or
+                            -- both without, the country code).
+                            REGEXP_REPLACE(coalesce(g.phone, ''), '\D', '', 'g')
+                                LIKE %s::text || '%%'
+                            -- Typed without the country code, stored with it.
+                         OR RIGHT(REGEXP_REPLACE(coalesce(g.phone, ''), '\D', '', 'g'), 10)
+                                LIKE %s::text || '%%'
+                            -- Typed with a country code, stored without (or
+                            -- with a different one): compare national numbers.
+                         OR (
+                                length(%s::text) > 10
+                            AND RIGHT(REGEXP_REPLACE(coalesce(g.phone, ''), '\D', '', 'g'), 10)
+                                    = RIGHT(%s::text, 10)
+                            )
+                        )
+                    )
                  OR lower(coalesce(g.email, ''))
                         LIKE '%%' || %s || '%%'
               )
@@ -138,7 +168,11 @@ def search_guests(
 
                 # WHERE
                 search_text,
-                search_text,
+                phone_digits,
+                phone_digits,
+                phone_digits,
+                phone_digits,
+                phone_digits,
                 search_text,
 
                 # ORDER BY

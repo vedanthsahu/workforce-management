@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { X, Armchair, MapPin, Building2, Layers, CalendarDays, CalendarPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AdminBooking } from "../types/adminBooking.types";
@@ -63,7 +64,7 @@ export default function BookingDetailsPanel({
   // The parenthetical now shows who the seat was booked for ("Self" or the
   // actual booker's name) instead of the seat type, per the standalone
   // "Booked By" row being removed.
-  const seatValue = booking.seat_code ? `${booking.seat_code} ( by - ${booking.booked_by} )` : "Visit only";
+  const seatValue = booking.seat_code ? `${displaySpaceCode(booking.seat_code)} ( by - ${booking.booked_by} )` : "Visit only";
 
   return (
     <div

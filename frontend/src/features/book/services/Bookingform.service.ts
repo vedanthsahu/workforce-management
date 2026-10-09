@@ -577,6 +577,24 @@ export async function fetchQuickPickSeats(): Promise<QuickPickSeat[]> {
 // offering as a shortcut) and BookingSidebar's own click-time re-check
 // (guards against the date changing, or a race, between that filtering and
 // the actual click).
+// A seat only has availability rows for the dates its own layout covers. When
+// the floor switches to a scheduled layout inside the range, the seat reports
+// "FULLY_AVAILABLE" for just the covered days -- so FULLY_AVAILABLE alone is
+// not proof the whole range is bookable. The favourite may not even exist in
+// the scheduled layout, so every requested date must be covered.
+export function seatCoversRange(
+  availability: Pick<SeatAvailabilitySummary, "total_requested_days"> | null | undefined,
+  fromDate: string,
+  toDate: string,
+): boolean {
+  if (!availability) return false;
+  const from = Date.parse(`${fromDate}T00:00:00Z`);
+  const to = Date.parse(`${toDate}T00:00:00Z`);
+  if (Number.isNaN(from) || Number.isNaN(to) || to < from) return false;
+  const requestedDays = Math.round((to - from) / 86400000) + 1;
+  return availability.total_requested_days >= requestedDays;
+}
+
 export async function isQuickPickSeatAvailable(
   seat: QuickPickSeat,
   fromDate: string,
@@ -585,7 +603,10 @@ export async function isQuickPickSeatAvailable(
   if (!seat.floorId) return false;
   const seats = await fetchAvailability({ floorId: seat.floorId, fromDate, toDate });
   const match = seats.find((s) => String(s.seat_id) === String(seat.id));
-  return match?.availability?.status === "FULLY_AVAILABLE";
+  return (
+    match?.availability?.status === "FULLY_AVAILABLE" &&
+    seatCoversRange(match.availability, fromDate, toDate)
+  );
 }
 
 // ── Sidebar: next booking — GET /bookings/me/future ─────────────────────────

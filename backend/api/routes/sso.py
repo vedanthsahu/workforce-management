@@ -10,7 +10,7 @@ from typing import Annotated, Any
 
 import psycopg2
 from fastapi import APIRouter, Depends, Request, status
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user
@@ -36,6 +36,7 @@ from backend.core.sso import (
     fetch_graph_me,
     verify_id_token,
 )
+from backend.core.text import titlecase_name
 from backend.db.connection import get_db
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.user_repository import (
@@ -689,7 +690,12 @@ def _resolve_display_name(claims: dict[str, Any], graph_profile: dict[str, Any])
         if normalized:
             if len(normalized) > 200:
                 raise ValueError("displayName exceeds schema length.")
-            return normalized
+            # Graph/Entra directory entries are inconsistently cased
+            # ("JOHN DOE", "john doe", etc.) -- normalize to Title Case so
+            # app_users.display_name (and full_name, which falls back to
+            # this value below) read consistently regardless of how the
+            # name was entered in the directory.
+            return titlecase_name(normalized)
     return None
 
 
@@ -755,13 +761,28 @@ def _error_response(
     code: str,
     message: str,
     details: dict[str, Any] | None = None,
-) -> JSONResponse:
-    content: dict[str, Any] = {
-        "error": {
-            "code": code,
-            "message": message,
-        }
-    }
-    if details:
-        content["error"]["details"] = details
-    return JSONResponse(status_code=status_code, content=content)
+) -> RedirectResponse:
+    """Every caller of this is reached by the browser navigating here
+    directly (the OAuth/gateway callback flow, or /auth/login itself) --
+    never an XHR/fetch call from our own frontend. Returning raw JSON means
+    the user's browser renders that JSON as a page, with no way back into
+    the app. Redirecting to the login page with ?error=<code> instead lets
+    LoginForm show a real message (falling back to a generic one for any
+    code it doesn't recognize yet) and leaves the user somewhere they can
+    actually retry from.
+
+    The full message/details (which can include a raw exception string) is
+    logged server-side instead of being put in the URL -- both because a
+    query param is a bad place for that much text, and because surfacing
+    internal exception text directly to the browser was already more detail
+    than a user should see.
+    """
+    logger.warning(
+        "sso.error_response status=%s code=%s message=%s details=%s",
+        status_code, code, message, details,
+    )
+    settings = get_settings()
+    return RedirectResponse(
+        url=f"{settings.frontend_url}/login?error={code}",
+        status_code=status.HTTP_302_FOUND,
+    )

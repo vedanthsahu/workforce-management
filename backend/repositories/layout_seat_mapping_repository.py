@@ -9,7 +9,10 @@ from typing import Any
 from psycopg2.extensions import connection as PGConnection
 from psycopg2.extras import RealDictCursor
 
-from backend.core.seat_categorization import suggest_seat_type
+from backend.core.seat_categorization import (
+    capacity_from_svg_element_id,
+    suggest_seat_type,
+)
 
 
 def bulk_insert_layout_seat_mappings(
@@ -38,6 +41,7 @@ def bulk_insert_layout_seat_mappings(
             # like before -- only cabins/conference rooms get a value set at
             # upload time.
             initial_seat_type = suggest_seat_type(seat_id)
+            initial_capacity = capacity_from_svg_element_id(seat_id)
 
             cur.execute(
                 """
@@ -50,9 +54,11 @@ def bulk_insert_layout_seat_mappings(
                     svg_element_id,
                     seat_code,
                     seat_type,
+                    capacity,
                     created_by
                 )
                 VALUES (
+                    %s,
                     %s,
                     %s,
                     %s,
@@ -85,6 +91,7 @@ def bulk_insert_layout_seat_mappings(
                     seat_id,
                     seat_id,
                     initial_seat_type,
+                    initial_capacity,
                     created_by,
                 ),
             )

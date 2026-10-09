@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -399,7 +400,7 @@ const BookASeatPage: React.FC = () => {
                         instead — which is exactly what made the field
                         flash an unrelated, wrong office name before
                         settling on the real (possibly inactive) one. */}
-                    <option value="" disabled>{loadingSites ? "Loading…" : "Select office"}</option>
+                    <option value="" disabled hidden>{loadingSites ? "Loading…" : "Select office"}</option>
                     {officeOptions.map((s) => (
                       // An inactive office stays as the current value (so the
                       // field still shows its name, matching the "this
@@ -935,7 +936,7 @@ const BookASeatPage: React.FC = () => {
                   </div>
                   <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50 border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Space</span>
-                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{confirmation.seat_code ?? "—"}</span>
+                    <span className="text-[12.5px] font-semibold text-[#0f172a]">{displaySpaceCode(confirmation.seat_code) ?? "—"}</span>
                   </div>
                   <div className="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-50">
                     <span className="text-[12.5px] text-gray-500">Date</span>

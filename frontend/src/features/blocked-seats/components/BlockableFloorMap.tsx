@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import type { SeatOption } from "../types/blockedSeats.types";
@@ -184,8 +185,8 @@ const escapeSelector = (value: string) =>
 const resourceHoverLabel = (resource: SeatOption) => {
   const name = resource.resource_name?.trim();
   return name && name !== resource.seat_code
-    ? `${resource.seat_code} — ${name}`
-    : resource.seat_code;
+    ? `${displaySpaceCode(resource.seat_code)} — ${name}`
+    : displaySpaceCode(resource.seat_code);
 };
 
 export default function BlockableFloorMap({

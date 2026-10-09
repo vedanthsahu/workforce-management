@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Seat, SeatStatus, SeatType, SeatUpdatePayload } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
-import { amenityAppliesToSeatType, categoryOf, SPACE_CATEGORY_LABELS, suggestSeatType } from "../utils/spaceCategory";
+import { amenityAppliesToSeatType, categoryOf, displaySpaceCode, SPACE_CATEGORY_LABELS, suggestSeatType } from "../utils/spaceCategory";
 import { SEAT_STATUSES } from "../utils/seatOptions.utils";
 import AmenityChecklist from "./AmenityChecklist";
 
@@ -48,7 +48,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
     setBookable(initialStatus === "INACTIVE" ? false : seat.is_configured ? seat.is_bookable : null);
     setAmenityIds([...seat.amenity_ids]);
     setNotes(seat.notes ?? "");
-    setCapacity(seat.capacity ?? null);
+    setCapacity(seat.capacity ?? (((seat.seat_type as SeatType) ?? suggestSeatType(seat.seat_svg_id)) === "CONFERENCE_ROOM" ? 1 : null));
     setSaved(false);
     setSaveError(false);
   }, [seat]);
@@ -81,7 +81,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
         status,
         amenity_ids: amenityIds,
         notes: notes || undefined,
-        capacity: isConferenceRoom ? capacity : null,
+        // Capacity is derived by the backend from the SVG id (e.g. MR-C6-01).
       });
       setSaved(true);
     } catch {
@@ -101,7 +101,7 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">
             Edit {categoryOf(seat.seat_type) === "SEATS" ? "Seat" : categoryOf(seat.seat_type) === "CABINS" ? "Cabin" : "Conference Room"}
           </p>
-          <h3 className="text-base font-bold text-indigo-600">{seat.seat_code}</h3>
+          <h3 className="text-base font-bold text-indigo-600">{displaySpaceCode(seat.seat_code, seatType)}</h3>
         </div>
         <button
           onClick={onClose}
@@ -133,24 +133,16 @@ export default function EditSeatPanel({ seat, preferences, onSave, onClose }: Pr
             {isConferenceRoom && (
               <div>
                 <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1 block">
-                  Capacity <span className="text-red-500">*</span>
+                  Capacity
                 </label>
                 <input
                   type="number"
-                  min={1}
-                  max={1000}
                   value={capacity ?? ""}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setCapacity(v === "" ? null : Number(v));
-                    setSaved(false);
-                  }}
-                  placeholder="e.g. 12"
-                  className={`w-full h-9 px-3 text-xs font-medium text-gray-700 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-colors ${
-                    capacityInvalid ? "border-red-300 focus:border-red-400" : "border-gray-200 focus:border-indigo-400"
-                  }`}
+                  readOnly
+                  aria-readonly="true"
+                  className="w-full h-9 px-3 text-xs font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-lg cursor-not-allowed"
                 />
-                <p className="text-[10.5px] text-gray-400 mt-1">Number of people this room seats.</p>
+                <p className="text-[10.5px] text-gray-400 mt-1">Read from the room SVG ID (for example, MR-C6-01).</p>
                 {capacityInvalid && (
                   <p className="text-[10.5px] text-red-500 mt-1">Capacity is required for a conference room.</p>
                 )}

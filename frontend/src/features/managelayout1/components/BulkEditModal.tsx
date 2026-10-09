@@ -201,21 +201,6 @@ export default function BulkEditModal({
     onAmenityToggle: (id: string) => void,
   ) => (
     <>
-      {showCapacity && (
-        <div>
-          <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Capacity</label>
-          <input
-            type="number"
-            min={1}
-            max={1000}
-            value={fields.capacity}
-            onChange={(e) => onCapacityChange(e.target.value)}
-            placeholder="e.g. 12"
-            className={selectClass}
-          />
-        </div>
-      )}
-
       <div>
         <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">Status <span className="text-red-500">*</span></label>
         <select

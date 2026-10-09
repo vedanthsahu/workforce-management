@@ -67,9 +67,12 @@ class BlockedSeatPolicyResponse(BaseModel):
     expiring_soon_days: int
     # The Expired tab only shows records from the previous N days.
     expired_window_days: int
+    # How many days ahead a block can be created, modified or re-blocked.
+    max_advance_days: int
 
 
 class UpdateBlockedSeatPolicyRequest(BaseModel):
     upcoming_days: int | None = Field(default=None, gt=0)
     expiring_soon_days: int | None = Field(default=None, gt=0)
     expired_window_days: int | None = Field(default=None, gt=0)
+    max_advance_days: int | None = Field(default=None, gt=0, le=730)
