@@ -69,10 +69,38 @@ jobs:
     - name: SAM Build
       run: sam build --use-container
 
+    - name: Stage migration files to S3
+      run: aws s3 sync backend/db/migrations/ s3://${{ secrets.S3_BUCKET_NAME }}/ci-migrations/dev/ --delete
+
+    - name: Run database migrations (dev)
+      run: |
+        COMMAND_ID=$(aws ssm send-command \
+          --instance-ids "${{ vars.MIGRATION_BASTION_INSTANCE_ID }}" \
+          --document-name "AWS-RunShellScript" \
+          --comment "backend-cd: dev migrations for ${{ github.sha }}" \
+          --parameters commands="[
+            \"aws s3 sync s3://${{ secrets.S3_BUCKET_NAME }}/ci-migrations/dev/ /opt/seatbook-migrations-dev/ --delete\",
+            \"chmod +x /opt/seatbook-migrations-dev/ci_run_migrations.sh\",
+            \"MIGRATE_TARGET=dev MIGRATOR_SECRET_ARN='${{ secrets.DEV_MIGRATOR_SECRET_ARN }}' DB_HOST_REAL='${{ secrets.RDS_ENDPOINT }}' WORKDIR=/opt/seatbook-migrations-dev /opt/seatbook-migrations-dev/ci_run_migrations.sh\"
+          ]" \
+          --query "Command.CommandId" --output text)
+
+        echo "SSM command: $COMMAND_ID"
+        aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "${{ vars.MIGRATION_BASTION_INSTANCE_ID }}" || true
+
+        STATUS=$(aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "${{ vars.MIGRATION_BASTION_INSTANCE_ID }}" --query "Status" --output text)
+        aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "${{ vars.MIGRATION_BASTION_INSTANCE_ID }}" --query "StandardOutputContent" --output text
+        aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "${{ vars.MIGRATION_BASTION_INSTANCE_ID }}" --query "StandardErrorContent" --output text
+
+        if [ "$STATUS" != "Success" ]; then
+          echo "Migration failed on bastion (status: $STATUS). Aborting before deploy."
+          exit 1
+        fi
+
     - name: SAM Deploy
       run: >
-        sam deploy 
-        --stack-name workforce-api-dev 
+        sam deploy
+        --stack-name workforce-api-dev
         --resolve-s3 
         --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND 
         --no-confirm-changeset 
@@ -158,10 +186,38 @@ jobs:
     - name: SAM Build
       run: sam build --use-container
 
+    - name: Stage migration files to S3
+      run: aws s3 sync backend/db/migrations/ s3://${{ secrets.S3_BUCKET_NAME }}/ci-migrations/uat/ --delete
+
+    - name: Run database migrations (uat)
+      run: |
+        COMMAND_ID=$(aws ssm send-command \
+          --instance-ids "${{ vars.MIGRATION_BASTION_INSTANCE_ID }}" \
+          --document-name "AWS-RunShellScript" \
+          --comment "backend-cd: uat migrations for ${{ github.sha }}" \
+          --parameters commands="[
+            \"aws s3 sync s3://${{ secrets.S3_BUCKET_NAME }}/ci-migrations/uat/ /opt/seatbook-migrations-uat/ --delete\",
+            \"chmod +x /opt/seatbook-migrations-uat/ci_run_migrations.sh\",
+            \"MIGRATE_TARGET=uat MIGRATOR_SECRET_ARN='${{ secrets.UAT_MIGRATOR_SECRET_ARN }}' DB_HOST_REAL='${{ secrets.RDS_ENDPOINT }}' WORKDIR=/opt/seatbook-migrations-uat /opt/seatbook-migrations-uat/ci_run_migrations.sh\"
+          ]" \
+          --query "Command.CommandId" --output text)
+
+        echo "SSM command: $COMMAND_ID"
+        aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "${{ vars.MIGRATION_BASTION_INSTANCE_ID }}" || true
+
+        STATUS=$(aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "${{ vars.MIGRATION_BASTION_INSTANCE_ID }}" --query "Status" --output text)
+        aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "${{ vars.MIGRATION_BASTION_INSTANCE_ID }}" --query "StandardOutputContent" --output text
+        aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "${{ vars.MIGRATION_BASTION_INSTANCE_ID }}" --query "StandardErrorContent" --output text
+
+        if [ "$STATUS" != "Success" ]; then
+          echo "Migration failed on bastion (status: $STATUS). Aborting before deploy."
+          exit 1
+        fi
+
     - name: SAM Deploy
       run: >
-        sam deploy 
-        --stack-name workforce-api-uat 
+        sam deploy
+        --stack-name workforce-api-uat
         --resolve-s3 
         --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND 
         --no-confirm-changeset 
