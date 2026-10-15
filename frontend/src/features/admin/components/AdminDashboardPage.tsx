@@ -18,7 +18,7 @@ export default function AdminDashboardPage() {
   };
   const [selectedDate, setSelectedDate] = useState(getLocalDate());
 
-  const { statsData, loading, error, trendData, selectedWeek, setSelectedWeek, topOffices, recentBookings } = useAdminDashboard(selectedDate);
+  const { statsData, loading, error, trendData, selectedPeriod, setSelectedPeriod, topOffices, recentBookings } = useAdminDashboard(selectedDate);
   return (
     <main className="flex-1 bg-gray-50 p-6 space-y-6 overflow-y-auto">
       <AdminHeader
@@ -26,7 +26,7 @@ export default function AdminDashboardPage() {
         setSelectedDate={setSelectedDate} />
       {loading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-          {Array.from({ length: 5 }).map((_, i) => (
+          {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-28 w-full rounded-xl" />
           ))}
         </div>
@@ -37,8 +37,8 @@ export default function AdminDashboardPage() {
         </div>
       )}
       {!loading && !error && <AdminStats data={statsData} selectedDate={selectedDate} />}
-      <AdminCharts data={statsData} trendData={trendData} selectedWeek={selectedWeek}
-        setSelectedWeek={setSelectedWeek} topOffices={topOffices} />
+      <AdminCharts data={statsData} trendData={trendData} selectedPeriod={selectedPeriod}
+        setSelectedPeriod={setSelectedPeriod} topOffices={topOffices} />
 
       <AdminRecentBookings bookings={recentBookings} loading={loading} />
     </main>

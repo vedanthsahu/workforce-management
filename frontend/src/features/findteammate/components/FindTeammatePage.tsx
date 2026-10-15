@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useRef, useEffect, useState } from "react";
 import {
   Search, X, MapPin, Users,
@@ -7,6 +8,8 @@ import {
 } from "lucide-react";
 import { useFindTeammate } from "../hooks/useFindTeammate";
 import { FindTeammateSkeleton } from "./FindTeammateSkeleton";
+import FindTeammatePagination from "./FindTeammatePagination";
+import { FINDTEAMMATE_PAGE_SIZE } from "../utils/constants";
 import type { ApiTeamGroup, ApiTeamMember, RawTeammateBooking, TeammateResult } from "../types/findteammate.types";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
 import { amenitiesService } from "@/features/amenities/services/amenitiesService";
@@ -155,10 +158,10 @@ function TeamGroupCard({
                 <div className="w-[116px] flex justify-end">
                   {member.seat?.seat_code ? (
                     <span className="text-[10.5px] text-gray-400 font-mono">
-                      {member.seat.seat_code}
+                      {displaySpaceCode(member.seat.seat_code)}
                     </span>
                   ) : (
-                    <span className="text-[10.5px] text-amber-500 italic">No seat booked</span>
+                    <span className="text-[10.5px] text-amber-500 italic">No space booked</span>
                   )}
                 </div>
               </div>
@@ -173,9 +176,15 @@ function TeamGroupCard({
 function TeamOverview({
   groups,
   onSelectMember,
+  page,
+  totalPages,
+  onPageChange,
 }: {
   groups: ApiTeamGroup[];
   onSelectMember: (member: ApiTeamMember, teamName: string) => void;
+  page: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
 }) {
   const totalMembers = groups.reduce((acc, g) => acc + g.total_members, 0);
   const totalInOffice = groups.reduce((acc, g) => acc + g.booked_today_count, 0);
@@ -217,8 +226,20 @@ function TeamOverview({
         <TeamGroupCard key={group.team_id} group={group} onSelectMember={onSelectMember} />
       ))}
 
+      {totalMembers > 0 && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white border border-[#EBEBF5] rounded-xl px-4 sm:px-6 py-4 text-xs sm:text-sm text-gray-500">
+          <span>
+            Showing {(page - 1) * FINDTEAMMATE_PAGE_SIZE + 1} to{" "}
+            {Math.min(page * FINDTEAMMATE_PAGE_SIZE, totalMembers)} of {totalMembers} entries
+          </span>
+          <div className="self-center sm:self-auto">
+            <FindTeammatePagination currentPage={page} totalPages={totalPages} onPageChange={onPageChange} />
+          </div>
+        </div>
+      )}
+
       <p className="text-[11px] text-gray-400 text-center pb-2">
-        Click any teammate to view their seat details
+        Click any teammate to view their space details
       </p>
     </div>
   );
@@ -240,7 +261,7 @@ function StatusCard({ inOffice, booking }: { inOffice: boolean; booking: RawTeam
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
           </p>
           <p className="text-[11.5px] text-emerald-600 mt-0.5">
-            {booking ? "Booked a seat for today" : "Checked in today"}
+            {booking ? "Booked a space for today" : "Checked in today"}
           </p>
         </>
       ) : (
@@ -275,7 +296,7 @@ function SeatDetailsGrid({ booking }: { booking: RawTeammateBooking }) {
   const cells: { label: string; value: React.ReactNode }[] = [
     { label: "Building", value: booking.building_name ?? "—" },
     { label: "Floor", value: booking.floor_name ?? "—" },
-    { label: "Seat Number", value: booking.seat_code ?? "—" },
+    { label: "Space Number", value: displaySpaceCode(booking.seat_code) ?? "—" },
     { label: "Booking Source", value: booking.source_channel ?? "—" },
     { label: "Start Time", value: formatTime(booking.start_time) },
     { label: "End Time", value: formatTime(booking.end_time) },
@@ -359,7 +380,7 @@ function ResultCard({ result, searchedAt, onBack }: { result: TeammateResult; se
             <div className="p-5">
               <p className="text-[12.5px] font-semibold text-gray-700 flex items-center gap-1.5 mb-4">
                 <MapPin className="w-3.5 h-3.5 text-indigo-400" />
-                Seat Details
+                Space Details
               </p>
               <SeatDetailsGrid booking={result.booking} />
               <p className="mt-4 text-[11px] text-gray-400 flex items-center gap-1.5">
@@ -386,6 +407,7 @@ export default function FindTeammatePage() {
     query, setQuery,
     phase, handleSearch, handleClear, selectMember,
     teamGroups, teamsLoading,
+    page, totalPages, setPage,
   } = useFindTeammate();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -407,21 +429,41 @@ export default function FindTeammatePage() {
     (phase.status === "idle" || phase.status === "not_found");
 
   const q = query.trim().toLowerCase();
+  // Split on whitespace so a multi-word query ("vedanth sahu") is checked
+  // word-by-word against the name's own words, rather than as one literal
+  // string that can never prefix-match a single name word. Every typed word
+  // must prefix some word in the name (order-independent), so "vedanth s"
+  // still matches while "sahu" is still being typed.
+  const qWords = q.split(/\s+/).filter(Boolean);
+  const matchesQuery = (m: ApiTeamMember) => {
+    const nameWords = m.full_name.toLowerCase().split(" ");
+    return (
+      qWords.every((qw) => nameWords.some((w) => w.startsWith(qw))) ||
+      m.email.toLowerCase().startsWith(q)
+    );
+  };
   const suggestions = showSuggestions
     ? teamGroups
       .flatMap((g) =>
         g.members
-          .filter((m) => {
-            const nameWords = m.full_name.toLowerCase().split(" ");
-            return (
-              nameWords.some((w) => w.startsWith(q)) ||
-              m.email.toLowerCase().startsWith(q)
-            );
-          })
+          .filter(matchesQuery)
           .map((m) => ({ member: m, teamName: g.team_name }))
       )
       .slice(0, 6)
     : [];
+
+  // True once teams have loaded and the typed query matches no known teammate —
+  // used to block firing a search for a name that can't possibly exist.
+  const noLocalMatch =
+    !teamsLoading &&
+    q.length > 0 &&
+    !teamGroups.some((g) => g.members.some(matchesQuery));
+
+  const trySearch = () => {
+    if (noLocalMatch) return;
+    setDropdownOpen(false);
+    handleSearch();
+  };
 
   return (
     <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#F7F8FC]">
@@ -446,12 +488,12 @@ export default function FindTeammatePage() {
                 onChange={(e) => { setQuery(e.target.value); setDropdownOpen(true); }}
                 onFocus={() => { if (query.trim().length >= 1) setDropdownOpen(true); }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") { setDropdownOpen(false); handleSearch(); }
+                  if (e.key === "Enter") { trySearch(); }
                   else if (e.key === "Escape") { setDropdownOpen(false); }
                 }}
                 placeholder="Search by name or email"
                 disabled={teamsLoading}
-                className="w-full pl-9 pr-8 py-2 text-[13px] border border-[#EBEBF5] rounded-lg bg-[#F7F8FC] text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 disabled:opacity-50 transition-all"
+                className="w-full pl-9 pr-8 py-2 text-[13px] border border-[#EBEBF5] rounded-lg bg-[#F7F8FC] text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-all"
               />
               {query && (
                 <button
@@ -498,8 +540,9 @@ export default function FindTeammatePage() {
               )}
             </div>
             <button
-              onClick={handleSearch}
-              disabled={!query.trim() || teamsLoading || phase.status === "searching"}
+              onClick={trySearch}
+              disabled={!query.trim() || teamsLoading || phase.status === "searching" || noLocalMatch}
+              title={noLocalMatch ? `No teammate matches "${query.trim()}"` : undefined}
               className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-[13px] font-semibold rounded-lg hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               {phase.status === "searching"
@@ -510,7 +553,11 @@ export default function FindTeammatePage() {
             </button>
           </div>
           <p className="text-[11px] text-gray-400 mt-2">
-            {teamsLoading ? "Loading team data…" : "Search by name or email — or click any teammate below"}
+            {teamsLoading
+              ? "Loading team data…"
+              : noLocalMatch
+                ? `No teammate matches "${query.trim()}"`
+                : "Search by name or email — or click any teammate below"}
           </p>
         </div>
       </div>
@@ -543,7 +590,15 @@ export default function FindTeammatePage() {
                 ← Back to teams
               </button>
             </div>
-            {!teamsLoading && <TeamOverview groups={teamGroups} onSelectMember={selectMember} />}
+            {!teamsLoading && (
+              <TeamOverview
+                groups={teamGroups}
+                onSelectMember={selectMember}
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+              />
+            )}
           </div>
         )}
 
@@ -559,7 +614,15 @@ export default function FindTeammatePage() {
         {phase.status === "idle" && (
           teamsLoading
             ? <TeamOverviewSkeleton />
-            : <TeamOverview groups={teamGroups} onSelectMember={selectMember} />
+            : (
+              <TeamOverview
+                groups={teamGroups}
+                onSelectMember={selectMember}
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+              />
+            )
         )}
       </div>
     </main>

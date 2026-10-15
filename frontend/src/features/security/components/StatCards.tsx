@@ -36,23 +36,33 @@ export function StatCards({ summary, onViewAll }: Props) {
               </div>
             </div>
 
-            <p className="text-3xl font-semibold text-gray-900 leading-none tracking-tight">
-              {values[card.key]}
-            </p>
+            {card.comingSoon ? (
+              <span className="self-start h-7.5 flex items-center">
+                <span className="text-[11px] font-medium text-gray-400 bg-gray-100 rounded-full px-2.5 py-1">
+                  Coming Soon
+                </span>
+              </span>
+            ) : (
+              <p className="text-3xl font-semibold text-gray-900 leading-none tracking-tight">
+                {values[card.key]}
+              </p>
+            )}
 
             <div className="flex items-center justify-between">
               <p className="text-[11px] text-gray-400">{card.sublabel}</p>
-              <button
-                type="button"
-                onClick={() => onViewAll?.(card.key)}
-                className={cn(
-                  "text-[11px] font-medium flex items-center gap-0.5 group transition-colors",
-                  card.viewAllColor
-                )}
-              >
-                View all
-                <ArrowRight className="w-2.5 h-2.5 transition-transform group-hover:translate-x-0.5" />
-              </button>
+              {!card.comingSoon && (
+                <button
+                  type="button"
+                  onClick={() => onViewAll?.(card.key)}
+                  className={cn(
+                    "text-[11px] font-medium flex items-center gap-0.5 group transition-colors",
+                    card.viewAllColor
+                  )}
+                >
+                  View all
+                  <ArrowRight className="w-2.5 h-2.5 transition-transform group-hover:translate-x-0.5" />
+                </button>
+              )}
             </div>
           </div>
         );

@@ -1,15 +1,23 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Eye, MoreVertical, Pencil, XCircle } from "lucide-react";
+import { displaySpaceCode } from "@/lib/spaceCode";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Eye, MoreVertical, Pencil, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
+import { todayIsoInIndia } from "@/lib/indiaDate";
 import { AdminBooking } from "../types/adminBooking.types";
 import { BOOKING_STATUS_STYLES } from "../utils/constants";
 import { getBookingRowKey } from "../utils/mapAdminBooking";
 
 type Props = {
   data: AdminBooking[];
+  /** Sorting now happens in the parent, over the whole filtered dataset
+   * (not just this page's rows) so it's correct across pagination — this
+   * component just renders `data` as given and reports clicks on the
+   * header's sort toggle. */
+  dateSort: "asc" | "desc";
+  onToggleDateSort: () => void;
   selectedRowKey?: string | null;
   onView: (booking: AdminBooking) => void;
   onModifySeat: (booking: AdminBooking) => void;
@@ -42,7 +50,7 @@ function RowMenu({
   const isGuest = booking.person_type === "Guest";
   const hasVisit = isGuest && !!booking.guest_visit_id;
   const hasBooking = !!booking.booking_id;
-  const canMutate = booking.status !== "Cancelled" && booking.activity_date > new Date().toISOString().slice(0, 10);
+  const canMutate = booking.status !== "Cancelled" && booking.activity_date > todayIsoInIndia();
   const hasBothActions = canMutate && hasVisit && hasBooking;
 
   const openMenu = () => {
@@ -201,28 +209,53 @@ function PersonCell({ booking }: { booking: AdminBooking }) {
   );
 }
 
-export default function BookingsTable({ data, selectedRowKey, onView, onModifySeat, onModifyVisit, onCancelSeat, onCancelVisit }: Props) {
-  if (data.length === 0) {
-    return <p className="px-6 py-12 text-center text-gray-400 text-sm">No bookings found.</p>;
-  }
+const BOOKING_COLUMN_COUNT = 9;
 
+export default function BookingsTable({
+  data,
+  dateSort,
+  onToggleDateSort,
+  selectedRowKey,
+  onView,
+  onModifySeat,
+  onModifyVisit,
+  onCancelSeat,
+  onCancelVisit,
+}: Props) {
   return (
     <div className="w-full overflow-x-auto">
       <table className="w-full text-xs" style={{ minWidth: "980px" }}>
         <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
           <tr>
-            <th className="pl-10 pr-2 py-3 text-left font-bold max-w-45">Employee / Guest</th>
-            <th className="pl-8 pr-3 py-3 text-left font-bold">Seat</th>
+            <th className="pl-11 pr-2 py-3 text-left font-bold max-w-45">Employee / Guest</th>
+            <th className="pl-8 pr-3 py-3 text-left font-bold">Space</th>
             <th className="pl-3 pr-3 py-3 text-left font-bold">Office</th>
             <th className="pl-3 pr-1 py-3 text-left font-bold">Building</th>
             <th className="pl-5 pr-1 py-3 text-left font-bold">Floor</th>
-            <th className="pl-8 px-3 py-3 text-left font-bold">Date</th>
-            <th className="pl-10 px-3 py-3 text-left font-bold">Status</th>
+            <th className="pl-12 px-3 py-3 text-left font-bold min-w-30">
+              <button
+                type="button"
+                onClick={onToggleDateSort}
+                className="inline-flex items-center gap-1 p-0 text-blue-600"
+                title={`Sort by date ${dateSort === "asc" ? "descending" : "ascending"}`}
+              >
+                Date
+                {dateSort === "asc" ? <ArrowUp size={13} strokeWidth={2} /> : <ArrowDown size={13} strokeWidth={2} />}
+              </button>
+            </th>
+            <th className="pl-4 pr-3 py-3 text-center font-bold w-36">Status</th>
             <th className="px-3 py-3 text-center font-bold">Booked By</th>
             <th className="px-3 py-3 text-center font-bold">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
+          {data.length === 0 && (
+            <tr>
+              <td colSpan={BOOKING_COLUMN_COUNT} className="py-16 text-center text-sm text-gray-400">
+                No bookings found.
+              </td>
+            </tr>
+          )}
           {data.map((booking) => {
             const rowKey = getBookingRowKey(booking);
             const isSelected = rowKey === selectedRowKey;
@@ -234,7 +267,7 @@ export default function BookingsTable({ data, selectedRowKey, onView, onModifySe
                 <td className="pl-1 pr-3 py-3">
                   {booking.seat_code ? (
                     <>
-                      <p className="text-gray-900 font-medium">{booking.seat_code}</p>
+                      <p className="text-gray-900 font-medium">{displaySpaceCode(booking.seat_code)}</p>
                       <p className="text-[11px] text-gray-400">{booking.seat_type}</p>
                     </>
                   ) : (
@@ -246,16 +279,19 @@ export default function BookingsTable({ data, selectedRowKey, onView, onModifySe
                   <p className="line-clamp-2 wrap-break-word">{booking.building_name}</p>
                 </td>
                 <td className="pl-3 pr-1 py-3 text-gray-700">{booking.floor_name}</td>
-                <td className="pl-4 pr-3 py-3">
-                  <p className="text-gray-900">{booking.date_label}</p>
-                  <p className="text-[11px] text-gray-400">{booking.date_relative}</p>
+                <td className="pl-10 pr-3 py-3 min-w-32">
+                  <p className="text-gray-900 whitespace-nowrap">{booking.date_label}</p>
+                  <p className="text-[11px] text-gray-400 whitespace-nowrap">{booking.date_relative}</p>
                 </td>
-                <td className="pl-5 pr-3 py-3 text-center">
+                <td className="pl-4 pr-3 py-3 text-center w-36">
                   <span
                     className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap ${BOOKING_STATUS_STYLES[booking.status]}`}
                   >
                     {booking.status}
                   </span>
+                  {booking.cancelled_by && (
+                    <p className="mt-1 text-xs font-bold text-gray-500 line-clamp-2 wrap-break-word">by {booking.cancelled_by}</p>
+                  )}
                 </td>
                 <td className="px-3 py-3 text-gray-700 text-center">{booking.booked_by}</td>
                 <td className="px-3 py-3">

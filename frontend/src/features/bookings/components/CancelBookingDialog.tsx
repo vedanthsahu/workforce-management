@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useState, useEffect, useCallback } from "react";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,17 +68,17 @@ export function CancelBookingDialog({ open, booking, cancelMode = "booking", onC
   const title = isPureVisit
     ? "Cancel Visit"
     : isSeatOnlyCancel
-      ? "Cancel Seat"
+      ? "Cancel Space"
       : "Cancel Booking";
   const confirmLabel = isPureVisit
     ? "Yes, Cancel Visit"
     : isSeatOnlyCancel
-      ? "Yes, Cancel Seat"
+      ? "Yes, Cancel Space"
       : "Yes, Cancel Booking";
   const keepLabel = isPureVisit
     ? "Keep Visit"
     : isSeatOnlyCancel
-      ? "Keep Seat"
+      ? "Keep Space"
       : "Keep Booking";
   const reasons = cancelMode === "visit"
     ? VISIT_CANCEL_REASONS
@@ -137,9 +138,9 @@ export function CancelBookingDialog({ open, booking, cancelMode = "booking", onC
                 </span>
               ) : isSeatOnlyCancel ? (
                 <span>
-                  Are you sure you want to cancel the seat reservation at{" "}
+                  Are you sure you want to cancel the space reservation at{" "}
                   <strong className="text-gray-700">
-                    {booking.location} · {booking.floor} · Seat {booking.seat}
+                    {booking.location} · {booking.floor} · Space {displaySpaceCode(booking.seat)}
                   </strong>{" "}
                   on <strong className="text-gray-700">{formatDate(booking.date)}</strong>?
                   This action cannot be undone.
@@ -157,7 +158,7 @@ export function CancelBookingDialog({ open, booking, cancelMode = "booking", onC
                 <span>
                   Are you sure you want to cancel your booking at{" "}
                   <strong className="text-gray-700">
-                    {booking.location} · {booking.floor} · Seat {booking.seat}
+                    {booking.location} · {booking.floor} · Space {displaySpaceCode(booking.seat)}
                   </strong>{" "}
                   on <strong className="text-gray-700">{formatDate(booking.date)}</strong>?
                   This action cannot be undone.
@@ -183,7 +184,7 @@ export function CancelBookingDialog({ open, booking, cancelMode = "booking", onC
                   setSelectedReason(e.target.value);
                   if (e.target.value !== "Other") setOtherReason("");
                 }}
-                className="w-full h-10 px-3 pr-8 rounded-lg border border-[#EBEBF5] bg-white text-[13px] text-[#1A1A2E] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full h-10 px-3 pr-8 rounded-lg border border-[#EBEBF5] bg-white text-[13px] text-[#1A1A2E] appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Select a reason</option>
                 {reasons.map((r) => (

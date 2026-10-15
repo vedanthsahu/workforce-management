@@ -1,4 +1,5 @@
 import { axiosInstance } from "@/lib/http/axios";
+import { todayIsoInIndia } from "@/lib/indiaDate";
 import { Booking, BookingSummary, RawBooking } from "../types/bookings.types";
 import type { ApiTeamGroup } from "@/features/dashboard/types/dashboard.types";
 import type { User } from "@/features/auth/types/auth.types";
@@ -8,11 +9,15 @@ const BASE = "/bookings";
 
 // ── Status normaliser ─────────────────────────────────────────────────────────
 
-function normaliseStatus(raw: string): "confirmed" | "modified" | "cancelled" | "pending" {
-  const s = raw.toUpperCase();
-  if (s === "CONFIRMED" || s === "ACTIVE")   return "confirmed";
-  if (s === "MODIFIED")                      return "modified";
+function normaliseStatus(raw: RawBooking): "confirmed" | "modified" | "cancelled" | "pending" {
+  const s = raw.booking_status.toUpperCase();
   if (s === "CANCELLED" || s === "CANCELED") return "cancelled";
+  // A modified row's successor is still literally CONFIRMED/SCHEDULED --
+  // is_modified (derived from modified_from_booking_id /
+  // modified_from_guest_visit_id) is the authoritative signal, same as the
+  // admin bookings list already does.
+  if (s === "MODIFIED" || raw.is_modified)   return "modified";
+  if (s === "CONFIRMED" || s === "ACTIVE")   return "confirmed";
   return "pending";
 }
 
@@ -73,7 +78,7 @@ function mapRawBooking(raw: RawBooking, currentUserId: string): Booking {
     day:   "numeric",
   });
 
-  const status = normaliseStatus(raw.booking_status);
+  const status = normaliseStatus(raw);
   const bookingType = deriveBookingType(raw, currentUserId);
 
   const tagList: Booking["tags"] = [];
@@ -136,6 +141,8 @@ function mapRawBooking(raw: RawBooking, currentUserId: string): Booking {
     guestVisitId:     raw.guest_visit_id ?? undefined,
     activitySource:   (raw.activity_source as Booking["activitySource"]) ?? "BOOKING",
     createdAt:        raw.created_at ?? raw.booking_date,
+    updatedByUserId:  raw.updated_user_id ?? undefined,
+    updatedByName:    raw.updated_by_name ?? undefined,
   };
 }
 
@@ -243,7 +250,7 @@ export function deriveBookingSummary(
   teamGroups:    ApiTeamGroup[] = [],
   currentUserId: string        = "",
 ): BookingSummary {
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayIsoInIndia();
 
   // All non-cancelled upcoming (current + future), sorted ascending by date
   const upcoming = [...current, ...future]

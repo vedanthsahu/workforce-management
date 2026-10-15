@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import { AlertCircle } from "lucide-react";
@@ -14,22 +14,39 @@ import {
   ComboboxItem,
 } from "@/components/ui/combobox";
 import useCreateSite from "../hooks/useCreateSite";
-import { Country } from "country-state-city";
+import { officeService } from "../services/office.service";
+import { TIMEZONES, COUNTRIES, getStatesOfCountry, getCities } from "../utils/office.utils";
+import { officeCodeFromName, uniqueCode } from "@/lib/codeGenerator";
 
-const TIMEZONES = [
-  "Asia/Kolkata",
-  ...Intl.supportedValuesOf("timeZone"),
-].filter((value, index, self) => self.indexOf(value) === index).sort();
+// Shared field-label look across all "Add" forms (Office, Building, Floor, Amenity).
+const labelClass = "text-xs font-semibold text-gray-500 uppercase tracking-wide";
 
-const COUNTRIES = Country.getAllCountries()
-  .map((c) => c.name)
-  .sort();
+// Read-only, derived fields (office/building/floor codes) share this look so
+// it's visually obvious they can't be typed into.
+const readOnlyInputClass = "bg-gray-50 text-gray-500 cursor-not-allowed";
+
+// Dropdowns use the same placeholder color as the text inputs, and match the
+// read-only look above while waiting on a parent field (State, City). The
+// placeholder color is forced because browsers restyle disabled inputs'
+// placeholders, which Office Code (readOnly, not disabled) never gets.
+const comboInputClass =
+  "placeholder:text-muted-foreground! disabled:opacity-100 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed";
 
 export default function OfficeForm() {
   const router = useRouter();
   const { createSite, loading } = useCreateSite();
 
   const [errorMessage, setErrorMessage] = useState("");
+
+  // Existing office codes, fetched once so the generated code can be
+  // disambiguated (HYD, HYD-01, HYD-02, ...) before the user ever submits.
+  const [existingCodes, setExistingCodes] = useState<string[]>([]);
+  useEffect(() => {
+    officeService.getSites().then(
+      (sites) => setExistingCodes(sites.map((s) => s.site_code)),
+      (err) => console.error("Failed to load existing office codes", err)
+    );
+  }, []);
 
   const [formData, setFormData] = useState({
     site_name: "",
@@ -42,9 +59,29 @@ export default function OfficeForm() {
     status: "ACTIVE" as const,
   });
 
+  // State only narrows the city list; the site record has no state column,
+  // so it stays out of formData (and the create payload).
+  const [selectedState, setSelectedState] = useState("");
+  const stateOptions = useMemo(() => getStatesOfCountry(formData.country), [formData.country]);
+  const cityOptions = useMemo(
+    () => getCities(formData.country, selectedState),
+    [formData.country, selectedState]
+  );
+  // City is pickable once a state is chosen, or right away for countries
+  // that have no states in the dataset.
+  const cityStepReady = !!formData.country && (!!selectedState || stateOptions.length === 0);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setErrorMessage("");
-    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+      // Office code is derived from the name, not typed by hand.
+      ...(name === "site_name"
+        ? { site_code: uniqueCode(officeCodeFromName(value), existingCodes) }
+        : {}),
+    }));
   };
 
   const isFormValid =
@@ -126,8 +163,8 @@ export default function OfficeForm() {
         <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
 
           <div className="space-y-1.5">
-            <Label>
-              Office Name <span className="text-red-400 font-normal">*</span>
+            <Label className={labelClass}>
+              Office Name <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
             </Label>
             <Input
               name="site_name"
@@ -138,43 +175,33 @@ export default function OfficeForm() {
           </div>
 
           <div className="space-y-1.5">
-            <Label>
-              Office Code <span className="text-red-400 font-normal">*</span>
+            <Label className={labelClass}>
+              Office Code <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
             </Label>
             <Input
               name="site_code"
               value={formData.site_code}
-              onChange={handleChange}
-              placeholder="e.g. MUM-01"
+              readOnly
+              placeholder="Auto-generated from office name"
+              className={readOnlyInputClass}
             />
-            <p className="text-[11px] text-gray-400">Short unique identifier for this office</p>
+            <p className="text-[11px] text-gray-400">Auto-generated from the office name</p>
           </div>
 
           <div className="space-y-1.5">
-            <Label>
-              City <span className="text-red-400 font-normal">*</span>
-            </Label>
-            <Input
-              name="city"
-              value={formData.city}
-              onChange={handleChange}
-              placeholder="e.g. Mumbai"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>
-              Country <span className="text-red-400 font-normal">*</span>
+            <Label className={labelClass}>
+              Country <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
             </Label>
             <Combobox
               items={COUNTRIES}
               value={formData.country || null}
               onValueChange={(value) => {
                 setErrorMessage("");
-                setFormData((prev) => ({ ...prev, country: value ?? "" }));
+                setSelectedState("");
+                setFormData((prev) => ({ ...prev, country: value ?? "", city: "" }));
               }}
             >
-              <ComboboxInput placeholder="Select a country…" />
+              <ComboboxInput placeholder="Select a country" className={comboInputClass} />
               <ComboboxContent>
                 {(country: string) => (
                   <ComboboxItem key={country} value={country}>
@@ -185,9 +212,84 @@ export default function OfficeForm() {
             </Combobox>
           </div>
 
-          <div className="sm:col-span-2 space-y-1.5">
-            <Label>
-              Timezone <span className="text-red-400 font-normal">*</span>
+          <div className="space-y-1.5">
+            <Label className={labelClass}>State</Label>
+            <Combobox
+              items={stateOptions}
+              value={selectedState || null}
+              disabled={!formData.country || stateOptions.length === 0}
+              onValueChange={(value) => {
+                setErrorMessage("");
+                setSelectedState(value ?? "");
+                setFormData((prev) => ({ ...prev, city: "" }));
+              }}
+            >
+              <ComboboxInput
+                placeholder={
+                  !formData.country
+                    ? "Select a country first"
+                    : stateOptions.length === 0
+                      ? "No states for this country"
+                      : "Select a state"
+                }
+                className={comboInputClass}
+              />
+              <ComboboxContent>
+                {(state: string) => (
+                  <ComboboxItem key={state} value={state}>
+                    {state}
+                  </ComboboxItem>
+                )}
+              </ComboboxContent>
+            </Combobox>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className={labelClass}>
+              City <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
+            </Label>
+            {cityStepReady && cityOptions.length === 0 ? (
+              // Some states have no cities in the dataset — let the admin type one.
+              <Input
+                name="city"
+                value={formData.city}
+                onChange={handleChange}
+                placeholder="Enter city"
+              />
+            ) : (
+              <Combobox
+                items={cityOptions}
+                value={formData.city || null}
+                disabled={!cityStepReady}
+                onValueChange={(value) => {
+                  setErrorMessage("");
+                  setFormData((prev) => ({ ...prev, city: value ?? "" }));
+                }}
+              >
+                <ComboboxInput
+                  placeholder={
+                    !formData.country
+                      ? "Select a country first"
+                      : !cityStepReady
+                        ? "Select a state first"
+                        : "Select a city"
+                  }
+                  className={comboInputClass}
+                />
+                <ComboboxContent>
+                  {(city: string) => (
+                    <ComboboxItem key={city} value={city}>
+                      {city}
+                    </ComboboxItem>
+                  )}
+                </ComboboxContent>
+              </Combobox>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className={labelClass}>
+              Timezone <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
             </Label>
             <Combobox
               items={TIMEZONES}
@@ -197,7 +299,7 @@ export default function OfficeForm() {
                 setFormData((prev) => ({ ...prev, timezone: value ?? "" }));
               }}
             >
-              <ComboboxInput placeholder="Select a timezone…" />
+              <ComboboxInput placeholder="Select a timezone" className={comboInputClass} />
               <ComboboxContent>
                 {(tz: string) => (
                   <ComboboxItem key={tz} value={tz}>
@@ -220,7 +322,7 @@ export default function OfficeForm() {
         <div className="px-5 py-4 grid grid-cols-1 gap-4">
 
           <div className="space-y-1.5">
-            <Label>Address Line 1</Label>
+            <Label className={labelClass}>Address Line 1</Label>
             <Input
               name="address_line1"
               value={formData.address_line1}
@@ -230,7 +332,7 @@ export default function OfficeForm() {
           </div>
 
           <div className="space-y-1.5">
-            <Label>Address Line 2</Label>
+            <Label className={labelClass}>Address Line 2</Label>
             <Input
               name="address_line2"
               value={formData.address_line2}

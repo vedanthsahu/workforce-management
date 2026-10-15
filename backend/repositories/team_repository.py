@@ -175,7 +175,8 @@ def search_team_members(
 ) -> list[dict]:
     """Search within the caller's own team(s) only -- scoped by tm_target.user_id,
     so this can never be used to enumerate members of a team the caller isn't in."""
-    search_text = search_text.strip().lower()
+    search_text = " ".join(search_text.lower().split())
+    search_text = search_text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     status_clause = ""
     if not include_inactive:
@@ -223,7 +224,10 @@ def search_team_members(
                             '\\s+'
                         )
                     ) WITH ORDINALITY AS t(word, pos)
-                    WHERE word LIKE %s || '%%'
+                    WHERE array_to_string(
+                        (regexp_split_to_array(lower(coalesce(u.full_name, '')), '\\s+'))[pos::int:],
+                        ' '
+                    ) LIKE %s || '%%'
                 ) mp ON TRUE
 
                 WHERE tm_target.user_id = %s

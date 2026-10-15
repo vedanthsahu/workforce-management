@@ -1,4 +1,5 @@
 import { GuestType, PurposeOfVisit } from "../types/booking";
+import { todayIsoInIndia } from "@/lib/indiaDate";
 
 export const GUEST_TYPES: { value: GuestType; label: string }[] = [
   { value: "INTERVIEW_CANDIDATE", label: "Interview Candidate" },
@@ -17,3 +18,12 @@ export const PURPOSE_OF_VISIT: { value: PurposeOfVisit; label: string }[] = [
   { value: "CUSTOMER_VISIT", label: "Customer Visit" },
   { value: "OTHER",          label: "Other" },
 ];
+
+// The advance window itself is tenant-configured (Configuration → Visitor
+// Booking) and read via useBookingPolicy; only the wording lives here.
+export const guestVisitTooFarInAdvanceMessage = (days: number) =>
+  `Guest visits can only be booked up to ${days} days in advance. Please select a date within the next ${days} days.`;
+
+export function todayIso(): string {
+  return todayIsoInIndia();
+}

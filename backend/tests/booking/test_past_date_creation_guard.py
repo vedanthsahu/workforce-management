@@ -19,14 +19,43 @@ from backend.services.guest_service import create_guest_booking, create_guest_vi
 TODAY = date.today()
 YESTERDAY = TODAY - timedelta(days=1)
 TOMORROW = TODAY + timedelta(days=1)
+THIRTY_DAYS_OUT = TODAY + timedelta(days=30)
+THIRTY_ONE_DAYS_OUT = TODAY + timedelta(days=31)
+FIFTEEN_DAYS_OUT = TODAY + timedelta(days=15)
+SIXTEEN_DAYS_OUT = TODAY + timedelta(days=16)
 
 EMPLOYEE_CALLER = {"tenant_id": "1", "user_id": "7", "role_name": "EMPLOYEE"}
 GUEST_OPERATOR_CALLER = {"tenant_id": "1", "user_id": "7", "role_name": "FACILITATOR"}
 
 
+class _NoRowCursor:
+    """Simulates an unseeded business_rules table -- fetchone() returns
+    None, so resolve_booking_advance_days() falls back to its hardcoded
+    defaults (30 days employee, 15 days guest), which is exactly the
+    boundary these tests assert against."""
+
+    def __enter__(self) -> _NoRowCursor:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def execute(self, sql, params=None) -> None:
+        pass
+
+    def fetchone(self):
+        return None
+
+
 class FakeConnection:
     """Minimal conn stand-in for paths that reach the commit/rollback
-    try-block after clearing the past-date guard."""
+    try-block after clearing the past-date guard. Also answers .cursor()
+    since both the past-date guard and the max-advance guard now resolve
+    their limits via resolve_booking_advance_days(), which queries
+    business rules through conn.cursor()."""
+
+    def cursor(self, *args, **kwargs) -> _NoRowCursor:
+        return _NoRowCursor()
 
     def commit(self) -> None:
         pass
@@ -57,7 +86,7 @@ class BookSeatPastDateGuardTests(unittest.TestCase):
             "backend.services.booking_service._resolve_booked_for_user",
         ) as mock_resolve, self.assertRaises(HTTPException) as context:
             book_seat(
-                conn=object(),
+                conn=FakeConnection(),
                 current_user=EMPLOYEE_CALLER,
                 payload=self._payload(YESTERDAY),
             )
@@ -98,6 +127,52 @@ class BookSeatPastDateGuardTests(unittest.TestCase):
         self.assertEqual(context.exception.status_code, 418)
 
 
+class BookSeatMaxAdvanceGuardTests(unittest.TestCase):
+    """Regression coverage: seat bookings can only be made up to 30 days
+    in advance -- server-side, since the client <input max> is just as
+    trivially bypassed as the past-date <input min> was."""
+
+    def _payload(self, booking_date: date) -> CreateBookingRequest:
+        return CreateBookingRequest(
+            site_id=1,
+            building_id=1,
+            floor_id=1,
+            seat_id=1,
+            booking_date=booking_date,
+            start_time=time(9, 0),
+            end_time=time(18, 0),
+        )
+
+    def test_rejects_a_date_31_days_out(self) -> None:
+        with patch(
+            "backend.services.booking_service._resolve_booked_for_user",
+        ) as mock_resolve, self.assertRaises(HTTPException) as context:
+            book_seat(
+                conn=FakeConnection(),
+                current_user=EMPLOYEE_CALLER,
+                payload=self._payload(THIRTY_ONE_DAYS_OUT),
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertEqual(
+            context.exception.detail["code"], "booking_date_too_far_in_advance"
+        )
+        mock_resolve.assert_not_called()
+
+    def test_accepts_a_date_exactly_30_days_out(self) -> None:
+        with patch(
+            "backend.services.booking_service._resolve_booked_for_user",
+            side_effect=HTTPException(status_code=418, detail="reached"),
+        ), self.assertRaises(HTTPException) as context:
+            book_seat(
+                conn=FakeConnection(),
+                current_user=EMPLOYEE_CALLER,
+                payload=self._payload(THIRTY_DAYS_OUT),
+            )
+
+        self.assertEqual(context.exception.status_code, 418)
+
+
 class GuestVisitPastDateGuardTests(unittest.TestCase):
     def _payload(self, visit_date: date) -> CreateGuestVisitRequest:
         return CreateGuestVisitRequest(
@@ -114,7 +189,7 @@ class GuestVisitPastDateGuardTests(unittest.TestCase):
             "backend.services.guest_service._resolve_guest",
         ) as mock_resolve_guest, self.assertRaises(HTTPException) as context:
             create_guest_visit(
-                conn=object(),
+                conn=FakeConnection(),
                 current_user=GUEST_OPERATOR_CALLER,
                 payload=self._payload(YESTERDAY),
             )
@@ -129,7 +204,7 @@ class GuestVisitPastDateGuardTests(unittest.TestCase):
         authorization checks for anyone, including on invalid input."""
         with self.assertRaises(HTTPException) as context:
             create_guest_visit(
-                conn=object(),
+                conn=FakeConnection(),
                 current_user=EMPLOYEE_CALLER,
                 payload=self._payload(YESTERDAY),
             )
@@ -168,7 +243,7 @@ class GuestBookingPastDateGuardTests(unittest.TestCase):
             "backend.services.guest_service._resolve_guest",
         ) as mock_resolve_guest, self.assertRaises(HTTPException) as context:
             create_guest_booking(
-                conn=object(),
+                conn=FakeConnection(),
                 current_user=GUEST_OPERATOR_CALLER,
                 payload=self._payload(YESTERDAY),
             )
@@ -186,6 +261,96 @@ class GuestBookingPastDateGuardTests(unittest.TestCase):
                 conn=FakeConnection(),
                 current_user=GUEST_OPERATOR_CALLER,
                 payload=self._payload(TOMORROW),
+            )
+
+        self.assertEqual(context.exception.status_code, 418)
+
+
+class GuestVisitMaxAdvanceGuardTests(unittest.TestCase):
+    """Guest visits (no seat) can only be booked up to 15 days in advance --
+    a shorter window than the 30-day employee seat booking limit."""
+
+    def _payload(self, visit_date: date) -> CreateGuestVisitRequest:
+        return CreateGuestVisitRequest(
+            guest_id=1,
+            host_user_id=1,
+            site_id=1,
+            building_id=1,
+            visit_date=visit_date,
+            guest_type=GuestType.OTHER,
+        )
+
+    def test_rejects_a_visit_date_16_days_out(self) -> None:
+        with patch(
+            "backend.services.guest_service._resolve_guest",
+        ) as mock_resolve_guest, self.assertRaises(HTTPException) as context:
+            create_guest_visit(
+                conn=FakeConnection(),
+                current_user=GUEST_OPERATOR_CALLER,
+                payload=self._payload(SIXTEEN_DAYS_OUT),
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertEqual(
+            context.exception.detail["code"], "visit_date_too_far_in_advance"
+        )
+        mock_resolve_guest.assert_not_called()
+
+    def test_accepts_a_visit_date_exactly_15_days_out(self) -> None:
+        with patch(
+            "backend.services.guest_service._resolve_guest",
+            side_effect=HTTPException(status_code=418, detail="reached"),
+        ), self.assertRaises(HTTPException) as context:
+            create_guest_visit(
+                conn=FakeConnection(),
+                current_user=GUEST_OPERATOR_CALLER,
+                payload=self._payload(FIFTEEN_DAYS_OUT),
+            )
+
+        self.assertEqual(context.exception.status_code, 418)
+
+
+class GuestBookingMaxAdvanceGuardTests(unittest.TestCase):
+    """Guest bookings (visit + seat) share the guest visit's 15-day window,
+    not the 30-day employee seat booking limit."""
+
+    def _payload(self, visit_date: date) -> CreateGuestBookingRequest:
+        return CreateGuestBookingRequest(
+            guest_id=1,
+            host_user_id=1,
+            site_id=1,
+            building_id=1,
+            floor_id=1,
+            seat_id=1,
+            visit_date=visit_date,
+            guest_type=GuestType.OTHER,
+        )
+
+    def test_rejects_a_visit_date_16_days_out(self) -> None:
+        with patch(
+            "backend.services.guest_service._resolve_guest",
+        ) as mock_resolve_guest, self.assertRaises(HTTPException) as context:
+            create_guest_booking(
+                conn=FakeConnection(),
+                current_user=GUEST_OPERATOR_CALLER,
+                payload=self._payload(SIXTEEN_DAYS_OUT),
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertEqual(
+            context.exception.detail["code"], "visit_date_too_far_in_advance"
+        )
+        mock_resolve_guest.assert_not_called()
+
+    def test_accepts_a_visit_date_exactly_15_days_out(self) -> None:
+        with patch(
+            "backend.services.guest_service._resolve_guest",
+            side_effect=HTTPException(status_code=418, detail="reached"),
+        ), self.assertRaises(HTTPException) as context:
+            create_guest_booking(
+                conn=FakeConnection(),
+                current_user=GUEST_OPERATOR_CALLER,
+                payload=self._payload(FIFTEEN_DAYS_OUT),
             )
 
         self.assertEqual(context.exception.status_code, 418)

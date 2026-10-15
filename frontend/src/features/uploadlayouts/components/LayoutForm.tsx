@@ -13,6 +13,7 @@ import { layoutService } from "../services/layout.service";
 import SVGPreviewModal from "./Svgpreviewmodal";
 import { Building, Floor, FloorLayoutInfo, LayoutFormState, Site } from "../types/layout.types";
 import { extractSeatIds } from "@/lib/svg/extractSeatIds";
+import { formatSeatCategorySummary } from "@/lib/svg/seatCategories";
 
 interface LayoutFormProps {
   formData: LayoutFormState;
@@ -246,11 +247,9 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
     setFileError(null);
     if (file.type !== "image/svg+xml") {
       setFileError("Only SVG files are allowed.");
-      setFileError("Only SVG files are allowed.");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setFileError("Maximum file size is 10 MB.");
+    if (file.size > 50 * 1024 * 1024) {
       setFileError("Maximum file size is 10 MB.");
       return;
     }
@@ -463,7 +462,9 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
               </Label>
               <Input
                 value={formData.layoutName}
-                onChange={(e) => setFormData((prev) => ({ ...prev, layoutName: e.target.value }))}
+                readOnly
+                aria-readonly="true"
+                className="bg-gray-50 text-gray-700 cursor-not-allowed"
                 placeholder="Auto-generated after floor selection"
               />
             </div>
@@ -517,7 +518,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
                       </span>
                     ) : seatIds.length > 0 ? (
                       <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full font-medium">
-                        {seatIds.length} seat{seatIds.length !== 1 ? "s" : ""} detected
+                        {formatSeatCategorySummary(seatIds)} detected
                       </span>
                     ) : (
                       <span className="flex items-center gap-1.5 px-2.5 py-1 bg-red-50 text-red-600 border border-red-200 rounded-full text-xs font-medium">
@@ -645,7 +646,7 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
           badge={
             seatIds.length > 0 ? (
               <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs font-medium">
-                {seatIds.length} seat{seatIds.length !== 1 ? "s" : ""}
+                {formatSeatCategorySummary(seatIds)}
               </span>
             ) : undefined
           }

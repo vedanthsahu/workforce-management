@@ -63,9 +63,12 @@ import {
   CalendarSearch,
   History,
   UserPlus,
+  SlidersHorizontal,
+  Ban,
 } from "lucide-react";
 
 import { getInitials, type User } from "@/features/auth/types/auth.types";
+import { formatRoleLabel, getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
 import { cn } from "@/lib/utils";
 import { useBookForSomeoneStore } from "@/store/useBookForSomeoneStore";
 import { useUsersFilterStore } from "@/store/useUsersFilterStore";
@@ -117,6 +120,7 @@ const ROUTE_MAP: Record<string, string> = {
   seats: "/admin/seats",
   amenities: "/admin/amenities",
   seatstatus: "/admin/seat-status",
+  blockedseats: "/admin/blocked-seats",
   bookings: "/admin/bookings",
   users: "/admin/users",
   roles: "/admin/roles",
@@ -124,6 +128,7 @@ const ROUTE_MAP: Record<string, string> = {
   utilization: "/admin/utilization",
   audit: "/admin/audit",
   settings: "/admin/settings",
+  all_configurations: "/admin/configuration",
 
   front_office_dashboard: "/dashboard",
   today_visitors: "/front_office/today-visitors",
@@ -137,7 +142,7 @@ const ROUTE_MAP: Record<string, string> = {
 
 const MAIN_NAV: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "book", label: "Book a seat", icon: CalendarDays, permission: "seat:book_self" },
+  { id: "book", label: "Book a space", icon: CalendarDays, permission: "seat:book_self" },
   { id: "mybookings", label: "My bookings", icon: BookOpen, badge: 3, badgeRed: true, permission: "booking:view_own" },
   { id: "team", label: "Book for someone", icon: Monitor, badge: "New", badgeGreen: true, anyPermission: ["booking:book_for_employee", "booking:book_for_guest"] },
   { id: "schedule", label: "My schedule", icon: CalendarCheck, permission: "booking:view_own", disabled: true },
@@ -162,9 +167,10 @@ const ADMIN_MANAGE_NAV: NavItem[] = [
   { id: "buildings", label: "Buildings", icon: Building },
   { id: "floors", label: "Floors", icon: MapPin },
   { id: "layouts", label: "Floor Layouts", icon: ClipboardList },
-  { id: "seats", label: "Seats", icon: CalendarDays, disabled: true },
+  { id: "seats", label: "Spaces", icon: CalendarDays, disabled: true },
   { id: "amenities", label: "Amenities", icon: Star },
-  { id: "seatstatus", label: "Seat Status", icon: Settings, disabled: true },
+  { id: "seatstatus", label: "Space Status", icon: Settings, disabled: true },
+  { id: "blockedseats", label: "Blocked Spaces", icon: Ban },
 ];
 
 const ADMIN_OPERATIONS_NAV: NavItem[] = [
@@ -178,11 +184,15 @@ const ADMIN_OPERATIONS_NAV: NavItem[] = [
 const ADMIN_REPORTS_NAV: NavItem[] = [
   { id: "occupancy", label: "Occupancy", icon: BarChart3, disabled: true },
   { id: "utilization", label: "Utilization", icon: BarChart3, disabled: true },
-  { id: "audit", label: "Audit Logs", icon: ShieldCheck, disabled: true },
+  { id: "audit", label: "Audit Logs", icon: ShieldCheck },
 ];
 
 const ADMIN_SETTINGS_NAV: NavItem[] = [
   { id: "settings", label: "Settings", icon: Settings, disabled: true },
+];
+
+const ADMIN_CONFIGURATION_NAV: NavItem[] = [
+  { id: "all_configurations", label: "Configuration", icon: SlidersHorizontal },
 ];
 //--------security nav config----------------------------------------------------
 const FRONT_OFFICE_DASHBOARD: NavItem[] = [
@@ -211,15 +221,6 @@ const ROLE_LABELS: Record<string, string> = {
   FACILITIES: "Facilities",
 };
 
-const ROLE_BADGE_STYLES: Record<string, string> = {
-  TENANT_ADMIN: "bg-rose-50 text-rose-600 ring-rose-200",
-  MANAGER: "bg-violet-50 text-violet-600 ring-violet-200",
-  EMPLOYEE: "bg-blue-50 text-blue-600 ring-blue-200",
-  FACILITATOR: "bg-teal-50 text-teal-600 ring-teal-200",
-  FRONT_OFFICE: "bg-amber-50 text-amber-600 ring-amber-200",
-  FACILITIES: "bg-orange-50 text-orange-600 ring-orange-200",
-};
-
 function getRoleLabel(r: string) { return ROLE_LABELS[r] ?? r; }
 
 function resolveDisplayName(u: User) {
@@ -236,13 +237,12 @@ function resolveInitials(u: User) {
 // ─── RoleBadge ────────────────────────────────────────────────────────────────
 
 function RoleBadge({ role }: { role: string }) {
-  const styles = ROLE_BADGE_STYLES[role] ?? "bg-gray-50 text-gray-500 ring-gray-200";
   return (
     <span className={cn(
       "inline-flex items-center px-1.5 py-[2px] rounded-md text-[9px] font-semibold uppercase tracking-wide ring-1",
-      styles
+      getRoleBadgeClass(role)
     )}>
-      {getRoleLabel(role)}
+      {formatRoleLabel(role)}
     </span>
   );
 }
@@ -337,7 +337,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
   const isSecurity = role === "FRONT_OFFICE";
 
   const relevantItems = isAdmin
-    ? [...ADMIN_DASHBOARD, ...ADMIN_MANAGE_NAV, ...ADMIN_OPERATIONS_NAV, ...ADMIN_REPORTS_NAV, ...ADMIN_SETTINGS_NAV]
+    ? [...ADMIN_DASHBOARD, ...ADMIN_MANAGE_NAV, ...ADMIN_OPERATIONS_NAV, ...ADMIN_REPORTS_NAV, ...ADMIN_SETTINGS_NAV, ...ADMIN_CONFIGURATION_NAV]
     : isSecurity
       ? [...FRONT_OFFICE_DASHBOARD, ...FRONT_OFFICE_VISITOR_NAV, ...FRONT_OFFICE_ACTIONS_NAV]
       : [...MAIN_NAV, ...OFFICE_NAV, ...PERSONAL_NAV];
@@ -436,6 +436,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 <SidebarGroupLabel>Settings</SidebarGroupLabel>
                 <SidebarMenu>
                   <NavSection items={ADMIN_SETTINGS_NAV} activeItem={activeItem} onNavigate={handleNav} />
+                </SidebarMenu>
+              </SidebarGroup>
+              <SidebarGroup>
+                <SidebarGroupLabel>Configuration</SidebarGroupLabel>
+                <SidebarMenu>
+                  <NavSection items={ADMIN_CONFIGURATION_NAV} activeItem={activeItem} onNavigate={handleNav} />
                 </SidebarMenu>
               </SidebarGroup>
             </>
@@ -557,9 +563,10 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 </DropdownMenuItem>
 
                 <DropdownMenuItem
-                  onMouseEnter={() => router.prefetch("/notifications")}
-                  onClick={() => useNavigationGuardStore.getState().requestNavigation(() => router.push("/notifications"))}
-                  className="gap-2.5 px-2 py-2 text-[12.5px] cursor-pointer"
+                  disabled
+                  aria-disabled
+                  title="Notifications (coming soon)"
+                  className="gap-2.5 px-2 py-2 text-[12.5px] opacity-50 cursor-not-allowed"
                 >
                   <Bell className="w-4 h-4 text-gray-400" />
                   Notifications

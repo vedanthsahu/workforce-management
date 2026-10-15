@@ -8,13 +8,14 @@ type Props = {
   data: Floor[];
   onEdit: (floor: Floor) => void;
   highlightedId?: string | null;
+  /** Shown in place of the rows when `data` is empty -- e.g. "No inactive
+   * floors found." when the status card filter is set to Inactive. */
+  emptyMessage?: string;
 };
 
-export default function FloorTable({ data, onEdit, highlightedId }: Props) {
-  if (data.length === 0) {
-    return <p className="px-6 py-12 text-center text-gray-400 text-sm">No floors found.</p>;
-  }
+const FLOOR_COLUMN_COUNT = 9;
 
+export default function FloorTable({ data, onEdit, highlightedId, emptyMessage = "No floors found." }: Props) {
   return (
     <>
       <style>{`
@@ -28,6 +29,9 @@ export default function FloorTable({ data, onEdit, highlightedId }: Props) {
 
       {/* ── Mobile card list (hidden on md+) ──────────────── */}
       <div className="md:hidden divide-y">
+        {data.length === 0 && (
+          <p className="px-6 py-12 text-center text-gray-400 text-sm">{emptyMessage}</p>
+        )}
         {data.map((floor) => {
           const isHighlighted = highlightedId === floor.floor_id;
           return (
@@ -86,15 +90,22 @@ export default function FloorTable({ data, onEdit, highlightedId }: Props) {
               <th className="pl-13 px-3 py-3 text-left font-bold">Floor Code</th>
               <th className="pl-4 pr-3 py-3 text-left font-bold">Floor Name</th>
               <th className="pl-6 px-3 py-3 text-left font-bold">Building</th>
-              <th className="px-3 py-3 text-center font-bold">Seats</th>
-              <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Active Seats</th>
-              <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Bookable Seats</th>
+              <th className="px-3 py-3 text-center font-bold">Spaces</th>
+              <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Active Spaces</th>
+              <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Bookable Spaces</th>
               <th className="px-3 py-3 text-center font-bold">Layouts</th>
               <th className="px-3 py-3 text-center font-bold">Status</th>
               <th className="px-3 py-3 text-center font-bold">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
+            {data.length === 0 && (
+              <tr>
+                <td colSpan={FLOOR_COLUMN_COUNT} className="py-16 text-center text-sm text-gray-400">
+                  {emptyMessage}
+                </td>
+              </tr>
+            )}
             {data.map((floor) => {
               const isHighlighted = highlightedId === floor.floor_id;
               return (
@@ -109,8 +120,8 @@ export default function FloorTable({ data, onEdit, highlightedId }: Props) {
                       <span className="font-medium">{floor.floor_code}</span>
                     </div>
                   </td>
-                  <td className="pl-5 pr-3 py-3 max-w-0"><span className="block font-medium truncate">{floor.floor_name}</span></td>
-                  <td className="px-3 py-3 max-w-0"><span className="block truncate">{floor.building_name}</span></td>
+                  <td className="pl-5 pr-3 py-3 max-w-0"><span className="block font-medium line-clamp-2">{floor.floor_name}</span></td>
+                  <td className="px-3 py-3 max-w-0"><span className="block line-clamp-2">{floor.building_name}</span></td>
                   <td className="px-3 py-3 text-center">{floor.seat_count}</td>
                   <td className="px-3 py-3 text-center">{floor.active_seat_count}</td>
                   <td className="px-3 py-3 text-center">{floor.bookable_seat_count}</td>

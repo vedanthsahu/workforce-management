@@ -1,14 +1,25 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, ZoomIn, ZoomOut, Layers } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Layout } from "../types/layout.types";
-import { Preference, Seat, SeatStatus, SeatType, SeatUpdatePayload } from "@/features/managelayout1";
-import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
+import {
+  AmenityChecklist,
+  Preference, Seat, SeatStatus, SeatType, SeatUpdatePayload,
+  amenityAppliesToSeatType, categoryOf, SPACE_CATEGORY_LABELS, suggestSeatType,
+} from "@/features/managelayout1";
 import { extractSeatIds } from "@/lib/svg/extractSeatIds";
+import {
+  SVG_W,
+  SVG_H,
+  ROOM_SVG_ID_PATTERN,
+  SEAT_STATUSES,
+  LEGEND_ITEMS,
+} from "../utils/layoutPreview.utils";
 
 interface LayoutPreviewProps {
   layout: Layout | null;
@@ -22,7 +33,7 @@ interface LayoutPreviewProps {
   // derived from the filter inputs, not inferred here by comparing
   // filteredSeats.length to seats.length. That comparison can land on equal
   // counts even when a real filter is active, which used to make the map
-  // silently skip the yellow highlight for genuine matches.
+  // silently skip the pulse highlight for genuine matches.
   isFilterActive?: boolean;
 }
 
@@ -82,16 +93,80 @@ function getSeatIdFromClick(target: EventTarget | null, knownIds: Set<string>): 
 //   ACTIVE + is_bookable = false      → Amber (#F59E0B)
 //   ACTIVE + is_bookable = true       → Green (#22C55E)
 
-function resolveSeatFill(seat: Seat): string {
-  if (seat.status === "INACTIVE") return "#EF4444"; // Inactive     — red
-  if (!seat.is_bookable) return "#F59E0B"; // Non-bookable — amber
-  return "#22C55E";                                 // Bookable     — green
+type SeatStateKind = "inactive" | "nonBookable" | "bookable";
+
+function resolveSeatStateKind(seat: Seat): SeatStateKind {
+  if (seat.status === "INACTIVE") return "inactive";
+  if (!seat.is_bookable) return "nonBookable";
+  return "bookable";
 }
 
-// Cabin/conference/meeting room seats are grouped under one svg id containing
-// a "CBN"/"CFR"/"MR" segment (e.g. "HYD-PRV-F11-CBN-04", "HYD-PRV-F11-CFR-02",
-// "HYD-PRV-F11-MR-01"), not a dedicated field.
-const ROOM_SVG_ID_PATTERN = /(^|[-_])(cbn|cfr|mr)([-_]|$)/i;
+const FILL_BY_KIND: Record<SeatStateKind, string> = {
+  inactive:    "#EF4444", // red
+  nonBookable: "#F59E0B", // amber
+  bookable:    "#22C55E", // green
+};
+
+// A filter match now radiates a glowing, breathing pulse in the seat's OWN
+// status color (green/amber/red) instead of repainting it solid yellow — so
+// the map keeps telling you at a glance whether a matched seat is actually
+// available. This deliberately matches the booking flow's own selected-seat
+// glow (SELECTED_PULSE_STYLE in features/book/components/SvgFloorMapPage.tsx)
+// exactly: a CSS `filter:drop-shadow(...)` breathing on the seat's <g>. A
+// `filter` is a separate rendering step, not an attribute override, so
+// unlike animating `stroke` directly it never touches (and never hides) the
+// seat's own black border underneath.
+const PULSE_CLASS_BY_KIND: Record<SeatStateKind, string> = {
+  inactive:    "_space-pulse-red",
+  nonBookable: "_space-pulse-amber",
+  bookable:    "_space-pulse-green",
+};
+// A still-unconfigured seat has no status color to preserve — it gets a
+// neutral accent pulse instead, matching the app's usual selection/highlight
+// color rather than implying a bogus available/unavailable state.
+const PENDING_PULSE_CLASS = "_space-pulse-pending";
+const NEUTRAL_PULSE_CLASS = "_space-pulse-neutral";
+
+const PULSE_KEYFRAMES: Record<string, string> = {
+  [PULSE_CLASS_BY_KIND.bookable]:    "#22C55E",
+  [PULSE_CLASS_BY_KIND.nonBookable]: "#F59E0B",
+  [PULSE_CLASS_BY_KIND.inactive]:    "#EF4444",
+  [PENDING_PULSE_CLASS]:             "#FB923C",
+  [NEUTRAL_PULSE_CLASS]:             "#6366F1",
+};
+
+// The blur radius in a CSS `drop-shadow()` inside inline SVG resolves in the
+// SVG's own user-unit coordinate system, not literal screen pixels — the
+// booking flow hit this same thing (see its own comment above
+// SELECTED_PULSE_STYLE), which is why this can't just reuse its 40/90/150
+// (x3 layers). Booking only ever glows ONE selected seat in isolation; a
+// filter match here can light up hundreds of seats at once, packed close
+// together, so a booking-sized glow bleeds into every neighbor and the
+// individual glows merge into one solid wash of color across a whole desk
+// cluster. This stays a single layer (cheap to animate at scale) but sized
+// generously enough to actually read as a spreading glow rather than a thin
+// outline — if a dense cluster's glows start merging again, shrink these
+// two numbers rather than reintroducing extra layers.
+function pulseStyleBlock(): string {
+  // Class names already carry their leading "_" (matching the booking-side
+  // convention, e.g. "_sel-pulse") -- the CSS selector below must keep it
+  // too, since `._foo` and `.foo` target different classes.
+  const rules = Object.entries(PULSE_KEYFRAMES).map(([className, color]) => {
+    const anim = `${className.replace(/^_/, "")}-kf`;
+    // `transform: scale(...)` alongside the glow so a matched seat visibly
+    // grows, not just brightens -- a composited transform, so it's cheap to
+    // animate on hundreds of seats at once (no per-element layout work, same
+    // reasoning as skipping bringToFront above). `transform-box: fill-box`
+    // makes the scale originate from the seat's own center instead of the
+    // whole SVG's (0,0) origin, which is the default for SVG elements.
+    // Seats sit flush against their neighbors with no gap, so scaling up
+    // does mean a matched seat's icon can overlap into its neighbors'
+    // artwork -- kept modest (1.18x) so it still reads as "this one seat"
+    // rather than distorting the whole cluster.
+    return `@keyframes ${anim}{0%,100%{filter:drop-shadow(0 0 45px ${color});transform:scale(1);}50%{filter:drop-shadow(0 0 100px ${color}) brightness(1.15);transform:scale(1.18);}}.${className}{transform-box:fill-box;transform-origin:center;animation:${anim} 1.6s ease-in-out infinite;}`;
+  }).join("");
+  return `<style>${rules}</style>`;
+}
 
 function isRoomSvgId(svgId: string): boolean {
   return ROOM_SVG_ID_PATTERN.test(svgId);
@@ -122,22 +197,92 @@ function recolorGroup(svgText: string, id: string, fill: string): string {
   });
 }
 
+// Paints a solid black stroke directly on every shape inside a seat's <g>,
+// mirroring the booking-side floor map's seat border (see recolorSeat's
+// fallback branch in features/book/components/SvgFloorMapPage.tsx). Seats sit
+// flush against their neighbors with zero gap, so an outer glow (CSS
+// filter/drop-shadow) gets painted over on the touching side by whichever
+// neighbor is drawn later in the SVG's document order — it only ever shows on
+// edges facing open space. A `stroke` painted directly on each shape is part
+// of the same paint step as its fill, so it can't be erased by a later
+// sibling, giving a complete border on every side including shared edges.
+function addFlatBorder(svgText: string, id: string, color = "#000000", width = "32"): string {
+  const groupRegex = new RegExp(`(<g[^>]*id="${escapeRegExp(id)}"[^>]*>)([\\s\\S]*?)(<\\/g>)`, "gm");
+  return svgText.replace(groupRegex, (_match, open, inner, close) => {
+    // `stroke` and `stroke-width` are added independently: many real exports
+    // set stroke="none" with no stroke-width at all, so "already has a
+    // stroke attribute" isn't a reliable signal that a usable width exists
+    // too — checking each attribute separately guarantees every shape ends
+    // up with both, instead of some shapes getting recolored to black but
+    // keeping the default 1-unit width (invisible against a canvas tens of
+    // thousands of units wide).
+    const bordered = inner
+      .replace(/<(path|rect|polygon|circle|ellipse)\b(?![^>]*\sstroke=)/g, `<$1 stroke="${color}"`)
+      .replace(/<(path|rect|polygon|circle|ellipse)\b(?![^>]*\sstroke-width=)/g, `<$1 stroke-width="${width}"`)
+      .replace(/stroke="[^"]*"/g, `stroke="${color}"`)
+      .replace(/stroke-width="[^"]*"/g, `stroke-width="${width}"`);
+    return `${open}${bordered}${close}`;
+  });
+}
+
+// Dims and desaturates a room's <g> (cabin/conference/meeting/training) in
+// place, without touching its inner artwork — the CSS filter/opacity on the
+// outer group cascades to every nested shape regardless of how deeply the
+// room's furniture/table icons are grouped, so this only needs to add a
+// style attribute to the opening tag, unlike recolorGroup's per-shape fill
+// rewrite. Matches the grey/desaturated treatment already used for
+// booked/unavailable rooms on the booking-side floor map.
+function greyOutRoom(svgText: string, id: string): string {
+  const openTagRegex = new RegExp(`<g\\b[^>]*\\sid="${escapeRegExp(id)}"[^>]*>`);
+  const match = svgText.match(openTagRegex);
+  if (!match || match.index === undefined) return svgText;
+  const openTag = match[0];
+  const overlay = "opacity:0.45;filter:grayscale(1) saturate(0.5);";
+  const newTag = /\sstyle="/.test(openTag)
+    ? openTag.replace(/\sstyle="([^"]*)"/, (_m, existing) =>
+        ` style="${existing}${existing && !existing.trim().endsWith(";") ? ";" : ""}${overlay}"`
+      )
+    : openTag.replace(/>$/, ` style="${overlay}">`);
+  return svgText.slice(0, match.index) + newTag + svgText.slice(match.index + openTag.length);
+}
+
+// Adds a CSS class to a seat's own <g id="..."> opening tag — the glow
+// filter (see pulseStyleBlock) only needs to live on the group itself, not
+// on every inner shape, since `filter` isn't a per-shape presentation
+// attribute the way `stroke`/`stroke-width` are.
+function addGroupClass(svgText: string, id: string, className: string): string {
+  const openTagRegex = new RegExp(`<g\\b[^>]*\\sid="${escapeRegExp(id)}"[^>]*>`);
+  const match = svgText.match(openTagRegex);
+  if (!match || match.index === undefined) return svgText;
+  const openTag = match[0];
+  const newTag = /\sclass="/.test(openTag)
+    ? openTag.replace(/\sclass="([^"]*)"/, (_m, existing) => ` class="${existing} ${className}"`)
+    : openTag.replace(/>$/, ` class="${className}">`);
+  return svgText.slice(0, match.index) + newTag + svgText.slice(match.index + openTag.length);
+}
+
+
 function colorSeats(svgText: string, seats: Seat[], filteredIds: Set<string> | undefined, isFilterActive: boolean): string {
   let result = svgText;
   const hasFilter = isFilterActive && filteredIds !== undefined;
+  // seat_svg_id -> which pulse class to layer on top, keyed by the seat's
+  // own status color (or a neutral/pending accent when there's no real
+  // status color to preserve) -- see PULSE_CLASS_BY_KIND above.
+  const highlighted: { id: string; pulseClass: string }[] = [];
 
   seats.forEach((seat) => {
     const id = seat.seat_svg_id;
+    const isMatch = hasFilter && filteredIds!.has(id);
 
-    // Cabins/conference/meeting rooms are never recolored on the admin
-    // side — no status/bookable grey, no filter highlight — they always
-    // keep the floor plan's original artwork colors.
-    if (isRoomSvgId(id)) return;
-
-    const isHighlighted = hasFilter && filteredIds!.has(id);
-
-    if (isHighlighted) {
-      result = recolorGroup(result, id, "#FACC15"); // Highlight matching seats — vivid yellow
+    // Cabins/conference/meeting/training rooms keep the floor plan's
+    // original artwork colors — no status/bookable flood-fill, no filter
+    // highlight — with one exception: an INACTIVE room gets a grey,
+    // desaturated overlay so it still reads as unavailable, same as any
+    // other seat's INACTIVE state does.
+    if (isRoomSvgId(id)) {
+      if (seat.is_configured && seat.status === "INACTIVE") {
+        result = greyOutRoom(result, id);
+      }
       return;
     }
 
@@ -145,15 +290,49 @@ function colorSeats(svgText: string, seats: Seat[], filteredIds: Set<string> | u
     // flag it distinctly so the admin can see at a glance what will change.
     if (seat.has_unpublished_changes) {
       result = recolorGroup(result, id, "#FB923C"); // Pending — orange
+      result = addFlatBorder(result, id);
+      if (isMatch) highlighted.push({ id, pulseClass: PENDING_PULSE_CLASS });
       return;
     }
 
     // Unconfigured — leave the floor plan's original artwork colors until an
-    // admin actually configures it.
-    if (!seat.is_configured) return;
+    // admin actually configures it, but still border it: the booking and
+    // facilitator floor maps border every seat regardless of status (see
+    // recolorSeat's fallback branch in SvgFloorMapPage.tsx), so a plain,
+    // borderless icon here read as broken/inconsistent rather than simply
+    // "not configured yet." No status color to preserve, so a filter match
+    // still pulses, just with the neutral accent instead of a status color
+    // that doesn't exist yet.
+    if (!seat.is_configured) {
+      result = addFlatBorder(result, id);
+      if (isMatch) highlighted.push({ id, pulseClass: NEUTRAL_PULSE_CLASS });
+      return;
+    }
 
-    result = recolorGroup(result, id, resolveSeatFill(seat));
+    const kind = resolveSeatStateKind(seat);
+    result = recolorGroup(result, id, FILL_BY_KIND[kind]);
+    result = addFlatBorder(result, id);
+    if (isMatch) highlighted.push({ id, pulseClass: PULSE_CLASS_BY_KIND[kind] });
   });
+
+  // Applied last, after every fill/border above: a glowing pulse class in
+  // the seat's own status color. This is purely additive — it never touches
+  // `stroke`/`stroke-width`, so the seat's own black border (or the
+  // pending-edit orange one) stays exactly as it already was. Deliberately
+  // NOT brought to the front of paint order the way booking's single
+  // selected seat is (SvgFloorMapPage.tsx's bringToFront): a filter match
+  // here can hit hundreds of seats at once, and that reordering is a full
+  // string slice-and-reinsert per seat -- fine for exactly one element, a
+  // serious hang risk for hundreds on a multi-megabyte floor plan. A little
+  // glow clipping on a shared edge is a far smaller cost than freezing the
+  // page.
+  highlighted.forEach(({ id, pulseClass }) => {
+    result = addGroupClass(result, id, pulseClass);
+  });
+  if (highlighted.length > 0) {
+    const firstClose = result.indexOf(">");
+    if (firstClose !== -1) result = result.slice(0, firstClose + 1) + pulseStyleBlock() + result.slice(firstClose + 1);
+  }
 
   return result;
 }
@@ -179,16 +358,6 @@ function highlightSeat(svgText: string, svgId: string): string {
 
 // ─── Seat Config Dialog ───────────────────────────────────────────────────────
 
-const SEAT_TYPES: SeatType[] = ["STANDARD", "WINDOW", "CABIN", "ACCESSIBLE", "HOT_DESK"];
-const SEAT_TYPE_LABELS: Record<string, string> = {
-  STANDARD: "STANDARD",
-  WINDOW: "WINDOW",
-  CABIN: "CABIN",
-  ACCESSIBLE: "ACCESSIBLE",
-  HOT_DESK: "HOT_DESK",
-};
-const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
-
 interface SeatConfigDialogProps {
   open: boolean;
   onClose: () => void;
@@ -198,22 +367,33 @@ interface SeatConfigDialogProps {
 }
 
 const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat, preferences, onSave }) => {
-  const [seatType, setSeatType] = useState<SeatType>("STANDARD");
+  const [seatType, setSeatType] = useState<SeatType>("SEAT");
   const [bookable, setBookable] = useState(true);
   const [status, setStatus] = useState<SeatStatus>("ACTIVE");
   const [amenityIds, setAmenityIds] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
+  const [capacity, setCapacity] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const isConferenceRoom = seatType === "CONFERENCE_ROOM";
+  const capacityInvalid = isConferenceRoom && (capacity == null || capacity < 1);
+  const visiblePreferences = preferences.filter((p) =>
+    amenityAppliesToSeatType(p.applicable_seat_types, seatType)
+  );
+
   useEffect(() => {
     if (!seat) return;
-    setSeatType((seat.seat_type as SeatType) ?? "STANDARD");
+    // seat_type is auto-categorized (from its own stored value, or a
+    // suggestion derived from the floor-plan SVG id when unset) -- not a
+    // field the admin fills in by hand here.
+    setSeatType((seat.seat_type as SeatType) ?? (suggestSeatType(seat.seat_svg_id) as SeatType));
     setBookable(seat.is_bookable ?? true);
     setStatus((seat.status as SeatStatus) ?? "ACTIVE");
     setAmenityIds([...seat.amenity_ids]);
     setNotes(seat.notes ?? "");
+    setCapacity(seat.capacity ?? (((seat.seat_type as SeatType) ?? suggestSeatType(seat.seat_svg_id)) === "CONFERENCE_ROOM" ? 1 : null));
     setSaved(false);
     setSaveError(false);
   }, [seat]);
@@ -227,6 +407,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
 
   const handleSave = async () => {
     if (!seat) return;
+    if (capacityInvalid) { setSaved(false); return; }
     setSaving(true); setSaveError(false);
     try {
       await onSave({
@@ -237,6 +418,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
         status,
         amenity_ids: amenityIds,
         notes: notes || undefined,
+        capacity: isConferenceRoom ? capacity : null,
       });
       setSaved(true);
       setTimeout(() => onClose(), 800);
@@ -250,8 +432,8 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
   if (!seat) return null;
 
   const selectCls = `w-full h-9 px-3 text-xs font-medium text-gray-700 bg-white border border-gray-200
-    rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30
-    focus:border-indigo-400 transition-colors`;
+    rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500
+    transition-colors`;
   const chevron = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'
     viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline
     points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`;
@@ -260,29 +442,50 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md rounded-xl p-0 overflow-hidden gap-0 [&>button:last-child]:hidden">
         <DialogHeader className="px-5 pt-5 pb-4 border-b">
-          <p className="text-xs text-gray-400 mb-0.5 font-medium">Configure Seat</p>
+          <p className="text-xs text-gray-400 mb-0.5 font-medium">
+            Configure {categoryOf(seat.seat_type) === "SEATS" ? "Seat" : categoryOf(seat.seat_type) === "CABINS" ? "Cabin" : "Conference Room"}
+          </p>
           <DialogTitle className="text-base font-bold text-indigo-600">
-            {seat.seat_code}
+            {displaySpaceCode(seat.seat_code)}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="px-5 py-5 space-y-4 overflow-y-auto max-h-[60vh]">
-          {/* Seat Type */}
+        <div className="px-5 py-5 space-y-4 overflow-y-auto scrollbar-thin max-h-[60vh]">
+          {/* Space Type — auto-categorized, read-only */}
           <div>
             <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">
-              Seat Type <span className="text-red-500">*</span>
+              Space Type
             </label>
-            <select
-              value={seatType}
-              onChange={(e) => { setSeatType(e.target.value as SeatType); setSaved(false); }}
-              className={selectCls}
-              style={{ backgroundImage: chevron, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
-            >
-              {SEAT_TYPES.map((t) => (
-                <option key={t} value={t}>{SEAT_TYPE_LABELS[t]}</option>
-              ))}
-            </select>
+            <div className="w-full h-9 px-3 flex items-center text-xs font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-lg">
+              {SPACE_CATEGORY_LABELS[categoryOf(seat.seat_type)].singular}
+            </div>
           </div>
+
+          {/* Capacity — Conference Rooms only */}
+          {isConferenceRoom && (
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 block">
+                Capacity <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={1000}
+                value={capacity ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCapacity(v === "" ? null : Number(v));
+                  setSaved(false);
+                }}
+                placeholder="e.g. 12"
+                className={`${selectCls} ${capacityInvalid ? "border-red-300 focus:border-red-400" : ""}`}
+              />
+              <p className="text-[10.5px] text-gray-400 mt-1">Number of people this room seats.</p>
+              {capacityInvalid && (
+                <p className="text-[10.5px] text-red-500 mt-1">Capacity is required for a conference room.</p>
+              )}
+            </div>
+          )}
 
           {/* Bookable */}
           <div>
@@ -326,35 +529,11 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
             <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2 block">
               Amenities
             </label>
-            {preferences.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">No amenities available.</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-1.5">
-                {preferences.map((p) => {
-                  const on = amenityIds.includes(p.preference_id);
-                  const color = getAmenityColor(p.preference_name, p.preference_type);
-                  return (
-                    <button
-                      key={p.preference_id}
-                      onClick={() => toggleAmenity(p.preference_id)}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left text-xs font-medium transition-colors ${on ? "bg-indigo-50 border-indigo-300 text-indigo-700" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                        }`}
-                    >
-                      <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${on ? "bg-indigo-600 border-indigo-600" : "border-gray-300"
-                        }`}>
-                        {on && (
-                          <svg viewBox="0 0 8 7" className="w-2.5 h-2.5">
-                            <path d="M1 3.5l2 2L7 1" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        )}
-                      </div>
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${color.dot}`} />
-                      {p.preference_name}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            <AmenityChecklist
+              preferences={visiblePreferences}
+              selectedIds={amenityIds}
+              onToggle={toggleAmenity}
+            />
           </div>
 
           {/* Notes */}
@@ -365,10 +544,10 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
             <textarea
               value={notes}
               onChange={(e) => { setNotes(e.target.value); setSaved(false); }}
-              placeholder="Add any notes about this seat…"
+              placeholder="Add any notes about this space…"
               maxLength={200}
               rows={3}
-              className="w-full px-3 py-2.5 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400"
+              className="w-full px-3 py-2.5 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400"
             />
             <p className="text-right text-[10px] text-gray-400 mt-0.5">{notes.length} / 200</p>
           </div>
@@ -388,7 +567,7 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
             </button>
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || capacityInvalid}
               className="px-4 py-1.5 text-xs font-semibold bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors"
             >
               {saving ? "Saving…" : "Save Changes"}
@@ -401,13 +580,6 @@ const SeatConfigDialog: React.FC<SeatConfigDialogProps> = ({ open, onClose, seat
 };
 
 // ─── Legend ───────────────────────────────────────────────────────────────────
-
-const LEGEND_ITEMS = [
-  { label: "Bookable", color: "#22C55E" },
-  { label: "Non-bookable", color: "#F59E0B" },
-  { label: "Inactive", color: "#EF4444" },
-  { label: "Unconfigured", color: "#000000ff" },
-] as const;
 
 // FIX: flex-wrap + gap-y so items wrap on narrow screens instead of overflowing
 function PreviewLegend() {
@@ -424,9 +596,6 @@ function PreviewLegend() {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-
-const SVG_W = 2466;
-const SVG_H = 2039;
 
 export default function LayoutPreview({
   layout,
@@ -518,9 +687,18 @@ export default function LayoutPreview({
   }, [coloredSvg, clickedSeat, dialogOpen]);
 
   // ── Transform helpers ──────────────────────────────────────────────────
-  const applyTransform = useCallback(() => {
+  // `animate` adds a short CSS transition for discrete, user-initiated steps
+  // (zoom buttons) so they ease instead of jump-cutting. Continuous
+  // interactions (wheel zoom, drag-pan) stay untransitioned — animating
+  // those would make them lag behind the cursor. Both zoom directions use
+  // the same short transition (120ms) rather than one direction being
+  // instant — an asymmetric instant/eased split reads as a glitchy jump,
+  // and 120ms keeps the number of repainted frames low on this floor plan's
+  // oversized canvas without the visual inconsistency.
+  const applyTransform = useCallback((animate = false) => {
     const el = transformRef.current;
     if (!el) return;
+    el.style.transition = animate ? "transform 120ms ease-out" : "none";
     el.style.transform = `translate(${translateRef.current.x}px,${translateRef.current.y}px) scale(${scaleRef.current})`;
   }, []);
 
@@ -551,46 +729,81 @@ export default function LayoutPreview({
   }, [rawSvg, loading, fitView]);
 
   // ── Zoom ───────────────────────────────────────────────────────────────
+  // The zoom-out floor is the "fit to view" scale for whatever SVG is
+  // currently loaded, not a fixed constant — a fixed floor either blocks
+  // reaching fit-to-view on an oversized canvas (too high) or, on a normal-
+  // sized floor plan, lets you zoom out past fit-to-view into a tiny shape
+  // surrounded by empty gray space (too low). Clamping to the fit scale
+  // means "fully zoomed out" always means the original fitted framing.
   const zoomStep = useCallback((factor: number) => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
     const { width: wW, height: wH } = wrapper.getBoundingClientRect();
+    const zoomFloor = Math.min(wW / svgDims.w, wH / svgDims.h);
     const oldScale = scaleRef.current;
-    const newScale = Math.min(Math.max(oldScale * factor, 0.05), 4);
+    const newScale = Math.min(Math.max(oldScale * factor, zoomFloor), 4);
     const cx = wW / 2, cy = wH / 2;
     translateRef.current = {
       x: cx - (cx - translateRef.current.x) * (newScale / oldScale),
       y: cy - (cy - translateRef.current.y) * (newScale / oldScale),
     };
     scaleRef.current = newScale;
-    applyTransform();
+    applyTransform(true);
     setZoomDisplay(Math.round(newScale * 100));
-  }, [applyTransform]);
+  }, [applyTransform, svgDims]);
 
   const zoomIn = useCallback(() => zoomStep(1.25), [zoomStep]);
   const zoomOut = useCallback(() => zoomStep(1 / 1.25), [zoomStep]);
 
   // ── Wheel zoom ─────────────────────────────────────────────────────────
+  // A trackpad or a fast mouse wheel can fire many "wheel" events within a
+  // single animation frame. Doing a full transform + React state update per
+  // event does redundant work the browser can't even paint in time, which
+  // reads as stutter — especially on this floor plan's oversized SVG canvas,
+  // which is already expensive to re-rasterize on any scale change. Instead,
+  // accumulate the zoom factor from every event that arrives before the
+  // next frame and apply it once, right before paint.
   useEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
-    const handler = (e: WheelEvent) => {
-      e.preventDefault();
-      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    let rafId: number | null = null;
+    let pending: { factor: number; clientX: number; clientY: number } | null = null;
+
+    const flush = () => {
+      rafId = null;
+      if (!pending) return;
+      const { factor, clientX, clientY } = pending;
+      pending = null;
       const oldScale = scaleRef.current;
-      const newScale = Math.min(Math.max(oldScale * factor, 0.05), 4);
       const rect = el.getBoundingClientRect();
+      // Same fit-scale floor as zoomStep — see the comment there.
+      const zoomFloor = Math.min(rect.width / svgDims.w, rect.height / svgDims.h);
+      const newScale = Math.min(Math.max(oldScale * factor, zoomFloor), 4);
       translateRef.current = {
-        x: e.clientX - rect.left - (e.clientX - rect.left - translateRef.current.x) * (newScale / oldScale),
-        y: e.clientY - rect.top - (e.clientY - rect.top - translateRef.current.y) * (newScale / oldScale),
+        x: clientX - rect.left - (clientX - rect.left - translateRef.current.x) * (newScale / oldScale),
+        y: clientY - rect.top - (clientY - rect.top - translateRef.current.y) * (newScale / oldScale),
       };
       scaleRef.current = newScale;
       applyTransform();
       setZoomDisplay(Math.round(newScale * 100));
     };
+
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      pending = {
+        factor: (pending?.factor ?? 1) * factor,
+        clientX: e.clientX,
+        clientY: e.clientY,
+      };
+      if (rafId === null) rafId = requestAnimationFrame(flush);
+    };
     el.addEventListener("wheel", handler, { passive: false });
-    return () => el.removeEventListener("wheel", handler);
-  }, [applyTransform]);
+    return () => {
+      el.removeEventListener("wheel", handler);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, [applyTransform, svgDims]);
 
   // ── Mouse pan handlers ─────────────────────────────────────────────────
   const onMouseDown = (e: React.MouseEvent) => {
@@ -693,12 +906,14 @@ export default function LayoutPreview({
 
       const wrapper = wrapperRef.current;
       if (!wrapper) return;
-      const { left, top } = wrapper.getBoundingClientRect();
+      const { left, top, width, height } = wrapper.getBoundingClientRect();
       const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - left;
       const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - top;
 
       const oldScale = scaleRef.current;
-      const newScale = Math.min(Math.max(oldScale * factor, 0.05), 4);
+      // Same fit-scale floor as zoomStep — see the comment there.
+      const zoomFloor = Math.min(width / svgDims.w, height / svgDims.h);
+      const newScale = Math.min(Math.max(oldScale * factor, zoomFloor), 4);
       translateRef.current = {
         x: cx - (cx - translateRef.current.x) * (newScale / oldScale),
         y: cy - (cy - translateRef.current.y) * (newScale / oldScale),
@@ -863,7 +1078,7 @@ export default function LayoutPreview({
                   className="absolute z-30 pointer-events-none bg-white border border-gray-200 rounded-lg shadow-md px-2.5 py-2 min-w-[140px] max-w-[200px]"
                   style={{ left: tooltip.x, top: tooltip.y }}
                 >
-                  <p className="text-[11px] font-semibold text-gray-800">{tooltip.seat.seat_code}</p>
+                  <p className="text-[11px] font-semibold text-gray-800">{displaySpaceCode(tooltip.seat.seat_code)}</p>
                   {tooltip.seat.is_configured ? (
                     <div className="mt-1 space-y-0.5">
                       <p className="text-[10px] text-gray-500 flex items-center gap-1">
@@ -906,13 +1121,31 @@ export default function LayoutPreview({
             </button>
             {/* FIX: hide hint text on mobile — too long for narrow screens */}
             <p className="text-[10px] text-gray-400 select-none hidden sm:block">
-              Scroll to zoom · Drag to pan · Click a seat to configure
+              Scroll to zoom · Drag to pan · Click a space to configure
             </p>
           </div>
         )}
 
+        {/* ── Scheduled banner ─────────────────────────────────────────────
+            Checked before the draft banner below -- a SCHEDULED layout
+            also has is_published=false, so without this it fell into the
+            "this is a draft, publish it" banner, which is both wrong (it's
+            already scheduled, not sitting undecided) and actively
+            misleading (there's no "Publish" action to take here; seat
+            edits are already live via the reschedule/edit endpoints). */}
+        {layout && layout.status === "SCHEDULED" && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-sky-50 border border-sky-200 rounded-lg text-xs text-sky-700 flex-shrink-0">
+            <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+            </svg>
+            {layout.effective_from
+              ? `Scheduled to take over on ${new Date(layout.effective_from).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}. Space changes made now apply immediately; changing the date is still allowed until bookings exist against it.`
+              : "This layout is scheduled to take over automatically. Space changes made now apply immediately."}
+          </div>
+        )}
+
         {/* ── Draft banner ──────────────────────────────────────────────── */}
-        {layout && !layout.is_published && layout.status !== "ARCHIVED" && (
+        {layout && !layout.is_published && layout.status !== "ARCHIVED" && layout.status !== "SCHEDULED" && (
           <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 flex-shrink-0">
             <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />

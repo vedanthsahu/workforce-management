@@ -18,13 +18,14 @@ export interface BuildingStatsSummary {
   total_buildings: number;
   active_buildings: number;
   inactive_buildings: number;
-  total_seats: number;
+  active_seats: number;
 }
 
 export interface SiteOption {
   site_id: string;
   site_code: string;
   site_name: string;
+  status: "ACTIVE" | "INACTIVE";
 }
 
 export interface CreateBuildingPayload {
@@ -41,4 +42,7 @@ export interface UpdateBuildingPayload {
   building_name: string;
 
   status: "ACTIVE" | "INACTIVE";
+
+  reactivate_floor_ids?: number[];
+  reactivate_office?: boolean;
 }

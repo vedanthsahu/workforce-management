@@ -1,6 +1,7 @@
 import { axiosInstance } from "@/lib/http/axios";
 import { Seat } from "../types/seat.types";
 import { LayoutSeatStats } from "../types/layout.types";
+import { capacityFromSvgId } from "../utils/spaceCategory";
 
 // ─── Mapper ───────────────────────────────────────────────────────────────────
 // No fake defaults — null stays null so the UI can show "—" for unconfigured seats
@@ -19,6 +20,7 @@ interface RawSeatItem {
   amenity_ids?:    (string | number)[] | null;
   layout_id:       string | number;
   notes?:          string | null;
+  capacity?:       number | null;
 }
 
 function mapApiItemToSeat(item: RawSeatItem, forceConfigured = false): Seat {
@@ -37,6 +39,10 @@ function mapApiItemToSeat(item: RawSeatItem, forceConfigured = false): Seat {
     amenity_ids:            (item.amenity_ids ?? []).map(String),
     layout_id:              String(item.layout_id),
     notes:                  item.notes ?? "",
+    // Existing layouts may pre-date server-side capacity persistence.  Read
+    // the SVG convention as a fallback so MR-C6-01 shows capacity 6 before
+    // the layout is configured or re-uploaded.
+    capacity:               item.capacity ?? capacityFromSvgId(String(item.svg_element_id)),
   };
 }
 
@@ -65,7 +71,7 @@ export async function fetchLayoutSeats(
     total_seats:        data.total_seats,
     configured_seats:   data.configured_seats,
     unconfigured_seats: data.pending_seats,
-    non_bookable_seats: seats.filter((s) => s.is_bookable === false).length,
+    non_bookable_seats: seats.filter((s) => s.status === "ACTIVE" && s.is_bookable === false).length,
     bookable_seats:     seats.filter((s) => s.is_bookable === true).length,
     inactive_seats:     seats.filter((s) => s.status === "INACTIVE").length,
   };
@@ -82,6 +88,7 @@ export interface SeatConfigPayload {
   is_bookable: boolean;
   is_reserved: boolean;
   amenity_ids: number[];
+  capacity?:   number | null;
 }
 
 export async function configureSeat(
@@ -119,6 +126,7 @@ export interface SeatBulkEntry {
   is_bookable?: boolean;
   is_reserved?: boolean;
   amenity_ids?: number[];
+  capacity?:    number | null;
 }
 
 export interface BulkConfigureSeatsPayload {

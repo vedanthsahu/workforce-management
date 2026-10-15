@@ -1,10 +1,10 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Plus, CheckCircle2, XCircle, X } from "lucide-react";
-import BuildingCards from "@/features/building/components/BuildingCards";
+import BuildingCards, { BuildingStatusFilter } from "@/features/building/components/BuildingCards";
 import BuildingFilters from "@/features/building/components/BuildingFilters";
 import BuildingTable from "@/features/building/components/buildingTable";
 import BuildingPagination from "@/features/building/components/BuildingPagination";
@@ -12,12 +12,13 @@ import EditBuildingModal from "@/features/building/components/EditBuildingModal"
 import { useBuildings } from "@/features/building/hooks/useBuildings";
 import { Building } from "@/features/building/types/building.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
+import { searchMatchRank } from "@/lib/searchRank";
 
 type BannerState = { type: "success" | "error"; message: string } | null;
 
 function BuildingsPage() {
   const {
-    buildings, sites, stats, loading, error,
+    buildings, sites, stats, statsLoading, loading, error,
     search, setSearch, selectedSiteId, setSelectedSiteId, fetchBuildings, fetchStats,
     
   } = useBuildings();
@@ -30,8 +31,9 @@ function BuildingsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [banner, setBanner] = useState<BannerState>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<BuildingStatusFilter>(null);
 
-  useEffect(() => { setCurrentPage(1); }, [search, selectedSiteId]);
+  useEffect(() => { setCurrentPage(1); }, [search, selectedSiteId, statusFilter]);
 
   const showBannerWithHighlight = (message: string, buildingId?: string) => {
     setBanner({ type: "success", message });
@@ -57,28 +59,52 @@ function BuildingsPage() {
   };
 
   const handleEditSuccess = async (updatedBuildingId?: string) => {
-    await Promise.all([fetchBuildings(selectedSiteId), fetchStats()]);
+    await Promise.all([fetchBuildings(), fetchStats()]);
     showBannerWithHighlight("Building updated successfully.", updatedBuildingId);
   };
 
-  const filteredBuildings = buildings
-    .filter((building) => {
-      const name = (building.building_name || "").toLowerCase();
-      const query = search.toLowerCase();
-      let i = 0;
-      for (const char of name) {
-        if (char === query[i]) i++;
-        if (i === query.length) return true;
-      }
-      return query.length === 0;
-    })
+  // Status cards are the parent filter, the office dropdown is the child:
+  // with a card selected, the dropdown only lists offices that have at least
+  // one building of that status ("Total" lists every office).
+  const statusMatchedBuildings = useMemo(
+    () => buildings.filter((b) => !statusFilter || b.status === statusFilter),
+    [buildings, statusFilter],
+  );
+
+  const siteOptions = useMemo(() => {
+    if (!statusFilter) return sites;
+    const siteIds = new Set(statusMatchedBuildings.map((b) => String(b.site_id)));
+    return sites.filter((s) => siteIds.has(String(s.site_id)));
+  }, [sites, statusFilter, statusMatchedBuildings]);
+
+  // If the selected office has no buildings for the current card (after a
+  // card switch or an edit), fall back to "All Offices".
+  useEffect(() => {
+    if (!statusFilter || !selectedSiteId || loading) return;
+    const hasMatch = statusMatchedBuildings.some((b) => String(b.site_id) === selectedSiteId);
+    if (!hasMatch) setSelectedSiteId("");
+  }, [statusFilter, selectedSiteId, statusMatchedBuildings, loading, setSelectedSiteId]);
+
+  // Picking "All Offices" in the dropdown clears every filter, so the cards
+  // go back to "Total Buildings" too. (The automatic fallback above sets
+  // the office directly and deliberately keeps the card.)
+  const handleSiteChange = (siteId: string) => {
+    if (!siteId) setStatusFilter(null);
+    setSelectedSiteId(siteId);
+  };
+
+  const filteredBuildings = statusMatchedBuildings
+    .filter((building) => !selectedSiteId || String(building.site_id) === selectedSiteId)
+    .map((building) => ({ building, rank: searchMatchRank(building.building_name || "", search) }))
+    .filter((x): x is { building: Building; rank: number } => x.rank !== null)
     .sort((a, b) => {
       if (highlightedId) {
-        if (a.building_id === highlightedId) return -1;
-        if (b.building_id === highlightedId) return 1;
+        if (a.building.building_id === highlightedId) return -1;
+        if (b.building.building_id === highlightedId) return 1;
       }
-      return 0;
-    });
+      return a.rank - b.rank;
+    })
+    .map((x) => x.building);
 
   const itemsPerPage = 10;
   const totalPages = Math.ceil(filteredBuildings.length / itemsPerPage);
@@ -125,7 +151,15 @@ function BuildingsPage() {
       )}
 
       {/* STATS */}
-      {loading ? <StatCardsSkeleton /> : <BuildingCards stats={stats} />}
+      {statsLoading ? (
+        <StatCardsSkeleton />
+      ) : (
+        <BuildingCards
+          stats={stats}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+        />
+      )}
 
       {/* TABLE CARD */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
@@ -135,9 +169,16 @@ function BuildingsPage() {
           <h2 className="text-sm sm:text-base font-semibold text-gray-800">Buildings List</h2>
           <div className="w-full sm:w-auto">
             <BuildingFilters
-              sites={sites}
+              sites={siteOptions}
               selectedSiteId={selectedSiteId}
-              setSelectedSiteId={setSelectedSiteId}
+              setSelectedSiteId={handleSiteChange}
+              scopedAllLabel={
+                statusFilter === "ACTIVE"
+                  ? "All Active Offices"
+                  : statusFilter === "INACTIVE"
+                    ? "All Inactive Offices"
+                    : undefined
+              }
               search={search}
               setSearch={(value) => {
                 setSearch(value);
@@ -158,6 +199,15 @@ function BuildingsPage() {
               data={paginatedBuildings}
               onEdit={handleEdit}
               highlightedId={highlightedId}
+              emptyMessage={
+                search
+                  ? `No buildings match "${search}".`
+                  : statusFilter === "ACTIVE"
+                    ? "No active buildings found."
+                    : statusFilter === "INACTIVE"
+                      ? "No inactive buildings found."
+                      : "No buildings found."
+              }
             />
           )}
         </div>

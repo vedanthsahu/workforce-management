@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { Calendar, Hash, Clock, Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Booking } from "../types/dashboard.types";
@@ -18,6 +19,18 @@ type BookingCardProps = {
 
 export function BookingCard({ booking, onCancel, onModify, canCancelOwn, canBookSelf }: BookingCardProps) {
   const isConfirmed = booking.status === "Confirmed";
+  const isModified  = booking.status === "Modified";
+  // "(self)" only applies to a genuine self-booking (booked by and for the
+  // same person) that its own owner then modified themselves, same rule the
+  // admin bookings list and My Bookings page use.
+  const isGenuineSelfBooking =
+    !!booking.bookedForUserId && booking.bookedForUserId === booking.bookedByUserId;
+  const isSelfModified =
+    isModified &&
+    isGenuineSelfBooking &&
+    !!booking.updatedByUserId &&
+    booking.updatedByUserId === booking.bookedForUserId;
+  const showModifiedBy = isModified && !!booking.updatedByName;
 
   return (
     <div className={cn(
@@ -34,7 +47,7 @@ export function BookingCard({ booking, onCancel, onModify, canCancelOwn, canBook
         {/* Main info */}
         <div className="min-w-0">
           <p className="text-[13px] font-bold text-[#0f172a] truncate">{booking.location}</p>
-          <p className="text-[11.5px] text-gray-600 mt-0.5">{booking.floor} · Seat {booking.seatId}</p>
+          <p className="text-[11.5px] text-gray-600 mt-0.5">{booking.floor} · Space {displaySpaceCode(booking.seatId)}</p>
           <div className="flex items-center gap-1.5 mt-1.5 text-[11.5px] text-gray-600">
             <Calendar className="size-3 text-blue-500 shrink-0" />
             <span>{booking.date} · {booking.startTime} – {booking.endTime}</span>
@@ -60,6 +73,12 @@ export function BookingCard({ booking, onCancel, onModify, canCancelOwn, canBook
               </span>
             )}
           </div>
+          {showModifiedBy && (
+            <p className="text-[11px] font-medium text-gray-500 mt-1.5">
+              Modified by <span className="font-bold text-gray-600">{booking.updatedByName}</span>
+              {isSelfModified && " (self)"}
+            </p>
+          )}
         </div>
 
         {/* Right column: Booking ID + Booked on */}

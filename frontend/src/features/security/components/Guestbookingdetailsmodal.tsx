@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import {
   Building2,
   Calendar,
@@ -179,11 +180,11 @@ export function GuestBookingDetailsModal({ visitor, onClose }: Props) {
               <InfoRow icon={Hash} label="Floor" value={visitor.floorName} />
               <InfoRow
                 icon={Armchair}
-                label="Seat"
+                label="Space"
                 value={
                   visitor.seatBooked
                     ? visitor.seatCode
-                      ? `Seat ${visitor.seatCode}`
+                      ? `Space ${displaySpaceCode(visitor.seatCode)}`
                       : "Booked"
                     : "Not required"
                 }
