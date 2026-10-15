@@ -1,3 +1,5 @@
+import { todayIsoInIndia } from "@/lib/indiaDate";
+
 export type BookingStatus =
   | "Scheduled"
   | "Confirmed"
@@ -38,6 +40,8 @@ export interface AdminBooking {
   booked_by: BookedByType;
   booked_on: string;
   check_in_time?: string;
+  /** Set only when this row is Cancelled/Modified by someone other than its own owner. */
+  cancelled_by?: string;
   /** Not available from GET /admin/activities; always empty until a real source exists. */
   amenities: AdminBookingAmenity[];
   /** Not available from GET /admin/activities. */
@@ -103,7 +107,7 @@ export interface AdminBookingFloorOption {
 export function defaultAdminBookingFilters(): AdminBookingFilters {
   // Date Range defaults to today so the page loads showing today's bookings
   // without the admin needing to pick a date and click Search first.
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayIsoInIndia();
   return {
     search: "",
     site: "",
@@ -168,6 +172,9 @@ export interface AdminBookingRaw {
   checked_out_at: string | null;
   cancelled_at: string | null;
   cancellation_reason: string | null;
+  updated_user_id?: string | null;
+  updated_by_name?: string | null;
+  updated_by_email?: string | null;
 
   // Server-derived (modified_from_booking_id is not null) — the authoritative
   // signal for whether this row is a modification, independent of whatever
@@ -204,6 +211,7 @@ export interface AdminBookingRaw {
 export interface AdminBookingSummary {
   total_bookings: number;
   confirmed_bookings: number;
+  not_checked_in_bookings: number;
   cancelled_bookings: number;
   modified_bookings: number;
   completed_bookings: number;

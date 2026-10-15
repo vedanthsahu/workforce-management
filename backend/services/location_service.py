@@ -21,12 +21,20 @@ from backend.core.audit_actions import (
     SITE_UPDATED,
 )
 from backend.core.enums import LayoutStatus
+from backend.core.seat_categorization import capacity_from_svg_element_id
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.floor_layout_repository import (
     fetch_floor_layout_by_id,
     touch_floor_layout_updated_by,
 )
 from backend.repositories.location_repository import (
+    activate_buildings_by_ids,
+    activate_floors_by_ids_for_building,
+    activate_floors_by_ids_for_site,
+    activate_site_by_id,
+    deactivate_buildings_by_site,
+    deactivate_floors_by_building,
+    deactivate_floors_by_site,
     fetch_building_by_id,
     fetch_building_duplicates,
     fetch_buildings_by_site,
@@ -295,6 +303,41 @@ def update_site_metadata(
         )
         if updated_site is None:
             _raise_not_found("site")
+
+        # Deactivating an office cascades down automatically: a building
+        # (and its floors) can never stay ACTIVE under an inactive office.
+        # Reactivating a site is NOT auto-cascaded the same way -- only the
+        # buildings/floors the caller explicitly opts in via
+        # reactivate_building_ids/reactivate_floor_ids come back, so nothing
+        # that was already inactive for an unrelated reason gets silently
+        # resurrected.
+        if updates.get("status") == "INACTIVE":
+            deactivate_buildings_by_site(conn, tenant_id=tenant_id, site_id=site_id)
+            deactivate_floors_by_site(conn, tenant_id=tenant_id, site_id=site_id)
+        elif updates.get("status") == "ACTIVE":
+            # Opt-in reactivation: only the buildings/floors the caller
+            # explicitly selected come back, never every inactive child.
+            # Buildings first so activate_floors_by_ids_for_site sees them
+            # as ACTIVE when deciding which floors it's allowed to reach.
+            if payload.reactivate_building_ids:
+                activate_buildings_by_ids(
+                    conn,
+                    tenant_id=tenant_id,
+                    site_id=site_id,
+                    building_ids=payload.reactivate_building_ids,
+                )
+            if payload.reactivate_floor_ids:
+                activate_floors_by_ids_for_site(
+                    conn,
+                    tenant_id=tenant_id,
+                    site_id=site_id,
+                    floor_ids=payload.reactivate_floor_ids,
+                )
+        elif payload.reactivate_building_ids or payload.reactivate_floor_ids:
+            _raise_invalid_hierarchy(
+                "reactivate_building_ids/reactivate_floor_ids are only valid when activating the office.",
+            )
+
         conn.commit()
     except HTTPException as he:
         conn.rollback()
@@ -356,6 +399,16 @@ def update_layout_seat_configuration(
 
         amenity_ids = payload.amenity_ids or []
 
+        # Conference-room capacity belongs to the SVG naming convention, not
+        # the client request.  This prevents an API caller from changing the
+        # value displayed by a room id such as MR-C6-01.
+        derived_capacity = capacity_from_svg_element_id(str(mapping["svg_element_id"]))
+        effective_capacity = (
+            derived_capacity
+            if derived_capacity is not None
+            else mapping.get("capacity")
+        )
+
         updated_mapping = update_layout_seat_mapping_configuration(
                 conn,
                 tenant_id=tenant_id,
@@ -367,6 +420,7 @@ def update_layout_seat_configuration(
                 is_reserved=payload.is_reserved,
                 amenity_ids=amenity_ids,
                 updated_by=str(current_user["user_id"]),
+                capacity=effective_capacity,
             )
 
         # Draft isolation only holds for DRAFT/ARCHIVED layouts. A PUBLISHED
@@ -374,13 +428,23 @@ def update_layout_seat_configuration(
         # as update_layout_seat_configurations_bulk), so this single-mapping
         # edit must cascade into seats/seat_amenities too -- otherwise an
         # admin editing one already-live seat gets a 200 while the seat
-        # bookings actually read from stays stale.
+        # bookings actually read from stays stale. A SCHEDULED layout's
+        # seats are likewise already materialized in `seats` the moment
+        # it's scheduled (see floor_layout_service._schedule_floor_layout),
+        # so it needs the same cascade -- editing its seat configuration is
+        # always allowed regardless of how close effective_from is, since
+        # it only touches this layout's own seats and can't strand anyone
+        # else's booking (unlike changing the effective_date itself, which
+        # reschedule_floor_layout gates separately).
         layout = fetch_floor_layout_by_id(
             conn,
             tenant_id=tenant_id,
             layout_id=str(mapping["layout_id"]),
         )
-        if layout is not None and layout["status"] == LayoutStatus.PUBLISHED.value:
+        if layout is not None and layout["status"] in (
+            LayoutStatus.PUBLISHED.value,
+            LayoutStatus.SCHEDULED.value,
+        ):
             seat = upsert_operational_seat(
                 conn,
                 tenant_id=tenant_id,
@@ -396,6 +460,7 @@ def update_layout_seat_configuration(
                 is_reserved=updated_mapping.get("is_reserved"),
                 svg_element_id=str(updated_mapping["svg_element_id"]),
                 source_layout_mapping_id=str(updated_mapping["id"]),
+                capacity=updated_mapping.get("capacity"),
             )
             replace_seat_amenities(
                 conn,
@@ -428,6 +493,7 @@ def update_layout_seat_configuration(
             is_configured=True,
             configuration_status="COMPLETED",
             amenity_ids=updated_mapping.get("amenity_ids") or [],
+            capacity=updated_mapping.get("capacity"),
         )
 
     except HTTPException:
@@ -509,8 +575,12 @@ def update_layout_seat_configurations_bulk(
                     },
                 )
 
-        update_entries = [
-            {
+        update_entries = []
+        for entry in payload.seats:
+            mapping_id = str(entry.layout_seat_mapping_id)
+            mapping = mappings_by_id[mapping_id]
+            derived_capacity = capacity_from_svg_element_id(str(mapping["svg_element_id"]))
+            update_entries.append({
                 "layout_seat_mapping_id": str(entry.layout_seat_mapping_id),
                 "seat_name": _resolve_bulk_field(entry.seat_name, defaults.seat_name if defaults else None),
                 "seat_type": _resolve_bulk_field(entry.seat_type, defaults.seat_type if defaults else None),
@@ -520,9 +590,12 @@ def update_layout_seat_configurations_bulk(
                 "amenity_ids": _resolve_bulk_field(
                     entry.amenity_ids, defaults.amenity_ids if defaults else None
                 ),
+                # Like the single-seat endpoint, ignore a capacity supplied
+                # by the browser and retain legacy values only where an SVG
+                # has not yet adopted the MR-C<number>-... convention.
+                "capacity": derived_capacity if derived_capacity is not None else mapping.get("capacity"),
             }
-            for entry in payload.seats
-        ]
+            )
 
         updated_mappings_by_id = update_layout_seat_mapping_configurations_bulk(
             conn,
@@ -546,6 +619,7 @@ def update_layout_seat_configurations_bulk(
                 is_configured=True,
                 configuration_status="COMPLETED",
                 amenity_ids=updated_mappings_by_id[mapping_id].get("amenity_ids") or [],
+                capacity=updated_mappings_by_id[mapping_id].get("capacity"),
             )
             for mapping_id in mapping_ids
         ]
@@ -556,13 +630,16 @@ def update_layout_seat_configurations_bulk(
                 tenant_id=tenant_id,
                 layout_id=layout_id,
             )
-            if layout is not None and layout["status"] == LayoutStatus.PUBLISHED.value:
-                # Published layout: no separate publish step exists for a
-                # post-publish edit, so push straight into the live
-                # projection alongside the draft table, in this same
-                # transaction. Scoped to just the edited mappings, not a
-                # full reconcile -- nothing is being removed from the
-                # layout here, only reconfigured.
+            if layout is not None and layout["status"] in (
+                LayoutStatus.PUBLISHED.value,
+                LayoutStatus.SCHEDULED.value,
+            ):
+                # Published (or SCHEDULED, already-materialized) layout: no
+                # separate publish step exists for a post-publish edit, so
+                # push straight into the live projection alongside the
+                # draft table, in this same transaction. Scoped to just
+                # the edited mappings, not a full reconcile -- nothing is
+                # being removed from the layout here, only reconfigured.
                 seats_payload = [
                     {
                         "layout_id": str(updated_mappings_by_id[mapping_id]["layout_id"]),
@@ -577,6 +654,7 @@ def update_layout_seat_configurations_bulk(
                         "is_reserved": updated_mappings_by_id[mapping_id].get("is_reserved"),
                         "svg_element_id": str(updated_mappings_by_id[mapping_id]["svg_element_id"]),
                         "source_layout_mapping_id": str(updated_mappings_by_id[mapping_id]["id"]),
+                        "capacity": updated_mappings_by_id[mapping_id].get("capacity"),
                     }
                     for mapping_id in mapping_ids
                 ]
@@ -708,6 +786,10 @@ def create_building(
         site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=site_id)
         if site is None:
             _raise_not_found("site")
+        if payload.status == "ACTIVE" and site.get("status") != "ACTIVE":
+            _raise_invalid_hierarchy(
+                "Cannot create an ACTIVE building under an INACTIVE office.",
+            )
 
         _raise_building_duplicate_if_needed(
             fetch_building_duplicates(
@@ -815,6 +897,25 @@ def update_building_metadata(
                 building_name=str(updates["building_name"]),
             )
 
+        if updates.get("status") == "ACTIVE" and building.get("status") != "ACTIVE":
+            site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=str(building["site_id"]))
+            if site is None:
+                _raise_invalid_hierarchy(
+                    "Cannot activate a building while its office is INACTIVE.",
+                )
+            elif site.get("status") != "ACTIVE":
+                # A building can never be ACTIVE under an INACTIVE office.
+                # The caller must explicitly opt in via reactivate_office
+                # (surfaced in the UI as a locked, always-checked "Office"
+                # row) to also reactivate the office in the same request --
+                # otherwise this stays a hard rejection, same as before.
+                if payload.reactivate_office:
+                    activate_site_by_id(conn, tenant_id=tenant_id, site_id=str(building["site_id"]))
+                else:
+                    _raise_invalid_hierarchy(
+                        "Cannot activate a building while its office is INACTIVE.",
+                    )
+
         updated_building = update_building(
             conn,
             tenant_id=tenant_id,
@@ -823,6 +924,26 @@ def update_building_metadata(
         )
         if updated_building is None:
             _raise_not_found("building")
+
+        # Deactivating a building cascades down to its floors, same rule
+        # and same reactivation exception as the site cascade above.
+        if updates.get("status") == "INACTIVE":
+            deactivate_floors_by_building(conn, tenant_id=tenant_id, building_id=building_id)
+        elif updates.get("status") == "ACTIVE":
+            # Opt-in reactivation of the floors the caller explicitly
+            # selected, same pattern as the site-level cascade above.
+            if payload.reactivate_floor_ids:
+                activate_floors_by_ids_for_building(
+                    conn,
+                    tenant_id=tenant_id,
+                    building_id=building_id,
+                    floor_ids=payload.reactivate_floor_ids,
+                )
+        elif payload.reactivate_floor_ids:
+            _raise_invalid_hierarchy(
+                "reactivate_floor_ids is only valid when activating the building.",
+            )
+
         conn.commit()
     except HTTPException as he:
         conn.rollback()
@@ -865,19 +986,21 @@ def get_floors_by_building(
     conn: PGConnection,
     *,
     tenant_id: str,
-    building_id: str,
+    building_id: str | None = None,
+    site_id: str | None = None,
     page: int | None = None,
     limit: int | None = None,
     search: str | None = None,
     status_filter: str | None = None,
 ) -> list[FloorResponse]:
-    """Return tenant-scoped floors for one site through the full hierarchy."""
+    """Return tenant-scoped floors, optionally narrowed to one building and/or site."""
     status_filter = _normalize_status_filter(status_filter)
     try:
         floors = fetch_floors_by_building(
             conn,
             tenant_id=tenant_id,
             building_id=building_id,
+            site_id=site_id,
             page=page,
             limit=limit,
             search=search,
@@ -917,6 +1040,10 @@ def create_floor(
         if str(building["site_id"]) != site_id:
             _raise_invalid_hierarchy(
                 "building_id does not belong to the supplied site_id.",
+            )
+        if payload.status == "ACTIVE" and building.get("status") != "ACTIVE":
+            _raise_invalid_hierarchy(
+                "Cannot create an ACTIVE floor under an INACTIVE building.",
             )
 
         _raise_floor_duplicate_if_needed(
@@ -1023,6 +1150,42 @@ def update_floor_metadata(
                 ),
                 floor_name=str(updates["floor_name"]),
             )
+
+        if updates.get("status") == "ACTIVE" and floor.get("status") != "ACTIVE":
+            building = fetch_building_by_id(conn, tenant_id=tenant_id, building_id=str(floor["building_id"]))
+            if building is None:
+                _raise_invalid_hierarchy(
+                    "Cannot activate a floor while its building is INACTIVE.",
+                )
+
+            site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=str(building["site_id"]))
+            if site is None:
+                _raise_invalid_hierarchy(
+                    "Cannot activate a floor while its office is INACTIVE.",
+                )
+
+            # Two independent opt-in cascades, same pattern as the building
+            # endpoint's reactivate_office: each ancestor that's still
+            # INACTIVE needs its own explicit flag (surfaced in the UI as a
+            # locked, always-checked row) before it gets reactivated here.
+            if site.get("status") != "ACTIVE":
+                if not payload.reactivate_office:
+                    _raise_invalid_hierarchy(
+                        "Cannot activate a floor while its office is INACTIVE.",
+                    )
+                activate_site_by_id(conn, tenant_id=tenant_id, site_id=str(building["site_id"]))
+
+            if building.get("status") != "ACTIVE":
+                if not payload.reactivate_building:
+                    _raise_invalid_hierarchy(
+                        "Cannot activate a floor while its building is INACTIVE.",
+                    )
+                activate_buildings_by_ids(
+                    conn,
+                    tenant_id=tenant_id,
+                    site_id=str(building["site_id"]),
+                    building_ids=[int(building["building_id"])],
+                )
 
         updated_floor = update_floor(
             conn,
@@ -1259,8 +1422,19 @@ def _build_floor_response(floor: dict[str, object]) -> FloorResponse:
             "layout_file_url": floor.get("layout_file_url"),
         }
 
+    scheduled_layout = None
+    scheduled_layout_id = floor.get("scheduled_layout_id")
+    if scheduled_layout_id is not None:
+        scheduled_layout = {
+            "layout_id": scheduled_layout_id,
+            "layout_name": floor.get("scheduled_layout_name"),
+            "layout_file_url": floor.get("scheduled_layout_file_url"),
+            "effective_from": floor.get("scheduled_layout_effective_from"),
+        }
+
     response_data = dict(floor)
     response_data["active_layout"] = active_layout
+    response_data["scheduled_layout"] = scheduled_layout
 
     return FloorResponse(**response_data)
 

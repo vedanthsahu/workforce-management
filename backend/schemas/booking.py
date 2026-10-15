@@ -94,6 +94,10 @@ class BookingResponse(BaseModel):
 
     cancellation_reason: str | None = None
 
+    updated_user_id: str | None = None
+    updated_by_name: str | None = None
+    updated_by_email: str | None = None
+
     modified_from_booking_id: str | None = None
     modification_reason: str | None = None
     is_modified: bool = False

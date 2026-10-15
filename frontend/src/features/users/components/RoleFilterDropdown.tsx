@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { getRoleBadgeClass, normalizeRoleKey } from "../utils/users.utils";
+import { formatRoleLabel, getRoleBadgeClass, normalizeRoleKey } from "../utils/users.utils";
 import type { RoleCount, RoleKey } from "../types/users.types";
 
 type Props = {
@@ -70,7 +70,7 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
   const label = selectedRoles.length === 0
     ? "All roles"
     : selectedRoles.length === 1
-      ? selectedRoles[0]
+      ? formatRoleLabel(selectedRoles[0])
       : `${selectedRoles.length} roles`;
 
   return (
@@ -78,14 +78,14 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
       <button
         type="button"
         onClick={openDropdown}
-        className="flex items-center justify-between gap-2 h-10 w-44 px-4 border border-gray-200 rounded-lg text-sm bg-white hover:bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="flex items-center justify-between gap-2 h-10 w-full md:w-44 px-4 border border-gray-200 rounded-lg text-sm bg-white hover:bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
         <span className="truncate">{label}</span>
         <ChevronDown size={14} className="text-gray-400 shrink-0" />
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-1 w-64 rounded-lg border border-gray-200 bg-white py-1.5 shadow-lg">
+        <div className="absolute left-0 right-0 md:left-auto md:right-0 z-20 mt-1 w-auto md:w-64 rounded-lg border border-gray-200 bg-white py-1.5 shadow-lg">
           <div className="flex items-center justify-between gap-2 px-3 py-1">
             <button
               type="button"
@@ -103,7 +103,16 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setPendingRoles([])}
+                onClick={() => {
+                  // Clear is immediate -- unlike checking/unchecking boxes,
+                  // it doesn't wait for Apply. Unticks the draft AND resets
+                  // the actually-applied filter back to "All Roles" in one
+                  // click, but (unlike Apply) doesn't close the dropdown --
+                  // it's a reset the admin can keep picking roles after, not
+                  // a confirm-and-done action.
+                  setPendingRoles([]);
+                  onChange([]);
+                }}
                 className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
               >
                 Clear
@@ -140,7 +149,7 @@ export default function RoleFilterDropdown({ roleCounts, selectedRoles, onChange
                     className="accent-blue-600 shrink-0"
                   />
                   <span className={`inline-flex items-center whitespace-nowrap px-1.5 py-0.5 rounded text-[11px] font-semibold ring-1 ${getRoleBadgeClass(roleName)}`}>
-                    {roleName}
+                    {formatRoleLabel(roleName)}
                   </span>
                 </span>
                 <span className="text-xs text-gray-400 shrink-0">{count}</span>

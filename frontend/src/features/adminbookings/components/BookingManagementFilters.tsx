@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useEffect, useRef, useState } from "react";
 import { adminBookingsService } from "../services/adminBookings.service";
 import { mapAdminBookingRawToUiBooking } from "../utils/mapAdminBooking";
@@ -11,7 +12,7 @@ import {
   AdminBookingBuildingOption,
   AdminBookingFloorOption,
 } from "../types/adminBooking.types";
-import { BOOKING_STATUS_OPTIONS } from "../utils/constants";
+import { BOOKING_STATUS_OPTIONS, SELECT_BASE_CLASS, SELECT_ARROW_STYLE } from "../utils/constants";
 
 type Props = {
   filters: AdminBookingFilters;
@@ -74,7 +75,7 @@ function DateRangeField({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="h-10 px-3 flex items-center gap-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors w-full"
+        className="h-10 px-3 flex items-center gap-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors w-full"
       >
         <CalendarDays size={14} className="text-gray-400 shrink-0" />
         <span className="flex-1 text-left truncate">{label}</span>
@@ -88,13 +89,20 @@ function DateRangeField({
             <input
               type="date"
               value={draftFrom}
-              max={draftTo || undefined}
-              onChange={(e) => setDraftFrom(e.target.value)}
+              onChange={(e) => {
+                // Picking a new From date resets To to match it -- keeps the
+                // range valid without the user having to also touch To, but
+                // they can still pick a different To afterward (min below
+                // just stops them picking one earlier than From).
+                const next = e.target.value;
+                setDraftFrom(next);
+                setDraftTo(next);
+              }}
               onKeyDown={(e) => {
                 if (!["Tab", "Escape", "Shift"].includes(e.key)) e.preventDefault();
               }}
               onPaste={(e) => e.preventDefault()}
-              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -108,7 +116,7 @@ function DateRangeField({
                 if (!["Tab", "Escape", "Shift"].includes(e.key)) e.preventDefault();
               }}
               onPaste={(e) => e.preventDefault()}
-              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+              className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="flex items-center justify-between gap-2 pt-1">
@@ -164,16 +172,6 @@ function Field({
   );
 }
 
-const selectBaseClass =
-  "h-10 pr-8 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors cursor-pointer w-full";
-
-const selectArrowStyle: React.CSSProperties = {
-  backgroundImage:
-    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
-  backgroundRepeat: "no-repeat",
-  backgroundPosition: "right 10px center",
-};
-
 function NativeSelect({
   value,
   onChange,
@@ -211,8 +209,8 @@ function NativeSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className={`${selectBaseClass} ${icon ? "pl-8" : "pl-3"} disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400`}
-        style={showClear ? { backgroundImage: "none" } : selectArrowStyle}
+        className={`${SELECT_BASE_CLASS} ${icon ? "pl-8" : "pl-3"} disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400`}
+        style={showClear ? { backgroundImage: "none" } : SELECT_ARROW_STYLE}
       >
         {placeholder && (
           <option value="" disabled hidden>
@@ -236,6 +234,10 @@ function NativeSelect({
       )}
     </div>
   );
+}
+
+function optionLabel(options: { value: string; label: string }[], value: string): string {
+  return options.find((o) => o.value === value)?.label ?? value;
 }
 
 export default function BookingManagementFilters({
@@ -348,7 +350,10 @@ export default function BookingManagementFilters({
   useEffect(() => {
     const employeeStatusValues = ["All", "Confirmed", "Cancelled", "Modified"];
     const allStatusValues = BOOKING_STATUS_OPTIONS.map((o) => o.value);
-    const guestStatusValues = allStatusValues.filter((v) => v !== "No Show");
+    // "Not Checked In" isn't a real BookingStatus -- it's the Guest tab's
+    // Not Checked In card, which filters to Scheduled + Confirmed combined
+    // (see the matchingItems filter in AdminBookingsPage.tsx).
+    const guestStatusValues = [...allStatusValues.filter((v) => v !== "No Show"), "Not Checked In"];
 
     const allowed =
       filters.bookingType === "Employee"
@@ -360,11 +365,53 @@ export default function BookingManagementFilters({
     if (!allowed.includes(filters.status)) onUpdate("status", "All");
   }, [filters.bookingType, filters.status, onUpdate]);
 
+  // Chips summarizing whichever of Office/Building/Floor/Status aren't "All"
+  // (or, for Office/Building/Floor, not yet picked at all -- their default
+  // is "" before a first selection, not "All"). Office and Building removal
+  // reuse the same cascading reset as their selects (onSiteChange/
+  // onBuildingChange) so clearing Office also clears the now-stale
+  // Building/Floor picks instead of leaving them pointed at a hidden site.
+  const activeFilterChips = [
+    !!filters.site && filters.site !== "All" && {
+      key: "site",
+      label: "Office",
+      value: optionLabel(
+        sites.map((s) => ({ value: s.site_id, label: s.site_name })),
+        filters.site
+      ),
+      onRemove: () => onSiteChange("All"),
+    },
+    !!filters.building && filters.building !== "All" && {
+      key: "building",
+      label: "Building",
+      value: optionLabel(
+        buildings.map((b) => ({ value: b.building_id, label: b.building_name })),
+        filters.building
+      ),
+      onRemove: () => onBuildingChange("All"),
+    },
+    !!filters.floor && filters.floor !== "All" && {
+      key: "floor",
+      label: "Floor",
+      value: optionLabel(
+        floors.map((f) => ({ value: f.floor_id, label: f.floor_name })),
+        filters.floor
+      ),
+      onRemove: () => onUpdate("floor", "All"),
+    },
+    filters.status !== "All" && {
+      key: "status",
+      label: "Status",
+      value: optionLabel(BOOKING_STATUS_OPTIONS, filters.status),
+      onRemove: () => onUpdate("status", "All"),
+    },
+  ].filter((chip): chip is { key: string; label: string; value: string; onRemove: () => void } => Boolean(chip));
+
   return (
     <div className="flex flex-col gap-4">
       {/* Row 1 */}
       <div className="flex items-end gap-3 flex-wrap">
-        <Field label="Date Range" width="240px">
+        <Field label="Date Range" width="255px">
           <DateRangeField
             dateFrom={filters.dateFrom}
             dateTo={filters.dateTo}
@@ -375,7 +422,7 @@ export default function BookingManagementFilters({
           />
         </Field>
 
-        <Field label="Office" width="175px">
+        <Field label="Office" width="173px">
           <NativeSelect
             value={filters.site}
             onChange={onSiteChange}
@@ -388,7 +435,7 @@ export default function BookingManagementFilters({
           />
         </Field>
 
-        <Field label="Building" width="175px">
+        <Field label="Building" width="173px">
           <NativeSelect
             value={filters.building}
             onChange={onBuildingChange}
@@ -402,7 +449,7 @@ export default function BookingManagementFilters({
           />
         </Field>
 
-        <Field label="Floor" width="175px">
+        <Field label="Floor" width="173px">
           <NativeSelect
             value={filters.floor}
             onChange={(v) => onUpdate("floor", v)}
@@ -427,7 +474,10 @@ export default function BookingManagementFilters({
                 { value: "Modified", label: "Modified" },
               ];
             } else if (filters.bookingType === "Guest") {
-              statusOptions = BOOKING_STATUS_OPTIONS.filter((o) => o.value !== "No Show");
+              statusOptions = [
+                ...BOOKING_STATUS_OPTIONS.filter((o) => o.value !== "No Show"),
+                { value: "Not Checked In", label: "Not Checked In" },
+              ];
             } else {
               statusOptions = BOOKING_STATUS_OPTIONS;
             }
@@ -445,10 +495,40 @@ export default function BookingManagementFilters({
         </Field>
       </div>
 
+      {activeFilterChips.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-medium text-gray-500">
+            {activeFilterChips.length} filter{activeFilterChips.length > 1 ? "s" : ""} selected:
+          </span>
+          {activeFilterChips.map((chip) => (
+            <span
+              key={chip.key}
+              className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full"
+            >
+              <span className="text-indigo-400 font-normal">{chip.label}:</span>
+              {chip.value}
+              <button
+                type="button"
+                onClick={chip.onRemove}
+                className="p-0.5 rounded-full hover:bg-indigo-100 transition-colors"
+                aria-label={`Clear ${chip.label} filter`}
+              >
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Row 2 */}
       <div className="flex items-end gap-2 flex-wrap" >
-        <Field label="Search By" minWidth="100px">
-          <div className="h-10 inline-flex items-center bg-gray-200 border border-gray-200 p-1 rounded-lg gap-1">
+        <Field label="Search By" minWidth="224px">
+          <div className="relative h-10 flex items-center bg-gray-100 p-1 rounded-full w-56">
+            <div
+              aria-hidden
+              className="absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-full bg-indigo-700 shadow-sm transition-transform duration-300 ease-out"
+              style={{ transform: filters.bookingType === "Guest" ? "translateX(100%)" : "translateX(0%)" }}
+            />
             {(["Employee", "Guest"] as const).map((opt) => {
               const active = filters.bookingType === opt;
               const Icon = opt === "Employee" ? User : Users;
@@ -457,7 +537,7 @@ export default function BookingManagementFilters({
                   key={opt}
                   type="button"
                   onClick={() => onUpdate("bookingType", opt)}
-                  className={`inline-flex items-center justify-center gap-1 w-21 h-full px-2 text-[12px] font-medium rounded-md transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 ${active ? "bg-indigo-700 text-white shadow-sm" : "bg-white text-gray-700 shadow-sm hover:bg-gray-50"}`}
+                  className={`relative z-10 flex-1 inline-flex items-center justify-center gap-1.5 h-full px-2 text-[12px] font-medium rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 ${active ? "text-white" : "text-gray-500 hover:text-gray-700"}`}
                 >
                   <Icon size={13} />
                   {opt}
@@ -488,7 +568,7 @@ export default function BookingManagementFilters({
                   onKeyDown={(e) => {
                     if (e.key === "Escape") setSearchOpen(false);
                   }}
-                  className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
+                  className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
                 />
                 {filters.search && (
                   <button
@@ -542,12 +622,12 @@ export default function BookingManagementFilters({
           </div>
         </Field>
 
-        <Field label="Seat Number">
+        <Field label="Space Number">
           <div ref={seatRef} className="relative w-full sm:w-60">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Search seat number"
+              placeholder="Search space number"
               value={filters.seatNumber}
               onChange={(e) => {
                 onUpdate("seatNumber", e.target.value);
@@ -559,7 +639,7 @@ export default function BookingManagementFilters({
               onKeyDown={(e) => {
                 if (e.key === "Escape") setSeatOpen(false);
               }}
-              className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400"
+              className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400"
             />
             {filters.seatNumber && (
               <button
@@ -591,7 +671,7 @@ export default function BookingManagementFilters({
                           }}
                           className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-indigo-50 transition-colors text-left"
                         >
-                          <span className="text-[13px] font-medium text-gray-800">{b.seat_code}</span>
+                          <span className="text-[13px] font-medium text-gray-800">{displaySpaceCode(b.seat_code)}</span>
                           <span className="text-[11px] text-gray-400">{b.seat_type}</span>
                         </button>
                       </li>

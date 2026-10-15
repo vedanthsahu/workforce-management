@@ -61,7 +61,7 @@ export function SecurityDashboardSkeleton() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-gray-100">
-              {["Guest Name", "Host", "Visit Time", "Location", "Seat", "Status", ""].map((h, i) => (
+              {["Guest Name", "Host", "Visit Time", "Location", "Space", "Status", ""].map((h, i) => (
                 <th key={i} className="px-4 py-3 text-left">
                   <Skeleton className="h-3 w-16" />
                 </th>

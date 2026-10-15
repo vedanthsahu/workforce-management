@@ -9,6 +9,11 @@ from typing import Any
 from psycopg2.extensions import connection as PGConnection
 from psycopg2.extras import RealDictCursor
 
+from backend.core.seat_categorization import (
+    capacity_from_svg_element_id,
+    suggest_seat_type,
+)
+
 
 def bulk_insert_layout_seat_mappings(
     conn: PGConnection,
@@ -28,6 +33,16 @@ def bulk_insert_layout_seat_mappings(
 
         for seat_id in seat_ids:
 
+            # Cabins/conference rooms are detected from the svg id's own
+            # naming convention (e.g. "...-CBN-05", "...-MR-06") so they land
+            # in the right Manage Spaces tab immediately, with no manual
+            # per-seat retyping needed after upload. A plain desk's svg id
+            # matches nothing here, so seat_type stays NULL for it exactly
+            # like before -- only cabins/conference rooms get a value set at
+            # upload time.
+            initial_seat_type = suggest_seat_type(seat_id)
+            initial_capacity = capacity_from_svg_element_id(seat_id)
+
             cur.execute(
                 """
                 INSERT INTO layout_seat_mappings (
@@ -38,9 +53,13 @@ def bulk_insert_layout_seat_mappings(
                     floor_id,
                     svg_element_id,
                     seat_code,
+                    seat_type,
+                    capacity,
                     created_by
                 )
                 VALUES (
+                    %s,
+                    %s,
                     %s,
                     %s,
                     %s,
@@ -59,6 +78,7 @@ def bulk_insert_layout_seat_mappings(
                     floor_id::text AS floor_id,
                     svg_element_id,
                     seat_code,
+                    seat_type,
                     created_at,
                     updated_at
                 """,
@@ -70,6 +90,8 @@ def bulk_insert_layout_seat_mappings(
                     floor_id,
                     seat_id,
                     seat_id,
+                    initial_seat_type,
+                    initial_capacity,
                     created_by,
                 ),
             )

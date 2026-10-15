@@ -5,12 +5,24 @@ import type {
   PreferenceMatchConfig,
 } from "../types/Bookingform.types";
 
+// ── Booking policy ────────────────────────────────────────────────────────────
+// The advance window itself is tenant-configured (Configuration → Employee
+// Booking) and read via useBookingPolicy; only the wording lives here.
+export const bookingTooFarInAdvanceMessage = (days: number) =>
+  `Bookings can only be made up to ${days} days in advance. Please select a date within the next ${days} days.`;
+
+export const MULTI_DAY_BOOKING_NOT_SUPPORTED_MESSAGE =
+  "Multi-day booking isn’t available yet. Your booking has been set for the selected date only.";
+
 // ── Floor map SVG dimensions ───────────────────────────────────────────────────
 export const SVG_W = 2466;
 export const SVG_H = 2039;
 
 // ── Zoom limits & steps ─────────────────────────────────────────────────────────
-export const ZOOM_MIN = 0.05;
+// No fixed ZOOM_MIN: the zoom-out floor is computed per-SVG as the
+// "fit to view" scale (see SvgFloorMapPage's zoomStep/wheel handler), so
+// zooming out always bottoms out at the original fitted framing rather than
+// a constant that's wrong for either an oversized or a normal-sized canvas.
 export const ZOOM_MAX = 4;
 export const ZOOM_BUTTON_FACTOR = 1.25;
 export const ZOOM_WHEEL_FACTOR = 1.1;
@@ -64,10 +76,10 @@ export const SEAT_PALETTES: Record<string, SeatPalette> = {
     opacity: "0.75",
   },
   yours: {
-    body: "#d1fae5", bodyStroke: "#10b981",
-    armrest: "#6ee7b7",
-    back: "#059669", backStroke: "#047857",
-    curve: "#10b981", arc: "#6ee7b7",
+    body: "#dbeafe", bodyStroke: "#3b82f6",
+    armrest: "#93c5fd",
+    back: "#1d4ed8", backStroke: "#1e40af",
+    curve: "#3b82f6", arc: "#93c5fd",
     opacity: "1",
   },
   unloaded: {

@@ -28,10 +28,8 @@ AdminDirectoryStatus = Literal[
 
 
 class UpdateMyProfileRequest(BaseModel):
-    full_name: str | None = Field(default=None, max_length=200)
-    display_name: str | None = Field(default=None, max_length=200)
-    mobile_phone: str | None = Field(default=None, max_length=50)
-    office_location: str | None = Field(default=None, max_length=200)
+    bio: str | None = Field(default=None, max_length=2000)
+    skills: list[str] | None = Field(default=None, max_length=50)
 
 
 class AdminUserAccessUpdateRequest(BaseModel):
@@ -40,6 +38,10 @@ class AdminUserAccessUpdateRequest(BaseModel):
         "MANAGER",
         "FACILITATOR",
         "FRONT_OFFICE",
+        # A Tenant Admin can assign this to anyone (promoting a new admin,
+        # managing an existing one, or their own access) -- PRODUCT_ADMIN
+        # is deliberately not offered here; see admin_update_user_access_service.
+        "TENANT_ADMIN",
     ] | None = None
 
     status: Literal[
@@ -79,6 +81,7 @@ class AdminUserDirectoryItem(CamelModel):
     department: str | None = None
     job_title: str | None = Field(default=None, alias="jobTitle")
     mobile_phone: str | None = Field(default=None, alias="mobilePhone")
+    office_location: str | None = Field(default=None, alias="officeLocation")
     status: str
     email: str | None = None
 

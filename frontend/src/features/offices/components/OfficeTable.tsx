@@ -8,13 +8,14 @@ interface OfficeTableProps {
   data: Office[];
   onEdit: (office: Office) => void;
   highlightedId?: string | null;
+  /** Shown in place of the rows when `data` is empty -- e.g. "No inactive
+   * offices found." when the status card filter is set to Inactive. */
+  emptyMessage?: string;
 }
 
-export default function OfficeTable({ data, onEdit, highlightedId }: OfficeTableProps) {
-  if (data.length === 0) {
-    return <p className="px-6 py-12 text-center text-gray-400 text-sm">No offices found.</p>;
-  }
+const OFFICE_COLUMN_COUNT = 10;
 
+export default function OfficeTable({ data, onEdit, highlightedId, emptyMessage = "No offices found." }: OfficeTableProps) {
   return (
     <>
       <style>{`
@@ -28,6 +29,9 @@ export default function OfficeTable({ data, onEdit, highlightedId }: OfficeTable
 
       {/* ── Mobile card list ──────────────────────────────── */}
       <div className="md:hidden divide-y">
+        {data.length === 0 && (
+          <p className="px-6 py-12 text-center text-gray-400 text-sm">{emptyMessage}</p>
+        )}
         {data.map((o) => {
           const isHighlighted = highlightedId === o.site_id;
           return (
@@ -74,12 +78,19 @@ export default function OfficeTable({ data, onEdit, highlightedId }: OfficeTable
               <th className="pl-6 px-3 py-3 text-left font-bold">Timezone</th>
               <th className="px-1 py-3 text-center font-bold">Buildings</th>
               <th className="px-4 py-3 text-center font-bold">Floors</th>
-              <th className="px-3 py-3 text-center font-bold">Seats</th>
+              <th className="px-3 py-3 text-center font-bold">Spaces</th>
               <th className="pl-6 px-3 py-3 text-left font-bold">Status</th>
               <th className="px-3 py-3 text-center font-bold">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
+            {data.length === 0 && (
+              <tr>
+                <td colSpan={OFFICE_COLUMN_COUNT} className="py-16 text-center text-sm text-gray-400">
+                  {emptyMessage}
+                </td>
+              </tr>
+            )}
             {data.map((o) => {
               const isHighlighted = highlightedId === o.site_id;
               return (

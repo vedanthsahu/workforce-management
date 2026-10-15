@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import {
   Card,
   CardHeader,
@@ -8,38 +9,24 @@ import {
 } from "@/components/ui/card";
 
 import type { RecentBooking } from "../types/admin.types";
+import { RECENT_BOOKING_TYPE_STYLES, RECENT_BOOKING_STATUS_STYLES } from "../utils/dashboard.utils";
 
 type Props = {
   bookings: RecentBooking[];
   loading?: boolean;
 };
 
-const TYPE_STYLES: Record<RecentBooking["type"], string> = {
-  Self: "bg-blue-100 text-blue-600",
-  Employee: "bg-purple-100 text-purple-600",
-  Guest: "bg-amber-100 text-amber-600",
-};
-
 function TypeBadge({ type, className = "" }: { type: RecentBooking["type"]; className?: string }) {
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${TYPE_STYLES[type]} ${className}`}>
+    <span className={`px-2 py-1 rounded-full text-xs font-medium ${RECENT_BOOKING_TYPE_STYLES[type]} ${className}`}>
       {type}
     </span>
   );
 }
 
-const STATUS_STYLES: Record<RecentBooking["status"], string> = {
-  Booked: "bg-green-100 text-green-600",
-  "Checked In": "bg-blue-100 text-blue-600",
-  Completed: "bg-gray-100 text-gray-600",
-  Cancelled: "bg-red-100 text-red-600",
-  "No Show": "bg-orange-100 text-orange-600",
-  Modified: "bg-amber-100 text-amber-600",
-};
-
 function StatusBadge({ status, className = "" }: { status: RecentBooking["status"]; className?: string }) {
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${STATUS_STYLES[status]} ${className}`}>
+    <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${RECENT_BOOKING_STATUS_STYLES[status]} ${className}`}>
       {status}
     </span>
   );
@@ -49,7 +36,13 @@ export default function AdminRecentBookings({ bookings }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm font-semibold">Recent Activities</CardTitle>
+        {/* Count badge matches the Role Management table header. */}
+        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          Recent Activities
+          <span className="text-[11px] font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
+            {bookings.length}
+          </span>
+        </CardTitle>
       </CardHeader>
 
       <CardContent className="p-0">
@@ -78,7 +71,7 @@ export default function AdminRecentBookings({ bookings }: Props) {
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                     <span className="text-xs text-gray-500">{item.office}</span>
                     <span className="text-xs text-gray-400">·</span>
-                    <span className="text-xs text-gray-500">{item.seat}</span>
+                    <span className="text-xs text-gray-500">{displaySpaceCode(item.seat)}</span>
                     <span className="text-xs text-gray-400">·</span>
                     <span className="text-xs text-gray-500">{item.date}</span>
                   </div>
@@ -97,7 +90,7 @@ export default function AdminRecentBookings({ bookings }: Props) {
                 <th className="pr-14  px-1 py-3 font-medium text-center border-b border-gray-200 w-[28%]">User</th>
                 <th className="pl-1 pr-4 py-3 font-medium text-center border-b border-gray-200 w-[11%]">Type</th>
                 <th className="pr-8 px-4 py-3 font-medium text-center border-b border-gray-200 w-[22%]">Office</th>
-                <th className="pr-8 px-4 py-3 font-medium text-center border-b border-gray-200 w-[17%]">Seat / Visit</th>
+                <th className="pr-8 px-4 py-3 font-medium text-center border-b border-gray-200 w-[17%]">Space / Visit</th>
                 <th className="pr-8 px-4 py-3 font-medium text-center whitespace-nowrap border-b border-gray-200 w-[12%]">Date</th>
                 <th className="pr-8 px-4 py-3 font-medium text-center border-b border-gray-200 w-[10%]">Status</th>
               </tr>
@@ -131,7 +124,7 @@ export default function AdminRecentBookings({ bookings }: Props) {
                     <div>{item.office}</div>
                   </td>
                   <td className="px-4 py-4 align-middle text-center w-[17%]">
-                    <div>{item.seat}</div>
+                    <div>{displaySpaceCode(item.seat)}</div>
                   </td>
                   <td className="px-4 py-4 align-middle text-center whitespace-nowrap w-[12%]">{item.date}</td>
                   <td className="px-4 py-4 align-middle text-center w-[10%]">

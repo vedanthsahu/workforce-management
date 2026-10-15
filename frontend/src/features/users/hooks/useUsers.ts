@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usersService } from "../services/usersService";
-import { mapApiUserToUser, mapSearchResultToUser } from "../utils/users.utils";
+import { mapApiUserToUser, mapSearchResultToUser, SEARCH_DEBOUNCE_MS } from "../utils/users.utils";
 import type { User, UsersSummary } from "../types/users.types";
 import { useUsersFilterStore } from "@/store/useUsersFilterStore";
-
-const SEARCH_DEBOUNCE_MS = 350;
 
 export const useUsers = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -53,46 +51,31 @@ export const useUsers = () => {
     }
   }, [selectedRoles, statusFilter, page, limit]);
 
+  // GET /users?q= now matches name AND email (word-prefix on both, see
+  // search_users in user_repository.py), so one call covers both -- no more
+  // fetching every user in the tenant just to filter by email client-side.
+  //
+  // The endpoint defaults to active-only (include_inactive=false) -- without
+  // passing this, search silently dropped every inactive user regardless of
+  // the Status filter dropdown. There's no "inactive only" mode on the
+  // backend, just include/exclude, so an INACTIVE-only filter still has to
+  // fetch both and narrow client-side.
   const fetchSearch = useCallback(async (q: string) => {
     try {
       setLoading(true);
-      const lower = q.toLowerCase();
-
-      // Name search via the existing API endpoint
-      const nameSearchPromise = usersService.searchUsers(q, 50);
-
-      // Email search: fetch all users (no pagination) and filter by email client-side.
-      // The /users?q= endpoint doesn't match email, so we do it here separately.
-      const emailSearchPromise = usersService.getUsers({
-        roles: selectedRoles.length ? selectedRoles : undefined,
-        status: statusFilter === "ALL" ? undefined : statusFilter,
-      });
-
-      const [nameResults, allUsersResponse] = await Promise.all([
-        nameSearchPromise,
-        emailSearchPromise,
-      ]);
-
-      const nameUsers = nameResults.map(mapSearchResultToUser);
-      const emailUsers = allUsersResponse.items
-        .map(mapApiUserToUser)
-        .filter((u) => u.email.toLowerCase().includes(lower));
-
-      // Merge: name results first, then any email-only matches not already included
-      const seen = new Set(nameUsers.map((u) => u.id));
-      const merged = [
-        ...nameUsers,
-        ...emailUsers.filter((u) => !seen.has(u.id)),
-      ];
-
-      setUsers(merged);
+      const includeInactive = statusFilter !== "ACTIVE";
+      const results = await usersService.searchUsers(q, 50, includeInactive);
+      const scoped = statusFilter === "INACTIVE"
+        ? results.filter((r) => r.status === "INACTIVE")
+        : results;
+      setUsers(scoped.map(mapSearchResultToUser));
       setSummary(null);
     } catch (error) {
       console.error("Error searching users", error);
     } finally {
       setLoading(false);
     }
-  }, [selectedRoles, statusFilter]);
+  }, [statusFilter]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);

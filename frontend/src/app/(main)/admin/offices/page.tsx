@@ -2,7 +2,7 @@
 
 import OfficeTable from "@/features/offices/components/OfficeTable";
 import OfficeFilters from "@/features/offices/components/OfficeFilters";
-import OfficeStats from "@/features/offices/components/OfficeStats";
+import OfficeStats, { OfficeStatusFilter } from "@/features/offices/components/OfficeStats";
 import useOffices from "@/features/offices/hooks/useOffices";
 import Pagination from "@/features/offices/components/OfficePagination";
 import EditOfficeModal from "@/features/offices/components/EditOfficeModal";
@@ -11,6 +11,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { CheckCircle2, XCircle, X, Plus } from "lucide-react";
 import { Office } from "@/features/offices/types/office.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
+import { searchMatchRank } from "@/lib/searchRank";
 
 type BannerState = {
   type: "success" | "error";
@@ -29,6 +30,7 @@ function OfficesPage() {
   const [open, setOpen] = useState(false);
   const [banner, setBanner] = useState<BannerState>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<OfficeStatusFilter>(null);
 
   const showBannerWithHighlight = (message: string, siteId?: string) => {
     setBanner({ type: "success", message });
@@ -62,19 +64,19 @@ function OfficesPage() {
   };
 
   const filteredOffices = offices
-    .filter((o) => {
-      const name = (o.site_name || "").toLowerCase();
-      const query = search.toLowerCase().trim();
-      return name.includes(query);
-    })
+    .map((o) => ({ office: o, rank: searchMatchRank(o.site_name || "", search) }))
+    .filter((x): x is { office: Office; rank: number } => x.rank !== null)
+    .filter((x) => !statusFilter || x.office.status === statusFilter)
     .sort((a, b) => {
       // Always push the newly added/edited office to the top
       if (highlightedId) {
-        if (a.site_id === highlightedId) return -1;
-        if (b.site_id === highlightedId) return 1;
+        if (a.office.site_id === highlightedId) return -1;
+        if (b.office.site_id === highlightedId) return 1;
       }
-      return 0;
-    });
+      // Otherwise, the closer the match (starts-with > contains > fuzzy), the higher it ranks
+      return a.rank - b.rank;
+    })
+    .map((x) => x.office);
 
   const itemsPerPage = 10;
   const totalPages = Math.ceil(filteredOffices.length / itemsPerPage);
@@ -121,7 +123,18 @@ function OfficesPage() {
       )}
 
       {/* STATS CARDS */}
-      {loading ? <StatCardsSkeleton /> : <OfficeStats stats={stats} />}
+      {loading ? (
+        <StatCardsSkeleton />
+      ) : (
+        <OfficeStats
+          stats={stats}
+          statusFilter={statusFilter}
+          onStatusFilterChange={(filter) => {
+            setStatusFilter(filter);
+            setCurrentPage(1);
+          }}
+        />
+      )}
 
       {/* TABLE CARD */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
@@ -151,6 +164,15 @@ function OfficesPage() {
               data={paginatedOffices}
               onEdit={handleEdit}
               highlightedId={highlightedId}
+              emptyMessage={
+                search
+                  ? `No offices match "${search}".`
+                  : statusFilter === "ACTIVE"
+                    ? "No active offices found."
+                    : statusFilter === "INACTIVE"
+                      ? "No inactive offices found."
+                      : "No offices found."
+              }
             />
           )}
         </div>

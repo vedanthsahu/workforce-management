@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from psycopg2.extensions import connection as PGConnection
@@ -100,7 +101,20 @@ def search_guests(
     search_text: str,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
-    search_text = search_text.strip().lower()
+    search_text = " ".join(search_text.lower().split())
+
+    # Phone search ignores formatting and the country code, so "8147837541",
+    # "+91 81478 37541" and "+918147837541" all find the same guest. Only a
+    # phone-looking query (digits plus + - ( ) . spaces) is treated as a
+    # phone search; the last 10 digits are the national number, matching the
+    # duplicate-phone rule in fetch_guest_by_phone below.
+    phone_digits = (
+        re.sub(r"\D", "", search_text)
+        if re.fullmatch(r"[\d\s()+\-.]+", search_text)
+        else ""
+    ) or None
+
+    search_text = search_text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     status_clause = ""
     if not include_inactive:
@@ -114,18 +128,27 @@ def search_guests(
             WHERE g.tenant_id = %s
             {status_clause}
               AND (
-                    EXISTS (
-                        SELECT 1
-                        FROM unnest(
-                            regexp_split_to_array(
-                                lower(coalesce(g.full_name, '')),
-                                '\s+'
+                    (' ' || regexp_replace(lower(coalesce(g.full_name, '')), '\s+', ' ', 'g'))
+                        LIKE '%% ' || %s || '%%'
+                 OR (
+                        %s::text IS NOT NULL
+                    AND (
+                            -- Typed the same way it's stored (both with, or
+                            -- both without, the country code).
+                            REGEXP_REPLACE(coalesce(g.phone, ''), '\D', '', 'g')
+                                LIKE %s::text || '%%'
+                            -- Typed without the country code, stored with it.
+                         OR RIGHT(REGEXP_REPLACE(coalesce(g.phone, ''), '\D', '', 'g'), 10)
+                                LIKE %s::text || '%%'
+                            -- Typed with a country code, stored without (or
+                            -- with a different one): compare national numbers.
+                         OR (
+                                length(%s::text) > 10
+                            AND RIGHT(REGEXP_REPLACE(coalesce(g.phone, ''), '\D', '', 'g'), 10)
+                                    = RIGHT(%s::text, 10)
                             )
-                        ) AS name_part
-                        WHERE name_part LIKE %s || '%%'
+                        )
                     )
-                 OR coalesce(g.phone, '')
-                        LIKE %s || '%%'
                  OR lower(coalesce(g.email, ''))
                         LIKE '%%' || %s || '%%'
               )
@@ -145,7 +168,11 @@ def search_guests(
 
                 # WHERE
                 search_text,
-                search_text,
+                phone_digits,
+                phone_digits,
+                phone_digits,
+                phone_digits,
+                phone_digits,
                 search_text,
 
                 # ORDER BY
@@ -189,13 +216,20 @@ def fetch_guest_by_phone(
     tenant_id: str,
     phone: str,
 ) -> dict[str, Any] | None:
+    # Compares the last 10 digits on both sides (via REGEXP_REPLACE stripping
+    # everything but digits) rather than the raw stored string — "9876543210"
+    # and "+91 9876543210" are the same number but were never equal as plain
+    # strings, which let the same phone number be registered twice under a
+    # different +91 formatting. This also self-heals existing rows that were
+    # stored inconsistently before this fix, since nothing is rewritten in
+    # the table — only how the comparison reads it.
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
             SELECT {GUEST_SELECT_FIELDS}
             FROM guests AS g
             WHERE g.tenant_id = %s
-              AND g.phone = %s
+              AND RIGHT(REGEXP_REPLACE(g.phone, '\\D', '', 'g'), 10) = RIGHT(REGEXP_REPLACE(%s, '\\D', '', 'g'), 10)
               AND g.status = 'ACTIVE'
             ORDER BY g.id
             LIMIT 1
@@ -283,13 +317,15 @@ def fetch_guest_by_phone_excluding_guest(
     exclude_guest_id: str,
 ) -> dict[str, Any] | None:
     """Check phone uniqueness across ACTIVE and INACTIVE guests, excluding one guest."""
+    # See fetch_guest_by_phone above — same last-10-digits normalization so a
+    # number re-entered with/without the +91 prefix is still caught here.
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
             SELECT {GUEST_SELECT_FIELDS}
             FROM guests AS g
             WHERE g.tenant_id = %s
-              AND g.phone = %s
+              AND RIGHT(REGEXP_REPLACE(g.phone, '\\D', '', 'g'), 10) = RIGHT(REGEXP_REPLACE(%s, '\\D', '', 'g'), 10)
               AND g.id <> %s
             ORDER BY g.id
             LIMIT 1

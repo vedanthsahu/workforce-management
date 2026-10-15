@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { floorService } from "../services/floorService";
 import {
@@ -9,8 +9,19 @@ import {
 } from "../types/floor.types";
 
 export const useFloors = () => {
+  // Table skeleton -- first load only. Later fetches (post-edit refresh)
+  // keep the current rows on screen until the new ones arrive, so the
+  // table never blanks out.
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Cards have their own API, so their skeleton is tied to it alone --
+  // filtering the table never touches the cards.
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  // Ignore responses from superseded requests (e.g. fast filter switching).
+  const latestFloorsRequest = useRef(0);
+  const latestBuildingsRequest = useRef(0);
 
   const [sites, setSites] = useState<FloorSite[]>([]);
   const [buildings, setBuildings] = useState<FloorBuilding[]>([]);
@@ -23,36 +34,17 @@ export const useFloors = () => {
   useEffect(() => {
     fetchSites();
     fetchDashboardSummary();
+
+    // A filter saved before navigating away (e.g. after creating a floor)
+    // takes priority; otherwise load every floor for the tenant up front.
+    const saved = sessionStorage.getItem("floorSelection");
+    if (saved) {
+      restoreSelection(saved);
+    } else {
+      fetchFloors();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Auto-load the default site/building selection once sites are available
-  useEffect(() => {
-    const loadDefaultSelection = async () => {
-      if (sites.length === 0) return;
-
-      const defaultSiteId = "5";
-      const defaultBuildingId = "7";
-
-      await handleSiteChange(defaultSiteId);
-      await handleBuildingChange(defaultBuildingId);
-    };
-
-    loadDefaultSelection();
-    // handleSiteChange/handleBuildingChange are plain functions recreated
-    // every render, not memoized. This effect must fire only once when
-    // `sites` first populates — adding them here would re-run it on every
-    // render and repeatedly force the selection back to the hardcoded
-    // defaults ("5"/"7"), overwriting whatever the user actually picked.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sites]);
-
-  // Restore a selection saved before navigating away (e.g. after creating a floor)
-  useEffect(() => {
-    restoreSelection();
-    // Same reasoning as above: restoreSelection is recreated every render;
-    // this must only run once when `sites` first populates.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sites]);
 
   const fetchSites = async () => {
     try {
@@ -69,36 +61,39 @@ export const useFloors = () => {
       setStats(response);
     } catch (error) {
       console.error(error);
+    } finally {
+      setStatsLoading(false);
     }
   };
 
   const fetchBuildings = async (siteId: string) => {
+    const requestId = ++latestBuildingsRequest.current;
     try {
       const response = await floorService.getBuildings(Number(siteId));
+      if (requestId !== latestBuildingsRequest.current) return;
       setBuildings(response);
-
-      if (response.length > 0) {
-        const firstBuildingId = String(response[0].building_id);
-        setSelectedBuilding(firstBuildingId);
-        await fetchFloors(firstBuildingId);
-      }
     } catch (error) {
       console.error(error);
     }
   };
 
-  const fetchFloors = async (buildingId: string) => {
+  // Always loads every floor for the tenant. The office/building filters and
+  // the dropdowns' options are derived client-side on the page (the status
+  // cards narrow which offices/buildings are listed), so filtering never
+  // needs a refetch.
+  const fetchFloors = async () => {
+    const requestId = ++latestFloorsRequest.current;
     try {
-      setLoading(true);
-
-      const response = await floorService.getFloors(Number(buildingId));
+      const response = await floorService.getAllFloors();
+      if (requestId !== latestFloorsRequest.current) return;
       setFloors(response);
       setError("");
     } catch (error) {
+      if (requestId !== latestFloorsRequest.current) return;
       console.error(error);
       setError("Failed to load floors");
     } finally {
-      setLoading(false);
+      if (requestId === latestFloorsRequest.current) setLoading(false);
     }
   };
 
@@ -106,37 +101,35 @@ export const useFloors = () => {
     setSelectedSite(siteId);
     setSelectedBuilding("");
     setBuildings([]);
-    setFloors([]);
 
-    if (!siteId) return;
-    await fetchBuildings(siteId);
+    // Only the building dropdown's list needs the server; the table is
+    // filtered client-side from the full floor list.
+    if (siteId) {
+      await fetchBuildings(siteId);
+    }
   };
 
-  const handleBuildingChange = async (buildingId: string) => {
+  const handleBuildingChange = (buildingId: string) => {
     setSelectedBuilding(buildingId);
-    setFloors([]);
-
-    if (!buildingId) return;
-    await fetchFloors(buildingId);
   };
 
   const refreshFloors = async () => {
-    if (selectedBuilding) {
-      await fetchFloors(selectedBuilding);
-    }
-
+    await fetchFloors();
     await fetchDashboardSummary();
   };
 
-  const restoreSelection = async () => {
-    const saved = sessionStorage.getItem("floorSelection");
-    if (!saved) return;
-
+  const restoreSelection = async (saved: string) => {
     try {
       const { site_id, building_id } = JSON.parse(saved);
 
-      await handleSiteChange(site_id);
-      await handleBuildingChange(building_id);
+      setSelectedSite(site_id || "");
+      setSelectedBuilding(building_id || "");
+
+      if (site_id) {
+        await fetchBuildings(site_id);
+      }
+
+      await fetchFloors();
 
       sessionStorage.removeItem("floorSelection");
     } catch (error) {
@@ -153,6 +146,7 @@ export const useFloors = () => {
     floors,
 
     stats,
+    statsLoading,
 
     selectedSite,
     selectedBuilding,

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { fetchAllTeamGroups, searchTeamMembers, fetchTeamMemberById } from "../services/findteammate.service";
 import type { ApiTeamGroup, ApiTeamMember, RawTeammateBooking, SearchPhase, TeammateResult } from "../types/findteammate.types";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
+import { FINDTEAMMATE_PAGE_SIZE } from "../utils/constants";
 
 // In-office members first; within each group (in-office / remote), sort alphabetically by name
 function sortMembers(members: ApiTeamMember[]): ApiTeamMember[] {
@@ -49,6 +50,7 @@ function buildResult(member: ApiTeamMember, teamName: string): TeammateResult {
   };
 }
 
+
 export function useFindTeammate() {
   const { user } = useAuthContext();
 
@@ -56,13 +58,22 @@ export function useFindTeammate() {
   const [phase, setPhase] = useState<SearchPhase>({ status: "idle" });
   const [teamGroups, setTeamGroups] = useState<ApiTeamGroup[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
-    fetchAllTeamGroups()
-      .then(setTeamGroups)
-      .catch(() => setTeamGroups([]))
+    setTeamsLoading(true);
+    fetchAllTeamGroups({ page, limit: FINDTEAMMATE_PAGE_SIZE })
+      .then((groups) => {
+        setTeamGroups(groups);
+        setTotalPages(groups[0]?.total_pages ?? 1);
+      })
+      .catch(() => {
+        setTeamGroups([]);
+        setTotalPages(1);
+      })
       .finally(() => setTeamsLoading(false));
-  }, []);
+  }, [page]);
 
   // Exclude the current user from every group's member list, then sort:
   // in-office members first, rest sorted by name
@@ -144,5 +155,9 @@ export function useFindTeammate() {
     setPhase({ status: "idle" });
   }, []);
 
-  return { query, setQuery: handleQueryChange, phase, handleSearch, handleClear, selectMember, teamGroups: visibleTeamGroups, teamsLoading };
+  return {
+    query, setQuery: handleQueryChange, phase, handleSearch, handleClear, selectMember,
+    teamGroups: visibleTeamGroups, teamsLoading,
+    page, totalPages, setPage,
+  };
 }

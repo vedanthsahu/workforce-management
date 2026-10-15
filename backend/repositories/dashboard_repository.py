@@ -203,14 +203,31 @@ def fetch_admin_dashboard_summary(
                    AND sf.site_id = st.site_id
                    AND sf.building_id = st.building_id
                    AND sf.status = 'ACTIVE'
-                -- Only seats belonging to the floor's currently published
-                -- layout count toward stats -- seats left over from a
+                -- Only seats belonging to whichever layout actually covers
+                -- selected_date count toward stats -- the currently
+                -- PUBLISHED one, or a SCHEDULED one if selected_date falls
+                -- on/after its effective_from. Seats left over from a
                 -- superseded layout must not inflate total/available counts.
+                --
+                -- selected_date is a bare calendar date with no timezone of
+                -- its own -- casting it straight to timestamptz would
+                -- implicitly use the DB session's timezone (UTC), silently
+                -- shifting the day boundary. This demo deployment anchors
+                -- dashboard days to Asia/Kolkata. effective_from is compared
+                -- against the START of the NEXT day (India-local),
+                -- not selected_date's own midnight -- a direct publish's
+                -- effective_from is the real-time instant it was published
+                -- at (see activate_floor_layout), almost never midnight, so
+                -- comparing against that day's own midnight would make a
+                -- same-day publish look "not yet effective" and undercount
+                -- its seats. See booking_repository.fetch_seat_for_booking
+                -- for the fuller version of this comment.
                 INNER JOIN floor_layouts AS sfl
                     ON sfl.floor_id = st.floor_id
                    AND sfl.tenant_id = st.tenant_id
-                   AND sfl.is_published = TRUE
-                   AND sfl.status = 'PUBLISHED'
+                   AND sfl.status IN ('PUBLISHED', 'SCHEDULED')
+                   AND sfl.effective_from < ((%(selected_date)s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')
+                   AND (sfl.effective_till IS NULL OR sfl.effective_till > (%(selected_date)s::timestamp AT TIME ZONE 'Asia/Kolkata'))
                    AND sfl.id = st.layout_id
                 WHERE st.tenant_id = %(tenant_id)s
                   AND (
@@ -254,6 +271,100 @@ def fetch_admin_dashboard_summary(
                   )
             ),
 
+                        -- Count only bookings that reserve an actual seat. Guest visits
+                        -- without a linked booking remain in all_bookings_for_date but
+                        -- must not inflate booked_seats_today. Do not join the current
+                        -- bookable-seat snapshot here: historical seat metadata changes
+                        -- must not erase a valid seat booking from this day's count.
+            seat_bookings_for_date AS (
+                                SELECT DISTINCT b.seat_id
+                FROM bookings AS b
+                WHERE b.tenant_id = %(tenant_id)s
+                                AND b.seat_id IS NOT NULL
+                AND b.booking_date = %(selected_date)s
+                AND b.booking_status NOT IN ('MODIFIED', 'CANCELLED')
+                AND (
+                    %(site_id)s IS NULL
+                    OR b.site_id = %(site_id)s::bigint
+                )
+                AND (
+                    %(floor_id)s IS NULL
+                    OR b.floor_id = %(floor_id)s::bigint
+                )
+            ),
+
+            -- How many people are actually expected in the office for the
+            -- selected date: every active booking/guest-visit -- unlike the
+            -- Admin Bookings screen's own total (GET /admin/bookings), which
+            -- is a full audit log and deliberately keeps Cancelled rows
+            -- visible, the dashboard excludes Cancelled here since a
+            -- cancelled reservation means that person is NOT coming in.
+            -- MODIFIED (superseded history) is excluded either way. This is
+            -- deliberately NOT restricted to CONFIRMED/CHECKED_IN or to
+            -- bookable seats -- booked_seats above stays the seat-occupancy
+            -- metric (for occupancy_percentage/available_seats), while this
+            -- is the "how many are expected in" metric shown on the
+            -- Bookings stat card.
+            all_bookings_for_date AS (
+                SELECT
+                    b.id,
+                    CASE WHEN b.booking_type = 'EMPLOYEE' THEN 'EMPLOYEE' ELSE 'GUEST' END AS booking_category
+                FROM bookings AS b
+                WHERE b.tenant_id = %(tenant_id)s
+                  AND b.booking_date = %(selected_date)s
+                  AND b.booking_status NOT IN ('MODIFIED', 'CANCELLED')
+                  AND (
+                        %(site_id)s IS NULL
+                        OR b.site_id = %(site_id)s::bigint
+                  )
+                  AND (
+                        %(floor_id)s IS NULL
+                        OR b.floor_id = %(floor_id)s::bigint
+                  )
+
+                UNION ALL
+
+                SELECT
+                    gv.id,
+                    'GUEST' AS booking_category
+                FROM guest_visits AS gv
+                LEFT JOIN bookings AS gvb
+                    ON gvb.guest_visit_id = gv.id
+                   AND gvb.tenant_id = gv.tenant_id
+                WHERE gv.tenant_id = %(tenant_id)s
+                  AND gv.visit_date = %(selected_date)s
+                  AND gv.visit_status NOT IN ('MODIFIED', 'CANCELLED')
+                  AND gvb.id IS NULL
+                  AND (
+                        %(site_id)s IS NULL
+                        OR gv.site_id = %(site_id)s::bigint
+                  )
+                  AND (
+                        %(floor_id)s IS NULL
+                        OR gv.floor_id = %(floor_id)s::bigint
+                  )
+            ),
+
+            visit_only_for_date AS (
+                SELECT gv.id
+                FROM guest_visits AS gv
+                LEFT JOIN bookings AS gvb
+                  ON gvb.guest_visit_id = gv.id
+                 AND gvb.tenant_id = gv.tenant_id
+                WHERE gv.tenant_id = %(tenant_id)s
+                AND gv.visit_date = %(selected_date)s
+                AND gv.visit_status NOT IN ('MODIFIED', 'CANCELLED')
+                AND gvb.id IS NULL
+                AND (
+                    %(site_id)s IS NULL
+                    OR gv.site_id = %(site_id)s::bigint
+                )
+                AND (
+                    %(floor_id)s IS NULL
+                    OR gv.floor_id = %(floor_id)s::bigint
+                )
+            ),
+
             blocked_seat_counts AS (
                 SELECT COUNT(DISTINCT bs.seat_id) AS blocked_seats
                 FROM blocked_seats AS bs
@@ -270,6 +381,25 @@ def fetch_admin_dashboard_summary(
                         %(floor_id)s IS NULL
                         OR bs.floor_id = %(floor_id)s::bigint
                   )
+            ),
+
+            guest_visit_bookings_with_seat_for_date AS (
+                SELECT DISTINCT b.id
+                FROM bookings AS b
+                WHERE b.tenant_id = %(tenant_id)s
+                AND b.booking_date = %(selected_date)s
+                AND b.booking_type = 'GUEST'
+                AND b.guest_visit_id IS NOT NULL
+                AND b.seat_id IS NOT NULL
+                AND b.booking_status NOT IN ('MODIFIED', 'CANCELLED')
+                AND (
+                    %(site_id)s IS NULL
+                    OR b.site_id = %(site_id)s::bigint
+                )
+                AND (
+                    %(floor_id)s IS NULL
+                    OR b.floor_id = %(floor_id)s::bigint
+                )
             ),
 
             summary_counts AS (
@@ -291,8 +421,21 @@ def fetch_admin_dashboard_summary(
 
                     (
                         SELECT COUNT(*)
-                        FROM bookable_seats
+                        FROM scoped_seats
+                        WHERE status = 'ACTIVE'
                     ) AS total_seats,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM bookable_seats
+                    ) AS bookable_seats,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM scoped_seats
+                        WHERE status = 'ACTIVE'
+                          AND is_bookable = FALSE
+                    ) AS non_bookable_seats,
 
                     (
                         SELECT COUNT(*)
@@ -342,9 +485,13 @@ def fetch_admin_dashboard_summary(
                         WHERE status = 'INACTIVE'
                     ) AS inactive_seats,
 
+                    -- "Booked" now means the same thing everywhere on the
+                    -- dashboard as it does on the Admin Bookings page: every
+                    -- booking/guest-visit for this date, any non-MODIFIED
+                    -- status, not just currently-confirmed/checked-in seats.
                     (
-                        SELECT COUNT(DISTINCT seat_id)
-                        FROM booked_seats
+                        SELECT COUNT(*)
+                        FROM all_bookings_for_date
                     ) AS booked_seats_count,
 
                     (
@@ -354,8 +501,35 @@ def fetch_admin_dashboard_summary(
 
                     (
                         SELECT COUNT(*)
-                        FROM booked_seats
+                        FROM all_bookings_for_date
                     ) AS total_bookings,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM seat_bookings_for_date
+                    ) AS actual_booked_seats_today,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM all_bookings_for_date
+                        WHERE booking_category = 'EMPLOYEE'
+                    ) AS employee_bookings_today,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM all_bookings_for_date
+                        WHERE booking_category = 'GUEST'
+                    ) AS guest_bookings_today,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM visit_only_for_date
+                    ) AS guest_visit_today,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM guest_visit_bookings_with_seat_for_date
+                    ) AS guest_visit_booking_with_seat_today,
 
                     (
                         SELECT COUNT(DISTINCT booked_for_user_id)
@@ -366,13 +540,13 @@ def fetch_admin_dashboard_summary(
             utilization_metrics AS (
                 SELECT
                     *,
-                    GREATEST(total_seats - blocked_seats, 0) AS available_seats,
+                    GREATEST(bookable_seats - blocked_seats, 0) AS available_seats,
                     COALESCE(
                         ROUND(
                             (
-                                booked_seats_count::numeric
+                                actual_booked_seats_today::numeric
                                 /
-                                NULLIF(GREATEST(total_seats - blocked_seats, 0), 0)
+                                NULLIF(GREATEST(bookable_seats - blocked_seats, 0), 0)
                             ) * 100,
                             1
                         ),
@@ -386,12 +560,17 @@ def fetch_admin_dashboard_summary(
                 total_buildings,
                 total_floors,
                 total_seats,
+                non_bookable_seats,
                 booked_seats_count AS booked_today,
-                booked_seats_count AS booked_seats_today,
+                actual_booked_seats_today AS booked_seats_today,
                 blocked_seats,
                 blocked_seats AS blocked_seats_today,
                 booking_utilization_percentage AS occupancy_percentage,
                 total_bookings,
+                employee_bookings_today,
+                guest_bookings_today,
+                guest_visit_today,
+                guest_visit_booking_with_seat_today,
                 unique_users_booked,
                 booking_utilization_percentage,
                 active_sites,
@@ -445,6 +624,9 @@ def _fetch_employee_activity_rows(
                 NULL::text AS guest_visit_id,
 
                 b.booking_status AS activity_status,
+
+                b.modified_from_booking_id::text AS modified_from_booking_id,
+                NULL::text AS modified_from_guest_visit_id,
 
                 b.booking_date AS activity_date,
 
@@ -522,6 +704,11 @@ def _fetch_employee_activity_rows(
 
               AND b.booking_type = 'EMPLOYEE'
 
+              -- A superseded booking (replaced by a reschedule/modify) must
+              -- not show up as its own separate activity row -- only the
+              -- active booking it was replaced by should appear.
+              AND b.booking_status <> 'MODIFIED'
+
               AND (%(activity_date)s IS NULL
                 OR b.booking_date = %(activity_date)s)
 
@@ -566,45 +753,40 @@ def _fetch_guest_activity_rows(
     building_id: str | None = None,
     floor_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """
-    Fetch guest visit activities.
-    """
+    """Fetch one current activity row for each guest visit."""
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
             SELECT
                 CASE
-                    WHEN b.id IS NULL
-                        THEN CONCAT('guest-visit-', gv.id::text)
-                    ELSE CONCAT('guest-booking-', b.id::text)
+                    WHEN gv.visit_status = 'CANCELLED' AND b.id IS NOT NULL
+                        THEN CONCAT('guest-booking-', b.id::text)
+                    ELSE CONCAT('guest-visit-', gv.id::text)
                 END AS activity_id,
-
                 CASE
-                    WHEN b.id IS NULL THEN 'GUEST_VISIT'
-                    ELSE 'GUEST_BOOKING'
+                    WHEN gv.visit_status = 'CANCELLED' AND b.id IS NOT NULL
+                        THEN 'GUEST_BOOKING'
+                    WHEN b.booking_status = 'CONFIRMED' THEN 'GUEST_BOOKING'
+                    ELSE 'GUEST_VISIT'
                 END AS activity_type,
+                (b.booking_status = 'CONFIRMED' OR (
+                    gv.visit_status = 'CANCELLED' AND b.id IS NOT NULL
+                )) AS has_booking,
 
-                (b.id IS NOT NULL) AS has_booking,
-
-                CASE
-                    WHEN b.id IS NULL
-                        THEN CONCAT('guest-visit-', gv.id::text)
-                    ELSE CONCAT('guest-booking-', b.id::text)
-                END AS activity_id,
-
-                CASE
-                    WHEN b.id IS NULL THEN 'GUEST_VISIT'
-                    ELSE 'GUEST_BOOKING'
-                END AS activity_type,
-
-                (b.id IS NOT NULL) AS has_booking,
-
-                b.id::text AS booking_id,
-
+                CASE WHEN b.booking_status = 'CONFIRMED'
+                    OR (gv.visit_status = 'CANCELLED' AND b.id IS NOT NULL)
+                    THEN b.id::text END AS booking_id,
                 gv.id::text AS guest_visit_id,
+                CASE
+                    WHEN gv.visit_status = 'CANCELLED'
+                        THEN COALESCE(b.booking_status, gv.visit_status)
+                    WHEN b.booking_status = 'CANCELLED' THEN 'MODIFIED'
+                    ELSE gv.visit_status
+                END AS activity_status,
 
-                gv.visit_status AS activity_status,
+                b.modified_from_booking_id::text AS modified_from_booking_id,
+                gv.modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
 
                 COALESCE(b.booking_date, gv.visit_date) AS activity_date,
 
@@ -621,39 +803,16 @@ def _fetch_guest_activity_rows(
                 NULL::text AS booked_for_role,
                 NULL::text AS booked_for_department,
                 NULL::text AS booked_for_job_title,
-
                 gv.guest_type AS booked_for_guest_type,
 
-                gv.id::text AS guest_visit_id,
-
-                gv.visit_status AS activity_status,
-
-                COALESCE(b.booking_date, gv.visit_date) AS activity_date,
-
-                booked_by.id::text AS booked_by_id,
-                booked_by.full_name AS booked_by_name,
-                booked_by.email AS booked_by_email,
-                UPPER(REPLACE(booked_by.role_name, ' ', '_')) AS booked_by_role,
-                booked_by.department AS booked_by_department,
-                booked_by.job_title AS booked_by_job_title,
-
-                g.id::text AS booked_for_id,
-                g.full_name AS booked_for_name,
-                g.email AS booked_for_email,
-                NULL::text AS booked_for_role,
-                NULL::text AS booked_for_department,
-                NULL::text AS booked_for_job_title,
-
-                gv.guest_type AS booked_for_guest_type,
-
-                s.id::text AS seat_id,
-                s.seat_code,
-                s.seat_type,
-                s.seat_neighborhood,
-                s.id::text AS seat_id,
-                s.seat_code,
-                s.seat_type,
-                s.seat_neighborhood,
+                CASE WHEN b.booking_status = 'CONFIRMED'
+                    OR gv.visit_status = 'CANCELLED' THEN s.id::text END AS seat_id,
+                CASE WHEN b.booking_status = 'CONFIRMED'
+                    OR gv.visit_status = 'CANCELLED' THEN s.seat_code END AS seat_code,
+                CASE WHEN b.booking_status = 'CONFIRMED'
+                    OR gv.visit_status = 'CANCELLED' THEN s.seat_type END AS seat_type,
+                CASE WHEN b.booking_status = 'CONFIRMED'
+                    OR gv.visit_status = 'CANCELLED' THEN s.seat_neighborhood END AS seat_neighborhood,
 
                 si.id::text AS site_id,
                 si.site_code,
@@ -667,8 +826,8 @@ def _fetch_guest_activity_rows(
                 fl.floor_code,
                 fl.floor_name,
 
-                gv.checked_in_at AS check_in_at,
-                gv.checked_out_at,
+                COALESCE(b.check_in_at, gv.checked_in_at) AS check_in_at,
+                COALESCE(b.checked_out_at, gv.checked_out_at) AS checked_out_at,
                 COALESCE(b.created_at, gv.created_at) AS created_at,
                 COALESCE(b.updated_at, gv.updated_at) AS updated_at
 
@@ -684,17 +843,13 @@ def _fetch_guest_activity_rows(
                 WHERE guest_booking.guest_visit_id = gv.id
                   AND guest_booking.tenant_id = gv.tenant_id
                   AND guest_booking.booking_type = 'GUEST'
-                ORDER BY
-                    guest_booking.created_at DESC,
-                    guest_booking.id DESC
+                  AND guest_booking.booking_status <> 'MODIFIED'
+                ORDER BY guest_booking.updated_at DESC, guest_booking.id DESC
                 LIMIT 1
             ) b ON TRUE
 
             LEFT JOIN app_users booked_by
-                ON booked_by.id = COALESCE(
-                    b.booked_by_user_id,
-                    gv.created_by_user_id
-                )
+                ON booked_by.id = COALESCE(b.booked_by_user_id, gv.created_by_user_id)
                AND booked_by.tenant_id = gv.tenant_id
 
             LEFT JOIN seats s
@@ -720,28 +875,23 @@ def _fetch_guest_activity_rows(
                AND fl.building_id = bu.id
 
             WHERE gv.tenant_id = %(tenant_id)s
-
-            
-            AND (%(activity_date)s IS NULL
+              AND gv.visit_status <> 'MODIFIED'
+              AND (%(activity_date)s IS NULL
                 OR COALESCE(b.booking_date, gv.visit_date) = %(activity_date)s)
               AND (
                     %(site_id)s IS NULL
                     OR COALESCE(b.site_id, gv.site_id) = %(site_id)s::bigint
               )
-
               AND (
                     %(building_id)s IS NULL
                     OR COALESCE(b.building_id, gv.building_id) = %(building_id)s::bigint
               )
-
               AND (
                     %(floor_id)s IS NULL
                     OR COALESCE(b.floor_id, gv.floor_id) = %(floor_id)s::bigint
               )
 
-            ORDER BY
-                COALESCE(b.updated_at, gv.updated_at) DESC,
-                gv.id DESC
+            ORDER BY COALESCE(b.updated_at, gv.updated_at) DESC, gv.id DESC
             LIMIT 100
             """,
             {
@@ -752,8 +902,6 @@ def _fetch_guest_activity_rows(
                 "floor_id": floor_id,
             },
         )
-
-
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
@@ -892,19 +1040,47 @@ def fetch_date_range_occupancy(
                 GROUP BY d.occupancy_date
             ),
 
-            booked_by_date AS (
+            -- Actual per-date seat occupancy, split by employee vs guest.
+            -- Only bookings that reserve a real seat count here (seat_id IS
+            -- NOT NULL) -- a guest visit with no linked booking (invite-only,
+            -- no seat) never has a bookings row at all, so it's naturally
+            -- excluded rather than needing an explicit filter. Mirrors the
+            -- summary endpoint's actual_booked_seats_today/
+            -- seat_bookings_for_date definition (NOT IN MODIFIED/CANCELLED,
+            -- not just CONFIRMED/CHECKED_IN) so "booked seat" means the same
+            -- thing everywhere on the dashboard. Deliberately does NOT join
+            -- the current filtered_seats/layout snapshot -- a seat that's
+            -- since been deactivated, moved, or had its floor layout
+            -- republished must not erase a booking that was valid on the
+            -- day it was made. Site/building/floor scoping instead filters
+            -- directly on the booking's own stored columns.
+            seat_bookings_by_date AS (
                 SELECT
                     b.booking_date AS occupancy_date,
+                    COUNT(DISTINCT b.seat_id)
+                        FILTER (WHERE b.booking_type = 'EMPLOYEE')::integer
+                        AS employee_booked_seats,
+                    COUNT(DISTINCT b.seat_id)
+                        FILTER (WHERE b.booking_type != 'EMPLOYEE')::integer
+                        AS guest_booked_seats,
                     COUNT(DISTINCT b.seat_id)::integer AS booked_seats
                 FROM bookings AS b
-                INNER JOIN filtered_seats AS fs
-                    ON fs.seat_id = b.seat_id
-                   AND fs.site_id = b.site_id
-                   AND fs.building_id = b.building_id
-                   AND fs.floor_id = b.floor_id
                 WHERE b.tenant_id = %(tenant_id)s
+                  AND b.seat_id IS NOT NULL
                   AND b.booking_date BETWEEN %(start_date)s AND %(end_date)s
-                  AND b.booking_status IN ('CONFIRMED', 'CHECKED_IN')
+                  AND b.booking_status NOT IN ('MODIFIED', 'CANCELLED')
+                  AND (
+                        %(site_id)s IS NULL
+                        OR b.site_id = %(site_id)s::bigint
+                  )
+                  AND (
+                        %(building_id)s IS NULL
+                        OR b.building_id = %(building_id)s::bigint
+                  )
+                  AND (
+                        %(floor_id)s IS NULL
+                        OR b.floor_id = %(floor_id)s::bigint
+                  )
                 GROUP BY b.booking_date
             ),
 
@@ -917,13 +1093,15 @@ def fetch_date_range_occupancy(
                         si.total_seats - COALESCE(bd.blocked_seats, 0),
                         0
                     )::integer AS available_seats,
-                    COALESCE(bkd.booked_seats, 0)::integer AS booked_seats
+                    COALESCE(sbd.booked_seats, 0)::integer AS booked_seats,
+                    COALESCE(sbd.employee_booked_seats, 0)::integer AS employee_booked_seats,
+                    COALESCE(sbd.guest_booked_seats, 0)::integer AS guest_booked_seats
                 FROM dates AS d
                 CROSS JOIN seat_inventory AS si
                 LEFT JOIN blocked_by_date AS bd
                     ON bd.occupancy_date = d.occupancy_date
-                LEFT JOIN booked_by_date AS bkd
-                    ON bkd.occupancy_date = d.occupancy_date
+                LEFT JOIN seat_bookings_by_date AS sbd
+                    ON sbd.occupancy_date = d.occupancy_date
             )
 
             SELECT
@@ -932,6 +1110,8 @@ def fetch_date_range_occupancy(
                 blocked_seats,
                 available_seats,
                 booked_seats,
+                employee_booked_seats,
+                guest_booked_seats,
                 CASE
                     WHEN available_seats = 0
                         THEN 0.0
@@ -992,9 +1172,24 @@ def fetch_hierarchy_occupancy(
                 FROM groups AS g
                 INNER JOIN seats AS s
                     ON s.{group_seat_column} = g.group_id
+                -- Only seats belonging to the floor's currently published
+                -- layout count toward Top Offices -- otherwise a seat left
+                -- over from a superseded layout inflates total_seats past
+                -- what the office/building/floor admin lists show (those
+                -- already scope to the published layout; see
+                -- _SEAT_IN_PUBLISHED_LAYOUT_SQL in location_repository.py).
+                INNER JOIN floor_layouts AS pfl
+                    ON pfl.floor_id = s.floor_id
+                   AND pfl.tenant_id = s.tenant_id
+                   AND pfl.is_published = TRUE
+                   AND pfl.status = 'PUBLISHED'
+                   AND pfl.id = s.layout_id
+                -- No is_bookable filter here -- total_seats must match the
+                -- office/building/floor admin lists' "Active Seats" count
+                -- (active_seat_count, which doesn't require is_bookable
+                -- either), not their separate "Bookable Seats" count.
                 WHERE s.tenant_id = %(tenant_id)s
                   AND s.status = 'ACTIVE'
-                  AND s.is_bookable = TRUE
             ),
 
             seat_counts AS (
@@ -1021,20 +1216,31 @@ def fetch_hierarchy_occupancy(
                 GROUP BY fs.group_id
             ),
 
-            booked_counts AS (
+            -- Actual per-office seat occupancy, split by employee vs guest.
+            -- Only bookings that reserve a real seat count here (seat_id IS
+            -- NOT NULL) -- an invite-only guest visit with no linked booking
+            -- never has a bookings row at all, so it's naturally excluded.
+            -- Groups directly on the booking's own stored hierarchy column
+            -- (like total_bookings_counts used to) rather than joining the
+            -- current seat/layout snapshot -- a seat that's since been
+            -- deactivated, moved, or had its floor layout republished must
+            -- not erase a booking that was valid on the selected date.
+            seat_bookings_counts AS (
                 SELECT
-                    fs.group_id,
+                    b.{group_seat_column} AS group_id,
+                    COUNT(DISTINCT b.seat_id)
+                        FILTER (WHERE b.booking_type = 'EMPLOYEE')::integer
+                        AS employee_booked_seats,
+                    COUNT(DISTINCT b.seat_id)
+                        FILTER (WHERE b.booking_type != 'EMPLOYEE')::integer
+                        AS guest_booked_seats,
                     COUNT(DISTINCT b.seat_id)::integer AS booked_seats
-                FROM filtered_seats AS fs
-                INNER JOIN bookings AS b
-                    ON b.seat_id = fs.seat_id
-                   AND b.site_id = fs.site_id
-                   AND b.building_id = fs.building_id
-                   AND b.floor_id = fs.floor_id
+                FROM bookings AS b
                 WHERE b.tenant_id = %(tenant_id)s
+                  AND b.seat_id IS NOT NULL
                   AND b.booking_date = %(selected_date)s
-                  AND b.booking_status IN ('CONFIRMED', 'CHECKED_IN')
-                GROUP BY fs.group_id
+                  AND b.booking_status NOT IN ('MODIFIED', 'CANCELLED')
+                GROUP BY b.{group_seat_column}
             ),
 
             metrics AS (
@@ -1048,14 +1254,16 @@ def fetch_hierarchy_occupancy(
                         - COALESCE(bl.blocked_seats, 0),
                         0
                     )::integer AS available_seats,
-                    COALESCE(bk.booked_seats, 0)::integer AS booked_seats
+                    COALESCE(sbc.booked_seats, 0)::integer AS booked_seats,
+                    COALESCE(sbc.employee_booked_seats, 0)::integer AS employee_booked_seats,
+                    COALESCE(sbc.guest_booked_seats, 0)::integer AS guest_booked_seats
                 FROM groups AS g
                 LEFT JOIN seat_counts AS sc
                     ON sc.group_id = g.group_id
                 LEFT JOIN blocked_counts AS bl
                     ON bl.group_id = g.group_id
-                LEFT JOIN booked_counts AS bk
-                    ON bk.group_id = g.group_id
+                LEFT JOIN seat_bookings_counts AS sbc
+                    ON sbc.group_id = g.group_id
             )
 
             SELECT
@@ -1065,6 +1273,8 @@ def fetch_hierarchy_occupancy(
                 blocked_seats,
                 available_seats,
                 booked_seats,
+                employee_booked_seats,
+                guest_booked_seats,
                 CASE
                     WHEN available_seats = 0
                         THEN 0.0

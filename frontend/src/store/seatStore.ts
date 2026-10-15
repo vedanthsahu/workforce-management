@@ -20,7 +20,7 @@ function computeStats(seats: Seat[], prev: LayoutSeatStats | null): LayoutSeatSt
   return {
     ...prev,
     bookable_seats:     seats.filter((s) => s.is_bookable).length,
-    non_bookable_seats: seats.filter((s) => !s.is_bookable).length,
+    non_bookable_seats: seats.filter((s) => s.status === "ACTIVE" && s.is_bookable === false).length,
     configured_seats:   seats.filter((s) => s.is_configured).length,
     unconfigured_seats: seats.filter((s) => !s.is_configured).length,
     inactive_seats:     seats.filter((s) => s.status === "INACTIVE").length,

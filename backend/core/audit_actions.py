@@ -17,6 +17,16 @@ USER_PROFILE_UPDATED = "user.profile_updated"
 USER_PREFERENCES_UPDATED = "user.preferences_updated"
 USER_ACCESS_UPDATED = "user.access_updated"
 
+# ── Group administration events ───────────────────────────────────────────────
+GROUP_ASSIGNED = "group.assigned"
+GROUP_REMOVED = "group.removed"
+GROUP_CREATED = "group.created"
+GROUP_UPDATED = "group.updated"
+GROUP_DEACTIVATED = "group.deactivated"
+GROUP_PERMISSIONS_UPDATED = "group.permissions_updated"
+ROLE_GROUP_ASSIGNED = "role_group.assigned"
+ROLE_GROUP_REMOVED = "role_group.removed"
+
 # ── Auth events ───────────────────────────────────────────────────────────────
 USER_LOGIN = "user.login"
 USER_LOGOUT = "user.logout"
@@ -29,6 +39,9 @@ BUILDING_UPDATED = "building.updated"
 FLOOR_CREATED = "floor.created"
 FLOOR_UPDATED = "floor.updated"
 SEAT_CONFIGURED = "seat.configured"
+SEAT_BLOCK_CREATED = "seat_block.created"
+SEAT_BLOCK_UPDATED = "seat_block.updated"
+SEAT_BLOCK_CANCELLED = "seat_block.cancelled"
 
 # ── Amenity events ────────────────────────────────────────────────────────────
 AMENITY_CATEGORY_CREATED = "amenity_category.created"
@@ -40,6 +53,10 @@ AMENITY_UPDATED = "amenity.updated"
 FLOOR_LAYOUT_UPLOADED = "floor_layout.uploaded"
 FLOOR_LAYOUT_PUBLISHED = "floor_layout.published"
 FLOOR_LAYOUT_DELETED = "floor_layout.deleted"
+FLOOR_LAYOUT_SCHEDULED = "floor_layout.scheduled"
+FLOOR_LAYOUT_RESCHEDULED = "floor_layout.rescheduled"
+FLOOR_LAYOUT_SCHEDULE_CANCELLED = "floor_layout.schedule_cancelled"
+FLOOR_LAYOUT_CUTOVER_PROMOTED = "floor_layout.cutover_promoted"
 
 # ── Guest booking lifecycle events ────────────────────────────────────────────
 GUEST_BOOKING_CANCELLED = "guest_booking.cancelled"

@@ -1,5 +1,22 @@
 import { z } from "zod";
 
+import { isValidPhoneNumber, parsePhoneNumber } from "libphonenumber-js/mobile";
+
+export const sanitizePhoneNumber = (value: string) => {
+  return value.replace(/[^\d+ ]/g, "").replace(/(?!^)\+/g, "").replace(/\s+/g, " ").slice(0, 24);
+};
+
+export const normalizeMobileNumber = (value: string) => {
+  const compact = value.replace(/\s/g, "");
+  if (!compact || !isValidPhoneNumber(compact)) return null;
+
+  const parsed = parsePhoneNumber(compact);
+  const numberType = parsed.getType();
+  if (numberType !== "MOBILE" && numberType !== "FIXED_LINE_OR_MOBILE") return null;
+
+  return parsed.number;
+};
+
 export const createGuestSchema = z.object({
   firstName: z.string().trim().min(1, "First name is required"),
   lastName: z.string().trim().min(1, "Last name is required"),
@@ -9,27 +26,13 @@ export const createGuestSchema = z.object({
     .min(1, "Email is required")
     .email("Enter a valid email address"),
   phone: z
-  .string()
-  .trim()
-  .refine((val) => !val || /^[\d\s+\-()]*$/.test(val), {
-    message: "Only digits, spaces, +, -, (, ) are allowed",
-  })
-  .refine((val) => {
-    if (!val) return true;
-    const digits = val.replace(/\D/g, "");
-    if (digits.startsWith("91")) return digits.length === 12;
-    return digits.length === 10;
-  }, {
-    message: "Phone number must be exactly 10 digits (or 91 + 10 digits)",
-  })
-  .optional(),
-  organization: z
     .string()
-    .trim()
-    .refine((val) => !val || /^[a-zA-Z0-9\s]+$/.test(val), {
-      message: "Organization name must not contain special characters",
+    .refine((val) => !val || normalizeMobileNumber(val) !== null, {
+      message: "Enter a valid mobile number for the selected country",
     })
+    .transform((val) => (val ? normalizeMobileNumber(val) ?? val : val))
     .optional(),
+  organization: z.string().trim().optional(),
 });
 
 export type CreateGuestFormValues = z.infer<typeof createGuestSchema>;

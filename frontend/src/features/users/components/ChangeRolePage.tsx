@@ -42,15 +42,7 @@ export default function ChangeRolePage({ userId }: { userId: string }) {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-[#f8fafc]">
-      {/* <button
-        type="button"
-        onClick={() => router.push("/admin/users")}
-        onMouseEnter={() => router.prefetch("/admin/users")}
-        className="flex items-center gap-2 text-sm text-gray-600 hover:text-black mb-5"
-      >
-        <ArrowLeft size={16} />
-        Back to User Management
-      </button> */}
+      
 
       {loading && <ChangeRoleSkeleton />}
       {!loading && notFound && <div className="text-sm text-red-600">{errorMessage ?? "User not found."}</div>}
@@ -62,7 +54,7 @@ export default function ChangeRolePage({ userId }: { userId: string }) {
             <p className="text-xs sm:text-sm text-gray-500 mt-1">View user details, current permissions and change role.</p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6 items-stretch">
             <UserProfileCard user={user} />
             <ChangeRolePanel
               roles={roles}

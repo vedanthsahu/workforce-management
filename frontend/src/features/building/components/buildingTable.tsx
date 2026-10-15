@@ -7,13 +7,14 @@ type Props = {
   data: Building[];
   onEdit: (building: Building) => void;
   highlightedId?: string | null;
+  /** Shown in place of the rows when `data` is empty -- e.g. "No inactive
+   * buildings found." when the status card filter is set to Inactive. */
+  emptyMessage?: string;
 };
 
-export default function BuildingTable({ data, onEdit, highlightedId }: Props) {
-  if (data.length === 0) {
-    return <p className="px-6 py-12 text-center text-gray-400 text-sm">No buildings found.</p>;
-  }
+const BUILDING_COLUMN_COUNT = 9;
 
+export default function BuildingTable({ data, onEdit, highlightedId, emptyMessage = "No buildings found." }: Props) {
   return (
     <>
       <style>{`
@@ -27,6 +28,9 @@ export default function BuildingTable({ data, onEdit, highlightedId }: Props) {
 
       {/* ── Mobile card list ──────────────────────────────── */}
       <div className="md:hidden divide-y">
+        {data.length === 0 && (
+          <p className="px-6 py-12 text-center text-gray-400 text-sm">{emptyMessage}</p>
+        )}
         {data.map((building) => {
           const isHighlighted = highlightedId === String(building.building_id);
           return (
@@ -72,26 +76,33 @@ export default function BuildingTable({ data, onEdit, highlightedId }: Props) {
               <th className="pl-6 px-3 py-3 text-left font-bold">Building Name</th>
               <th className="pl-4 px-3 py-3 text-left font-bold">Office Name</th>
               <th className="px-3 py-3 text-center font-bold">Floors</th>
-              <th className="px-3 py-3 text-center font-bold">Total Seats</th>
-              <th className="px-3 py-3 text-center font-bold">Active Seats</th>
-              <th className="px-3 py-3 text-center font-bold">Bookable Seats</th>
+              <th className="px-3 py-3 text-center font-bold">Total Spaces</th>
+              <th className="px-3 py-3 text-center font-bold">Active Spaces</th>
+              <th className="px-3 py-3 text-center font-bold">Bookable Spaces</th>
               <th className="pl-6 px-3 py-3 text-left font-bold">Status</th>
               <th className="px-3 py-3 text-center font-bold">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
+            {data.length === 0 && (
+              <tr>
+                <td colSpan={BUILDING_COLUMN_COUNT} className="py-16 text-center text-sm text-gray-400">
+                  {emptyMessage}
+                </td>
+              </tr>
+            )}
             {data.map((building) => {
               const isHighlighted = highlightedId === String(building.building_id);
               return (
                 <tr key={building.building_id} className={`transition-colors ${isHighlighted ? "row-highlight" : "hover:bg-gray-50"}`}>
                   <td className="px-3 py-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-start gap-2">
                       <div className={`w-7 h-7 shrink-0 flex items-center justify-center rounded-full ${
                         isHighlighted ? "bg-blue-200" : "bg-blue-100"
                       }`}>
                         <Building2 className="w-3 h-3 text-blue-600" />
                       </div>
-                      <span className="font-medium truncate">{building.building_code}</span>
+                      <span title={building.building_code} className="font-medium line-clamp-2 min-w-0 flex-1">{building.building_code}</span>
                     </div>
                   </td>
                   <td className="px-3 py-3 max-w-0"><span title={building.building_name} className="block font-medium truncate">{building.building_name}</span></td>

@@ -20,15 +20,18 @@ import {
 } from "./BookingWizardSteps";
 import { useDashboard } from "@/features/dashboard/hooks/useDashboard";
 import { useBookForSomeoneStore } from "@/store/useBookForSomeoneStore";
+import { useBookingPolicy } from "@/features/configuration/hooks/useBookingPolicy";
 
 export default function BookForSomeonePage() {
   const router = useRouter();
   const { data } = useDashboard();
   const currentUserId = data?.user.user_id;
+  const { guestMaxAdvanceDays } = useBookingPolicy();
   const {
     formState,
     isSubmitting,
     submitError,
+    clearSubmitError,
     setBookingType,
     setSelectedEmployee,
     selectGuest,
@@ -44,6 +47,8 @@ export default function BookForSomeonePage() {
 
   const searchParams = useSearchParams();
   const setFormState = useBookForSomeoneStore((s) => s.setFormState);
+  const awaitingSeatSelection = useBookForSomeoneStore((s) => s.awaitingSeatSelection);
+  const setAwaitingSeatSelection = useBookForSomeoneStore((s) => s.setAwaitingSeatSelection);
 
   const { step, bookingType, selectedEmployee, selectedGuest, visitDetails, seatRequired } = formState;
   const { sites, buildings, floors, isLoadingBuildings, isLoadingFloors } = useSiteBuildingOptions(visitDetails.siteId, visitDetails.buildingId);
@@ -73,13 +78,19 @@ export default function BookForSomeonePage() {
   // would otherwise still be there the next time this page is opened fresh.
   // Reset once per mount so every fresh entry (button, sidebar link) starts
   // clean at the type selector; skip it for an editVisitId deep link, which
-  // needs its own prefilled state instead.
+  // needs its own prefilled state instead -- and skip it when this remount
+  // is the user coming back from redirectToBookSeat's /book step (browser
+  // Back), which used to wipe out the employee/guest they'd already picked.
   const resetOnMountApplied = useRef(false);
   useEffect(() => {
     if (resetOnMountApplied.current) return;
     resetOnMountApplied.current = true;
+    if (awaitingSeatSelection) {
+      setAwaitingSeatSelection(false);
+      return;
+    }
     if (!editVisitId) resetWizard();
-  }, [editVisitId, resetWizard]);
+  }, [editVisitId, resetWizard, awaitingSeatSelection, setAwaitingSeatSelection]);
 
   useEffect(() => {
     if (!editVisitId || prefillApplied.current) return;
@@ -155,6 +166,31 @@ export default function BookForSomeonePage() {
       .catch(() => {});
   }, [visitDetails.hostEmployee?.id, bookingType, editVisitId, visitDetails.siteId, visitDetails.buildingId, visitDetails.floorId, updateVisitDetails]);
 
+  // Auto-select the only building/floor when there's nothing else to choose
+  // from — same "don't make them pick between one thing" pattern used in
+  // the admin Blocked Spaces flow (BlockedSeatsPage/BlockSeatsPage). Guarded
+  // on the field still being blank so this never overrides a location the
+  // host-prefs prefill above (or a manual pick) already set.
+  //
+  // The `siteId`/`buildingId` ownership checks are required, not optional:
+  // switching Office clears the building in the same commit that this effect
+  // runs, while `buildings` still holds the PREVIOUS office's (not yet
+  // refetched) list. Without them, a single stale building/floor from the
+  // old selection gets "auto-selected" into the new office -- the form then
+  // holds ids from two different offices while the dropdowns just display
+  // each list's first option.
+  useEffect(() => {
+    if (visitDetails.buildingId || isLoadingBuildings || buildings.length !== 1) return;
+    if (buildings[0].siteId !== visitDetails.siteId) return;
+    updateVisitDetails({ buildingId: buildings[0].id, floorId: "" });
+  }, [visitDetails.buildingId, visitDetails.siteId, isLoadingBuildings, buildings, updateVisitDetails]);
+
+  useEffect(() => {
+    if (visitDetails.floorId || isLoadingFloors || floors.length !== 1) return;
+    if (floors[0].buildingId !== visitDetails.buildingId) return;
+    updateVisitDetails({ floorId: floors[0].id });
+  }, [visitDetails.floorId, visitDetails.buildingId, isLoadingFloors, floors, updateVisitDetails]);
+
   // Admin's "Booking Management" page links here with ?entry=employee or
   // ?entry=guest depending on which button was clicked — lock the wizard to
   // that type and disable the other card. Absent for every other entry point
@@ -191,13 +227,30 @@ export default function BookForSomeonePage() {
     setEligibilityError(null);
   }, [visitDetails.visitDate, visitDetails.endDate, selectedGuest]);
 
-  // When an eligibility error appears, scroll it into view so the user
-  // doesn't miss it if they're scrolled down past the footer.
+  // A failure belongs to the step it happened on: moving to another step must
+  // not carry it along.
   useEffect(() => {
-    if (eligibilityError) {
+    setEligibilityError(null);
+    setEditError(null);
+    clearSubmitError();
+  }, [step, clearSubmitError]);
+
+  // One red banner at the top for any failure (eligibility check, sending the
+  // invite, modifying a visit).
+  const bannerError = eligibilityError ?? editError ?? submitError;
+  const dismissBannerError = () => {
+    setEligibilityError(null);
+    setEditError(null);
+    clearSubmitError();
+  };
+
+  // When an error appears, scroll it into view so the user doesn't miss it if
+  // they're scrolled down past the footer.
+  useEffect(() => {
+    if (bannerError) {
       errorBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, [eligibilityError]);
+  }, [bannerError]);
 
   const redirectToBookSeat = () => {
     const fromDate = visitDetails.visitDate;
@@ -228,13 +281,14 @@ export default function BookForSomeonePage() {
     }
 
     const query = params.toString();
+    setAwaitingSeatSelection(true);
     router.push(`/book${query ? `?${query}` : ""}`);
   };
 
   const steps =
     bookingType === "internal"
       ? ["Who"]
-      : ["Who", "Details", "Seat Required?", "Book Seat", "Confirm"];
+      : ["Who", "Details", "Space Required?", "Book Space", "Confirm"];
 
   const isSuccessStep = bookingType === "visitor" && step === 5;
 
@@ -279,8 +333,8 @@ export default function BookForSomeonePage() {
   }
 
   const submitLabel = (() => {
-    if (bookingType === "internal" && step === 1) return "Book a Seat";
-    if (bookingType === "visitor" && step === 3) return seatRequired === "no" ? "Continue" : "Book a Seat";
+    if (bookingType === "internal" && step === 1) return "Book a Space";
+    if (bookingType === "visitor" && step === 3) return seatRequired === "no" ? "Continue" : "Book a Space";
     if (bookingType === "visitor" && step === 4) {
       if (editVisitId) return editSubmitting ? "Saving…" : "Confirm Changes";
       return isSubmitting ? "Sending…" : "Confirm Invite";
@@ -290,10 +344,10 @@ export default function BookForSomeonePage() {
 
   const infoText =
     (bookingType === "internal" && step === 1) || (bookingType === "visitor" && step === 3 && seatRequired === "yes")
-      ? `After clicking "${submitLabel}", you will continue in the existing booking flow to select workspace, date, preferences and choose a seat.`
+      ? `After clicking "${submitLabel}", you will continue in the existing booking flow to select workspace, date, preferences and choose a space.`
       : (editVisitId && bookingType === "visitor" && step === 2 && visitDetailsRequiredFilled && !hasVisitChanges)
         ? "Change the host, date, location, or another detail to save changes."
-        : editError ?? submitError;
+        : null;
 
   const handlePrimaryAction = async () => {
     if (bookingType === "internal" && step === 1) {
@@ -418,6 +472,7 @@ export default function BookForSomeonePage() {
           isLoadingBuildings={isLoadingBuildings}
           isLoadingFloors={isLoadingFloors}
           readOnlyLocation={!!hasLinkedBooking}
+          guestMaxAdvanceDays={guestMaxAdvanceDays}
         />
       );
     } else if (step === 3) {
@@ -442,13 +497,13 @@ export default function BookForSomeonePage() {
     bookingType === "internal"
       ? [
         { step: "1", title: "Choose who", desc: "Search and select the employee you're booking for." },
-        { step: "2", title: "Pick a seat", desc: "Continue to the booking flow to choose workspace, date and seat." },
+        { step: "2", title: "Pick a space", desc: "Continue to the booking flow to choose workspace, date and space." },
       ]
       : [
         { step: "1", title: "Choose who", desc: "Select a recent guest or create a new one." },
         { step: "2", title: "Fill in details", desc: "Set guest type, purpose, host employee and visit time." },
-        { step: "3", title: "Seat required?", desc: "Decide whether this guest needs a workspace." },
-        { step: "4", title: "Pick a seat", desc: "Continue to the booking flow to choose workspace and seat." },
+        { step: "3", title: "Space required?", desc: "Decide whether this guest needs a workspace." },
+        { step: "4", title: "Pick a space", desc: "Continue to the booking flow to choose workspace and space." },
         { step: "5", title: "Confirm", desc: "Review the details and send the invite." },
       ];
 
@@ -462,7 +517,7 @@ export default function BookForSomeonePage() {
               Book for Someone
             </h1>
             <p className="text-[12px] sm:text-[12.5px] text-gray-400 mt-0.5">
-              Book a seat for an internal employee, or send a visitor an invite.
+              Book a space for an internal employee, or send a visitor an invite.
             </p>
           </div>
         </div>
@@ -470,14 +525,14 @@ export default function BookForSomeonePage() {
 
       {/* ── Scrollable content ── */}
       <div ref={scrollAreaRef} className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
-        {eligibilityError && (
+        {bannerError && (
           <div
             ref={errorBannerRef}
             className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 sm:px-5 py-3 text-red-600 text-[12.5px] sm:text-[13px] flex items-start gap-3"
           >
             <svg className="w-4 h-4 mt-0.5 shrink-0" viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm9-3a1 1 0 00-2 0v3a1 1 0 002 0V5zm-.25 5.75a.75.75 0 10-1.5 0 .75.75 0 001.5 0z" /></svg>
-            <span className="flex-1">{eligibilityError}</span>
-            <button onClick={() => setEligibilityError(null)} className="text-red-400 hover:text-red-600 shrink-0">
+            <span className="flex-1">{bannerError}</span>
+            <button onClick={dismissBannerError} className="text-red-400 hover:text-red-600 shrink-0">
               <svg className="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 1l12 12M13 1L1 13" /></svg>
             </button>
           </div>
@@ -562,8 +617,10 @@ export default function BookForSomeonePage() {
                 Booking policy
               </p>
               <p className="text-[11.5px] text-indigo-500 leading-relaxed">
-                You can book a seat up to 30 days in advance. Visitors must be
-                accompanied by a host employee at all times.
+                {guestMaxAdvanceDays != null && (
+                  <>You can book a space up to {guestMaxAdvanceDays} days in advance. </>
+                )}
+                Visitors must be accompanied by a host employee at all times.
               </p>
             </div>
           </aside>

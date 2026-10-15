@@ -40,6 +40,7 @@ class AdminDashboardSummaryResponse(BaseModel):
     total_buildings : int = 0
     total_floors: int = 0
     total_seats: int = 0
+    non_bookable_seats: int = 0
 
     booked_today: int = 0
     blocked_seats: int = 0
@@ -49,6 +50,10 @@ class AdminDashboardSummaryResponse(BaseModel):
     occupancy_percentage: float = 0.0
 
     total_bookings: int = 0
+    employee_bookings_today: int = 0
+    guest_bookings_today: int = 0
+    guest_visit_today: int = 0
+    guest_visit_booking_with_seat_today: int = 0
     unique_users_booked: int = 0
     booking_utilization_percentage: float = 0.0
 
@@ -117,6 +122,8 @@ class AdminDateOccupancyResponse(CamelModel):
     blocked_seats: int = Field(alias="blockedSeats")
     available_seats: int = Field(alias="availableSeats")
     booked_seats: int = Field(alias="bookedSeats")
+    employee_booked_seats: int = Field(alias="employeeBookedSeats")
+    guest_booked_seats: int = Field(alias="guestBookedSeats")
     occupancy_rate: float = Field(alias="occupancyRate")
 
     model_config = ConfigDict(
@@ -128,6 +135,8 @@ class AdminDateOccupancyResponse(CamelModel):
                 "blockedSeats": 5,
                 "availableSeats": 95,
                 "bookedSeats": 72,
+                "employeeBookedSeats": 50,
+                "guestBookedSeats": 22,
                 "occupancyRate": 75.79,
             }
         },
@@ -144,6 +153,8 @@ class AdminHierarchyOccupancyResponse(CamelModel):
     blocked_seats: int = Field(alias="blockedSeats")
     available_seats: int = Field(alias="availableSeats")
     booked_seats: int = Field(alias="bookedSeats")
+    employee_booked_seats: int = Field(alias="employeeBookedSeats")
+    guest_booked_seats: int = Field(alias="guestBookedSeats")
     occupancy_rate: float = Field(alias="occupancyRate")
 
     model_config = ConfigDict(
@@ -157,6 +168,8 @@ class AdminHierarchyOccupancyResponse(CamelModel):
                     "blockedSeats": 20,
                     "availableSeats": 480,
                     "bookedSeats": 350,
+                    "employeeBookedSeats": 300,
+                    "guestBookedSeats": 50,
                     "occupancyRate": 72.91,
                 },
                 {
@@ -166,6 +179,8 @@ class AdminHierarchyOccupancyResponse(CamelModel):
                     "blockedSeats": 10,
                     "availableSeats": 190,
                     "bookedSeats": 120,
+                    "employeeBookedSeats": 100,
+                    "guestBookedSeats": 20,
                     "occupancyRate": 63.15,
                 },
                 {
@@ -175,6 +190,8 @@ class AdminHierarchyOccupancyResponse(CamelModel):
                     "blockedSeats": 5,
                     "availableSeats": 75,
                     "bookedSeats": 61,
+                    "employeeBookedSeats": 55,
+                    "guestBookedSeats": 6,
                     "occupancyRate": 81.33,
                 },
             ]

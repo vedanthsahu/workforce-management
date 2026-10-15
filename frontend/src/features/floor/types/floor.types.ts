@@ -29,6 +29,8 @@ export interface CreateFloorPayload {
 export interface UpdateFloorPayload {
   floor_name: string;
   status: string;
+  reactivate_building?: boolean;
+  reactivate_office?: boolean;
 }
 
 export interface FloorSite {
@@ -39,12 +41,14 @@ export interface FloorSite {
 
 export interface FloorBuilding {
   building_id: string;
+  building_code: string;
   building_name: string;
+  status: "ACTIVE" | "INACTIVE";
 }
 
 export interface FloorStatsSummary {
   total_floors: number;
   active_floors: number;
   inactive_floors: number;
-  total_seats: number;
+  active_seats: number;
 }
