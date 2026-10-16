@@ -47,24 +47,32 @@ const hasAllowedEmailDomain = (email: string) =>
     email.slice(email.lastIndexOf("@") + 1).toLowerCase(),
   );
 
-// Length limits for the first and last name fields (each, after trimming).
-// The minimum applies to the first name only -- a last name can be a single
-// letter (e.g. "Ravi K").
-export const NAME_MIN_LENGTH = 2;
+// First and last name: required (at least 1 character) and at most
+// NAME_MAX_LENGTH, counted after trimming.
 export const NAME_MAX_LENGTH = 50;
+
+// Letters from any language (plus combining marks, so accented names work),
+// spaces, apostrophes (' and the curly ’), hyphens and periods -- e.g.
+// "Sai Kumar", "O'Connor", "D’Souza", "Anne-Marie", "A. P. J.". The lookahead
+// requires at least one letter, so a name can't be punctuation alone. Digits
+// and other symbols are rejected. Built with RegExp() because the project
+// targets ES2017, where the \p{...} literal syntax isn't recognised.
+const NAME_PATTERN = new RegExp("^(?=.*\\p{L})[\\p{L}\\p{M} '\\u2019.-]+$", "u");
+const NAME_CHARS_ERROR = "can only contain letters, spaces and the symbols . ' -";
 
 export const createGuestSchema = z.object({
   firstName: z
     .string()
     .trim()
     .min(1, "First name is required")
-    .min(NAME_MIN_LENGTH, `First name must be at least ${NAME_MIN_LENGTH} characters`)
-    .max(NAME_MAX_LENGTH, `First name must be ${NAME_MAX_LENGTH} characters or fewer`),
+    .max(NAME_MAX_LENGTH, `First name must be ${NAME_MAX_LENGTH} characters or fewer`)
+    .regex(NAME_PATTERN, `First name ${NAME_CHARS_ERROR}`),
   lastName: z
     .string()
     .trim()
     .min(1, "Last name is required")
-    .max(NAME_MAX_LENGTH, `Last name must be ${NAME_MAX_LENGTH} characters or fewer`),
+    .max(NAME_MAX_LENGTH, `Last name must be ${NAME_MAX_LENGTH} characters or fewer`)
+    .regex(NAME_PATTERN, `Last name ${NAME_CHARS_ERROR}`),
   email: z
     .string()
     .trim()
