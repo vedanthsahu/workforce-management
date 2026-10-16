@@ -120,7 +120,7 @@ services:
     environment:
       - NODE_OPTIONS=--max_old_space_size=2048
       - CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
-      - NEXT_PUBLIC_API_URL=http://localhost:${API_HOST_PORT:-8100}
+      - NEXT_PUBLIC_API_URL=http://localhost:${SEAT_BACKEND_HOST_PORT:-8000}
       - NEXT_PUBLIC_CHATBOT_API_URL=http://localhost:${API_HOST_PORT:-8100}
       - NEXT_PUBLIC_HOST_APP_ORIGIN=http://localhost:3000
 
