@@ -1,18 +1,24 @@
 "use client";
 
 import { displaySpaceCode } from "@/lib/spaceCode";
-import { useEffect, useRef, useState } from "react";
-import { adminBookingsService } from "../services/adminBookings.service";
-import { mapAdminBookingRawToUiBooking } from "../utils/mapAdminBooking";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  adminBookingsService,
+  AdminPersonSuggestion,
+  AdminSeatSuggestion,
+} from "../services/adminBookings.service";
 import { Building2, CalendarDays, ChevronDown, Layers, RotateCcw, Search, ShieldCheck, User, Users, X } from "lucide-react";
 import {
-  AdminBooking,
   AdminBookingFilters,
   AdminBookingSiteOption,
   AdminBookingBuildingOption,
   AdminBookingFloorOption,
 } from "../types/adminBooking.types";
+import { filterPeople, filterSeats } from "../utils/suggestionSearch";
 import { BOOKING_STATUS_OPTIONS, SELECT_BASE_CLASS, SELECT_ARROW_STYLE } from "../utils/constants";
+
+// How many names/seat codes the dropdowns preload for instant local filtering.
+const PRELOAD_LIMIT = 1000;
 
 type Props = {
   filters: AdminBookingFilters;
@@ -265,84 +271,78 @@ export default function BookingManagementFilters({
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  // Employee/Guest & Seat suggestion dropdowns hit the backend's own
-  // search/seatCode filters directly (debounced) instead of pre-loading
-  // everything and matching client-side.
-  const [employeeSuggestions, setEmployeeSuggestions] = useState<AdminBooking[]>([]);
+  // Employee/Guest & Seat suggestions are instant: the full list is preloaded
+  // once (per booking type for people) and filtered in the browser on every
+  // keystroke, so typing never waits on the network. Only if a tenant's list
+  // is bigger than PRELOAD_LIMIT (so the preload is incomplete) does it fall
+  // back to a per-keystroke server search, aborting the previous request.
+  const [people, setPeople] = useState<AdminPersonSuggestion[]>([]);
+  const [serverPeople, setServerPeople] = useState<AdminPersonSuggestion[]>([]);
+  const peopleTruncated = people.length >= PRELOAD_LIMIT;
+  useEffect(() => {
+    setPeople([]);
+    if (!filters.bookingType) return;
+    const controller = new AbortController();
+    adminBookingsService
+      .suggestPeople("", filters.bookingType === "Guest" ? "GUEST" : "EMPLOYEE", PRELOAD_LIMIT, controller.signal)
+      .then(setPeople)
+      .catch(() => {});
+    return () => controller.abort();
+  }, [filters.bookingType]);
+
   useEffect(() => {
     const q = filters.search.trim();
-    if (!q) {
-      setEmployeeSuggestions([]);
+    if (!peopleTruncated || !q || !filters.bookingType) {
+      setServerPeople([]);
       return;
     }
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      adminBookingsService
-        .list({
-          search: q,
-          bookingType: filters.bookingType === "Employee" ? "EMPLOYEE" : filters.bookingType === "Guest" ? "GUEST" : undefined,
-          page: 1,
-          limit: 8,
-        })
-        .then((res) => {
-          if (cancelled) return;
-          const seen = new Set<string>();
-          const matches: AdminBooking[] = [];
-          for (const raw of res.items) {
-            const b = mapAdminBookingRawToUiBooking(raw);
-            const key = `${b.person_name}|${b.person_email}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            matches.push(b);
-          }
-          setEmployeeSuggestions(matches);
-        })
-        .catch(() => {
-          if (!cancelled) setEmployeeSuggestions([]);
-        });
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [filters.search, filters.bookingType]);
+    const controller = new AbortController();
+    adminBookingsService
+      .suggestPeople(q, filters.bookingType === "Guest" ? "GUEST" : "EMPLOYEE", undefined, controller.signal)
+      .then(setServerPeople)
+      .catch(() => {});
+    return () => controller.abort();
+  }, [filters.search, filters.bookingType, peopleTruncated]);
+
+  const employeeSuggestions = useMemo(
+    () => (peopleTruncated ? serverPeople : filterPeople(people, filters.search)),
+    [peopleTruncated, serverPeople, people, filters.search],
+  );
 
   const searchPlaceholder = filters.bookingType
     ? "Search by name or email"
     : "Select Employee or Guest first";
 
-  const [seatSuggestions, setSeatSuggestions] = useState<AdminBooking[]>([]);
+  const [seats, setSeats] = useState<AdminSeatSuggestion[]>([]);
+  const [serverSeats, setServerSeats] = useState<AdminSeatSuggestion[]>([]);
+  const seatsTruncated = seats.length >= PRELOAD_LIMIT;
+  useEffect(() => {
+    const controller = new AbortController();
+    adminBookingsService
+      .suggestSeats("", PRELOAD_LIMIT, controller.signal)
+      .then(setSeats)
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
+
   useEffect(() => {
     const q = filters.seatNumber.trim();
-    if (!q) {
-      setSeatSuggestions([]);
+    if (!seatsTruncated || !q) {
+      setServerSeats([]);
       return;
     }
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      adminBookingsService
-        .list({ seatCode: q, page: 1, limit: 8 })
-        .then((res) => {
-          if (cancelled) return;
-          const seen = new Set<string>();
-          const matches: AdminBooking[] = [];
-          for (const raw of res.items) {
-            const b = mapAdminBookingRawToUiBooking(raw);
-            if (!b.seat_code || seen.has(b.seat_code)) continue;
-            seen.add(b.seat_code);
-            matches.push(b);
-          }
-          setSeatSuggestions(matches);
-        })
-        .catch(() => {
-          if (!cancelled) setSeatSuggestions([]);
-        });
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [filters.seatNumber]);
+    const controller = new AbortController();
+    adminBookingsService
+      .suggestSeats(q, undefined, controller.signal)
+      .then(setServerSeats)
+      .catch(() => {});
+    return () => controller.abort();
+  }, [filters.seatNumber, seatsTruncated]);
+
+  const seatSuggestions = useMemo(
+    () => (seatsTruncated ? serverSeats : filterSeats(seats, filters.seatNumber)),
+    [seatsTruncated, serverSeats, seats, filters.seatNumber],
+  );
 
   // Keep the status selection valid when bookingType changes. If the
   // currently selected status is not present in the new options, reset
@@ -590,27 +590,27 @@ export default function BookingManagementFilters({
                   <p className="px-4 py-3 text-xs text-gray-400 text-center">No matches for &quot;{filters.search}&quot;</p>
                 ) : (
                   <ul role="listbox" className="py-1 max-h-60 overflow-y-auto divide-y divide-gray-100">
-                    {employeeSuggestions.map((b) => (
-                      <li key={`${b.person_name}-${b.person_email}`} role="option" aria-selected={false}>
+                    {employeeSuggestions.map((p) => (
+                      <li key={`${p.name}-${p.email}`} role="option" aria-selected={false}>
                         <button
                           type="button"
                           onMouseDown={(e) => {
                             e.preventDefault();
-                            onUpdate("search", b.person_name);
+                            onUpdate("search", p.name ?? p.email ?? "");
                             setSearchOpen(false);
                           }}
                           className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50 transition-colors text-left"
                         >
                           <span
                             className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 ${
-                              b.person_type === "Guest" ? "bg-violet-100 text-violet-700" : "bg-indigo-100 text-indigo-700"
+                              filters.bookingType === "Guest" ? "bg-violet-100 text-violet-700" : "bg-indigo-100 text-indigo-700"
                             }`}
                           >
-                            {initialsOf(b.person_name)}
+                            {initialsOf(p.name ?? "")}
                           </span>
                           <span className="flex-1 min-w-0">
-                            <p className="text-[13px] font-medium text-gray-800 truncate">{b.person_name}</p>
-                            <p className="text-[11px] text-gray-400 truncate">{b.person_email}</p>
+                            <p className="text-[13px] font-medium text-gray-800 truncate">{p.name}</p>
+                            <p className="text-[11px] text-gray-400 truncate">{p.email}</p>
                           </span>
                         </button>
                       </li>
@@ -660,19 +660,19 @@ export default function BookingManagementFilters({
                   <p className="px-4 py-3 text-xs text-gray-400 text-center">No matches for &quot;{filters.seatNumber}&quot;</p>
                 ) : (
                   <ul role="listbox" className="py-1 max-h-60 overflow-y-auto divide-y divide-gray-100">
-                    {seatSuggestions.map((b) => (
-                      <li key={b.seat_code} role="option" aria-selected={false}>
+                    {seatSuggestions.map((seat) => (
+                      <li key={seat.seat_code} role="option" aria-selected={false}>
                         <button
                           type="button"
                           onMouseDown={(e) => {
                             e.preventDefault();
-                            onUpdate("seatNumber", b.seat_code);
+                            onUpdate("seatNumber", seat.seat_code);
                             setSeatOpen(false);
                           }}
                           className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-indigo-50 transition-colors text-left"
                         >
-                          <span className="text-[13px] font-medium text-gray-800">{displaySpaceCode(b.seat_code)}</span>
-                          <span className="text-[11px] text-gray-400">{b.seat_type}</span>
+                          <span className="text-[13px] font-medium text-gray-800">{displaySpaceCode(seat.seat_code)}</span>
+                          <span className="text-[11px] text-gray-400">{seat.seat_type}</span>
                         </button>
                       </li>
                     ))}

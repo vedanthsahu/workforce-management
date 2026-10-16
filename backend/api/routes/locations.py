@@ -74,6 +74,7 @@ def sites(
     limit: Annotated[int | None, Query(ge=1, le=200)] = None,
     search: Annotated[str | None, Query()] = None,
     status_filter: Annotated[str | None, Query(alias="status")] = None,
+    bookable_only: Annotated[bool, Query()] = False,
 ) -> list[SiteResponse]:
 
     return get_sites(
@@ -83,6 +84,7 @@ def sites(
         limit=limit,
         search=search,
         status_filter=status_filter,
+        bookable_only=bookable_only,
     )
 
 
@@ -153,6 +155,7 @@ def buildings(
     limit: Annotated[int | None, Query(ge=1, le=200)] = None,
     search: Annotated[str | None, Query()] = None,
     status_filter: Annotated[str | None, Query(alias="status")] = None,
+    bookable_only: Annotated[bool, Query()] = False,
 ) -> list[BuildingResponse]:
     return get_buildings_by_site(
         conn,
@@ -160,8 +163,9 @@ def buildings(
         site_id=site_id,
         page=page,
         limit=limit,
-        search=search,  
+        search=search,
         status_filter=status_filter,
+        bookable_only=bookable_only,
     )
 
 

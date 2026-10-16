@@ -565,7 +565,15 @@ export default function BookForSomeonePage() {
                       editVisitId
                         ? (step === 4
                           ? () => setFormState((prev) => ({ ...prev, step: 2 }))
-                          : () => router.push("/mybookings?tab=bookedForSomeone"))
+                          : () => {
+                              // Return to wherever the user came from (admin bookings
+                              // or my bookings); fall back if opened directly.
+                              if (window.history.length > 1) {
+                                router.back();
+                              } else {
+                                router.push(isAdminFlow ? "/admin/bookings" : "/mybookings?tab=bookedForSomeone");
+                              }
+                            })
                         : step > 1
                           ? goBack
                           : undefined

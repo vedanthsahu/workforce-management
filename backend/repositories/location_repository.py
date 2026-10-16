@@ -29,8 +29,12 @@ def fetch_sites(
     limit: int | None = None,
     search: str | None = None,
     status_filter: str | None = None,
+    bookable_only: bool = False,
 ) -> list[dict[str, Any]]:
-    """Fetch tenant-scoped sites with additive admin aggregate fields."""
+    """Fetch tenant-scoped sites with additive admin aggregate fields.
+
+    `bookable_only` keeps just the sites a booking flow can actually use: ones
+    with at least one ACTIVE building that has at least one ACTIVE floor."""
     query = f"""
         SELECT
             s.id::text AS site_id,
@@ -76,6 +80,20 @@ def fetch_sites(
         WHERE s.tenant_id = %s
     """
     params: list[Any] = [tenant_id]
+    if bookable_only:
+        query += """
+        AND EXISTS (
+            SELECT 1
+            FROM buildings AS bb
+            INNER JOIN floors AS bf
+                ON bf.tenant_id = bb.tenant_id
+               AND bf.building_id = bb.id
+            WHERE bb.tenant_id = s.tenant_id
+              AND bb.site_id = s.id
+              AND bb.status = 'ACTIVE'
+              AND bf.status = 'ACTIVE'
+        )
+    """
     query, params = _apply_status_filter(query, params, "s.status", status_filter)
     query, params = _apply_search_filter(
         query,
@@ -101,8 +119,11 @@ def fetch_buildings_by_site(
     limit: int | None = None,
     search: str | None = None,
     status_filter: str | None = None,
+    bookable_only: bool = False,
 ) -> list[dict[str, Any]]:
-    """Fetch buildings under one active tenant-scoped site."""
+    """Fetch buildings under one active tenant-scoped site.
+
+    `bookable_only` keeps just buildings with at least one ACTIVE floor."""
     query = f"""
         SELECT
             b.id::text AS building_id,
@@ -146,6 +167,16 @@ def fetch_buildings_by_site(
         AND b.site_id = %s
     """
         params.append(site_id)
+    if bookable_only:
+        query += """
+        AND EXISTS (
+            SELECT 1
+            FROM floors AS bf
+            WHERE bf.tenant_id = b.tenant_id
+              AND bf.building_id = b.id
+              AND bf.status = 'ACTIVE'
+        )
+    """
     query, params = _apply_status_filter(query, params, "b.status", status_filter)
     query, params = _apply_search_filter(
         query,

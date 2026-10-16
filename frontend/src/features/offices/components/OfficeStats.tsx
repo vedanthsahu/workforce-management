@@ -27,7 +27,7 @@ function StatCard({ icon, bg, label, value, sub, selected, disabled, onClick }: 
         clickable ? "cursor-pointer hover:-translate-y-1 hover:shadow-lg" : disabled ? "cursor-not-allowed opacity-80" : ""
       } ${
         selected
-          ? "border-2 border-blue-500 ring-2 ring-blue-100 shadow-md"
+          ? "border border-indigo-300 ring-1 ring-indigo-100"
           : ""
       }`}
     >
@@ -62,6 +62,7 @@ export default function OfficeStats({ stats, statusFilter = null, onStatusFilter
         label="Total Offices"
         value={stats.total_offices.toString()}
         sub="Across all tenants"
+        selected={statusFilter === null}
         disabled={stats.total_offices === 0}
         onClick={onStatusFilterChange && stats.total_offices > 0 ? () => onStatusFilterChange(null) : undefined}
       />
