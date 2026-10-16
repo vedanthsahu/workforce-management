@@ -85,10 +85,14 @@ class SeatCard(BaseModel):
     seat_type: str
     seat_neighborhood: Optional[str]
     amenities: List[str] = []
+    is_available: bool = True
+    x: Optional[float] = None
+    y: Optional[float] = None
 
 
 class SeatList(BaseModel):
     seats: List[SeatCard]
+    seat_catalog: List[SeatCard] = []
     total: int
     floor_name: str
     building_name: str

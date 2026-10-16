@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     SYNC_DATABASE_URL: str = ""
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
+    # The integrated app signs chatbot tokens with the root JWT_SECRET.
+    # Keep MAIN_APP_JWT_SECRET as the standalone/deployment-compatible name,
+    # but always use JWT_SECRET when the shared root configuration provides it.
+    JWT_SECRET: str = ""
     MAIN_APP_JWT_SECRET: str = ""
     MAIN_APP_JWT_ALGORITHM: str = "HS256"
     ALLOWED_ORIGINS: str = "http://localhost:4200"
@@ -83,6 +87,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def configure_database_urls(self) -> "Settings":
+        if self.JWT_SECRET:
+            self.MAIN_APP_JWT_SECRET = self.JWT_SECRET
+
         db_values = (self.DB_HOST, self.DB_NAME, self.DB_USER, self.DB_PASSWORD)
         if all(db_values):
             user = quote_plus(self.DB_USER)

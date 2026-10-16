@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import random
+import re
 from datetime import datetime, date, timezone, timedelta
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1223,7 +1225,16 @@ class ChatEngine:
             if isinstance(value, list):
                 candidates.extend(value)
 
-        for key in ("favorite_seat_id", "favourite_seat_id", "preferred_seat_id", "default_seat_id", "seat_id"):
+        for key in (
+            "favorite_seat",
+            "favourite_seat",
+            "preferred_seat",
+            "favorite_seat_id",
+            "favourite_seat_id",
+            "preferred_seat_id",
+            "default_seat_id",
+            "seat_id",
+        ):
             value = preferences.get(key)
             if value not in (None, ""):
                 candidates.append(value)
@@ -1662,6 +1673,7 @@ class ChatEngine:
         booking_date_str: Optional[str],
         amenity_ids: list[int],
         modify_booking_id: Optional[str] = None,
+        seat_search_query: Optional[str] = None,
     ) -> Optional[ChatResponse]:
         if not floor_id or not booking_date_str:
             return None
@@ -1716,7 +1728,6 @@ class ChatEngine:
         ctx = await self._get_context(session.id, db)
         quick_book_mode = ctx.get("quick_book_mode") == "true"
         seat_list_text = f"Found {len(available_rows)} available seat(s). Select one to continue:"
-        candidate_rows = available_rows[:20]
         floors = await seat_backend_api_service.list_floors(building_id) if building_id else None
         floor_name = next(
             (floor.get("floor_name") or floor.get("floor_code") for floor in (floors or []) if str(floor.get("floor_id")) == str(floor_id)),
@@ -1733,6 +1744,93 @@ class ChatEngine:
             (site.get("site_name") for site in (sites or []) if str(site.get("site_id")) == str(site_id or "")),
             "Selected office",
         )
+
+        recommended_ids = (
+            []
+            if quick_book_mode
+            else await self._recommended_seat_ids_for_location(
+                site_id=site_id,
+                building_id=building_id,
+                floor_id=floor_id,
+            )
+        )
+        recommended_order = {
+            seat_id: index for index, seat_id in enumerate(recommended_ids)
+        }
+        original_order = {id(seat): index for index, seat in enumerate(available_rows)}
+        ranked_available_rows = sorted(
+            available_rows,
+            key=lambda seat: (
+                recommended_order.get(self._backend_seat_id(seat) or 0, 999999),
+                original_order[id(seat)],
+            ),
+        )
+        candidate_rows = ranked_available_rows[:20]
+
+        normalized_search = str(seat_search_query or "").strip()
+        if normalized_search:
+            requested_seat = self._find_seat_by_code(seats, normalized_search)
+            search_key = normalized_search.casefold()
+            matching_available = [
+                seat
+                for seat in ranked_available_rows
+                if search_key
+                in self._backend_seat_code(
+                    seat,
+                    self._backend_seat_id(seat) or 0,
+                ).casefold()
+            ]
+            if requested_seat and self._is_backend_seat_available(
+                requested_seat,
+                booking_date_str,
+            ):
+                requested_id = self._backend_seat_id(requested_seat)
+                candidate_rows = [requested_seat] + [
+                    seat
+                    for seat in ranked_available_rows
+                    if self._backend_seat_id(seat) != requested_id
+                ][:19]
+                requested_code = self._backend_seat_code(
+                    requested_seat,
+                    requested_id or 0,
+                )
+                seat_list_text = (
+                    f"Seat {requested_code} is available and is shown first. "
+                    "Other recommended seats follow."
+                )
+            elif requested_seat:
+                candidate_rows = self._nearby_available_seats(
+                    requested_seat,
+                    ranked_available_rows,
+                )[:20]
+                requested_id = self._backend_seat_id(requested_seat)
+                requested_code = self._backend_seat_code(
+                    requested_seat,
+                    requested_id or 0,
+                )
+                seat_list_text = (
+                    f"Seat {requested_code} is not available for the selected date. "
+                    "Here are the nearest available seats."
+                )
+            elif matching_available:
+                matching_ids = {
+                    self._backend_seat_id(seat) for seat in matching_available
+                }
+                candidate_rows = matching_available + [
+                    seat
+                    for seat in ranked_available_rows
+                    if self._backend_seat_id(seat) not in matching_ids
+                ]
+                candidate_rows = candidate_rows[:20]
+                seat_list_text = (
+                    f"Showing available seats matching {normalized_search} first, "
+                    "followed by other recommendations."
+                )
+            else:
+                seat_list_text = (
+                    f"Seat {normalized_search} was not found on this floor. "
+                    "Here are recommended available seats."
+                )
 
         if quick_book_mode:
             preferred_ids = self._quick_book_preferred_seat_ids(ctx)
@@ -1782,6 +1880,9 @@ class ChatEngine:
                 seat_type=seat.get("seat_type") or "STANDARD",
                 seat_neighborhood=seat.get("seat_neighborhood"),
                 amenities=seat.get("matched_amenities") or [],
+                is_available=True,
+                x=self._safe_float(seat.get("x")),
+                y=self._safe_float(seat.get("y")),
             )
             for seat in candidate_rows
             if (seat_id := self._backend_seat_id(seat)) is not None
@@ -1789,10 +1890,36 @@ class ChatEngine:
         if not seat_cards:
             return None
 
+        ranked_available_ids = {
+            self._backend_seat_id(seat) for seat in ranked_available_rows
+        }
+        catalog_rows = ranked_available_rows + [
+            seat
+            for seat in seats
+            if self._backend_seat_id(seat) not in ranked_available_ids
+        ]
+        seat_catalog = [
+            SeatCard(
+                id=seat_id,
+                seat_code=self._backend_seat_code(seat, seat_id),
+                seat_type=seat.get("seat_type") or "STANDARD",
+                seat_neighborhood=seat.get("seat_neighborhood"),
+                amenities=seat.get("matched_amenities") or [],
+                is_available=self._is_backend_seat_available(seat, booking_date_str),
+                x=self._safe_float(seat.get("x")),
+                y=self._safe_float(seat.get("y")),
+            )
+            for seat in catalog_rows
+            if (seat_id := self._backend_seat_id(seat)) is not None
+        ]
+
         seat_map = {str(i + 1): seat.id for i, seat in enumerate(seat_cards)}
+        available_catalog = [seat for seat in seat_catalog if seat.is_available]
         await self._set_context_bulk(session.id, {
             "available_seats_map": ",".join(f"{k}:{v}" for k, v in seat_map.items()),
-            "available_seat_codes": ",".join(f"{seat.id}:{seat.seat_code}" for seat in seat_cards),
+            "available_seat_codes": ",".join(
+                f"{seat.id}:{seat.seat_code}" for seat in available_catalog
+            ),
             "external_booking_source": "seat_backend_api",
             "site_name": site_name,
             "building_name": building_name,
@@ -1815,7 +1942,8 @@ class ChatEngine:
                     text=seat_list_text,
                     seat_list=SeatList(
                         seats=seat_cards,
-                        total=len(seat_cards),
+                        seat_catalog=seat_catalog,
+                        total=len(ranked_available_rows),
                         floor_name=floor_name,
                         building_name=building_name,
                         headcount=int((await self._get_context(session.id, db)).get("headcount", "1")),
@@ -1883,8 +2011,139 @@ class ChatEngine:
             or seat_id
         )
 
+    async def _recommended_seat_ids_for_location(
+        self,
+        *,
+        site_id: Optional[int],
+        building_id: Optional[int],
+        floor_id: Optional[int],
+    ) -> list[int]:
+        """Rank preferred seats first, then frequently/recently booked seats."""
+        preferences = await seat_backend_api_service.preferences() or {}
+        current_user = await seat_backend_api_service.me() or {}
+        favorite_ids = self._extract_preferred_seat_ids_from_preferences(
+            {**preferences, **current_user},
+        )
+        rows = await self._recent_booking_rows()
+        history_scores: Dict[int, tuple[int, str]] = {}
+        for row in rows:
+            if str(row.get("site_id") or "") != str(site_id or ""):
+                continue
+            if str(row.get("building_id") or "") != str(building_id or ""):
+                continue
+            if str(row.get("floor_id") or "") != str(floor_id or ""):
+                continue
+            seat_id = self._safe_int(row.get("seat_id"))
+            if not seat_id:
+                continue
+            count, latest = history_scores.get(seat_id, (0, ""))
+            history_scores[seat_id] = (
+                count + 1,
+                max(latest, str(row.get("booking_date") or "")),
+            )
+
+        ranked = list(dict.fromkeys(favorite_ids))
+        for seat_id, _ in sorted(
+            history_scores.items(),
+            key=lambda item: (item[1][0], item[1][1]),
+            reverse=True,
+        ):
+            if seat_id not in ranked:
+                ranked.append(seat_id)
+        return ranked
+
+    @classmethod
+    def _find_seat_by_code(
+        cls,
+        seats: list[Dict[str, Any]],
+        query: str,
+    ) -> Optional[Dict[str, Any]]:
+        normalized = query.strip().casefold()
+        if not normalized:
+            return None
+        exact = [
+            seat
+            for seat in seats
+            if cls._backend_seat_code(
+                seat,
+                cls._backend_seat_id(seat) or 0,
+            ).casefold() == normalized
+        ]
+        if exact:
+            return exact[0]
+        suffix = [
+            seat
+            for seat in seats
+            if cls._backend_seat_code(
+                seat,
+                cls._backend_seat_id(seat) or 0,
+            ).casefold().endswith(normalized)
+        ]
+        return suffix[0] if len(suffix) == 1 else None
+
+    @classmethod
+    def _nearby_available_seats(
+        cls,
+        requested_seat: Dict[str, Any],
+        available_rows: list[Dict[str, Any]],
+    ) -> list[Dict[str, Any]]:
+        target_x = cls._safe_float(requested_seat.get("x"))
+        target_y = cls._safe_float(requested_seat.get("y"))
+        target_code = cls._backend_seat_code(
+            requested_seat,
+            cls._backend_seat_id(requested_seat) or 0,
+        )
+        target_number = cls._seat_code_number(target_code)
+
+        def proximity(seat: Dict[str, Any]) -> tuple[int, float, str]:
+            x = cls._safe_float(seat.get("x"))
+            y = cls._safe_float(seat.get("y"))
+            code = cls._backend_seat_code(seat, cls._backend_seat_id(seat) or 0)
+            if target_x is not None and target_y is not None and x is not None and y is not None:
+                return (0, math.hypot(x - target_x, y - target_y), code)
+            number = cls._seat_code_number(code)
+            if target_number is not None and number is not None:
+                return (1, abs(number - target_number), code)
+            return (2, 0, code)
+
+        return sorted(available_rows, key=proximity)
+
+    @staticmethod
+    def _seat_code_number(value: str) -> Optional[int]:
+        match = re.search(r"(\d+)$", value.strip())
+        return int(match.group(1)) if match else None
+
+    @staticmethod
+    def _safe_float(value: Any) -> Optional[float]:
+        try:
+            return float(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
     async def _handle_seat_selection(self, session, user_text, form_data, db):
         selected_ids = []
+
+        if form_data and form_data.get("action") == "search_seat":
+            query = str(form_data.get("seat_code") or "").strip()
+            if not query:
+                return await self._build_seat_list(session, db)
+            ctx = await self._get_context(session.id, db)
+            response = await self._build_external_seat_list_response(
+                session,
+                db,
+                site_id=self._safe_int(ctx.get("site_id")),
+                building_id=self._safe_int(ctx.get("building_id")),
+                floor_id=self._safe_int(ctx.get("floor_id")),
+                booking_date_str=ctx.get("booking_date"),
+                amenity_ids=[
+                    int(value)
+                    for value in (ctx.get("amenity_ids") or "").split(",")
+                    if value.strip().isdigit()
+                ],
+                modify_booking_id=ctx.get("rebook_modify_booking_id") or None,
+                seat_search_query=query,
+            )
+            return response or await self._build_seat_list(session, db)
 
         edit_response = await self._route_seat_preference_change(session, user_text, form_data, db)
         if edit_response:
