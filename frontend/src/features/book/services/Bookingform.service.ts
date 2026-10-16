@@ -82,8 +82,9 @@ interface RawPreference {
 // ── Sites ─────────────────────────────────────────────────────────────────────
 
 export async function fetchSites(): Promise<Site[]> {
+  // bookable_only: skip offices with no active building/floor -- nothing to book there.
   const { data } = await axiosInstance.get<RawSite[]>("/sites", {
-    params: { status: "ACTIVE" },
+    params: { status: "ACTIVE", bookable_only: true },
   });
   return data.map((s) => ({
     id: s.site_id,
@@ -109,8 +110,9 @@ export async function fetchSiteStatus(siteId: string): Promise<string | null> {
 // ── Buildings ─────────────────────────────────────────────────────────────────
 
 export async function fetchBuildings(siteId: string): Promise<Building[]> {
+  // bookable_only: skip buildings with no active floor.
   const { data } = await axiosInstance.get<RawBuilding[]>("/buildings", {
-    params: { site_id: siteId, status: "ACTIVE" },
+    params: { site_id: siteId, status: "ACTIVE", bookable_only: true },
   });
   return data.map((b) => ({
     id: b.building_id,

@@ -152,6 +152,7 @@ def get_sites(
     limit: int | None = None,
     search: str | None = None,
     status_filter: str | None = None,
+    bookable_only: bool = False,
 ) -> list[SiteResponse]:
     """Return tenant-scoped sites without changing the legacy list envelope."""
     status_filter = _normalize_status_filter(status_filter)
@@ -163,6 +164,7 @@ def get_sites(
             limit=limit,
             search=search,
             status_filter=status_filter,
+            bookable_only=bookable_only,
         )
     except psycopg2.Error as exc:
         logger.exception("location.db_error")
@@ -747,6 +749,7 @@ def get_buildings_by_site(
     limit: int | None = None,
     search: str | None = None,
     status_filter: str | None = None,
+    bookable_only: bool = False,
 ) -> list[BuildingResponse]:
     """Return tenant-scoped active buildings for one site."""
     status_filter = _normalize_status_filter(status_filter)
@@ -759,6 +762,7 @@ def get_buildings_by_site(
             limit=limit,
             search=search,
             status_filter=status_filter,
+            bookable_only=bookable_only,
         )
     except psycopg2.Error as exc:
         logger.exception("location.db_error")

@@ -579,6 +579,7 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
   ) => {
     const value = field === "phone" ? sanitizePhoneNumber(e.target.value) : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
+    setApiError(null);
     if (!touched[field]) setTouched((prev) => ({ ...prev, [field]: true }));
     validateField(field, value);
   };
@@ -589,6 +590,7 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
 
   const handlePhoneChange = (value: string) => {
     setForm((prev) => ({ ...prev, phone: value }));
+    setApiError(null);
     if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
     validateField("phone", value);
   };
@@ -599,6 +601,7 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
       ? `+${getCountryCallingCode(country)} ${localPhoneValue(form.phone, phoneCountry)}`
       : "";
     setForm((prev) => ({ ...prev, phone }));
+    setApiError(null);
     if (phone) validateField("phone", phone);
   };
 
@@ -1233,11 +1236,13 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
   const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = field === "phone" ? sanitizePhoneNumber(e.target.value) : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
+    setApiError(null);
     if (touched[field]) validateField(field, value);
   };
 
   const handlePhoneChange = (value: string) => {
     setForm((prev) => ({ ...prev, phone: value }));
+    setApiError(null);
     if (touched.phone) validateField("phone", value);
   };
 
@@ -1247,6 +1252,7 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
       ? `+${getCountryCallingCode(country)} ${localPhoneValue(form.phone, phoneCountry)}`
       : "";
     setForm((prev) => ({ ...prev, phone }));
+    setApiError(null);
     if (phone) validateField("phone", phone);
   };
 
