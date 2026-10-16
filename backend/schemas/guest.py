@@ -43,6 +43,42 @@ def _normalize_mobile_phone(value: str | None) -> str | None:
     return phonenumbers.format_number(parsed, PhoneNumberFormat.E164)
 
 
+# Guest emails must come from one of these providers. Keep in sync with
+# ALLOWED_EMAIL_DOMAINS in frontend/src/features/bookforsomeone/schemas/guest.schema.ts.
+ALLOWED_GUEST_EMAIL_DOMAINS = frozenset({
+    "gmail.com",
+    "googlemail.com",
+    "yahoo.com",
+    "yahoo.in",
+    "yahoo.co.in",
+    "ymail.com",
+    "outlook.com",
+    "hotmail.com",
+    "live.com",
+    "msn.com",
+    "icloud.com",
+    "me.com",
+    "rediffmail.com",
+    "protonmail.com",
+    "proton.me",
+    "aol.com",
+    "zoho.com",
+})
+
+
+def _validate_guest_email_domain(value: str | None) -> str | None:
+    """Reject an email whose domain isn't one of the supported providers."""
+    if value is None or not value.strip():
+        return value
+    email = value.strip()
+    local, sep, domain = email.rpartition("@")
+    if not sep or not local or domain.lower() not in ALLOWED_GUEST_EMAIL_DOMAINS:
+        raise ValueError(
+            "This email domain isn't supported. Please use a different email address."
+        )
+    return email
+
+
 class CreateGuestRequest(BaseModel):
     full_name: str = Field(min_length=1, max_length=255)
     email: str | None = Field(default=None, max_length=255)
@@ -50,6 +86,7 @@ class CreateGuestRequest(BaseModel):
     organization: str | None = Field(default=None, max_length=255)
 
     _validate_phone = field_validator("phone")(_normalize_mobile_phone)
+    _validate_email = field_validator("email")(_validate_guest_email_domain)
 
 
 class UpdateGuestRequest(BaseModel):
@@ -59,6 +96,7 @@ class UpdateGuestRequest(BaseModel):
     organization: str | None = Field(default=None, max_length=255)
 
     _validate_phone = field_validator("phone")(_normalize_mobile_phone)
+    _validate_email = field_validator("email")(_validate_guest_email_domain)
 
 
 GuestStatus = Literal["ACTIVE", "INACTIVE"]
