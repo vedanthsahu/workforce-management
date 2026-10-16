@@ -74,7 +74,10 @@ class SessionActivityTouchTests(unittest.TestCase):
         self.assertEqual(kwargs["tenant_id"], "1")
         self.assertEqual(kwargs["user_id"], "7")
         self.assertEqual(kwargs["session_id"], "session-abc")
-        self.assertEqual(kwargs["min_touch_interval_seconds"], SESSION_ACTIVITY_TOUCH_INTERVAL_SECONDS)
+        self.assertEqual(
+            kwargs["min_touch_interval_seconds"],
+            SESSION_ACTIVITY_TOUCH_INTERVAL_SECONDS,
+        )
         self.assertEqual(conn.commits, 1)
         self.assertEqual(conn.rollbacks, 0)
 

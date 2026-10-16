@@ -84,9 +84,11 @@ def _ensure_within_block_window(
 
 
 def _can_use_non_bookable_seat(current_user: dict[str, Any]) -> bool:
-    role = str(
-        current_user.get("role_name") or current_user.get("role") or ""
-    ).strip().upper()
+    role = (
+        str(current_user.get("role_name") or current_user.get("role") or "")
+        .strip()
+        .upper()
+    )
     return role in ADMIN_SEAT_ACCESS_ROLES
 
 
@@ -231,9 +233,7 @@ def get_blocked_seat_history(
     # Keep history tenant-scoped and return 404 for inaccessible block IDs.
     get_blocked_seat(conn, tenant_id=tenant_id, block_id=block_id)
     try:
-        rows = fetch_blocked_seat_history(
-            conn, tenant_id=tenant_id, block_id=block_id
-        )
+        rows = fetch_blocked_seat_history(conn, tenant_id=tenant_id, block_id=block_id)
     except psycopg2.Error as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -275,7 +275,9 @@ def get_blockable_floor_layout(
                 "message": "Block To must be on or after Block From.",
             },
         )
-    _ensure_within_block_window(conn, tenant_id=tenant_id, dates=[blocked_from, blocked_to])
+    _ensure_within_block_window(
+        conn, tenant_id=tenant_id, dates=[blocked_from, blocked_to]
+    )
     try:
         layout = fetch_blockable_floor_layout(
             conn,
@@ -405,8 +407,7 @@ def create_blocked_seats(
             for seat in seats
             if seat["status"] != "ACTIVE"
             or (
-                not seat["is_bookable"]
-                and not _can_use_non_bookable_seat(current_user)
+                not seat["is_bookable"] and not _can_use_non_bookable_seat(current_user)
             )
         ]
         if unavailable:
@@ -485,9 +486,11 @@ def create_blocked_seats(
             failure_reason=message,
         )
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT
-            if conflict
-            else status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=(
+                status.HTTP_409_CONFLICT
+                if conflict
+                else status.HTTP_500_INTERNAL_SERVER_ERROR
+            ),
             detail={"code": code, "message": message},
         ) from exc
 
@@ -570,8 +573,7 @@ def cancel_seat_block(
             "reason": existing.reason,
         },
         new_values={"status": "CANCELLED", "reason": reason},
-        changed_fields=["status"]
-        + (["reason"] if existing.reason != reason else []),
+        changed_fields=["status"] + (["reason"] if existing.reason != reason else []),
     )
     return CancelBlockedSeatResponse(
         message="Seat block cancelled successfully.",

@@ -77,7 +77,9 @@ class AdminManagementRouteTests(unittest.TestCase):
         self.assertIn(("GET", "/offices/{office_id}/floors"), route_map)
         self.assertIn(("PATCH", "/seats/{seat_id}/configuration"), route_map)
         self.assertIn(("PATCH", "/seats/bulk-configuration"), route_map)
-        self.assertIn(("PATCH", "/layout-seats/{layout_seat_mapping_id}/configuration"), route_map)
+        self.assertIn(
+            ("PATCH", "/layout-seats/{layout_seat_mapping_id}/configuration"), route_map
+        )
         self.assertIn(("PATCH", "/layout-seats/bulk-configuration"), route_map)
 
     def test_amenity_management_routes_are_registered(self) -> None:
@@ -142,9 +144,7 @@ class LocationMutationsRequirePermissionTests(unittest.TestCase):
             ("PATCH", "/layout-seats/bulk-configuration"),
         ):
             with self.subTest(route=f"{method} {path}"):
-                required = _required_permissions(
-                    _route(locations_router, method, path)
-                )
+                required = _required_permissions(_route(locations_router, method, path))
                 self.assertIn("layout:upload", required)
 
     def test_read_routes_do_not_require_a_permission(self) -> None:
@@ -153,8 +153,7 @@ class LocationMutationsRequirePermissionTests(unittest.TestCase):
                 route = _route(locations_router, method, path)
                 self.assertIsNone(
                     _required_permissions(route),
-                    f"{method} {path} should remain open to any "
-                    "authenticated user.",
+                    f"{method} {path} should remain open to any " "authenticated user.",
                 )
 
 

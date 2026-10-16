@@ -83,11 +83,27 @@ class AuditLogFilterOption(BaseModel):
             "examples": [
                 {"module": "AUTH", "entity_type": "session", "action": "user.login"},
                 {"module": "AUTH", "entity_type": "session", "action": "user.logout"},
-                {"module": "AUTH", "entity_type": "user", "action": "user.access_updated"},
-                {"module": "BOOKING", "entity_type": "booking", "action": "booking.created"},
-                {"module": "BOOKING", "entity_type": "booking", "action": "booking.cancel"},
+                {
+                    "module": "AUTH",
+                    "entity_type": "user",
+                    "action": "user.access_updated",
+                },
+                {
+                    "module": "BOOKING",
+                    "entity_type": "booking",
+                    "action": "booking.created",
+                },
+                {
+                    "module": "BOOKING",
+                    "entity_type": "booking",
+                    "action": "booking.cancel",
+                },
                 {"module": "LOCATION", "entity_type": "site", "action": "site.created"},
-                {"module": "LOCATION", "entity_type": "building", "action": "building.created"},
+                {
+                    "module": "LOCATION",
+                    "entity_type": "building",
+                    "action": "building.created",
+                },
             ]
         }
     )
@@ -102,7 +118,11 @@ class AuditLogListResponse(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "items": [AuditLogListItemResponse.model_config["json_schema_extra"]["example"]],
+                "items": [
+                    AuditLogListItemResponse.model_config["json_schema_extra"][
+                        "example"
+                    ]
+                ],
                 "summary": {
                     "total_events": 828,
                     "successful_events": 713,
@@ -110,9 +130,21 @@ class AuditLogListResponse(BaseModel):
                     "unique_users": 21,
                 },
                 "filter_options": [
-                    {"module": "AUTH", "entity_type": "session", "action": "user.login"},
-                    {"module": "AUTH", "entity_type": "user", "action": "user.access_updated"},
-                    {"module": "LOCATION", "entity_type": "building", "action": "building.created"},
+                    {
+                        "module": "AUTH",
+                        "entity_type": "session",
+                        "action": "user.login",
+                    },
+                    {
+                        "module": "AUTH",
+                        "entity_type": "user",
+                        "action": "user.access_updated",
+                    },
+                    {
+                        "module": "LOCATION",
+                        "entity_type": "building",
+                        "action": "building.created",
+                    },
                 ],
                 "pagination": {"total": 828, "page": 1, "limit": 10, "total_pages": 83},
             }

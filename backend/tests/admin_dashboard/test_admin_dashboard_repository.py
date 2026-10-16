@@ -51,7 +51,9 @@ class FakeConnection:
 
 
 class AdminDashboardRepositoryTests(unittest.TestCase):
-    def test_summary_query_preserves_existing_fields_and_adds_status_metrics(self) -> None:
+    def test_summary_query_preserves_existing_fields_and_adds_status_metrics(
+        self,
+    ) -> None:
         cursor = FakeCursor(
             fetchone_values=[
                 {
@@ -143,10 +145,13 @@ class AdminDashboardRepositoryTests(unittest.TestCase):
         self.assertIn("LEFT JOIN LATERAL", combined_sql)
         self.assertIn("guest_booking.booking_status <> 'MODIFIED'", combined_sql)
         self.assertIn("COALESCE(b.floor_id, gv.floor_id)", combined_sql)
-        self.assertEqual([row["activity_id"] for row in result], [
-            "guest-booking-20",
-            "employee-booking-10",
-        ])
+        self.assertEqual(
+            [row["activity_id"] for row in result],
+            [
+                "guest-booking-20",
+                "employee-booking-10",
+            ],
+        )
         self.assertEqual(cursor.executions[0][1]["tenant_id"], "1")
         self.assertEqual(cursor.executions[1][1]["tenant_id"], "1")
 
@@ -185,7 +190,9 @@ class AdminDashboardRepositoryTests(unittest.TestCase):
         self.assertIn("WHEN b.booking_status = 'CANCELLED' THEN 'MODIFIED'", guest_sql)
         self.assertIn("ELSE 'GUEST_VISIT'", guest_sql)
 
-    def test_date_range_occupancy_query_uses_generate_series_and_grouped_counts(self) -> None:
+    def test_date_range_occupancy_query_uses_generate_series_and_grouped_counts(
+        self,
+    ) -> None:
         cursor = FakeCursor(
             fetchall_values=[
                 [

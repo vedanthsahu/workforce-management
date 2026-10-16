@@ -24,7 +24,11 @@ LISTING_ROUTES = [
 
 def _route(path: str) -> APIRoute:
     for route in bookings_router.routes:
-        if isinstance(route, APIRoute) and route.path == path and "GET" in route.methods:
+        if (
+            isinstance(route, APIRoute)
+            and route.path == path
+            and "GET" in route.methods
+        ):
             return route
     raise AssertionError(f"GET {path} is not registered")
 
@@ -38,7 +42,9 @@ class BookingListingQueryParamTests(unittest.TestCase):
                 self.assertIn("booking_date", names)
 
     def test_delegated_current_now_supports_pagination(self) -> None:
-        names = {p.name for p in _route("/bookings/delegated/current").dependant.query_params}
+        names = {
+            p.name for p in _route("/bookings/delegated/current").dependant.query_params
+        }
         self.assertIn("page", names)
         self.assertIn("limit", names)
 

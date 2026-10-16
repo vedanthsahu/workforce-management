@@ -67,10 +67,13 @@ class UpdateLayoutSeatConfigurationVisibilityTests(unittest.TestCase):
         current_user = {"tenant_id": "1", "user_id": "5"}
         payload = LayoutSeatConfigurationUpdateRequest(seat_name="Desk 1")
 
-        with patch(
-            "backend.services.location_service.fetch_layout_seat_mapping_by_id",
-            return_value=None,
-        ), self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.location_service.fetch_layout_seat_mapping_by_id",
+                return_value=None,
+            ),
+            self.assertRaises(HTTPException) as context,
+        ):
             update_layout_seat_configuration(
                 conn,
                 tenant_id=str(current_user["tenant_id"]),

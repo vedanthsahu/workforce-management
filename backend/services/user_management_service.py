@@ -89,7 +89,9 @@ def _can_view_user_resource(
     FACILITATOR, or the target's own MANAGER."""
     current_user_id = _current_user_id(current_user)
 
-    if current_user_id == str(target_user.get("id") or target_user.get("user_id") or ""):
+    if current_user_id == str(
+        target_user.get("id") or target_user.get("user_id") or ""
+    ):
         return True
 
     role = _user_role(current_user)
@@ -177,8 +179,12 @@ def admin_update_user_access_service(
 
     if target_user is None:
         safe_write_audit_log(
-            conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+            conn,
+            action=USER_ACCESS_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="user",
+            resource_id=str(target_user_id),
             event_status="FAILURE",
             failure_code="user_not_found",
             failure_reason="Target user not found.",
@@ -198,8 +204,12 @@ def admin_update_user_access_service(
     # be self-directed, same as managing another admin.
     if is_self and target_role != "TENANT_ADMIN":
         safe_write_audit_log(
-            conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+            conn,
+            action=USER_ACCESS_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="user",
+            resource_id=str(target_user_id),
             event_status="DENIED",
             failure_code="self_modification_not_allowed",
             failure_reason="Users cannot modify their own access.",
@@ -214,8 +224,12 @@ def admin_update_user_access_service(
 
     if target_role in PROTECTED_TARGET_ROLE_NAMES:
         safe_write_audit_log(
-            conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+            conn,
+            action=USER_ACCESS_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="user",
+            resource_id=str(target_user_id),
             event_status="DENIED",
             failure_code="protected_target_role",
             failure_reason="This user's access cannot be changed through this endpoint.",
@@ -230,8 +244,12 @@ def admin_update_user_access_service(
 
     if payload.role_name and payload.role_name not in ASSIGNABLE_ROLE_NAMES:
         safe_write_audit_log(
-            conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+            conn,
+            action=USER_ACCESS_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="user",
+            resource_id=str(target_user_id),
             event_status="DENIED",
             failure_code="protected_role",
             failure_reason="Requested role cannot be assigned.",
@@ -249,9 +267,7 @@ def admin_update_user_access_service(
     if target_role == "TENANT_ADMIN" and target_user.get("status") == "ACTIVE":
         losing_admin_access = (
             payload.role_name is not None and payload.role_name != "TENANT_ADMIN"
-        ) or (
-            payload.status is not None and payload.status != "ACTIVE"
-        )
+        ) or (payload.status is not None and payload.status != "ACTIVE")
         if losing_admin_access:
             remaining_admins = count_active_tenant_admins(
                 conn,
@@ -260,8 +276,12 @@ def admin_update_user_access_service(
             )
             if remaining_admins == 0:
                 safe_write_audit_log(
-                    conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
-                    current_user=current_user, resource_type="user", resource_id=str(target_user_id),
+                    conn,
+                    action=USER_ACCESS_UPDATED,
+                    tenant_id=tenant_id,
+                    current_user=current_user,
+                    resource_type="user",
+                    resource_id=str(target_user_id),
                     event_status="DENIED",
                     failure_code="last_admin_required",
                     failure_reason="Cannot remove the tenant's last active Tenant Admin.",
@@ -301,10 +321,14 @@ def admin_update_user_access_service(
         "role_name": _user_role(target_user),
         "status": target_user.get("status"),
     }
-    _new_data = {k: v for k, v in {
-        "role_name": payload.role_name,
-        "status": payload.status,
-    }.items() if v is not None}
+    _new_data = {
+        k: v
+        for k, v in {
+            "role_name": payload.role_name,
+            "status": payload.status,
+        }.items()
+        if v is not None
+    }
     _actually_changed = [k for k in _new_data if _old.get(k) != _new_data[k]]
 
     safe_write_audit_log(
@@ -365,9 +389,7 @@ def get_admin_user_directory(
     )
 
     unsupported_roles = [
-        role
-        for role in normalized_roles
-        if role not in ADMIN_DIRECTORY_ROLES
+        role for role in normalized_roles if role not in ADMIN_DIRECTORY_ROLES
     ]
     if unsupported_roles:
         raise HTTPException(
@@ -422,6 +444,7 @@ def _normalize_admin_directory_roles(
             if normalized and normalized not in roles:
                 roles.append(normalized)
     return roles
+
 
 def get_user_by_id_service(
     conn: PGConnection,

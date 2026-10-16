@@ -28,7 +28,6 @@ from backend.services.guest_service import (
 router = APIRouter(prefix="/guests", tags=["guests"])
 
 
-
 @router.get("", response_model=list[GuestResponse])
 def search_guest_records(
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],

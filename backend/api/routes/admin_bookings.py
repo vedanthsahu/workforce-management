@@ -59,11 +59,17 @@ def admin_bookings(
     ] = None,
     booking_status: Annotated[
         AdminBookingStatus | None,
-        Query(alias="bookingStatus", description="Filters bookings.booking_status (employee + guest-with-seat rows)."),
+        Query(
+            alias="bookingStatus",
+            description="Filters bookings.booking_status (employee + guest-with-seat rows).",
+        ),
     ] = None,
     visit_status: Annotated[
         AdminVisitStatus | None,
-        Query(alias="visitStatus", description="Filters guest_visits.visit_status (guest rows only)."),
+        Query(
+            alias="visitStatus",
+            description="Filters guest_visits.visit_status (guest rows only).",
+        ),
     ] = None,
     search: Annotated[
         str | None,

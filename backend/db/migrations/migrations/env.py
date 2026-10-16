@@ -40,7 +40,13 @@ def _url_from_dotenv() -> str:
     """Build a SQLAlchemy URL from the repo-root .env, the same file
     backend/core/config.py reads DB_* from."""
     env_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))),
+        os.path.dirname(
+            os.path.dirname(
+                os.path.dirname(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                )
+            )
+        ),
         ".env",
     )
     values: dict[str, str] = {}

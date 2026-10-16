@@ -313,13 +313,17 @@ def resolve_blocked_seat_max_advance_days(conn: PGConnection, *, tenant_id: str)
     """Return how many days ahead a seat block can be set for a tenant."""
     return int(
         fetch_business_rule_value(
-            conn, tenant_id=tenant_id, business_rule_key=BLOCKED_SEAT_MAX_ADVANCE_DAYS_KEY,
+            conn,
+            tenant_id=tenant_id,
+            business_rule_key=BLOCKED_SEAT_MAX_ADVANCE_DAYS_KEY,
             default=_DEFAULT_BLOCKED_SEAT_MAX_ADVANCE_DAYS,
         )
     )
 
 
-def resolve_layout_scheduling_gap(conn: PGConnection, *, tenant_id: str) -> dict[str, Any]:
+def resolve_layout_scheduling_gap(
+    conn: PGConnection, *, tenant_id: str
+) -> dict[str, Any]:
     """Return the employee booking window, the safety buffer, and their
     sum -- the minimum number of days out an admin must schedule a new
     layout. This is the one place that combines the two rules; everything
@@ -329,13 +333,17 @@ def resolve_layout_scheduling_gap(conn: PGConnection, *, tenant_id: str) -> dict
     """
     employee_max_advance_days = int(
         fetch_business_rule_value(
-            conn, tenant_id=tenant_id, business_rule_key=EMPLOYEE_MAX_ADVANCE_DAYS_KEY,
+            conn,
+            tenant_id=tenant_id,
+            business_rule_key=EMPLOYEE_MAX_ADVANCE_DAYS_KEY,
             default=_DEFAULT_EMPLOYEE_MAX_ADVANCE_DAYS,
         )
     )
     buffer_days = int(
         fetch_business_rule_value(
-            conn, tenant_id=tenant_id, business_rule_key=LAYOUT_SCHEDULING_BUFFER_DAYS_KEY,
+            conn,
+            tenant_id=tenant_id,
+            business_rule_key=LAYOUT_SCHEDULING_BUFFER_DAYS_KEY,
             default=_DEFAULT_LAYOUT_SCHEDULING_BUFFER_DAYS,
         )
     )
@@ -351,7 +359,9 @@ def resolve_layout_scheduling_gap(conn: PGConnection, *, tenant_id: str) -> dict
     }
 
 
-def resolve_booking_advance_days(conn: PGConnection, *, tenant_id: str) -> dict[str, int]:
+def resolve_booking_advance_days(
+    conn: PGConnection, *, tenant_id: str
+) -> dict[str, int]:
     """Return the employee and guest booking-advance-window rules for a
     tenant. The single place both book_seat's and create_guest_visit's/
     create_guest_booking's advance-window checks should read from, instead
@@ -359,13 +369,17 @@ def resolve_booking_advance_days(conn: PGConnection, *, tenant_id: str) -> dict[
     return {
         "employee_max_advance_days": int(
             fetch_business_rule_value(
-                conn, tenant_id=tenant_id, business_rule_key=EMPLOYEE_MAX_ADVANCE_DAYS_KEY,
+                conn,
+                tenant_id=tenant_id,
+                business_rule_key=EMPLOYEE_MAX_ADVANCE_DAYS_KEY,
                 default=_DEFAULT_EMPLOYEE_MAX_ADVANCE_DAYS,
             )
         ),
         "guest_max_advance_days": int(
             fetch_business_rule_value(
-                conn, tenant_id=tenant_id, business_rule_key=GUEST_MAX_ADVANCE_DAYS_KEY,
+                conn,
+                tenant_id=tenant_id,
+                business_rule_key=GUEST_MAX_ADVANCE_DAYS_KEY,
                 default=_DEFAULT_GUEST_MAX_ADVANCE_DAYS,
             )
         ),
@@ -377,13 +391,17 @@ def resolve_activity_record_count(conn: PGConnection, *, tenant_id: str) -> int:
     shows for a tenant."""
     return int(
         fetch_business_rule_value(
-            conn, tenant_id=tenant_id, business_rule_key=ACTIVITY_RECORD_COUNT_KEY,
+            conn,
+            tenant_id=tenant_id,
+            business_rule_key=ACTIVITY_RECORD_COUNT_KEY,
             default=_DEFAULT_ACTIVITY_RECORD_COUNT,
         )
     )
 
 
-def resolve_layout_visibility_days(conn: PGConnection, *, tenant_id: str) -> dict[str, int]:
+def resolve_layout_visibility_days(
+    conn: PGConnection, *, tenant_id: str
+) -> dict[str, int]:
     """Return how many days a DRAFT/ARCHIVED/DELETED layout may sit
     untouched before it drops out of the admin layout list for an
     enrolled floor (PUBLISHED is never subject to this and has no rule).
@@ -391,7 +409,9 @@ def resolve_layout_visibility_days(conn: PGConnection, *, tenant_id: str) -> dic
     return {
         status_key: int(
             fetch_business_rule_value(
-                conn, tenant_id=tenant_id, business_rule_key=rule_key,
+                conn,
+                tenant_id=tenant_id,
+                business_rule_key=rule_key,
                 default=_DEFAULT_LAYOUT_VISIBILITY_DAYS[status_key],
             )
         )
@@ -406,7 +426,9 @@ def resolve_blocked_seat_days(conn: PGConnection, *, tenant_id: str) -> dict[str
     return {
         setting_key: int(
             fetch_business_rule_value(
-                conn, tenant_id=tenant_id, business_rule_key=rule_key,
+                conn,
+                tenant_id=tenant_id,
+                business_rule_key=rule_key,
                 default=_DEFAULT_BLOCKED_SEAT_DAYS[setting_key],
             )
         )

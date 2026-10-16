@@ -55,7 +55,9 @@ class RepositorySeatAndDateFilterTests(unittest.TestCase):
     def test_no_filters_matches_previous_query_shape(self) -> None:
         cursor = FakeCursor()
         fetch_past_bookings_for_user(
-            FakeConnection(cursor), tenant_id="1", user_id="7",
+            FakeConnection(cursor),
+            tenant_id="1",
+            user_id="7",
         )
         sql, params = cursor.executions[0]
         self.assertNotIn("b.seat_id = %s", sql)
@@ -65,7 +67,10 @@ class RepositorySeatAndDateFilterTests(unittest.TestCase):
     def test_seat_id_only_appends_one_filter(self) -> None:
         cursor = FakeCursor()
         fetch_future_bookings_for_user(
-            FakeConnection(cursor), tenant_id="1", user_id="7", seat_id="15",
+            FakeConnection(cursor),
+            tenant_id="1",
+            user_id="7",
+            seat_id="15",
         )
         sql, params = cursor.executions[0]
         self.assertIn("AND b.seat_id = %s", sql)
@@ -75,7 +80,10 @@ class RepositorySeatAndDateFilterTests(unittest.TestCase):
     def test_booking_date_only_appends_one_filter(self) -> None:
         cursor = FakeCursor()
         fetch_current_bookings_for_user(
-            FakeConnection(cursor), tenant_id="1", user_id="7", booking_date=FILTER_DATE,
+            FakeConnection(cursor),
+            tenant_id="1",
+            user_id="7",
+            booking_date=FILTER_DATE,
         )
         sql, params = cursor.executions[0]
         self.assertNotIn("b.seat_id = %s", sql)

@@ -91,12 +91,15 @@ TEAM_COUNTS = {"38": {"team_id": "38", "total_members": 2, "booked_today_count":
 
 class TeamOverviewSeatDetailTests(unittest.TestCase):
     def test_booked_member_exposes_full_seat_detail(self) -> None:
-        with patch(
-            "backend.services.team_service.fetch_team_members_with_today_booking",
-            return_value=[BOOKED_ROW, UNBOOKED_ROW],
-        ), patch(
-            "backend.services.team_service.fetch_team_member_counts",
-            return_value=TEAM_COUNTS,
+        with (
+            patch(
+                "backend.services.team_service.fetch_team_members_with_today_booking",
+                return_value=[BOOKED_ROW, UNBOOKED_ROW],
+            ),
+            patch(
+                "backend.services.team_service.fetch_team_member_counts",
+                return_value=TEAM_COUNTS,
+            ),
         ):
             teams = get_my_team_overview(
                 conn=object(),
@@ -125,12 +128,15 @@ class TeamOverviewSeatDetailTests(unittest.TestCase):
         self.assertEqual(team["limit"], 20)
 
     def test_member_user_id_filters_to_single_teammate(self) -> None:
-        with patch(
-            "backend.services.team_service.fetch_team_members_with_today_booking",
-            return_value=[BOOKED_ROW],
-        ) as mock_fetch, patch(
-            "backend.services.team_service.fetch_team_member_counts",
-            return_value=TEAM_COUNTS,
+        with (
+            patch(
+                "backend.services.team_service.fetch_team_members_with_today_booking",
+                return_value=[BOOKED_ROW],
+            ) as mock_fetch,
+            patch(
+                "backend.services.team_service.fetch_team_member_counts",
+                return_value=TEAM_COUNTS,
+            ),
         ):
             teams = get_my_team_overview(
                 conn=object(),
@@ -149,10 +155,13 @@ class TeamOverviewSeatDetailTests(unittest.TestCase):
         self.assertNotIn("page", team)
 
     def test_member_user_id_not_on_team_raises_404(self) -> None:
-        with patch(
-            "backend.services.team_service.fetch_team_members_with_today_booking",
-            return_value=[],
-        ), self.assertRaises(HTTPException) as ctx:
+        with (
+            patch(
+                "backend.services.team_service.fetch_team_members_with_today_booking",
+                return_value=[],
+            ),
+            self.assertRaises(HTTPException) as ctx,
+        ):
             get_my_team_overview(
                 conn=object(),
                 current_user={"tenant_id": "3", "user_id": "36"},
@@ -163,12 +172,15 @@ class TeamOverviewSeatDetailTests(unittest.TestCase):
         self.assertEqual(ctx.exception.detail["code"], "teammate_not_found")
 
     def test_pagination_computes_offset_and_total_pages(self) -> None:
-        with patch(
-            "backend.services.team_service.fetch_team_members_with_today_booking",
-            return_value=[BOOKED_ROW, UNBOOKED_ROW],
-        ) as mock_fetch, patch(
-            "backend.services.team_service.fetch_team_member_counts",
-            return_value=TEAM_COUNTS,
+        with (
+            patch(
+                "backend.services.team_service.fetch_team_members_with_today_booking",
+                return_value=[BOOKED_ROW, UNBOOKED_ROW],
+            ) as mock_fetch,
+            patch(
+                "backend.services.team_service.fetch_team_member_counts",
+                return_value=TEAM_COUNTS,
+            ),
         ):
             teams = get_my_team_overview(
                 conn=object(),

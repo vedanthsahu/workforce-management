@@ -40,7 +40,9 @@ router = APIRouter(tags=["user-management"])
 def admin_user_directory(
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_any_permission(["admin_dashboard:view", "users:view", "user:view"])),
+        Depends(
+            require_any_permission(["admin_dashboard:view", "users:view", "user:view"])
+        ),
     ],
     conn: Annotated[
         PGConnection,
@@ -90,6 +92,7 @@ def search_users(
         limit=limit,
     )
 
+
 @router.patch(
     "/users/me",
     response_model=UserResponse,
@@ -108,6 +111,7 @@ def update_profile(
         current_user=current_user,
         payload=payload,
     )
+
 
 @router.get(
     "/users/{user_id}",
@@ -140,7 +144,11 @@ def get_user_bookings(
     user_id: str,
     current_user: Annotated[
         dict[str, Any],
-        Depends(require_any_permission(["admin_dashboard:view", "users:view", "user:view", "teammate:view"])),
+        Depends(
+            require_any_permission(
+                ["admin_dashboard:view", "users:view", "user:view", "teammate:view"]
+            )
+        ),
     ],
     conn: Annotated[
         PGConnection,

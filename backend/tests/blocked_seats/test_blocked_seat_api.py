@@ -237,7 +237,9 @@ class BlockedSeatServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status, "CANCELLED")
-        self.assertEqual(cancel_block.call_args.kwargs["reason"], "Maintenance completed")
+        self.assertEqual(
+            cancel_block.call_args.kwargs["reason"], "Maintenance completed"
+        )
         self.assertEqual(
             audit.call_args.kwargs["new_values"]["reason"],
             "Maintenance completed",
@@ -270,7 +272,8 @@ class BlockedSeatServiceTests(unittest.TestCase):
         self, fetch_rows: MagicMock, fetch_summary: MagicMock, resolve_policy: MagicMock
     ) -> None:
         resolve_policy.return_value = {
-            "UPCOMING": 1, "EXPIRING_SOON": 3,
+            "UPCOMING": 1,
+            "EXPIRING_SOON": 3,
             "EXPIRED_WINDOW": 10,
         }
         fetch_rows.return_value = ([_row()], 1)
@@ -338,7 +341,8 @@ class BlockedSeatServiceTests(unittest.TestCase):
         resolve_policy: MagicMock,
     ) -> None:
         resolve_policy.return_value = {
-            "UPCOMING": 1, "EXPIRING_SOON": 3,
+            "UPCOMING": 1,
+            "EXPIRING_SOON": 3,
             "EXPIRED_WINDOW": 10,
         }
         fetch_rows.return_value = ([], 0)
@@ -474,7 +478,9 @@ if __name__ == "__main__":
 
 
 class BlockWindowTests(unittest.TestCase):
-    @patch("backend.services.blocked_seat_service.resolve_blocked_seat_max_advance_days")
+    @patch(
+        "backend.services.blocked_seat_service.resolve_blocked_seat_max_advance_days"
+    )
     def test_dates_beyond_the_configured_window_are_rejected(
         self, window_days: MagicMock
     ) -> None:
@@ -485,7 +491,9 @@ class BlockWindowTests(unittest.TestCase):
         today = date.today()
 
         # The last allowed day is today + 90; one day later is rejected.
-        _ensure_within_block_window(conn, tenant_id="1", dates=[today + timedelta(days=90)])
+        _ensure_within_block_window(
+            conn, tenant_id="1", dates=[today + timedelta(days=90)]
+        )
         _ensure_within_block_window(conn, tenant_id="1", dates=[])
         with self.assertRaises(HTTPException) as raised:
             _ensure_within_block_window(
@@ -496,7 +504,9 @@ class BlockWindowTests(unittest.TestCase):
         self.assertEqual(raised.exception.detail["code"], "block_window_exceeded")
         self.assertIn("90 days", raised.exception.detail["message"])
 
-    @patch("backend.services.blocked_seat_service.resolve_blocked_seat_max_advance_days")
+    @patch(
+        "backend.services.blocked_seat_service.resolve_blocked_seat_max_advance_days"
+    )
     def test_one_day_window_message_is_singular(self, window_days: MagicMock) -> None:
         from backend.services.blocked_seat_service import _ensure_within_block_window
 

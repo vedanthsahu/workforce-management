@@ -58,6 +58,7 @@ def create_guest_visit_record(
         background_tasks=background_tasks,
     )
 
+
 @router.get(
     "/{guest_visit_id}",
     response_model=GuestVisitListItem,
@@ -65,8 +66,7 @@ def create_guest_visit_record(
 def get_guest_visit(
     guest_visit_id: str,
     current_user: Annotated[
-        dict[str, Any],
-        Depends(require_permission("guest:view_visits"))
+        dict[str, Any], Depends(require_permission("guest:view_visits"))
     ],
     conn: Annotated[PGConnection, Depends(get_db)],
 ):
@@ -75,8 +75,6 @@ def get_guest_visit(
         current_user=current_user,
         guest_visit_id=guest_visit_id,
     )
-
-
 
 
 @router.get(
@@ -94,8 +92,7 @@ def get_guest_visits(
     offset: int = 0,
     page: int | None = Query(default=None, ge=1),
     current_user: Annotated[
-        dict[str, Any],
-        Depends(require_permission("guest:view_visits"))
+        dict[str, Any], Depends(require_permission("guest:view_visits"))
     ] = None,
     conn: Annotated[PGConnection, Depends(get_db)] = None,
 ):
@@ -112,6 +109,7 @@ def get_guest_visits(
         page=page,
     )
 
+
 @router.post(
     "/{guest_visit_id}/check-in",
     response_model=GuestVisitStatusUpdateResponse,
@@ -119,8 +117,7 @@ def get_guest_visits(
 def check_in_visit(
     guest_visit_id: str,
     current_user: Annotated[
-        dict[str, Any],
-        Depends(require_permission("guest:check_in"))
+        dict[str, Any], Depends(require_permission("guest:check_in"))
     ],
     conn: Annotated[PGConnection, Depends(get_db)],
 ):
@@ -130,6 +127,7 @@ def check_in_visit(
         guest_visit_id=guest_visit_id,
     )
 
+
 @router.post(
     "/{guest_visit_id}/check-out",
     response_model=GuestVisitStatusUpdateResponse,
@@ -137,8 +135,7 @@ def check_in_visit(
 def check_out_visit(
     guest_visit_id: str,
     current_user: Annotated[
-        dict[str, Any],
-        Depends(require_permission("guest:check_out"))
+        dict[str, Any], Depends(require_permission("guest:check_out"))
     ],
     conn: Annotated[PGConnection, Depends(get_db)],
 ):
@@ -157,8 +154,7 @@ def book_seat_for_existing_guest_visit(
     guest_visit_id: str,
     payload: AttachSeatToGuestVisitRequest,
     current_user: Annotated[
-        dict[str, Any],
-        Depends(require_permission("booking:book_for_guest"))
+        dict[str, Any], Depends(require_permission("booking:book_for_guest"))
     ],
     conn: Annotated[
         PGConnection,
@@ -182,8 +178,7 @@ def cancel_visit(
     payload: CancelGuestVisitRequest,
     background_tasks: BackgroundTasks,
     current_user: Annotated[
-        dict[str, Any],
-        Depends(require_permission("guest:manage"))
+        dict[str, Any], Depends(require_permission("guest:manage"))
     ],
     conn: Annotated[
         PGConnection,
@@ -209,8 +204,7 @@ def modify_visit(
     payload: ModifyGuestVisitRequest,
     background_tasks: BackgroundTasks,
     current_user: Annotated[
-        dict[str, Any],
-        Depends(require_permission("guest:manage"))
+        dict[str, Any], Depends(require_permission("guest:manage"))
     ],
     conn: Annotated[
         PGConnection,
@@ -246,4 +240,3 @@ def guest_visit_workflow(
         guest_visit_id=guest_visit_id,
         payload=payload,
     )
-

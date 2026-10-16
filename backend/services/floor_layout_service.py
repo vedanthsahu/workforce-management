@@ -278,7 +278,8 @@ def get_floor_layouts_by_floor(
     )
     visibility_thresholds = (
         resolve_layout_visibility_days(conn, tenant_id=tenant_id)
-        if layout_visibility_enabled else None
+        if layout_visibility_enabled
+        else None
     )
 
     try:
@@ -347,16 +348,9 @@ def get_floor_layout_seats(
             },
         ) from exc
 
-    configured_count = sum(
-        1
-        for seat in seats
-        if seat.get("is_configured") is True
-    )
+    configured_count = sum(1 for seat in seats if seat.get("is_configured") is True)
 
-    items = [
-        LayoutSeatResponse(**seat)
-        for seat in seats
-    ]
+    items = [LayoutSeatResponse(**seat) for seat in seats]
 
     return LayoutSeatListResponse(
         layout_id=layout_id,
@@ -365,6 +359,7 @@ def get_floor_layout_seats(
         pending_seats=len(items) - configured_count,
         items=items,
     )
+
 
 def _resolve_admin_min_advance_days(conn: PGConnection, *, tenant_id: str) -> int:
     """The minimum number of days out an admin must schedule a new layout,
@@ -375,7 +370,9 @@ def _resolve_admin_min_advance_days(conn: PGConnection, *, tenant_id: str) -> in
 
 
 def _resolve_employee_max_advance_days(conn: PGConnection, *, tenant_id: str) -> int:
-    return resolve_layout_scheduling_gap(conn, tenant_id=tenant_id)["employee_max_advance_days"]
+    return resolve_layout_scheduling_gap(conn, tenant_id=tenant_id)[
+        "employee_max_advance_days"
+    ]
 
 
 def _site_local_today(tz_name: str | None) -> date:
@@ -424,7 +421,9 @@ def _schedule_floor_layout(
     layout_id = str(layout["layout_id"])
     floor_id = str(layout["floor_id"])
 
-    tz_name = fetch_site_timezone(conn, tenant_id=tenant_id, site_id=str(layout["site_id"]))
+    tz_name = fetch_site_timezone(
+        conn, tenant_id=tenant_id, site_id=str(layout["site_id"])
+    )
     site_today = _site_local_today(tz_name)
     min_advance_days = _resolve_admin_min_advance_days(conn, tenant_id=tenant_id)
 
@@ -442,7 +441,9 @@ def _schedule_floor_layout(
         )
 
     existing_scheduled = fetch_scheduled_layout_for_floor(
-        conn, tenant_id=tenant_id, floor_id=floor_id,
+        conn,
+        tenant_id=tenant_id,
+        floor_id=floor_id,
     )
     if existing_scheduled is not None and existing_scheduled["layout_id"] != layout_id:
         raise HTTPException(
@@ -465,7 +466,9 @@ def _schedule_floor_layout(
     # new SCHEDULED row -- excl_floor_layouts_no_overlap is checked per
     # statement, not deferred, so doing this in the other order would
     # reject the new row as overlapping the old one's still-open window.
-    published = fetch_published_layout_for_floor(conn, tenant_id=tenant_id, floor_id=floor_id)
+    published = fetch_published_layout_for_floor(
+        conn, tenant_id=tenant_id, floor_id=floor_id
+    )
     if published is not None:
         set_published_layout_effective_till(
             conn,
@@ -541,7 +544,9 @@ def reschedule_floor_layout(
 
     try:
         layout = fetch_floor_layout_by_id(
-            conn, tenant_id=tenant_id, layout_id=layout_id,
+            conn,
+            tenant_id=tenant_id,
+            layout_id=layout_id,
         )
         if layout is None:
             raise HTTPException(
@@ -561,7 +566,9 @@ def reschedule_floor_layout(
             )
 
         floor_id = str(layout["floor_id"])
-        tz_name = fetch_site_timezone(conn, tenant_id=tenant_id, site_id=str(layout["site_id"]))
+        tz_name = fetch_site_timezone(
+            conn, tenant_id=tenant_id, site_id=str(layout["site_id"])
+        )
         site_today = _site_local_today(tz_name)
         # Deliberately the employee window alone, NOT the full admin
         # min_advance_days (window + buffer) a *new* schedule requires. The
@@ -572,7 +579,8 @@ def reschedule_floor_layout(
         # (no user booking can land on a layout about to be replaced) is
         # still load-bearing once a layout is already scheduled.
         employee_max_advance_days = _resolve_employee_max_advance_days(
-            conn, tenant_id=tenant_id,
+            conn,
+            tenant_id=tenant_id,
         )
 
         if effective_date < site_today + timedelta(days=employee_max_advance_days):
@@ -593,7 +601,9 @@ def reschedule_floor_layout(
         # Re-fetch under the lock -- a concurrent cutover could have
         # promoted this layout to PUBLISHED a moment ago.
         layout = fetch_floor_layout_by_id(
-            conn, tenant_id=tenant_id, layout_id=layout_id,
+            conn,
+            tenant_id=tenant_id,
+            layout_id=layout_id,
         )
         if layout is None or layout["status"] != LayoutStatus.SCHEDULED.value:
             raise HTTPException(
@@ -628,7 +638,9 @@ def reschedule_floor_layout(
 
         new_instant = _effective_instant_for_date(effective_date, tz_name)
         published = fetch_published_layout_for_floor(
-            conn, tenant_id=tenant_id, floor_id=floor_id,
+            conn,
+            tenant_id=tenant_id,
+            floor_id=floor_id,
         )
 
         # excl_floor_layouts_no_overlap is checked per statement, not
@@ -643,23 +655,35 @@ def reschedule_floor_layout(
         #     pull this row's effective_from back to match.
         if new_instant >= current_effective_from:
             rescheduled = schedule_floor_layout_record(
-                conn, tenant_id=tenant_id, layout_id=layout_id,
-                effective_from=new_instant, scheduled_by_user_id=user_id,
+                conn,
+                tenant_id=tenant_id,
+                layout_id=layout_id,
+                effective_from=new_instant,
+                scheduled_by_user_id=user_id,
             )
             if published is not None:
                 set_published_layout_effective_till(
-                    conn, tenant_id=tenant_id, layout_id=published["layout_id"],
-                    effective_till=new_instant, updated_by_user_id=user_id,
+                    conn,
+                    tenant_id=tenant_id,
+                    layout_id=published["layout_id"],
+                    effective_till=new_instant,
+                    updated_by_user_id=user_id,
                 )
         else:
             if published is not None:
                 set_published_layout_effective_till(
-                    conn, tenant_id=tenant_id, layout_id=published["layout_id"],
-                    effective_till=new_instant, updated_by_user_id=user_id,
+                    conn,
+                    tenant_id=tenant_id,
+                    layout_id=published["layout_id"],
+                    effective_till=new_instant,
+                    updated_by_user_id=user_id,
                 )
             rescheduled = schedule_floor_layout_record(
-                conn, tenant_id=tenant_id, layout_id=layout_id,
-                effective_from=new_instant, scheduled_by_user_id=user_id,
+                conn,
+                tenant_id=tenant_id,
+                layout_id=layout_id,
+                effective_from=new_instant,
+                scheduled_by_user_id=user_id,
             )
 
         conn.commit()
@@ -680,8 +704,12 @@ def reschedule_floor_layout(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=audit_action, tenant_id=tenant_id,
-            current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
+            conn,
+            action=audit_action,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="floor_layout",
+            resource_id=layout_id,
             event_status="FAILURE",
             failure_code=_d.get("code"),
             failure_reason=_d.get("message"),
@@ -691,8 +719,12 @@ def reschedule_floor_layout(
     except psycopg2.Error as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=audit_action, tenant_id=tenant_id,
-            current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
+            conn,
+            action=audit_action,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="floor_layout",
+            resource_id=layout_id,
             event_status="FAILURE",
             failure_code="floor_layout_reschedule_failed",
             failure_reason="Failed to reschedule floor layout.",
@@ -775,7 +807,9 @@ def activate_floor_layout(
             # avoidable DB call, whenever effective_date wasn't even given.
             floor_has_published_layout = (
                 fetch_published_layout_for_floor(
-                    conn, tenant_id=tenant_id, floor_id=str(layout["floor_id"]),
+                    conn,
+                    tenant_id=tenant_id,
+                    floor_id=str(layout["floor_id"]),
                 )
                 is not None
             )
@@ -784,7 +818,9 @@ def activate_floor_layout(
 
         if effective_date is not None and floor_has_published_layout:
             tz_name = fetch_site_timezone(
-                conn, tenant_id=tenant_id, site_id=str(layout["site_id"]),
+                conn,
+                tenant_id=tenant_id,
+                site_id=str(layout["site_id"]),
             )
             if effective_date > _site_local_today(tz_name):
                 failure_audit_action = FLOOR_LAYOUT_SCHEDULED
@@ -849,8 +885,16 @@ def activate_floor_layout(
             current_user=current_user,
             resource_type="floor_layout",
             resource_id=layout_id,
-            old_values={"layout_name": layout["layout_name"], "floor_id": str(layout["floor_id"]), "status": layout["status"]},
-            new_values={"layout_name": activated_layout["layout_name"], "floor_id": str(activated_layout["floor_id"]), "status": activated_layout["status"]},
+            old_values={
+                "layout_name": layout["layout_name"],
+                "floor_id": str(layout["floor_id"]),
+                "status": layout["status"],
+            },
+            new_values={
+                "layout_name": activated_layout["layout_name"],
+                "floor_id": str(activated_layout["floor_id"]),
+                "status": activated_layout["status"],
+            },
             changed_fields=["status"],
         )
 
@@ -865,8 +909,12 @@ def activate_floor_layout(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=failure_audit_action, tenant_id=tenant_id,
-            current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
+            conn,
+            action=failure_audit_action,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="floor_layout",
+            resource_id=layout_id,
             event_status="FAILURE",
             failure_code=_d.get("code"),
             failure_reason=_d.get("message"),
@@ -876,8 +924,12 @@ def activate_floor_layout(
     except psycopg2.Error as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=failure_audit_action, tenant_id=tenant_id,
-            current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
+            conn,
+            action=failure_audit_action,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="floor_layout",
+            resource_id=layout_id,
             event_status="FAILURE",
             failure_code="floor_layout_activate_failed",
             failure_reason="Failed to activate floor layout.",
@@ -935,7 +987,9 @@ def promote_scheduled_floor_layouts(conn: PGConnection) -> LayoutCutoverResult:
 
         try:
             layout = fetch_floor_layout_by_id(
-                conn, tenant_id=tenant_id, layout_id=layout_id,
+                conn,
+                tenant_id=tenant_id,
+                layout_id=layout_id,
             )
             if layout is None or layout["status"] != LayoutStatus.SCHEDULED.value:
                 # Raced with a manual discard/re-schedule between the scan
@@ -1066,10 +1120,14 @@ def delete_floor_layout(
             # either no longer needs it or has since moved its own danger
             # window.
             acquire_floor_publish_lock(
-                conn, tenant_id=tenant_id, floor_id=str(layout["floor_id"]),
+                conn,
+                tenant_id=tenant_id,
+                floor_id=str(layout["floor_id"]),
             )
             layout = fetch_floor_layout_by_id(
-                conn, tenant_id=tenant_id, layout_id=layout_id,
+                conn,
+                tenant_id=tenant_id,
+                layout_id=layout_id,
             )
             if layout is None or layout["status"] != LayoutStatus.SCHEDULED.value:
                 raise HTTPException(
@@ -1090,7 +1148,8 @@ def delete_floor_layout(
             # Before that point, it's still guaranteed unreachable and can
             # be freely cancelled.
             employee_max_advance_days = _resolve_employee_max_advance_days(
-                conn, tenant_id=tenant_id,
+                conn,
+                tenant_id=tenant_id,
             )
             danger_window_start = layout["effective_from"] - timedelta(
                 days=employee_max_advance_days,
@@ -1112,7 +1171,9 @@ def delete_floor_layout(
             # closed when this one was scheduled -- it's the active layout
             # again, indefinitely, now that its replacement is cancelled.
             published = fetch_published_layout_for_floor(
-                conn, tenant_id=tenant_id, floor_id=str(layout["floor_id"]),
+                conn,
+                tenant_id=tenant_id,
+                floor_id=str(layout["floor_id"]),
             )
             if published is not None:
                 set_published_layout_effective_till(
@@ -1162,8 +1223,14 @@ def delete_floor_layout(
             current_user=current_user,
             resource_type="floor_layout",
             resource_id=layout_id,
-            old_values={"layout_name": layout["layout_name"], "status": layout["status"]},
-            new_values={"layout_name": deleted_layout["layout_name"], "status": deleted_layout["status"]},
+            old_values={
+                "layout_name": layout["layout_name"],
+                "status": layout["status"],
+            },
+            new_values={
+                "layout_name": deleted_layout["layout_name"],
+                "status": deleted_layout["status"],
+            },
             changed_fields=["status"],
         )
 
@@ -1171,8 +1238,12 @@ def delete_floor_layout(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=audit_action, tenant_id=tenant_id,
-            current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
+            conn,
+            action=audit_action,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="floor_layout",
+            resource_id=layout_id,
             event_status="FAILURE",
             failure_code=_d.get("code"),
             failure_reason=_d.get("message"),
@@ -1182,8 +1253,12 @@ def delete_floor_layout(
     except psycopg2.Error as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=audit_action, tenant_id=tenant_id,
-            current_user=current_user, resource_type="floor_layout", resource_id=layout_id,
+            conn,
+            action=audit_action,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="floor_layout",
+            resource_id=layout_id,
             event_status="FAILURE",
             failure_code="floor_layout_delete_failed",
             failure_reason="Failed to delete floor layout.",
@@ -1263,9 +1338,7 @@ def _resolve_admin_notification_recipients(
 
 def _floor_layout_email_context(layout: dict[str, Any]) -> dict[str, str]:
     uploader_name = (
-        layout.get("uploaded_by_name")
-        or layout.get("uploaded_by_email")
-        or ""
+        layout.get("uploaded_by_name") or layout.get("uploaded_by_email") or ""
     )
     return {
         "layout_name": format_notification_value(layout.get("layout_name")),

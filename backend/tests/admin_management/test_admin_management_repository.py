@@ -143,7 +143,9 @@ class AdminManagementRepositoryTests(unittest.TestCase):
         )
         self.assertEqual(params[2:4], ["1", "3"])
 
-    def test_deactivate_buildings_by_site_only_touches_active_rows_in_scope(self) -> None:
+    def test_deactivate_buildings_by_site_only_touches_active_rows_in_scope(
+        self,
+    ) -> None:
         cursor = FakeCursor(rowcount=2)
         conn = FakeConnection(cursor)
 
@@ -171,7 +173,9 @@ class AdminManagementRepositoryTests(unittest.TestCase):
         self.assertEqual(params, ("1", "5"))
         self.assertEqual(result, 4)
 
-    def test_deactivate_floors_by_building_only_touches_active_rows_in_scope(self) -> None:
+    def test_deactivate_floors_by_building_only_touches_active_rows_in_scope(
+        self,
+    ) -> None:
         cursor = FakeCursor(rowcount=1)
         conn = FakeConnection(cursor)
 
@@ -266,9 +270,9 @@ class AdminManagementRepositoryTests(unittest.TestCase):
         combined_sql = " ".join(sql for sql, _ in cursor.executions)
         self.assertIn("au.tenant_id = %(tenant_id)s", combined_sql)
         self.assertIn(
-    "UPPER(REPLACE(au.role_name, ' ', '_')) = ANY(",
-    combined_sql,
-)
+            "UPPER(REPLACE(au.role_name, ' ', '_')) = ANY(",
+            combined_sql,
+        )
         self.assertIn("%(role_names)s::text[]", combined_sql)
         self.assertIn("au.status = %(status)s", combined_sql)
         self.assertIn("LOWER(au.full_name)", combined_sql)
@@ -309,14 +313,21 @@ class SearchUsersRepositoryTests(unittest.TestCase):
 
     def test_guest_full_name_search_normalizes_whitespace(self) -> None:
         cursor = FakeCursor(fetchall_values=[[]])
-        search_guests(FakeConnection(cursor), tenant_id="1", search_text=" Vedanth  Sahu ")
+        search_guests(
+            FakeConnection(cursor), tenant_id="1", search_text=" Vedanth  Sahu "
+        )
         sql, params = cursor.executions[0]
         self.assertIn("g.tenant_id = %s", sql)
         self.assertEqual(params[1], "vedanth sahu")
 
     def test_team_full_name_search_retains_membership_scope(self) -> None:
         cursor = FakeCursor(fetchall_values=[[]])
-        search_team_members(FakeConnection(cursor), tenant_id="1", user_id="2", search_text=" Vedanth  Sahu ")
+        search_team_members(
+            FakeConnection(cursor),
+            tenant_id="1",
+            user_id="2",
+            search_text=" Vedanth  Sahu ",
+        )
         sql, params = cursor.executions[0]
         self.assertIn("tm_target.user_id = %s", sql)
         self.assertIn("tm_target.tenant_id = %s", sql)
@@ -327,7 +338,10 @@ class SearchUsersRepositoryTests(unittest.TestCase):
         conn = FakeConnection(cursor)
 
         search_users(
-            conn, tenant_id="1", search_text="amit", include_inactive=True,
+            conn,
+            tenant_id="1",
+            search_text="amit",
+            include_inactive=True,
         )
 
         sql, _ = cursor.executions[0]

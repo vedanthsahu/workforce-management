@@ -68,8 +68,11 @@ def _connect():
     # Read-only introspection -- the app's own runtime role is fine here,
     # no elevated privilege needed just to read information_schema.
     return psycopg2.connect(
-        host=env["DB_HOST"], port=env["DB_PORT"], dbname=env["DB_NAME"],
-        user=env["DB_USER"], password=env["DB_PASSWORD"],
+        host=env["DB_HOST"],
+        port=env["DB_PORT"],
+        dbname=env["DB_NAME"],
+        user=env["DB_USER"],
+        password=env["DB_PASSWORD"],
         sslmode=env.get("DB_SSLMODE", "prefer"),
     )
 
@@ -85,24 +88,30 @@ def scan_schema(cur) -> dict:
 
     schema = {}
     for t in tables:
-        cur.execute("""
+        cur.execute(
+            """
             SELECT column_name, data_type, udt_name, character_maximum_length,
                    numeric_precision, numeric_scale, is_nullable, column_default,
                    ordinal_position
             FROM information_schema.columns
             WHERE table_schema = 'public' AND table_name = %s
             ORDER BY ordinal_position;
-        """, (t,))
+        """,
+            (t,),
+        )
         columns = cur.fetchall()
 
-        cur.execute("""
+        cur.execute(
+            """
             SELECT kcu.column_name
             FROM information_schema.table_constraints tc
             JOIN information_schema.key_column_usage kcu
               ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
             WHERE tc.table_schema = 'public' AND tc.table_name = %s AND tc.constraint_type = 'PRIMARY KEY'
             ORDER BY kcu.ordinal_position;
-        """, (t,))
+        """,
+            (t,),
+        )
         pk = [r[0] for r in cur.fetchall()]
 
         # information_schema.constraint_column_usage is unreliable for
@@ -110,7 +119,8 @@ def scan_schema(cur) -> dict:
         # (silently returns zero rows rather than erroring) -- pg_catalog
         # directly, matching conkey[n] to confkey[n] by ordinal position,
         # handles composite FKs correctly and actually returns results.
-        cur.execute("""
+        cur.execute(
+            """
             SELECT a.attname AS column_name, ref.relname AS ref_table,
                    af.attname AS ref_column, con.conname AS fk_name,
                    con.confupdtype, con.confdeltype
@@ -122,17 +132,22 @@ def scan_schema(cur) -> dict:
             JOIN unnest(con.confkey) WITH ORDINALITY AS cfk(attnum, n) ON cfk.n = ck.n
             JOIN pg_attribute af ON af.attrelid = ref.oid AND af.attnum = cfk.attnum
             WHERE con.contype = 'f' AND tbl.relname = %s;
-        """, (t,))
+        """,
+            (t,),
+        )
         fks = cur.fetchall()
 
-        cur.execute("""
+        cur.execute(
+            """
             SELECT tc.constraint_name, array_agg(kcu.column_name ORDER BY kcu.ordinal_position)
             FROM information_schema.table_constraints tc
             JOIN information_schema.key_column_usage kcu
               ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
             WHERE tc.table_schema = 'public' AND tc.table_name = %s AND tc.constraint_type = 'UNIQUE'
             GROUP BY tc.constraint_name;
-        """, (t,))
+        """,
+            (t,),
+        )
         uniques = cur.fetchall()
 
         # Standalone indexes only -- anything backing a PK/UNIQUE constraint
@@ -145,7 +160,8 @@ def scan_schema(cur) -> dict:
         # resolving to the nearest plain column -- a plain-attribute join
         # can't distinguish "this position is an expression" from "this
         # position is a normal column" and was producing a wrong match.
-        cur.execute("""
+        cur.execute(
+            """
             SELECT i.relname,
                    array_agg(pg_get_indexdef(ix.indexrelid, x.n, true) ORDER BY x.n) AS col_exprs,
                    ix.indisunique,
@@ -158,16 +174,34 @@ def scan_schema(cur) -> dict:
             WHERE tbl.relname = %s
               AND i.relname NOT IN (SELECT conname FROM pg_constraint WHERE conrelid = tbl.oid)
             GROUP BY i.relname, ix.indisunique, ix.indpred, ix.indrelid;
-        """, (t,))
+        """,
+            (t,),
+        )
         indexes = cur.fetchall()
 
-        schema[t] = {"columns": columns, "pk": pk, "fks": fks, "uniques": uniques, "indexes": indexes}
+        schema[t] = {
+            "columns": columns,
+            "pk": pk,
+            "fks": fks,
+            "uniques": uniques,
+            "indexes": indexes,
+        }
 
     return schema
 
 
 def py_type(col) -> str:
-    name, data_type, udt_name, char_len, num_prec, num_scale, is_nullable, default, pos = col
+    (
+        name,
+        data_type,
+        udt_name,
+        char_len,
+        num_prec,
+        num_scale,
+        is_nullable,
+        default,
+        pos,
+    ) = col
     if data_type in ("character varying", "character"):
         return f"String({char_len})" if char_len else "String"
     if data_type == "numeric":
@@ -180,7 +214,12 @@ def py_type(col) -> str:
         return "DateTime(timezone=False)"
     if data_type == "ARRAY":
         inner = udt_name.lstrip("_")
-        inner_map = {"text": "Text", "varchar": "String", "int4": "Integer", "int8": "BigInteger"}
+        inner_map = {
+            "text": "Text",
+            "varchar": "String",
+            "int4": "Integer",
+            "int8": "BigInteger",
+        }
         return f"ARRAY({inner_map.get(inner, 'Text')})"
     if data_type in TYPE_MAP:
         return TYPE_MAP[data_type]
@@ -203,16 +242,30 @@ def classname(table_name: str) -> str:
 def render(schema: dict) -> str:
     lines = []
     lines.append('"""')
-    lines.append(f"REAL SCHEMA MODELS -- regenerated {datetime.date.today()} by refresh_models_from_db.py.")
-    lines.append("One class per real table (no prefix). This is what migrations/env.py diffs")
-    lines.append("against for autogenerate. Do not hand-edit; rerun the generator instead, or")
-    lines.append("edit directly if you are deliberately authoring the NEXT schema change before")
-    lines.append("generating its migration -- see the workflow note in migrations/env.py.")
+    lines.append(
+        f"REAL SCHEMA MODELS -- regenerated {datetime.date.today()} by refresh_models_from_db.py."
+    )
+    lines.append(
+        "One class per real table (no prefix). This is what migrations/env.py diffs"
+    )
+    lines.append(
+        "against for autogenerate. Do not hand-edit; rerun the generator instead, or"
+    )
+    lines.append(
+        "edit directly if you are deliberately authoring the NEXT schema change before"
+    )
+    lines.append(
+        "generating its migration -- see the workflow note in migrations/env.py."
+    )
     lines.append('"""')
     lines.append("")
     lines.append("from sqlalchemy import (")
-    lines.append("    Column, BigInteger, Integer, SmallInteger, String, Text, Boolean,")
-    lines.append("    DateTime, Date, Time, Numeric, ForeignKeyConstraint, UniqueConstraint,")
+    lines.append(
+        "    Column, BigInteger, Integer, SmallInteger, String, Text, Boolean,"
+    )
+    lines.append(
+        "    DateTime, Date, Time, Numeric, ForeignKeyConstraint, UniqueConstraint,"
+    )
     lines.append("    Index, ARRAY, text,")
     lines.append(")")
     lines.append("from sqlalchemy.dialects.postgresql import JSONB, JSON, UUID, INET")
@@ -236,7 +289,14 @@ def render(schema: dict) -> str:
         # autogenerate can't match an unnamed model-side FK to the real
         # named one and flags it as removed-then-re-added, every time.
         fk_constraints = [
-            (fk_name, col, ref_table, ref_col, FK_ACTION.get(upd), FK_ACTION.get(delete))
+            (
+                fk_name,
+                col,
+                ref_table,
+                ref_col,
+                FK_ACTION.get(upd),
+                FK_ACTION.get(delete),
+            )
             for col, ref_table, ref_col, fk_name, upd, delete in info["fks"]
         ]
         single_unique_cols = set()
@@ -290,7 +350,11 @@ def render(schema: dict) -> str:
             table_args.append(f"ForeignKeyConstraint({', '.join(fk_parts)})")
         for index_name, cols, is_unique, where_clause, desc_flags in info["indexes"]:
             cols = _as_list(cols)
-            desc_flags = [int(x or 0) for x in _as_list(desc_flags)] if desc_flags is not None else [0] * len(cols)
+            desc_flags = (
+                [int(x or 0) for x in _as_list(desc_flags)]
+                if desc_flags is not None
+                else [0] * len(cols)
+            )
             col_exprs = []
             for c, flag in zip(cols, desc_flags):
                 expr = f"{c} DESC" if flag else c

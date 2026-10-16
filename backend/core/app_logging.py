@@ -42,7 +42,8 @@ def configure_logging(level_name: str = "INFO") -> None:
     # Native structlog calls go through shared_processors then wrap for the
     # ProcessorFormatter bridge before being handled by the stdlib handler.
     structlog.configure(
-        processors=shared_processors + [
+        processors=shared_processors
+        + [
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),
@@ -143,7 +144,6 @@ def enable_backend_function_trace() -> None:
     sys.setprofile(trace_calls)
     threading.setprofile(trace_calls)
     logger.warning("Backend function tracing is enabled. Expect very verbose logs.")
-
 
 
 def _resolve_log_level(level_name: str) -> int:

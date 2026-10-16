@@ -133,10 +133,13 @@ class GuestVisitDetailScopeTests(unittest.TestCase):
             "role_name": "FACILITATOR",
         }
 
-        with patch(
-            "backend.services.guest_service.fetch_guest_visit_by_id",
-            return_value=None,
-        ), self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.guest_service.fetch_guest_visit_by_id",
+                return_value=None,
+            ),
+            self.assertRaises(HTTPException) as context,
+        ):
             get_guest_visit_details(
                 conn=object(),
                 current_user=current_user,

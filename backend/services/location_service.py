@@ -214,18 +214,29 @@ def create_site(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=SITE_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="site", resource_id=None,
+            conn,
+            action=SITE_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="site",
+            resource_id=None,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except LookupError as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=SITE_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="site", resource_id=None,
-            event_status="FAILURE", failure_code="site_create_failed", failure_reason=str(exc),
+            conn,
+            action=SITE_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="site",
+            resource_id=None,
+            event_status="FAILURE",
+            failure_code="site_create_failed",
+            failure_reason=str(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -235,11 +246,23 @@ def create_site(
         conn.rollback()
         logger.exception("location.db_error")
         safe_write_audit_log(
-            conn, action=SITE_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="site", resource_id=None,
+            conn,
+            action=SITE_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="site",
+            resource_id=None,
             event_status="FAILURE",
-            failure_code="site_duplicate" if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "site_create_failed",
-            failure_reason="Duplicate record." if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "Failed to create site.",
+            failure_code=(
+                "site_duplicate"
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "site_create_failed"
+            ),
+            failure_reason=(
+                "Duplicate record."
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "Failed to create site."
+            ),
         )
         _raise_write_error(
             exc,
@@ -249,8 +272,12 @@ def create_site(
         )
 
     safe_write_audit_log(
-        conn, action=SITE_CREATED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="site", resource_id=str(site["site_id"]),
+        conn,
+        action=SITE_CREATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="site",
+        resource_id=str(site["site_id"]),
         new_values={
             "site_code": site.get("site_code"),
             "site_name": site.get("site_name"),
@@ -343,21 +370,38 @@ def update_site_metadata(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=SITE_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="site", resource_id=site_id,
+            conn,
+            action=SITE_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="site",
+            resource_id=site_id,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except psycopg2.Error as exc:
         conn.rollback()
         logger.exception("location.db_error")
         safe_write_audit_log(
-            conn, action=SITE_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="site", resource_id=site_id,
+            conn,
+            action=SITE_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="site",
+            resource_id=site_id,
             event_status="FAILURE",
-            failure_code="site_duplicate" if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "site_update_failed",
-            failure_reason="Duplicate record." if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "Failed to update site.",
+            failure_code=(
+                "site_duplicate"
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "site_update_failed"
+            ),
+            failure_reason=(
+                "Duplicate record."
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "Failed to update site."
+            ),
         )
         _raise_write_error(
             exc,
@@ -367,14 +411,17 @@ def update_site_metadata(
         )
 
     safe_write_audit_log(
-        conn, action=SITE_UPDATED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="site", resource_id=site_id,
+        conn,
+        action=SITE_UPDATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="site",
+        resource_id=site_id,
         old_values={k: site.get(k) for k in updates},
         new_values=updates,
         changed_fields=[k for k in updates if site.get(k) != updates[k]] or None,
     )
     return SiteResponse(**updated_site)
-
 
 
 def update_layout_seat_configuration(
@@ -410,18 +457,18 @@ def update_layout_seat_configuration(
         )
 
         updated_mapping = update_layout_seat_mapping_configuration(
-                conn,
-                tenant_id=tenant_id,
-                layout_seat_mapping_id=layout_seat_mapping_id,
-                seat_name=payload.seat_name,
-                seat_type=payload.seat_type,
-                status=payload.status,
-                is_bookable=payload.is_bookable,
-                is_reserved=payload.is_reserved,
-                amenity_ids=amenity_ids,
-                updated_by=str(current_user["user_id"]),
-                capacity=effective_capacity,
-            )
+            conn,
+            tenant_id=tenant_id,
+            layout_seat_mapping_id=layout_seat_mapping_id,
+            seat_name=payload.seat_name,
+            seat_type=payload.seat_type,
+            status=payload.status,
+            is_bookable=payload.is_bookable,
+            is_reserved=payload.is_reserved,
+            amenity_ids=amenity_ids,
+            updated_by=str(current_user["user_id"]),
+            capacity=effective_capacity,
+        )
 
         # Draft isolation only holds for DRAFT/ARCHIVED layouts. A PUBLISHED
         # layout has no separate "push the draft live" step (same rationale
@@ -512,9 +559,7 @@ def update_layout_seat_configuration(
         )
 
 
-def _resolve_bulk_field(
-    entry_value: Any, defaults_value: Any
-) -> Any:
+def _resolve_bulk_field(entry_value: Any, defaults_value: Any) -> Any:
     """Per-seat value wins; otherwise fall back to the shared `defaults`
     block; otherwise None (meaning: keep the mapping's stored value --
     update_layout_seat_mapping_configuration COALESCEs on None)."""
@@ -579,22 +624,39 @@ def update_layout_seat_configurations_bulk(
         for entry in payload.seats:
             mapping_id = str(entry.layout_seat_mapping_id)
             mapping = mappings_by_id[mapping_id]
-            derived_capacity = capacity_from_svg_element_id(str(mapping["svg_element_id"]))
-            update_entries.append({
-                "layout_seat_mapping_id": str(entry.layout_seat_mapping_id),
-                "seat_name": _resolve_bulk_field(entry.seat_name, defaults.seat_name if defaults else None),
-                "seat_type": _resolve_bulk_field(entry.seat_type, defaults.seat_type if defaults else None),
-                "status": _resolve_bulk_field(entry.status, defaults.status if defaults else None),
-                "is_bookable": _resolve_bulk_field(entry.is_bookable, defaults.is_bookable if defaults else None),
-                "is_reserved": _resolve_bulk_field(entry.is_reserved, defaults.is_reserved if defaults else None),
-                "amenity_ids": _resolve_bulk_field(
-                    entry.amenity_ids, defaults.amenity_ids if defaults else None
-                ),
-                # Like the single-seat endpoint, ignore a capacity supplied
-                # by the browser and retain legacy values only where an SVG
-                # has not yet adopted the MR-C<number>-... convention.
-                "capacity": derived_capacity if derived_capacity is not None else mapping.get("capacity"),
-            }
+            derived_capacity = capacity_from_svg_element_id(
+                str(mapping["svg_element_id"])
+            )
+            update_entries.append(
+                {
+                    "layout_seat_mapping_id": str(entry.layout_seat_mapping_id),
+                    "seat_name": _resolve_bulk_field(
+                        entry.seat_name, defaults.seat_name if defaults else None
+                    ),
+                    "seat_type": _resolve_bulk_field(
+                        entry.seat_type, defaults.seat_type if defaults else None
+                    ),
+                    "status": _resolve_bulk_field(
+                        entry.status, defaults.status if defaults else None
+                    ),
+                    "is_bookable": _resolve_bulk_field(
+                        entry.is_bookable, defaults.is_bookable if defaults else None
+                    ),
+                    "is_reserved": _resolve_bulk_field(
+                        entry.is_reserved, defaults.is_reserved if defaults else None
+                    ),
+                    "amenity_ids": _resolve_bulk_field(
+                        entry.amenity_ids, defaults.amenity_ids if defaults else None
+                    ),
+                    # Like the single-seat endpoint, ignore a capacity supplied
+                    # by the browser and retain legacy values only where an SVG
+                    # has not yet adopted the MR-C<number>-... convention.
+                    "capacity": (
+                        derived_capacity
+                        if derived_capacity is not None
+                        else mapping.get("capacity")
+                    ),
+                }
             )
 
         updated_mappings_by_id = update_layout_seat_mapping_configurations_bulk(
@@ -642,18 +704,34 @@ def update_layout_seat_configurations_bulk(
                 # being removed from the layout here, only reconfigured.
                 seats_payload = [
                     {
-                        "layout_id": str(updated_mappings_by_id[mapping_id]["layout_id"]),
+                        "layout_id": str(
+                            updated_mappings_by_id[mapping_id]["layout_id"]
+                        ),
                         "site_id": str(updated_mappings_by_id[mapping_id]["site_id"]),
-                        "building_id": str(updated_mappings_by_id[mapping_id]["building_id"]),
+                        "building_id": str(
+                            updated_mappings_by_id[mapping_id]["building_id"]
+                        ),
                         "floor_id": str(updated_mappings_by_id[mapping_id]["floor_id"]),
-                        "seat_code": str(updated_mappings_by_id[mapping_id]["seat_code"]),
-                        "seat_name": updated_mappings_by_id[mapping_id].get("seat_name"),
+                        "seat_code": str(
+                            updated_mappings_by_id[mapping_id]["seat_code"]
+                        ),
+                        "seat_name": updated_mappings_by_id[mapping_id].get(
+                            "seat_name"
+                        ),
                         "seat_type": updated_mappings_by_id[mapping_id]["seat_type"],
                         "status": updated_mappings_by_id[mapping_id]["status"],
-                        "is_bookable": updated_mappings_by_id[mapping_id]["is_bookable"],
-                        "is_reserved": updated_mappings_by_id[mapping_id].get("is_reserved"),
-                        "svg_element_id": str(updated_mappings_by_id[mapping_id]["svg_element_id"]),
-                        "source_layout_mapping_id": str(updated_mappings_by_id[mapping_id]["id"]),
+                        "is_bookable": updated_mappings_by_id[mapping_id][
+                            "is_bookable"
+                        ],
+                        "is_reserved": updated_mappings_by_id[mapping_id].get(
+                            "is_reserved"
+                        ),
+                        "svg_element_id": str(
+                            updated_mappings_by_id[mapping_id]["svg_element_id"]
+                        ),
+                        "source_layout_mapping_id": str(
+                            updated_mappings_by_id[mapping_id]["id"]
+                        ),
                         "capacity": updated_mappings_by_id[mapping_id].get("capacity"),
                     }
                     for mapping_id in mapping_ids
@@ -815,18 +893,29 @@ def create_building(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=BUILDING_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="building", resource_id=None,
+            conn,
+            action=BUILDING_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="building",
+            resource_id=None,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except LookupError as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=BUILDING_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="building", resource_id=None,
-            event_status="FAILURE", failure_code="building_create_failed", failure_reason=str(exc),
+            conn,
+            action=BUILDING_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="building",
+            resource_id=None,
+            event_status="FAILURE",
+            failure_code="building_create_failed",
+            failure_reason=str(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -836,11 +925,23 @@ def create_building(
         conn.rollback()
         logger.exception("location.db_error")
         safe_write_audit_log(
-            conn, action=BUILDING_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="building", resource_id=None,
+            conn,
+            action=BUILDING_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="building",
+            resource_id=None,
             event_status="FAILURE",
-            failure_code="building_duplicate" if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "building_create_failed",
-            failure_reason="Duplicate record." if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "Failed to create building.",
+            failure_code=(
+                "building_duplicate"
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "building_create_failed"
+            ),
+            failure_reason=(
+                "Duplicate record."
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "Failed to create building."
+            ),
         )
         _raise_write_error(
             exc,
@@ -850,8 +951,12 @@ def create_building(
         )
 
     safe_write_audit_log(
-        conn, action=BUILDING_CREATED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="building", resource_id=str(building["building_id"]),
+        conn,
+        action=BUILDING_CREATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="building",
+        resource_id=str(building["building_id"]),
         new_values={
             "building_code": building.get("building_code"),
             "building_name": building.get("building_name"),
@@ -898,7 +1003,9 @@ def update_building_metadata(
             )
 
         if updates.get("status") == "ACTIVE" and building.get("status") != "ACTIVE":
-            site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=str(building["site_id"]))
+            site = fetch_site_by_id(
+                conn, tenant_id=tenant_id, site_id=str(building["site_id"])
+            )
             if site is None:
                 _raise_invalid_hierarchy(
                     "Cannot activate a building while its office is INACTIVE.",
@@ -910,7 +1017,9 @@ def update_building_metadata(
                 # row) to also reactivate the office in the same request --
                 # otherwise this stays a hard rejection, same as before.
                 if payload.reactivate_office:
-                    activate_site_by_id(conn, tenant_id=tenant_id, site_id=str(building["site_id"]))
+                    activate_site_by_id(
+                        conn, tenant_id=tenant_id, site_id=str(building["site_id"])
+                    )
                 else:
                     _raise_invalid_hierarchy(
                         "Cannot activate a building while its office is INACTIVE.",
@@ -928,7 +1037,9 @@ def update_building_metadata(
         # Deactivating a building cascades down to its floors, same rule
         # and same reactivation exception as the site cascade above.
         if updates.get("status") == "INACTIVE":
-            deactivate_floors_by_building(conn, tenant_id=tenant_id, building_id=building_id)
+            deactivate_floors_by_building(
+                conn, tenant_id=tenant_id, building_id=building_id
+            )
         elif updates.get("status") == "ACTIVE":
             # Opt-in reactivation of the floors the caller explicitly
             # selected, same pattern as the site-level cascade above.
@@ -949,21 +1060,38 @@ def update_building_metadata(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=BUILDING_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="building", resource_id=building_id,
+            conn,
+            action=BUILDING_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="building",
+            resource_id=building_id,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except psycopg2.Error as exc:
         conn.rollback()
         logger.exception("location.db_error")
         safe_write_audit_log(
-            conn, action=BUILDING_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="building", resource_id=building_id,
+            conn,
+            action=BUILDING_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="building",
+            resource_id=building_id,
             event_status="FAILURE",
-            failure_code="building_duplicate" if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "building_update_failed",
-            failure_reason="Duplicate record." if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "Failed to update building.",
+            failure_code=(
+                "building_duplicate"
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "building_update_failed"
+            ),
+            failure_reason=(
+                "Duplicate record."
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "Failed to update building."
+            ),
         )
         _raise_write_error(
             exc,
@@ -973,8 +1101,12 @@ def update_building_metadata(
         )
 
     safe_write_audit_log(
-        conn, action=BUILDING_UPDATED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="building", resource_id=building_id,
+        conn,
+        action=BUILDING_UPDATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="building",
+        resource_id=building_id,
         old_values={k: building.get(k) for k in updates},
         new_values=updates,
         changed_fields=[k for k in updates if building.get(k) != updates[k]] or None,
@@ -1071,18 +1203,29 @@ def create_floor(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=FLOOR_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="floor", resource_id=None,
+            conn,
+            action=FLOOR_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="floor",
+            resource_id=None,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except LookupError as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=FLOOR_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="floor", resource_id=None,
-            event_status="FAILURE", failure_code="floor_create_failed", failure_reason=str(exc),
+            conn,
+            action=FLOOR_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="floor",
+            resource_id=None,
+            event_status="FAILURE",
+            failure_code="floor_create_failed",
+            failure_reason=str(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1092,11 +1235,23 @@ def create_floor(
         conn.rollback()
         logger.exception("location.db_error")
         safe_write_audit_log(
-            conn, action=FLOOR_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="floor", resource_id=None,
+            conn,
+            action=FLOOR_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="floor",
+            resource_id=None,
             event_status="FAILURE",
-            failure_code="floor_duplicate" if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "floor_create_failed",
-            failure_reason="Duplicate record." if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "Failed to create floor.",
+            failure_code=(
+                "floor_duplicate"
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "floor_create_failed"
+            ),
+            failure_reason=(
+                "Duplicate record."
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "Failed to create floor."
+            ),
         )
         _raise_write_error(
             exc,
@@ -1106,8 +1261,12 @@ def create_floor(
         )
 
     safe_write_audit_log(
-        conn, action=FLOOR_CREATED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="floor", resource_id=str(floor["floor_id"]),
+        conn,
+        action=FLOOR_CREATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="floor",
+        resource_id=str(floor["floor_id"]),
         new_values={
             "floor_code": floor.get("floor_code"),
             "floor_name": floor.get("floor_name"),
@@ -1152,13 +1311,17 @@ def update_floor_metadata(
             )
 
         if updates.get("status") == "ACTIVE" and floor.get("status") != "ACTIVE":
-            building = fetch_building_by_id(conn, tenant_id=tenant_id, building_id=str(floor["building_id"]))
+            building = fetch_building_by_id(
+                conn, tenant_id=tenant_id, building_id=str(floor["building_id"])
+            )
             if building is None:
                 _raise_invalid_hierarchy(
                     "Cannot activate a floor while its building is INACTIVE.",
                 )
 
-            site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=str(building["site_id"]))
+            site = fetch_site_by_id(
+                conn, tenant_id=tenant_id, site_id=str(building["site_id"])
+            )
             if site is None:
                 _raise_invalid_hierarchy(
                     "Cannot activate a floor while its office is INACTIVE.",
@@ -1173,7 +1336,9 @@ def update_floor_metadata(
                     _raise_invalid_hierarchy(
                         "Cannot activate a floor while its office is INACTIVE.",
                     )
-                activate_site_by_id(conn, tenant_id=tenant_id, site_id=str(building["site_id"]))
+                activate_site_by_id(
+                    conn, tenant_id=tenant_id, site_id=str(building["site_id"])
+                )
 
             if building.get("status") != "ACTIVE":
                 if not payload.reactivate_building:
@@ -1200,21 +1365,38 @@ def update_floor_metadata(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=FLOOR_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="floor", resource_id=floor_id,
+            conn,
+            action=FLOOR_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="floor",
+            resource_id=floor_id,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except psycopg2.Error as exc:
         conn.rollback()
         logger.exception("location.db_error")
         safe_write_audit_log(
-            conn, action=FLOOR_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="floor", resource_id=floor_id,
+            conn,
+            action=FLOOR_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="floor",
+            resource_id=floor_id,
             event_status="FAILURE",
-            failure_code="floor_duplicate" if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "floor_update_failed",
-            failure_reason="Duplicate record." if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "Failed to update floor.",
+            failure_code=(
+                "floor_duplicate"
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "floor_update_failed"
+            ),
+            failure_reason=(
+                "Duplicate record."
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "Failed to update floor."
+            ),
         )
         _raise_write_error(
             exc,
@@ -1224,8 +1406,12 @@ def update_floor_metadata(
         )
 
     safe_write_audit_log(
-        conn, action=FLOOR_UPDATED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="floor", resource_id=floor_id,
+        conn,
+        action=FLOOR_UPDATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="floor",
+        resource_id=floor_id,
         old_values={k: floor.get(k) for k in updates},
         new_values=updates,
         changed_fields=[k for k in updates if floor.get(k) != updates[k]] or None,
@@ -1278,21 +1464,38 @@ def update_seat_configuration_metadata(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=SEAT_CONFIGURED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="seat", resource_id=seat_id,
+            conn,
+            action=SEAT_CONFIGURED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="seat",
+            resource_id=seat_id,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except psycopg2.Error as exc:
         conn.rollback()
         logger.exception("location.db_error")
         safe_write_audit_log(
-            conn, action=SEAT_CONFIGURED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="seat", resource_id=seat_id,
+            conn,
+            action=SEAT_CONFIGURED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="seat",
+            resource_id=seat_id,
             event_status="FAILURE",
-            failure_code="seat_conflict" if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "seat_configuration_update_failed",
-            failure_reason="Duplicate record." if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "Failed to update seat configuration.",
+            failure_code=(
+                "seat_conflict"
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "seat_configuration_update_failed"
+            ),
+            failure_reason=(
+                "Duplicate record."
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "Failed to update seat configuration."
+            ),
         )
         _raise_write_error(
             exc,
@@ -1302,8 +1505,12 @@ def update_seat_configuration_metadata(
         )
 
     safe_write_audit_log(
-        conn, action=SEAT_CONFIGURED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="seat", resource_id=seat_id,
+        conn,
+        action=SEAT_CONFIGURED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="seat",
+        resource_id=seat_id,
         old_values={k: seat.get(k) for k in updates},
         new_values=updates,
         changed_fields=[k for k in updates if seat.get(k) != updates[k]] or None,
@@ -1371,21 +1578,38 @@ def update_seats_configuration_bulk(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=SEAT_CONFIGURED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="seat", resource_id=",".join(seat_ids),
+            conn,
+            action=SEAT_CONFIGURED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="seat",
+            resource_id=",".join(seat_ids),
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except psycopg2.Error as exc:
         conn.rollback()
         logger.exception("location.db_error")
         safe_write_audit_log(
-            conn, action=SEAT_CONFIGURED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="seat", resource_id=",".join(seat_ids),
+            conn,
+            action=SEAT_CONFIGURED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="seat",
+            resource_id=",".join(seat_ids),
             event_status="FAILURE",
-            failure_code="seat_conflict" if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "seat_configuration_update_failed",
-            failure_reason="Duplicate record." if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "Failed to update seat configuration.",
+            failure_code=(
+                "seat_conflict"
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "seat_configuration_update_failed"
+            ),
+            failure_reason=(
+                "Duplicate record."
+                if exc.pgcode == errorcodes.UNIQUE_VIOLATION
+                else "Failed to update seat configuration."
+            ),
         )
         _raise_write_error(
             exc,
@@ -1396,8 +1620,12 @@ def update_seats_configuration_bulk(
 
     for seat_id, seat in audit_entries:
         safe_write_audit_log(
-            conn, action=SEAT_CONFIGURED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="seat", resource_id=seat_id,
+            conn,
+            action=SEAT_CONFIGURED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="seat",
+            resource_id=seat_id,
             old_values={k: seat.get(k) for k in updates},
             new_values=updates,
             changed_fields=[k for k in updates if seat.get(k) != updates[k]] or None,
@@ -1441,11 +1669,7 @@ def _build_floor_response(floor: dict[str, object]) -> FloorResponse:
 
 def _extract_updates(payload: Any, allowed_fields: set[str]) -> dict[str, Any]:
     raw = payload.model_dump(exclude_unset=True)
-    return {
-        key: value
-        for key, value in raw.items()
-        if key in allowed_fields
-    }
+    return {key: value for key, value in raw.items() if key in allowed_fields}
 
 
 def _normalize_status_filter(status_filter: str | None) -> str | None:
@@ -1540,9 +1764,13 @@ def _raise_building_duplicate_if_needed(
 ) -> None:
     for row in duplicates:
         if building_code is not None and row.get("building_code") == building_code:
-            _raise_duplicate("building_code", "Building code already exists for this site.")
+            _raise_duplicate(
+                "building_code", "Building code already exists for this site."
+            )
         if building_name is not None and row.get("building_name") == building_name:
-            _raise_duplicate("building_name", "Building name already exists for this site.")
+            _raise_duplicate(
+                "building_name", "Building name already exists for this site."
+            )
 
 
 def _raise_floor_duplicate_if_needed(
@@ -1553,9 +1781,13 @@ def _raise_floor_duplicate_if_needed(
 ) -> None:
     for row in duplicates:
         if floor_code is not None and row.get("floor_code") == floor_code:
-            _raise_duplicate("floor_code", "Floor code already exists for this building.")
+            _raise_duplicate(
+                "floor_code", "Floor code already exists for this building."
+            )
         if floor_name is not None and row.get("floor_name") == floor_name:
-            _raise_duplicate("floor_name", "Floor name already exists for this building.")
+            _raise_duplicate(
+                "floor_name", "Floor name already exists for this building."
+            )
 
 
 def _raise_duplicate(field_name: str, message: str) -> NoReturn:

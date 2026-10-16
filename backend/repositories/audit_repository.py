@@ -45,7 +45,10 @@ def actor_from_user(user: dict[str, Any]) -> dict[str, Any]:
     return {
         "actor_user_id": user.get("user_id"),
         "actor_email": user.get("email"),
-        "actor_role": str(user.get("role_name") or user.get("role") or "").strip().upper() or None,
+        "actor_role": str(user.get("role_name") or user.get("role") or "")
+        .strip()
+        .upper()
+        or None,
     }
 
 
@@ -236,7 +239,9 @@ def safe_write_audit_log(
         )
         conn.commit()
     except Exception:
-        logger.exception("audit.write_failed action=%s resource_id=%s", action, resource_id)
+        logger.exception(
+            "audit.write_failed action=%s resource_id=%s", action, resource_id
+        )
         try:
             conn.rollback()
         except Exception:
@@ -327,7 +332,7 @@ def _parse_json_fields(row: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value, str):
             try:
                 row[field] = json.loads(value)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 pass
     return row
 

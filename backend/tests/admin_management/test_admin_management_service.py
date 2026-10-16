@@ -41,7 +41,11 @@ class FakeConnection:
         self.rollbacks += 1
 
 
-TENANT_ADMIN_CALLER = {"user_id": "1", "email": "admin@example.com", "role_name": "TENANT_ADMIN"}
+TENANT_ADMIN_CALLER = {
+    "user_id": "1",
+    "email": "admin@example.com",
+    "role_name": "TENANT_ADMIN",
+}
 
 
 class AdminManagementServiceTests(unittest.TestCase):
@@ -62,12 +66,16 @@ class AdminManagementServiceTests(unittest.TestCase):
             timezone="Asia/Kolkata",
         )
 
-        with patch(
-            "backend.services.location_service.fetch_site_duplicates",
-            return_value=[{"site_code": "BLR", "site_name": "Other"}],
-        ), patch(
-            "backend.services.location_service.safe_write_audit_log",
-        ), self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.location_service.fetch_site_duplicates",
+                return_value=[{"site_code": "BLR", "site_name": "Other"}],
+            ),
+            patch(
+                "backend.services.location_service.safe_write_audit_log",
+            ),
+            self.assertRaises(HTTPException) as context,
+        ):
             create_site(
                 conn,
                 tenant_id="1",
@@ -97,7 +105,9 @@ class AdminManagementServiceTests(unittest.TestCase):
         self.assertEqual(context.exception.detail["code"], "immutable_field_update")
         self.assertEqual(conn.rollbacks, 0)
 
-    def test_update_site_metadata_deactivating_cascades_to_buildings_and_floors(self) -> None:
+    def test_update_site_metadata_deactivating_cascades_to_buildings_and_floors(
+        self,
+    ) -> None:
         conn = FakeConnection()
         payload = UpdateSiteRequest(status="INACTIVE")
         site = {
@@ -107,18 +117,24 @@ class AdminManagementServiceTests(unittest.TestCase):
             "status": "ACTIVE",
         }
 
-        with patch(
-            "backend.services.location_service.fetch_site_by_id",
-            return_value=site,
-        ), patch(
-            "backend.services.location_service.update_site",
-            return_value={**site, "status": "INACTIVE"},
-        ), patch(
-            "backend.services.location_service.deactivate_buildings_by_site",
-        ) as mock_deactivate_buildings, patch(
-            "backend.services.location_service.deactivate_floors_by_site",
-        ) as mock_deactivate_floors, patch(
-            "backend.services.location_service.safe_write_audit_log",
+        with (
+            patch(
+                "backend.services.location_service.fetch_site_by_id",
+                return_value=site,
+            ),
+            patch(
+                "backend.services.location_service.update_site",
+                return_value={**site, "status": "INACTIVE"},
+            ),
+            patch(
+                "backend.services.location_service.deactivate_buildings_by_site",
+            ) as mock_deactivate_buildings,
+            patch(
+                "backend.services.location_service.deactivate_floors_by_site",
+            ) as mock_deactivate_floors,
+            patch(
+                "backend.services.location_service.safe_write_audit_log",
+            ),
         ):
             update_site_metadata(
                 conn,
@@ -128,7 +144,9 @@ class AdminManagementServiceTests(unittest.TestCase):
                 current_user=self.current_user,
             )
 
-        mock_deactivate_buildings.assert_called_once_with(conn, tenant_id="1", site_id="2")
+        mock_deactivate_buildings.assert_called_once_with(
+            conn, tenant_id="1", site_id="2"
+        )
         mock_deactivate_floors.assert_called_once_with(conn, tenant_id="1", site_id="2")
         self.assertEqual(conn.commits, 1)
 
@@ -142,18 +160,24 @@ class AdminManagementServiceTests(unittest.TestCase):
             "status": "INACTIVE",
         }
 
-        with patch(
-            "backend.services.location_service.fetch_site_by_id",
-            return_value=site,
-        ), patch(
-            "backend.services.location_service.update_site",
-            return_value={**site, "status": "ACTIVE"},
-        ), patch(
-            "backend.services.location_service.deactivate_buildings_by_site",
-        ) as mock_deactivate_buildings, patch(
-            "backend.services.location_service.deactivate_floors_by_site",
-        ) as mock_deactivate_floors, patch(
-            "backend.services.location_service.safe_write_audit_log",
+        with (
+            patch(
+                "backend.services.location_service.fetch_site_by_id",
+                return_value=site,
+            ),
+            patch(
+                "backend.services.location_service.update_site",
+                return_value={**site, "status": "ACTIVE"},
+            ),
+            patch(
+                "backend.services.location_service.deactivate_buildings_by_site",
+            ) as mock_deactivate_buildings,
+            patch(
+                "backend.services.location_service.deactivate_floors_by_site",
+            ) as mock_deactivate_floors,
+            patch(
+                "backend.services.location_service.safe_write_audit_log",
+            ),
         ):
             update_site_metadata(
                 conn,
@@ -178,16 +202,21 @@ class AdminManagementServiceTests(unittest.TestCase):
             "status": "ACTIVE",
         }
 
-        with patch(
-            "backend.services.location_service.fetch_building_by_id",
-            return_value=building,
-        ), patch(
-            "backend.services.location_service.update_building",
-            return_value={**building, "status": "INACTIVE"},
-        ), patch(
-            "backend.services.location_service.deactivate_floors_by_building",
-        ) as mock_deactivate_floors, patch(
-            "backend.services.location_service.safe_write_audit_log",
+        with (
+            patch(
+                "backend.services.location_service.fetch_building_by_id",
+                return_value=building,
+            ),
+            patch(
+                "backend.services.location_service.update_building",
+                return_value={**building, "status": "INACTIVE"},
+            ),
+            patch(
+                "backend.services.location_service.deactivate_floors_by_building",
+            ) as mock_deactivate_floors,
+            patch(
+                "backend.services.location_service.safe_write_audit_log",
+            ),
         ):
             update_building_metadata(
                 conn,
@@ -197,7 +226,9 @@ class AdminManagementServiceTests(unittest.TestCase):
                 current_user=self.current_user,
             )
 
-        mock_deactivate_floors.assert_called_once_with(conn, tenant_id="1", building_id="3")
+        mock_deactivate_floors.assert_called_once_with(
+            conn, tenant_id="1", building_id="3"
+        )
         self.assertEqual(conn.commits, 1)
 
     def test_create_floor_validates_building_belongs_to_site(self) -> None:
@@ -209,12 +240,16 @@ class AdminManagementServiceTests(unittest.TestCase):
             floor_name="Level 1",
         )
 
-        with patch(
-            "backend.services.location_service.fetch_building_by_id",
-            return_value={"building_id": "3", "site_id": "99"},
-        ), patch(
-            "backend.services.location_service.safe_write_audit_log",
-        ), self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.location_service.fetch_building_by_id",
+                return_value={"building_id": "3", "site_id": "99"},
+            ),
+            patch(
+                "backend.services.location_service.safe_write_audit_log",
+            ),
+            self.assertRaises(HTTPException) as context,
+        ):
             create_floor(
                 conn,
                 tenant_id="1",
@@ -236,12 +271,16 @@ class AdminManagementServiceTests(unittest.TestCase):
             status="ACTIVE",
         )
 
-        with patch(
-            "backend.services.location_service.fetch_site_by_id",
-            return_value={"site_id": "2", "status": "INACTIVE"},
-        ), patch(
-            "backend.services.location_service.safe_write_audit_log",
-        ), self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.location_service.fetch_site_by_id",
+                return_value={"site_id": "2", "status": "INACTIVE"},
+            ),
+            patch(
+                "backend.services.location_service.safe_write_audit_log",
+            ),
+            self.assertRaises(HTTPException) as context,
+        ):
             create_building(
                 conn,
                 tenant_id="1",
@@ -262,24 +301,29 @@ class AdminManagementServiceTests(unittest.TestCase):
             status="INACTIVE",
         )
 
-        with patch(
-            "backend.services.location_service.fetch_site_by_id",
-            return_value={"site_id": "2", "status": "INACTIVE"},
-        ), patch(
-            "backend.services.location_service.fetch_building_duplicates",
-            return_value=[],
-        ), patch(
-            "backend.services.location_service.insert_building",
-            return_value={
-                "building_id": "10",
-                "site_id": "2",
-                "site_name": "Bangalore",
-                "building_code": "BLD1",
-                "building_name": "Tower A",
-                "status": "INACTIVE",
-            },
-        ), patch(
-            "backend.services.location_service.safe_write_audit_log",
+        with (
+            patch(
+                "backend.services.location_service.fetch_site_by_id",
+                return_value={"site_id": "2", "status": "INACTIVE"},
+            ),
+            patch(
+                "backend.services.location_service.fetch_building_duplicates",
+                return_value=[],
+            ),
+            patch(
+                "backend.services.location_service.insert_building",
+                return_value={
+                    "building_id": "10",
+                    "site_id": "2",
+                    "site_name": "Bangalore",
+                    "building_code": "BLD1",
+                    "building_name": "Tower A",
+                    "status": "INACTIVE",
+                },
+            ),
+            patch(
+                "backend.services.location_service.safe_write_audit_log",
+            ),
         ):
             result = create_building(
                 conn,
@@ -301,12 +345,16 @@ class AdminManagementServiceTests(unittest.TestCase):
             status="ACTIVE",
         )
 
-        with patch(
-            "backend.services.location_service.fetch_building_by_id",
-            return_value={"building_id": "3", "site_id": "2", "status": "INACTIVE"},
-        ), patch(
-            "backend.services.location_service.safe_write_audit_log",
-        ), self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.location_service.fetch_building_by_id",
+                return_value={"building_id": "3", "site_id": "2", "status": "INACTIVE"},
+            ),
+            patch(
+                "backend.services.location_service.safe_write_audit_log",
+            ),
+            self.assertRaises(HTTPException) as context,
+        ):
             create_floor(
                 conn,
                 tenant_id="1",
@@ -429,10 +477,13 @@ class AdminManagementServiceTests(unittest.TestCase):
             category_id=10,
         )
 
-        with patch(
-            "backend.services.preferences_service.fetch_amenity_category_by_id",
-            return_value=None,
-        ), self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.preferences_service.fetch_amenity_category_by_id",
+                return_value=None,
+            ),
+            self.assertRaises(HTTPException) as context,
+        ):
             create_amenity(conn, tenant_id="1", payload=payload)
 
         self.assertEqual(context.exception.status_code, 404)

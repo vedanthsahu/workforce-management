@@ -28,7 +28,9 @@ def _is_https_url(url: str) -> bool:
     return urlparse(url).scheme.lower() == "https"
 
 
-def _parse_csv(value: str | tuple[str, ...] | list[str], *, field_name: str) -> tuple[str, ...]:
+def _parse_csv(
+    value: str | tuple[str, ...] | list[str], *, field_name: str
+) -> tuple[str, ...]:
     if isinstance(value, tuple) or isinstance(value, list):
         values = tuple(str(item).strip() for item in value if str(item).strip())
     else:
@@ -185,23 +187,37 @@ class Settings(BaseSettings):
         if self.s3_presigned_url_ttl_seconds <= 0:
             raise ValueError("s3_presigned_url_ttl_seconds must be greater than zero")
         if self.aws_ses_max_retries < 0:
-            raise ValueError("aws_ses_max_retries must be greater than or equal to zero")
+            raise ValueError(
+                "aws_ses_max_retries must be greater than or equal to zero"
+            )
         if self.aws_retry_initial_delay_seconds <= 0:
-            raise ValueError("aws_retry_initial_delay_seconds must be greater than zero")
+            raise ValueError(
+                "aws_retry_initial_delay_seconds must be greater than zero"
+            )
         if self.aws_retry_max_delay_seconds < self.aws_retry_initial_delay_seconds:
             raise ValueError(
                 "aws_retry_max_delay_seconds must be greater than or equal to aws_retry_initial_delay_seconds"
             )
         if self.graph_role_lookup_retries < 0:
-            raise ValueError("graph_role_lookup_retries must be greater than or equal to zero")
+            raise ValueError(
+                "graph_role_lookup_retries must be greater than or equal to zero"
+            )
         if self.graph_role_lookup_backoff_seconds < 0:
-            raise ValueError("graph_role_lookup_backoff_seconds must be greater than or equal to zero")
+            raise ValueError(
+                "graph_role_lookup_backoff_seconds must be greater than or equal to zero"
+            )
         if self.graph_role_sync_interval_minutes <= 0:
-            raise ValueError("graph_role_sync_interval_minutes must be greater than zero")
+            raise ValueError(
+                "graph_role_sync_interval_minutes must be greater than zero"
+            )
         if self.graph_team_sync_interval_minutes <= 0:
-            raise ValueError("graph_team_sync_interval_minutes must be greater than zero")
+            raise ValueError(
+                "graph_team_sync_interval_minutes must be greater than zero"
+            )
         if self.layout_cutover_interval_minutes <= 0:
-            raise ValueError("layout_cutover_interval_minutes must be greater than zero")
+            raise ValueError(
+                "layout_cutover_interval_minutes must be greater than zero"
+            )
 
         graph_group_id = str(self.graph_facilitator_group_id or "").strip()
         object.__setattr__(
@@ -221,7 +237,9 @@ class Settings(BaseSettings):
 
     @property
     def auth_url(self) -> str:
-        return f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/authorize"
+        return (
+            f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/authorize"
+        )
 
     @property
     def token_url(self) -> str:
@@ -339,6 +357,7 @@ def _runtime_secret_settings() -> dict[str, object]:
             secret_name="Application secret",
         ),
     }
+
 
 @lru_cache
 def get_settings() -> Settings:

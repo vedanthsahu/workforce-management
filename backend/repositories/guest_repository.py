@@ -91,8 +91,6 @@ def fetch_guest_by_id(
     return dict(row) if row else None
 
 
-
-
 def search_guests(
     conn: PGConnection,
     *,
@@ -114,7 +112,9 @@ def search_guests(
         else ""
     ) or None
 
-    search_text = search_text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    search_text = (
+        search_text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    )
 
     status_clause = ""
     if not include_inactive:
@@ -122,7 +122,7 @@ def search_guests(
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            fr"""
+            rf"""
             SELECT {GUEST_SELECT_FIELDS}
             FROM guests AS g
             WHERE g.tenant_id = %s
@@ -165,7 +165,6 @@ def search_guests(
             """,
             (
                 tenant_id,
-
                 # WHERE
                 search_text,
                 phone_digits,
@@ -174,10 +173,8 @@ def search_guests(
                 phone_digits,
                 phone_digits,
                 search_text,
-
                 # ORDER BY
                 search_text,
-
                 limit,
             ),
         )
@@ -345,15 +342,11 @@ def update_guest(
 ) -> dict[str, Any]:
     """Apply a partial update to one tenant-scoped guest."""
     allowed_fields = ("full_name", "email", "phone", "organization")
-    set_clauses = [
-        f"{field} = %s" for field in allowed_fields if field in updates
-    ]
+    set_clauses = [f"{field} = %s" for field in allowed_fields if field in updates]
     if not set_clauses:
         raise ValueError("No fields supplied for guest update.")
 
-    params: list[Any] = [
-        updates[field] for field in allowed_fields if field in updates
-    ]
+    params: list[Any] = [updates[field] for field in allowed_fields if field in updates]
     set_clauses.append("updated_at = NOW()")
     params.extend([guest_id, tenant_id])
 

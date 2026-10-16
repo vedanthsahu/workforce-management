@@ -150,12 +150,15 @@ def get_auth_context(
                 tenant_id=claims["tenant_id"],
                 user_id=claims["user_id"],
                 session_id=session_id,
-                new_expires_at=datetime.now(UTC) + timedelta(seconds=settings.jwt_refresh_token_ttl),
+                new_expires_at=datetime.now(UTC)
+                + timedelta(seconds=settings.jwt_refresh_token_ttl),
                 min_touch_interval_seconds=SESSION_ACTIVITY_TOUCH_INTERVAL_SECONDS,
             )
             conn.commit()
         except psycopg2.Error:
-            logger.exception("auth.session_activity_touch_failed session_id=%s", session_id)
+            logger.exception(
+                "auth.session_activity_touch_failed session_id=%s", session_id
+            )
             if conn.get_transaction_status() != TRANSACTION_STATUS_IDLE:
                 conn.rollback()
     request.state.auth_claims = claims
@@ -212,7 +215,9 @@ def get_current_user(
 
 
 def _parse_auth_claims(token_payload: dict[str, Any]) -> dict[str, Any]:
-    subject = str(token_payload.get("user_id") or token_payload.get("sub") or "").strip()
+    subject = str(
+        token_payload.get("user_id") or token_payload.get("sub") or ""
+    ).strip()
     email = str(token_payload.get("email") or "").strip().lower()
     tenant_id = str(token_payload.get("tenant_id") or "").strip()
     session_id = str(token_payload.get("session_id") or "").strip()
@@ -343,11 +348,11 @@ def require_any_permission(permissions: Iterable[str]):
     def dependency(
         current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     ) -> dict[str, Any]:
-        role_name = str(
-            current_user.get("role_name")
-            or current_user.get("role")
-            or ""
-        ).strip().upper()
+        role_name = (
+            str(current_user.get("role_name") or current_user.get("role") or "")
+            .strip()
+            .upper()
+        )
         if role_name in ADMIN_ROLE_NAMES:
             return current_user
 

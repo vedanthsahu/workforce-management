@@ -16,9 +16,7 @@ from backend.api.routes.admin_dashboard import router
 class AdminDashboardRouteTests(unittest.TestCase):
     def test_admin_dashboard_routes_are_registered(self) -> None:
         route_paths = {
-            route.path
-            for route in router.routes
-            if isinstance(route, APIRoute)
+            route.path for route in router.routes if isinstance(route, APIRoute)
         }
 
         self.assertIn("/admin/dashboard/summary", route_paths)
@@ -36,7 +34,9 @@ class AdminDashboardRouteTests(unittest.TestCase):
         self.assertIs(dependency(current_user), current_user)
 
     def test_require_any_permission_allows_any_matching_permission(self) -> None:
-        dependency = require_any_permission(["admin_dashboard:view", "booking:view_all"])
+        dependency = require_any_permission(
+            ["admin_dashboard:view", "booking:view_all"]
+        )
         current_user = {
             "role_name": "EMPLOYEE",
             "permissions": ["booking:view_all"],

@@ -1,6 +1,7 @@
 """
 Dashboard.py for schema define
 """
+
 from __future__ import annotations
 
 from datetime import datetime

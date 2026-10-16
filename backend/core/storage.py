@@ -29,7 +29,6 @@ def get_s3_client() -> BaseClient:
     )
 
 
-
 # SVG is rendered inline by the frontend viewer, so any of these constructs
 # would execute in the context of an authenticated user's session (stored
 # XSS). A legitimate floor-plan export from a design tool never needs them.
@@ -114,7 +113,7 @@ def resolve_layout_file_url(stored_url: str | None) -> str | None:
         # hand it back rather than guess at how to parse it.
         return stored_url
 
-    object_key = stored_url[len(prefix):]
+    object_key = stored_url[len(prefix) :]
     s3_client = get_s3_client()
 
     try:
@@ -126,7 +125,7 @@ def resolve_layout_file_url(stored_url: str | None) -> str | None:
             },
             ExpiresIn=settings.s3_presigned_url_ttl_seconds,
         )
-    except (BotoCoreError, ClientError):
+    except BotoCoreError, ClientError:
         logger.exception("s3.presign.failed key=%s", object_key)
         return stored_url
 
@@ -201,7 +200,7 @@ def upload_svg_to_s3(
 
     try:
         upload_with_retry()
-    except (BotoCoreError, ClientError, S3UploadFailedError):
+    except BotoCoreError, ClientError, S3UploadFailedError:
         logger.exception(
             "s3.upload.failed bucket=%s key=%s tenant_id=%s floor_id=%s version_no=%s",
             settings.aws_s3_bucket_name,

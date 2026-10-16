@@ -20,7 +20,7 @@ _SEAT_IN_PUBLISHED_LAYOUT_SQL = """
                     AND status = 'PUBLISHED'
               )"""
 
- 
+
 def fetch_sites(
     conn: PGConnection,
     *,
@@ -155,7 +155,6 @@ def fetch_buildings_by_site(
     )
     query += " ORDER BY b.building_code, b.id"
     query, params = _apply_pagination(query, params, page=page, limit=limit)
-  
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(query, params)
@@ -569,7 +568,6 @@ def deactivate_floors_by_building(
         return cur.rowcount
 
 
-
 def activate_buildings_by_ids(
     conn: PGConnection,
     *,
@@ -740,9 +738,6 @@ def fetch_building_by_id(
         )
         row = cur.fetchone()
     return dict(row) if row else None
-
- 
- 
 
 
 def fetch_building_duplicates(
@@ -1020,6 +1015,7 @@ def fetch_floor_duplicates(
         rows = cur.fetchall()
     return [dict(row) for row in rows]
 
+
 def fetch_layout_seat_mapping_by_id(
     conn: PGConnection,
     *,
@@ -1141,11 +1137,8 @@ def update_layout_seat_mapping_configuration(
                 status,
                 is_bookable,
                 is_reserved,
-
                 Json(amenity_ids) if amenity_ids is not None else None,
-
                 capacity,
-
                 updated_by,
                 tenant_id,
                 layout_seat_mapping_id,
@@ -1178,7 +1171,9 @@ def update_layout_seat_mapping_configurations_bulk(
     """
 
     row_placeholders = ", ".join(
-        ["(%s::bigint, %s::text, %s::text, %s::text, %s::boolean, %s::boolean, %s::jsonb, %s::integer)"]
+        [
+            "(%s::bigint, %s::text, %s::text, %s::text, %s::boolean, %s::boolean, %s::jsonb, %s::integer)"
+        ]
         * len(entries)
     )
 
@@ -1609,11 +1604,6 @@ def fetch_seat_amenity_names(
         )
         rows = cur.fetchall()
     return [row[0] for row in rows]
-
-
-
-
-
 
 
 def insert_floor(

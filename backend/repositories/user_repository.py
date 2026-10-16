@@ -95,6 +95,7 @@ def _role_name_for_storage(role_name: str) -> str:
         return "FRONT OFFICE"
     return role_name
 
+
 USER_STATUSES = {"ACTIVE", "INACTIVE", "LOCKED"}
 
 ROLE_DISTRIBUTION_ORDER = (
@@ -108,9 +109,7 @@ ROLE_DISTRIBUTION_ORDER = (
 
 GRAPH_MANAGED_ROLE_NAMES = ("EMPLOYEE", "FACILITATOR")
 
-ADMIN_NOTIFICATION_ROLES = (
-    "TENANT_ADMIN",
-)
+ADMIN_NOTIFICATION_ROLES = ("TENANT_ADMIN",)
 
 
 def _normalize_email(value: str) -> str:
@@ -184,13 +183,11 @@ def _required_text(value: str | None, *, field_name: str, max_length: int) -> st
 def fetch_default_tenant_id(conn: PGConnection) -> str:
     """Resolve one active tenant when request-level tenant scoping is absent."""
     with conn.cursor() as cur:
-        cur.execute(
-            """
+        cur.execute("""
             SELECT id::text
             FROM tenants
             WHERE status = 'ACTIVE'
-            """
-        )
+            """)
         rows = cur.fetchall()
 
     if not rows:
@@ -205,19 +202,19 @@ def fetch_default_tenant_id(conn: PGConnection) -> str:
 def fetch_active_tenant_ids(conn: PGConnection) -> list[str]:
     """Fetch active tenant ids in deterministic order."""
     with conn.cursor() as cur:
-        cur.execute(
-            """
+        cur.execute("""
             SELECT id::text
             FROM tenants
             WHERE status = 'ACTIVE'
             ORDER BY id
-            """
-        )
+            """)
         rows = cur.fetchall()
     return [str(row[0]) for row in rows]
 
 
-def fetch_tenant_by_azure_tenant_id(conn: PGConnection, azure_tenant_id: str) -> dict[str, Any] | None:
+def fetch_tenant_by_azure_tenant_id(
+    conn: PGConnection, azure_tenant_id: str
+) -> dict[str, Any] | None:
     """Fetch the active application tenant whose tenant_key maps to Azure tid."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -239,7 +236,9 @@ def fetch_tenant_by_azure_tenant_id(conn: PGConnection, azure_tenant_id: str) ->
     return dict(row) if row else None
 
 
-def fetch_active_tenant_for_login(conn: PGConnection, *, azure_tenant_id: str) -> dict[str, Any] | None:
+def fetch_active_tenant_for_login(
+    conn: PGConnection, *, azure_tenant_id: str
+) -> dict[str, Any] | None:
     """Resolve the tenant for SSO using tenant_key, falling back only if unambiguous."""
     tenant = fetch_tenant_by_azure_tenant_id(conn, azure_tenant_id)
     if tenant is not None:
@@ -458,7 +457,14 @@ def fetch_user_by_microsoft_object_id(
             WHERE au.tenant_id = %s
               AND au.microsoft_object_id = %s
             """,
-            (tenant_id, _required_text(microsoft_object_id, field_name="microsoft_object_id", max_length=150)),
+            (
+                tenant_id,
+                _required_text(
+                    microsoft_object_id,
+                    field_name="microsoft_object_id",
+                    max_length=150,
+                ),
+            ),
         )
         result = cur.fetchone()
     return dict(result) if result else None
@@ -487,7 +493,9 @@ def fetch_user_by_sso_identity(
             (
                 tenant_id,
                 _required_text(provider, field_name="provider", max_length=50),
-                _required_text(provider_user_id, field_name="provider_user_id", max_length=150),
+                _required_text(
+                    provider_user_id, field_name="provider_user_id", max_length=150
+                ),
             ),
         )
         result = cur.fetchone()
@@ -513,8 +521,12 @@ def create_app_user_from_graph(
     role_name: str = "EMPLOYEE",
 ) -> dict[str, Any]:
     """Create a first-time SSO user in app_users using schema-valid fields."""
-    normalized_email = _required_text(_normalize_email(email), field_name="email", max_length=200)
-    normalized_role = _required_text(role_name, field_name="role_name", max_length=30).upper()
+    normalized_email = _required_text(
+        _normalize_email(email), field_name="email", max_length=200
+    )
+    normalized_role = _required_text(
+        role_name, field_name="role_name", max_length=30
+    ).upper()
     normalized_status = "ACTIVE"
 
     if normalized_role not in ROLE_NAMES:
@@ -569,7 +581,11 @@ def create_app_user_from_graph(
                 _required_text(full_name, field_name="full_name", max_length=200),
                 normalized_role,
                 normalized_status,
-                _required_text(microsoft_object_id, field_name="microsoft_object_id", max_length=150),
+                _required_text(
+                    microsoft_object_id,
+                    field_name="microsoft_object_id",
+                    max_length=150,
+                ),
                 _normalize_text(user_principal_name, max_length=200),
                 _normalize_text(display_name, max_length=200),
                 _normalize_text(mobile_phone, max_length=50),
@@ -609,7 +625,9 @@ def create_auth_identity_for_user(
 ) -> None:
     """Insert the provider identity row for a first-time SSO user."""
     normalized_provider = _required_text(provider, field_name="provider", max_length=50)
-    normalized_provider_user_id = _required_text(provider_user_id, field_name="provider_user_id", max_length=150)
+    normalized_provider_user_id = _required_text(
+        provider_user_id, field_name="provider_user_id", max_length=150
+    )
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -631,7 +649,9 @@ def create_auth_identity_for_user(
                 normalized_provider,
                 _normalize_text(provider_tenant_id, max_length=100),
                 normalized_provider_user_id,
-                _required_text(_normalize_email(email), field_name="email", max_length=200),
+                _required_text(
+                    _normalize_email(email), field_name="email", max_length=200
+                ),
                 Json(raw_profile),
             ),
         )
@@ -649,7 +669,9 @@ def create_auth_identity_for_user(
         )
         row = cur.fetchone()
     if row is None or str(row[0]) != str(tenant_id) or str(row[1]) != str(user_id):
-        raise LookupError("Microsoft provider identity is already linked to a different user.")
+        raise LookupError(
+            "Microsoft provider identity is already linked to a different user."
+        )
 
 
 def upsert_user_graph_profile(
@@ -661,7 +683,9 @@ def upsert_user_graph_profile(
     manager_graph_object_id: str | None,
 ) -> None:
     """Store the enriched Microsoft Graph profile for a first-time SSO user."""
-    graph_object_id = _required_text(str(graph_profile.get("id") or ""), field_name="graph_object_id", max_length=150)
+    graph_object_id = _required_text(
+        str(graph_profile.get("id") or ""), field_name="graph_object_id", max_length=150
+    )
     business_phones = graph_profile.get("businessPhones")
     if business_phones is not None and not isinstance(business_phones, list):
         raise ValueError("businessPhones must be a JSON array when present.")
@@ -822,7 +846,9 @@ def sync_department_team_for_user(
             )
             team = cur.fetchone()
             if team is None:
-                raise LookupError(f"Department team '{team_key}' could not be resolved.")
+                raise LookupError(
+                    f"Department team '{team_key}' could not be resolved."
+                )
 
         team_id = team["team_id"]
         team_key = team["team_key"]
@@ -972,7 +998,9 @@ def admin_update_user_access(
     if status is not None and status not in USER_STATUSES:
         raise ValueError("Invalid status.")
 
-    storage_role_name = _role_name_for_storage(role_name) if role_name is not None else None
+    storage_role_name = (
+        _role_name_for_storage(role_name) if role_name is not None else None
+    )
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -1055,7 +1083,9 @@ def update_user_role(
     role_name: str,
 ) -> dict[str, Any] | None:
     """Update one user's role_name and return the schema-native user row."""
-    normalized_role = _required_text(role_name, field_name="role_name", max_length=30).upper()
+    normalized_role = _required_text(
+        role_name, field_name="role_name", max_length=30
+    ).upper()
     if normalized_role not in ROLE_NAMES:
         raise ValueError("Invalid role_name.")
 
@@ -1094,7 +1124,9 @@ def sync_app_user_from_graph(
     office_location: str | None,
 ) -> dict[str, Any] | None:
     """Hydrate Graph-controlled fields while preserving user-maintained values."""
-    normalized_role = _required_text(role_name, field_name="role_name", max_length=30).upper()
+    normalized_role = _required_text(
+        role_name, field_name="role_name", max_length=30
+    ).upper()
     if normalized_role not in ROLE_NAMES:
         raise ValueError("Invalid role_name.")
 
@@ -1117,11 +1149,17 @@ def sync_app_user_from_graph(
             RETURNING {USER_RETURNING_FIELDS}
             """,
             (
-                _required_text(_normalize_email(email), field_name="email", max_length=200),
+                _required_text(
+                    _normalize_email(email), field_name="email", max_length=200
+                ),
                 _required_text(full_name, field_name="full_name", max_length=200),
                 _normalize_text(display_name, max_length=200),
                 _role_name_for_storage(normalized_role),
-                _required_text(microsoft_object_id, field_name="microsoft_object_id", max_length=150),
+                _required_text(
+                    microsoft_object_id,
+                    field_name="microsoft_object_id",
+                    max_length=150,
+                ),
                 _normalize_text(user_principal_name, max_length=200),
                 _normalize_text(mobile_phone, max_length=50),
                 _normalize_text(office_location, max_length=200),
@@ -1131,6 +1169,7 @@ def sync_app_user_from_graph(
         )
         row = cur.fetchone()
     return dict(row) if row else None
+
 
 def fetch_favorite_seat(
     conn: PGConnection,
@@ -1202,9 +1241,9 @@ def fetch_favorite_seat(
             (tenant_id, user_id),
         )
         rows = cur.fetchall()
-    first  = dict(rows[0]) if len(rows) > 0 else None
+    first = dict(rows[0]) if len(rows) > 0 else None
     second = dict(rows[1]) if len(rows) > 1 else None
-    third  = dict(rows[2]) if len(rows) > 2 else None
+    third = dict(rows[2]) if len(rows) > 2 else None
     return first, second, third
 
 
@@ -1229,6 +1268,8 @@ def fetch_days_in_office(
         )
         row = cur.fetchone()
     return int(row[0]) if row else 0
+
+
 def fetch_days_in_office_current_month(
     conn: PGConnection,
     *,
@@ -1254,6 +1295,8 @@ def fetch_days_in_office_current_month(
         row = cur.fetchone()
 
     return int(row[0]) if row else 0
+
+
 def fetch_days_in_office_current_year(
     conn: PGConnection,
     *,
@@ -1279,6 +1322,8 @@ def fetch_days_in_office_current_year(
         row = cur.fetchone()
 
     return int(row[0]) if row else 0
+
+
 def fetch_team_rank_current_year(
     conn: PGConnection,
     *,
@@ -1356,7 +1401,6 @@ def fetch_team_rank_current_year(
     }
 
 
-
 def search_users(
     conn: PGConnection,
     *,
@@ -1384,7 +1428,7 @@ def search_users(
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            fr"""
+            rf"""
             SELECT {USER_SELECT_FIELDS}
             {USER_SELECT_FROM}
             WHERE au.tenant_id = %s
@@ -1429,16 +1473,13 @@ def search_users(
             """,
             (
                 tenant_id,
-
                 # WHERE
                 search_text,
                 email_search_text,
                 search_text,
                 search_text,
-
                 # ORDER BY
                 search_text,
-
                 limit,
             ),
         )
@@ -1458,9 +1499,7 @@ def build_admin_directory_pagination(
     if page is None or limit is None:
         return None
 
-    total_pages = (
-        filtered_users + limit - 1
-    ) // limit
+    total_pages = (filtered_users + limit - 1) // limit
 
     return {
         "page": page,
@@ -1531,9 +1570,7 @@ def fetch_admin_user_directory(
         effective_limit = limit or 20
 
         params["limit"] = effective_limit
-        params["offset"] = (
-            effective_page - 1
-        ) * effective_limit
+        params["offset"] = (effective_page - 1) * effective_limit
 
         pagination_clause = """
             LIMIT %(limit)s
@@ -1625,26 +1662,18 @@ def fetch_admin_user_directory(
         }
     )
 
-    pagination_payload = (
-        build_admin_directory_pagination(
-            page=page,
-            limit=limit,
-            filtered_users=summary_payload[
-                "filtered_users"
-            ],
-        )
+    pagination_payload = build_admin_directory_pagination(
+        page=page,
+        limit=limit,
+        filtered_users=summary_payload["filtered_users"],
     )
 
     return {
         "summary": summary_payload,
         "roles": role_metadata,
         "pagination": pagination_payload,
-        "items": [
-            dict(row)
-            for row in rows
-        ],
+        "items": [dict(row) for row in rows],
     }
-
 
 
 def fetch_user_details_by_id(
@@ -1686,6 +1715,7 @@ def fetch_user_details_by_id(
         row = cur.fetchone()
 
     return dict(row) if row else None
+
 
 def fetch_admin_role_metadata(
     conn: PGConnection,
@@ -1746,7 +1776,7 @@ def fetch_admin_role_metadata(
 
             ORDER BY r.id
             """,
-            (tenant_id,)
+            (tenant_id,),
         )
 
         rows = cur.fetchall()

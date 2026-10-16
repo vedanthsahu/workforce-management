@@ -155,13 +155,17 @@ def blockable_floor_layout(
     seat_ids: Annotated[list[int] | None, Query(alias="seatId", max_length=200)] = None,
 ) -> BlockableFloorLayoutResponse | FloorLayoutScheduleResponse:
     # Preserve the permission boundary of the previous /admin/bookings lookup.
-    if view == "conflicts" and not {"booking:view_all", "admin_dashboard:view"}.intersection(
-        current_user.get("permissions", [])
-    ):
-        raise HTTPException(status_code=403, detail={
-            "code": "insufficient_permissions",
-            "message": "Booking-view permission is required to view conflict details.",
-        })
+    if view == "conflicts" and not {
+        "booking:view_all",
+        "admin_dashboard:view",
+    }.intersection(current_user.get("permissions", [])):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "insufficient_permissions",
+                "message": "Booking-view permission is required to view conflict details.",
+            },
+        )
     return get_blockable_floor_layout(
         conn,
         tenant_id=str(current_user["tenant_id"]),

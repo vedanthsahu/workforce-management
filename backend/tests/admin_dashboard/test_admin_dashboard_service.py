@@ -93,11 +93,14 @@ class AdminDashboardServiceTests(unittest.TestCase):
             "floor_name": "Floor 1",
         }
 
-        with patch.object(service, "_validate_hierarchy_filters") as validate, patch.object(
-            service,
-            "fetch_admin_activity_list",
-            return_value=[row],
-        ) as fetch:
+        with (
+            patch.object(service, "_validate_hierarchy_filters") as validate,
+            patch.object(
+                service,
+                "fetch_admin_activity_list",
+                return_value=[row],
+            ) as fetch,
+        ):
             response = service.get_admin_activity_list(
                 object(),
                 tenant_id="1",

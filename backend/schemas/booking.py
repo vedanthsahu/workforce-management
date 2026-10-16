@@ -33,10 +33,8 @@ class CreateBookingRequest(BaseModel):
     source_channel: str | None = None
 
 
-
 class CancelBookingRequest(BaseModel):
     cancellation_reason: str | None = None
-
 
 
 class ModifyBookingRequest(BaseModel):
@@ -46,7 +44,6 @@ class ModifyBookingRequest(BaseModel):
     seat_id: int = Field(gt=0)
     booking_date: date
     modification_reason: BookingModificationReason | None = None
-
 
 
 class BookingResponse(BaseModel):
@@ -225,6 +222,7 @@ class BookingEligibilityRequest(BaseModel):
         default=None,
         gt=0,
     )
+
 
 class BookingEligibilityResponse(BaseModel):
     eligible: bool

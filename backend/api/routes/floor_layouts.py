@@ -45,6 +45,7 @@ router = APIRouter(
     tags=["floor-layouts"],
 )
 
+
 @router.post(
     "",
     response_model=FloorLayoutResponse,
@@ -52,14 +53,11 @@ router = APIRouter(
 )
 def create_floor_layout_route(
     background_tasks: BackgroundTasks,
-
     current_user: Annotated[
         dict[str, Any],
         Depends(require_permission("layout:upload")),
     ],
-
     conn: Annotated[PGConnection, Depends(get_db)],
-
     file: UploadFile = File(...),
     site_id: int = Form(gt=0),
     building_id: int = Form(gt=0),
@@ -71,15 +69,14 @@ def create_floor_layout_route(
 ) -> FloorLayoutResponse:
 
     payload = CreateFloorLayoutRequest(
-    site_id=site_id,
-    building_id=building_id,
-    floor_id=floor_id,
-    layout_name=layout_name,
-    status=status,
-    layout_metadata=_parse_layout_metadata(layout_metadata),
-    seat_ids=seat_ids,
+        site_id=site_id,
+        building_id=building_id,
+        floor_id=floor_id,
+        layout_name=layout_name,
+        status=status,
+        layout_metadata=_parse_layout_metadata(layout_metadata),
+        seat_ids=seat_ids,
     )
-
 
     try:
         result = create_floor_layout(
@@ -92,17 +89,29 @@ def create_floor_layout_route(
     except HTTPException as he:
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=FLOOR_LAYOUT_UPLOADED, tenant_id=str(current_user["tenant_id"]),
-            current_user=current_user, resource_type="floor_layout", resource_id=None,
+            conn,
+            action=FLOOR_LAYOUT_UPLOADED,
+            tenant_id=str(current_user["tenant_id"]),
+            current_user=current_user,
+            resource_type="floor_layout",
+            resource_id=None,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
             failure_code=_d.get("code"),
             failure_reason=_d.get("message"),
         )
         raise
     safe_write_audit_log(
-        conn, action=FLOOR_LAYOUT_UPLOADED, tenant_id=str(current_user["tenant_id"]),
-        current_user=current_user, resource_type="floor_layout", resource_id=str(result.layout_id),
-        new_values={"layout_name": result.layout_name, "floor_id": str(payload.floor_id), "status": result.status},
+        conn,
+        action=FLOOR_LAYOUT_UPLOADED,
+        tenant_id=str(current_user["tenant_id"]),
+        current_user=current_user,
+        resource_type="floor_layout",
+        resource_id=str(result.layout_id),
+        new_values={
+            "layout_name": result.layout_name,
+            "floor_id": str(payload.floor_id),
+            "status": result.status,
+        },
     )
     return result
 
@@ -113,12 +122,10 @@ def create_floor_layout_route(
 )
 def list_floor_layouts_route(
     floor_id: Annotated[int, Path(gt=0)],
-
     current_user: Annotated[
         dict[str, Any],
         Depends(require_permission("layout:upload")),
     ],
-
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> list[FloorLayoutResponse]:
 
@@ -135,16 +142,12 @@ def list_floor_layouts_route(
 )
 def activate_floor_layout_route(
     layout_id: Annotated[int, Path(gt=0)],
-
     background_tasks: BackgroundTasks,
-
     current_user: Annotated[
         dict[str, Any],
         Depends(require_permission("layout:publish")),
     ],
-
     conn: Annotated[PGConnection, Depends(get_db)],
-
     # Optional and defaulted so existing callers that send no body at all
     # keep publishing immediately, exactly as before this field existed.
     payload: ActivateFloorLayoutRequest | None = None,
@@ -166,14 +169,11 @@ def activate_floor_layout_route(
 )
 def reschedule_floor_layout_route(
     layout_id: Annotated[int, Path(gt=0)],
-
     payload: RescheduleFloorLayoutRequest,
-
     current_user: Annotated[
         dict[str, Any],
         Depends(require_permission("layout:publish")),
     ],
-
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> FloorLayoutResponse:
 
@@ -191,12 +191,10 @@ def reschedule_floor_layout_route(
 )
 def delete_floor_layout_route(
     layout_id: Annotated[int, Path(gt=0)],
-
     current_user: Annotated[
         dict[str, Any],
         Depends(require_permission("layout:publish")),
     ],
-
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> FloorLayoutResponse:
 
@@ -213,19 +211,15 @@ def delete_floor_layout_route(
     response_model=LayoutSeatListResponse,
 )
 def get_floor_layout_seats_route(
-
     layout_id: Annotated[int, Path(gt=0)],
-
     current_user: Annotated[
         dict[str, Any],
         Depends(require_permission("layout:upload")),
     ],
-
     conn: Annotated[
         PGConnection,
         Depends(get_db),
     ],
-
 ) -> LayoutSeatListResponse:
 
     return get_floor_layout_seats(
@@ -233,6 +227,7 @@ def get_floor_layout_seats_route(
         current_user=current_user,
         layout_id=str(layout_id),
     )
+
 
 def _parse_layout_metadata(
     layout_metadata: str | None,

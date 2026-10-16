@@ -30,15 +30,12 @@ class TokenError(Exception):
     """Base exception for authentication-token validation failures."""
 
 
-
 class ExpiredTokenError(TokenError):
     """Raised when a token is structurally valid but no longer within its TTL."""
 
 
-
 class RefreshTokenReplayError(TokenError):
     """Reserved error type for refresh-token replay detection flows."""
-
 
 
 def register_claim_hook(hook: ClaimHook) -> None:
@@ -178,7 +175,9 @@ def decode_token(token: str, *, verify_exp: bool = True) -> dict[str, Any]:
         other JWT validation failures.
     """
     if is_microsoft_token(token):
-        raise TokenError("Microsoft tokens are not accepted by backend APIs. Use the backend-issued access token.")
+        raise TokenError(
+            "Microsoft tokens are not accepted by backend APIs. Use the backend-issued access token."
+        )
 
     settings = get_settings()
     try:
@@ -214,13 +213,17 @@ def is_microsoft_token(token: str) -> bool:
 
     issuer = str(payload.get("iss") or "").lower()
     audience = str(payload.get("aud") or "").lower()
-    has_microsoft_issuer = "login.microsoftonline.com" in issuer or "sts.windows.net" in issuer
+    has_microsoft_issuer = (
+        "login.microsoftonline.com" in issuer or "sts.windows.net" in issuer
+    )
     has_microsoft_identity_claims = bool(payload.get("tid") or payload.get("oid"))
     has_microsoft_graph_audience = audience in {
         "00000003-0000-0000-c000-000000000000",
         "https://graph.microsoft.com",
     }
-    return has_microsoft_issuer or (has_microsoft_identity_claims and has_microsoft_graph_audience)
+    return has_microsoft_issuer or (
+        has_microsoft_identity_claims and has_microsoft_graph_audience
+    )
 
 
 def build_auth_cookie_settings(*, max_age: int) -> dict[str, Any]:
@@ -351,7 +354,9 @@ def _validate_jwt_payload(payload: dict[str, Any]) -> None:
     required_claims = {"user_id", "tenant_id", "iat", "exp"}
     missing_claims = sorted(claim for claim in required_claims if claim not in payload)
     if missing_claims:
-        raise ValueError(f"JWT payload is missing required claims: {', '.join(missing_claims)}")
+        raise ValueError(
+            f"JWT payload is missing required claims: {', '.join(missing_claims)}"
+        )
 
     if not str(payload["user_id"]).strip():
         raise ValueError("JWT payload claim 'user_id' cannot be empty")

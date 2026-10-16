@@ -44,11 +44,15 @@ class GuestAvailabilityAuthorizationTests(unittest.TestCase):
     guest-data code path in the app."""
 
     def test_employee_cannot_probe_guest_availability(self) -> None:
-        with patch(
-            "backend.services.booking_service.guest_has_active_booking_in_range",
-        ) as mock_guest_conflict, patch(
-            "backend.services.booking_service.fetch_available_seats_by_range",
-        ) as mock_fetch_seats, self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.booking_service.guest_has_active_booking_in_range",
+            ) as mock_guest_conflict,
+            patch(
+                "backend.services.booking_service.fetch_available_seats_by_range",
+            ) as mock_fetch_seats,
+            self.assertRaises(HTTPException) as context,
+        ):
             get_available_seats_by_range(
                 conn=_FakeConnection(),
                 tenant_id="1",
@@ -61,9 +65,7 @@ class GuestAvailabilityAuthorizationTests(unittest.TestCase):
             )
 
         self.assertEqual(context.exception.status_code, 403)
-        self.assertEqual(
-            context.exception.detail["code"], "guest_booking_not_allowed"
-        )
+        self.assertEqual(context.exception.detail["code"], "guest_booking_not_allowed")
         mock_guest_conflict.assert_not_called()
         mock_fetch_seats.assert_not_called()
 
@@ -88,12 +90,16 @@ class GuestAvailabilityAuthorizationTests(unittest.TestCase):
         """A FACILITATOR must clear the new role gate and reach the existing
         guest-conflict logic -- proven here by that check firing its own 409,
         which could only happen if the 403 gate did not block the call."""
-        with patch(
-            "backend.services.booking_service.guest_has_active_booking_in_range",
-            return_value=True,
-        ) as mock_guest_conflict, patch(
-            "backend.services.booking_service.fetch_available_seats_by_range",
-        ) as mock_fetch_seats, self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.booking_service.guest_has_active_booking_in_range",
+                return_value=True,
+            ) as mock_guest_conflict,
+            patch(
+                "backend.services.booking_service.fetch_available_seats_by_range",
+            ) as mock_fetch_seats,
+            self.assertRaises(HTTPException) as context,
+        ):
             get_available_seats_by_range(
                 conn=_FakeConnection(),
                 tenant_id="1",
@@ -106,9 +112,7 @@ class GuestAvailabilityAuthorizationTests(unittest.TestCase):
             )
 
         self.assertEqual(context.exception.status_code, 409)
-        self.assertEqual(
-            context.exception.detail["code"], "booking_guest_conflict"
-        )
+        self.assertEqual(context.exception.detail["code"], "booking_guest_conflict")
         mock_guest_conflict.assert_called_once()
         mock_fetch_seats.assert_not_called()
 

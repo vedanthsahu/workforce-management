@@ -47,6 +47,7 @@ class UISeatState(str, Enum):
     BEST_MATCH = "BEST_MATCH"
     UNAVAILABLE = "UNAVAILABLE"
 
+
 class RangeAvailabilityStatus(str, Enum):
     FULLY_AVAILABLE = "FULLY_AVAILABLE"
     PARTIALLY_AVAILABLE = "PARTIALLY_AVAILABLE"
@@ -81,6 +82,7 @@ class VisitPurpose(str, Enum):
 class BookingModificationReason(str, Enum):
     """Mirrors chk_booking_modification_reason -- the only values
     bookings.modification_reason accepts besides NULL."""
+
     USER_REQUEST = "USER_REQUEST"
     ADMIN_MODIFIED = "ADMIN_MODIFIED"
     FACILITATOR_MODIFIED = "FACILITATOR_MODIFIED"
@@ -95,6 +97,7 @@ class BookingModificationReason(str, Enum):
 class GuestVisitModificationReason(str, Enum):
     """Mirrors chk_guest_visit_modification_reason -- the only values
     guest_visits.modification_reason accepts besides NULL."""
+
     USER_REQUEST = "USER_REQUEST"
     HOST_CHANGED = "HOST_CHANGED"
     DATE_CHANGED = "DATE_CHANGED"
