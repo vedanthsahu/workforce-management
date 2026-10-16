@@ -142,10 +142,10 @@ export function ChatbotEmbed() {
         onLoad={initializeChatbot}
         aria-hidden={!isOpen}
         sandbox="allow-forms allow-same-origin allow-scripts"
-        className={`fixed right-0 bottom-0 z-[100] h-dvh w-full border-0 bg-transparent transition-opacity sm:right-6 sm:bottom-6 sm:h-[min(680px,calc(100dvh-48px))] sm:w-[min(420px,calc(100vw-48px))] sm:rounded-[20px] sm:shadow-2xl ${
+        className={`fixed z-[100] border-0 bg-transparent ${
           isOpen
-            ? "visible opacity-100"
-            : "invisible pointer-events-none opacity-0"
+            ? "right-0 bottom-0 h-dvh w-full visible opacity-100 sm:right-6 sm:bottom-6 sm:h-[min(680px,calc(100dvh-48px))] sm:w-[min(420px,calc(100vw-48px))] sm:rounded-[20px] sm:shadow-2xl"
+            : "right-6 bottom-6 h-0 w-0 invisible pointer-events-none opacity-0 shadow-none"
         }`}
       />
     </>
