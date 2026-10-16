@@ -594,7 +594,7 @@ def fetch_admin_dashboard_summary(
         row = cur.fetchone()
 
     return dict(row) if row else {}
- 
+
 
 def _fetch_employee_activity_rows(
     conn: PGConnection,
@@ -743,6 +743,7 @@ def _fetch_employee_activity_rows(
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
+
 
 def _fetch_guest_activity_rows(
     conn: PGConnection,
@@ -905,6 +906,7 @@ def _fetch_guest_activity_rows(
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
+
 
 def fetch_admin_activity_list(
     conn: PGConnection,

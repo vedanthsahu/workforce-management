@@ -120,11 +120,14 @@ def get_my_preferences(
     user_id: str,
 ) -> MyPreferencesResponse:
     """Return one user's saved work-location and amenity preferences."""
-    work_preferences = fetch_user_work_preferences(
-        conn,
-        tenant_id=tenant_id,
-        user_id=user_id,
-    ) or {}
+    work_preferences = (
+        fetch_user_work_preferences(
+            conn,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+        or {}
+    )
     amenities = fetch_user_preferred_amenities(
         conn,
         tenant_id=tenant_id,
@@ -299,7 +302,9 @@ def _validate_preference_location(
             )
 
     if building_id is not None:
-        building = fetch_building_scope(conn, tenant_id=tenant_id, building_id=building_id)
+        building = fetch_building_scope(
+            conn, tenant_id=tenant_id, building_id=building_id
+        )
         if building is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -394,10 +399,7 @@ def get_amenity_categories(
     total = int(result.get("total") or 0)
     total_pages = math.ceil(total / limit) if total else 0
     return AmenityCategoryListResponse(
-        items=[
-            AmenityCategoryResponse(**row)
-            for row in result.get("items", [])
-        ],
+        items=[AmenityCategoryResponse(**row) for row in result.get("items", [])],
         total=total,
         page=page,
         limit=limit,
@@ -822,11 +824,7 @@ def _status_filter_to_bool(status_filter: str | None) -> bool | None:
 
 def _extract_updates(payload: Any, allowed_fields: set[str]) -> dict[str, Any]:
     raw = payload.model_dump(exclude_unset=True)
-    return {
-        key: value
-        for key, value in raw.items()
-        if key in allowed_fields
-    }
+    return {key: value for key, value in raw.items() if key in allowed_fields}
 
 
 def _reject_extra_fields(payload: Any, forbidden_fields: set[str]) -> None:

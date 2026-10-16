@@ -64,7 +64,10 @@ def admin_audit_logs(
     conn: Annotated[PGConnection, Depends(get_db)],
     action: Annotated[
         str | None,
-        Query(min_length=1, description="Exact match on audit_logs.action, e.g. 'building.created'."),
+        Query(
+            min_length=1,
+            description="Exact match on audit_logs.action, e.g. 'building.created'.",
+        ),
     ] = None,
     module: Annotated[
         str | None,
@@ -76,7 +79,10 @@ def admin_audit_logs(
     ] = None,
     event_status: Annotated[
         str | None,
-        Query(alias="status", description="Exact match on audit_logs.event_status: SUCCESS, FAILURE, or DENIED."),
+        Query(
+            alias="status",
+            description="Exact match on audit_logs.event_status: SUCCESS, FAILURE, or DENIED.",
+        ),
     ] = None,
     start_date: Annotated[
         date | None,
@@ -101,7 +107,10 @@ def admin_audit_logs(
     ] = None,
     search: Annotated[
         str | None,
-        Query(min_length=1, description="Partial, case-insensitive match on actor name only -- for the type-ahead search box."),
+        Query(
+            min_length=1,
+            description="Partial, case-insensitive match on actor name only -- for the type-ahead search box.",
+        ),
     ] = None,
     sort_by: Annotated[
         AuditSortBy,

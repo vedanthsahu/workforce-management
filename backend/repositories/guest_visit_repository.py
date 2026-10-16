@@ -115,6 +115,7 @@ def _append_guest_visit_filters(
 
     return query
 
+
 GUEST_VISIT_RETURNING_FIELDS = """
     id::text AS guest_visit_id,
     tenant_id::text AS tenant_id,
@@ -209,6 +210,7 @@ def insert_guest_visit(
         raise LookupError("Guest visit insert did not return a row.")
     return dict(row)
 
+
 def update_guest_visit_booking_details(
     conn: PGConnection,
     *,
@@ -243,10 +245,7 @@ def update_guest_visit_booking_details(
         )
 
         if cur.rowcount != 1:
-            raise LookupError(
-                "Guest visit was not found for update."
-            )
-
+            raise LookupError("Guest visit was not found for update.")
 
 
 def fetch_guest_visits(
@@ -405,15 +404,19 @@ def fetch_guest_visit_summary(
         cur.execute(query, params)
         row = cur.fetchone()
 
-    return dict(row) if row else {
-        "total": 0,
-        "scheduled": 0,
-        "checked_in": 0,
-        "checked_out": 0,
-        "cancelled": 0,
-        "modified": 0,
-        "overdue": 2,
-    }
+    return (
+        dict(row)
+        if row
+        else {
+            "total": 0,
+            "scheduled": 0,
+            "checked_in": 0,
+            "checked_out": 0,
+            "cancelled": 0,
+            "modified": 0,
+            "overdue": 2,
+        }
+    )
 
 
 def check_in_guest_visit(
@@ -458,7 +461,7 @@ def check_in_guest_visit(
     if row is None:
         raise LookupError("Guest visit not found.")
     raise ValueError("Only scheduled guest visits can be checked in.")
-        
+
 
 def check_out_guest_visit(
     conn: PGConnection,
@@ -502,7 +505,8 @@ def check_out_guest_visit(
     if row is None:
         raise LookupError("Guest visit not found.")
     raise ValueError("Only checked-in guest visits can be checked out.")
-        
+
+
 def fetch_guest_visit_by_id(
     conn: PGConnection,
     *,
@@ -625,7 +629,7 @@ def guest_visit_has_active_booking(
         )
 
         return cur.fetchone() is not None
-    
+
 
 def update_guest_visit_requires_seat(
     conn: PGConnection,
@@ -653,10 +657,8 @@ def update_guest_visit_requires_seat(
         )
 
         if cur.rowcount != 1:
-            raise LookupError(
-                "Guest visit not found."
-            )
-        
+            raise LookupError("Guest visit not found.")
+
 
 def cancel_guest_visit(
     conn: PGConnection,
@@ -689,10 +691,7 @@ def cancel_guest_visit(
         )
 
         if cur.rowcount != 1:
-            raise LookupError(
-                "Guest visit not found."
-            )
-        
+            raise LookupError("Guest visit not found.")
 
 
 def fetch_active_booking_by_guest_visit(
@@ -702,9 +701,7 @@ def fetch_active_booking_by_guest_visit(
     guest_visit_id: str,
 ) -> dict[str, Any] | None:
 
-    with conn.cursor(
-        cursor_factory=RealDictCursor
-    ) as cur:
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
 
         cur.execute(
             """
@@ -772,6 +769,7 @@ def fetch_active_booking_for_guest_visit(
 
     return dict(row) if row else None
 
+
 def fetch_guest_visit_status(
     conn: PGConnection,
     *,
@@ -779,9 +777,7 @@ def fetch_guest_visit_status(
     guest_visit_id: str,
 ) -> dict[str, Any]:
 
-    with conn.cursor(
-        cursor_factory=RealDictCursor
-    ) as cur:
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
 
         cur.execute(
             """
@@ -803,12 +799,9 @@ def fetch_guest_visit_status(
         row = cur.fetchone()
 
     if row is None:
-        raise LookupError(
-            "Guest visit not found."
-        )
+        raise LookupError("Guest visit not found.")
 
     return dict(row)
-
 
 
 def update_guest_visit(
@@ -865,9 +858,7 @@ def update_guest_visit(
         )
 
         if cur.rowcount != 1:
-            raise LookupError(
-                "Guest visit not found."
-            )
+            raise LookupError("Guest visit not found.")
 
 
 def update_guest_visit_only(
@@ -944,6 +935,7 @@ def mark_guest_visit_modified(
         if cur.rowcount != 1:
             raise LookupError("Guest visit not found.")
 
+
 def sync_booking_from_guest_visit(
     conn: PGConnection,
     *,
@@ -1019,9 +1011,7 @@ def recalculate_guest_visit_requires_seat(
         )
 
         if cur.rowcount != 1:
-            raise LookupError(
-                "Guest visit not found."
-            )
+            raise LookupError("Guest visit not found.")
 
 
 def fetch_guest_visit_integrity_findings(
@@ -1492,4 +1482,3 @@ def cancel_future_guest_visits_for_guest(
             (cancellation_reason, tenant_id, guest_id),
         )
         return cur.rowcount
-

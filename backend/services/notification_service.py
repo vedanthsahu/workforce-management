@@ -94,7 +94,9 @@ def booking_notification_details(booking: dict[str, Any]) -> dict[str, str]:
         "guest_name": format_notification_value(booking.get("guest_name")),
         "guest_email": format_notification_value(booking.get("guest_email")),
         "guest_phone": format_notification_value(booking.get("guest_phone")),
-        "guest_organization": format_notification_value(booking.get("guest_organization")),
+        "guest_organization": format_notification_value(
+            booking.get("guest_organization")
+        ),
         "seat_name": seat,
         "location": location,
     }
@@ -179,7 +181,7 @@ class NotificationService:
 
         try:
             response = send_with_retry()
-        except (BotoCoreError, ClientError):
+        except BotoCoreError, ClientError:
             logger.exception(
                 "notification.failure template=%s recipient_count=%s subject=%s",
                 template_name,
@@ -245,9 +247,9 @@ class NotificationService:
 
     def _build_ses_client(self) -> BaseClient:
         return boto3.client(
-        "ses",
-        region_name=self._settings.aws_region,
-    )
+            "ses",
+            region_name=self._settings.aws_region,
+        )
 
     def _build_template_environment(self) -> Environment:
         template_dir = _resolve_template_dir(self._settings.email_template_dir)
@@ -356,7 +358,9 @@ def _queue_notification(
 ) -> None:
     recipients = _normalize_emails(to_emails)
     if not recipients:
-        logger.warning("notification.queue_skipped event=%s reason=no_recipients", event_name)
+        logger.warning(
+            "notification.queue_skipped event=%s reason=no_recipients", event_name
+        )
         return
 
     task_context = dict(context)
@@ -388,7 +392,9 @@ def _dispatch_notification(
         service = get_notification_service()
         if method_name == "send_email":
             if subject is None or template_name is None:
-                raise ValueError("Generic notifications require subject and template_name.")
+                raise ValueError(
+                    "Generic notifications require subject and template_name."
+                )
             service.send_email(
                 to_emails=to_emails,
                 subject=subject,

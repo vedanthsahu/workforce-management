@@ -139,20 +139,16 @@ def get_dashboard_for_user(
             user_id=user_id,
         )
 
-        days_in_office_current_month = (
-            fetch_days_in_office_current_month(
-                conn,
-                tenant_id=tenant_id,
-                user_id=user_id,
-            )
+        days_in_office_current_month = fetch_days_in_office_current_month(
+            conn,
+            tenant_id=tenant_id,
+            user_id=user_id,
         )
 
-        days_in_office_current_year = (
-            fetch_days_in_office_current_year(
-                conn,
-                tenant_id=tenant_id,
-                user_id=user_id,
-            )
+        days_in_office_current_year = fetch_days_in_office_current_year(
+            conn,
+            tenant_id=tenant_id,
+            user_id=user_id,
         )
 
         rank_data = fetch_team_rank_current_year(

@@ -112,16 +112,20 @@ class GetFloorLayoutsByFloorServiceTests(unittest.TestCase):
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layouts_by_floor",
-            return_value=[_layout_row(status="DRAFT")],
-        ) as mock_fetch, patch(
-            "backend.services.floor_layout_service.resolve_layout_visibility_days",
-            return_value=_VISIBILITY_DAYS,
-        ), patch.object(
-            floor_layout_service_module,
-            "LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS",
-            True,
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layouts_by_floor",
+                return_value=[_layout_row(status="DRAFT")],
+            ) as mock_fetch,
+            patch(
+                "backend.services.floor_layout_service.resolve_layout_visibility_days",
+                return_value=_VISIBILITY_DAYS,
+            ),
+            patch.object(
+                floor_layout_service_module,
+                "LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS",
+                True,
+            ),
         ):
             get_floor_layouts_by_floor(
                 conn,
@@ -145,19 +149,25 @@ class GetFloorLayoutsByFloorServiceTests(unittest.TestCase):
         current_user = {"tenant_id": "1", "user_id": "5"}
         pilot_floor_id = next(iter(LAYOUT_VISIBILITY_PILOT_FLOOR_IDS))
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layouts_by_floor",
-            return_value=[_layout_row(status="DRAFT")],
-        ) as mock_fetch, patch(
-            "backend.services.floor_layout_service.resolve_layout_visibility_days",
-            return_value=_VISIBILITY_DAYS,
-        ), patch.object(
-            floor_layout_service_module,
-            "LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS",
-            False,
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layouts_by_floor",
+                return_value=[_layout_row(status="DRAFT")],
+            ) as mock_fetch,
+            patch(
+                "backend.services.floor_layout_service.resolve_layout_visibility_days",
+                return_value=_VISIBILITY_DAYS,
+            ),
+            patch.object(
+                floor_layout_service_module,
+                "LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS",
+                False,
+            ),
         ):
             get_floor_layouts_by_floor(
-                conn, current_user=current_user, floor_id=pilot_floor_id,
+                conn,
+                current_user=current_user,
+                floor_id=pilot_floor_id,
             )
             self.assertEqual(
                 mock_fetch.call_args.kwargs["visibility_thresholds"],
@@ -184,13 +194,16 @@ class DeleteFloorLayoutServiceTests(unittest.TestCase):
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=_layout_row(status="DRAFT"),
-        ), patch(
-            "backend.services.floor_layout_service.soft_delete_floor_layout",
-            return_value=_layout_row(status="DELETED"),
-        ) as mock_delete:
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=_layout_row(status="DRAFT"),
+            ),
+            patch(
+                "backend.services.floor_layout_service.soft_delete_floor_layout",
+                return_value=_layout_row(status="DELETED"),
+            ) as mock_delete,
+        ):
             response = delete_floor_layout(
                 conn,
                 current_user=current_user,
@@ -198,7 +211,9 @@ class DeleteFloorLayoutServiceTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status, "DELETED")
-        mock_delete.assert_called_once_with(conn, tenant_id="1", layout_id="10", target_status="DELETED")
+        mock_delete.assert_called_once_with(
+            conn, tenant_id="1", layout_id="10", target_status="DELETED"
+        )
         self.assertEqual(conn.commits, 1)
         self.assertEqual(conn.rollbacks, 0)
 
@@ -206,12 +221,15 @@ class DeleteFloorLayoutServiceTests(unittest.TestCase):
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=_layout_row(status="ARCHIVED"),
-        ), patch(
-            "backend.services.floor_layout_service.soft_delete_floor_layout",
-            return_value=_layout_row(status="DELETED"),
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=_layout_row(status="ARCHIVED"),
+            ),
+            patch(
+                "backend.services.floor_layout_service.soft_delete_floor_layout",
+                return_value=_layout_row(status="DELETED"),
+            ),
         ):
             response = delete_floor_layout(
                 conn,
@@ -227,12 +245,16 @@ class DeleteFloorLayoutServiceTests(unittest.TestCase):
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=_layout_row(status="PUBLISHED"),
-        ), patch(
-            "backend.services.floor_layout_service.soft_delete_floor_layout",
-        ) as mock_delete, self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=_layout_row(status="PUBLISHED"),
+            ),
+            patch(
+                "backend.services.floor_layout_service.soft_delete_floor_layout",
+            ) as mock_delete,
+            self.assertRaises(HTTPException) as context,
+        ):
             delete_floor_layout(
                 conn,
                 current_user=current_user,
@@ -252,10 +274,13 @@ class DeleteFloorLayoutServiceTests(unittest.TestCase):
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=None,
-        ), self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=None,
+            ),
+            self.assertRaises(HTTPException) as context,
+        ):
             delete_floor_layout(
                 conn,
                 current_user=current_user,
@@ -279,10 +304,13 @@ class DeleteFloorLayoutServiceTests(unittest.TestCase):
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=None,
-        ), self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=None,
+            ),
+            self.assertRaises(HTTPException) as context,
+        ):
             delete_floor_layout(
                 conn,
                 current_user=current_user,
@@ -330,14 +358,21 @@ class ActivateFloorLayoutFirstPublishServiceTests(unittest.TestCase):
                 "backend.services.floor_layout_service.activate_floor_layout_record",
                 return_value=_layout_row(status="PUBLISHED"),
             ) as mock_activate,
-            patch("backend.services.floor_layout_service.publish_layout_seat_configurations"),
-            patch("backend.services.floor_layout_service.reconcile_published_layout_seats"),
+            patch(
+                "backend.services.floor_layout_service.publish_layout_seat_configurations"
+            ),
+            patch(
+                "backend.services.floor_layout_service.reconcile_published_layout_seats"
+            ),
             patch(
                 "backend.services.floor_layout_service._schedule_floor_layout",
             ) as mock_schedule,
         ):
             response = activate_floor_layout(
-                conn, current_user=current_user, layout_id="10", effective_date=future_date,
+                conn,
+                current_user=current_user,
+                layout_id="10",
+                effective_date=future_date,
             )
 
         self.assertEqual(response.status, "PUBLISHED")
@@ -374,7 +409,10 @@ class ActivateFloorLayoutFirstPublishServiceTests(unittest.TestCase):
             ) as mock_activate,
         ):
             response = activate_floor_layout(
-                conn, current_user=current_user, layout_id="10", effective_date=future_date,
+                conn,
+                current_user=current_user,
+                layout_id="10",
+                effective_date=future_date,
             )
 
         self.assertEqual(response["status"], "SCHEDULED")
@@ -415,38 +453,56 @@ class CancelScheduledFloorLayoutServiceTests(unittest.TestCase):
         future_effective_from = datetime.now(UTC) + timedelta(days=60)
         published_row = _layout_row(layout_id="20", status="PUBLISHED")
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=_layout_row(
-                layout_id="10", status="SCHEDULED", effective_from=future_effective_from,
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=_layout_row(
+                    layout_id="10",
+                    status="SCHEDULED",
+                    effective_from=future_effective_from,
+                ),
             ),
-        ), patch(
-            "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
-            return_value=_SCHEDULING_GAP,
-        ), patch(
-            "backend.services.floor_layout_service.acquire_floor_publish_lock",
-        ), patch(
-            "backend.services.floor_layout_service.fetch_published_layout_for_floor",
-            return_value=published_row,
-        ), patch(
-            "backend.services.floor_layout_service.set_published_layout_effective_till",
-        ) as mock_reopen, patch(
-            "backend.services.floor_layout_service.retire_layout_seats",
-        ) as mock_retire, patch(
-            "backend.services.floor_layout_service.soft_delete_floor_layout",
-            return_value=_layout_row(layout_id="10", status="DRAFT"),
-        ) as mock_soft_delete:
+            patch(
+                "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
+                return_value=_SCHEDULING_GAP,
+            ),
+            patch(
+                "backend.services.floor_layout_service.acquire_floor_publish_lock",
+            ),
+            patch(
+                "backend.services.floor_layout_service.fetch_published_layout_for_floor",
+                return_value=published_row,
+            ),
+            patch(
+                "backend.services.floor_layout_service.set_published_layout_effective_till",
+            ) as mock_reopen,
+            patch(
+                "backend.services.floor_layout_service.retire_layout_seats",
+            ) as mock_retire,
+            patch(
+                "backend.services.floor_layout_service.soft_delete_floor_layout",
+                return_value=_layout_row(layout_id="10", status="DRAFT"),
+            ) as mock_soft_delete,
+        ):
             response = delete_floor_layout(
-                conn, current_user=current_user, layout_id="10",
+                conn,
+                current_user=current_user,
+                layout_id="10",
             )
 
         self.assertEqual(response.status, "DRAFT")
         mock_soft_delete.assert_called_once_with(
-            conn, tenant_id="1", layout_id="10", target_status="DRAFT",
+            conn,
+            tenant_id="1",
+            layout_id="10",
+            target_status="DRAFT",
         )
         mock_reopen.assert_called_once_with(
-            conn, tenant_id="1", layout_id="20",
-            effective_till=None, updated_by_user_id="5",
+            conn,
+            tenant_id="1",
+            layout_id="20",
+            effective_till=None,
+            updated_by_user_id="5",
         )
         mock_retire.assert_called_once_with(conn, tenant_id="1", layout_id="10")
         self.assertEqual(conn.commits, 1)
@@ -459,23 +515,33 @@ class CancelScheduledFloorLayoutServiceTests(unittest.TestCase):
         # danger_window_start is 20 days in the past already.
         near_effective_from = datetime.now(UTC) + timedelta(days=10)
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=_layout_row(
-                layout_id="10", status="SCHEDULED", effective_from=near_effective_from,
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=_layout_row(
+                    layout_id="10",
+                    status="SCHEDULED",
+                    effective_from=near_effective_from,
+                ),
             ),
-        ), patch(
-            "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
-            return_value=_SCHEDULING_GAP,
-        ), patch(
-            "backend.services.floor_layout_service.acquire_floor_publish_lock",
-        ), patch(
-            "backend.services.floor_layout_service.soft_delete_floor_layout",
-        ) as mock_soft_delete, self.assertRaises(HTTPException) as context:
+            patch(
+                "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
+                return_value=_SCHEDULING_GAP,
+            ),
+            patch(
+                "backend.services.floor_layout_service.acquire_floor_publish_lock",
+            ),
+            patch(
+                "backend.services.floor_layout_service.soft_delete_floor_layout",
+            ) as mock_soft_delete,
+            self.assertRaises(HTTPException) as context,
+        ):
             delete_floor_layout(conn, current_user=current_user, layout_id="10")
 
         self.assertEqual(context.exception.status_code, 409)
-        self.assertEqual(context.exception.detail["code"], "floor_layout_schedule_locked")
+        self.assertEqual(
+            context.exception.detail["code"], "floor_layout_schedule_locked"
+        )
         mock_soft_delete.assert_not_called()
         self.assertEqual(conn.rollbacks, 1)
         self.assertEqual(conn.commits, 0)
@@ -492,23 +558,32 @@ class CancelScheduledFloorLayoutServiceTests(unittest.TestCase):
         current_user = {"tenant_id": "1", "user_id": "5"}
         future_effective_from = datetime.now(UTC) + timedelta(days=60)
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            side_effect=[
-                _layout_row(
-                    layout_id="10", status="SCHEDULED", effective_from=future_effective_from,
-                ),
-                _layout_row(layout_id="10", status="PUBLISHED"),
-            ],
-        ), patch(
-            "backend.services.floor_layout_service.acquire_floor_publish_lock",
-        ), patch(
-            "backend.services.floor_layout_service.fetch_published_layout_for_floor",
-        ) as mock_fetch_published, patch(
-            "backend.services.floor_layout_service.retire_layout_seats",
-        ) as mock_retire, patch(
-            "backend.services.floor_layout_service.soft_delete_floor_layout",
-        ) as mock_soft_delete, self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                side_effect=[
+                    _layout_row(
+                        layout_id="10",
+                        status="SCHEDULED",
+                        effective_from=future_effective_from,
+                    ),
+                    _layout_row(layout_id="10", status="PUBLISHED"),
+                ],
+            ),
+            patch(
+                "backend.services.floor_layout_service.acquire_floor_publish_lock",
+            ),
+            patch(
+                "backend.services.floor_layout_service.fetch_published_layout_for_floor",
+            ) as mock_fetch_published,
+            patch(
+                "backend.services.floor_layout_service.retire_layout_seats",
+            ) as mock_retire,
+            patch(
+                "backend.services.floor_layout_service.soft_delete_floor_layout",
+            ) as mock_soft_delete,
+            self.assertRaises(HTTPException) as context,
+        ):
             delete_floor_layout(conn, current_user=current_user, layout_id="10")
 
         self.assertEqual(context.exception.status_code, 409)
@@ -541,34 +616,50 @@ class RescheduleFloorLayoutServiceTests(unittest.TestCase):
         new_date = (datetime.now(UTC) + timedelta(days=90)).date()
         published_row = _layout_row(layout_id="20", status="PUBLISHED")
         scheduled_row = _layout_row(
-            layout_id="10", status="SCHEDULED", effective_from=current_effective_from,
+            layout_id="10",
+            status="SCHEDULED",
+            effective_from=current_effective_from,
         )
 
         call_order: list[str] = []
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=scheduled_row,
-        ), patch(
-            "backend.services.floor_layout_service.fetch_site_timezone",
-            return_value=None,
-        ), patch(
-            "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
-            return_value=_SCHEDULING_GAP,
-        ), patch(
-            "backend.services.floor_layout_service.acquire_floor_publish_lock",
-        ), patch(
-            "backend.services.floor_layout_service.fetch_published_layout_for_floor",
-            return_value=published_row,
-        ), patch(
-            "backend.services.floor_layout_service.schedule_floor_layout_record",
-            side_effect=lambda *a, **k: (call_order.append("schedule"), _layout_row(layout_id="10", status="SCHEDULED"))[1],
-        ) as mock_schedule, patch(
-            "backend.services.floor_layout_service.set_published_layout_effective_till",
-            side_effect=lambda *a, **k: call_order.append("reopen_published"),
-        ) as mock_till:
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=scheduled_row,
+            ),
+            patch(
+                "backend.services.floor_layout_service.fetch_site_timezone",
+                return_value=None,
+            ),
+            patch(
+                "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
+                return_value=_SCHEDULING_GAP,
+            ),
+            patch(
+                "backend.services.floor_layout_service.acquire_floor_publish_lock",
+            ),
+            patch(
+                "backend.services.floor_layout_service.fetch_published_layout_for_floor",
+                return_value=published_row,
+            ),
+            patch(
+                "backend.services.floor_layout_service.schedule_floor_layout_record",
+                side_effect=lambda *a, **k: (
+                    call_order.append("schedule"),
+                    _layout_row(layout_id="10", status="SCHEDULED"),
+                )[1],
+            ) as mock_schedule,
+            patch(
+                "backend.services.floor_layout_service.set_published_layout_effective_till",
+                side_effect=lambda *a, **k: call_order.append("reopen_published"),
+            ) as mock_till,
+        ):
             response = reschedule_floor_layout(
-                conn, current_user=current_user, layout_id="10", effective_date=new_date,
+                conn,
+                current_user=current_user,
+                layout_id="10",
+                effective_date=new_date,
             )
 
         self.assertEqual(response.status, "SCHEDULED")
@@ -587,34 +678,50 @@ class RescheduleFloorLayoutServiceTests(unittest.TestCase):
         new_date = (datetime.now(UTC) + timedelta(days=50)).date()
         published_row = _layout_row(layout_id="20", status="PUBLISHED")
         scheduled_row = _layout_row(
-            layout_id="10", status="SCHEDULED", effective_from=current_effective_from,
+            layout_id="10",
+            status="SCHEDULED",
+            effective_from=current_effective_from,
         )
 
         call_order: list[str] = []
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=scheduled_row,
-        ), patch(
-            "backend.services.floor_layout_service.fetch_site_timezone",
-            return_value=None,
-        ), patch(
-            "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
-            return_value=_SCHEDULING_GAP,
-        ), patch(
-            "backend.services.floor_layout_service.acquire_floor_publish_lock",
-        ), patch(
-            "backend.services.floor_layout_service.fetch_published_layout_for_floor",
-            return_value=published_row,
-        ), patch(
-            "backend.services.floor_layout_service.schedule_floor_layout_record",
-            side_effect=lambda *a, **k: (call_order.append("schedule"), _layout_row(layout_id="10", status="SCHEDULED"))[1],
-        ), patch(
-            "backend.services.floor_layout_service.set_published_layout_effective_till",
-            side_effect=lambda *a, **k: call_order.append("reopen_published"),
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=scheduled_row,
+            ),
+            patch(
+                "backend.services.floor_layout_service.fetch_site_timezone",
+                return_value=None,
+            ),
+            patch(
+                "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
+                return_value=_SCHEDULING_GAP,
+            ),
+            patch(
+                "backend.services.floor_layout_service.acquire_floor_publish_lock",
+            ),
+            patch(
+                "backend.services.floor_layout_service.fetch_published_layout_for_floor",
+                return_value=published_row,
+            ),
+            patch(
+                "backend.services.floor_layout_service.schedule_floor_layout_record",
+                side_effect=lambda *a, **k: (
+                    call_order.append("schedule"),
+                    _layout_row(layout_id="10", status="SCHEDULED"),
+                )[1],
+            ),
+            patch(
+                "backend.services.floor_layout_service.set_published_layout_effective_till",
+                side_effect=lambda *a, **k: call_order.append("reopen_published"),
+            ),
         ):
             response = reschedule_floor_layout(
-                conn, current_user=current_user, layout_id="10", effective_date=new_date,
+                conn,
+                current_user=current_user,
+                layout_id="10",
+                effective_date=new_date,
             )
 
         self.assertEqual(response.status, "SCHEDULED")
@@ -627,29 +734,43 @@ class RescheduleFloorLayoutServiceTests(unittest.TestCase):
         near_effective_from = datetime.now(UTC) + timedelta(days=10)
         new_date = (datetime.now(UTC) + timedelta(days=90)).date()
         scheduled_row = _layout_row(
-            layout_id="10", status="SCHEDULED", effective_from=near_effective_from,
+            layout_id="10",
+            status="SCHEDULED",
+            effective_from=near_effective_from,
         )
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=scheduled_row,
-        ), patch(
-            "backend.services.floor_layout_service.fetch_site_timezone",
-            return_value=None,
-        ), patch(
-            "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
-            return_value=_SCHEDULING_GAP,
-        ), patch(
-            "backend.services.floor_layout_service.acquire_floor_publish_lock",
-        ), patch(
-            "backend.services.floor_layout_service.schedule_floor_layout_record",
-        ) as mock_schedule, self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=scheduled_row,
+            ),
+            patch(
+                "backend.services.floor_layout_service.fetch_site_timezone",
+                return_value=None,
+            ),
+            patch(
+                "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
+                return_value=_SCHEDULING_GAP,
+            ),
+            patch(
+                "backend.services.floor_layout_service.acquire_floor_publish_lock",
+            ),
+            patch(
+                "backend.services.floor_layout_service.schedule_floor_layout_record",
+            ) as mock_schedule,
+            self.assertRaises(HTTPException) as context,
+        ):
             reschedule_floor_layout(
-                conn, current_user=current_user, layout_id="10", effective_date=new_date,
+                conn,
+                current_user=current_user,
+                layout_id="10",
+                effective_date=new_date,
             )
 
         self.assertEqual(context.exception.status_code, 409)
-        self.assertEqual(context.exception.detail["code"], "floor_layout_schedule_locked")
+        self.assertEqual(
+            context.exception.detail["code"], "floor_layout_schedule_locked"
+        )
         mock_schedule.assert_not_called()
         self.assertEqual(conn.rollbacks, 1)
 
@@ -659,23 +780,34 @@ class RescheduleFloorLayoutServiceTests(unittest.TestCase):
         current_effective_from = datetime.now(UTC) + timedelta(days=90)
         too_soon_date = (datetime.now(UTC) + timedelta(days=5)).date()
         scheduled_row = _layout_row(
-            layout_id="10", status="SCHEDULED", effective_from=current_effective_from,
+            layout_id="10",
+            status="SCHEDULED",
+            effective_from=current_effective_from,
         )
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=scheduled_row,
-        ), patch(
-            "backend.services.floor_layout_service.fetch_site_timezone",
-            return_value=None,
-        ), patch(
-            "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
-            return_value=_SCHEDULING_GAP,
-        ), patch(
-            "backend.services.floor_layout_service.schedule_floor_layout_record",
-        ) as mock_schedule, self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=scheduled_row,
+            ),
+            patch(
+                "backend.services.floor_layout_service.fetch_site_timezone",
+                return_value=None,
+            ),
+            patch(
+                "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
+                return_value=_SCHEDULING_GAP,
+            ),
+            patch(
+                "backend.services.floor_layout_service.schedule_floor_layout_record",
+            ) as mock_schedule,
+            self.assertRaises(HTTPException) as context,
+        ):
             reschedule_floor_layout(
-                conn, current_user=current_user, layout_id="10", effective_date=too_soon_date,
+                conn,
+                current_user=current_user,
+                layout_id="10",
+                effective_date=too_soon_date,
             )
 
         self.assertEqual(context.exception.status_code, 400)
@@ -698,29 +830,41 @@ class RescheduleFloorLayoutServiceTests(unittest.TestCase):
         current_effective_from = datetime.now(UTC) + timedelta(days=90)
         new_date = (datetime.now(UTC) + timedelta(days=35)).date()
         scheduled_row = _layout_row(
-            layout_id="10", status="SCHEDULED", effective_from=current_effective_from,
+            layout_id="10",
+            status="SCHEDULED",
+            effective_from=current_effective_from,
         )
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=scheduled_row,
-        ), patch(
-            "backend.services.floor_layout_service.fetch_site_timezone",
-            return_value=None,
-        ), patch(
-            "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
-            return_value=_SCHEDULING_GAP,
-        ), patch(
-            "backend.services.floor_layout_service.acquire_floor_publish_lock",
-        ), patch(
-            "backend.services.floor_layout_service.fetch_published_layout_for_floor",
-            return_value=None,
-        ), patch(
-            "backend.services.floor_layout_service.schedule_floor_layout_record",
-            return_value=_layout_row(layout_id="10", status="SCHEDULED"),
-        ) as mock_schedule:
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=scheduled_row,
+            ),
+            patch(
+                "backend.services.floor_layout_service.fetch_site_timezone",
+                return_value=None,
+            ),
+            patch(
+                "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
+                return_value=_SCHEDULING_GAP,
+            ),
+            patch(
+                "backend.services.floor_layout_service.acquire_floor_publish_lock",
+            ),
+            patch(
+                "backend.services.floor_layout_service.fetch_published_layout_for_floor",
+                return_value=None,
+            ),
+            patch(
+                "backend.services.floor_layout_service.schedule_floor_layout_record",
+                return_value=_layout_row(layout_id="10", status="SCHEDULED"),
+            ) as mock_schedule,
+        ):
             response = reschedule_floor_layout(
-                conn, current_user=current_user, layout_id="10", effective_date=new_date,
+                conn,
+                current_user=current_user,
+                layout_id="10",
+                effective_date=new_date,
             )
 
         self.assertEqual(response.status, "SCHEDULED")
@@ -731,12 +875,17 @@ class RescheduleFloorLayoutServiceTests(unittest.TestCase):
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=_layout_row(layout_id="10", status="PUBLISHED"),
-        ), self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=_layout_row(layout_id="10", status="PUBLISHED"),
+            ),
+            self.assertRaises(HTTPException) as context,
+        ):
             reschedule_floor_layout(
-                conn, current_user=current_user, layout_id="10",
+                conn,
+                current_user=current_user,
+                layout_id="10",
                 effective_date=date.today() + timedelta(days=90),
             )
 
@@ -750,10 +899,13 @@ class DeletedLayoutVisibilityServiceTests(unittest.TestCase):
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=None,
-        ), self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=None,
+            ),
+            self.assertRaises(HTTPException) as context,
+        ):
             activate_floor_layout(
                 conn,
                 current_user=current_user,
@@ -770,12 +922,16 @@ class DeletedLayoutVisibilityServiceTests(unittest.TestCase):
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=None,
-        ) as mock_fetch_layout, patch(
-            "backend.services.floor_layout_service.fetch_layout_seats_by_layout_id",
-        ) as mock_fetch_seats, self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=None,
+            ) as mock_fetch_layout,
+            patch(
+                "backend.services.floor_layout_service.fetch_layout_seats_by_layout_id",
+            ) as mock_fetch_seats,
+            self.assertRaises(HTTPException) as context,
+        ):
             get_floor_layout_seats(
                 conn,
                 current_user=current_user,
@@ -785,7 +941,10 @@ class DeletedLayoutVisibilityServiceTests(unittest.TestCase):
         self.assertEqual(context.exception.status_code, 404)
         mock_fetch_seats.assert_not_called()
         mock_fetch_layout.assert_called_once_with(
-            conn, tenant_id="1", layout_id="10", include_deleted=True,
+            conn,
+            tenant_id="1",
+            layout_id="10",
+            include_deleted=True,
         )
 
     def test_get_seats_for_deleted_layout_succeeds_as_view_only_entry(self) -> None:
@@ -795,13 +954,16 @@ class DeletedLayoutVisibilityServiceTests(unittest.TestCase):
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=_layout_row(status="DELETED"),
-        ) as mock_fetch_layout, patch(
-            "backend.services.floor_layout_service.fetch_layout_seats_by_layout_id",
-            return_value=[],
-        ) as mock_fetch_seats:
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=_layout_row(status="DELETED"),
+            ) as mock_fetch_layout,
+            patch(
+                "backend.services.floor_layout_service.fetch_layout_seats_by_layout_id",
+                return_value=[],
+            ) as mock_fetch_seats,
+        ):
             response = get_floor_layout_seats(
                 conn,
                 current_user=current_user,
@@ -810,7 +972,10 @@ class DeletedLayoutVisibilityServiceTests(unittest.TestCase):
 
         mock_fetch_seats.assert_called_once()
         mock_fetch_layout.assert_called_once_with(
-            conn, tenant_id="1", layout_id="10", include_deleted=True,
+            conn,
+            tenant_id="1",
+            layout_id="10",
+            include_deleted=True,
         )
         self.assertEqual(response.total_seats, 0)
 
@@ -818,13 +983,16 @@ class DeletedLayoutVisibilityServiceTests(unittest.TestCase):
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
 
-        with patch(
-            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
-            return_value=_layout_row(status="DRAFT"),
-        ), patch(
-            "backend.services.floor_layout_service.fetch_layout_seats_by_layout_id",
-            return_value=[],
-        ) as mock_fetch_seats:
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=_layout_row(status="DRAFT"),
+            ),
+            patch(
+                "backend.services.floor_layout_service.fetch_layout_seats_by_layout_id",
+                return_value=[],
+            ) as mock_fetch_seats,
+        ):
             response = get_floor_layout_seats(
                 conn,
                 current_user=current_user,

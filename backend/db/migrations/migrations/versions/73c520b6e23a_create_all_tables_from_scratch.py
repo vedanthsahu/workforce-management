@@ -16,11 +16,11 @@ to this revision instead, after being manually brought to match this
 same shape, so Alembic considers them already here without re-running
 any CREATE TABLE against data that already exists.
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-
 
 revision: str = "73c520b6e23a"
 down_revision: Union[str, Sequence[str], None] = None

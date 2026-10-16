@@ -26,7 +26,9 @@ _CATEGORY_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 
 # ``MR-C6-01`` denotes a meeting room with capacity six.  A capacity must be
 # its own segment so unrelated ids containing C6 are never interpreted as one.
-_ROOM_CAPACITY_PATTERN = re.compile(r"(^|[-_])c([1-9][0-9]{0,2})(?=[-_]|$)", re.IGNORECASE)
+_ROOM_CAPACITY_PATTERN = re.compile(
+    r"(^|[-_])c([1-9][0-9]{0,2})(?=[-_]|$)", re.IGNORECASE
+)
 
 
 def suggest_seat_type(svg_element_id: str) -> str | None:

@@ -1,6 +1,7 @@
 """
 Repository helpers for floor layout persistence.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -44,6 +45,7 @@ def acquire_floor_publish_lock(
             "SELECT pg_advisory_xact_lock(%s::int, hashtext(%s))",
             (_FLOOR_PUBLISH_LOCK_CLASS, key),
         )
+
 
 FLOOR_LAYOUT_SELECT_FIELDS = """
     fl.id::text AS layout_id,
@@ -775,9 +777,7 @@ def insert_floor_layout(
                 layout_file_url,
                 version_no,
                 is_published,
-                Json(layout_metadata)
-                if layout_metadata is not None
-                else None,
+                Json(layout_metadata) if layout_metadata is not None else None,
                 uploaded_by_user_id,
                 uploaded_by_user_id if is_published else None,
                 status,
@@ -800,6 +800,7 @@ def insert_floor_layout(
         raise LookupError("Created floor layout could not be reloaded.")
 
     return created_layout
+
 
 def fetch_layout_seats_by_layout_id(
     conn: PGConnection,
@@ -876,10 +877,8 @@ def fetch_layout_seats_by_layout_id(
 
         rows = cur.fetchall()
 
-    return [
-        dict(row)
-        for row in rows
-    ]
+    return [dict(row) for row in rows]
+
 
 def reconcile_published_layout_seats(
     conn: PGConnection,
@@ -921,6 +920,7 @@ def reconcile_published_layout_seats(
             (tenant_id, floor_id, layout_id),
         )
 
+
 def retire_layout_seats(
     conn: PGConnection,
     *,
@@ -954,6 +954,7 @@ def retire_layout_seats(
             """,
             (tenant_id, layout_id),
         )
+
 
 def publish_layout_seat_configurations(
     conn: PGConnection,

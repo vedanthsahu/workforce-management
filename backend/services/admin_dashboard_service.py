@@ -114,17 +114,14 @@ def get_admin_activity_list(
 
     rows = _apply_modified_display_status(rows)
 
-    items = [
-        _build_activity_item(row)
-        for row in rows
-    ]
+    items = [_build_activity_item(row) for row in rows]
     pagination = None
     if page is not None or limit is not None:
         effective_page = page or 1
         effective_limit = limit or 100
         total = len(items)
         start = (effective_page - 1) * effective_limit
-        items = items[start:start + effective_limit]
+        items = items[start : start + effective_limit]
         pagination = PaginationMetadata(
             total=total,
             page=effective_page,
@@ -183,10 +180,7 @@ def get_date_range_occupancy(
             },
         ) from exc
 
-    return [
-        AdminDateOccupancyResponse(**row)
-        for row in rows
-    ]
+    return [AdminDateOccupancyResponse(**row) for row in rows]
 
 
 def get_hierarchy_occupancy(
@@ -374,12 +368,9 @@ def _apply_modified_display_status(rows: list[dict[str, Any]]) -> list[dict[str,
         is_guest = str(row["activity_type"]) in {"GUEST_VISIT", "GUEST_BOOKING"}
         active_status = _ACTIVE_STATUS_BY_ENTITY["GUEST" if is_guest else "EMPLOYEE"]
         if (
-            (
-                row.get("modified_from_booking_id") is not None
-                or row.get("modified_from_guest_visit_id") is not None
-            )
-            and row.get("activity_status") == active_status
-        ):
+            row.get("modified_from_booking_id") is not None
+            or row.get("modified_from_guest_visit_id") is not None
+        ) and row.get("activity_status") == active_status:
             row["activity_status"] = "MODIFIED"
 
     return rows
@@ -388,9 +379,7 @@ def _apply_modified_display_status(rows: list[dict[str, Any]]) -> list[dict[str,
 def _build_activity_item(row: dict[str, Any]) -> AdminActivityListItemResponse:
     activity_type = str(row["activity_type"])
     booked_for_entity = (
-        "GUEST"
-        if activity_type in {"GUEST_VISIT", "GUEST_BOOKING"}
-        else "EMPLOYEE"
+        "GUEST" if activity_type in {"GUEST_VISIT", "GUEST_BOOKING"} else "EMPLOYEE"
     )
 
     return AdminActivityListItemResponse(
@@ -446,9 +435,7 @@ def _build_activity_person(
         department=row.get(f"{prefix}_department"),
         job_title=row.get(f"{prefix}_job_title"),
         guest_type=(
-            row.get("booked_for_guest_type")
-            if prefix == "booked_for"
-            else None
+            row.get("booked_for_guest_type") if prefix == "booked_for" else None
         ),
     )
 

@@ -39,10 +39,13 @@ class UserResourceAuthorizationTests(unittest.TestCase):
     def test_employee_cannot_view_another_employees_details(self) -> None:
         current_user = {"user_id": "7", "tenant_id": "3", "role_name": "EMPLOYEE"}
 
-        with patch(
-            "backend.services.user_management_service.fetch_user_details_by_id",
-            return_value=TARGET_USER,
-        ), self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.user_management_service.fetch_user_details_by_id",
+                return_value=TARGET_USER,
+            ),
+            self.assertRaises(HTTPException) as context,
+        ):
             get_user_by_id_service(
                 conn=object(),
                 current_user=current_user,
@@ -85,10 +88,13 @@ class UserResourceAuthorizationTests(unittest.TestCase):
     def test_manager_cannot_view_non_report_details(self) -> None:
         current_user = {"user_id": "99", "tenant_id": "3", "role_name": "MANAGER"}
 
-        with patch(
-            "backend.services.user_management_service.fetch_user_details_by_id",
-            return_value=TARGET_USER,
-        ), self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.user_management_service.fetch_user_details_by_id",
+                return_value=TARGET_USER,
+            ),
+            self.assertRaises(HTTPException) as context,
+        ):
             get_user_by_id_service(
                 conn=object(),
                 current_user=current_user,
@@ -106,7 +112,11 @@ class UserResourceAuthorizationTests(unittest.TestCase):
                 with self.subTest(role=role):
                     response = get_user_by_id_service(
                         conn=object(),
-                        current_user={"user_id": "1", "tenant_id": "3", "role_name": role},
+                        current_user={
+                            "user_id": "1",
+                            "tenant_id": "3",
+                            "role_name": role,
+                        },
                         user_id="15",
                     )
                     self.assertEqual(response.id, "15")
@@ -114,12 +124,15 @@ class UserResourceAuthorizationTests(unittest.TestCase):
     def test_employee_cannot_view_another_employees_bookings(self) -> None:
         current_user = {"user_id": "7", "tenant_id": "3", "role_name": "EMPLOYEE"}
 
-        with patch(
-            "backend.services.user_management_service.fetch_user_details_by_id",
-            return_value=TARGET_USER,
-        ), patch(
-            "backend.services.user_management_service.fetch_all_confirmed_bookings_for_user",
-        ) as mock_fetch_bookings:
+        with (
+            patch(
+                "backend.services.user_management_service.fetch_user_details_by_id",
+                return_value=TARGET_USER,
+            ),
+            patch(
+                "backend.services.user_management_service.fetch_all_confirmed_bookings_for_user",
+            ) as mock_fetch_bookings,
+        ):
             with self.assertRaises(HTTPException) as context:
                 get_user_booking_history(
                     conn=object(),

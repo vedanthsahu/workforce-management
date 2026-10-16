@@ -9,7 +9,9 @@ from pydantic import BaseModel, model_validator
 
 class MessageResponse(BaseModel):
     """Simple message-only response."""
+
     message: str
+
 
 class FavoriteSeatResponse(BaseModel):
     seat_id: str
@@ -72,17 +74,13 @@ class UserResponse(BaseModel):
             payload["role_name"] = payload.get("role_name") or role
 
             if payload.get("display_name") is None:
-                payload["display_name"] = (
-                    payload.get("full_name")
-                )
+                payload["display_name"] = payload.get("full_name")
 
             if payload.get("name") is None:
-                payload["name"] = (
-                    payload.get("display_name")
-                    or payload.get("full_name")
+                payload["name"] = payload.get("display_name") or payload.get(
+                    "full_name"
                 )
 
             return payload
 
         return value
-        

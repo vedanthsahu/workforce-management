@@ -221,6 +221,7 @@ class GuestVisitListItem(BaseModel):
             }
         return data
 
+
 class GuestVisitSummary(BaseModel):
     total: int = 0
     scheduled: int = 0
@@ -249,6 +250,7 @@ GuestVisitScope = Literal[
     "UPCOMING",
     "PAST",
 ]
+
 
 class AttachSeatToGuestVisitRequest(BaseModel):
     site_id: int = Field(gt=0)
@@ -298,6 +300,7 @@ class GuestWorkflowResponse(BaseModel):
     guest_visit: GuestVisitResponse
     booking: BookingResponse | None = None
 
+
 class CancelGuestVisitRequest(BaseModel):
     cancellation_reason: str | None = None
 
@@ -322,12 +325,12 @@ class ModifyGuestVisitRequest(BaseModel):
     modification_reason: GuestVisitModificationReason | None = None
 
 
-
 class AttachSeatToGuestVisitRequest(BaseModel):
     site_id: int = Field(gt=0)
     building_id: int = Field(gt=0)
     floor_id: int = Field(gt=0)
     seat_id: int = Field(gt=0)
+
 
 class CancelledGuestVisitItem(BaseModel):
     guest_visit_id: str

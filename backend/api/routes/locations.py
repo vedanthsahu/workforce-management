@@ -69,7 +69,6 @@ def sites(
         PGConnection,
         Depends(get_db),
     ],
-
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int | None, Query(ge=1, le=200)] = None,
     search: Annotated[str | None, Query()] = None,
@@ -102,7 +101,14 @@ def create_site_route(
         Depends(get_db),
     ],
 ) -> SiteResponse:
-    return create_site(conn, tenant_id=str(current_user["tenant_id"]), payload=payload, current_user=current_user)
+    return create_site(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        payload=payload,
+        current_user=current_user,
+    )
+
+
 @router.get("/sites/{site_id}", response_model=SiteDetailsResponse)
 def site_details(
     site_id: Annotated[int, Path(gt=0)],
@@ -135,7 +141,13 @@ def update_site_route(
         Depends(get_db),
     ],
 ) -> SiteResponse:
-    return update_site_metadata(conn, tenant_id=str(current_user["tenant_id"]), site_id=str(site_id), payload=payload, current_user=current_user)
+    return update_site_metadata(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        site_id=str(site_id),
+        payload=payload,
+        current_user=current_user,
+    )
 
 
 @router.get("/buildings", response_model=list[BuildingResponse])
@@ -160,7 +172,7 @@ def buildings(
         site_id=site_id,
         page=page,
         limit=limit,
-        search=search,  
+        search=search,
         status_filter=status_filter,
     )
 
@@ -181,7 +193,12 @@ def create_building_route(
         Depends(get_db),
     ],
 ) -> BuildingResponse:
-    return create_building(conn, tenant_id=str(current_user["tenant_id"]), payload=payload, current_user=current_user)
+    return create_building(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        payload=payload,
+        current_user=current_user,
+    )
 
 
 @router.patch("/buildings/{building_id}", response_model=BuildingResponse)
@@ -197,7 +214,13 @@ def update_building_route(
         Depends(get_db),
     ],
 ) -> BuildingResponse:
-    return update_building_metadata(conn, tenant_id=str(current_user["tenant_id"]), building_id=str(building_id), payload=payload, current_user=current_user)
+    return update_building_metadata(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        building_id=str(building_id),
+        payload=payload,
+        current_user=current_user,
+    )
 
 
 @router.get(
@@ -206,17 +229,14 @@ def update_building_route(
 )
 def floors_by_building(
     building_id: Annotated[int, Path(gt=0)],
-
     current_user: Annotated[
         dict[str, Any],
         Depends(get_current_user),
     ],
-
     conn: Annotated[
         PGConnection,
         Depends(get_db),
     ],
-
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int | None, Query(ge=1, le=200)] = None,
     search: Annotated[str | None, Query()] = None,
@@ -240,17 +260,14 @@ def floors_by_building(
 )
 def floors_by_office(
     office_id: Annotated[int, Path(gt=0)],
-
     current_user: Annotated[
         dict[str, Any],
         Depends(get_current_user),
     ],
-
     conn: Annotated[
         PGConnection,
         Depends(get_db),
     ],
-
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int | None, Query(ge=1, le=200)] = None,
     search: Annotated[str | None, Query()] = None,
@@ -276,12 +293,10 @@ def floors(
         dict[str, Any],
         Depends(get_current_user),
     ],
-
     conn: Annotated[
         PGConnection,
         Depends(get_db),
     ],
-
     site_id: Annotated[int | None, Query(gt=0)] = None,
     building_id: Annotated[int | None, Query(gt=0)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
@@ -318,7 +333,12 @@ def create_floor_route(
         Depends(get_db),
     ],
 ) -> FloorResponse:
-    return create_floor(conn, tenant_id=str(current_user["tenant_id"]), payload=payload, current_user=current_user)
+    return create_floor(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        payload=payload,
+        current_user=current_user,
+    )
 
 
 @router.patch("/floors/{floor_id}", response_model=FloorResponse)
@@ -334,7 +354,13 @@ def update_floor_route(
         Depends(get_db),
     ],
 ) -> FloorResponse:
-    return update_floor_metadata(conn, tenant_id=str(current_user["tenant_id"]), floor_id=str(floor_id), payload=payload, current_user=current_user)
+    return update_floor_metadata(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        floor_id=str(floor_id),
+        payload=payload,
+        current_user=current_user,
+    )
 
 
 @router.patch(
@@ -353,7 +379,13 @@ def update_seat_configuration_route(
         Depends(get_db),
     ],
 ) -> SeatConfigurationResponse:
-    return update_seat_configuration_metadata(conn, tenant_id=str(current_user["tenant_id"]), seat_id=str(seat_id), payload=payload, current_user=current_user)
+    return update_seat_configuration_metadata(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        seat_id=str(seat_id),
+        payload=payload,
+        current_user=current_user,
+    )
 
 
 @router.patch(
@@ -387,45 +419,38 @@ def available_seats(
     floor_id: Annotated[int, Path(gt=0)],
     start_date: date,
     end_date: date,
-
     current_user: Annotated[
         dict[str, Any],
         Depends(get_current_user),
     ],
-
     conn: Annotated[
         PGConnection,
         Depends(get_db),
     ],
-
     booked_for_user_id: Annotated[
         int | None,
         Query(),
     ] = None,
-
     amenity_ids: Annotated[
         list[int] | None,
         Query(),
     ] = None,
     modify_booking_id: Annotated[
-    str | None,
-    Query(alias="modifyBookingId"),
+        str | None,
+        Query(alias="modifyBookingId"),
     ] = None,
     is_guest_booking: Annotated[
         bool,
         Query(),
     ] = False,
-
     booked_for_guest_id: Annotated[
         int | None,
         Query(),
     ] = None,
-
     calendar_mode: Annotated[
         bool,
         Query(),
     ] = False,
-
 ) -> AvailableSeatListResponse:
 
     if start_date > end_date:
@@ -459,27 +484,23 @@ def available_seats(
         )
 
     return get_available_seats_by_range(
-            conn,
-            tenant_id=str(current_user["tenant_id"]),
-            floor_id=str(floor_id),
-            start_date=start_date,
-            end_date=end_date,
-            current_user=current_user,
-            booked_for_user_id=(
-                str(effective_user_id)
-                if effective_user_id is not None
-                else None
-            ),
-            booked_for_guest_id=(
-                str(booked_for_guest_id)
-                if booked_for_guest_id is not None
-                else None
-            ),
-            is_guest_booking=is_guest_booking,
-            amenity_ids=amenity_ids,
-            exclude_booking_id=modify_booking_id,
-            calendar_mode=calendar_mode,
-        )
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        floor_id=str(floor_id),
+        start_date=start_date,
+        end_date=end_date,
+        current_user=current_user,
+        booked_for_user_id=(
+            str(effective_user_id) if effective_user_id is not None else None
+        ),
+        booked_for_guest_id=(
+            str(booked_for_guest_id) if booked_for_guest_id is not None else None
+        ),
+        is_guest_booking=is_guest_booking,
+        amenity_ids=amenity_ids,
+        exclude_booking_id=modify_booking_id,
+        calendar_mode=calendar_mode,
+    )
 
 
 @router.patch(
@@ -487,24 +508,19 @@ def available_seats(
     response_model=LayoutSeatConfigurationResponse,
 )
 def update_layout_seat_configuration_route(
-
     layout_seat_mapping_id: Annotated[
         int,
         Path(gt=0),
     ],
-
     payload: LayoutSeatConfigurationUpdateRequest,
-
     current_user: Annotated[
         dict[str, Any],
         Depends(require_any_permission(["location:manage", "layout:upload"])),
     ],
-
     conn: Annotated[
         PGConnection,
         Depends(get_db),
     ],
-
 ) -> LayoutSeatConfigurationResponse:
 
     return update_layout_seat_configuration(

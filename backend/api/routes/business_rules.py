@@ -113,7 +113,8 @@ def update_activity_policy(
 
     if payload.record_count is not None:
         update_activity_record_count(
-            conn, tenant_id=tenant_id,
+            conn,
+            tenant_id=tenant_id,
             new_value=payload.record_count,
             updated_by_user_id=str(current_user["user_id"]),
         )
@@ -124,7 +125,8 @@ def update_activity_policy(
 
 
 def _blocked_seat_policy_response(
-    policy: dict[str, int], max_advance_days: int,
+    policy: dict[str, int],
+    max_advance_days: int,
 ) -> BlockedSeatPolicyResponse:
     return BlockedSeatPolicyResponse(
         upcoming_days=policy["UPCOMING"],
@@ -166,7 +168,8 @@ def update_blocked_seat_policy(
     for setting_key, new_value in fields.items():
         if new_value is not None:
             update_blocked_seat_days(
-                conn, tenant_id=tenant_id,
+                conn,
+                tenant_id=tenant_id,
                 setting_key=setting_key,
                 new_value=new_value,
                 updated_by_user_id=user_id,
@@ -174,7 +177,8 @@ def update_blocked_seat_policy(
 
     if payload.max_advance_days is not None:
         update_blocked_seat_max_advance_days(
-            conn, tenant_id=tenant_id,
+            conn,
+            tenant_id=tenant_id,
             new_value=payload.max_advance_days,
             updated_by_user_id=user_id,
         )
@@ -199,13 +203,15 @@ def update_booking_policy(
 
     if payload.employee_max_advance_days is not None:
         update_employee_max_advance_days(
-            conn, tenant_id=tenant_id,
+            conn,
+            tenant_id=tenant_id,
             new_value=payload.employee_max_advance_days,
             updated_by_user_id=user_id,
         )
     if payload.guest_max_advance_days is not None:
         update_guest_max_advance_days(
-            conn, tenant_id=tenant_id,
+            conn,
+            tenant_id=tenant_id,
             new_value=payload.guest_max_advance_days,
             updated_by_user_id=user_id,
         )
@@ -229,7 +235,8 @@ def update_layout_policy(
 
     if payload.buffer_days is not None:
         update_layout_scheduling_buffer_days(
-            conn, tenant_id=tenant_id,
+            conn,
+            tenant_id=tenant_id,
             new_value=payload.buffer_days,
             updated_by_user_id=user_id,
         )
@@ -243,7 +250,8 @@ def update_layout_policy(
         for status_key, new_value in visibility_fields.items():
             if new_value is not None:
                 update_layout_visibility_days(
-                    conn, tenant_id=tenant_id,
+                    conn,
+                    tenant_id=tenant_id,
                     status_key=status_key,
                     new_value=new_value,
                     updated_by_user_id=user_id,

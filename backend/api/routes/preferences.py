@@ -141,7 +141,10 @@ def amenity_category(
 )
 def create_amenity_category_route(
     payload: CreateAmenityCategoryRequest,
-    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_any_permission(["amenities:manage", "location:manage"])),
+    ],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AmenityCategoryResponse:
     tenant_id = str(current_user["tenant_id"])
@@ -150,15 +153,24 @@ def create_amenity_category_route(
     except HTTPException as he:
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=AMENITY_CATEGORY_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="amenity_category", resource_id=None,
+            conn,
+            action=AMENITY_CATEGORY_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="amenity_category",
+            resource_id=None,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     safe_write_audit_log(
-        conn, action=AMENITY_CATEGORY_CREATED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="amenity_category", resource_id=str(result.category_id),
+        conn,
+        action=AMENITY_CATEGORY_CREATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="amenity_category",
+        resource_id=str(result.category_id),
         new_values={"category_name": result.category_name},
     )
     return result
@@ -171,17 +183,30 @@ def create_amenity_category_route(
 def update_amenity_category_route(
     category_id: Annotated[int, Path(gt=0)],
     payload: UpdateAmenityCategoryRequest,
-    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_any_permission(["amenities:manage", "location:manage"])),
+    ],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AmenityCategoryResponse:
     sent = payload.model_dump(exclude_unset=True)
     tenant_id = str(current_user["tenant_id"])
     old = get_amenity_category(conn, tenant_id=tenant_id, category_id=str(category_id))
-    result = update_amenity_category_metadata(conn, tenant_id=tenant_id, category_id=str(category_id), payload=payload)
-    actually_changed = [k for k in sent if getattr(old, k, None) != sent[k]] if old else list(sent.keys())
+    result = update_amenity_category_metadata(
+        conn, tenant_id=tenant_id, category_id=str(category_id), payload=payload
+    )
+    actually_changed = (
+        [k for k in sent if getattr(old, k, None) != sent[k]]
+        if old
+        else list(sent.keys())
+    )
     safe_write_audit_log(
-        conn, action=AMENITY_CATEGORY_UPDATED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="amenity_category", resource_id=str(category_id),
+        conn,
+        action=AMENITY_CATEGORY_UPDATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="amenity_category",
+        resource_id=str(category_id),
         old_values={k: getattr(old, k, None) for k in sent} if old else None,
         new_values=sent,
         changed_fields=actually_changed or None,
@@ -196,7 +221,10 @@ def update_amenity_category_route(
 )
 def create_amenity_route(
     payload: CreateAmenityRequest,
-    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_any_permission(["amenities:manage", "location:manage"])),
+    ],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AdminAmenityResponse:
     tenant_id = str(current_user["tenant_id"])
@@ -205,16 +233,28 @@ def create_amenity_route(
     except HTTPException as he:
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=AMENITY_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="amenity", resource_id=None,
+            conn,
+            action=AMENITY_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="amenity",
+            resource_id=None,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     safe_write_audit_log(
-        conn, action=AMENITY_CREATED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="amenity", resource_id=str(result.amenity_id),
-        new_values={"amenity_name": result.amenity_name, "category_id": str(result.category_id)},
+        conn,
+        action=AMENITY_CREATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="amenity",
+        resource_id=str(result.amenity_id),
+        new_values={
+            "amenity_name": result.amenity_name,
+            "category_id": str(result.category_id),
+        },
     )
     return result
 
@@ -236,17 +276,30 @@ def amenity_detail(
 def update_amenity_route(
     amenity_id: Annotated[int, Path(gt=0)],
     payload: UpdateAmenityRequest,
-    current_user: Annotated[dict[str, Any], Depends(require_any_permission(["amenities:manage", "location:manage"]))],
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_any_permission(["amenities:manage", "location:manage"])),
+    ],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> AdminAmenityResponse:
     sent = payload.model_dump(exclude_unset=True)
     tenant_id = str(current_user["tenant_id"])
     old = get_amenity(conn, tenant_id=tenant_id, amenity_id=str(amenity_id))
-    result = update_amenity_metadata(conn, tenant_id=tenant_id, amenity_id=str(amenity_id), payload=payload)
-    actually_changed = [k for k in sent if getattr(old, k, None) != sent[k]] if old else list(sent.keys())
+    result = update_amenity_metadata(
+        conn, tenant_id=tenant_id, amenity_id=str(amenity_id), payload=payload
+    )
+    actually_changed = (
+        [k for k in sent if getattr(old, k, None) != sent[k]]
+        if old
+        else list(sent.keys())
+    )
     safe_write_audit_log(
-        conn, action=AMENITY_UPDATED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="amenity", resource_id=str(amenity_id),
+        conn,
+        action=AMENITY_UPDATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="amenity",
+        resource_id=str(amenity_id),
         old_values={k: getattr(old, k, None) for k in sent} if old else None,
         new_values=sent,
         changed_fields=actually_changed or None,

@@ -341,21 +341,23 @@ def record_auth_event(
 
 def _fetch_active_tenant_ids(conn: PGConnection) -> list[str]:
     with conn.cursor() as cur:
-        cur.execute(
-            """
+        cur.execute("""
             SELECT id::text
             FROM tenants
             WHERE status = 'ACTIVE'
             ORDER BY id
-            """
-        )
+            """)
         rows = cur.fetchall()
     return [str(row[0]) for row in rows]
 
 
-def purge_expired_refresh_tokens(conn: PGConnection, *, tenant_id: str | None = None) -> None:
+def purge_expired_refresh_tokens(
+    conn: PGConnection, *, tenant_id: str | None = None
+) -> None:
     """Delete expired refresh sessions with explicit tenant scoping."""
-    tenant_ids = [tenant_id] if tenant_id is not None else _fetch_active_tenant_ids(conn)
+    tenant_ids = (
+        [tenant_id] if tenant_id is not None else _fetch_active_tenant_ids(conn)
+    )
     with conn.cursor() as cur:
         for scoped_tenant_id in tenant_ids:
             cur.execute(
@@ -368,7 +370,9 @@ def purge_expired_refresh_tokens(conn: PGConnection, *, tenant_id: str | None = 
             )
 
 
-def purge_expired_sessions(conn: PGConnection, session_ttl: int, *, tenant_id: str | None = None) -> None:
+def purge_expired_sessions(
+    conn: PGConnection, session_ttl: int, *, tenant_id: str | None = None
+) -> None:
     """Keep startup compatibility by purging expired user sessions."""
     del session_ttl
     purge_expired_refresh_tokens(conn, tenant_id=tenant_id)

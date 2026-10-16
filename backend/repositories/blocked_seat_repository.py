@@ -82,7 +82,9 @@ def _category_condition(category: str) -> str | None:
     }[category]
 
 
-def _category_params(category: str, *, reference_date: date, upcoming_days: int, expiring_soon_days: int) -> list[Any]:
+def _category_params(
+    category: str, *, reference_date: date, upcoming_days: int, expiring_soon_days: int
+) -> list[Any]:
     if category == "all":
         return []
     if category == "upcoming":
@@ -114,8 +116,10 @@ def fetch_blocked_seats(
     base, filter_params = _filtered_base(query, window=window)
     category_sql = _category_condition(query.category)
     category_params = _category_params(
-        query.category, reference_date=reference_date,
-        upcoming_days=upcoming_days, expiring_soon_days=expiring_soon_days,
+        query.category,
+        reference_date=reference_date,
+        upcoming_days=upcoming_days,
+        expiring_soon_days=expiring_soon_days,
     )
     select = """
         SELECT bs.id::text AS block_id, bs.seat_id::text AS seat_id,
@@ -166,8 +170,7 @@ def fetch_blocked_seat_summary(
     # to an unlimited time horizon: it must match the configured rolling
     # window used by the expired table.
     base, filter_params = _filtered_base(query, details=False)
-    sql = (
-        """
+    sql = """
         SELECT
           COUNT(*) FILTER (WHERE bs.status = 'ACTIVE' AND %s BETWEEN bs.blocked_from AND bs.blocked_to)::integer AS active_blocks,
           COUNT(*) FILTER (WHERE bs.status = 'ACTIVE' AND (bs.created_at AT TIME ZONE COALESCE(si.timezone, 'UTC'))::date = %s)::integer AS seats_blocked_today,
@@ -177,16 +180,21 @@ def fetch_blocked_seat_summary(
             WHERE bs.blocked_to >= (%s - %s)
               AND bs.blocked_to < %s
           )::integer AS expired
-    """
-        + base
-    )
+    """ + base
     params: list[Any] = [
         reference_date,
         reference_date,
-        reference_date, reference_date, upcoming_days,
-        reference_date, reference_date, expiring_soon_days,
-        reference_date, expired_window_days, reference_date,
-        tenant_id, *filter_params,
+        reference_date,
+        reference_date,
+        upcoming_days,
+        reference_date,
+        reference_date,
+        expiring_soon_days,
+        reference_date,
+        expired_window_days,
+        reference_date,
+        tenant_id,
+        *filter_params,
     ]
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(sql, params)
@@ -400,8 +408,19 @@ def insert_blocked_seats(
 ) -> list[str]:
     """Insert the validated selection in one statement (API maximum: 200)."""
     values = [
-        (tenant_id, seat["id"], seat["site_id"], seat["building_id"], seat["floor_id"],
-         blocked_from, blocked_to, reason, block_type, "ACTIVE", blocked_by_user_id)
+        (
+            tenant_id,
+            seat["id"],
+            seat["site_id"],
+            seat["building_id"],
+            seat["floor_id"],
+            blocked_from,
+            blocked_to,
+            reason,
+            block_type,
+            "ACTIVE",
+            blocked_by_user_id,
+        )
         for seat in seats
     ]
     with conn.cursor() as cur:
@@ -425,8 +444,7 @@ def fetch_blocked_seats_by_ids(
 ) -> list[dict[str, Any]]:
     query = BlockedSeatListQuery(category="active")
     base, _ = _filtered_base(query)
-    sql = (
-        """
+    sql = """
         SELECT bs.id::text AS block_id, bs.seat_id::text AS seat_id,
                st.seat_code, bs.site_id::text AS site_id, si.site_name,
                bs.building_id::text AS building_id, bu.building_name,
@@ -438,10 +456,7 @@ def fetch_blocked_seats_by_ids(
                     ELSE 'ACTIVE' END AS display_status,
                bs.blocked_by_user_id::text AS blocked_by_user_id,
                au.full_name AS blocked_by_name, bs.created_at
-    """
-        + base
-        + " AND bs.id = ANY(%s::bigint[]) ORDER BY bs.id"
-    )
+    """ + base + " AND bs.id = ANY(%s::bigint[]) ORDER BY bs.id"
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(sql, (reference_date, reference_date, tenant_id, block_ids))
         return [dict(row) for row in cur.fetchall()]

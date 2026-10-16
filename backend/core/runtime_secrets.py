@@ -46,13 +46,9 @@ def get_json_secret(secret_arn: str) -> dict[str, Any]:
     try:
         payload = json.loads(secret_string)
     except json.JSONDecodeError as exc:
-        raise RuntimeSecretError(
-            "The runtime secret must contain valid JSON."
-        ) from exc
+        raise RuntimeSecretError("The runtime secret must contain valid JSON.") from exc
 
     if not isinstance(payload, dict):
-        raise RuntimeSecretError(
-            "The runtime secret JSON must be an object."
-        )
+        raise RuntimeSecretError("The runtime secret JSON must be an object.")
 
     return {str(key): value for key, value in payload.items()}

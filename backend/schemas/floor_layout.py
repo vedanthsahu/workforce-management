@@ -46,6 +46,8 @@ class CreateFloorLayoutRequest(BaseModel):
     seat_ids: list[str] = Field(
         min_length=1,
     )
+
+
 class FloorLayoutResponse(BaseModel):
     layout_id: str
 
@@ -163,8 +165,8 @@ class LayoutSeatResponse(BaseModel):
     seat_code: str
     seat_name: str | None = None
 
-    seat_type: str | None = None        # ← was: str
-    status: str | None = None           # ← was: str (can also be NULL on new seats)
+    seat_type: str | None = None  # ← was: str
+    status: str | None = None  # ← was: str (can also be NULL on new seats)
     configuration_status: str | None = None  # ← was: str
 
     is_bookable: bool
@@ -172,13 +174,11 @@ class LayoutSeatResponse(BaseModel):
     is_configured: bool
 
     notes: str | None = None
-    amenity_ids: list[int] = []         # ← guard against NULL list too
+    amenity_ids: list[int] = []  # ← guard against NULL list too
     capacity: int | None = None
 
     created_at: datetime
     updated_at: datetime
-
-
 
 
 class LayoutSeatListResponse(BaseModel):

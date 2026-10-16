@@ -31,13 +31,14 @@ ActivityType = Literal[
 
 ActivityEntityType = Literal["EMPLOYEE", "GUEST"]
 
+
 class CamelModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
 class AdminDashboardSummaryResponse(BaseModel):
     total_offices: int = 0
-    total_buildings : int = 0
+    total_buildings: int = 0
     total_floors: int = 0
     total_seats: int = 0
     non_bookable_seats: int = 0
@@ -74,8 +75,6 @@ class AdminActivityListQuery(CamelModel):
     floor_id: int | None = Field(default=None, alias="floorId", gt=0)
 
 
-
-
 class AdminOccupancyDateRangeQuery(CamelModel):
     start_date: Date = Field(alias="startDate")
     end_date: Date = Field(alias="endDate")
@@ -88,7 +87,6 @@ class AdminHierarchyOccupancyQuery(CamelModel):
     date: Date
     site_id: int | None = Field(default=None, alias="siteId", gt=0)
     building_id: int | None = Field(default=None, alias="buildingId", gt=0)
-
 
 
 class AdminActivitySeatResponse(CamelModel):
@@ -141,6 +139,7 @@ class AdminDateOccupancyResponse(CamelModel):
             }
         },
     )
+
 
 class AdminHierarchyOccupancyResponse(CamelModel):
     site_id: str | None = Field(default=None, alias="siteId")
@@ -197,6 +196,7 @@ class AdminHierarchyOccupancyResponse(CamelModel):
             ]
         },
     )
+
 
 class AdminActivityPersonResponse(CamelModel):
     entity_type: ActivityEntityType | None = Field(default=None, alias="entityType")
@@ -342,4 +342,3 @@ class AdminActivityListResponse(CamelModel):
             }
         },
     )
- 

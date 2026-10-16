@@ -1,4 +1,5 @@
 """This file is team_repository.py this is to get the user's team related info"""
+
 from psycopg2.extensions import connection as PGConnection
 from psycopg2.extras import RealDictCursor
 
@@ -163,7 +164,6 @@ def fetch_team_member_counts(
     return {row["team_id"]: dict(row) for row in rows}
 
 
-
 def search_team_members(
     conn: PGConnection,
     *,
@@ -176,7 +176,9 @@ def search_team_members(
     """Search within the caller's own team(s) only -- scoped by tm_target.user_id,
     so this can never be used to enumerate members of a team the caller isn't in."""
     search_text = " ".join(search_text.lower().split())
-    search_text = search_text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    search_text = (
+        search_text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    )
 
     status_clause = ""
     if not include_inactive:
@@ -265,4 +267,3 @@ def search_team_members(
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
- 

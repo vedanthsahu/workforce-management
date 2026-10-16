@@ -33,21 +33,28 @@ class UpdateMyProfileRequest(BaseModel):
 
 
 class AdminUserAccessUpdateRequest(BaseModel):
-    role_name: Literal[
-        "EMPLOYEE",
-        "MANAGER",
-        "FACILITATOR",
-        "FRONT_OFFICE",
-        # A Tenant Admin can assign this to anyone (promoting a new admin,
-        # managing an existing one, or their own access) -- PRODUCT_ADMIN
-        # is deliberately not offered here; see admin_update_user_access_service.
-        "TENANT_ADMIN",
-    ] | None = None
+    role_name: (
+        Literal[
+            "EMPLOYEE",
+            "MANAGER",
+            "FACILITATOR",
+            "FRONT_OFFICE",
+            # A Tenant Admin can assign this to anyone (promoting a new admin,
+            # managing an existing one, or their own access) -- PRODUCT_ADMIN
+            # is deliberately not offered here; see admin_update_user_access_service.
+            "TENANT_ADMIN",
+        ]
+        | None
+    ) = None
 
-    status: Literal[
-        "ACTIVE",
-        "INACTIVE",
-    ] | None = None
+    status: (
+        Literal[
+            "ACTIVE",
+            "INACTIVE",
+        ]
+        | None
+    ) = None
+
 
 class UserSearchResponse(BaseModel):
     user_id: str
@@ -61,9 +68,6 @@ class UserSearchResponse(BaseModel):
 
     employee_id: str | None = None
     department: str | None = None
-
-
-
 
 
 class AdminUserDirectorySummary(CamelModel):
@@ -84,8 +88,6 @@ class AdminUserDirectoryItem(CamelModel):
     office_location: str | None = Field(default=None, alias="officeLocation")
     status: str
     email: str | None = None
-
-
 
 
 class UserDetailsResponse(CamelModel):
@@ -169,9 +171,7 @@ class RoleMetadata(CamelModel):
 
     permission_count: int = Field(alias="permissionCount")
 
-    permissions: list[PermissionMetadata] = Field(
-        default_factory=list
-    )
+    permissions: list[PermissionMetadata] = Field(default_factory=list)
 
 
 class PaginationMetadata(CamelModel):
@@ -187,9 +187,7 @@ class PaginationMetadata(CamelModel):
 class AdminUserDirectoryResponse(CamelModel):
     summary: AdminUserDirectorySummary
 
-    roles: list[RoleMetadata] = Field(
-        default_factory=list
-    )
+    roles: list[RoleMetadata] = Field(default_factory=list)
 
     pagination: PaginationMetadata | None = None
 

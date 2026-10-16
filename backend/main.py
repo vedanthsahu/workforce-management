@@ -178,7 +178,11 @@ async def log_http_requests(request: Request, call_next):
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """Convert FastAPI HTTP exceptions into a consistent error envelope."""
-    if exc.__cause__ is not None or exc.__context__ is not None or exc.status_code >= 500:
+    if (
+        exc.__cause__ is not None
+        or exc.__context__ is not None
+        or exc.status_code >= 500
+    ):
         print_error_diagnostic(exc)
     payload = _normalize_http_error(exc.detail)
     error = payload.get("error", {})
@@ -202,12 +206,19 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 
 
 @app.exception_handler(Exception)
-async def unexpected_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+async def unexpected_exception_handler(
+    request: Request, exc: Exception
+) -> JSONResponse:
     """Keep unexpected implementation details in the terminal, never the response."""
     print_error_diagnostic(exc)
     return JSONResponse(
         status_code=500,
-        content={"error": {"code": "internal_server_error", "message": "An unexpected error occurred."}},
+        content={
+            "error": {
+                "code": "internal_server_error",
+                "message": "An unexpected error occurred.",
+            }
+        },
     )
 
 
@@ -371,7 +382,9 @@ def _normalize_http_error(detail: Any) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "error": {
                 "code": str(detail.get("code") or "http_error"),
-                "message": str(detail.get("message") or detail.get("detail") or "Request failed."),
+                "message": str(
+                    detail.get("message") or detail.get("detail") or "Request failed."
+                ),
             }
         }
         extra = {

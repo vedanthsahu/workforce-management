@@ -43,8 +43,7 @@ def is_retryable_aws_error(exc: BaseException) -> bool:
         status_code = response_metadata.get("HTTPStatusCode")
         error_code = str(exc.response.get("Error", {}).get("Code") or "")
         return (
-            isinstance(status_code, int)
-            and status_code >= 500
+            isinstance(status_code, int) and status_code >= 500
         ) or error_code in RETRYABLE_AWS_ERROR_CODES
 
     return isinstance(exc, BotoCoreError)

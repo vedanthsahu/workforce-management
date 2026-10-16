@@ -78,17 +78,17 @@ class BookingEligibilitySeatTests(unittest.TestCase):
         for name, new_patch in patches.items():
             defaults[name] = new_patch
 
-        with defaults[
-            "backend.services.booking_service._resolve_booked_for_user"
-        ], defaults[
-            "backend.services.booking_service.user_has_active_booking_in_range"
-        ], defaults[
-            "backend.services.booking_service.fetch_seat_configuration"
-        ], defaults[
-            "backend.services.booking_service.seat_has_active_block_in_range"
-        ], defaults[
-            "backend.services.booking_service.seat_has_active_booking_in_range"
-        ]:
+        with (
+            defaults["backend.services.booking_service._resolve_booked_for_user"],
+            defaults[
+                "backend.services.booking_service.user_has_active_booking_in_range"
+            ],
+            defaults["backend.services.booking_service.fetch_seat_configuration"],
+            defaults["backend.services.booking_service.seat_has_active_block_in_range"],
+            defaults[
+                "backend.services.booking_service.seat_has_active_booking_in_range"
+            ],
+        ):
             return check_booking_eligibility(
                 conn=object(),
                 tenant_id="1",
@@ -103,24 +103,33 @@ class BookingEligibilitySeatTests(unittest.TestCase):
     def test_seat_lookup_uses_layout_effective_on_start_date(self) -> None:
         """A seat left over from a superseded layout must be treated as
         not-found here, same as the booking-creation path."""
-        with patch(
-            "backend.services.booking_service._resolve_booked_for_user",
-            return_value={"user_id": "7"},
-        ), patch(
-            "backend.services.booking_service.user_has_active_booking_in_range",
-            return_value=False,
-        ), patch(
-            "backend.services.booking_service.fetch_seat_configuration",
-            return_value=dict(ACTIVE_BOOKABLE_SEAT),
-        ) as mock_fetch_seat, patch(
-            "backend.services.booking_service.seat_has_active_block_in_range",
-            return_value=False,
-        ), patch(
-            "backend.services.booking_service.seat_has_active_booking_in_range",
-            return_value=False,
+        with (
+            patch(
+                "backend.services.booking_service._resolve_booked_for_user",
+                return_value={"user_id": "7"},
+            ),
+            patch(
+                "backend.services.booking_service.user_has_active_booking_in_range",
+                return_value=False,
+            ),
+            patch(
+                "backend.services.booking_service.fetch_seat_configuration",
+                return_value=dict(ACTIVE_BOOKABLE_SEAT),
+            ) as mock_fetch_seat,
+            patch(
+                "backend.services.booking_service.seat_has_active_block_in_range",
+                return_value=False,
+            ),
+            patch(
+                "backend.services.booking_service.seat_has_active_booking_in_range",
+                return_value=False,
+            ),
         ):
             check_booking_eligibility(
-                conn=object(), tenant_id="1", current_user=CALLER, payload=_payload(),
+                conn=object(),
+                tenant_id="1",
+                current_user=CALLER,
+                payload=_payload(),
             )
 
         # The seat lookup must be scoped to the layout covering the
@@ -293,22 +302,28 @@ class BookingEligibilitySeatTests(unittest.TestCase):
         self.assertEqual(context.exception.detail["code"], "booking_conflict")
 
     def test_exclude_booking_id_is_forwarded_to_the_seat_conflict_check(self) -> None:
-        with patch(
-            "backend.services.booking_service._resolve_booked_for_user",
-            return_value={"user_id": "7"},
-        ), patch(
-            "backend.services.booking_service.user_has_active_booking_in_range",
-            return_value=False,
-        ), patch(
-            "backend.services.booking_service.fetch_seat_configuration",
-            return_value=dict(ACTIVE_BOOKABLE_SEAT),
-        ), patch(
-            "backend.services.booking_service.seat_has_active_block_in_range",
-            return_value=False,
-        ), patch(
-            "backend.services.booking_service.seat_has_active_booking_in_range",
-            return_value=False,
-        ) as mock_seat_conflict:
+        with (
+            patch(
+                "backend.services.booking_service._resolve_booked_for_user",
+                return_value={"user_id": "7"},
+            ),
+            patch(
+                "backend.services.booking_service.user_has_active_booking_in_range",
+                return_value=False,
+            ),
+            patch(
+                "backend.services.booking_service.fetch_seat_configuration",
+                return_value=dict(ACTIVE_BOOKABLE_SEAT),
+            ),
+            patch(
+                "backend.services.booking_service.seat_has_active_block_in_range",
+                return_value=False,
+            ),
+            patch(
+                "backend.services.booking_service.seat_has_active_booking_in_range",
+                return_value=False,
+            ) as mock_seat_conflict,
+        ):
             check_booking_eligibility(
                 conn=object(),
                 tenant_id="1",
@@ -316,19 +331,25 @@ class BookingEligibilitySeatTests(unittest.TestCase):
                 payload=_payload(exclude_booking_id="55"),
             )
 
-        self.assertEqual(mock_seat_conflict.call_args.kwargs["exclude_booking_id"], "55")
+        self.assertEqual(
+            mock_seat_conflict.call_args.kwargs["exclude_booking_id"], "55"
+        )
 
     def test_no_seat_id_preserves_existing_behaviour(self) -> None:
         """Omitting seat_id must not trigger any of the new seat checks."""
-        with patch(
-            "backend.services.booking_service._resolve_booked_for_user",
-            return_value={"user_id": "7"},
-        ), patch(
-            "backend.services.booking_service.user_has_active_booking_in_range",
-            return_value=False,
-        ), patch(
-            "backend.services.booking_service.fetch_seat_configuration",
-        ) as mock_fetch_seat:
+        with (
+            patch(
+                "backend.services.booking_service._resolve_booked_for_user",
+                return_value={"user_id": "7"},
+            ),
+            patch(
+                "backend.services.booking_service.user_has_active_booking_in_range",
+                return_value=False,
+            ),
+            patch(
+                "backend.services.booking_service.fetch_seat_configuration",
+            ) as mock_fetch_seat,
+        ):
             result = check_booking_eligibility(
                 conn=object(),
                 tenant_id="1",

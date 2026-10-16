@@ -76,7 +76,9 @@ def fetch_business_rule_value(
     should treat that as "not configured yet" and fall back to their own
     hardcoded default, not treat it as an error.
     """
-    rule = fetch_business_rule(conn, tenant_id=tenant_id, business_rule_key=business_rule_key)
+    rule = fetch_business_rule(
+        conn, tenant_id=tenant_id, business_rule_key=business_rule_key
+    )
     if rule is None:
         return default
     return _cast_business_rule_value(rule["value"], rule["data_type"])
@@ -115,4 +117,6 @@ def upsert_tenant_business_rule(
             (tenant_id, value, updated_by_user_id, business_rule_key),
         )
         if cur.rowcount != 1:
-            raise LookupError(f"No business rule with key '{business_rule_key}' exists.")
+            raise LookupError(
+                f"No business rule with key '{business_rule_key}' exists."
+            )

@@ -200,6 +200,7 @@ BOOKING_SELECT_FROM = """
        AND updated_by.tenant_id = b.tenant_id
 """
 
+
 def fetch_future_delegated_guest_visits_without_booking(
     conn: PGConnection,
     *,
@@ -948,7 +949,15 @@ def fetch_seat_for_booking(
             AND s.site_id = %s
             AND s.tenant_id = %s
             """,
-            (booking_date, booking_date, seat_id, floor_id, building_id, site_id, tenant_id),
+            (
+                booking_date,
+                booking_date,
+                seat_id,
+                floor_id,
+                building_id,
+                site_id,
+                tenant_id,
+            ),
         )
         row = cur.fetchone()
     return dict(row) if row else None
@@ -963,7 +972,7 @@ def has_active_booking_conflict(
     exclude_booking_id: str | None = None,
 ) -> bool:
     """Return whether a seat is already actively booked for a date.
- 
+
     Pass exclude_booking_id when modifying an existing booking so the
     original booking row is not treated as a conflict with itself.
     """
@@ -996,7 +1005,6 @@ def has_active_booking_conflict(
                 (tenant_id, seat_id, booking_date),
             )
         return cur.fetchone() is not None
-
 
 
 def user_has_active_booking_on_date(
@@ -1073,7 +1081,6 @@ def guest_has_active_visit_in_range(
         return cur.fetchone() is not None
 
 
-
 def user_has_active_booking_in_range(
     conn: PGConnection,
     *,
@@ -1136,6 +1143,7 @@ def guest_has_active_booking_on_date(
     with conn.cursor() as cur:
         cur.execute(query, params)
         return cur.fetchone() is not None
+
 
 def guest_has_active_booking_in_range(
     conn: PGConnection,
@@ -1266,9 +1274,7 @@ def insert_booking(
     normalized_source = source_channel.strip().upper()
 
     if normalized_source not in SOURCE_CHANNELS:
-        raise ValueError(
-            "source_channel is not allowed by chk_bookings_source."
-        )
+        raise ValueError("source_channel is not allowed by chk_bookings_source.")
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
 
@@ -1324,21 +1330,15 @@ def insert_booking(
             """,
             (
                 tenant_id,
-
                 booked_for_user_id,
                 booked_by_user_id,
-
                 seat["seat_id"],
                 seat["site_id"],
                 seat["building_id"],
                 seat["floor_id"],
-
                 booking_date,
-
                 normalized_source,
-
                 modified_from_booking_id,
-
                 updated_by_user_id,
             ),
         )
@@ -1346,9 +1346,7 @@ def insert_booking(
         created = cur.fetchone()
 
     if created is None:
-        raise LookupError(
-            "Booking insert did not return an id."
-        )
+        raise LookupError("Booking insert did not return an id.")
 
     booking = fetch_booking_by_id(
         conn,
@@ -1357,9 +1355,7 @@ def insert_booking(
     )
 
     if booking is None:
-        raise LookupError(
-            "Created booking could not be reloaded."
-        )
+        raise LookupError("Created booking could not be reloaded.")
 
     return booking
 
@@ -1526,7 +1522,10 @@ def fetch_past_bookings_for_user(
     """
     params: list[Any] = [user_id, tenant_id]
     query, params = _apply_seat_and_date_filters(
-        query, params, seat_id=seat_id, booking_date=booking_date,
+        query,
+        params,
+        seat_id=seat_id,
+        booking_date=booking_date,
     )
     query += " ORDER BY b.booking_date DESC"
 
@@ -1534,6 +1533,7 @@ def fetch_past_bookings_for_user(
         cur.execute(query, params)
         rows = cur.fetchall()
     return [dict(row) for row in rows]
+
 
 def fetch_all_confirmed_bookings_for_user(
     conn: PGConnection,
@@ -1578,7 +1578,10 @@ def fetch_current_bookings_for_user(
     """
     params: list[Any] = [user_id, tenant_id]
     query, params = _apply_seat_and_date_filters(
-        query, params, seat_id=seat_id, booking_date=booking_date,
+        query,
+        params,
+        seat_id=seat_id,
+        booking_date=booking_date,
     )
     query += " ORDER BY b.booking_date DESC"
 
@@ -1586,6 +1589,7 @@ def fetch_current_bookings_for_user(
         cur.execute(query, params)
         rows = cur.fetchall()
     return [dict(row) for row in rows]
+
 
 def fetch_current_delegated_bookings(
     conn: PGConnection,
@@ -1613,7 +1617,10 @@ def fetch_current_delegated_bookings(
     """
     params: list[Any] = [tenant_id, user_id]
     query, params = _apply_seat_and_date_filters(
-        query, params, seat_id=seat_id, booking_date=booking_date,
+        query,
+        params,
+        seat_id=seat_id,
+        booking_date=booking_date,
     )
     query += " ORDER BY b.updated_at DESC"
 
@@ -1622,6 +1629,7 @@ def fetch_current_delegated_bookings(
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
+
 
 def fetch_future_delegated_bookings(
     conn: PGConnection,
@@ -1649,7 +1657,10 @@ def fetch_future_delegated_bookings(
     """
     params: list[Any] = [tenant_id, user_id]
     query, params = _apply_seat_and_date_filters(
-        query, params, seat_id=seat_id, booking_date=booking_date,
+        query,
+        params,
+        seat_id=seat_id,
+        booking_date=booking_date,
     )
     query += " ORDER BY b.updated_at DESC"
 
@@ -1658,6 +1669,7 @@ def fetch_future_delegated_bookings(
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
+
 
 def fetch_past_delegated_bookings(
     conn: PGConnection,
@@ -1685,7 +1697,10 @@ def fetch_past_delegated_bookings(
     """
     params: list[Any] = [tenant_id, user_id]
     query, params = _apply_seat_and_date_filters(
-        query, params, seat_id=seat_id, booking_date=booking_date,
+        query,
+        params,
+        seat_id=seat_id,
+        booking_date=booking_date,
     )
     query += " ORDER BY b.updated_at DESC"
 
@@ -1694,6 +1709,8 @@ def fetch_past_delegated_bookings(
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
+
+
 def fetch_cancelled_delegated_bookings(
     conn: PGConnection,
     *,
@@ -1791,7 +1808,9 @@ def fetch_cancelled_delegated_bookings(
         cur.execute(query, params)
         rows = cur.fetchall()
 
-    return [dict(row) for row in rows ]
+    return [dict(row) for row in rows]
+
+
 def fetch_cancelled_bookings_for_user(
     conn: PGConnection,
     *,
@@ -1810,7 +1829,10 @@ def fetch_cancelled_bookings_for_user(
     """
     params: list[Any] = [user_id, tenant_id]
     query, params = _apply_seat_and_date_filters(
-        query, params, seat_id=seat_id, booking_date=booking_date,
+        query,
+        params,
+        seat_id=seat_id,
+        booking_date=booking_date,
     )
     query += " ORDER BY b.booking_date DESC"
 
@@ -1818,6 +1840,7 @@ def fetch_cancelled_bookings_for_user(
         cur.execute(query, params)
         rows = cur.fetchall()
     return [dict(row) for row in rows]
+
 
 def fetch_future_bookings_for_user(
     conn: PGConnection,
@@ -1838,7 +1861,10 @@ def fetch_future_bookings_for_user(
     """
     params: list[Any] = [user_id, tenant_id]
     query, params = _apply_seat_and_date_filters(
-        query, params, seat_id=seat_id, booking_date=booking_date,
+        query,
+        params,
+        seat_id=seat_id,
+        booking_date=booking_date,
     )
     query += " ORDER BY b.booking_date DESC"
 
@@ -1846,6 +1872,7 @@ def fetch_future_bookings_for_user(
         cur.execute(query, params)
         rows = cur.fetchall()
     return [dict(row) for row in rows]
+
 
 def fetch_available_seats_by_range(
     conn: PGConnection,
@@ -2253,35 +2280,30 @@ def fetch_available_seats_by_range(
             ORDER BY sds.seat_code
             """,
             (
-                        start_date,
-                        end_date,
-
-                        amenity_ids,
-
-                        tenant_id,
-                        floor_id,
-
-                        tenant_id,
-                        floor_id,
-                        start_date,
-                        end_date,
-                        exclude_booking_id,
-                        exclude_booking_id,
-
-                        tenant_id,
-                        list(allowed_block_types),
-
-                        tenant_id,
-
-                        allow_non_bookable,
-                        tenant_id,
-                        floor_id,
-                    ),
+                start_date,
+                end_date,
+                amenity_ids,
+                tenant_id,
+                floor_id,
+                tenant_id,
+                floor_id,
+                start_date,
+                end_date,
+                exclude_booking_id,
+                exclude_booking_id,
+                tenant_id,
+                list(allowed_block_types),
+                tenant_id,
+                allow_non_bookable,
+                tenant_id,
+                floor_id,
+            ),
         )
 
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
+
 
 def fetch_available_seats(
     conn: PGConnection,
@@ -2502,9 +2524,7 @@ def insert_guest_booking(
     normalized_source = source_channel.strip().upper()
 
     if normalized_source not in SOURCE_CHANNELS:
-        raise ValueError(
-            "source_channel is not allowed by chk_bookings_source."
-        )
+        raise ValueError("source_channel is not allowed by chk_bookings_source.")
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
 
@@ -2567,23 +2587,16 @@ def insert_guest_booking(
             """,
             (
                 tenant_id,
-
                 guest_id,
                 guest_visit_id,
-
                 booked_by_user_id,
-
                 seat["seat_id"],
                 seat["site_id"],
                 seat["building_id"],
                 seat["floor_id"],
-
                 booking_date,
-
                 normalized_source,
-
                 modified_from_booking_id,
-
                 updated_by_user_id,
             ),
         )
@@ -2591,9 +2604,7 @@ def insert_guest_booking(
         created = cur.fetchone()
 
     if created is None:
-        raise LookupError(
-            "Guest booking insert did not return an id."
-        )
+        raise LookupError("Guest booking insert did not return an id.")
 
     booking = fetch_booking_by_id(
         conn,
@@ -2602,9 +2613,7 @@ def insert_guest_booking(
     )
 
     if booking is None:
-        raise LookupError(
-            "Created guest booking could not be reloaded."
-        )
+        raise LookupError("Created guest booking could not be reloaded.")
 
     return booking
 
@@ -2878,15 +2887,19 @@ def fetch_admin_bookings_summary(
         )
         row = cur.fetchone()
 
-    return dict(row) if row else {
-        "total_bookings": 0,
-        "confirmed_bookings": 0,
-        "cancelled_bookings": 0,
-        "modified_bookings": 0,
-        "completed_bookings": 0,
-        "no_show_bookings": 0,
-        "employee_bookings": 0,
-        "guest_bookings": 0,
-        "checked_in_bookings": 0,
-        "checked_out_bookings": 0,
-    }
+    return (
+        dict(row)
+        if row
+        else {
+            "total_bookings": 0,
+            "confirmed_bookings": 0,
+            "cancelled_bookings": 0,
+            "modified_bookings": 0,
+            "completed_bookings": 0,
+            "no_show_bookings": 0,
+            "employee_bookings": 0,
+            "guest_bookings": 0,
+            "checked_in_bookings": 0,
+            "checked_out_bookings": 0,
+        }
+    )

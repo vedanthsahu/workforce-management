@@ -299,8 +299,7 @@ def _validate_visit_location(
             },
         )
     if floor is not None and (
-        floor["site_id"] != site_id
-        or floor["building_id"] != building_id
+        floor["site_id"] != site_id or floor["building_id"] != building_id
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -363,7 +362,9 @@ def _resolve_seat(
                 "message": "Bookings can only target ACTIVE seats.",
             },
         )
-    if seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(current_user):
+    if seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(
+        current_user
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -504,18 +505,29 @@ def create_guest_profile(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=GUEST_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest", resource_id=None,
+            conn,
+            action=GUEST_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest",
+            resource_id=None,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except (LookupError, ValueError) as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest", resource_id=None,
-            event_status="FAILURE", failure_code="invalid_guest", failure_reason=str(exc),
+            conn,
+            action=GUEST_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest",
+            resource_id=None,
+            event_status="FAILURE",
+            failure_code="invalid_guest",
+            failure_reason=str(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -524,9 +536,15 @@ def create_guest_profile(
     except psycopg2.Error as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest", resource_id=None,
-            event_status="FAILURE", failure_code="guest_create_failed", failure_reason="Failed to create guest.",
+            conn,
+            action=GUEST_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest",
+            resource_id=None,
+            event_status="FAILURE",
+            failure_code="guest_create_failed",
+            failure_reason="Failed to create guest.",
         )
         _translate_guest_db_error(exc, action="create")
 
@@ -545,7 +563,6 @@ def get_guest_profile(
         require_active=False,
     )
     return GuestResponse(**guest)
-
 
 
 def search_guest_profiles(
@@ -698,18 +715,29 @@ def update_guest_profile(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=GUEST_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest", resource_id=str(guest_id),
+            conn,
+            action=GUEST_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest",
+            resource_id=str(guest_id),
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except (LookupError, ValueError) as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest", resource_id=str(guest_id),
-            event_status="FAILURE", failure_code="invalid_guest", failure_reason=str(exc),
+            conn,
+            action=GUEST_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest",
+            resource_id=str(guest_id),
+            event_status="FAILURE",
+            failure_code="invalid_guest",
+            failure_reason=str(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -718,9 +746,15 @@ def update_guest_profile(
     except psycopg2.Error as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest", resource_id=str(guest_id),
-            event_status="FAILURE", failure_code="guest_update_failed", failure_reason="Failed to update guest.",
+            conn,
+            action=GUEST_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest",
+            resource_id=str(guest_id),
+            event_status="FAILURE",
+            failure_code="guest_update_failed",
+            failure_reason="Failed to update guest.",
         )
         _translate_guest_db_error(exc, action="update")
 
@@ -775,7 +809,9 @@ def update_guest_status(
             resource_id=str(guest_id),
             old_values={"status": guest_before.get("status")},
             new_values={"status": payload.status},
-            changed_fields=["status"] if guest_before.get("status") != payload.status else None,
+            changed_fields=(
+                ["status"] if guest_before.get("status") != payload.status else None
+            ),
             metadata={"cancel_future_bookings": payload.cancel_future_bookings},
         )
         return GuestResponse(**updated)
@@ -783,18 +819,29 @@ def update_guest_status(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=GUEST_STATUS_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest", resource_id=str(guest_id),
+            conn,
+            action=GUEST_STATUS_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest",
+            resource_id=str(guest_id),
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except (LookupError, ValueError) as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_STATUS_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest", resource_id=str(guest_id),
-            event_status="FAILURE", failure_code="invalid_guest_status_update", failure_reason=str(exc),
+            conn,
+            action=GUEST_STATUS_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest",
+            resource_id=str(guest_id),
+            event_status="FAILURE",
+            failure_code="invalid_guest_status_update",
+            failure_reason=str(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -803,9 +850,15 @@ def update_guest_status(
     except psycopg2.Error as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_STATUS_UPDATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest", resource_id=str(guest_id),
-            event_status="FAILURE", failure_code="guest_status_update_failed", failure_reason="Failed to update guest status.",
+            conn,
+            action=GUEST_STATUS_UPDATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest",
+            resource_id=str(guest_id),
+            event_status="FAILURE",
+            failure_code="guest_status_update_failed",
+            failure_reason="Failed to update guest status.",
         )
         _translate_guest_db_error(exc, action="status_update")
 
@@ -880,7 +933,8 @@ def create_guest_visit(
             },
         )
     guest_max_advance_days = resolve_booking_advance_days(
-        conn, tenant_id=tenant_id,
+        conn,
+        tenant_id=tenant_id,
     )["guest_max_advance_days"]
     if payload.visit_date > date.today() + timedelta(days=guest_max_advance_days):
         raise HTTPException(
@@ -935,8 +989,11 @@ def create_guest_visit(
         )
         conn.commit()
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit",
+            conn,
+            action=GUEST_VISIT_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
             resource_id=str(visit["guest_visit_id"]),
             new_values={
                 "guest_id": str(payload.guest_id),
@@ -947,8 +1004,12 @@ def create_guest_visit(
                 "floor_id": floor_id,
                 "guest_type": _enum_value(payload.guest_type),
                 "purpose_of_visit": _enum_value(payload.purpose_of_visit),
-                "start_time": str(payload.start_time) if payload.start_time is not None else None,
-                "end_time": str(payload.end_time) if payload.end_time is not None else None,
+                "start_time": (
+                    str(payload.start_time) if payload.start_time is not None else None
+                ),
+                "end_time": (
+                    str(payload.end_time) if payload.end_time is not None else None
+                ),
                 "notes": _clean_optional(payload.notes),
             },
         )
@@ -973,18 +1034,29 @@ def create_guest_visit(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit", resource_id=None,
+            conn,
+            action=GUEST_VISIT_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=None,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except (LookupError, ValueError) as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit", resource_id=None,
-            event_status="FAILURE", failure_code="invalid_guest_visit", failure_reason=str(exc),
+            conn,
+            action=GUEST_VISIT_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=None,
+            event_status="FAILURE",
+            failure_code="invalid_guest_visit",
+            failure_reason=str(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -993,9 +1065,15 @@ def create_guest_visit(
     except psycopg2.Error as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit", resource_id=None,
-            event_status="FAILURE", failure_code="guest_visit_create_failed", failure_reason="Failed to create guest visit.",
+            conn,
+            action=GUEST_VISIT_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=None,
+            event_status="FAILURE",
+            failure_code="guest_visit_create_failed",
+            failure_reason="Failed to create guest visit.",
         )
         _translate_guest_db_error(exc, action="visit_create")
 
@@ -1018,7 +1096,8 @@ def create_guest_booking(
             },
         )
     guest_max_advance_days = resolve_booking_advance_days(
-        conn, tenant_id=tenant_id,
+        conn,
+        tenant_id=tenant_id,
     )["guest_max_advance_days"]
     if payload.visit_date > date.today() + timedelta(days=guest_max_advance_days):
         raise HTTPException(
@@ -1118,18 +1197,29 @@ def create_guest_booking(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=GUEST_BOOKING_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_booking", resource_id=None,
+            conn,
+            action=GUEST_BOOKING_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_booking",
+            resource_id=None,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except (LookupError, ValueError) as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_BOOKING_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_booking", resource_id=None,
-            event_status="FAILURE", failure_code="invalid_guest_booking", failure_reason=str(exc),
+            conn,
+            action=GUEST_BOOKING_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_booking",
+            resource_id=None,
+            event_status="FAILURE",
+            failure_code="invalid_guest_booking",
+            failure_reason=str(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1138,15 +1228,24 @@ def create_guest_booking(
     except psycopg2.Error as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_BOOKING_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_booking", resource_id=None,
-            event_status="FAILURE", failure_code="guest_booking_create_failed", failure_reason="Failed to create guest booking.",
+            conn,
+            action=GUEST_BOOKING_CREATED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_booking",
+            resource_id=None,
+            event_status="FAILURE",
+            failure_code="guest_booking_create_failed",
+            failure_reason="Failed to create guest booking.",
         )
         _translate_guest_db_error(exc, action="booking_create")
 
     safe_write_audit_log(
-        conn, action=GUEST_BOOKING_CREATED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="guest_booking",
+        conn,
+        action=GUEST_BOOKING_CREATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="guest_booking",
         resource_id=str(booking.get("booking_id")),
         new_values={
             "guest_id": guest_id,
@@ -1155,7 +1254,9 @@ def create_guest_booking(
             "visit_date": str(payload.visit_date),
             "guest_type": _enum_value(payload.guest_type),
             "purpose_of_visit": _enum_value(payload.purpose_of_visit),
-            "start_time": str(payload.start_time) if payload.start_time is not None else None,
+            "start_time": (
+                str(payload.start_time) if payload.start_time is not None else None
+            ),
             "end_time": str(payload.end_time) if payload.end_time is not None else None,
             "notes": _clean_optional(payload.notes),
             "seat_id": booking.get("seat_id"),
@@ -1184,9 +1285,7 @@ def list_guest_bookings(
 ) -> list[BookingResponse] | PaginatedBookingResponse:
     _require_guest_operator(current_user)
     normalized_status = (
-        booking_status.strip().upper()
-        if booking_status is not None
-        else None
+        booking_status.strip().upper() if booking_status is not None else None
     )
     if normalized_status is not None and normalized_status not in BOOKING_STATUSES:
         raise HTTPException(
@@ -1287,9 +1386,7 @@ def cancel_guest_booking(
         recalculate_guest_visit_requires_seat(
             conn,
             tenant_id=tenant_id,
-            guest_visit_id=str(
-                booking["guest_visit_id"]
-            ),
+            guest_visit_id=str(booking["guest_visit_id"]),
         )
         updated_booking = fetch_booking_by_id(
             conn,
@@ -1303,18 +1400,29 @@ def cancel_guest_booking(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=GUEST_BOOKING_CANCELLED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_booking", resource_id=booking_id,
+            conn,
+            action=GUEST_BOOKING_CANCELLED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_booking",
+            resource_id=booking_id,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except LookupError as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_BOOKING_CANCELLED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_booking", resource_id=booking_id,
-            event_status="FAILURE", failure_code="guest_booking_not_found", failure_reason=str(exc),
+            conn,
+            action=GUEST_BOOKING_CANCELLED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_booking",
+            resource_id=booking_id,
+            event_status="FAILURE",
+            failure_code="guest_booking_not_found",
+            failure_reason=str(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1323,9 +1431,15 @@ def cancel_guest_booking(
     except psycopg2.Error as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_BOOKING_CANCELLED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_booking", resource_id=booking_id,
-            event_status="FAILURE", failure_code="guest_booking_cancel_failed", failure_reason="Failed to cancel guest booking.",
+            conn,
+            action=GUEST_BOOKING_CANCELLED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_booking",
+            resource_id=booking_id,
+            event_status="FAILURE",
+            failure_code="guest_booking_cancel_failed",
+            failure_reason="Failed to cancel guest booking.",
         )
         _translate_guest_db_error(exc, action="booking_cancel")
 
@@ -1354,8 +1468,11 @@ def cancel_guest_booking(
         **_bc_context,
     }
     safe_write_audit_log(
-        conn, action=GUEST_BOOKING_CANCELLED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="guest_booking",
+        conn,
+        action=GUEST_BOOKING_CANCELLED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="guest_booking",
         resource_id=booking_id,
         old_values=_bc_old,
         new_values=_bc_new,
@@ -1444,11 +1561,14 @@ def modify_guest_booking(
         ):
             _raise_seat_booking_conflict()
 
-        old_booking = fetch_booking_by_id(
-            conn,
-            tenant_id=tenant_id,
-            booking_id=booking_id,
-        ) or booking
+        old_booking = (
+            fetch_booking_by_id(
+                conn,
+                tenant_id=tenant_id,
+                booking_id=booking_id,
+            )
+            or booking
+        )
         update_guest_visit_booking_details(
             conn,
             tenant_id=tenant_id,
@@ -1492,18 +1612,29 @@ def modify_guest_booking(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=GUEST_BOOKING_MODIFIED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_booking", resource_id=booking_id,
+            conn,
+            action=GUEST_BOOKING_MODIFIED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_booking",
+            resource_id=booking_id,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except (LookupError, ValueError) as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_BOOKING_MODIFIED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_booking", resource_id=booking_id,
-            event_status="FAILURE", failure_code="guest_booking_modify_failed", failure_reason=str(exc),
+            conn,
+            action=GUEST_BOOKING_MODIFIED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_booking",
+            resource_id=booking_id,
+            event_status="FAILURE",
+            failure_code="guest_booking_modify_failed",
+            failure_reason=str(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1512,24 +1643,53 @@ def modify_guest_booking(
     except psycopg2.Error as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_BOOKING_MODIFIED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_booking", resource_id=booking_id,
-            event_status="FAILURE", failure_code="guest_booking_modify_failed", failure_reason="Failed to modify guest booking.",
+            conn,
+            action=GUEST_BOOKING_MODIFIED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_booking",
+            resource_id=booking_id,
+            event_status="FAILURE",
+            failure_code="guest_booking_modify_failed",
+            failure_reason="Failed to modify guest booking.",
         )
         _translate_guest_db_error(exc, action="booking_modify")
 
     _visit_context = fetch_guest_visit_by_id(
-        conn, tenant_id=tenant_id, guest_visit_id=guest_visit_id,
+        conn,
+        tenant_id=tenant_id,
+        guest_visit_id=guest_visit_id,
     )
     _bm_visit_fields = {
         "host_user_id": _visit_context.get("host_user_id") if _visit_context else None,
-        "guest_type": _enum_value(_visit_context.get("guest_type")) if _visit_context else None,
-        "purpose_of_visit": _enum_value(_visit_context.get("purpose_of_visit")) if _visit_context else None,
-        "start_time": str(_visit_context.get("start_time")) if _visit_context and _visit_context.get("start_time") is not None else None,
-        "end_time": str(_visit_context.get("end_time")) if _visit_context and _visit_context.get("end_time") is not None else None,
+        "guest_type": (
+            _enum_value(_visit_context.get("guest_type")) if _visit_context else None
+        ),
+        "purpose_of_visit": (
+            _enum_value(_visit_context.get("purpose_of_visit"))
+            if _visit_context
+            else None
+        ),
+        "start_time": (
+            str(_visit_context.get("start_time"))
+            if _visit_context and _visit_context.get("start_time") is not None
+            else None
+        ),
+        "end_time": (
+            str(_visit_context.get("end_time"))
+            if _visit_context and _visit_context.get("end_time") is not None
+            else None
+        ),
         "notes": _visit_context.get("notes") if _visit_context else None,
     }
-    _bm_fields = ("booking_date", "seat_id", "seat_code", "site_id", "building_id", "floor_id")
+    _bm_fields = (
+        "booking_date",
+        "seat_id",
+        "seat_code",
+        "site_id",
+        "building_id",
+        "floor_id",
+    )
     _bm_old = {
         "booking_id": booking_id,
         "booking_date": str(old_booking.get("booking_date")),
@@ -1556,10 +1716,15 @@ def modify_guest_booking(
         "floor_name": new_booking.get("floor_name"),
         **_bm_visit_fields,
     }
-    _bm_changed = [k for k in _bm_fields if str(_bm_old.get(k) or "") != str(_bm_new.get(k) or "")]
+    _bm_changed = [
+        k for k in _bm_fields if str(_bm_old.get(k) or "") != str(_bm_new.get(k) or "")
+    ]
     safe_write_audit_log(
-        conn, action=GUEST_BOOKING_MODIFIED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="guest_booking",
+        conn,
+        action=GUEST_BOOKING_MODIFIED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="guest_booking",
         resource_id=str(new_booking.get("booking_id")),
         old_values=_bm_old,
         new_values=_bm_new,
@@ -1587,7 +1752,10 @@ def _validate_mutable_guest_booking(
                 "message": "Guest booking was not found.",
             },
         )
-    if booking.get("booked_for_guest_id") is None or booking.get("guest_visit_id") is None:
+    if (
+        booking.get("booked_for_guest_id") is None
+        or booking.get("guest_visit_id") is None
+    ):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -1771,22 +1939,34 @@ def _guest_visit_email_context(
 ) -> dict[str, str]:
     return {
         "guest_visit_id": format_notification_value(visit.get("guest_visit_id")),
-        "guest_name": _first_text(visit.get("guest_name"), guest.get("full_name") if guest else None),
-        "guest_email": _first_text(visit.get("guest_email"), guest.get("email") if guest else None),
-        "guest_phone": _first_text(visit.get("guest_phone"), guest.get("phone") if guest else None),
+        "guest_name": _first_text(
+            visit.get("guest_name"), guest.get("full_name") if guest else None
+        ),
+        "guest_email": _first_text(
+            visit.get("guest_email"), guest.get("email") if guest else None
+        ),
+        "guest_phone": _first_text(
+            visit.get("guest_phone"), guest.get("phone") if guest else None
+        ),
         "guest_organization": _first_text(
             visit.get("guest_organization"),
             guest.get("organization") if guest else None,
         ),
-        "host_name": _first_text(visit.get("host_name"), host.get("full_name") if host else None),
-        "host_email": _first_text(visit.get("host_email"), host.get("email") if host else None),
+        "host_name": _first_text(
+            visit.get("host_name"), host.get("full_name") if host else None
+        ),
+        "host_email": _first_text(
+            visit.get("host_email"), host.get("email") if host else None
+        ),
         "creator_name": _first_text(
             visit.get("created_by_name"),
             creator.get("full_name"),
             creator.get("display_name"),
             creator.get("email"),
         ),
-        "creator_email": _first_text(visit.get("created_by_email"), creator.get("email")),
+        "creator_email": _first_text(
+            visit.get("created_by_email"), creator.get("email")
+        ),
         "visit_date": format_notification_value(visit.get("visit_date")),
         "start_time": format_notification_value(visit.get("start_time")),
         "end_time": format_notification_value(visit.get("end_time")),
@@ -1873,10 +2053,7 @@ def list_guest_visits(
 
     return GuestVisitListResponse(
         summary=summary,
-        items=[
-            GuestVisitListItem(**row)
-            for row in rows
-        ],
+        items=[GuestVisitListItem(**row) for row in rows],
         pagination=pagination,
     )
 
@@ -1916,7 +2093,11 @@ def _guest_visit_audit_context(visit: dict[str, Any] | None) -> dict[str, Any]:
         "site_name": visit.get("site_name"),
         "building_name": visit.get("building_name"),
         "purpose_of_visit": visit.get("purpose_of_visit"),
-        "visit_date": str(visit.get("visit_date")) if visit.get("visit_date") is not None else None,
+        "visit_date": (
+            str(visit.get("visit_date"))
+            if visit.get("visit_date") is not None
+            else None
+        ),
     }
 
 
@@ -1931,7 +2112,9 @@ def guest_visit_check_in(
 
     try:
         _visit_before_ci = fetch_guest_visit_by_id(
-            conn, tenant_id=tenant_id, guest_visit_id=guest_visit_id,
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
         )
         check_in_guest_visit(
             conn,
@@ -1941,21 +2124,32 @@ def guest_visit_check_in(
 
         conn.commit()
         _visit_after_ci = fetch_guest_visit_by_id(
-            conn, tenant_id=tenant_id, guest_visit_id=guest_visit_id,
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
         )
         _ci_context = _guest_visit_audit_context(_visit_before_ci)
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_CHECKED_IN, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit",
+            conn,
+            action=GUEST_VISIT_CHECKED_IN,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
             resource_id=guest_visit_id,
             old_values={
-                "visit_status": _visit_before_ci.get("visit_status") if _visit_before_ci else None,
+                "visit_status": (
+                    _visit_before_ci.get("visit_status") if _visit_before_ci else None
+                ),
                 "checked_in_at": None,
                 **_ci_context,
             },
             new_values={
                 "visit_status": "CHECKED_IN",
-                "checked_in_at": str(_visit_after_ci.get("checked_in_at")) if _visit_after_ci else None,
+                "checked_in_at": (
+                    str(_visit_after_ci.get("checked_in_at"))
+                    if _visit_after_ci
+                    else None
+                ),
                 **_ci_context,
             },
             changed_fields=["visit_status", "checked_in_at"],
@@ -1968,9 +2162,15 @@ def guest_visit_check_in(
     except LookupError as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_CHECKED_IN, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit", resource_id=guest_visit_id,
-            event_status="FAILURE", failure_code="guest_visit_not_found", failure_reason=str(exc),
+            conn,
+            action=GUEST_VISIT_CHECKED_IN,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=guest_visit_id,
+            event_status="FAILURE",
+            failure_code="guest_visit_not_found",
+            failure_reason=str(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1979,11 +2179,19 @@ def guest_visit_check_in(
     except ValueError as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_CHECKED_IN, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit", resource_id=guest_visit_id,
-            event_status="FAILURE", failure_code="invalid_guest_visit_transition", failure_reason=str(exc),
+            conn,
+            action=GUEST_VISIT_CHECKED_IN,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=guest_visit_id,
+            event_status="FAILURE",
+            failure_code="invalid_guest_visit_transition",
+            failure_reason=str(exc),
             old_values={
-                "visit_status": _visit_before_ci.get("visit_status") if _visit_before_ci else None,
+                "visit_status": (
+                    _visit_before_ci.get("visit_status") if _visit_before_ci else None
+                ),
                 **_guest_visit_audit_context(_visit_before_ci),
             },
         )
@@ -1994,6 +2202,7 @@ def guest_visit_check_in(
     except Exception:
         conn.rollback()
         raise
+
 
 def guest_visit_check_out(
     conn: PGConnection,
@@ -2006,7 +2215,9 @@ def guest_visit_check_out(
 
     try:
         _visit_before_co = fetch_guest_visit_by_id(
-            conn, tenant_id=tenant_id, guest_visit_id=guest_visit_id,
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
         )
         check_out_guest_visit(
             conn,
@@ -2016,21 +2227,32 @@ def guest_visit_check_out(
 
         conn.commit()
         _visit_after_co = fetch_guest_visit_by_id(
-            conn, tenant_id=tenant_id, guest_visit_id=guest_visit_id,
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
         )
         _co_context = _guest_visit_audit_context(_visit_before_co)
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_CHECKED_OUT, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit",
+            conn,
+            action=GUEST_VISIT_CHECKED_OUT,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
             resource_id=guest_visit_id,
             old_values={
-                "visit_status": _visit_before_co.get("visit_status") if _visit_before_co else None,
+                "visit_status": (
+                    _visit_before_co.get("visit_status") if _visit_before_co else None
+                ),
                 "checked_out_at": None,
                 **_co_context,
             },
             new_values={
                 "visit_status": "CHECKED_OUT",
-                "checked_out_at": str(_visit_after_co.get("checked_out_at")) if _visit_after_co else None,
+                "checked_out_at": (
+                    str(_visit_after_co.get("checked_out_at"))
+                    if _visit_after_co
+                    else None
+                ),
                 **_co_context,
             },
             changed_fields=["visit_status", "checked_out_at"],
@@ -2043,9 +2265,15 @@ def guest_visit_check_out(
     except LookupError as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_CHECKED_OUT, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit", resource_id=guest_visit_id,
-            event_status="FAILURE", failure_code="guest_visit_not_found", failure_reason=str(exc),
+            conn,
+            action=GUEST_VISIT_CHECKED_OUT,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=guest_visit_id,
+            event_status="FAILURE",
+            failure_code="guest_visit_not_found",
+            failure_reason=str(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -2054,11 +2282,19 @@ def guest_visit_check_out(
     except ValueError as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_CHECKED_OUT, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit", resource_id=guest_visit_id,
-            event_status="FAILURE", failure_code="invalid_guest_visit_transition", failure_reason=str(exc),
+            conn,
+            action=GUEST_VISIT_CHECKED_OUT,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=guest_visit_id,
+            event_status="FAILURE",
+            failure_code="invalid_guest_visit_transition",
+            failure_reason=str(exc),
             old_values={
-                "visit_status": _visit_before_co.get("visit_status") if _visit_before_co else None,
+                "visit_status": (
+                    _visit_before_co.get("visit_status") if _visit_before_co else None
+                ),
                 **_guest_visit_audit_context(_visit_before_co),
             },
         )
@@ -2092,23 +2328,17 @@ def create_booking_for_existing_guest_visit(
         )
 
         if visit is None:
-            raise LookupError(
-                "Guest visit not found."
-            )
+            raise LookupError("Guest visit not found.")
 
         if visit["visit_status"] != "SCHEDULED":
-            raise ValueError(
-                "Only scheduled visits can receive seat bookings."
-            )
+            raise ValueError("Only scheduled visits can receive seat bookings.")
 
         if guest_visit_has_active_booking(
             conn,
             tenant_id=tenant_id,
             guest_visit_id=guest_visit_id,
         ):
-            raise ValueError(
-                "Guest visit already has a booking."
-            )
+            raise ValueError("Guest visit already has a booking.")
 
         seat = _resolve_seat(
             conn,
@@ -2164,6 +2394,7 @@ def create_booking_for_existing_guest_visit(
         conn.rollback()
         raise
 
+
 def cancel_guest_visit_record(
     conn: PGConnection,
     *,
@@ -2197,12 +2428,10 @@ def cancel_guest_visit_record(
             guest_visit_id=guest_visit_id,
         )
 
-        active_booking = (
-            fetch_active_booking_by_guest_visit(
-                conn,
-                tenant_id=tenant_id,
-                guest_visit_id=guest_visit_id,
-            )
+        active_booking = fetch_active_booking_by_guest_visit(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
         )
 
         cancel_guest_visit(
@@ -2218,14 +2447,8 @@ def cancel_guest_visit_record(
             cancel_booking(
                 conn,
                 tenant_id=tenant_id,
-                booking_id=str(
-                    active_booking["booking_id"]
-                ),
-                cancellation_reason=(
-                    cancellation_reason
-                    or
-                    "Guest visit cancelled."
-                ),
+                booking_id=str(active_booking["booking_id"]),
+                cancellation_reason=(cancellation_reason or "Guest visit cancelled."),
                 updated_by_user_id=_current_user_id(current_user),
             )
 
@@ -2238,15 +2461,21 @@ def cancel_guest_visit_record(
         conn.commit()
         _vc_context = {
             "guest_id": visit_for_email.get("guest_id") if visit_for_email else None,
-            "host_user_id": visit_for_email.get("host_user_id") if visit_for_email else None,
+            "host_user_id": (
+                visit_for_email.get("host_user_id") if visit_for_email else None
+            ),
             "site_id": visit_for_email.get("site_id") if visit_for_email else None,
-            "building_id": visit_for_email.get("building_id") if visit_for_email else None,
+            "building_id": (
+                visit_for_email.get("building_id") if visit_for_email else None
+            ),
             "floor_id": visit_for_email.get("floor_id") if visit_for_email else None,
             "seat_code": visit_for_email.get("seat_code") if visit_for_email else None,
             **_guest_visit_audit_context(visit_for_email),
         }
         _vc_old = {
-            "visit_status": visit_for_email.get("visit_status") if visit_for_email else None,
+            "visit_status": (
+                visit_for_email.get("visit_status") if visit_for_email else None
+            ),
             "cancellation_reason": None,
             **_vc_context,
         }
@@ -2256,8 +2485,11 @@ def cancel_guest_visit_record(
             **_vc_context,
         }
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_CANCELLED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit",
+            conn,
+            action=GUEST_VISIT_CANCELLED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
             resource_id=guest_visit_id,
             old_values=_vc_old,
             new_values=_vc_new,
@@ -2288,19 +2520,30 @@ def cancel_guest_visit_record(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_CANCELLED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit", resource_id=guest_visit_id,
+            conn,
+            action=GUEST_VISIT_CANCELLED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=guest_visit_id,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
 
     except LookupError as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_CANCELLED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit", resource_id=guest_visit_id,
-            event_status="FAILURE", failure_code="guest_visit_not_found", failure_reason=str(exc),
+            conn,
+            action=GUEST_VISIT_CANCELLED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=guest_visit_id,
+            event_status="FAILURE",
+            failure_code="guest_visit_not_found",
+            failure_reason=str(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -2310,15 +2553,23 @@ def cancel_guest_visit_record(
     except psycopg2.Error as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_CANCELLED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit", resource_id=guest_visit_id,
-            event_status="FAILURE", failure_code="guest_visit_cancel_failed", failure_reason="Failed to cancel guest visit.",
+            conn,
+            action=GUEST_VISIT_CANCELLED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=guest_visit_id,
+            event_status="FAILURE",
+            failure_code="guest_visit_cancel_failed",
+            failure_reason="Failed to cancel guest visit.",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"code": "guest_visit_cancel_failed", "message": "Failed to cancel guest visit."},
+            detail={
+                "code": "guest_visit_cancel_failed",
+                "message": "Failed to cancel guest visit.",
+            },
         ) from exc
-    
 
 
 def modify_guest_visit(
@@ -2334,11 +2585,7 @@ def modify_guest_visit(
 
     tenant_id = str(current_user["tenant_id"])
 
-    floor_id = (
-        str(payload.floor_id)
-        if payload.floor_id is not None
-        else None
-    )
+    floor_id = str(payload.floor_id) if payload.floor_id is not None else None
 
     try:
 
@@ -2355,14 +2602,10 @@ def modify_guest_visit(
         )
 
         if visit is None:
-            raise LookupError(
-                "Guest visit not found."
-            )
+            raise LookupError("Guest visit not found.")
 
         if visit["visit_status"] != "SCHEDULED":
-            raise ValueError(
-                "Only scheduled guest visits can be modified."
-            )
+            raise ValueError("Only scheduled guest visits can be modified.")
 
         _validate_visit_times(
             payload.start_time,
@@ -2416,9 +2659,7 @@ def modify_guest_visit(
             floor_id=floor_id,
             visit_date=payload.visit_date,
             guest_type=_enum_value(payload.guest_type),
-            purpose_of_visit=_enum_value(
-                payload.purpose_of_visit
-            ),
+            purpose_of_visit=_enum_value(payload.purpose_of_visit),
             start_time=payload.start_time,
             end_time=payload.end_time,
             notes=_clean_optional(payload.notes),
@@ -2446,7 +2687,11 @@ def modify_guest_visit(
             "visit_date": str(visit.get("visit_date")),
             "site_id": str(visit.get("site_id")),
             "building_id": str(visit.get("building_id")),
-            "floor_id": str(visit.get("floor_id")) if visit.get("floor_id") is not None else None,
+            "floor_id": (
+                str(visit.get("floor_id"))
+                if visit.get("floor_id") is not None
+                else None
+            ),
             "host_user_id": str(visit.get("host_user_id")),
         }
         _vm_new = {
@@ -2457,18 +2702,24 @@ def modify_guest_visit(
             "host_user_id": str(payload.host_user_id),
         }
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_MODIFIED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit",
+            conn,
+            action=GUEST_VISIT_MODIFIED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
             resource_id=guest_visit_id,
             old_values=_vm_old,
             new_values=_vm_new,
             changed_fields=[k for k in _vm_new if _vm_old.get(k) != _vm_new[k]] or None,
         )
-        updated = fetch_guest_visit_by_id(
-            conn,
-            tenant_id=tenant_id,
-            guest_visit_id=str(new_visit["guest_visit_id"]),
-        ) or new_visit
+        updated = (
+            fetch_guest_visit_by_id(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=str(new_visit["guest_visit_id"]),
+            )
+            or new_visit
+        )
 
         conn.commit()
 
@@ -2488,19 +2739,30 @@ def modify_guest_visit(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_MODIFIED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit", resource_id=guest_visit_id,
+            conn,
+            action=GUEST_VISIT_MODIFIED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=guest_visit_id,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
 
     except (LookupError, ValueError) as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_MODIFIED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit", resource_id=guest_visit_id,
-            event_status="FAILURE", failure_code="guest_visit_modify_failed", failure_reason=str(exc),
+            conn,
+            action=GUEST_VISIT_MODIFIED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=guest_visit_id,
+            event_status="FAILURE",
+            failure_code="guest_visit_modify_failed",
+            failure_reason=str(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -2625,16 +2887,27 @@ def attach_seat_to_guest_visit(
         )
 
     safe_write_audit_log(
-        conn, action=GUEST_BOOKING_CREATED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="guest_booking",
+        conn,
+        action=GUEST_BOOKING_CREATED,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        resource_type="guest_booking",
         resource_id=str(booking.get("booking_id")),
         new_values={
             "guest_visit_id": guest_visit_id,
             "host_user_id": visit.get("host_user_id"),
             "guest_type": _enum_value(visit.get("guest_type")),
             "purpose_of_visit": _enum_value(visit.get("purpose_of_visit")),
-            "start_time": str(visit.get("start_time")) if visit.get("start_time") is not None else None,
-            "end_time": str(visit.get("end_time")) if visit.get("end_time") is not None else None,
+            "start_time": (
+                str(visit.get("start_time"))
+                if visit.get("start_time") is not None
+                else None
+            ),
+            "end_time": (
+                str(visit.get("end_time"))
+                if visit.get("end_time") is not None
+                else None
+            ),
             "notes": visit.get("notes"),
             "booking_date": str(booking.get("booking_date")),
             "seat_id": booking.get("seat_id"),
@@ -2723,8 +2996,6 @@ def _build_guest_workflow_response(
     )
 
 
-
-
 def execute_guest_visit_workflow(
     conn: PGConnection,
     *,
@@ -2757,11 +3028,7 @@ def execute_guest_visit_workflow(
                 tenant_id=tenant_id,
                 host_user_id=str(payload.host_user_id),
             )
-            floor_id = (
-                str(payload.floor_id)
-                if payload.floor_id is not None
-                else None
-            )
+            floor_id = str(payload.floor_id) if payload.floor_id is not None else None
             _validate_visit_location(
                 conn,
                 tenant_id=tenant_id,
@@ -2832,7 +3099,9 @@ def execute_guest_visit_workflow(
                 "purpose_of_visit": _enum_value(payload.purpose_of_visit),
                 "notes": _clean_optional(payload.notes),
             }
-            _aud_changed = [k for k in _aud_new if _aud_old.get(k) != _aud_new[k]] or None
+            _aud_changed = [
+                k for k in _aud_new if _aud_old.get(k) != _aud_new[k]
+            ] or None
 
         elif payload.action == GuestWorkflowAction.MODIFY_VISIT_AND_BOOKING:
             visit = _require_workflow_visit(
@@ -3004,7 +3273,9 @@ def execute_guest_visit_workflow(
                 "seat_code": seat.get("seat_code"),
                 "booking_date": _iso(payload.visit_date),
             }
-            _aud_changed = [k for k in _aud_new if _aud_old.get(k) != _aud_new[k]] or None
+            _aud_changed = [
+                k for k in _aud_new if _aud_old.get(k) != _aud_new[k]
+            ] or None
 
         elif payload.action == GuestWorkflowAction.ADD_BOOKING:
             visit = _require_workflow_visit(
@@ -3015,11 +3286,14 @@ def execute_guest_visit_workflow(
                 ),
                 require_scheduled=True,
             )
-            if fetch_active_booking_for_guest_visit(
-                conn,
-                tenant_id=tenant_id,
-                guest_visit_id=guest_visit_id,
-            ) is not None:
+            if (
+                fetch_active_booking_for_guest_visit(
+                    conn,
+                    tenant_id=tenant_id,
+                    guest_visit_id=guest_visit_id,
+                )
+                is not None
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail={
@@ -3150,12 +3424,16 @@ def execute_guest_visit_workflow(
             )
             _aud_context = {
                 "guest_id": booking.get("booked_for_guest_id"),
-                "guest_email": result.booking.booked_for_email if result.booking else None,
+                "guest_email": (
+                    result.booking.booked_for_email if result.booking else None
+                ),
                 "seat_code": result.booking.seat_code if result.booking else None,
                 "site_id": booking.get("site_id"),
                 "site_name": result.booking.site_name if result.booking else None,
                 "building_id": booking.get("building_id"),
-                "building_name": result.booking.building_name if result.booking else None,
+                "building_name": (
+                    result.booking.building_name if result.booking else None
+                ),
                 "floor_id": booking.get("floor_id"),
                 "floor_name": result.booking.floor_name if result.booking else None,
             }
@@ -3220,9 +3498,7 @@ def execute_guest_visit_workflow(
                 action=payload.action,
                 guest_visit_id=str(visit["guest_visit_id"]),
                 booking_id=(
-                    str(booking["booking_id"])
-                    if booking is not None
-                    else None
+                    str(booking["booking_id"]) if booking is not None else None
                 ),
                 message="Guest visit and any active booking cancelled.",
             )
@@ -3232,7 +3508,9 @@ def execute_guest_visit_workflow(
                 "site_id": visit.get("site_id"),
                 "site_name": result.booking.site_name if result.booking else None,
                 "building_id": visit.get("building_id"),
-                "building_name": result.booking.building_name if result.booking else None,
+                "building_name": (
+                    result.booking.building_name if result.booking else None
+                ),
                 "floor_id": visit.get("floor_id"),
                 "floor_name": result.booking.floor_name if result.booking else None,
                 "seat_id": booking.get("seat_id") if booking is not None else None,
@@ -3241,15 +3519,21 @@ def execute_guest_visit_workflow(
             _aud_old = {
                 "visit_status": visit.get("visit_status"),
                 "visit_date": _iso(visit.get("visit_date")),
-                "booking_id": booking.get("booking_id") if booking is not None else None,
-                "booking_status": booking.get("booking_status") if booking is not None else None,
+                "booking_id": (
+                    booking.get("booking_id") if booking is not None else None
+                ),
+                "booking_status": (
+                    booking.get("booking_status") if booking is not None else None
+                ),
                 "cancellation_reason": None,
                 **_aud_context,
             }
             _aud_new = {
                 "visit_status": "CANCELLED",
                 "visit_date": _iso(visit.get("visit_date")),
-                "booking_id": booking.get("booking_id") if booking is not None else None,
+                "booking_id": (
+                    booking.get("booking_id") if booking is not None else None
+                ),
                 "booking_status": "CANCELLED" if booking is not None else None,
                 "cancellation_reason": cancellation_reason,
                 **_aud_context,
@@ -3275,7 +3559,9 @@ def execute_guest_visit_workflow(
         }
         safe_write_audit_log(
             conn,
-            action=_WORKFLOW_AUDIT_ACTION.get(payload.action, GUEST_VISIT_WORKFLOW_EXECUTED),
+            action=_WORKFLOW_AUDIT_ACTION.get(
+                payload.action, GUEST_VISIT_WORKFLOW_EXECUTED
+            ),
             tenant_id=tenant_id,
             current_user=current_user,
             resource_type="guest_visit",
@@ -3289,18 +3575,29 @@ def execute_guest_visit_workflow(
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_WORKFLOW_EXECUTED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit", resource_id=guest_visit_id,
+            conn,
+            action=GUEST_VISIT_WORKFLOW_EXECUTED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=guest_visit_id,
             event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
+            failure_code=_d.get("code"),
+            failure_reason=_d.get("message"),
         )
         raise
     except (LookupError, ValueError) as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_WORKFLOW_EXECUTED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit", resource_id=guest_visit_id,
-            event_status="FAILURE", failure_code="guest_workflow_failed", failure_reason=str(exc),
+            conn,
+            action=GUEST_VISIT_WORKFLOW_EXECUTED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=guest_visit_id,
+            event_status="FAILURE",
+            failure_code="guest_workflow_failed",
+            failure_reason=str(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -3309,15 +3606,20 @@ def execute_guest_visit_workflow(
     except psycopg2.Error as exc:
         conn.rollback()
         safe_write_audit_log(
-            conn, action=GUEST_VISIT_WORKFLOW_EXECUTED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="guest_visit", resource_id=guest_visit_id,
-            event_status="FAILURE", failure_code="guest_workflow_failed", failure_reason="Database error during guest workflow.",
+            conn,
+            action=GUEST_VISIT_WORKFLOW_EXECUTED,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            resource_type="guest_visit",
+            resource_id=guest_visit_id,
+            event_status="FAILURE",
+            failure_code="guest_workflow_failed",
+            failure_reason="Database error during guest workflow.",
         )
         _translate_guest_db_error(exc, action="workflow")
     except Exception:
         conn.rollback()
         raise
- 
 
 
 def audit_guest_visit_integrity(
@@ -3334,17 +3636,14 @@ def audit_guest_visit_integrity(
         limit=limit,
     )
 
+
 def list_cancelled_guest_visits(
     conn: PGConnection,
     *,
     current_user: dict[str, Any],
 ) -> CancelledGuestVisitResponse:
 
-    role = (
-        current_user.get("role_name")
-        or current_user.get("role")
-        or ""
-    ).upper()
+    role = (current_user.get("role_name") or current_user.get("role") or "").upper()
 
     created_by_user_id = None
 
@@ -3358,8 +3657,5 @@ def list_cancelled_guest_visits(
     )
 
     return CancelledGuestVisitResponse(
-        items=[
-            CancelledGuestVisitItem(**row)
-            for row in rows
-        ]
+        items=[CancelledGuestVisitItem(**row) for row in rows]
     )

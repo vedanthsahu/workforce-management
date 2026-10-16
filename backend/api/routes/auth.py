@@ -26,6 +26,7 @@ from backend.services.auth_service import (
 
 router = APIRouter(tags=["auth"])
 
+
 @router.post("/auth/logout", response_model=MessageResponse)
 def logout(
     request: Request,
@@ -45,6 +46,8 @@ def logout(
     _clear_auth_cookies(response)
 
     return MessageResponse(message="Logged out successfully")
+
+
 @router.post("/auth/refresh", response_model=MessageResponse)
 def refresh_token(
     request: Request,
@@ -70,7 +73,7 @@ def refresh_token(
         user_agent=request.headers.get("user-agent"),
         ip_address=request.client.host if request.client else None,
     )
- 
+
     _set_auth_cookies(response, auth_tokens)
     return MessageResponse(message="Token refreshed")
 

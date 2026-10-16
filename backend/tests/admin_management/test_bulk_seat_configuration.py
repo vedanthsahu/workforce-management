@@ -12,7 +12,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from backend.schemas.location import BulkSeatConfigurationUpdateRequest
 from backend.services.location_service import update_seats_configuration_bulk
 
-TENANT_ADMIN_CALLER = {"user_id": "1", "email": "admin@example.com", "role_name": "TENANT_ADMIN"}
+TENANT_ADMIN_CALLER = {
+    "user_id": "1",
+    "email": "admin@example.com",
+    "role_name": "TENANT_ADMIN",
+}
 
 
 class FakeConnection:
@@ -43,7 +47,9 @@ def _seat_row(seat_id: str, *, layout_id: str | None = None) -> dict[str, object
 class BulkSeatConfigurationServiceTests(unittest.TestCase):
     def test_applies_same_configuration_to_every_seat(self) -> None:
         conn = FakeConnection()
-        payload = BulkSeatConfigurationUpdateRequest(seat_ids=[1, 2, 3], is_bookable=False)
+        payload = BulkSeatConfigurationUpdateRequest(
+            seat_ids=[1, 2, 3], is_bookable=False
+        )
 
         fetched = [_seat_row("1"), _seat_row("2"), _seat_row("3")]
         updated = [
@@ -61,7 +67,9 @@ class BulkSeatConfigurationServiceTests(unittest.TestCase):
                 "backend.services.location_service.update_seat_configuration",
                 side_effect=updated,
             ) as mock_update,
-            patch("backend.services.location_service.safe_write_audit_log") as mock_audit,
+            patch(
+                "backend.services.location_service.safe_write_audit_log"
+            ) as mock_audit,
         ):
             responses = update_seats_configuration_bulk(
                 conn,
@@ -82,7 +90,9 @@ class BulkSeatConfigurationServiceTests(unittest.TestCase):
 
     def test_deduplicates_repeated_seat_ids(self) -> None:
         conn = FakeConnection()
-        payload = BulkSeatConfigurationUpdateRequest(seat_ids=[5, 5, 5], status="INACTIVE")
+        payload = BulkSeatConfigurationUpdateRequest(
+            seat_ids=[5, 5, 5], status="INACTIVE"
+        )
 
         with (
             patch(
@@ -120,7 +130,9 @@ class BulkSeatConfigurationServiceTests(unittest.TestCase):
                 "backend.services.location_service.update_seat_configuration",
                 return_value={**_seat_row("1"), "is_bookable": True},
             ),
-            patch("backend.services.location_service.safe_write_audit_log") as mock_audit,
+            patch(
+                "backend.services.location_service.safe_write_audit_log"
+            ) as mock_audit,
         ):
             with self.assertRaises(HTTPException) as context:
                 update_seats_configuration_bulk(
@@ -142,7 +154,9 @@ class BulkSeatConfigurationServiceTests(unittest.TestCase):
         layout once; a seat with no layout_id (pre-tracking data) must not
         be stamped at all."""
         conn = FakeConnection()
-        payload = BulkSeatConfigurationUpdateRequest(seat_ids=[1, 2, 3], is_bookable=False)
+        payload = BulkSeatConfigurationUpdateRequest(
+            seat_ids=[1, 2, 3], is_bookable=False
+        )
 
         fetched = [
             _seat_row("1", layout_id="100"),
@@ -183,7 +197,9 @@ class BulkSeatConfigurationServiceTests(unittest.TestCase):
 
     def test_rejects_immutable_fields_like_the_single_seat_endpoint(self) -> None:
         conn = FakeConnection()
-        payload = BulkSeatConfigurationUpdateRequest(seat_ids=[1], status="ACTIVE", map_x=10)
+        payload = BulkSeatConfigurationUpdateRequest(
+            seat_ids=[1], status="ACTIVE", map_x=10
+        )
 
         with self.assertRaises(HTTPException) as context:
             update_seats_configuration_bulk(

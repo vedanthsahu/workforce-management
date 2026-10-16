@@ -77,13 +77,19 @@ class AcquireBookingSlotLocksTests(unittest.TestCase):
         each other for no reason."""
         cursor_a = FakeCursor()
         acquire_booking_slot_locks(
-            FakeConnection(cursor_a), tenant_id="1", seat_id="42",
-            subject_id="7", booking_date=TOMORROW,
+            FakeConnection(cursor_a),
+            tenant_id="1",
+            seat_id="42",
+            subject_id="7",
+            booking_date=TOMORROW,
         )
         cursor_b = FakeCursor()
         acquire_booking_slot_locks(
-            FakeConnection(cursor_b), tenant_id="1", seat_id="99",
-            subject_id="7", booking_date=TOMORROW,
+            FakeConnection(cursor_b),
+            tenant_id="1",
+            seat_id="99",
+            subject_id="7",
+            booking_date=TOMORROW,
         )
 
         seat_key_a = cursor_a.executions[0][1][1]
@@ -142,7 +148,10 @@ class BookSeatAcquiresLockBeforeConflictChecksTests(unittest.TestCase):
 
     def _payload(self) -> CreateBookingRequest:
         return CreateBookingRequest(
-            site_id=1, building_id=1, floor_id=1, seat_id=1,
+            site_id=1,
+            building_id=1,
+            floor_id=1,
+            seat_id=1,
             booking_date=TOMORROW,
         )
 
@@ -155,9 +164,13 @@ class BookSeatAcquiresLockBeforeConflictChecksTests(unittest.TestCase):
             patch(
                 "backend.services.booking_service.fetch_seat_for_booking",
                 return_value={
-                    "tenant_id": "1", "site_id": "1", "building_id": "1",
-                    "floor_id": "1", "seat_id": "1",
-                    "status": "ACTIVE", "is_bookable": True,
+                    "tenant_id": "1",
+                    "site_id": "1",
+                    "building_id": "1",
+                    "floor_id": "1",
+                    "seat_id": "1",
+                    "status": "ACTIVE",
+                    "is_bookable": True,
                 },
             ),
             patch(
@@ -173,7 +186,11 @@ class BookSeatAcquiresLockBeforeConflictChecksTests(unittest.TestCase):
             patch("backend.services.booking_service.safe_write_audit_log"),
         ):
             with self.assertRaises(HTTPException) as context:
-                book_seat(conn=_CommitRollbackOnlyConnection(), current_user=CALLER, payload=self._payload())
+                book_seat(
+                    conn=_CommitRollbackOnlyConnection(),
+                    current_user=CALLER,
+                    payload=self._payload(),
+                )
 
         self.assertEqual(context.exception.status_code, 418)
         mock_user_check.assert_not_called()
@@ -188,9 +205,13 @@ class BookSeatAcquiresLockBeforeConflictChecksTests(unittest.TestCase):
             patch(
                 "backend.services.booking_service.fetch_seat_for_booking",
                 return_value={
-                    "tenant_id": "1", "site_id": "1", "building_id": "1",
-                    "floor_id": "1", "seat_id": "1",
-                    "status": "ACTIVE", "is_bookable": True,
+                    "tenant_id": "1",
+                    "site_id": "1",
+                    "building_id": "1",
+                    "floor_id": "1",
+                    "seat_id": "1",
+                    "status": "ACTIVE",
+                    "is_bookable": True,
                 },
             ),
             patch(
@@ -214,7 +235,11 @@ class BookSeatAcquiresLockBeforeConflictChecksTests(unittest.TestCase):
             ),
             patch("backend.services.booking_service.write_audit_log"),
         ):
-            book_seat(conn=_CommitRollbackOnlyConnection(), current_user=CALLER, payload=self._payload())
+            book_seat(
+                conn=_CommitRollbackOnlyConnection(),
+                current_user=CALLER,
+                payload=self._payload(),
+            )
 
         kwargs = mock_lock.call_args.kwargs
         self.assertEqual(kwargs["tenant_id"], "1")

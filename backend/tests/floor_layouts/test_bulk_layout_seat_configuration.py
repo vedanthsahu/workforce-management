@@ -120,9 +120,7 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
                 current_user=CALLER,
             )
 
-        self.assertEqual(
-            [r.layout_seat_mapping_id for r in responses], ["1", "2", "3"]
-        )
+        self.assertEqual([r.layout_seat_mapping_id for r in responses], ["1", "2", "3"])
         self.assertTrue(all(r.is_reserved is True for r in responses))
         mock_update.assert_called_once()
         entries = mock_update.call_args.kwargs["entries"]
@@ -253,9 +251,7 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
                 )
 
         self.assertEqual(context.exception.status_code, 400)
-        self.assertEqual(
-            context.exception.detail["code"], "mixed_layout_bulk_request"
-        )
+        self.assertEqual(context.exception.detail["code"], "mixed_layout_bulk_request")
         mock_update.assert_not_called()
         self.assertEqual(conn.commits, 0)
         self.assertEqual(conn.rollbacks, 1)
@@ -366,7 +362,6 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
         )
         self.assertEqual(conn.commits, 1)
 
-
     def test_capacity_round_trips_and_cascades_into_seats_on_publish(self) -> None:
         """A bulk edit of several conference rooms' capacity resolves it
         per seat (own value wins over `defaults`, same as every other
@@ -388,19 +383,21 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
             patch(
                 "backend.services.location_service.fetch_layout_seat_mappings_by_ids",
                 return_value={
-                    "1": {**_mapping_row("1"), "svg_element_id": "HYD-PRV-F11-MR-C10-01"},
-                    "2": {**_mapping_row("2"), "svg_element_id": "HYD-PRV-F11-MR-C20-02"},
+                    "1": {
+                        **_mapping_row("1"),
+                        "svg_element_id": "HYD-PRV-F11-MR-C10-01",
+                    },
+                    "2": {
+                        **_mapping_row("2"),
+                        "svg_element_id": "HYD-PRV-F11-MR-C20-02",
+                    },
                 },
             ),
             patch(
                 "backend.services.location_service.update_layout_seat_mapping_configurations_bulk",
                 return_value={
-                    "1": _updated_row(
-                        "1", seat_type="CONFERENCE_ROOM", capacity=10
-                    ),
-                    "2": _updated_row(
-                        "2", seat_type="CONFERENCE_ROOM", capacity=20
-                    ),
+                    "1": _updated_row("1", seat_type="CONFERENCE_ROOM", capacity=10),
+                    "2": _updated_row("2", seat_type="CONFERENCE_ROOM", capacity=20),
                 },
             ) as mock_update,
             patch(

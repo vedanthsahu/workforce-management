@@ -79,7 +79,6 @@ class GraphAPIError(SSOError):
     """Structured exception for Microsoft Graph request failures."""
 
 
-
 def build_auth_url() -> tuple[str, str]:
     """Create the Microsoft authorization URL and CSRF state token.
 
@@ -243,6 +242,7 @@ def exchange_client_credentials_for_graph_token() -> str:
             details=_provider_error_details(payload),
         )
     return access_token
+
 
 def verify_id_token(id_token: str) -> dict[str, Any]:
     """Validate a Microsoft ID token against tenant signing keys.
@@ -526,7 +526,9 @@ def fetch_graph_users_with_department(access_token: str) -> dict[str, str | None
                 continue
             object_id = str(user.get("id") or "").strip().lower()
             if object_id:
-                departments[object_id] = str(user.get("department") or "").strip() or None
+                departments[object_id] = (
+                    str(user.get("department") or "").strip() or None
+                )
         next_link = str(payload.get("@odata.nextLink") or "").strip()
         url_or_path = next_link or None
         params = None
@@ -633,7 +635,9 @@ def _graph_get(
         )
 
     try:
-        url = path if path.startswith("https://") else f"{MICROSOFT_GRAPH_BASE_URL}{path}"
+        url = (
+            path if path.startswith("https://") else f"{MICROSOFT_GRAPH_BASE_URL}{path}"
+        )
         response = requests.get(
             url,
             headers={"Authorization": f"Bearer {access_token}"},

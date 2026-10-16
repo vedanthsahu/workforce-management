@@ -72,10 +72,16 @@ class ModifyBookingNoOpTests(unittest.TestCase):
                 "backend.services.booking_service.fetch_user_by_id",
                 return_value=BOOKING_OWNER,
             ),
-            patch("backend.services.booking_service.fetch_seat_for_booking") as mock_fetch_seat,
-            patch("backend.services.booking_service.mark_booking_modified") as mock_mark_modified,
+            patch(
+                "backend.services.booking_service.fetch_seat_for_booking"
+            ) as mock_fetch_seat,
+            patch(
+                "backend.services.booking_service.mark_booking_modified"
+            ) as mock_mark_modified,
             patch("backend.services.booking_service.insert_booking") as mock_insert,
-            patch("backend.services.booking_service.safe_write_audit_log") as mock_audit,
+            patch(
+                "backend.services.booking_service.safe_write_audit_log"
+            ) as mock_audit,
         ):
             result = modify_booking(
                 conn,

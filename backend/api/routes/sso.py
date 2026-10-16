@@ -88,7 +88,9 @@ def auth_login(email: str | None = None):
     if gateway_hostname and email and "@" in email:
         email_domain = email.rsplit("@", 1)[-1].strip().lower()
         if email_domain == gateway_hostname:
-            return RedirectResponse(url=build_gateway_sso_url(), status_code=status.HTTP_302_FOUND)
+            return RedirectResponse(
+                url=build_gateway_sso_url(), status_code=status.HTTP_302_FOUND
+            )
 
     try:
         auth_url, state = build_auth_url()
@@ -120,7 +122,9 @@ def auth_callback(
 
     if error:
         debug(f"Microsoft returned error: {error} - {error_description}")
-        return _error_response(400, "microsoft_auth_error", f"{error}: {error_description}")
+        return _error_response(
+            400, "microsoft_auth_error", f"{error}: {error_description}"
+        )
 
     if not code:
         debug("Missing code")
@@ -165,7 +169,9 @@ def auth_callback(
         return _error_response(exc.status_code, exc.code, exc.message, exc.details)
     except Exception as exc:
         debug(f"Unexpected error in token exchange: {type(exc).__name__}: {exc}")
-        return _error_response(500, "token_exchange_failed", f"{type(exc).__name__}: {exc!s}")
+        return _error_response(
+            500, "token_exchange_failed", f"{type(exc).__name__}: {exc!s}"
+        )
 
     azure_tenant_id = str(claims.get("tid") or "").strip()
     debug(f"azure_tenant_id={azure_tenant_id!r}")
@@ -184,7 +190,9 @@ def auth_callback(
         return _error_response(409, "tenant_resolution_ambiguous", str(exc))
     except Exception as exc:
         debug(f"Exception in tenant fetch: {type(exc).__name__}: {exc}")
-        return _error_response(500, "tenant_resolution_failed", f"{type(exc).__name__}: {exc!s}")
+        return _error_response(
+            500, "tenant_resolution_failed", f"{type(exc).__name__}: {exc!s}"
+        )
 
     tenant_id = str(tenant["tenant_id"])
     debug(f"tenant_id={tenant_id}")
@@ -197,13 +205,17 @@ def auth_callback(
 
         if microsoft_object_id:
             debug("Looking up user by microsoft_object_id...")
-            user = fetch_user_by_microsoft_object_id(conn, tenant_id=tenant_id, microsoft_object_id=microsoft_object_id)
+            user = fetch_user_by_microsoft_object_id(
+                conn, tenant_id=tenant_id, microsoft_object_id=microsoft_object_id
+            )
             debug(f"User by oid: {user}")
 
         if user is None:
             debug("Fetching Graph /me...")
             debug("STEP_GRAPH_ME_START")
-            graph_profile = _fetch_graph_payload(fetch_graph_me, token_payload["access_token"], required=True)
+            graph_profile = _fetch_graph_payload(
+                fetch_graph_me, token_payload["access_token"], required=True
+            )
             debug("STEP_GRAPH_ME_END")
             debug(f"Graph /me keys: {list(graph_profile.keys())}")
             graph_object_id = _resolve_graph_object_id(graph_profile)
@@ -211,12 +223,16 @@ def auth_callback(
                 raise ValueError("OID mismatch between id_token and Graph /me.")
             microsoft_object_id = graph_object_id
 
-            user = fetch_user_by_microsoft_object_id(conn, tenant_id=tenant_id, microsoft_object_id=microsoft_object_id)
+            user = fetch_user_by_microsoft_object_id(
+                conn, tenant_id=tenant_id, microsoft_object_id=microsoft_object_id
+            )
             debug(f"User after graph lookup: {user}")
 
         if user is None:
             debug("Provisioning first-time user...")
-            graph_manager = _fetch_graph_payload(fetch_graph_manager, token_payload["access_token"], required=False)
+            graph_manager = _fetch_graph_payload(
+                fetch_graph_manager, token_payload["access_token"], required=False
+            )
             debug(f"Graph manager keys: {list(graph_manager.keys())}")
             user = _provision_first_time_user(
                 conn,
@@ -287,11 +303,14 @@ def auth_callback(
         conn.rollback()
         debug(f"Unexpected exception: {type(exc).__name__}: {exc}")
         import traceback
+
         traceback.print_exc(file=sys.stderr)
         return _error_response(500, "sso_failed", f"{type(exc).__name__}: {exc!s}")
 
     settings = get_settings()
-    response = RedirectResponse(url=settings.frontend_url, status_code=status.HTTP_302_FOUND)
+    response = RedirectResponse(
+        url=settings.frontend_url, status_code=status.HTTP_302_FOUND
+    )
     _set_auth_cookies(response, auth_tokens)
     response.set_cookie(
         key=SESSION_TOKEN_COOKIE_NAME,
@@ -301,6 +320,8 @@ def auth_callback(
     _clear_state_cookie(response)
     debug("=== auth_callback complete, redirecting ===")
     return response
+
+
 @router.get("/graph/me", response_model=None)
 def graph_me(
     request: Request,
@@ -352,16 +373,22 @@ def auth_sso_gateway_callback(
         return _error_response(exc.status_code, exc.code, exc.message, exc.details)
 
     try:
-        debug("Fetching tenant (exact tenant_key match required, no default-tenant fallback -- "
-              "the gateway's own Microsoft login isn't scoped to our tenant the way "
-              "login.microsoftonline.com/{our_tenant_id} is for /auth/callback)...")
+        debug(
+            "Fetching tenant (exact tenant_key match required, no default-tenant fallback -- "
+            "the gateway's own Microsoft login isn't scoped to our tenant the way "
+            "login.microsoftonline.com/{our_tenant_id} is for /auth/callback)..."
+        )
         tenant = fetch_tenant_by_azure_tenant_id(conn, azure_tenant_id)
         debug(f"Tenant result: {tenant}")
         if tenant is None:
-            return _error_response(401, "unknown_tenant", "No active tenant found for this Azure tenant.")
+            return _error_response(
+                401, "unknown_tenant", "No active tenant found for this Azure tenant."
+            )
     except Exception as exc:
         debug(f"Exception in tenant fetch: {type(exc).__name__}: {exc}")
-        return _error_response(500, "tenant_resolution_failed", f"{type(exc).__name__}: {exc!s}")
+        return _error_response(
+            500, "tenant_resolution_failed", f"{type(exc).__name__}: {exc!s}"
+        )
 
     tenant_id = str(tenant["tenant_id"])
     debug(f"tenant_id={tenant_id}")
@@ -373,12 +400,16 @@ def auth_sso_gateway_callback(
     debug(f"microsoft_object_id={microsoft_object_id!r}")
 
     try:
-        user = fetch_user_by_microsoft_object_id(conn, tenant_id=tenant_id, microsoft_object_id=microsoft_object_id)
+        user = fetch_user_by_microsoft_object_id(
+            conn, tenant_id=tenant_id, microsoft_object_id=microsoft_object_id
+        )
         debug(f"User by oid: {user}")
 
         if user is None:
             debug("Provisioning first-time user...")
-            graph_manager = _fetch_graph_payload(fetch_graph_manager, access_token, required=False)
+            graph_manager = _fetch_graph_payload(
+                fetch_graph_manager, access_token, required=False
+            )
             debug(f"Graph manager keys: {list(graph_manager.keys())}")
             user = _provision_first_time_user(
                 conn,
@@ -449,11 +480,14 @@ def auth_sso_gateway_callback(
         conn.rollback()
         debug(f"Unexpected exception: {type(exc).__name__}: {exc}")
         import traceback
+
         traceback.print_exc(file=sys.stderr)
         return _error_response(500, "sso_failed", f"{type(exc).__name__}: {exc!s}")
 
     settings = get_settings()
-    response = RedirectResponse(url=settings.frontend_url, status_code=status.HTTP_302_FOUND)
+    response = RedirectResponse(
+        url=settings.frontend_url, status_code=status.HTTP_302_FOUND
+    )
     _set_auth_cookies(response, auth_tokens)
     response.set_cookie(
         key=SESSION_TOKEN_COOKIE_NAME,
@@ -599,7 +633,9 @@ def _sync_existing_user_department_team(
 
     if not graph_profile:
         try:
-            graph_profile = _fetch_graph_payload(fetch_graph_me, access_token, required=False)
+            graph_profile = _fetch_graph_payload(
+                fetch_graph_me, access_token, required=False
+            )
         except GraphAPIError:
             logger.warning("sso.department_sync.graph_me_failed user_id=%s", user_id)
             return
@@ -620,7 +656,7 @@ def _sync_existing_user_department_team(
             user_id=user_id,
             department=department,
         )
-    except (psycopg2.Error, LookupError, ValueError):
+    except psycopg2.Error, LookupError, ValueError:
         conn.rollback()
         logger.exception("sso.department_sync.failed user_id=%s", user_id)
 
@@ -652,7 +688,9 @@ def _resolve_graph_object_id(graph_profile: dict[str, Any]) -> str:
     if not graph_object_id:
         raise ValueError("Microsoft Graph /me did not include id.")
     if len(graph_object_id) > 150:
-        raise ValueError("Microsoft Graph /me id exceeds app_users.microsoft_object_id length.")
+        raise ValueError(
+            "Microsoft Graph /me id exceeds app_users.microsoft_object_id length."
+        )
     return graph_object_id
 
 
@@ -671,8 +709,13 @@ def _resolve_email(claims: dict[str, Any], graph_profile: dict[str, Any]) -> str
     raise ValueError("Microsoft identity did not include mail or userPrincipalName.")
 
 
-def _resolve_user_principal_name(claims: dict[str, Any], graph_profile: dict[str, Any]) -> str | None:
-    for candidate in (graph_profile.get("userPrincipalName"), claims.get("preferred_username")):
+def _resolve_user_principal_name(
+    claims: dict[str, Any], graph_profile: dict[str, Any]
+) -> str | None:
+    for candidate in (
+        graph_profile.get("userPrincipalName"),
+        claims.get("preferred_username"),
+    ):
         normalized = str(candidate or "").strip()
         if normalized:
             if len(normalized) > 200:
@@ -681,7 +724,9 @@ def _resolve_user_principal_name(claims: dict[str, Any], graph_profile: dict[str
     return None
 
 
-def _resolve_display_name(claims: dict[str, Any], graph_profile: dict[str, Any]) -> str | None:
+def _resolve_display_name(
+    claims: dict[str, Any], graph_profile: dict[str, Any]
+) -> str | None:
     for candidate in (
         graph_profile.get("displayName"),
         claims.get("name"),
@@ -779,7 +824,10 @@ def _error_response(
     """
     logger.warning(
         "sso.error_response status=%s code=%s message=%s details=%s",
-        status_code, code, message, details,
+        status_code,
+        code,
+        message,
+        details,
     )
     settings = get_settings()
     return RedirectResponse(

@@ -62,11 +62,15 @@ class RefreshTokenReuseDetectionTests(unittest.TestCase):
         self.assertEqual(context.exception.detail["code"], "invalid_refresh_token")
 
         mock_revoke.assert_called_once_with(
-            conn, tenant_id="1", user_id="7", session_id="session-abc",
+            conn,
+            tenant_id="1",
+            user_id="7",
+            session_id="session-abc",
         )
         mock_record.assert_called_once()
         self.assertEqual(
-            mock_record.call_args.kwargs["event_type"], "REFRESH_TOKEN_REUSE_DETECTED",
+            mock_record.call_args.kwargs["event_type"],
+            "REFRESH_TOKEN_REUSE_DETECTED",
         )
         self.assertEqual(conn.commits, 1)
 
@@ -129,7 +133,10 @@ class RefreshTokenReuseDetectionTests(unittest.TestCase):
                 },
             ),
             patch("backend.services.auth_service.record_auth_event"),
-            patch("backend.services.auth_service._build_access_token_for_user", return_value="jwt"),
+            patch(
+                "backend.services.auth_service._build_access_token_for_user",
+                return_value="jwt",
+            ),
         ):
             tokens = refresh_auth_tokens(conn, REFRESH_TOKEN)
 

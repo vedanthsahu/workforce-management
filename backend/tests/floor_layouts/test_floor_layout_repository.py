@@ -81,9 +81,14 @@ class FloorLayoutRepositoryFilterTests(unittest.TestCase):
 
         sql, params = cursor.executions[0]
         self.assertNotIn("updated_at >=", sql)
-        self.assertEqual(params, ("1", "2", ["DRAFT", "PUBLISHED", "SCHEDULED", "ARCHIVED", "DELETED"]))
+        self.assertEqual(
+            params,
+            ("1", "2", ["DRAFT", "PUBLISHED", "SCHEDULED", "ARCHIVED", "DELETED"]),
+        )
 
-    def test_fetch_layouts_by_floor_applies_visibility_clause_when_enrolled(self) -> None:
+    def test_fetch_layouts_by_floor_applies_visibility_clause_when_enrolled(
+        self,
+    ) -> None:
         """A floor enrolled in the visibility rule gets the extra age
         condition, with PUBLISHED always exempt and the per-status
         thresholds passed through as params, using the given unit."""
@@ -99,9 +104,18 @@ class FloorLayoutRepositoryFilterTests(unittest.TestCase):
 
         sql, params = cursor.executions[0]
         self.assertIn("fl.status = 'PUBLISHED'", sql)
-        self.assertIn("fl.status = 'DRAFT' AND fl.updated_at >= NOW() - (%s || ' days')::interval", sql)
-        self.assertIn("fl.status = 'ARCHIVED' AND fl.updated_at >= NOW() - (%s || ' days')::interval", sql)
-        self.assertIn("fl.status = 'DELETED' AND fl.updated_at >= NOW() - (%s || ' days')::interval", sql)
+        self.assertIn(
+            "fl.status = 'DRAFT' AND fl.updated_at >= NOW() - (%s || ' days')::interval",
+            sql,
+        )
+        self.assertIn(
+            "fl.status = 'ARCHIVED' AND fl.updated_at >= NOW() - (%s || ' days')::interval",
+            sql,
+        )
+        self.assertIn(
+            "fl.status = 'DELETED' AND fl.updated_at >= NOW() - (%s || ' days')::interval",
+            sql,
+        )
         self.assertEqual(
             params,
             (
@@ -154,13 +168,22 @@ class FloorLayoutRepositoryFilterTests(unittest.TestCase):
 
         sql, params = cursor.executions[0]
         self.assertIn("fl.status = ANY(%s)", sql)
-        self.assertEqual(params, ("1", "10", ["DRAFT", "SCHEDULED", "ARCHIVED", "PUBLISHED"]))
+        self.assertEqual(
+            params, ("1", "10", ["DRAFT", "SCHEDULED", "ARCHIVED", "PUBLISHED"])
+        )
 
 
 class SoftDeleteFloorLayoutRepositoryTests(unittest.TestCase):
     def test_cancel_schedule_clears_dates_and_returns_draft(self) -> None:
-        cursor = FakeCursor(fetchone_values=[{"layout_id": "10"}, {"layout_id": "10", "status": "DRAFT"}])
-        result = soft_delete_floor_layout(FakeConnection(cursor), tenant_id="1", layout_id="10", target_status="DRAFT")
+        cursor = FakeCursor(
+            fetchone_values=[
+                {"layout_id": "10"},
+                {"layout_id": "10", "status": "DRAFT"},
+            ]
+        )
+        result = soft_delete_floor_layout(
+            FakeConnection(cursor), tenant_id="1", layout_id="10", target_status="DRAFT"
+        )
         sql, params = cursor.executions[0]
         self.assertIn("effective_from = CASE WHEN %s = 'DRAFT' THEN NULL", sql)
         self.assertIn("effective_till = CASE WHEN %s = 'DRAFT' THEN NULL", sql)
@@ -185,7 +208,14 @@ class SoftDeleteFloorLayoutRepositoryTests(unittest.TestCase):
         self.assertIn("status = ANY(%s)", update_sql)
         self.assertEqual(
             update_params,
-            ("DELETED", "DELETED", "DELETED", "1", "10", ["DRAFT", "ARCHIVED", "SCHEDULED"]),
+            (
+                "DELETED",
+                "DELETED",
+                "DELETED",
+                "1",
+                "10",
+                ["DRAFT", "ARCHIVED", "SCHEDULED"],
+            ),
         )
 
         for sql, _ in cursor.executions:
@@ -220,7 +250,9 @@ class LayoutSeatMappingConfigurationVisibilityTests(unittest.TestCase):
         sql, params = cursor.executions[0]
         self.assertIn("JOIN floor_layouts", sql)
         self.assertIn("fl.status = ANY(%s)", sql)
-        self.assertEqual(params, ("1", "20", ["DRAFT", "SCHEDULED", "ARCHIVED", "PUBLISHED"]))
+        self.assertEqual(
+            params, ("1", "20", ["DRAFT", "SCHEDULED", "ARCHIVED", "PUBLISHED"])
+        )
 
 
 if __name__ == "__main__":

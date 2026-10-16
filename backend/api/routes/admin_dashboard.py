@@ -267,7 +267,9 @@ def admin_hierarchy_occupancy(
     ] = None,
     building_id: Annotated[
         int | None,
-        Query(alias="buildingId", gt=0, description="Optional building drilldown filter."),
+        Query(
+            alias="buildingId", gt=0, description="Optional building drilldown filter."
+        ),
     ] = None,
 ) -> list[AdminHierarchyOccupancyResponse]:
     if selected_date is None:

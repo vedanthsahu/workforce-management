@@ -175,17 +175,25 @@ def sync_graph_managed_roles(
     timestamp = datetime.now(UTC).isoformat()
 
     try:
-        tenant_ids = [tenant_id] if tenant_id is not None else fetch_active_tenant_ids(conn)
+        tenant_ids = (
+            [tenant_id] if tenant_id is not None else fetch_active_tenant_ids(conn)
+        )
         for scoped_tenant_id in tenant_ids:
-            users = fetch_graph_managed_role_users(conn, tenant_id=str(scoped_tenant_id))
+            users = fetch_graph_managed_role_users(
+                conn, tenant_id=str(scoped_tenant_id)
+            )
             for user in users:
                 scanned += 1
-                old_role = str(user.get("role_name") or user.get("role") or "").strip().upper()
+                old_role = (
+                    str(user.get("role_name") or user.get("role") or "").strip().upper()
+                )
                 if old_role not in GRAPH_MANAGED_ROLES:
                     continue
 
                 object_id = str(user.get("microsoft_object_id") or "").strip().lower()
-                new_role = "FACILITATOR" if object_id in graph_member_ids else "EMPLOYEE"
+                new_role = (
+                    "FACILITATOR" if object_id in graph_member_ids else "EMPLOYEE"
+                )
                 if old_role == new_role:
                     continue
 
@@ -196,7 +204,9 @@ def sync_graph_managed_roles(
                     role_name=new_role,
                 )
                 if updated is None:
-                    raise LookupError("Graph role sync target user could not be updated.")
+                    raise LookupError(
+                        "Graph role sync target user could not be updated."
+                    )
 
                 revoked_sessions = revoke_all_user_sessions(
                     conn,
@@ -288,7 +298,9 @@ def sync_department_teams(
     changed = 0
 
     try:
-        tenant_ids = [tenant_id] if tenant_id is not None else fetch_active_tenant_ids(conn)
+        tenant_ids = (
+            [tenant_id] if tenant_id is not None else fetch_active_tenant_ids(conn)
+        )
         for scoped_tenant_id in tenant_ids:
             users = fetch_graph_linked_users(conn, tenant_id=str(scoped_tenant_id))
             for user in users:
@@ -441,7 +453,7 @@ def issue_tokens_for_user(
             access_token=access_token,
             refresh_token=refresh_data["token"],
         )
-       
+
     except HTTPException:
         if commit:
             _rollback_if_needed(conn)
@@ -558,7 +570,7 @@ def refresh_auth_tokens(
             tenant_id=refresh_scope["tenant_id"],
             user_id=refresh_scope["user_id"],
         )
-        
+
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -623,7 +635,7 @@ def refresh_auth_tokens(
             user,
             session_id=refresh_scope["session_id"],
         )
-        
+
         if commit:
             conn.commit()
         return AuthTokens(
@@ -690,7 +702,9 @@ def logout_user_session(
                 tenant_id=refresh_scope["tenant_id"],
                 actor_user_id=refresh_scope["user_id"],
                 actor_email=user.get("email") if user else None,
-                actor_role=str(user.get("role_name") or "").upper() or None if user else None,
+                actor_role=(
+                    str(user.get("role_name") or "").upper() or None if user else None
+                ),
                 resource_type="session",
                 resource_id=refresh_scope["session_id"],
                 ip_address=ip_address,

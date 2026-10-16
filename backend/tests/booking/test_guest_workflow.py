@@ -119,7 +119,9 @@ class GuestWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(route.methods, {"POST"})
 
-    def test_modify_visit_only_creates_new_visit_and_never_touches_booking(self) -> None:
+    def test_modify_visit_only_creates_new_visit_and_never_touches_booking(
+        self,
+    ) -> None:
         conn = FakeConnection()
         old_visit = _visit()
         new_visit = _visit(
@@ -132,31 +134,39 @@ class GuestWorkflowTests(unittest.TestCase):
             guest_type="VENDOR",
             purpose_of_visit="VENDOR_VISIT",
         )
-        with patch.object(
-            guest_service,
-            "fetch_guest_visit_by_id_for_update",
-            side_effect=[old_visit, new_visit],
-        ), patch.object(
-            guest_service,
-            "_resolve_host",
-            return_value={},
-        ), patch.object(
-            guest_service,
-            "_validate_visit_location",
-        ), patch.object(
-            guest_service,
-            "mark_guest_visit_modified",
-        ) as mark_visit, patch.object(
-            guest_service,
-            "insert_guest_visit",
-            return_value=new_visit,
-        ) as insert_visit, patch.object(
-            guest_service,
-            "fetch_active_booking_for_guest_visit",
-        ) as fetch_booking, patch.object(
-            guest_service,
-            "cancel_booking",
-        ) as cancel_booking:
+        with (
+            patch.object(
+                guest_service,
+                "fetch_guest_visit_by_id_for_update",
+                side_effect=[old_visit, new_visit],
+            ),
+            patch.object(
+                guest_service,
+                "_resolve_host",
+                return_value={},
+            ),
+            patch.object(
+                guest_service,
+                "_validate_visit_location",
+            ),
+            patch.object(
+                guest_service,
+                "mark_guest_visit_modified",
+            ) as mark_visit,
+            patch.object(
+                guest_service,
+                "insert_guest_visit",
+                return_value=new_visit,
+            ) as insert_visit,
+            patch.object(
+                guest_service,
+                "fetch_active_booking_for_guest_visit",
+            ) as fetch_booking,
+            patch.object(
+                guest_service,
+                "cancel_booking",
+            ) as cancel_booking,
+        ):
             response = guest_service.execute_guest_visit_workflow(
                 conn,
                 current_user=self.current_user,
@@ -213,63 +223,78 @@ class GuestWorkflowTests(unittest.TestCase):
             floor_id="7",
             booking_date=_future_date(20),
         )
-        with patch.object(
-            guest_service,
-            "fetch_guest_visit_by_id_for_update",
-            side_effect=[old_visit, new_visit],
-        ), patch.object(
-            guest_service,
-            "fetch_active_booking_for_guest_visit",
-            return_value=old_booking,
-        ), patch.object(
-            guest_service,
-            "_resolve_guest",
-            return_value={},
-        ), patch.object(
-            guest_service,
-            "_resolve_host",
-            return_value={},
-        ), patch.object(
-            guest_service,
-            "_validate_visit_location",
-        ), patch.object(
-            guest_service,
-            "_resolve_seat",
-            return_value={
-                "seat_id": "31",
-                "site_id": "5",
-                "building_id": "6",
-                "floor_id": "7",
-            },
-        ), patch.object(
-            guest_service,
-            "guest_has_active_booking_on_date",
-            return_value=False,
-        ), patch.object(
-            guest_service,
-            "has_active_booking_conflict",
-            return_value=False,
-        ), patch.object(
-            guest_service,
-            "mark_booking_modified",
-        ) as mark_booking, patch.object(
-            guest_service,
-            "mark_guest_visit_modified",
-        ) as mark_visit, patch.object(
-            guest_service,
-            "insert_guest_visit",
-            return_value=new_visit,
-        ) as insert_visit, patch.object(
-            guest_service,
-            "insert_guest_booking",
-            return_value=new_booking,
-        ) as insert_booking, patch.object(
-            guest_service,
-            "recalculate_guest_visit_requires_seat",
-        ), patch.object(
-            guest_service,
-            "fetch_booking_by_id",
-            return_value=new_booking,
+        with (
+            patch.object(
+                guest_service,
+                "fetch_guest_visit_by_id_for_update",
+                side_effect=[old_visit, new_visit],
+            ),
+            patch.object(
+                guest_service,
+                "fetch_active_booking_for_guest_visit",
+                return_value=old_booking,
+            ),
+            patch.object(
+                guest_service,
+                "_resolve_guest",
+                return_value={},
+            ),
+            patch.object(
+                guest_service,
+                "_resolve_host",
+                return_value={},
+            ),
+            patch.object(
+                guest_service,
+                "_validate_visit_location",
+            ),
+            patch.object(
+                guest_service,
+                "_resolve_seat",
+                return_value={
+                    "seat_id": "31",
+                    "site_id": "5",
+                    "building_id": "6",
+                    "floor_id": "7",
+                },
+            ),
+            patch.object(
+                guest_service,
+                "guest_has_active_booking_on_date",
+                return_value=False,
+            ),
+            patch.object(
+                guest_service,
+                "has_active_booking_conflict",
+                return_value=False,
+            ),
+            patch.object(
+                guest_service,
+                "mark_booking_modified",
+            ) as mark_booking,
+            patch.object(
+                guest_service,
+                "mark_guest_visit_modified",
+            ) as mark_visit,
+            patch.object(
+                guest_service,
+                "insert_guest_visit",
+                return_value=new_visit,
+            ) as insert_visit,
+            patch.object(
+                guest_service,
+                "insert_guest_booking",
+                return_value=new_booking,
+            ) as insert_booking,
+            patch.object(
+                guest_service,
+                "recalculate_guest_visit_requires_seat",
+            ),
+            patch.object(
+                guest_service,
+                "fetch_booking_by_id",
+                return_value=new_booking,
+            ),
         ):
             response = guest_service.execute_guest_visit_workflow(
                 conn,
@@ -286,9 +311,13 @@ class GuestWorkflowTests(unittest.TestCase):
             mark_booking.call_args.kwargs["modification_reason"],
             "OTHER",
         )
-        self.assertEqual(insert_booking.call_args.kwargs["modified_from_booking_id"], "200")
+        self.assertEqual(
+            insert_booking.call_args.kwargs["modified_from_booking_id"], "200"
+        )
         self.assertNotIn("modification_reason", insert_booking.call_args.kwargs)
-        self.assertEqual(insert_visit.call_args.kwargs["modified_from_guest_visit_id"], "60")
+        self.assertEqual(
+            insert_visit.call_args.kwargs["modified_from_guest_visit_id"], "60"
+        )
         mark_visit.assert_called_once_with(
             conn,
             tenant_id="1",
@@ -332,44 +361,56 @@ class GuestWorkflowTests(unittest.TestCase):
             purpose_of_visit=VisitPurpose.VENDOR_VISIT,
             modification_reason="LOCATION_CHANGED",
         )
-        with patch.object(
-            guest_service,
-            "fetch_guest_visit_by_id_for_update",
-            return_value=old_visit,
-        ), patch.object(
-            guest_service,
-            "_resolve_host",
-            return_value={},
-        ), patch.object(
-            guest_service,
-            "_validate_visit_location",
-        ), patch.object(
-            guest_service,
-            "fetch_active_booking_for_guest_visit",
-            return_value=old_booking,
-        ), patch.object(
-            guest_service,
-            "mark_booking_modified",
-        ) as mark_booking, patch.object(
-            guest_service,
-            "mark_guest_visit_modified",
-        ) as mark_visit, patch.object(
-            guest_service,
-            "insert_guest_visit",
-            return_value=new_visit,
-        ) as insert_visit, patch.object(
-            guest_service,
-            "update_guest_visit_booking_details",
-        ), patch.object(
-            guest_service,
-            "sync_booking_from_guest_visit",
-        ) as sync_booking, patch.object(
-            guest_service,
-            "recalculate_guest_visit_requires_seat",
-        ), patch.object(
-            guest_service,
-            "fetch_guest_visit_by_id",
-            return_value=new_visit,
+        with (
+            patch.object(
+                guest_service,
+                "fetch_guest_visit_by_id_for_update",
+                return_value=old_visit,
+            ),
+            patch.object(
+                guest_service,
+                "_resolve_host",
+                return_value={},
+            ),
+            patch.object(
+                guest_service,
+                "_validate_visit_location",
+            ),
+            patch.object(
+                guest_service,
+                "fetch_active_booking_for_guest_visit",
+                return_value=old_booking,
+            ),
+            patch.object(
+                guest_service,
+                "mark_booking_modified",
+            ) as mark_booking,
+            patch.object(
+                guest_service,
+                "mark_guest_visit_modified",
+            ) as mark_visit,
+            patch.object(
+                guest_service,
+                "insert_guest_visit",
+                return_value=new_visit,
+            ) as insert_visit,
+            patch.object(
+                guest_service,
+                "update_guest_visit_booking_details",
+            ),
+            patch.object(
+                guest_service,
+                "sync_booking_from_guest_visit",
+            ) as sync_booking,
+            patch.object(
+                guest_service,
+                "recalculate_guest_visit_requires_seat",
+            ),
+            patch.object(
+                guest_service,
+                "fetch_guest_visit_by_id",
+                return_value=new_visit,
+            ),
         ):
             response = guest_service.modify_guest_visit(
                 conn,
@@ -389,7 +430,9 @@ class GuestWorkflowTests(unittest.TestCase):
             guest_visit_id="60",
             modification_reason="LOCATION_CHANGED",
         )
-        self.assertEqual(insert_visit.call_args.kwargs["modified_from_guest_visit_id"], "60")
+        self.assertEqual(
+            insert_visit.call_args.kwargs["modified_from_guest_visit_id"], "60"
+        )
         self.assertNotIn("modification_reason", insert_visit.call_args.kwargs)
         self.assertEqual(sync_booking.call_args.kwargs["guest_visit_id"], "60")
         self.assertEqual(sync_booking.call_args.kwargs["site_id"], "5")
@@ -403,52 +446,64 @@ class GuestWorkflowTests(unittest.TestCase):
         visit = _visit()
         new_booking = _booking(booking_id="201")
         payload = _payload(GuestWorkflowAction.ADD_BOOKING)
-        with patch.object(
-            guest_service,
-            "fetch_guest_visit_by_id_for_update",
-            side_effect=[visit, visit],
-        ), patch.object(
-            guest_service,
-            "fetch_active_booking_for_guest_visit",
-            return_value=None,
-        ), patch.object(
-            guest_service,
-            "_resolve_guest",
-            return_value={},
-        ), patch.object(
-            guest_service,
-            "_validate_visit_location",
-        ), patch.object(
-            guest_service,
-            "_resolve_seat",
-            return_value={
-                "seat_id": "31",
-                "site_id": "2",
-                "building_id": "3",
-                "floor_id": "4",
-            },
-        ) as resolve_seat, patch.object(
-            guest_service,
-            "guest_has_active_booking_on_date",
-            return_value=False,
-        ), patch.object(
-            guest_service,
-            "has_active_booking_conflict",
-            return_value=False,
-        ), patch.object(
-            guest_service,
-            "insert_guest_booking",
-            return_value=new_booking,
-        ) as insert_booking, patch.object(
-            guest_service,
-            "update_guest_visit_booking_details",
-        ), patch.object(
-            guest_service,
-            "recalculate_guest_visit_requires_seat",
-        ), patch.object(
-            guest_service,
-            "fetch_booking_by_id",
-            return_value=new_booking,
+        with (
+            patch.object(
+                guest_service,
+                "fetch_guest_visit_by_id_for_update",
+                side_effect=[visit, visit],
+            ),
+            patch.object(
+                guest_service,
+                "fetch_active_booking_for_guest_visit",
+                return_value=None,
+            ),
+            patch.object(
+                guest_service,
+                "_resolve_guest",
+                return_value={},
+            ),
+            patch.object(
+                guest_service,
+                "_validate_visit_location",
+            ),
+            patch.object(
+                guest_service,
+                "_resolve_seat",
+                return_value={
+                    "seat_id": "31",
+                    "site_id": "2",
+                    "building_id": "3",
+                    "floor_id": "4",
+                },
+            ) as resolve_seat,
+            patch.object(
+                guest_service,
+                "guest_has_active_booking_on_date",
+                return_value=False,
+            ),
+            patch.object(
+                guest_service,
+                "has_active_booking_conflict",
+                return_value=False,
+            ),
+            patch.object(
+                guest_service,
+                "insert_guest_booking",
+                return_value=new_booking,
+            ) as insert_booking,
+            patch.object(
+                guest_service,
+                "update_guest_visit_booking_details",
+            ),
+            patch.object(
+                guest_service,
+                "recalculate_guest_visit_requires_seat",
+            ),
+            patch.object(
+                guest_service,
+                "fetch_booking_by_id",
+                return_value=new_booking,
+            ),
         ):
             response = guest_service.execute_guest_visit_workflow(
                 conn,
@@ -474,27 +529,34 @@ class GuestWorkflowTests(unittest.TestCase):
             booking_status="CANCELLED",
             cancellation_reason="Seat not needed",
         )
-        with patch.object(
-            guest_service,
-            "fetch_guest_visit_by_id_for_update",
-            side_effect=[_visit(), _visit(requires_seat=False)],
-        ), patch.object(
-            guest_service,
-            "fetch_active_booking_for_guest_visit",
-            return_value=_booking(),
-        ), patch.object(
-            guest_service,
-            "cancel_booking",
-        ) as cancel_booking, patch.object(
-            guest_service,
-            "cancel_guest_visit",
-        ) as cancel_visit, patch.object(
-            guest_service,
-            "recalculate_guest_visit_requires_seat",
-        ), patch.object(
-            guest_service,
-            "fetch_booking_by_id",
-            return_value=cancelled_booking,
+        with (
+            patch.object(
+                guest_service,
+                "fetch_guest_visit_by_id_for_update",
+                side_effect=[_visit(), _visit(requires_seat=False)],
+            ),
+            patch.object(
+                guest_service,
+                "fetch_active_booking_for_guest_visit",
+                return_value=_booking(),
+            ),
+            patch.object(
+                guest_service,
+                "cancel_booking",
+            ) as cancel_booking,
+            patch.object(
+                guest_service,
+                "cancel_guest_visit",
+            ) as cancel_visit,
+            patch.object(
+                guest_service,
+                "recalculate_guest_visit_requires_seat",
+            ),
+            patch.object(
+                guest_service,
+                "fetch_booking_by_id",
+                return_value=cancelled_booking,
+            ),
         ):
             response = guest_service.execute_guest_visit_workflow(
                 conn,
@@ -521,27 +583,34 @@ class GuestWorkflowTests(unittest.TestCase):
             requires_seat=False,
         )
         cancelled_booking = _booking(booking_status="CANCELLED")
-        with patch.object(
-            guest_service,
-            "fetch_guest_visit_by_id_for_update",
-            side_effect=[_visit(), cancelled_visit],
-        ), patch.object(
-            guest_service,
-            "fetch_active_booking_for_guest_visit",
-            return_value=_booking(),
-        ), patch.object(
-            guest_service,
-            "cancel_booking",
-        ) as cancel_booking, patch.object(
-            guest_service,
-            "cancel_guest_visit",
-        ) as cancel_visit, patch.object(
-            guest_service,
-            "recalculate_guest_visit_requires_seat",
-        ), patch.object(
-            guest_service,
-            "fetch_booking_by_id",
-            return_value=cancelled_booking,
+        with (
+            patch.object(
+                guest_service,
+                "fetch_guest_visit_by_id_for_update",
+                side_effect=[_visit(), cancelled_visit],
+            ),
+            patch.object(
+                guest_service,
+                "fetch_active_booking_for_guest_visit",
+                return_value=_booking(),
+            ),
+            patch.object(
+                guest_service,
+                "cancel_booking",
+            ) as cancel_booking,
+            patch.object(
+                guest_service,
+                "cancel_guest_visit",
+            ) as cancel_visit,
+            patch.object(
+                guest_service,
+                "recalculate_guest_visit_requires_seat",
+            ),
+            patch.object(
+                guest_service,
+                "fetch_booking_by_id",
+                return_value=cancelled_booking,
+            ),
         ):
             response = guest_service.execute_guest_visit_workflow(
                 conn,
@@ -559,26 +628,32 @@ class GuestWorkflowTests(unittest.TestCase):
 
     def test_cancel_visit_without_booking_cancels_visit_only(self) -> None:
         conn = FakeConnection()
-        with patch.object(
-            guest_service,
-            "fetch_guest_visit_by_id_for_update",
-            side_effect=[
-                _visit(requires_seat=False),
-                _visit(requires_seat=False, visit_status="CANCELLED"),
-            ],
-        ), patch.object(
-            guest_service,
-            "fetch_active_booking_for_guest_visit",
-            return_value=None,
-        ), patch.object(
-            guest_service,
-            "cancel_booking",
-        ) as cancel_booking, patch.object(
-            guest_service,
-            "cancel_guest_visit",
-        ) as cancel_visit, patch.object(
-            guest_service,
-            "recalculate_guest_visit_requires_seat",
+        with (
+            patch.object(
+                guest_service,
+                "fetch_guest_visit_by_id_for_update",
+                side_effect=[
+                    _visit(requires_seat=False),
+                    _visit(requires_seat=False, visit_status="CANCELLED"),
+                ],
+            ),
+            patch.object(
+                guest_service,
+                "fetch_active_booking_for_guest_visit",
+                return_value=None,
+            ),
+            patch.object(
+                guest_service,
+                "cancel_booking",
+            ) as cancel_booking,
+            patch.object(
+                guest_service,
+                "cancel_guest_visit",
+            ) as cancel_visit,
+            patch.object(
+                guest_service,
+                "recalculate_guest_visit_requires_seat",
+            ),
         ):
             response = guest_service.execute_guest_visit_workflow(
                 conn,
@@ -595,47 +670,61 @@ class GuestWorkflowTests(unittest.TestCase):
 
     def test_failure_rolls_back_historical_modification(self) -> None:
         conn = FakeConnection()
-        with patch.object(
-            guest_service,
-            "fetch_guest_visit_by_id_for_update",
-            return_value=_visit(),
-        ), patch.object(
-            guest_service,
-            "fetch_active_booking_for_guest_visit",
-            return_value=_booking(),
-        ), patch.object(guest_service, "_resolve_guest", return_value={}), patch.object(
-            guest_service,
-            "_resolve_host",
-            return_value={},
-        ), patch.object(guest_service, "_validate_visit_location"), patch.object(
-            guest_service,
-            "_resolve_seat",
-            return_value={
-                "seat_id": "31",
-                "site_id": "5",
-                "building_id": "6",
-                "floor_id": "7",
-            },
-        ), patch.object(
-            guest_service,
-            "guest_has_active_booking_on_date",
-            return_value=False,
-        ), patch.object(
-            guest_service,
-            "has_active_booking_conflict",
-            return_value=False,
-        ), patch.object(guest_service, "mark_booking_modified"), patch.object(
-            guest_service,
-            "mark_guest_visit_modified",
-        ), patch.object(
-            guest_service,
-            "insert_guest_visit",
-            return_value={"guest_visit_id": "61"},
-        ), patch.object(
-            guest_service,
-            "insert_guest_booking",
-            side_effect=psycopg2.DatabaseError("insert failed"),
-        ), self.assertRaises(HTTPException):
+        with (
+            patch.object(
+                guest_service,
+                "fetch_guest_visit_by_id_for_update",
+                return_value=_visit(),
+            ),
+            patch.object(
+                guest_service,
+                "fetch_active_booking_for_guest_visit",
+                return_value=_booking(),
+            ),
+            patch.object(guest_service, "_resolve_guest", return_value={}),
+            patch.object(
+                guest_service,
+                "_resolve_host",
+                return_value={},
+            ),
+            patch.object(guest_service, "_validate_visit_location"),
+            patch.object(
+                guest_service,
+                "_resolve_seat",
+                return_value={
+                    "seat_id": "31",
+                    "site_id": "5",
+                    "building_id": "6",
+                    "floor_id": "7",
+                },
+            ),
+            patch.object(
+                guest_service,
+                "guest_has_active_booking_on_date",
+                return_value=False,
+            ),
+            patch.object(
+                guest_service,
+                "has_active_booking_conflict",
+                return_value=False,
+            ),
+            patch.object(guest_service, "mark_booking_modified"),
+            patch.object(
+                guest_service,
+                "mark_guest_visit_modified",
+            ),
+            patch.object(
+                guest_service,
+                "insert_guest_visit",
+                return_value={"guest_visit_id": "61"},
+            ),
+            patch.object(
+                guest_service,
+                "insert_guest_booking",
+                side_effect=psycopg2.DatabaseError("insert failed"),
+            ),
+            self.assertRaises(HTTPException),
+        ):
             guest_service.execute_guest_visit_workflow(
                 conn,
                 current_user=self.current_user,

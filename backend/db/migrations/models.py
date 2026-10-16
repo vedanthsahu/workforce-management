@@ -7,9 +7,22 @@ generating its migration -- see the workflow note in migrations/env.py.
 """
 
 from sqlalchemy import (
-    Column, BigInteger, Integer, SmallInteger, String, Text, Boolean,
-    DateTime, Date, Time, Numeric, ForeignKeyConstraint, UniqueConstraint,
-    Index, ARRAY, text,
+    Column,
+    BigInteger,
+    Integer,
+    SmallInteger,
+    String,
+    Text,
+    Boolean,
+    DateTime,
+    Date,
+    Time,
+    Numeric,
+    ForeignKeyConstraint,
+    UniqueConstraint,
+    Index,
+    ARRAY,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, JSON, UUID, INET
 from sqlalchemy.orm import declarative_base
@@ -27,16 +40,24 @@ class Amenities(Base):
     description = Column(Text, nullable=True)
     icon_name = Column(String(80), nullable=True)
     is_active = Column(Boolean, nullable=False, server_default=text("true"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
     category_id = Column(BigInteger, nullable=False)
     category = Column(String(255), nullable=True)
     applicable_seat_types = Column(ARRAY(Text), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "amenity_key", name="uq_amenities_tenant_key"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="amenities_tenant_id_fkey"),
-        ForeignKeyConstraint(["category_id"], ["amenity_categories.id"], name="fk_amenities_category"),
+        ForeignKeyConstraint(
+            ["tenant_id"], ["tenants.id"], name="amenities_tenant_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["category_id"], ["amenity_categories.id"], name="fk_amenities_category"
+        ),
         Index("idx_amenities_category_id", "category_id"),
     )
 
@@ -52,12 +73,20 @@ class AmenityCategories(Base):
     search_keywords = Column(ARRAY(Text), nullable=True)
     is_system_defined = Column(Boolean, nullable=False, server_default=text("true"))
     is_active = Column(Boolean, nullable=False, server_default=text("true"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "category_key", name="uq_amenity_categories_tenant_key"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="amenity_categories_tenant_id_fkey"),
+        UniqueConstraint(
+            "tenant_id", "category_key", name="uq_amenity_categories_tenant_key"
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id"], ["tenants.id"], name="amenity_categories_tenant_id_fkey"
+        ),
         Index("idx_amenity_categories_active", "tenant_id", "is_active"),
         Index("idx_amenity_categories_tenant", "tenant_id"),
     )
@@ -71,11 +100,19 @@ class AppUsers(Base):
     external_user_id = Column(String(100), nullable=True)
     email = Column(String(200), nullable=False)
     full_name = Column(String(200), nullable=False)
-    role_name = Column(String(30), nullable=False, server_default=text("'EMPLOYEE'::character varying"))
-    status = Column(String(20), nullable=False, server_default=text("'ACTIVE'::character varying"))
+    role_name = Column(
+        String(30), nullable=False, server_default=text("'EMPLOYEE'::character varying")
+    )
+    status = Column(
+        String(20), nullable=False, server_default=text("'ACTIVE'::character varying")
+    )
     home_site_id = Column(BigInteger, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
     microsoft_object_id = Column(String(150), nullable=True)
     user_principal_name = Column(String(200), nullable=True)
     display_name = Column(String(200), nullable=True)
@@ -92,15 +129,33 @@ class AppUsers(Base):
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "email", name="app_users_tenant_id_email_key"),
-        UniqueConstraint("tenant_id", "external_user_id", name="app_users_tenant_id_external_user_id_key"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="app_users_tenant_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["home_site_id"], ["sites.id"], name="app_users_home_site_id_fkey", ondelete="SET NULL"),
-        ForeignKeyConstraint(["manager_user_id"], ["app_users.id"], name="app_users_manager_user_id_fkey"),
+        UniqueConstraint(
+            "tenant_id",
+            "external_user_id",
+            name="app_users_tenant_id_external_user_id_key",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name="app_users_tenant_id_fkey",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["home_site_id"],
+            ["sites.id"],
+            name="app_users_home_site_id_fkey",
+            ondelete="SET NULL",
+        ),
+        ForeignKeyConstraint(
+            ["manager_user_id"], ["app_users.id"], name="app_users_manager_user_id_fkey"
+        ),
         Index("idx_app_users_home_site_id", "home_site_id"),
         Index("idx_app_users_role_name", "role_name"),
         Index("idx_app_users_status", "status"),
         Index("idx_app_users_tenant_id", "tenant_id"),
-        Index("uq_app_users_ms_object", "tenant_id", "microsoft_object_id", unique=True),
+        Index(
+            "uq_app_users_ms_object", "tenant_id", "microsoft_object_id", unique=True
+        ),
     )
 
 
@@ -116,7 +171,9 @@ class AuditLogs(Base):
     module = Column(String(100), nullable=False)
     entity_type = Column(String(100), nullable=True)
     entity_id = Column(String(100), nullable=True)
-    event_status = Column(String(30), nullable=False, server_default=text("'SUCCESS'::character varying"))
+    event_status = Column(
+        String(30), nullable=False, server_default=text("'SUCCESS'::character varying")
+    )
     request_method = Column(String(10), nullable=True)
     request_path = Column(String(500), nullable=True)
     request_id = Column(String(100), nullable=True)
@@ -130,14 +187,30 @@ class AuditLogs(Base):
     metadata_ = Column("metadata", JSONB, nullable=True)
     failure_code = Column(String(100), nullable=True)
     failure_reason = Column(Text, nullable=True)
-    occurred_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    occurred_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="fk_audit_logs_tenant"),
-        ForeignKeyConstraint(["actor_user_id"], ["app_users.id"], name="fk_audit_logs_actor_user", ondelete="SET NULL"),
+        ForeignKeyConstraint(
+            ["tenant_id"], ["tenants.id"], name="fk_audit_logs_tenant"
+        ),
+        ForeignKeyConstraint(
+            ["actor_user_id"],
+            ["app_users.id"],
+            name="fk_audit_logs_actor_user",
+            ondelete="SET NULL",
+        ),
         Index("idx_audit_logs_action", "tenant_id", "action", text("occurred_at DESC")),
-        Index("idx_audit_logs_actor", "tenant_id", "actor_user_id", text("occurred_at DESC")),
+        Index(
+            "idx_audit_logs_actor",
+            "tenant_id",
+            "actor_user_id",
+            text("occurred_at DESC"),
+        ),
         Index("idx_audit_logs_entity", "tenant_id", "entity_type", "entity_id"),
         Index("idx_audit_logs_module", "tenant_id", "module", text("occurred_at DESC")),
         Index("idx_audit_logs_request_id", "request_id"),
@@ -156,14 +229,37 @@ class AuthIdentities(Base):
     provider_user_id = Column(String(150), nullable=False)
     email = Column(String(200), nullable=False)
     raw_profile = Column(JSONB, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
-        UniqueConstraint("provider", "provider_user_id", name="auth_identities_provider_provider_user_id_key"),
-        UniqueConstraint("tenant_id", "provider", "email", name="auth_identities_tenant_id_provider_email_key"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="auth_identities_tenant_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["user_id"], ["app_users.id"], name="auth_identities_user_id_fkey", ondelete="CASCADE"),
+        UniqueConstraint(
+            "provider",
+            "provider_user_id",
+            name="auth_identities_provider_provider_user_id_key",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "provider",
+            "email",
+            name="auth_identities_tenant_id_provider_email_key",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name="auth_identities_tenant_id_fkey",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["user_id"],
+            ["app_users.id"],
+            name="auth_identities_user_id_fkey",
+            ondelete="CASCADE",
+        ),
     )
 
 
@@ -178,11 +274,23 @@ class AuthTokenEvents(Base):
     ip_address = Column(INET, nullable=True)
     user_agent = Column(Text, nullable=True)
     metadata_ = Column("metadata", JSONB, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="auth_token_events_tenant_id_fkey", ondelete="SET NULL"),
-        ForeignKeyConstraint(["user_id"], ["app_users.id"], name="auth_token_events_user_id_fkey", ondelete="SET NULL"),
+        ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name="auth_token_events_tenant_id_fkey",
+            ondelete="SET NULL",
+        ),
+        ForeignKeyConstraint(
+            ["user_id"],
+            ["app_users.id"],
+            name="auth_token_events_user_id_fkey",
+            ondelete="SET NULL",
+        ),
     )
 
 
@@ -198,22 +306,48 @@ class BlockedSeats(Base):
     blocked_from = Column(Date, nullable=False)
     blocked_to = Column(Date, nullable=False)
     reason = Column(String(255), nullable=True)
-    block_type = Column(String(50), nullable=False, server_default=text("'Operational block'::character varying"))
-    status = Column(String(30), nullable=False, server_default=text("'ACTIVE'::character varying"))
+    block_type = Column(
+        String(50),
+        nullable=False,
+        server_default=text("'Operational block'::character varying"),
+    )
+    status = Column(
+        String(30), nullable=False, server_default=text("'ACTIVE'::character varying")
+    )
     blocked_by_user_id = Column(BigInteger, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="blocked_seats_tenant_id_fkey"),
-        ForeignKeyConstraint(["seat_id"], ["seats.id"], name="blocked_seats_seat_id_fkey"),
-        ForeignKeyConstraint(["site_id"], ["sites.id"], name="blocked_seats_site_id_fkey"),
-        ForeignKeyConstraint(["building_id"], ["buildings.id"], name="blocked_seats_building_id_fkey"),
-        ForeignKeyConstraint(["floor_id"], ["floors.id"], name="blocked_seats_floor_id_fkey"),
-        ForeignKeyConstraint(["blocked_by_user_id"], ["app_users.id"], name="blocked_seats_blocked_by_user_id_fkey"),
+        ForeignKeyConstraint(
+            ["tenant_id"], ["tenants.id"], name="blocked_seats_tenant_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["seat_id"], ["seats.id"], name="blocked_seats_seat_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["site_id"], ["sites.id"], name="blocked_seats_site_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["building_id"], ["buildings.id"], name="blocked_seats_building_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["floor_id"], ["floors.id"], name="blocked_seats_floor_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["blocked_by_user_id"],
+            ["app_users.id"],
+            name="blocked_seats_blocked_by_user_id_fkey",
+        ),
         Index("idx_blocked_seats_floor_status", "floor_id", "status"),
         Index("idx_blocked_seats_seat_date", "seat_id", "blocked_from", "blocked_to"),
-        Index("idx_blocked_seats_tenant_date", "tenant_id", "blocked_from", "blocked_to"),
+        Index(
+            "idx_blocked_seats_tenant_date", "tenant_id", "blocked_from", "blocked_to"
+        ),
     )
 
 
@@ -228,14 +362,24 @@ class Bookings(Base):
     building_id = Column(BigInteger, nullable=False)
     floor_id = Column(BigInteger, nullable=False)
     booking_date = Column(Date, nullable=False)
-    booking_status = Column(String(20), nullable=False, server_default=text("'CONFIRMED'::character varying"))
-    source_channel = Column(String(20), nullable=False, server_default=text("'WEB'::character varying"))
+    booking_status = Column(
+        String(20),
+        nullable=False,
+        server_default=text("'CONFIRMED'::character varying"),
+    )
+    source_channel = Column(
+        String(20), nullable=False, server_default=text("'WEB'::character varying")
+    )
     check_in_at = Column(DateTime(timezone=True), nullable=True)
     checked_out_at = Column(DateTime(timezone=True), nullable=True)
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
     cancellation_reason = Column(String(250), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
     booked_for_user_id = Column(BigInteger, nullable=True)
     booked_by_user_id = Column(BigInteger, nullable=False)
     booked_for_guest_id = Column(BigInteger, nullable=True)
@@ -246,18 +390,64 @@ class Bookings(Base):
     updated_by_user_id = Column(BigInteger, nullable=True)
 
     __table_args__ = (
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="bookings_tenant_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["user_id"], ["app_users.id"], name="bookings_user_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["seat_id"], ["seats.id"], name="bookings_seat_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["site_id"], ["sites.id"], name="bookings_site_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["building_id"], ["buildings.id"], name="bookings_building_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["floor_id"], ["floors.id"], name="bookings_floor_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["booked_for_user_id"], ["app_users.id"], name="bookings_booked_for_user_id_fkey"),
-        ForeignKeyConstraint(["booked_by_user_id"], ["app_users.id"], name="bookings_booked_by_user_id_fkey"),
-        ForeignKeyConstraint(["booked_for_guest_id"], ["guests.id"], name="bookings_booked_for_guest_id_fkey"),
-        ForeignKeyConstraint(["guest_visit_id"], ["guest_visits.id"], name="bookings_guest_visit_id_fkey"),
-        ForeignKeyConstraint(["modified_from_booking_id"], ["bookings.id"], name="fk_modified_from_booking"),
-        ForeignKeyConstraint(["updated_by_user_id"], ["app_users.id"], name="bookings_updated_by_user_id_fkey"),
+        ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name="bookings_tenant_id_fkey",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["user_id"],
+            ["app_users.id"],
+            name="bookings_user_id_fkey",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["seat_id"], ["seats.id"], name="bookings_seat_id_fkey", ondelete="RESTRICT"
+        ),
+        ForeignKeyConstraint(
+            ["site_id"], ["sites.id"], name="bookings_site_id_fkey", ondelete="RESTRICT"
+        ),
+        ForeignKeyConstraint(
+            ["building_id"],
+            ["buildings.id"],
+            name="bookings_building_id_fkey",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["floor_id"],
+            ["floors.id"],
+            name="bookings_floor_id_fkey",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["booked_for_user_id"],
+            ["app_users.id"],
+            name="bookings_booked_for_user_id_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["booked_by_user_id"],
+            ["app_users.id"],
+            name="bookings_booked_by_user_id_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["booked_for_guest_id"],
+            ["guests.id"],
+            name="bookings_booked_for_guest_id_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["guest_visit_id"], ["guest_visits.id"], name="bookings_guest_visit_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["modified_from_booking_id"],
+            ["bookings.id"],
+            name="fk_modified_from_booking",
+        ),
+        ForeignKeyConstraint(
+            ["updated_by_user_id"],
+            ["app_users.id"],
+            name="bookings_updated_by_user_id_fkey",
+        ),
         Index("idx_bookings_booking_date", "booking_date"),
         Index("idx_bookings_guest_visit_id", "guest_visit_id"),
         Index("idx_bookings_seat_id", "seat_id"),
@@ -266,9 +456,36 @@ class Bookings(Base):
         Index("idx_bookings_tenant_date", "tenant_id", "booking_date"),
         Index("idx_bookings_tenant_id", "tenant_id"),
         Index("idx_bookings_user_id", "user_id"),
-        Index("uq_bookings_tenant_guest_date_active", "tenant_id", "booked_for_guest_id", "booking_date", unique=True, postgresql_where=text("(((booking_status)::text = ANY (ARRAY[('CONFIRMED'::character varying)::text, ('CHECKED_IN'::character varying)::text])) AND (booked_for_guest_id IS NOT NULL))")),
-        Index("uq_bookings_tenant_seat_date", "tenant_id", "seat_id", "booking_date", unique=True, postgresql_where=text("((booking_status)::text = ANY (ARRAY[('CONFIRMED'::character varying)::text, ('CHECKED_IN'::character varying)::text]))")),
-        Index("uq_bookings_tenant_user_date_active", "tenant_id", "booked_for_user_id", "booking_date", unique=True, postgresql_where=text("(((booking_status)::text = ANY (ARRAY[('CONFIRMED'::character varying)::text, ('CHECKED_IN'::character varying)::text])) AND (booked_for_user_id IS NOT NULL))")),
+        Index(
+            "uq_bookings_tenant_guest_date_active",
+            "tenant_id",
+            "booked_for_guest_id",
+            "booking_date",
+            unique=True,
+            postgresql_where=text(
+                "(((booking_status)::text = ANY (ARRAY[('CONFIRMED'::character varying)::text, ('CHECKED_IN'::character varying)::text])) AND (booked_for_guest_id IS NOT NULL))"
+            ),
+        ),
+        Index(
+            "uq_bookings_tenant_seat_date",
+            "tenant_id",
+            "seat_id",
+            "booking_date",
+            unique=True,
+            postgresql_where=text(
+                "((booking_status)::text = ANY (ARRAY[('CONFIRMED'::character varying)::text, ('CHECKED_IN'::character varying)::text]))"
+            ),
+        ),
+        Index(
+            "uq_bookings_tenant_user_date_active",
+            "tenant_id",
+            "booked_for_user_id",
+            "booking_date",
+            unique=True,
+            postgresql_where=text(
+                "(((booking_status)::text = ANY (ARRAY[('CONFIRMED'::character varying)::text, ('CHECKED_IN'::character varying)::text])) AND (booked_for_user_id IS NOT NULL))"
+            ),
+        ),
     )
 
 
@@ -280,15 +497,35 @@ class Buildings(Base):
     site_id = Column(BigInteger, nullable=False)
     building_code = Column(String(50), nullable=False)
     building_name = Column(String(200), nullable=False)
-    status = Column(String(20), nullable=False, server_default=text("'ACTIVE'::character varying"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    status = Column(
+        String(20), nullable=False, server_default=text("'ACTIVE'::character varying")
+    )
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
-        UniqueConstraint("site_id", "building_code", name="buildings_site_id_building_code_key"),
-        UniqueConstraint("site_id", "building_name", name="buildings_site_id_building_name_key"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="buildings_tenant_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["site_id"], ["sites.id"], name="buildings_site_id_fkey", ondelete="RESTRICT"),
+        UniqueConstraint(
+            "site_id", "building_code", name="buildings_site_id_building_code_key"
+        ),
+        UniqueConstraint(
+            "site_id", "building_name", name="buildings_site_id_building_name_key"
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name="buildings_tenant_id_fkey",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["site_id"],
+            ["sites.id"],
+            name="buildings_site_id_fkey",
+            ondelete="RESTRICT",
+        ),
         Index("idx_buildings_site_id", "site_id"),
         Index("idx_buildings_tenant_id", "tenant_id"),
     )
@@ -312,12 +549,21 @@ class ChatbotMessages(Base):
     session_id = Column(UUID, nullable=False)
     direction = Column(String(10), nullable=False)
     message_text = Column(Text, nullable=False)
-    message_type = Column(String(30), nullable=False, server_default=text("'TEXT'::character varying"))
+    message_type = Column(
+        String(30), nullable=False, server_default=text("'TEXT'::character varying")
+    )
     node_id = Column(String(100), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
-        ForeignKeyConstraint(["session_id"], ["chatbot_sessions.id"], name="fk_chatbot_messages_session", ondelete="CASCADE"),
+        ForeignKeyConstraint(
+            ["session_id"],
+            ["chatbot_sessions.id"],
+            name="fk_chatbot_messages_session",
+            ondelete="CASCADE",
+        ),
         Index("idx_cb_messages_session", "session_id", "created_at"),
     )
 
@@ -328,12 +574,24 @@ class ChatbotSessions(Base):
     id = Column(UUID, primary_key=True, server_default=text("uuid_generate_v4()"))
     tenant_id = Column(Integer, nullable=False, server_default=text("3"))
     user_name = Column(String(255), nullable=False)
-    state = Column(String(50), nullable=False, server_default=text("'INITIATED'::character varying"))
-    current_node = Column(String(100), nullable=False, server_default=text("'MAIN_MENU'::character varying"))
+    state = Column(
+        String(50),
+        nullable=False,
+        server_default=text("'INITIATED'::character varying"),
+    )
+    current_node = Column(
+        String(100),
+        nullable=False,
+        server_default=text("'MAIN_MENU'::character varying"),
+    )
     current_menu_id = Column(Integer, nullable=True)
     context_data = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
     expires_at = Column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (
@@ -350,18 +608,30 @@ class EmailLogs(Base):
     email_type = Column(String(100), nullable=False)
     recipient_email = Column(String(255), nullable=False)
     subject = Column(String(500), nullable=False)
-    status = Column(String(50), nullable=False, server_default=text("'PENDING'::character varying"))
-    provider = Column(String(50), nullable=True, server_default=text("'AWS_SES'::character varying"))
+    status = Column(
+        String(50), nullable=False, server_default=text("'PENDING'::character varying")
+    )
+    provider = Column(
+        String(50), nullable=True, server_default=text("'AWS_SES'::character varying")
+    )
     provider_message_id = Column(String(255), nullable=True)
     error_message = Column(Text, nullable=True)
     triggered_by_user_id = Column(BigInteger, nullable=True)
     metadata_ = Column("metadata", JSONB, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
     sent_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="email_logs_tenant_id_fkey"),
-        ForeignKeyConstraint(["triggered_by_user_id"], ["app_users.id"], name="email_logs_triggered_by_user_id_fkey"),
+        ForeignKeyConstraint(
+            ["tenant_id"], ["tenants.id"], name="email_logs_tenant_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["triggered_by_user_id"],
+            ["app_users.id"],
+            name="email_logs_triggered_by_user_id_fkey",
+        ),
         Index("idx_email_logs_status", "status"),
         Index("idx_email_logs_tenant_created", "tenant_id", text("created_at DESC")),
         Index("idx_email_logs_type", "email_type"),
@@ -378,37 +648,100 @@ class FloorLayouts(Base):
     floor_id = Column(BigInteger, nullable=False)
     layout_name = Column(String(150), nullable=False)
     layout_file_url = Column(Text, nullable=False)
-    file_storage_provider = Column(String(30), nullable=True, server_default=text("'S3'::character varying"))
-    layout_type = Column(String(30), nullable=False, server_default=text("'SVG'::character varying"))
+    file_storage_provider = Column(
+        String(30), nullable=True, server_default=text("'S3'::character varying")
+    )
+    layout_type = Column(
+        String(30), nullable=False, server_default=text("'SVG'::character varying")
+    )
     version_no = Column(Integer, nullable=False, server_default=text("1"))
     is_published = Column(Boolean, nullable=False, server_default=text("false"))
     layout_metadata = Column(JSONB, nullable=True)
     uploaded_by_user_id = Column(BigInteger, nullable=True)
     published_by_user_id = Column(BigInteger, nullable=True)
     published_at = Column(DateTime(timezone=True), nullable=True)
-    status = Column(String(30), nullable=False, server_default=text("'DRAFT'::character varying"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    status = Column(
+        String(30), nullable=False, server_default=text("'DRAFT'::character varying")
+    )
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
     updated_by_user_id = Column(BigInteger, nullable=True)
     effective_from = Column(DateTime(timezone=True), nullable=True)
     effective_till = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "floor_id", "version_no", name="uq_floor_layout_version"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="floor_layouts_tenant_id_fkey"),
-        ForeignKeyConstraint(["site_id"], ["sites.id"], name="floor_layouts_site_id_fkey"),
-        ForeignKeyConstraint(["building_id"], ["buildings.id"], name="floor_layouts_building_id_fkey"),
-        ForeignKeyConstraint(["floor_id"], ["floors.id"], name="floor_layouts_floor_id_fkey"),
-        ForeignKeyConstraint(["uploaded_by_user_id"], ["app_users.id"], name="floor_layouts_uploaded_by_user_id_fkey"),
-        ForeignKeyConstraint(["published_by_user_id"], ["app_users.id"], name="floor_layouts_published_by_user_id_fkey"),
-        ForeignKeyConstraint(["updated_by_user_id"], ["app_users.id"], name="fk_layout_updated_by_user", ondelete="SET NULL"),
-        ForeignKeyConstraint(["updated_by_user_id"], ["app_users.id"], name="floor_layouts_updated_by_user_id_fkey"),
-        Index("idx_floor_layouts_effective_window", "floor_id", "effective_from", "effective_till", postgresql_where=text("((status)::text = ANY ((ARRAY['PUBLISHED'::character varying, 'SCHEDULED'::character varying])::text[]))")),
+        UniqueConstraint(
+            "tenant_id", "floor_id", "version_no", name="uq_floor_layout_version"
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id"], ["tenants.id"], name="floor_layouts_tenant_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["site_id"], ["sites.id"], name="floor_layouts_site_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["building_id"], ["buildings.id"], name="floor_layouts_building_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["floor_id"], ["floors.id"], name="floor_layouts_floor_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["uploaded_by_user_id"],
+            ["app_users.id"],
+            name="floor_layouts_uploaded_by_user_id_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["published_by_user_id"],
+            ["app_users.id"],
+            name="floor_layouts_published_by_user_id_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["updated_by_user_id"],
+            ["app_users.id"],
+            name="fk_layout_updated_by_user",
+            ondelete="SET NULL",
+        ),
+        ForeignKeyConstraint(
+            ["updated_by_user_id"],
+            ["app_users.id"],
+            name="floor_layouts_updated_by_user_id_fkey",
+        ),
+        Index(
+            "idx_floor_layouts_effective_window",
+            "floor_id",
+            "effective_from",
+            "effective_till",
+            postgresql_where=text(
+                "((status)::text = ANY ((ARRAY['PUBLISHED'::character varying, 'SCHEDULED'::character varying])::text[]))"
+            ),
+        ),
         Index("ix_floor_layouts_updated_by_user_id", "updated_by_user_id"),
         Index("ix_layout_updated_by_user_id", "updated_by_user_id"),
-        Index("uq_floor_layout_one_published_per_floor", "tenant_id", "floor_id", unique=True, postgresql_where=text("((is_published = true) AND ((status)::text = 'PUBLISHED'::text))")),
-        Index("uq_floor_layouts_one_published_per_floor", "floor_id", unique=True, postgresql_where=text("((status)::text = 'PUBLISHED'::text)")),
-        Index("uq_floor_layouts_one_scheduled_per_floor", "floor_id", unique=True, postgresql_where=text("((status)::text = 'SCHEDULED'::text)")),
+        Index(
+            "uq_floor_layout_one_published_per_floor",
+            "tenant_id",
+            "floor_id",
+            unique=True,
+            postgresql_where=text(
+                "((is_published = true) AND ((status)::text = 'PUBLISHED'::text))"
+            ),
+        ),
+        Index(
+            "uq_floor_layouts_one_published_per_floor",
+            "floor_id",
+            unique=True,
+            postgresql_where=text("((status)::text = 'PUBLISHED'::text)"),
+        ),
+        Index(
+            "uq_floor_layouts_one_scheduled_per_floor",
+            "floor_id",
+            unique=True,
+            postgresql_where=text("((status)::text = 'SCHEDULED'::text)"),
+        ),
     )
 
 
@@ -421,16 +754,38 @@ class Floors(Base):
     building_id = Column(BigInteger, nullable=False)
     floor_code = Column(String(50), nullable=False)
     floor_name = Column(String(100), nullable=False)
-    status = Column(String(20), nullable=False, server_default=text("'ACTIVE'::character varying"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    status = Column(
+        String(20), nullable=False, server_default=text("'ACTIVE'::character varying")
+    )
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
-        UniqueConstraint("building_id", "floor_code", name="floors_building_id_floor_code_key"),
-        UniqueConstraint("building_id", "floor_name", name="floors_building_id_floor_name_key"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="floors_tenant_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["site_id"], ["sites.id"], name="floors_site_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["building_id"], ["buildings.id"], name="floors_building_id_fkey", ondelete="RESTRICT"),
+        UniqueConstraint(
+            "building_id", "floor_code", name="floors_building_id_floor_code_key"
+        ),
+        UniqueConstraint(
+            "building_id", "floor_name", name="floors_building_id_floor_name_key"
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name="floors_tenant_id_fkey",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["site_id"], ["sites.id"], name="floors_site_id_fkey", ondelete="RESTRICT"
+        ),
+        ForeignKeyConstraint(
+            ["building_id"],
+            ["buildings.id"],
+            name="floors_building_id_fkey",
+            ondelete="RESTRICT",
+        ),
         Index("idx_floors_building_id", "building_id"),
         Index("idx_floors_site_id", "site_id"),
         Index("idx_floors_tenant_id", "tenant_id"),
@@ -443,12 +798,24 @@ class GroupPermissions(Base):
     id = Column(BigInteger, primary_key=True)
     group_id = Column(BigInteger, nullable=False)
     permission_id = Column(BigInteger, nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
         UniqueConstraint("group_id", "permission_id", name="uq_group_permission"),
-        ForeignKeyConstraint(["group_id"], ["groups.id"], name="group_permissions_group_id_fkey", ondelete="CASCADE"),
-        ForeignKeyConstraint(["permission_id"], ["permissions.id"], name="group_permissions_permission_id_fkey", ondelete="CASCADE"),
+        ForeignKeyConstraint(
+            ["group_id"],
+            ["groups.id"],
+            name="group_permissions_group_id_fkey",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["permission_id"],
+            ["permissions.id"],
+            name="group_permissions_permission_id_fkey",
+            ondelete="CASCADE",
+        ),
         Index("idx_group_permissions_group_id", "group_id"),
         Index("idx_group_permissions_permission_id", "permission_id"),
     )
@@ -464,17 +831,33 @@ class Groups(Base):
     is_system = Column(Boolean, nullable=False, server_default=text("false"))
     is_active = Column(Boolean, nullable=False, server_default=text("true"))
     version = Column(Integer, nullable=False, server_default=text("1"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
     group_name_normalized = Column(String(100), nullable=True)
     permission_set_hash = Column(String(32), nullable=True)
     group_tier = Column(String(20), nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "group_name_normalized", name="uq_groups_tenant_name_normalized"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="groups_tenant_id_fkey"),
+        UniqueConstraint(
+            "tenant_id",
+            "group_name_normalized",
+            name="uq_groups_tenant_name_normalized",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id"], ["tenants.id"], name="groups_tenant_id_fkey"
+        ),
         Index("idx_groups_tenant_id", "tenant_id"),
-        Index("uq_groups_tenant_permission_set", "tenant_id", "permission_set_hash", unique=True, postgresql_where=text("(permission_set_hash IS NOT NULL)")),
+        Index(
+            "uq_groups_tenant_permission_set",
+            "tenant_id",
+            "permission_set_hash",
+            unique=True,
+            postgresql_where=text("(permission_set_hash IS NOT NULL)"),
+        ),
     )
 
 
@@ -494,11 +877,19 @@ class GuestVisits(Base):
     guest_type = Column(String(50), nullable=False)
     purpose_of_visit = Column(String(100), nullable=True)
     requires_seat = Column(Boolean, nullable=False, server_default=text("false"))
-    visit_status = Column(String(30), nullable=False, server_default=text("'SCHEDULED'::character varying"))
+    visit_status = Column(
+        String(30),
+        nullable=False,
+        server_default=text("'SCHEDULED'::character varying"),
+    )
     notes = Column(Text, nullable=True)
     created_by_user_id = Column(BigInteger, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
     checked_in_at = Column(DateTime(timezone=True), nullable=True)
     checked_out_at = Column(DateTime(timezone=True), nullable=True)
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
@@ -508,15 +899,39 @@ class GuestVisits(Base):
     updated_by_user_id = Column(BigInteger, nullable=True)
 
     __table_args__ = (
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="guest_visits_tenant_id_fkey"),
-        ForeignKeyConstraint(["guest_id"], ["guests.id"], name="guest_visits_guest_id_fkey"),
-        ForeignKeyConstraint(["host_user_id"], ["app_users.id"], name="guest_visits_host_user_id_fkey"),
-        ForeignKeyConstraint(["site_id"], ["sites.id"], name="guest_visits_site_id_fkey"),
-        ForeignKeyConstraint(["building_id"], ["buildings.id"], name="guest_visits_building_id_fkey"),
-        ForeignKeyConstraint(["floor_id"], ["floors.id"], name="guest_visits_floor_id_fkey"),
-        ForeignKeyConstraint(["created_by_user_id"], ["app_users.id"], name="guest_visits_created_by_user_id_fkey"),
-        ForeignKeyConstraint(["modified_from_guest_visit_id"], ["guest_visits.id"], name="fk_guest_visits_modified_from"),
-        ForeignKeyConstraint(["updated_by_user_id"], ["app_users.id"], name="guest_visits_updated_by_user_id_fkey"),
+        ForeignKeyConstraint(
+            ["tenant_id"], ["tenants.id"], name="guest_visits_tenant_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["guest_id"], ["guests.id"], name="guest_visits_guest_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["host_user_id"], ["app_users.id"], name="guest_visits_host_user_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["site_id"], ["sites.id"], name="guest_visits_site_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["building_id"], ["buildings.id"], name="guest_visits_building_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["floor_id"], ["floors.id"], name="guest_visits_floor_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["created_by_user_id"],
+            ["app_users.id"],
+            name="guest_visits_created_by_user_id_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["modified_from_guest_visit_id"],
+            ["guest_visits.id"],
+            name="fk_guest_visits_modified_from",
+        ),
+        ForeignKeyConstraint(
+            ["updated_by_user_id"],
+            ["app_users.id"],
+            name="guest_visits_updated_by_user_id_fkey",
+        ),
         Index("idx_guest_visits_host_date", "host_user_id", "visit_date"),
         Index("idx_guest_visits_host_visit_date", "host_user_id", "visit_date"),
         Index("idx_guest_visits_status", "tenant_id", "visit_status"),
@@ -535,17 +950,37 @@ class Guests(Base):
     email = Column(String(255), nullable=True)
     phone = Column(String(30), nullable=True)
     organization = Column(String(150), nullable=True)
-    status = Column(String(30), nullable=False, server_default=text("'ACTIVE'::character varying"))
+    status = Column(
+        String(30), nullable=False, server_default=text("'ACTIVE'::character varying")
+    )
     created_by_user_id = Column(BigInteger, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="guests_tenant_id_fkey"),
-        ForeignKeyConstraint(["created_by_user_id"], ["app_users.id"], name="guests_created_by_user_id_fkey"),
+        ForeignKeyConstraint(
+            ["tenant_id"], ["tenants.id"], name="guests_tenant_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["created_by_user_id"],
+            ["app_users.id"],
+            name="guests_created_by_user_id_fkey",
+        ),
         Index("idx_guests_tenant_name", "tenant_id", text("lower(full_name::text)")),
         Index("idx_guests_tenant_phone", "tenant_id", "phone"),
-        Index("uq_guests_tenant_email_active", "tenant_id", text("lower(email::text)"), unique=True, postgresql_where=text("((email IS NOT NULL) AND ((status)::text = 'ACTIVE'::text))")),
+        Index(
+            "uq_guests_tenant_email_active",
+            "tenant_id",
+            text("lower(email::text)"),
+            unique=True,
+            postgresql_where=text(
+                "((email IS NOT NULL) AND ((status)::text = 'ACTIVE'::text))"
+            ),
+        ),
     )
 
 
@@ -562,14 +997,22 @@ class LayoutSeatMappings(Base):
     seat_code = Column(String(100), nullable=False)
     seat_name = Column(String(150), nullable=True)
     seat_type = Column(String(50), nullable=True)
-    status = Column(String(30), nullable=True, server_default=text("'ACTIVE'::character varying"))
+    status = Column(
+        String(30), nullable=True, server_default=text("'ACTIVE'::character varying")
+    )
     is_bookable = Column(Boolean, nullable=True, server_default=text("true"))
     is_reserved = Column(Boolean, nullable=True, server_default=text("false"))
     is_configured = Column(Boolean, nullable=True, server_default=text("false"))
-    configuration_status = Column(String(30), nullable=True, server_default=text("'PENDING'::character varying"))
+    configuration_status = Column(
+        String(30), nullable=True, server_default=text("'PENDING'::character varying")
+    )
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=True, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=True, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=True, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=True, server_default=text("now()")
+    )
     created_by = Column(BigInteger, nullable=True)
     updated_by = Column(BigInteger, nullable=True)
     amenity_ids = Column(JSONB, nullable=True, server_default=text("'[]'::jsonb"))
@@ -593,8 +1036,14 @@ class Permissions(Base):
     description = Column(Text, nullable=True)
     module_name = Column(String(50), nullable=True)
     is_active = Column(Boolean, nullable=False, server_default=text("true"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
-    enforcement_scope = Column(String(20), nullable=False, server_default=text("'backend'::character varying"))
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    enforcement_scope = Column(
+        String(20), nullable=False, server_default=text("'backend'::character varying")
+    )
 
 
 class RoleGroups(Base):
@@ -603,12 +1052,24 @@ class RoleGroups(Base):
     id = Column(BigInteger, primary_key=True)
     role_id = Column(BigInteger, nullable=False)
     group_id = Column(BigInteger, nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
         UniqueConstraint("role_id", "group_id", name="uq_role_group"),
-        ForeignKeyConstraint(["role_id"], ["roles.id"], name="role_groups_role_id_fkey", ondelete="CASCADE"),
-        ForeignKeyConstraint(["group_id"], ["groups.id"], name="role_groups_group_id_fkey", ondelete="CASCADE"),
+        ForeignKeyConstraint(
+            ["role_id"],
+            ["roles.id"],
+            name="role_groups_role_id_fkey",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["group_id"],
+            ["groups.id"],
+            name="role_groups_group_id_fkey",
+            ondelete="CASCADE",
+        ),
         Index("idx_role_groups_group_id", "group_id"),
         Index("idx_role_groups_role_id", "role_id"),
     )
@@ -620,12 +1081,26 @@ class RolePermissions(Base):
     id = Column(BigInteger, primary_key=True)
     role_id = Column(BigInteger, nullable=False)
     permission_id = Column(BigInteger, nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
 
     __table_args__ = (
         UniqueConstraint("role_id", "permission_id", name="uq_role_permission"),
-        ForeignKeyConstraint(["role_id"], ["roles.id"], name="role_permissions_role_id_fkey", ondelete="CASCADE"),
-        ForeignKeyConstraint(["permission_id"], ["permissions.id"], name="role_permissions_permission_id_fkey", ondelete="CASCADE"),
+        ForeignKeyConstraint(
+            ["role_id"],
+            ["roles.id"],
+            name="role_permissions_role_id_fkey",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["permission_id"],
+            ["permissions.id"],
+            name="role_permissions_permission_id_fkey",
+            ondelete="CASCADE",
+        ),
     )
 
 
@@ -637,12 +1112,25 @@ class Roles(Base):
     role_name = Column(String(50), nullable=False)
     description = Column(Text, nullable=True)
     is_active = Column(Boolean, nullable=False, server_default=text("true"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "role_name", name="uq_roles_tenant_role"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="roles_tenant_id_fkey", ondelete="CASCADE"),
+        ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name="roles_tenant_id_fkey",
+            ondelete="CASCADE",
+        ),
     )
 
 
@@ -654,14 +1142,26 @@ class SeatAmenities(Base):
     seat_id = Column(BigInteger, nullable=False)
     amenity_id = Column(BigInteger, nullable=False)
     assigned_by_user_id = Column(BigInteger, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "seat_id", "amenity_id", name="uq_seat_amenity"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="seat_amenities_tenant_id_fkey"),
-        ForeignKeyConstraint(["seat_id"], ["seats.id"], name="seat_amenities_seat_id_fkey"),
-        ForeignKeyConstraint(["amenity_id"], ["amenities.id"], name="seat_amenities_amenity_id_fkey"),
-        ForeignKeyConstraint(["assigned_by_user_id"], ["app_users.id"], name="seat_amenities_assigned_by_user_id_fkey"),
+        ForeignKeyConstraint(
+            ["tenant_id"], ["tenants.id"], name="seat_amenities_tenant_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["seat_id"], ["seats.id"], name="seat_amenities_seat_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["amenity_id"], ["amenities.id"], name="seat_amenities_amenity_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["assigned_by_user_id"],
+            ["app_users.id"],
+            name="seat_amenities_assigned_by_user_id_fkey",
+        ),
         Index("idx_seat_amenities_amenity_id", "amenity_id"),
         Index("idx_seat_amenities_seat_id", "seat_id"),
         Index("idx_seat_amenities_tenant_amenity", "tenant_id", "amenity_id"),
@@ -677,12 +1177,20 @@ class Seats(Base):
     building_id = Column(BigInteger, nullable=False)
     floor_id = Column(BigInteger, nullable=False)
     seat_code = Column(String(50), nullable=False)
-    seat_type = Column(String(30), nullable=False, server_default=text("'STANDARD'::character varying"))
+    seat_type = Column(
+        String(30), nullable=False, server_default=text("'STANDARD'::character varying")
+    )
     seat_neighborhood = Column(String(100), nullable=True)
     is_bookable = Column(Boolean, nullable=False, server_default=text("true"))
-    status = Column(String(20), nullable=False, server_default=text("'ACTIVE'::character varying"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    status = Column(
+        String(20), nullable=False, server_default=text("'ACTIVE'::character varying")
+    )
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
     map_x = Column(Numeric(10, 2), nullable=True)
     map_y = Column(Numeric(10, 2), nullable=True)
     map_width = Column(Numeric(10, 2), nullable=True)
@@ -699,13 +1207,38 @@ class Seats(Base):
     capacity = Column(Integer, nullable=True, server_default=text("1"))
 
     __table_args__ = (
-        UniqueConstraint("floor_id", "layout_id", "seat_code", name="seats_floor_layout_seat_code_key"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="seats_tenant_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["site_id"], ["sites.id"], name="seats_site_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["building_id"], ["buildings.id"], name="seats_building_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["floor_id"], ["floors.id"], name="seats_floor_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["layout_id"], ["floor_layouts.id"], name="seats_layout_id_fkey"),
-        ForeignKeyConstraint(["source_layout_mapping_id"], ["layout_seat_mappings.id"], name="seats_source_layout_mapping_id_fkey"),
+        UniqueConstraint(
+            "floor_id",
+            "layout_id",
+            "seat_code",
+            name="seats_floor_layout_seat_code_key",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name="seats_tenant_id_fkey",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["site_id"], ["sites.id"], name="seats_site_id_fkey", ondelete="RESTRICT"
+        ),
+        ForeignKeyConstraint(
+            ["building_id"],
+            ["buildings.id"],
+            name="seats_building_id_fkey",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["floor_id"], ["floors.id"], name="seats_floor_id_fkey", ondelete="RESTRICT"
+        ),
+        ForeignKeyConstraint(
+            ["layout_id"], ["floor_layouts.id"], name="seats_layout_id_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["source_layout_mapping_id"],
+            ["layout_seat_mappings.id"],
+            name="seats_source_layout_mapping_id_fkey",
+        ),
         Index("idx_seats_bookable_status", "is_bookable", "status"),
         Index("idx_seats_building_id", "building_id"),
         Index("idx_seats_floor_id", "floor_id"),
@@ -729,14 +1262,29 @@ class Sites(Base):
     timezone = Column(String(100), nullable=False)
     address_line1 = Column(String(250), nullable=True)
     address_line2 = Column(String(250), nullable=True)
-    status = Column(String(20), nullable=False, server_default=text("'ACTIVE'::character varying"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    status = Column(
+        String(20), nullable=False, server_default=text("'ACTIVE'::character varying")
+    )
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "site_code", name="sites_tenant_id_site_code_key"),
-        UniqueConstraint("tenant_id", "site_name", name="sites_tenant_id_site_name_key"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="sites_tenant_id_fkey", ondelete="RESTRICT"),
+        UniqueConstraint(
+            "tenant_id", "site_code", name="sites_tenant_id_site_code_key"
+        ),
+        UniqueConstraint(
+            "tenant_id", "site_name", name="sites_tenant_id_site_name_key"
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name="sites_tenant_id_fkey",
+            ondelete="RESTRICT",
+        ),
         Index("idx_sites_tenant_id", "tenant_id"),
     )
 
@@ -748,14 +1296,38 @@ class TeamMembers(Base):
     tenant_id = Column(BigInteger, nullable=False)
     team_id = Column(BigInteger, nullable=False)
     user_id = Column(BigInteger, nullable=False)
-    member_role = Column(String(50), nullable=True, server_default=text("'MEMBER'::character varying"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    member_role = Column(
+        String(50), nullable=True, server_default=text("'MEMBER'::character varying")
+    )
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "team_id", "user_id", name="team_members_tenant_id_team_id_user_id_key"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="team_members_tenant_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["team_id"], ["teams.id"], name="team_members_team_id_fkey", ondelete="CASCADE"),
-        ForeignKeyConstraint(["user_id"], ["app_users.id"], name="team_members_user_id_fkey", ondelete="CASCADE"),
+        UniqueConstraint(
+            "tenant_id",
+            "team_id",
+            "user_id",
+            name="team_members_tenant_id_team_id_user_id_key",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name="team_members_tenant_id_fkey",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["team_id"],
+            ["teams.id"],
+            name="team_members_team_id_fkey",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["user_id"],
+            ["app_users.id"],
+            name="team_members_user_id_fkey",
+            ondelete="CASCADE",
+        ),
     )
 
 
@@ -766,13 +1338,24 @@ class Teams(Base):
     tenant_id = Column(BigInteger, nullable=False)
     team_key = Column(String(100), nullable=False)
     team_name = Column(String(200), nullable=False)
-    source = Column(String(50), nullable=False, server_default=text("'GRAPH'::character varying"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    source = Column(
+        String(50), nullable=False, server_default=text("'GRAPH'::character varying")
+    )
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "team_key", name="teams_tenant_id_team_key_key"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="teams_tenant_id_fkey", ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name="teams_tenant_id_fkey",
+            ondelete="RESTRICT",
+        ),
     )
 
 
@@ -787,10 +1370,22 @@ class TenantBusinessRules(Base):
     updated_by_user_id = Column(BigInteger, nullable=True)
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "business_rule_id", name="uq_tenant_business_rules_tenant_rule"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="fk_tenant_business_rules_tenant"),
-        ForeignKeyConstraint(["business_rule_id"], ["business_rules.id"], name="fk_tenant_business_rules_rule"),
-        ForeignKeyConstraint(["updated_by_user_id"], ["app_users.id"], name="fk_tenant_business_rules_updated_by"),
+        UniqueConstraint(
+            "tenant_id", "business_rule_id", name="uq_tenant_business_rules_tenant_rule"
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id"], ["tenants.id"], name="fk_tenant_business_rules_tenant"
+        ),
+        ForeignKeyConstraint(
+            ["business_rule_id"],
+            ["business_rules.id"],
+            name="fk_tenant_business_rules_rule",
+        ),
+        ForeignKeyConstraint(
+            ["updated_by_user_id"],
+            ["app_users.id"],
+            name="fk_tenant_business_rules_updated_by",
+        ),
     )
 
 
@@ -800,9 +1395,15 @@ class Tenants(Base):
     id = Column(BigInteger, primary_key=True)
     tenant_key = Column(String(50), nullable=False, unique=True)
     tenant_name = Column(String(200), nullable=False)
-    status = Column(String(20), nullable=False, server_default=text("'ACTIVE'::character varying"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    status = Column(
+        String(20), nullable=False, server_default=text("'ACTIVE'::character varying")
+    )
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
 
 class UserGraphProfiles(Base):
@@ -829,15 +1430,37 @@ class UserGraphProfiles(Base):
     country = Column(String(100), nullable=True)
     manager_graph_object_id = Column(String(150), nullable=True)
     raw_profile = Column(JSONB, nullable=True)
-    synced_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    synced_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "graph_object_id", name="user_graph_profiles_tenant_id_graph_object_id_key"),
-        UniqueConstraint("tenant_id", "user_id", name="user_graph_profiles_tenant_id_user_id_key"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="user_graph_profiles_tenant_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["user_id"], ["app_users.id"], name="user_graph_profiles_user_id_fkey", ondelete="CASCADE"),
+        UniqueConstraint(
+            "tenant_id",
+            "graph_object_id",
+            name="user_graph_profiles_tenant_id_graph_object_id_key",
+        ),
+        UniqueConstraint(
+            "tenant_id", "user_id", name="user_graph_profiles_tenant_id_user_id_key"
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name="user_graph_profiles_tenant_id_fkey",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["user_id"],
+            ["app_users.id"],
+            name="user_graph_profiles_user_id_fkey",
+            ondelete="CASCADE",
+        ),
     )
 
 
@@ -848,13 +1471,29 @@ class UserGroups(Base):
     user_id = Column(BigInteger, nullable=False)
     group_id = Column(BigInteger, nullable=False)
     assigned_by_user_id = Column(BigInteger, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
         UniqueConstraint("user_id", "group_id", name="uq_user_group"),
-        ForeignKeyConstraint(["user_id"], ["app_users.id"], name="user_groups_user_id_fkey", ondelete="CASCADE"),
-        ForeignKeyConstraint(["group_id"], ["groups.id"], name="user_groups_group_id_fkey", ondelete="CASCADE"),
-        ForeignKeyConstraint(["assigned_by_user_id"], ["app_users.id"], name="user_groups_assigned_by_user_id_fkey"),
+        ForeignKeyConstraint(
+            ["user_id"],
+            ["app_users.id"],
+            name="user_groups_user_id_fkey",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["group_id"],
+            ["groups.id"],
+            name="user_groups_group_id_fkey",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["assigned_by_user_id"],
+            ["app_users.id"],
+            name="user_groups_assigned_by_user_id_fkey",
+        ),
         Index("idx_user_groups_group_id", "group_id"),
         Index("idx_user_groups_user_id", "user_id"),
     )
@@ -867,13 +1506,23 @@ class UserPreferredAmenities(Base):
     tenant_id = Column(BigInteger, nullable=False)
     user_id = Column(BigInteger, nullable=False)
     amenity_id = Column(BigInteger, nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "user_id", "amenity_id", name="uq_user_preferred_amenity"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="fk_user_preferred_amenities_tenant"),
-        ForeignKeyConstraint(["user_id"], ["app_users.id"], name="fk_user_preferred_amenities_user"),
-        ForeignKeyConstraint(["amenity_id"], ["amenities.id"], name="fk_user_preferred_amenities_amenity"),
+        UniqueConstraint(
+            "tenant_id", "user_id", "amenity_id", name="uq_user_preferred_amenity"
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id"], ["tenants.id"], name="fk_user_preferred_amenities_tenant"
+        ),
+        ForeignKeyConstraint(
+            ["user_id"], ["app_users.id"], name="fk_user_preferred_amenities_user"
+        ),
+        ForeignKeyConstraint(
+            ["amenity_id"], ["amenities.id"], name="fk_user_preferred_amenities_amenity"
+        ),
         Index("idx_user_preferred_amenities_amenity", "amenity_id"),
         Index("idx_user_preferred_amenities_tenant", "tenant_id"),
         Index("idx_user_preferred_amenities_user", "user_id"),
@@ -893,14 +1542,28 @@ class UserSessions(Base):
     expires_at = Column(DateTime(timezone=True), nullable=False)
     last_used_at = Column(DateTime(timezone=True), nullable=True)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
     previous_refresh_token_hash = Column(Text, nullable=True)
     previous_token_grace_expires_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="user_sessions_tenant_id_fkey", ondelete="RESTRICT"),
-        ForeignKeyConstraint(["user_id"], ["app_users.id"], name="user_sessions_user_id_fkey", ondelete="CASCADE"),
+        ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name="user_sessions_tenant_id_fkey",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["user_id"],
+            ["app_users.id"],
+            name="user_sessions_user_id_fkey",
+            ondelete="CASCADE",
+        ),
     )
 
 
@@ -914,16 +1577,32 @@ class UserWorkPreferences(Base):
     default_building_id = Column(BigInteger, nullable=True)
     default_floor_id = Column(BigInteger, nullable=True)
     preferred_seat_type = Column(String(50), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "user_id", name="uq_user_work_preferences_user"),
-        ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name="fk_user_work_preferences_tenant"),
-        ForeignKeyConstraint(["user_id"], ["app_users.id"], name="fk_user_work_preferences_user"),
-        ForeignKeyConstraint(["default_site_id"], ["sites.id"], name="fk_user_work_preferences_site"),
-        ForeignKeyConstraint(["default_building_id"], ["buildings.id"], name="fk_user_work_preferences_building"),
-        ForeignKeyConstraint(["default_floor_id"], ["floors.id"], name="fk_user_work_preferences_floor"),
+        ForeignKeyConstraint(
+            ["tenant_id"], ["tenants.id"], name="fk_user_work_preferences_tenant"
+        ),
+        ForeignKeyConstraint(
+            ["user_id"], ["app_users.id"], name="fk_user_work_preferences_user"
+        ),
+        ForeignKeyConstraint(
+            ["default_site_id"], ["sites.id"], name="fk_user_work_preferences_site"
+        ),
+        ForeignKeyConstraint(
+            ["default_building_id"],
+            ["buildings.id"],
+            name="fk_user_work_preferences_building",
+        ),
+        ForeignKeyConstraint(
+            ["default_floor_id"], ["floors.id"], name="fk_user_work_preferences_floor"
+        ),
         Index("idx_user_work_preferences_building", "default_building_id"),
         Index("idx_user_work_preferences_floor", "default_floor_id"),
         Index("idx_user_work_preferences_site", "default_site_id"),

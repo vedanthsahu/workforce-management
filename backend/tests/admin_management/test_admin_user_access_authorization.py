@@ -50,23 +50,31 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
       would leave the tenant with zero active Tenant Admins.
     """
 
-    def test_allows_role_change_on_tenant_admin_target_when_other_admins_remain(self) -> None:
+    def test_allows_role_change_on_tenant_admin_target_when_other_admins_remain(
+        self,
+    ) -> None:
         conn = FakeConnection()
         updated = {**_target("TENANT_ADMIN"), "role_name": "EMPLOYEE"}
 
-        with patch(
-            "backend.services.user_management_service.fetch_user_by_id",
-            return_value=_target("TENANT_ADMIN"),
-        ), patch(
-            "backend.services.user_management_service.count_active_tenant_admins",
-            return_value=1,
-        ), patch(
-            "backend.services.user_management_service.admin_update_user_access",
-            return_value=updated,
-        ) as mock_update, patch(
-            "backend.services.user_management_service.revoke_all_user_sessions",
-        ) as mock_revoke, patch(
-            "backend.services.user_management_service.record_auth_event",
+        with (
+            patch(
+                "backend.services.user_management_service.fetch_user_by_id",
+                return_value=_target("TENANT_ADMIN"),
+            ),
+            patch(
+                "backend.services.user_management_service.count_active_tenant_admins",
+                return_value=1,
+            ),
+            patch(
+                "backend.services.user_management_service.admin_update_user_access",
+                return_value=updated,
+            ) as mock_update,
+            patch(
+                "backend.services.user_management_service.revoke_all_user_sessions",
+            ) as mock_revoke,
+            patch(
+                "backend.services.user_management_service.record_auth_event",
+            ),
         ):
             response = admin_update_user_access_service(
                 conn,
@@ -80,23 +88,31 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
         mock_revoke.assert_called_once()
         self.assertEqual(conn.commits, 1)
 
-    def test_allows_status_change_on_tenant_admin_target_when_other_admins_remain(self) -> None:
+    def test_allows_status_change_on_tenant_admin_target_when_other_admins_remain(
+        self,
+    ) -> None:
         conn = FakeConnection()
         updated = {**_target("TENANT_ADMIN"), "status": "INACTIVE"}
 
-        with patch(
-            "backend.services.user_management_service.fetch_user_by_id",
-            return_value=_target("TENANT_ADMIN"),
-        ), patch(
-            "backend.services.user_management_service.count_active_tenant_admins",
-            return_value=1,
-        ), patch(
-            "backend.services.user_management_service.admin_update_user_access",
-            return_value=updated,
-        ) as mock_update, patch(
-            "backend.services.user_management_service.revoke_all_user_sessions",
-        ), patch(
-            "backend.services.user_management_service.record_auth_event",
+        with (
+            patch(
+                "backend.services.user_management_service.fetch_user_by_id",
+                return_value=_target("TENANT_ADMIN"),
+            ),
+            patch(
+                "backend.services.user_management_service.count_active_tenant_admins",
+                return_value=1,
+            ),
+            patch(
+                "backend.services.user_management_service.admin_update_user_access",
+                return_value=updated,
+            ) as mock_update,
+            patch(
+                "backend.services.user_management_service.revoke_all_user_sessions",
+            ),
+            patch(
+                "backend.services.user_management_service.record_auth_event",
+            ),
         ):
             response = admin_update_user_access_service(
                 conn,
@@ -111,15 +127,20 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
     def test_blocks_demotion_that_would_remove_last_active_admin(self) -> None:
         conn = FakeConnection()
 
-        with patch(
-            "backend.services.user_management_service.fetch_user_by_id",
-            return_value=_target("TENANT_ADMIN"),
-        ), patch(
-            "backend.services.user_management_service.count_active_tenant_admins",
-            return_value=0,
-        ), patch(
-            "backend.services.user_management_service.admin_update_user_access",
-        ) as mock_update, self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.user_management_service.fetch_user_by_id",
+                return_value=_target("TENANT_ADMIN"),
+            ),
+            patch(
+                "backend.services.user_management_service.count_active_tenant_admins",
+                return_value=0,
+            ),
+            patch(
+                "backend.services.user_management_service.admin_update_user_access",
+            ) as mock_update,
+            self.assertRaises(HTTPException) as context,
+        ):
             admin_update_user_access_service(
                 conn,
                 current_user=CALLER,
@@ -135,15 +156,20 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
     def test_blocks_deactivation_that_would_remove_last_active_admin(self) -> None:
         conn = FakeConnection()
 
-        with patch(
-            "backend.services.user_management_service.fetch_user_by_id",
-            return_value=_target("TENANT_ADMIN"),
-        ), patch(
-            "backend.services.user_management_service.count_active_tenant_admins",
-            return_value=0,
-        ), patch(
-            "backend.services.user_management_service.admin_update_user_access",
-        ) as mock_update, self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.user_management_service.fetch_user_by_id",
+                return_value=_target("TENANT_ADMIN"),
+            ),
+            patch(
+                "backend.services.user_management_service.count_active_tenant_admins",
+                return_value=0,
+            ),
+            patch(
+                "backend.services.user_management_service.admin_update_user_access",
+            ) as mock_update,
+            self.assertRaises(HTTPException) as context,
+        ):
             admin_update_user_access_service(
                 conn,
                 current_user=CALLER,
@@ -155,7 +181,9 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
         self.assertEqual(context.exception.detail["code"], "last_admin_required")
         mock_update.assert_not_called()
 
-    def test_allows_reassigning_tenant_admin_to_itself_while_only_changing_status(self) -> None:
+    def test_allows_reassigning_tenant_admin_to_itself_while_only_changing_status(
+        self,
+    ) -> None:
         """The frontend always resends the target's current role alongside
         any status change (no partial-field submission) -- TENANT_ADMIN ->
         TENANT_ADMIN must round-trip as a no-op, not get rejected as a
@@ -163,25 +191,33 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
         conn = FakeConnection()
         updated = {**_target("TENANT_ADMIN"), "status": "INACTIVE"}
 
-        with patch(
-            "backend.services.user_management_service.fetch_user_by_id",
-            return_value=_target("TENANT_ADMIN"),
-        ), patch(
-            "backend.services.user_management_service.count_active_tenant_admins",
-            return_value=1,
-        ), patch(
-            "backend.services.user_management_service.admin_update_user_access",
-            return_value=updated,
-        ) as mock_update, patch(
-            "backend.services.user_management_service.revoke_all_user_sessions",
-        ), patch(
-            "backend.services.user_management_service.record_auth_event",
+        with (
+            patch(
+                "backend.services.user_management_service.fetch_user_by_id",
+                return_value=_target("TENANT_ADMIN"),
+            ),
+            patch(
+                "backend.services.user_management_service.count_active_tenant_admins",
+                return_value=1,
+            ),
+            patch(
+                "backend.services.user_management_service.admin_update_user_access",
+                return_value=updated,
+            ) as mock_update,
+            patch(
+                "backend.services.user_management_service.revoke_all_user_sessions",
+            ),
+            patch(
+                "backend.services.user_management_service.record_auth_event",
+            ),
         ):
             admin_update_user_access_service(
                 conn,
                 current_user=CALLER,
                 target_user_id="15",
-                payload=AdminUserAccessUpdateRequest(role_name="TENANT_ADMIN", status="INACTIVE"),
+                payload=AdminUserAccessUpdateRequest(
+                    role_name="TENANT_ADMIN", status="INACTIVE"
+                ),
             )
 
         mock_update.assert_called_once()
@@ -189,12 +225,16 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
     def test_rejects_change_on_product_admin_target(self) -> None:
         conn = FakeConnection()
 
-        with patch(
-            "backend.services.user_management_service.fetch_user_by_id",
-            return_value=_target("PRODUCT_ADMIN"),
-        ), patch(
-            "backend.services.user_management_service.admin_update_user_access",
-        ) as mock_update, self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.user_management_service.fetch_user_by_id",
+                return_value=_target("PRODUCT_ADMIN"),
+            ),
+            patch(
+                "backend.services.user_management_service.admin_update_user_access",
+            ) as mock_update,
+            self.assertRaises(HTTPException) as context,
+        ):
             admin_update_user_access_service(
                 conn,
                 current_user=CALLER,
@@ -209,16 +249,21 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
         conn = FakeConnection()
         updated = {**_target("MANAGER"), "role_name": "EMPLOYEE"}
 
-        with patch(
-            "backend.services.user_management_service.fetch_user_by_id",
-            return_value=_target("MANAGER"),
-        ), patch(
-            "backend.services.user_management_service.admin_update_user_access",
-            return_value=updated,
-        ) as mock_update, patch(
-            "backend.services.user_management_service.revoke_all_user_sessions",
-        ) as mock_revoke, patch(
-            "backend.services.user_management_service.record_auth_event",
+        with (
+            patch(
+                "backend.services.user_management_service.fetch_user_by_id",
+                return_value=_target("MANAGER"),
+            ),
+            patch(
+                "backend.services.user_management_service.admin_update_user_access",
+                return_value=updated,
+            ) as mock_update,
+            patch(
+                "backend.services.user_management_service.revoke_all_user_sessions",
+            ) as mock_revoke,
+            patch(
+                "backend.services.user_management_service.record_auth_event",
+            ),
         ):
             response = admin_update_user_access_service(
                 conn,
@@ -235,10 +280,13 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
     def test_self_modification_is_still_blocked_for_a_non_admin(self) -> None:
         conn = FakeConnection()
 
-        with patch(
-            "backend.services.user_management_service.fetch_user_by_id",
-            return_value=_target("MANAGER", user_id=CALLER["user_id"]),
-        ), self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.user_management_service.fetch_user_by_id",
+                return_value=_target("MANAGER", user_id=CALLER["user_id"]),
+            ),
+            self.assertRaises(HTTPException) as context,
+        ):
             admin_update_user_access_service(
                 conn,
                 current_user=CALLER,
@@ -255,27 +303,38 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
         """A Tenant Admin managing another admin's access now also covers
         managing their own -- e.g. deactivating themselves."""
         conn = FakeConnection()
-        updated = {**_target("TENANT_ADMIN", user_id=CALLER["user_id"]), "status": "INACTIVE"}
+        updated = {
+            **_target("TENANT_ADMIN", user_id=CALLER["user_id"]),
+            "status": "INACTIVE",
+        }
 
-        with patch(
-            "backend.services.user_management_service.fetch_user_by_id",
-            return_value=_target("TENANT_ADMIN", user_id=CALLER["user_id"]),
-        ), patch(
-            "backend.services.user_management_service.count_active_tenant_admins",
-            return_value=1,
-        ), patch(
-            "backend.services.user_management_service.admin_update_user_access",
-            return_value=updated,
-        ) as mock_update, patch(
-            "backend.services.user_management_service.revoke_all_user_sessions",
-        ), patch(
-            "backend.services.user_management_service.record_auth_event",
+        with (
+            patch(
+                "backend.services.user_management_service.fetch_user_by_id",
+                return_value=_target("TENANT_ADMIN", user_id=CALLER["user_id"]),
+            ),
+            patch(
+                "backend.services.user_management_service.count_active_tenant_admins",
+                return_value=1,
+            ),
+            patch(
+                "backend.services.user_management_service.admin_update_user_access",
+                return_value=updated,
+            ) as mock_update,
+            patch(
+                "backend.services.user_management_service.revoke_all_user_sessions",
+            ),
+            patch(
+                "backend.services.user_management_service.record_auth_event",
+            ),
         ):
             response = admin_update_user_access_service(
                 conn,
                 current_user=CALLER,
                 target_user_id=CALLER["user_id"],
-                payload=AdminUserAccessUpdateRequest(role_name="TENANT_ADMIN", status="INACTIVE"),
+                payload=AdminUserAccessUpdateRequest(
+                    role_name="TENANT_ADMIN", status="INACTIVE"
+                ),
             )
 
         self.assertEqual(response.status, "INACTIVE")
@@ -284,10 +343,13 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
     def test_nonexistent_target_still_returns_404(self) -> None:
         conn = FakeConnection()
 
-        with patch(
-            "backend.services.user_management_service.fetch_user_by_id",
-            return_value=None,
-        ), self.assertRaises(HTTPException) as context:
+        with (
+            patch(
+                "backend.services.user_management_service.fetch_user_by_id",
+                return_value=None,
+            ),
+            self.assertRaises(HTTPException) as context,
+        ):
             admin_update_user_access_service(
                 conn,
                 current_user=CALLER,
@@ -303,16 +365,21 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
         conn = FakeConnection()
         updated = {**_target("MANAGER"), "role_name": "TENANT_ADMIN"}
 
-        with patch(
-            "backend.services.user_management_service.fetch_user_by_id",
-            return_value=_target("MANAGER"),
-        ), patch(
-            "backend.services.user_management_service.admin_update_user_access",
-            return_value=updated,
-        ) as mock_update, patch(
-            "backend.services.user_management_service.revoke_all_user_sessions",
-        ), patch(
-            "backend.services.user_management_service.record_auth_event",
+        with (
+            patch(
+                "backend.services.user_management_service.fetch_user_by_id",
+                return_value=_target("MANAGER"),
+            ),
+            patch(
+                "backend.services.user_management_service.admin_update_user_access",
+                return_value=updated,
+            ) as mock_update,
+            patch(
+                "backend.services.user_management_service.revoke_all_user_sessions",
+            ),
+            patch(
+                "backend.services.user_management_service.record_auth_event",
+            ),
         ):
             response = admin_update_user_access_service(
                 conn,

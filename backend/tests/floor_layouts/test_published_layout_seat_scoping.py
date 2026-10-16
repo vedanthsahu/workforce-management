@@ -58,11 +58,17 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
     """Seat queries use the published or scheduled layout effective on the
     requested date, excluding stale layout versions."""
 
-    def test_fetch_seat_for_booking_requires_published_layout_and_active_chain(self) -> None:
+    def test_fetch_seat_for_booking_requires_published_layout_and_active_chain(
+        self,
+    ) -> None:
         cursor = FakeCursor()
         fetch_seat_for_booking(
             FakeConnection(cursor),
-            tenant_id="1", site_id="1", building_id="1", floor_id="1", seat_id="99",
+            tenant_id="1",
+            site_id="1",
+            building_id="1",
+            floor_id="1",
+            seat_id="99",
             booking_date=date(2026, 1, 1),
         )
         sql, _ = cursor.executions[0]
@@ -75,7 +81,10 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         # boundary. effective_from is compared against the START of the NEXT
         # day (India-local) since a direct
         # publish's effective_from is a real-time instant, not midnight.
-        self.assertIn("fl.effective_from < ((%s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')", sql)
+        self.assertIn(
+            "fl.effective_from < ((%s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')",
+            sql,
+        )
         self.assertIn(
             "fl.effective_till IS NULL OR fl.effective_till > "
             "(%s::timestamp AT TIME ZONE 'Asia/Kolkata')",
@@ -86,12 +95,16 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         self.assertIn("bu.status = 'ACTIVE'", sql)
         self.assertIn("f.status = 'ACTIVE'", sql)
 
-    def test_fetch_available_seats_by_range_requires_published_layout_and_active_chain(self) -> None:
+    def test_fetch_available_seats_by_range_requires_published_layout_and_active_chain(
+        self,
+    ) -> None:
         cursor = FakeCursor()
         fetch_available_seats_by_range(
             FakeConnection(cursor),
-            tenant_id="1", floor_id="1",
-            start_date=date(2026, 1, 1), end_date=date(2026, 1, 2),
+            tenant_id="1",
+            floor_id="1",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 1, 2),
             amenity_ids=[],
         )
         sql, _ = cursor.executions[0]
@@ -103,7 +116,8 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         self.assertIn("fl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
         # Anchored to India time, not the DB session's UTC day boundary.
         self.assertIn(
-            "fl.effective_from < ((rd.booking_date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')", sql
+            "fl.effective_from < ((rd.booking_date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')",
+            sql,
         )
         self.assertIn(
             "fl.effective_till IS NULL OR fl.effective_till > "
@@ -120,12 +134,18 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         cursor = FakeCursor()
         fetch_available_seats(
             FakeConnection(cursor),
-            tenant_id="1", floor_id="1", booking_date=date(2026, 1, 1), amenity_ids=[],
+            tenant_id="1",
+            floor_id="1",
+            booking_date=date(2026, 1, 1),
+            amenity_ids=[],
         )
         sql, _ = cursor.executions[0]
         self.assertIn("floor_layouts", sql)
         self.assertIn("fl.status IN ('PUBLISHED', 'SCHEDULED')", sql)
-        self.assertIn("fl.effective_from < ((%s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')", sql)
+        self.assertIn(
+            "fl.effective_from < ((%s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')",
+            sql,
+        )
         self.assertIn(
             "fl.effective_till IS NULL OR fl.effective_till > "
             "(%s::timestamp AT TIME ZONE 'Asia/Kolkata')",
@@ -150,13 +170,18 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
         already passed) is treated as not found."""
         cursor = FakeCursor()
         fetch_seat_configuration(
-            FakeConnection(cursor), tenant_id="1", seat_id="99",
+            FakeConnection(cursor),
+            tenant_id="1",
+            seat_id="99",
             booking_date=date(2026, 1, 1),
         )
         sql, _ = cursor.executions[0]
         self.assertIn("floor_layouts", sql)
         self.assertIn("status IN ('PUBLISHED', 'SCHEDULED')", sql)
-        self.assertIn("fl.effective_from < ((%s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')", sql)
+        self.assertIn(
+            "fl.effective_from < ((%s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')",
+            sql,
+        )
         self.assertIn(
             "fl.effective_till IS NULL OR fl.effective_till > "
             "(%s::timestamp AT TIME ZONE 'Asia/Kolkata')",
@@ -166,7 +191,9 @@ class SeatQueriesOnlyConsiderEffectiveLayoutTests(unittest.TestCase):
     def test_dashboard_summary_scopes_seats_to_published_layout(self) -> None:
         cursor = FakeCursor()
         fetch_admin_dashboard_summary(
-            FakeConnection(cursor), tenant_id="1", selected_date=date(2026, 1, 1),
+            FakeConnection(cursor),
+            tenant_id="1",
+            selected_date=date(2026, 1, 1),
         )
         sql, _ = cursor.executions[0]
         self.assertIn("floor_layouts", sql)
@@ -219,9 +246,16 @@ class UpsertOperationalSeatAppendOnlyTests(unittest.TestCase):
         cursor = _FakeUpsertCursor()
         upsert_operational_seat(
             FakeConnection(cursor),
-            tenant_id="1", layout_id="10", site_id="1", building_id="1",
-            floor_id="2", seat_code="A-1", seat_type="STANDARD",
-            status="ACTIVE", is_bookable=True, svg_element_id="svg-1",
+            tenant_id="1",
+            layout_id="10",
+            site_id="1",
+            building_id="1",
+            floor_id="2",
+            seat_code="A-1",
+            seat_type="STANDARD",
+            status="ACTIVE",
+            is_bookable=True,
+            svg_element_id="svg-1",
         )
         sql, _ = cursor.executions[0]
         self.assertIn("ON CONFLICT", sql)
@@ -241,7 +275,10 @@ class ReconcilePublishedLayoutSeatsAppendOnlyTests(unittest.TestCase):
     def test_retires_by_layout_id_never_deletes(self) -> None:
         cursor = FakeCursor()
         reconcile_published_layout_seats(
-            FakeConnection(cursor), tenant_id="1", floor_id="2", layout_id="10",
+            FakeConnection(cursor),
+            tenant_id="1",
+            floor_id="2",
+            layout_id="10",
         )
 
         self.assertEqual(len(cursor.executions), 1)
