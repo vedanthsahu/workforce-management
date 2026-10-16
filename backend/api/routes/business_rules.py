@@ -52,9 +52,9 @@ from backend.services.business_rule_service import (
     update_activity_record_count,
     update_blocked_seat_days,
     update_blocked_seat_max_advance_days,
+    update_chatbot_employee_access,
     update_employee_max_advance_days,
     update_guest_max_advance_days,
-    update_chatbot_employee_access,
     update_layout_scheduling_buffer_days,
     update_layout_visibility_days,
 )
