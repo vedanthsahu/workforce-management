@@ -43,6 +43,7 @@ export default function FloorCards({ stats, statusFilter = null, onStatusFilterC
         label="Total Floors"
         value={stats.total_floors.toString()}
         sub="Across all buildings"
+        selected={statusFilter === null}
         disabled={stats.total_floors === 0}
         onClick={onStatusFilterChange && stats.total_floors > 0 ? () => onStatusFilterChange(null) : undefined}
       />
@@ -84,7 +85,7 @@ function Stat({ icon, bg, label, value, sub, selected, disabled, onClick }: Stat
       onClick={clickable ? onClick : undefined}
       className={`group flex items-center gap-3 p-3 sm:p-5 bg-white border rounded-2xl shadow-sm transition-all duration-200 ${
         clickable ? "cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:border-gray-300" : disabled ? "cursor-not-allowed opacity-80" : ""
-      } ${selected ? "border-2 border-blue-500 ring-2 ring-blue-100 shadow-md" : ""}`}
+      } ${selected ? "border-indigo-300 ring-1 ring-indigo-100" : ""}`}
     >
       <div className={`p-2 sm:p-3 rounded-xl shrink-0 transition-transform duration-200 group-hover:scale-110 ${bg}`}>{icon}</div>
       <div>
