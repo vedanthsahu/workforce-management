@@ -146,6 +146,11 @@ export default function EditOfficeModal({ office, open, onClose, onSuccess }: Ed
 
   const toggleBuilding = (id: string) => {
     setSelectedBuildingIds((prev) => (prev.includes(id) ? prev.filter((b) => b !== id) : [...prev, id]));
+    // Unticking a building also unticks its floors (they can't stay active without it).
+    if (selectedBuildingIds.includes(id)) {
+      const childFloorIds = inactiveFloors.filter((f) => f.buildingId === id).map((f) => f.id);
+      setSelectedFloorIds((prev) => prev.filter((f) => !childFloorIds.includes(f)));
+    }
   };
 
   const toggleFloor = (id: string) => {

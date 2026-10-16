@@ -93,6 +93,12 @@ function BuildingsPage() {
     setSelectedSiteId(siteId);
   };
 
+  // Clicking the "Total" card resets the office dropdown to its default too.
+  const handleStatusFilterChange = (filter: BuildingStatusFilter) => {
+    setStatusFilter(filter);
+    if (filter === null) setSelectedSiteId("");
+  };
+
   const filteredBuildings = statusMatchedBuildings
     .filter((building) => !selectedSiteId || String(building.site_id) === selectedSiteId)
     .map((building) => ({ building, rank: searchMatchRank(building.building_name || "", search) }))
@@ -157,7 +163,7 @@ function BuildingsPage() {
         <BuildingCards
           stats={stats}
           statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
+          onStatusFilterChange={handleStatusFilterChange}
         />
       )}
 
