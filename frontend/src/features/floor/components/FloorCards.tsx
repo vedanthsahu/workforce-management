@@ -31,10 +31,6 @@ export default function FloorCards({ stats, statusFilter = null, onStatusFilterC
     return null;
   }
 
-  const toggle = (value: "ACTIVE" | "INACTIVE") => {
-    onStatusFilterChange?.(statusFilter === value ? null : value);
-  };
-
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       <Stat
@@ -55,7 +51,7 @@ export default function FloorCards({ stats, statusFilter = null, onStatusFilterC
         sub="Currently active"
         selected={statusFilter === "ACTIVE"}
         disabled={stats.active_floors === 0}
-        onClick={onStatusFilterChange && stats.active_floors > 0 ? () => toggle("ACTIVE") : undefined}
+        onClick={onStatusFilterChange && stats.active_floors > 0 ? () => onStatusFilterChange("ACTIVE") : undefined}
       />
       <Stat
         icon={<PauseCircle className="text-orange-600" />}
@@ -65,7 +61,7 @@ export default function FloorCards({ stats, statusFilter = null, onStatusFilterC
         sub="Currently inactive"
         selected={statusFilter === "INACTIVE"}
         disabled={stats.inactive_floors === 0}
-        onClick={onStatusFilterChange && stats.inactive_floors > 0 ? () => toggle("INACTIVE") : undefined}
+        onClick={onStatusFilterChange && stats.inactive_floors > 0 ? () => onStatusFilterChange("INACTIVE") : undefined}
       />
       <Stat
         icon={<Armchair className="text-purple-600" />}
