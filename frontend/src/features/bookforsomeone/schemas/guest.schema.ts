@@ -17,6 +17,13 @@ export const normalizeMobileNumber = (value: string) => {
   return parsed.number;
 };
 
+// Local part: letters/digits/._%+- with no leading, trailing or consecutive dots.
+// Domain: dot-separated labels (no leading/trailing hyphen) ending in an alphabetic TLD of 2+ letters.
+const EMAIL_PATTERN =
+  /^[A-Za-z0-9_%+-]+(?:\.[A-Za-z0-9_%+-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+
+export const isValidEmail = (value: string) => value.length <= 254 && EMAIL_PATTERN.test(value);
+
 export const createGuestSchema = z.object({
   firstName: z.string().trim().min(1, "First name is required"),
   lastName: z.string().trim().min(1, "Last name is required"),
@@ -24,7 +31,7 @@ export const createGuestSchema = z.object({
     .string()
     .trim()
     .min(1, "Email is required")
-    .email("Enter a valid email address"),
+    .refine(isValidEmail, "Enter a valid email address (e.g. name@example.com)"),
   phone: z
     .string()
     .refine((val) => !val || normalizeMobileNumber(val) !== null, {
