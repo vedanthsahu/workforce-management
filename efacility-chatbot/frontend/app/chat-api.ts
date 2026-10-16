@@ -159,9 +159,37 @@ export interface LookupOption {
 
 const API_BASE =
   process.env.NEXT_PUBLIC_CHATBOT_API_URL || 'http://localhost:8100';
+const SEATBOOK_API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 let accessToken = '';
+let sitesLookup: Promise<LookupOption[]> | undefined;
+const buildingLookups = new Map<string, Promise<LookupOption[]>>();
+const floorLookups = new Map<string, Promise<LookupOption[]>>();
+
+function clearLookupCache() {
+  sitesLookup = undefined;
+  buildingLookups.clear();
+  floorLookups.clear();
+}
+
+function cachedLookup(
+  cache: Map<string, Promise<LookupOption[]>>,
+  key: string,
+  loader: () => Promise<LookupOption[]>,
+) {
+  const existing = cache.get(key);
+  if (existing) return existing;
+
+  const pending = loader().catch((error) => {
+    cache.delete(key);
+    throw error;
+  });
+  cache.set(key, pending);
+  return pending;
+}
 
 export function setAccessToken(token: string) {
+  if (token !== accessToken) clearLookupCache();
   accessToken = token;
 }
 
@@ -191,6 +219,32 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function requestSeatBookJson<T>(path: string): Promise<T> {
+  const headers = new Headers({ Accept: 'application/json' });
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+
+  const response = await fetch(`${SEATBOOK_API_BASE}${path}`, { headers });
+  if (!response.ok) throw new Error(`Workforce API request failed: ${response.status}`);
+  return response.json() as Promise<T>;
+}
+
+interface SeatBookSite {
+  site_id: string | number;
+  site_name: string;
+  city?: string;
+}
+
+interface SeatBookBuilding {
+  building_id: string | number;
+  building_name: string;
+}
+
+interface SeatBookFloor {
+  floor_id: string | number;
+  floor_name?: string;
+  floor_code?: string;
+}
+
 export function createSession() {
   return requestJson<SessionOut>('/api/chat/session', {
     method: 'POST',
@@ -206,15 +260,44 @@ export function sendMessage(sessionId: string, message: UserMessage) {
 }
 
 export function lookupSites() {
-  return requestJson<LookupOption[]>('/api/chat/lookup/sites');
+  if (!sitesLookup) {
+    sitesLookup = requestSeatBookJson<SeatBookSite[]>('/sites?status=ACTIVE&limit=100')
+      .then((sites) => sites
+        .filter((site) => site.site_id && site.site_name)
+        .map((site) => ({
+          value: String(site.site_id),
+          label: `${site.site_name}${site.city ? ` (${site.city})` : ''}`,
+          city: site.city,
+        })))
+      .catch((error) => {
+        sitesLookup = undefined;
+        throw error;
+      });
+  }
+  return sitesLookup;
 }
 
 export function lookupBuildings(siteId: string) {
-  return requestJson<LookupOption[]>(`/api/chat/lookup/buildings?site_id=${encodeURIComponent(siteId)}`);
+  return cachedLookup(buildingLookups, siteId, () =>
+    requestSeatBookJson<SeatBookBuilding[]>(
+      `/buildings?site_id=${encodeURIComponent(siteId)}&status=ACTIVE&limit=100`,
+    ).then((buildings) => buildings
+      .filter((building) => building.building_id && building.building_name)
+      .map((building) => ({ value: String(building.building_id), label: building.building_name }))),
+  );
 }
 
 export function lookupFloors(buildingId: string) {
-  return requestJson<LookupOption[]>(`/api/chat/lookup/floors?building_id=${encodeURIComponent(buildingId)}`);
+  return cachedLookup(floorLookups, buildingId, () =>
+    requestSeatBookJson<SeatBookFloor[]>(
+      `/buildings/${encodeURIComponent(buildingId)}/floors?status=ACTIVE&limit=100`,
+    ).then((floors) => floors
+      .filter((floor) => floor.floor_id)
+      .map((floor) => ({
+        value: String(floor.floor_id),
+        label: floor.floor_name || floor.floor_code || String(floor.floor_id),
+      }))),
+  );
 }
 
 export function lookupAmenities() {

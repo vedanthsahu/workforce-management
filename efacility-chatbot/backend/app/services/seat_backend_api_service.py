@@ -17,6 +17,7 @@ from app.services.telemetry_service import telemetry_service
 logger = logging.getLogger(__name__)
 
 TOKEN_COOKIE_NAMES = ("access_token", "refresh_token", "session_token")
+LOCATION_CACHE_TTL_SECONDS = 300
 
 
 class SeatBackendApiService:
@@ -36,30 +37,66 @@ class SeatBackendApiService:
             tuple[str, int, int],
             tuple[float, tuple[list[dict[str, Any]], bool]],
         ] = {}
+        self._location_cache: dict[
+            tuple[str, str, int],
+            tuple[float, list[dict[str, Any]]],
+        ] = {}
 
     @property
     def enabled(self) -> bool:
         return bool(settings.ENABLE_SEAT_BACKEND_API and settings.SEAT_BACKEND_API_URL)
 
     async def list_sites(self) -> Optional[list[dict[str, Any]]]:
+        cached = self._cached_location("sites", 0)
+        if cached is not None:
+            return cached
         payload = await self._request("GET", "/sites", params={"status": "ACTIVE", "limit": 100})
-        return self._items(payload)
+        return self._cache_location("sites", 0, self._items(payload))
 
     async def list_buildings(self, site_id: int) -> Optional[list[dict[str, Any]]]:
+        cached = self._cached_location("buildings", site_id)
+        if cached is not None:
+            return cached
         payload = await self._request(
             "GET",
             "/buildings",
             params={"site_id": site_id, "status": "ACTIVE", "limit": 100},
         )
-        return self._items(payload)
+        return self._cache_location("buildings", site_id, self._items(payload))
 
     async def list_floors(self, building_id: int) -> Optional[list[dict[str, Any]]]:
+        cached = self._cached_location("floors", building_id)
+        if cached is not None:
+            return cached
         payload = await self._request(
             "GET",
             f"/buildings/{building_id}/floors",
             params={"status": "ACTIVE", "limit": 100},
         )
-        return self._items(payload)
+        return self._cache_location("floors", building_id, self._items(payload))
+
+    def _location_cache_key(self, kind: str, parent_id: int) -> tuple[str, str, int]:
+        request_user = current_seatbook_user() or {}
+        tenant_id = str(request_user.get("tenant_id") or "").strip()
+        return tenant_id, kind, parent_id
+
+    def _cached_location(self, kind: str, parent_id: int) -> Optional[list[dict[str, Any]]]:
+        cached = self._location_cache.get(self._location_cache_key(kind, parent_id))
+        if not cached or time.monotonic() - cached[0] >= LOCATION_CACHE_TTL_SECONDS:
+            return None
+        return [dict(item) for item in cached[1]]
+
+    def _cache_location(
+        self,
+        kind: str,
+        parent_id: int,
+        items: Optional[list[dict[str, Any]]],
+    ) -> Optional[list[dict[str, Any]]]:
+        if items is None:
+            return None
+        snapshot = [dict(item) for item in items]
+        self._location_cache[self._location_cache_key(kind, parent_id)] = (time.monotonic(), snapshot)
+        return [dict(item) for item in snapshot]
 
     async def preferences(self) -> Optional[dict[str, Any]]:
         payload = await self._request("GET", "/preferences")
