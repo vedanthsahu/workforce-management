@@ -22,7 +22,7 @@ ClaimHook = Callable[[dict[str, Any]], dict[str, Any]]
 # created after registration.
 CLAIM_HOOKS: list[ClaimHook] = []
 ALLOWED_CLAIMS = frozenset(
-    {"user_id", "sub", "email", "role", "tenant_id", "session_id", "iat", "exp"}
+    {"user_id", "sub", "email", "display_name", "role", "tenant_id", "session_id", "iat", "exp"}
 )
 
 

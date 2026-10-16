@@ -1249,11 +1249,9 @@ def fetch_hierarchy_occupancy(
                     g.group_name,
                     COALESCE(sc.total_seats, 0)::integer AS total_seats,
                     COALESCE(bl.blocked_seats, 0)::integer AS blocked_seats,
-                    GREATEST(
-                        COALESCE(sc.total_seats, 0)
-                        - COALESCE(bl.blocked_seats, 0),
-                        0
-                    )::integer AS available_seats,
+                    -- Occupancy is measured against ALL active seats; blocked
+                    -- seats are no longer subtracted from the denominator.
+                    COALESCE(sc.total_seats, 0)::integer AS available_seats,
                     COALESCE(sbc.booked_seats, 0)::integer AS booked_seats,
                     COALESCE(sbc.employee_booked_seats, 0)::integer AS employee_booked_seats,
                     COALESCE(sbc.guest_booked_seats, 0)::integer AS guest_booked_seats

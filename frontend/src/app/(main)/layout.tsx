@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -10,6 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { BookOpen } from "lucide-react";
+import { ChatbotEmbed } from "@/features/chatbot/components/ChatbotEmbed";
+import { fetchChatbotPolicy } from "@/features/configuration/services/configuration.service";
 
 
 function SidebarSkeleton() {
@@ -34,7 +36,6 @@ function SidebarSkeleton() {
     </div>
   );
 }
-
 export default function MainLayout({
   children,
 }: {
@@ -44,6 +45,7 @@ export default function MainLayout({
   const isMobile = useIsMobile();
   const router = useRouter();
   const pathname = usePathname();
+  const [employeeChatbotEnabled, setEmployeeChatbotEnabled] = useState(false);
 
   const roleAllowed =
     (!pathname.startsWith("/admin") ||
@@ -63,6 +65,29 @@ export default function MainLayout({
       router.replace("/dashboard");
     }
   }, [isLoading, roleAllowed, router, user]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!user || user.role?.toUpperCase() !== "EMPLOYEE") {
+      setEmployeeChatbotEnabled(false);
+      return;
+    }
+
+    fetchChatbotPolicy()
+      .then((policy) => {
+        if (!cancelled) {
+          setEmployeeChatbotEnabled(policy.employee_access_enabled);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setEmployeeChatbotEnabled(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   if (!isLoading && (!user || !roleAllowed)) return null;
 
@@ -128,6 +153,11 @@ export default function MainLayout({
 
           {children}
         </div>
+        {!showSidebarSkeleton &&
+        user?.role?.toUpperCase() === "EMPLOYEE" &&
+        employeeChatbotEnabled ? (
+          <ChatbotEmbed />
+        ) : null}
       </div>
 
       <UnsavedChangesDialog />

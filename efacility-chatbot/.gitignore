@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+dist/
+.angular/
+.next/
+frontend/.next/
+frontend/playwright-report/
+frontend/test-results/
+
+# Environment
+backend/.env
+backend/.seat_backend_tokens.json
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Claude Code
+.claude/

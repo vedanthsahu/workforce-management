@@ -25,6 +25,7 @@ EMPLOYEE_MAX_ADVANCE_DAYS_KEY = "booking.max_advance_days.employee"
 GUEST_MAX_ADVANCE_DAYS_KEY = "booking.max_advance_days.guest"
 LAYOUT_SCHEDULING_BUFFER_DAYS_KEY = "floor_layouts.min_advance_days.buffer"
 ACTIVITY_RECORD_COUNT_KEY = "activity.recent_record_count"
+CHATBOT_EMPLOYEE_ACCESS_KEY = "chatbot.employee_access_enabled"
 
 # How far ahead (in days) a seat block can be set -- applies to creating,
 # modifying and re-blocking. A separate key, not part of
@@ -64,6 +65,7 @@ _DEFAULT_LAYOUT_SCHEDULING_BUFFER_DAYS = 15
 # Mirrors the RECENT_BOOKINGS_LIMIT the admin dashboard hardcoded before
 # this rule existed.
 _DEFAULT_ACTIVITY_RECORD_COUNT = 20
+_DEFAULT_CHATBOT_EMPLOYEE_ACCESS = False
 # Upper bound for the rule: GET /admin/activities never returns more than
 # 100 rows, so a larger count could never be filled.
 MAX_ACTIVITY_RECORD_COUNT = 100
@@ -198,6 +200,24 @@ def update_activity_record_count(
         tenant_id=tenant_id,
         business_rule_key=ACTIVITY_RECORD_COUNT_KEY,
         value=str(new_value),
+        updated_by_user_id=updated_by_user_id,
+    )
+    conn.commit()
+
+
+def update_chatbot_employee_access(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    enabled: bool,
+    updated_by_user_id: str,
+) -> None:
+    """Enable or disable the employee chatbot for one tenant."""
+    _upsert_or_500(
+        conn,
+        tenant_id=tenant_id,
+        business_rule_key=CHATBOT_EMPLOYEE_ACCESS_KEY,
+        value="true" if enabled else "false",
         updated_by_user_id=updated_by_user_id,
     )
     conn.commit()
@@ -379,6 +399,18 @@ def resolve_activity_record_count(conn: PGConnection, *, tenant_id: str) -> int:
         fetch_business_rule_value(
             conn, tenant_id=tenant_id, business_rule_key=ACTIVITY_RECORD_COUNT_KEY,
             default=_DEFAULT_ACTIVITY_RECORD_COUNT,
+        )
+    )
+
+
+def resolve_chatbot_employee_access(conn: PGConnection, *, tenant_id: str) -> bool:
+    """Return whether employees in a tenant may use the chatbot."""
+    return bool(
+        fetch_business_rule_value(
+            conn,
+            tenant_id=tenant_id,
+            business_rule_key=CHATBOT_EMPLOYEE_ACCESS_KEY,
+            default=_DEFAULT_CHATBOT_EMPLOYEE_ACCESS,
         )
     )
 

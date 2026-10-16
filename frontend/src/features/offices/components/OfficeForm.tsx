@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/combobox";
 import useCreateSite from "../hooks/useCreateSite";
 import { officeService } from "../services/office.service";
-import { TIMEZONES, COUNTRIES, getStatesOfCountry, getCities } from "../utils/office.utils";
+import { TIMEZONES, COUNTRIES, getStatesOfCountry, getCities, getTimezonesOfCountry } from "../utils/office.utils";
 import { officeCodeFromName, uniqueCode } from "@/lib/codeGenerator";
 
 // Shared field-label look across all "Add" forms (Office, Building, Floor, Amenity).
@@ -63,6 +63,10 @@ export default function OfficeForm() {
   // so it stays out of formData (and the create payload).
   const [selectedState, setSelectedState] = useState("");
   const stateOptions = useMemo(() => getStatesOfCountry(formData.country), [formData.country]);
+  const timezoneOptions = useMemo(() => {
+    const countryZones = getTimezonesOfCountry(formData.country);
+    return countryZones.length > 0 ? countryZones : TIMEZONES;
+  }, [formData.country]);
   const cityOptions = useMemo(
     () => getCities(formData.country, selectedState),
     [formData.country, selectedState]
@@ -198,7 +202,15 @@ export default function OfficeForm() {
               onValueChange={(value) => {
                 setErrorMessage("");
                 setSelectedState("");
-                setFormData((prev) => ({ ...prev, country: value ?? "", city: "" }));
+                // A country with a single zone (e.g. India) fills Timezone in;
+                // otherwise the user picks from that country's zones.
+                const countryZones = getTimezonesOfCountry(value ?? "");
+                setFormData((prev) => ({
+                  ...prev,
+                  country: value ?? "",
+                  city: "",
+                  timezone: countryZones.length === 1 ? countryZones[0] : "",
+                }));
               }}
             >
               <ComboboxInput placeholder="Select a country" className={comboInputClass} />
@@ -292,7 +304,7 @@ export default function OfficeForm() {
               Timezone <span className="text-red-400 normal-case tracking-normal font-normal">*</span>
             </Label>
             <Combobox
-              items={TIMEZONES}
+              items={timezoneOptions}
               value={formData.timezone || null}
               onValueChange={(value) => {
                 setErrorMessage("");
