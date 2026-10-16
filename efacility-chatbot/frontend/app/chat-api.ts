@@ -46,10 +46,14 @@ export interface SeatCard {
   seat_type: string;
   seat_neighborhood?: string;
   amenities: string[];
+  is_available?: boolean;
+  x?: number | null;
+  y?: number | null;
 }
 
 export interface SeatList {
   seats: SeatCard[];
+  seat_catalog?: SeatCard[];
   total: number;
   floor_name: string;
   building_name: string;

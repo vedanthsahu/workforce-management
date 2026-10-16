@@ -9,6 +9,7 @@ import {
   FormField,
   LookupOption,
   SeatCard,
+  SessionOut,
   UserMessage,
   createSession,
   lookupAmenities,
@@ -48,12 +49,18 @@ export default function Chatbot() {
   const [activeDropdownKey, setActiveDropdownKey] = useState<string | null>(null);
   const [selectedSeats, setSelectedSeats] = useState<SeatCard[]>([]);
   const [seatHeadcount, setSeatHeadcount] = useState(1);
+  const [seatSearchText, setSeatSearchText] = useState('');
   const [bookingTabLoading, setBookingTabLoading] = useState<'upcoming' | 'past' | 'cancelled' | null>(null);
+  const [initializationError, setInitializationError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const replaceBookingListRef = useRef(false);
   const replaceRebookCalendarRef = useRef(false);
+  const seatSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressAutoScrollRef = useRef(false);
   const hostInitializedRef = useRef(false);
+  const hostInitializingRef = useRef(false);
+  const restartRequestedRef = useRef(false);
+  const latestAccessTokenRef = useRef('');
 
   const minDate = useMemo(() => new Date().toISOString().split('T')[0], []);
   const nameIsValid = nameInput.trim().length >= 2 && nameInput.trim().length <= 50;
@@ -63,6 +70,10 @@ export default function Chatbot() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  useEffect(() => () => {
+    if (seatSearchTimerRef.current) clearTimeout(seatSearchTimerRef.current);
+  }, []);
+
   useEffect(() => {
     const hostOrigin = process.env.NEXT_PUBLIC_HOST_APP_ORIGIN || 'http://localhost:3000';
     window.parent.postMessage({ source: 'efacility-chatbot', type: 'chatbot:state', isOpen }, hostOrigin);
@@ -71,39 +82,70 @@ export default function Chatbot() {
   useEffect(() => {
     const hostOrigin = process.env.NEXT_PUBLIC_HOST_APP_ORIGIN || 'http://localhost:3000';
 
-    async function handleHostMessage(event: MessageEvent) {
+    function handleHostMessage(event: MessageEvent) {
       if (event.origin !== hostOrigin || event.source !== window.parent) return;
-      if (event.data?.source !== 'seatbook-host' || event.data?.type !== 'chatbot:init') return;
+      if (event.data?.source !== 'seatbook-host') return;
+      if (event.data?.type === 'chatbot:init-error') {
+        restartRequestedRef.current = false;
+        setIsLoading(false);
+        setInitializationError('The chat could not be restarted because a new access token was unavailable. Please try again.');
+        return;
+      }
+      if (event.data?.type !== 'chatbot:init') return;
       const token = String(event.data?.accessToken || '').trim();
       if (!token) return;
-      if (hostInitializedRef.current) {
+      latestAccessTokenRef.current = token;
+      const restartRequested = restartRequestedRef.current;
+      if (hostInitializedRef.current && !restartRequested) {
         setAccessToken(token);
         setIsOpen(true);
         return;
       }
-
-      hostInitializedRef.current = true;
-      setAccessToken(token);
-      setIsOpen(true);
-      setShowNameInput(false);
-      setIsLoading(true);
-      try {
-        const session = await createSession();
-        setUserName(session.user_name);
-        setNameInput(session.user_name);
-        setSessionId(session.session_id);
-        if (session.initial_response) processResponse(session.initial_response);
-      } catch (error) {
-        hostInitializedRef.current = false;
-        console.error('SeatBook session initialization failed', error);
-      } finally {
-        setIsLoading(false);
-      }
+      void initializeHostSession(token, restartRequested);
     }
 
     window.addEventListener('message', handleHostMessage);
+    window.parent.postMessage({ source: 'efacility-chatbot', type: 'chatbot:ready' }, hostOrigin);
     return () => window.removeEventListener('message', handleHostMessage);
   }, []);
+
+  async function initializeHostSession(token: string, replaceConversation = false) {
+    if (!token || hostInitializingRef.current) return;
+    hostInitializingRef.current = true;
+    hostInitializedRef.current = true;
+    setAccessToken(token);
+    setIsOpen(true);
+    setShowNameInput(false);
+    setInitializationError('');
+    setIsLoading(true);
+    try {
+      const session = await createSession();
+      const initialResponse = requireInitialResponse(session);
+      if (replaceConversation) resetChatState();
+      setUserName(session.user_name);
+      setNameInput(session.user_name);
+      setSessionId(session.session_id);
+      processResponse(initialResponse);
+    } catch (error) {
+      hostInitializedRef.current = false;
+      setInitializationError('The assistant could not start. Check your connection and try again.');
+      console.error('SeatBook session initialization failed', error);
+    } finally {
+      restartRequestedRef.current = false;
+      hostInitializingRef.current = false;
+      setIsLoading(false);
+    }
+  }
+
+  function retryInitialization() {
+    const token = latestAccessTokenRef.current;
+    if (token) {
+      void initializeHostSession(token);
+      return;
+    }
+    const hostOrigin = process.env.NEXT_PUBLIC_HOST_APP_ORIGIN || 'http://localhost:3000';
+    window.parent.postMessage({ source: 'efacility-chatbot', type: 'chatbot:ready' }, hostOrigin);
+  }
 
   async function startSession(event?: FormEvent) {
     event?.preventDefault();
@@ -114,11 +156,10 @@ export default function Chatbot() {
     setIsLoading(true);
     try {
       const session = await createSession();
+      const initialResponse = requireInitialResponse(session);
       setSessionId(session.session_id);
       setShowNameInput(false);
-      if (session.initial_response) {
-        processResponse(session.initial_response);
-      }
+      processResponse(initialResponse);
     } catch (error) {
       console.error('Session creation failed', error);
     } finally {
@@ -128,27 +169,11 @@ export default function Chatbot() {
 
   async function refreshChat() {
     if (isLoading) return;
-
-    const name = (userName || nameInput).trim();
-    resetChatState();
-    if (!name) return;
-
-    setUserName(name);
-    setNameInput(name);
+    setInitializationError('');
     setIsLoading(true);
-    try {
-      const session = await createSession();
-      setSessionId(session.session_id);
-      setShowNameInput(false);
-      if (session.initial_response) {
-        processResponse(session.initial_response);
-      }
-    } catch (error) {
-      setShowNameInput(false);
-      console.error('Session refresh failed', error);
-    } finally {
-      setIsLoading(false);
-    }
+    restartRequestedRef.current = true;
+    const hostOrigin = process.env.NEXT_PUBLIC_HOST_APP_ORIGIN || 'http://localhost:3000';
+    window.parent.postMessage({ source: 'efacility-chatbot', type: 'chatbot:token-request' }, hostOrigin);
   }
 
   function resetChatState() {
@@ -161,6 +186,9 @@ export default function Chatbot() {
     setActiveDropdownKey(null);
     setSelectedSeats([]);
     setSeatHeadcount(1);
+    setSeatSearchText('');
+    setInitializationError('');
+    if (seatSearchTimerRef.current) clearTimeout(seatSearchTimerRef.current);
     setShowNameInput(false);
   }
 
@@ -242,6 +270,7 @@ export default function Chatbot() {
       if (message.type === 'SEAT_LIST' && message.seat_list) {
         setSeatHeadcount(message.seat_list.headcount || 1);
         setSelectedSeats([]);
+        setSeatSearchText('');
       }
     });
 
@@ -291,8 +320,18 @@ export default function Chatbot() {
 
   function selectSeat(seat: SeatCard) {
     if (!sessionId || isLoading || seatHeadcount > 1) return;
+    cancelPendingSeatSearch();
     addUserMessage(`Selected: ${seat.seat_code}`);
     void dispatchMessage({ form_data: { seat_id: seat.id }, message_type: 'FORM_SUBMIT' });
+  }
+
+  function cancelPendingSeatSearch() {
+    if (seatSearchTimerRef.current) clearTimeout(seatSearchTimerRef.current);
+    seatSearchTimerRef.current = null;
+  }
+
+  function scheduleSeatSearch(value: string) {
+    setSeatSearchText(value);
   }
 
   function toggleSeat(seat: SeatCard) {
@@ -306,6 +345,7 @@ export default function Chatbot() {
 
   function submitSelectedSeats() {
     if (!sessionId || isLoading || selectedSeats.length !== seatHeadcount) return;
+    cancelPendingSeatSearch();
     addUserMessage(`Selected: ${selectedSeats.map((seat) => seat.seat_code).join(', ')}`);
     const seatIds = selectedSeats.map((seat) => seat.id);
     setSelectedSeats([]);
@@ -575,11 +615,21 @@ export default function Chatbot() {
           ) : (
             <>
               <div className={`messages-area ${activeFormCard ? 'has-form' : ''}`}>
+                {initializationError ? (
+                  <div className="chat-initialization-error" role="alert">
+                    <strong>Unable to load the assistant</strong>
+                    <span>{initializationError}</span>
+                    <button type="button" onClick={retryInitialization} disabled={isLoading}>Retry</button>
+                  </div>
+                ) : null}
                 {messages.map((message, index) => (
                   <div key={`${message.timestamp.toISOString()}-${index}`} className={`message-row ${message.from === 'user' ? 'user-row' : ''}`}>
                     {message.from === 'bot' ? <div className="bot-msg-avatar"><AssistantIcon /></div> : null}
                     {message.from === 'bot' && message.botMessage ? (
-                      <div className="bot-bubble-wrap">{renderBotMessage(message.botMessage)}</div>
+                      <div className="bot-bubble-wrap">{renderBotMessage(
+                        message.botMessage,
+                        index === messages.findLastIndex((item) => item.botMessage?.type === 'SEAT_LIST'),
+                      )}</div>
                     ) : null}
                     {message.from === 'user' ? <div className="user-bubble">{message.userText}</div> : null}
                   </div>
@@ -626,7 +676,7 @@ export default function Chatbot() {
     </>
   );
 
-  function renderBotMessage(message: BotMessage): ReactNode {
+  function renderBotMessage(message: BotMessage, isLatestSeatList = false): ReactNode {
     if (message.type === 'TEXT') {
       const classes = ['bot-bubble', 'text-bubble'];
       if (message.text?.includes('OK') || message.text?.includes('cancelled')) classes.push('info-bubble');
@@ -698,12 +748,56 @@ export default function Chatbot() {
     }
 
     if (message.type === 'SEAT_LIST' && message.seat_list) {
+      const catalog = message.seat_list.seat_catalog?.length
+        ? message.seat_list.seat_catalog
+        : message.seat_list.seats;
+      const availableCatalog = catalog.filter((seat) => seat.is_available !== false);
+      const query = isLatestSeatList ? seatSearchText.trim().toLocaleLowerCase() : '';
+      let displayedSeats = availableCatalog;
+      let seatListText = message.text;
+
+      if (query) {
+        const exact = catalog.find((seat) => seat.seat_code.toLocaleLowerCase() === query);
+        const suffixMatches = catalog.filter((seat) => seat.seat_code.toLocaleLowerCase().endsWith(query));
+        const requestedSeat = exact || (suffixMatches.length === 1 ? suffixMatches[0] : undefined);
+        const matchingSeats = availableCatalog.filter((seat) => seat.seat_code.toLocaleLowerCase().includes(query));
+
+        if (requestedSeat?.is_available === false) {
+          const numericPart = (code: string) => Number(code.match(/\d+(?!.*\d)/)?.[0] || 0);
+          displayedSeats = [...availableCatalog].sort((left, right) => {
+            if (requestedSeat.x != null && requestedSeat.y != null && left.x != null && left.y != null && right.x != null && right.y != null) {
+              return Math.hypot(left.x - requestedSeat.x, left.y - requestedSeat.y)
+                - Math.hypot(right.x - requestedSeat.x, right.y - requestedSeat.y);
+            }
+            return Math.abs(numericPart(left.seat_code) - numericPart(requestedSeat.seat_code))
+              - Math.abs(numericPart(right.seat_code) - numericPart(requestedSeat.seat_code));
+          });
+          seatListText = `Seat ${requestedSeat.seat_code} is not available for the selected date. Here are the nearest available seats.`;
+        } else if (matchingSeats.length) {
+          const matchingIds = new Set(matchingSeats.map((seat) => seat.id));
+          displayedSeats = [...matchingSeats, ...availableCatalog.filter((seat) => !matchingIds.has(seat.id))];
+          seatListText = `Showing available seats matching ${seatSearchText.trim()} first, followed by other recommendations.`;
+        } else {
+          seatListText = `Seat ${seatSearchText.trim()} was not found on this floor. Here are recommended available seats.`;
+        }
+      }
+
+      displayedSeats = displayedSeats.slice(0, 20);
       return (
         <div className="seat-list-msg">
-          {message.text ? <p className="seat-list-header">{message.text}</p> : null}
+          {seatListText ? <p className="seat-list-header">{seatListText}</p> : null}
+          {isLatestSeatList ? <div className="seat-search">
+            <input
+              type="search"
+              value={seatSearchText}
+              onChange={(event) => scheduleSeatSearch(event.target.value)}
+              placeholder="Type a seat number or code"
+              aria-label="Search for a seat"
+            />
+          </div> : null}
           <div className="seat-list">
             {(message.seat_list.headcount || 1) <= 1 ? (
-              message.seat_list.seats.map((seat) => (
+              displayedSeats.map((seat) => (
                 <button key={seat.id} className="seat-card" onClick={() => selectSeat(seat)} disabled={isLoading}>
                   <span className="seat-card-top"><span className="seat-code">{seat.seat_code}</span></span>
                   {seat.seat_neighborhood ? <span className="seat-neighborhood">Pin {seat.seat_neighborhood}</span> : null}
@@ -711,7 +805,7 @@ export default function Chatbot() {
               ))
             ) : (
               <>
-                {message.seat_list.seats.map((seat) => {
+                {displayedSeats.map((seat) => {
                   const selected = selectedSeats.some((item) => item.id === seat.id);
                   const disabled = isLoading || (!selected && selectedSeats.length >= seatHeadcount);
                   return (
@@ -1125,6 +1219,13 @@ function userFriendlyError(error: unknown) {
   }
   if (raw) return raw;
   return 'I am having trouble reaching the booking service right now. Please try again in a few minutes, or use Restart Chat.';
+}
+
+function requireInitialResponse(session: SessionOut): ChatResponse {
+  if (!session.initial_response?.messages?.length) {
+    throw new Error('The booking service did not return the initial chat menu.');
+  }
+  return session.initial_response;
 }
 
 function ConfirmRow({ label, value }: { label: string; value: string }) {

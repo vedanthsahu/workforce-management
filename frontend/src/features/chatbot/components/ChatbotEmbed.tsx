@@ -4,10 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle, MessageCircle } from "lucide-react";
 import { authService } from "@/features/auth/services/auth.service";
 
-interface ChatbotStateMessage {
+interface ChatbotMessage {
   source: "efacility-chatbot";
-  type: "chatbot:state";
-  isOpen: boolean;
+  type: "chatbot:ready" | "chatbot:state" | "chatbot:token-request";
+  isOpen?: boolean;
 }
 
 const CHATBOT_URL =
@@ -67,20 +67,30 @@ export function ChatbotEmbed() {
   }, [initializeChatbot]);
 
   useEffect(() => {
-    function handleMessage(event: MessageEvent<ChatbotStateMessage>) {
+    function handleMessage(event: MessageEvent<ChatbotMessage>) {
       if (!chatbotOrigin || event.origin !== chatbotOrigin) return;
       if (event.source !== iframeRef.current?.contentWindow) return;
-      if (
-        event.data?.source === "efacility-chatbot" &&
-        event.data.type === "chatbot:state"
-      ) {
+      if (event.data?.source !== "efacility-chatbot") return;
+
+      if (event.data.type === "chatbot:ready" || event.data.type === "chatbot:token-request") {
+        void ensureAccessToken().then(postChatbotInit).catch(() => {
+          setError("Unable to start the assistant. Please refresh and try again.");
+          iframeRef.current?.contentWindow?.postMessage(
+            { source: "seatbook-host", type: "chatbot:init-error" },
+            chatbotOrigin,
+          );
+        });
+        return;
+      }
+
+      if (event.data.type === "chatbot:state") {
         if (!event.data.isOpen) setIsOpen(false);
         else initializeChatbot();
       }
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [chatbotOrigin, initializeChatbot]);
+  }, [chatbotOrigin, ensureAccessToken, initializeChatbot, postChatbotInit]);
 
   async function openChatbot() {
     if (isStarting) return;

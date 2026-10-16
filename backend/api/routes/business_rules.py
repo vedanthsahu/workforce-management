@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user, require_any_permission
@@ -32,11 +32,13 @@ from backend.schemas.business_rule import (
     ActivityPolicyResponse,
     BlockedSeatPolicyResponse,
     BookingPolicyResponse,
+    ChatbotPolicyResponse,
     LayoutPolicyResponse,
     LayoutVisibilityDaysResponse,
     UpdateActivityPolicyRequest,
     UpdateBlockedSeatPolicyRequest,
     UpdateBookingPolicyRequest,
+    UpdateChatbotPolicyRequest,
     UpdateLayoutPolicyRequest,
 )
 from backend.services.business_rule_service import (
@@ -44,6 +46,7 @@ from backend.services.business_rule_service import (
     resolve_blocked_seat_days,
     resolve_blocked_seat_max_advance_days,
     resolve_booking_advance_days,
+    resolve_chatbot_employee_access,
     resolve_layout_scheduling_gap,
     resolve_layout_visibility_days,
     update_activity_record_count,
@@ -51,11 +54,66 @@ from backend.services.business_rule_service import (
     update_blocked_seat_max_advance_days,
     update_employee_max_advance_days,
     update_guest_max_advance_days,
+    update_chatbot_employee_access,
     update_layout_scheduling_buffer_days,
     update_layout_visibility_days,
 )
 
 router = APIRouter(prefix="/business-rules", tags=["business-rules"])
+
+
+def require_chatbot_configuration_admin(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+) -> dict[str, Any]:
+    role_name = str(
+        current_user.get("role_name") or current_user.get("role") or "",
+    ).strip().upper()
+    if role_name not in {"TENANT_ADMIN", "PRODUCT_ADMIN"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "chatbot_configuration_forbidden",
+                "message": "Only an administrator can change chatbot access.",
+            },
+        )
+    return current_user
+
+
+@router.get("/chatbot-policy", response_model=ChatbotPolicyResponse)
+def chatbot_policy(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> ChatbotPolicyResponse:
+    return ChatbotPolicyResponse(
+        employee_access_enabled=resolve_chatbot_employee_access(
+            conn,
+            tenant_id=str(current_user["tenant_id"]),
+        ),
+    )
+
+
+@router.patch("/chatbot-policy", response_model=ChatbotPolicyResponse)
+def update_chatbot_policy(
+    payload: UpdateChatbotPolicyRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_chatbot_configuration_admin),
+    ],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> ChatbotPolicyResponse:
+    tenant_id = str(current_user["tenant_id"])
+    update_chatbot_employee_access(
+        conn,
+        tenant_id=tenant_id,
+        enabled=payload.employee_access_enabled,
+        updated_by_user_id=str(current_user["user_id"]),
+    )
+    return ChatbotPolicyResponse(
+        employee_access_enabled=resolve_chatbot_employee_access(
+            conn,
+            tenant_id=tenant_id,
+        ),
+    )
 
 
 @router.get("/booking-policy", response_model=BookingPolicyResponse)

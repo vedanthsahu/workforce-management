@@ -76,3 +76,11 @@ class UpdateBlockedSeatPolicyRequest(BaseModel):
     expiring_soon_days: int | None = Field(default=None, gt=0)
     expired_window_days: int | None = Field(default=None, gt=0)
     max_advance_days: int | None = Field(default=None, gt=0, le=730)
+
+
+class ChatbotPolicyResponse(BaseModel):
+    employee_access_enabled: bool
+
+
+class UpdateChatbotPolicyRequest(BaseModel):
+    employee_access_enabled: bool

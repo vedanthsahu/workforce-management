@@ -1245,6 +1245,187 @@ class QuickBookDefaultProfileTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("not available", resp.messages[0].text)
         self.assertEqual(resp.messages[0].seat_list.seats[0].seat_code, "BEG-ROX-F8-D-777")
 
+    async def test_seat_search_places_available_requested_seat_first(self):
+        engine = ChatEngine()
+        session = SimpleNamespace(id="session-1")
+        rows = [
+            {"seat_id": 101, "seat_code": "HYD-F11-A-101", "x": 10, "y": 10, "availability": {"status": "AVAILABLE"}},
+            {"seat_id": 205, "seat_code": "HYD-F11-A-205", "x": 20, "y": 10, "availability": {"status": "AVAILABLE"}},
+        ]
+
+        with patch.object(engine, "_get_context", AsyncMock(return_value={"headcount": "1"})), patch.object(
+            engine, "_set_context_bulk", AsyncMock()
+        ), patch.object(
+            engine, "_recommended_seat_ids_for_location", AsyncMock(return_value=[101])
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.available_seats", AsyncMock(return_value=rows)
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.list_floors", AsyncMock(return_value=[])
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.list_buildings", AsyncMock(return_value=[])
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.list_sites", AsyncMock(return_value=[])
+        ):
+            resp = await engine._build_external_seat_list_response(
+                session,
+                db=object(),
+                site_id=8,
+                building_id=15,
+                floor_id=38,
+                booking_date_str="2026-10-29",
+                amenity_ids=[],
+                seat_search_query="A-205",
+            )
+
+        self.assertIn("is available", resp.messages[0].text)
+        self.assertEqual(resp.messages[0].seat_list.seats[0].seat_code, "HYD-F11-A-205")
+        self.assertEqual(len(resp.messages[0].seat_list.seat_catalog), 2)
+        self.assertTrue(all(seat.is_available for seat in resp.messages[0].seat_list.seat_catalog))
+
+    async def test_seat_search_returns_nearest_available_seats_when_requested_is_unavailable(self):
+        engine = ChatEngine()
+        session = SimpleNamespace(id="session-1")
+        rows = [
+            {"seat_id": 102, "seat_code": "HYD-F11-A-102", "x": 10, "y": 10, "availability": {"status": "BOOKED"}},
+            {"seat_id": 103, "seat_code": "HYD-F11-A-103", "x": 12, "y": 10, "availability": {"status": "AVAILABLE"}},
+            {"seat_id": 150, "seat_code": "HYD-F11-A-150", "x": 80, "y": 80, "availability": {"status": "AVAILABLE"}},
+        ]
+
+        with patch.object(engine, "_get_context", AsyncMock(return_value={"headcount": "1"})), patch.object(
+            engine, "_set_context_bulk", AsyncMock()
+        ), patch.object(
+            engine, "_recommended_seat_ids_for_location", AsyncMock(return_value=[])
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.available_seats", AsyncMock(return_value=rows)
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.list_floors", AsyncMock(return_value=[])
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.list_buildings", AsyncMock(return_value=[])
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.list_sites", AsyncMock(return_value=[])
+        ):
+            resp = await engine._build_external_seat_list_response(
+                session,
+                db=object(),
+                site_id=8,
+                building_id=15,
+                floor_id=38,
+                booking_date_str="2026-10-29",
+                amenity_ids=[],
+                seat_search_query="HYD-F11-A-102",
+            )
+
+        self.assertIn("not available", resp.messages[0].text)
+        self.assertIn("nearest", resp.messages[0].text)
+        self.assertEqual(resp.messages[0].seat_list.seats[0].seat_code, "HYD-F11-A-103")
+        catalog = resp.messages[0].seat_list.seat_catalog
+        self.assertEqual(len(catalog), 3)
+        self.assertFalse(next(seat for seat in catalog if seat.id == 102).is_available)
+
+    async def test_partial_seat_search_places_all_matches_before_other_seats(self):
+        engine = ChatEngine()
+        session = SimpleNamespace(id="session-1")
+        rows = [
+            {"seat_id": 101, "seat_code": "HYD-F11-A-101", "availability": {"status": "AVAILABLE"}},
+            {"seat_id": 108, "seat_code": "HYD-F11-A-108", "availability": {"status": "AVAILABLE"}},
+            {"seat_id": 208, "seat_code": "HYD-F11-B-108", "availability": {"status": "AVAILABLE"}},
+            {"seat_id": 109, "seat_code": "HYD-F11-A-109", "availability": {"status": "AVAILABLE"}},
+        ]
+
+        with patch.object(engine, "_get_context", AsyncMock(return_value={"headcount": "1"})), patch.object(
+            engine, "_set_context_bulk", AsyncMock()
+        ), patch.object(
+            engine, "_recommended_seat_ids_for_location", AsyncMock(return_value=[101])
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.available_seats", AsyncMock(return_value=rows)
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.list_floors", AsyncMock(return_value=[])
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.list_buildings", AsyncMock(return_value=[])
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.list_sites", AsyncMock(return_value=[])
+        ):
+            resp = await engine._build_external_seat_list_response(
+                session,
+                db=object(),
+                site_id=8,
+                building_id=15,
+                floor_id=38,
+                booking_date_str="2026-10-29",
+                amenity_ids=[],
+                seat_search_query="108",
+            )
+
+        displayed_codes = [seat.seat_code for seat in resp.messages[0].seat_list.seats]
+        self.assertIn("matching 108 first", resp.messages[0].text)
+        self.assertEqual(displayed_codes[:2], ["HYD-F11-A-108", "HYD-F11-B-108"])
+        self.assertEqual(displayed_codes[2:], ["HYD-F11-A-101", "HYD-F11-A-109"])
+
+    async def test_full_available_catalog_is_saved_for_confirmation_summary(self):
+        engine = ChatEngine()
+        session = SimpleNamespace(id="session-1")
+        rows = [
+            {
+                "seat_id": seat_id,
+                "seat_code": f"HYD-F11-A-{seat_id}",
+                "availability": {"status": "AVAILABLE"},
+            }
+            for seat_id in range(101, 126)
+        ]
+        set_context = AsyncMock()
+
+        with patch.object(engine, "_get_context", AsyncMock(return_value={"headcount": "1"})), patch.object(
+            engine, "_set_context_bulk", set_context
+        ), patch.object(
+            engine, "_recommended_seat_ids_for_location", AsyncMock(return_value=[])
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.available_seats", AsyncMock(return_value=rows)
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.list_floors", AsyncMock(return_value=[])
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.list_buildings", AsyncMock(return_value=[])
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.list_sites", AsyncMock(return_value=[])
+        ):
+            response = await engine._build_external_seat_list_response(
+                session,
+                db=object(),
+                site_id=8,
+                building_id=15,
+                floor_id=38,
+                booking_date_str="2026-10-29",
+                amenity_ids=[],
+            )
+
+        saved_context = set_context.await_args.args[1]
+        self.assertEqual(len(response.messages[0].seat_list.seats), 20)
+        self.assertEqual(len(response.messages[0].seat_list.seat_catalog), 25)
+        self.assertIn("125:HYD-F11-A-125", saved_context["available_seat_codes"])
+
+    async def test_standard_seat_list_ranks_preferences_then_booking_history(self):
+        engine = ChatEngine()
+        with patch(
+            "app.services.chat_engine.seat_backend_api_service.preferences",
+            AsyncMock(return_value={}),
+        ), patch(
+            "app.services.chat_engine.seat_backend_api_service.me",
+            AsyncMock(return_value={"favorite_seat": {"seat_id": 205}}),
+        ), patch.object(
+            engine,
+            "_recent_booking_rows",
+            AsyncMock(return_value=[
+                {"seat_id": 101, "site_id": 8, "building_id": 15, "floor_id": 38, "booking_date": "2026-10-01"},
+                {"seat_id": 101, "site_id": 8, "building_id": 15, "floor_id": 38, "booking_date": "2026-09-01"},
+            ]),
+        ):
+            ranked = await engine._recommended_seat_ids_for_location(
+                site_id=8,
+                building_id=15,
+                floor_id=38,
+            )
+
+        self.assertEqual(ranked, [205, 101])
+
     async def test_rebook_calendar_marks_same_seat_availability(self):
         engine = ChatEngine()
         today_value = date.today()
