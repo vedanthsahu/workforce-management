@@ -67,22 +67,15 @@ function FloorsPage() {
     setOpen(true);
   };
 
-  // Status cards are the parent filter, the office/building dropdowns are
-  // children: with a card selected, the dropdowns only list offices/buildings
-  // that have at least one floor of that status ("Total" lists everything).
+  // Clicking a card is the parent filter: it clears the office/building
+  // dropdowns, so the table shows every floor of that status ("Total" = all).
   const handleStatusFilterChange = (filter: FloorStatusFilter) => {
     setStatusFilter(filter);
     setCurrentPage(1);
-    // Clicking the "Total" card resets the office/building dropdowns too.
-    if (filter === null) {
-      handleSiteChange("");
-      handleBuildingChange("");
-    }
+    handleSiteChange("");
   };
 
-  // Picking "All Offices" in the dropdown clears every filter, so the cards
-  // go back to "Total" too. (The automatic fallback below calls the hook's
-  // handleSiteChange directly and deliberately keeps the card.)
+  // Picking "All Offices" clears every filter, so the cards go back to "Total".
   const handleTableSiteChange = (siteId: string) => {
     if (!siteId) setStatusFilter(null);
     setCurrentPage(1);
@@ -99,33 +92,22 @@ function FloorsPage() {
     [floors, statusFilter],
   );
 
+  // With a card selected, the dropdowns list only offices/buildings that have
+  // a floor of that status (plus the current selection, so it never disappears);
+  // picking one then narrows the table to it.
   const siteOptions = useMemo(() => {
     if (!statusFilter) return sites;
     const siteIds = new Set(statusMatchedFloors.map((f) => String(f.site_id)));
-    return sites.filter((s) => siteIds.has(String(s.site_id)));
-  }, [sites, statusFilter, statusMatchedFloors]);
+    return sites.filter((s) => siteIds.has(String(s.site_id)) || String(s.site_id) === selectedSite);
+  }, [sites, statusFilter, statusMatchedFloors, selectedSite]);
 
   const buildingOptions = useMemo(() => {
     if (!statusFilter) return buildings;
     const buildingIds = new Set(statusMatchedFloors.map((f) => String(f.building_id)));
-    return buildings.filter((b) => buildingIds.has(String(b.building_id)));
-  }, [buildings, statusFilter, statusMatchedFloors]);
-
-  // If the selected office/building has no floors for the current card
-  // (after a card switch or an edit), fall back to "All".
-  useEffect(() => {
-    if (!statusFilter || loading) return;
-    if (selectedSite && !statusMatchedFloors.some((f) => String(f.site_id) === selectedSite)) {
-      handleSiteChange("");
-    } else if (
-      selectedBuilding &&
-      !statusMatchedFloors.some((f) => String(f.building_id) === selectedBuilding)
-    ) {
-      handleBuildingChange("");
-    }
-    // handleSiteChange/handleBuildingChange are recreated every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, selectedSite, selectedBuilding, statusMatchedFloors, loading]);
+    return buildings.filter(
+      (b) => buildingIds.has(String(b.building_id)) || String(b.building_id) === selectedBuilding,
+    );
+  }, [buildings, statusFilter, statusMatchedFloors, selectedBuilding]);
 
   const filteredFloors = useMemo(() => {
     const ranked = statusMatchedFloors

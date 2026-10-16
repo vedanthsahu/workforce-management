@@ -23,7 +23,7 @@ export interface Floor {
 // Layout types
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type LayoutStatus = "PUBLISHED" | "SCHEDULED" | "ARCHIVED" | "DRAFT";
+export type LayoutStatus = "PUBLISHED" | "SCHEDULED" | "ARCHIVED" | "DRAFT" | "DELETED";
 
 export interface LayoutMetadata {
   width?: number;

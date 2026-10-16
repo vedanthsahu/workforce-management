@@ -63,9 +63,9 @@ function BuildingsPage() {
     showBannerWithHighlight("Building updated successfully.", updatedBuildingId);
   };
 
-  // Status cards are the parent filter, the office dropdown is the child:
-  // with a card selected, the dropdown only lists offices that have at least
-  // one building of that status ("Total" lists every office).
+  // With a card selected, the office dropdown lists only offices that have a
+  // building of that status (plus the current one, so it never disappears);
+  // picking an office then narrows the table to it.
   const statusMatchedBuildings = useMemo(
     () => buildings.filter((b) => !statusFilter || b.status === statusFilter),
     [buildings, statusFilter],
@@ -74,29 +74,20 @@ function BuildingsPage() {
   const siteOptions = useMemo(() => {
     if (!statusFilter) return sites;
     const siteIds = new Set(statusMatchedBuildings.map((b) => String(b.site_id)));
-    return sites.filter((s) => siteIds.has(String(s.site_id)));
-  }, [sites, statusFilter, statusMatchedBuildings]);
+    return sites.filter((s) => siteIds.has(String(s.site_id)) || String(s.site_id) === selectedSiteId);
+  }, [sites, statusFilter, statusMatchedBuildings, selectedSiteId]);
 
-  // If the selected office has no buildings for the current card (after a
-  // card switch or an edit), fall back to "All Offices".
-  useEffect(() => {
-    if (!statusFilter || !selectedSiteId || loading) return;
-    const hasMatch = statusMatchedBuildings.some((b) => String(b.site_id) === selectedSiteId);
-    if (!hasMatch) setSelectedSiteId("");
-  }, [statusFilter, selectedSiteId, statusMatchedBuildings, loading, setSelectedSiteId]);
+  // Clicking a card is the parent filter: it clears the office dropdown, so
+  // the table shows every office's buildings of that status ("Total" = all).
+  const handleStatusFilterChange = (filter: BuildingStatusFilter) => {
+    setStatusFilter(filter);
+    setSelectedSiteId("");
+  };
 
-  // Picking "All Offices" in the dropdown clears every filter, so the cards
-  // go back to "Total Buildings" too. (The automatic fallback above sets
-  // the office directly and deliberately keeps the card.)
+  // Picking "All Offices" clears every filter, so the cards go back to "Total".
   const handleSiteChange = (siteId: string) => {
     if (!siteId) setStatusFilter(null);
     setSelectedSiteId(siteId);
-  };
-
-  // Clicking the "Total" card resets the office dropdown to its default too.
-  const handleStatusFilterChange = (filter: BuildingStatusFilter) => {
-    setStatusFilter(filter);
-    if (filter === null) setSelectedSiteId("");
   };
 
   const filteredBuildings = statusMatchedBuildings

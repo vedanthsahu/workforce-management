@@ -15,11 +15,24 @@ from backend.schemas.booking import (
     AdminBookingListResponse,
     AdminBookingStatus,
     AdminBookingType,
+    AdminPersonSuggestion,
+    AdminSeatSuggestion,
     AdminVisitStatus,
 )
-from backend.services.booking_service import get_admin_bookings
+from backend.services.booking_service import (
+    get_admin_bookings,
+    get_admin_person_suggestions,
+    get_admin_seat_suggestions,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin-bookings"])
+
+# Suggestion lists are preloaded by the page (empty `q`) and filtered in the
+# browser as the user types, so the cap is generous; the page only falls back
+# to per-keystroke server searches if a tenant's list is bigger than the cap.
+SUGGESTION_LIMIT_DEFAULT = 200
+SUGGESTION_LIMIT_MAX = 2000
+_ADMIN_VIEW = ["booking:view_all", "admin_dashboard:view"]
 
 
 @router.get(
@@ -102,5 +115,54 @@ def admin_bookings(
         tenant_id=str(current_user["tenant_id"]),
         query=query,
         page=page,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/bookings/suggest/people",
+    response_model=list[AdminPersonSuggestion],
+    summary="Search-as-you-type employee/guest names for the admin bookings filter",
+    description=(
+        "Distinct people with bookings matching the text on name or email "
+        "(empty text lists everyone), ranked: name starts with the text, then a name word starts with it, "
+        "then email starts with it, then any other match."
+    ),
+)
+def admin_booking_person_suggestions(
+    current_user: Annotated[dict[str, Any], Depends(require_any_permission(_ADMIN_VIEW))],
+    conn: Annotated[PGConnection, Depends(get_db)],
+    booking_type: Annotated[AdminBookingType, Query(alias="bookingType")],
+    q: Annotated[str, Query(max_length=100)] = "",
+    limit: Annotated[int, Query(ge=1, le=SUGGESTION_LIMIT_MAX)] = SUGGESTION_LIMIT_DEFAULT,
+) -> list[dict[str, Any]]:
+    return get_admin_person_suggestions(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        text=q.strip(),
+        booking_type=booking_type,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/bookings/suggest/seats",
+    response_model=list[AdminSeatSuggestion],
+    summary="Search-as-you-type seat codes for the admin bookings filter",
+    description=(
+        "Distinct booked seat codes matching the text, ranked: code starts "
+        "with the text, then a code segment starts with it, then any other match."
+    ),
+)
+def admin_booking_seat_suggestions(
+    current_user: Annotated[dict[str, Any], Depends(require_any_permission(_ADMIN_VIEW))],
+    conn: Annotated[PGConnection, Depends(get_db)],
+    q: Annotated[str, Query(max_length=100)] = "",
+    limit: Annotated[int, Query(ge=1, le=SUGGESTION_LIMIT_MAX)] = SUGGESTION_LIMIT_DEFAULT,
+) -> list[dict[str, Any]]:
+    return get_admin_seat_suggestions(
+        conn,
+        tenant_id=str(current_user["tenant_id"]),
+        text=q.strip(),
         limit=limit,
     )
