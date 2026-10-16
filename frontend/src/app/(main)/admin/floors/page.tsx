@@ -73,6 +73,11 @@ function FloorsPage() {
   const handleStatusFilterChange = (filter: FloorStatusFilter) => {
     setStatusFilter(filter);
     setCurrentPage(1);
+    // Clicking the "Total" card resets the office/building dropdowns too.
+    if (filter === null) {
+      handleSiteChange("");
+      handleBuildingChange("");
+    }
   };
 
   // Picking "All Offices" in the dropdown clears every filter, so the cards
