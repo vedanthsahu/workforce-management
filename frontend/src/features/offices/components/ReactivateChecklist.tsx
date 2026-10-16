@@ -99,7 +99,11 @@ export default function ReactivateChecklist({
                     checked ? "bg-indigo-50" : "hover:bg-white"
                   )}
                 >
-                  <Checkbox checked={checked} onCheckedChange={() => onToggleBuilding(building.id)} />
+                  <Checkbox
+                    className="border-blue-500"
+                    checked={checked}
+                    onCheckedChange={() => onToggleBuilding(building.id)}
+                  />
                   <span
                     className={cn("text-xs font-medium truncate", checked ? "text-indigo-700" : "text-gray-700")}
                   >
@@ -119,15 +123,26 @@ export default function ReactivateChecklist({
             {floors.map((floor) => {
               const checked = selectedFloorIds.includes(floor.id);
               const parentBuildingName = buildingNameById.get(floor.buildingId);
+              // A floor can't come back before its (also inactive) building:
+              // locked until that building is ticked.
+              const blocked =
+                buildingNameById.has(floor.buildingId) && !selectedBuildingIds.includes(floor.buildingId);
               return (
                 <label
                   key={floor.id}
                   className={cn(
-                    "flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer transition-colors",
-                    checked ? "bg-indigo-50" : "hover:bg-white"
+                    "flex items-center gap-2.5 px-2 py-1.5 rounded-md transition-colors",
+                    blocked ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+                    checked ? "bg-indigo-50" : !blocked && "hover:bg-white"
                   )}
+                  title={blocked ? "Reactivate the building first" : undefined}
                 >
-                  <Checkbox checked={checked} onCheckedChange={() => onToggleFloor(floor.id)} />
+                  <Checkbox
+                    className="border-blue-500"
+                    checked={checked}
+                    disabled={blocked}
+                    onCheckedChange={() => onToggleFloor(floor.id)}
+                  />
                   <span className="min-w-0 truncate">
                     <span
                       className={cn(

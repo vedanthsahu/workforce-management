@@ -2823,6 +2823,107 @@ def fetch_admin_bookings(
     return [dict(row) for row in rows]
 
 
+def _escape_like(text: str) -> str:
+    """Escape LIKE wildcards so user input is matched literally."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def fetch_admin_booking_person_suggestions(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    text: str,
+    booking_type: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Distinct people (employees or guests) with a booking/visit matching
+    `text` on name or email, best matches first: name starts with the text,
+    then a name word starts with it, then email starts with it, then any
+    other contains-match."""
+    escaped = _escape_like(text)
+    if booking_type == "EMPLOYEE":
+        source = """
+            SELECT u.full_name AS name, u.email AS email
+            FROM bookings b
+            INNER JOIN app_users u
+                ON u.id = b.booked_for_user_id
+               AND u.tenant_id = b.tenant_id
+            WHERE b.tenant_id = %(tenant_id)s
+              AND b.booking_type = 'EMPLOYEE'
+        """
+    else:
+        source = """
+            SELECT g.full_name AS name, g.email AS email
+            FROM guest_visits gv
+            INNER JOIN guests g
+                ON g.id = gv.guest_id
+               AND g.tenant_id = gv.tenant_id
+            WHERE gv.tenant_id = %(tenant_id)s
+        """
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT name, email
+            FROM (
+                SELECT DISTINCT name, email
+                FROM ({source}) AS people
+                WHERE name ILIKE '%%' || %(text)s || '%%'
+                   OR email ILIKE '%%' || %(text)s || '%%'
+            ) AS matches
+            ORDER BY
+                CASE
+                    WHEN name ILIKE %(text)s || '%%' THEN 0
+                    WHEN name ILIKE '%% ' || %(text)s || '%%' THEN 1
+                    WHEN email ILIKE %(text)s || '%%' THEN 2
+                    ELSE 3
+                END,
+                name,
+                email
+            LIMIT %(limit)s
+            """,
+            {"tenant_id": tenant_id, "text": escaped, "limit": limit},
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
+def fetch_admin_booking_seat_suggestions(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    text: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Distinct booked seat codes matching `text`, best matches first: code
+    starts with the text, then a code segment starts with it, then contains."""
+    escaped = _escape_like(text)
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT seat_code, seat_type
+            FROM (
+                SELECT DISTINCT s.seat_code, s.seat_type
+                FROM bookings b
+                INNER JOIN seats s
+                    ON s.id = b.seat_id
+                   AND s.tenant_id = b.tenant_id
+                WHERE b.tenant_id = %(tenant_id)s
+                  AND s.seat_code ILIKE '%%' || %(text)s || '%%'
+            ) AS matches
+            ORDER BY
+                CASE
+                    WHEN seat_code ILIKE %(text)s || '%%' THEN 0
+                    WHEN seat_code ILIKE '%%-' || %(text)s || '%%' THEN 1
+                    ELSE 2
+                END,
+                seat_code
+            LIMIT %(limit)s
+            """,
+            {"tenant_id": tenant_id, "text": escaped, "limit": limit},
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
 def fetch_admin_bookings_summary(
     conn: PGConnection,
     *,

@@ -409,7 +409,9 @@ export function useFloorLayouts(
     setSelectedLayoutId("");
 
     getLayoutsByFloor(floorId)
-      .then((data) => {
+      .then((all) => {
+        // Discarded layouts are gone for the user -- never offer them.
+        const data = all.filter((l) => l.status !== "DELETED");
         setLayouts(data);
         if (initialLayoutId && data.find((l) => l.layout_id === initialLayoutId)) {
           setSelectedLayoutId(initialLayoutId);
