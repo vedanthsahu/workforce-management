@@ -34,6 +34,14 @@ const countryIsoFromName = (countryName: string) => {
   )?.isoCode;
 };
 
+// IANA zones used by the selected country; empty when the country is unknown
+// or has no zone data (callers then fall back to the full TIMEZONES list).
+export const getTimezonesOfCountry = (countryName: string): string[] => {
+  const countryIso = countryIsoFromName(countryName);
+  if (!countryIso) return [];
+  return uniqueSorted((Country.getCountryByCode(countryIso)?.timezones ?? []).map((t) => t.zoneName));
+};
+
 export const getStatesOfCountry = (countryName: string): string[] => {
   const countryIso = countryIsoFromName(countryName);
   if (!countryIso) return [];
