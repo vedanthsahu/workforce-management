@@ -28,6 +28,8 @@ from backend.repositories.audit_repository import (
 from backend.repositories.booking_repository import (
     acquire_booking_slot_locks,
     cancel_booking,
+    fetch_admin_booking_person_suggestions,
+    fetch_admin_booking_seat_suggestions,
     fetch_admin_bookings,
     fetch_admin_bookings_summary,
     fetch_admin_guest_visits_without_booking,
@@ -2276,6 +2278,22 @@ def get_delegated_cancelled_bookings(
     )
 
     return _booking_list_response(combined, page=page, limit=limit)
+
+
+def get_admin_person_suggestions(
+    conn: PGConnection, *, tenant_id: str, text: str, booking_type: str, limit: int
+) -> list[dict[str, Any]]:
+    """Search-as-you-type names/emails for the admin bookings person filter."""
+    return fetch_admin_booking_person_suggestions(
+        conn, tenant_id=tenant_id, text=text, booking_type=booking_type, limit=limit
+    )
+
+
+def get_admin_seat_suggestions(
+    conn: PGConnection, *, tenant_id: str, text: str, limit: int
+) -> list[dict[str, Any]]:
+    """Search-as-you-type seat codes for the admin bookings space filter."""
+    return fetch_admin_booking_seat_suggestions(conn, tenant_id=tenant_id, text=text, limit=limit)
 
 
 def get_admin_bookings(
