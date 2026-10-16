@@ -5,8 +5,10 @@ from unittest.mock import ANY, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from backend.api.routes.business_rules import require_chatbot_configuration_admin
-from backend.api.routes.business_rules import router
+from backend.api.routes.business_rules import (
+    require_chatbot_configuration_admin,
+    router,
+)
 from backend.services.business_rule_service import (
     CHATBOT_EMPLOYEE_ACCESS_KEY,
     resolve_chatbot_employee_access,
