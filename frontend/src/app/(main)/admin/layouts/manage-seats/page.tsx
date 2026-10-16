@@ -13,7 +13,8 @@ import ViewToggle from "@/features/managelayout1/components/ViewToggle";
 import SpaceCategoryTabs from "@/features/managelayout1/components/SpaceCategoryTabs";
 import SpaceStatCards from "@/features/managelayout1/components/SpaceStatCards";
 import { useManageSeats } from "@/features/managelayout1/hooks/Usemanageseats";
-import { SPACE_CATEGORY_LABELS } from "@/features/managelayout1/utils/spaceCategory";
+import { SPACE_CATEGORY_LABELS, type SpaceCategory } from "@/features/managelayout1/utils/spaceCategory";
+import type { SeatFilters } from "@/features/managelayout1/types/seat.types";
 import { usePublishLayout } from "@/features/managelayout/hooks/useLayoutDetails";
 import { fetchLayoutPolicy, getLayoutsByFloor } from "@/features/managelayout/services/layoutService";
 import { useLayoutsStore } from "@/store/useLayoutsStore";
@@ -82,6 +83,20 @@ function ManageSeatsPage() {
     isDirty,
     discardChanges,
   } = useManageSeats();
+
+  // The map highlights individual spaces by colour, which doesn't narrow
+  // meaningfully to a single space type (Seats/Cabins/Conference Rooms) -- the
+  // list is the view that actually reflects these. So picking one jumps to
+  // List, the same way picking a stat card does. "All" leaves the view alone.
+  const handleCategoryChange = (next: SpaceCategory) => {
+    setActiveCategory(next);
+    if (next !== "ALL") setView("list");
+  };
+
+  const handleFilterUpdate = <K extends keyof SeatFilters>(key: K, value: SeatFilters[K]) => {
+    updateFilter(key, value);
+    if (key === "seat_type" && value !== "All") setView("list");
+  };
 
   const {
     publishing,
@@ -260,7 +275,7 @@ function ManageSeatsPage() {
           <SpaceCategoryTabs
             active={activeCategory}
             counts={categoryCounts}
-            onChange={setActiveCategory}
+            onChange={handleCategoryChange}
             disabled={statsLoading}
           />
 
@@ -290,7 +305,7 @@ function ManageSeatsPage() {
               <SeatFiltersBar
                 filters={filters}
                 preferences={preferences}
-                onUpdate={updateFilter}
+                onUpdate={handleFilterUpdate}
                 onReset={resetFilters}
                 searchPlaceholder={`Search by ${SPACE_CATEGORY_LABELS[activeCategory].singular.toLowerCase()} code…`}
                 disabled={categoryStats.configured === 0}

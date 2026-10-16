@@ -52,6 +52,51 @@ const COLUMN_WIDTH: Record<ColumnKey, string> = {
   actions:       "100px",
 };
 
+// "+N" chip whose hover list opens downward, or upward when there isn't room
+// below it inside the table's scroll area (otherwise rows near the bottom
+// push the list out of view and the user has to scroll to read it).
+function AmenityOverflow({ count, children }: { count: number; children: React.ReactNode }) {
+  const [openUp, setOpenUp] = useState(false);
+
+  const handleEnter = (e: React.MouseEvent<HTMLDivElement>) => {
+    const wrapper = e.currentTarget;
+    const tooltip = wrapper.lastElementChild as HTMLElement | null;
+    if (!tooltip) return;
+
+    let boundary = window.innerHeight;
+    for (let el = wrapper.parentElement; el; el = el.parentElement) {
+      const { overflowY } = getComputedStyle(el);
+      if (overflowY === "auto" || overflowY === "scroll") {
+        boundary = Math.min(boundary, el.getBoundingClientRect().bottom);
+        break;
+      }
+    }
+
+    // The tooltip is display:none until hover, so measure it after it shows.
+    requestAnimationFrame(() => {
+      const needed = tooltip.offsetHeight + 8;
+      const spaceBelow = boundary - wrapper.getBoundingClientRect().bottom;
+      const spaceAbove = wrapper.getBoundingClientRect().top;
+      setOpenUp(spaceBelow < needed && spaceAbove > spaceBelow);
+    });
+  };
+
+  return (
+    <div className="relative inline-block group" onMouseEnter={handleEnter}>
+      <button type="button" className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-medium border border-gray-200 cursor-pointer focus:outline-none">
+        +{count}
+      </button>
+      <div
+        className={`hidden group-hover:block absolute right-0 w-auto bg-white border border-gray-200 rounded-md shadow-lg p-1.5 z-10 text-xs ${
+          openUp ? "bottom-full mb-1" : "mt-1"
+        }`}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function Dash() {
   return <span className="text-gray-400 text-xs">—</span>;
 }
@@ -344,26 +389,21 @@ export default function SeatTable({
                   );
                 })}
                 {seat.amenity_ids.length > 2 && (
-                  <div className="relative inline-block group">
-                    <button type="button" className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-medium border border-gray-200 cursor-pointer focus:outline-none">
-                      +{seat.amenity_ids.length - 2}
-                    </button>
-                    <div className="hidden group-hover:block absolute right-0 mt-1 w-auto bg-white border border-gray-200 rounded-md shadow-lg p-1.5 z-10 text-xs">
-                      {seat.amenity_ids.slice(2).map((id) => {
-                        const pref = prefMap[id];
-                        const name = pref?.preference_name ?? id;
-                        const cat = pref?.preference_type ?? null;
-                        const color = getAmenityColor(name, cat);
-                        return (
-                          <div key={id} className="py-0.5">
-                            <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-medium whitespace-nowrap border ${color.bg} ${color.text} ${color.border}`}>
-                              {name}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <AmenityOverflow count={seat.amenity_ids.length - 2}>
+                    {seat.amenity_ids.slice(2).map((id) => {
+                      const pref = prefMap[id];
+                      const name = pref?.preference_name ?? id;
+                      const cat = pref?.preference_type ?? null;
+                      const color = getAmenityColor(name, cat);
+                      return (
+                        <div key={id} className="py-0.5">
+                          <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-medium whitespace-nowrap border ${color.bg} ${color.text} ${color.border}`}>
+                            {name}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </AmenityOverflow>
                 )}
               </div>
             )}

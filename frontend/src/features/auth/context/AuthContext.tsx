@@ -84,8 +84,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (isNetworkError) {
           setUser((prev) => prev);
         } else if (status === 401) {
-          // Interceptor owns the refresh + redirect for 401.
-          setUser((prev) => prev);
+          // No valid session (and the interceptor's refresh failed). Resolve
+          // user to null -- leaving it undefined keeps isLoading true forever,
+          // so MainLayout never reaches its redirect to /login.
+          setUser(null);
         } else if (status === 403) {
           setUser(null);
         } else {
@@ -149,6 +151,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener("auth:session-expired", onSessionExpired);
     return () => window.removeEventListener("auth:session-expired", onSessionExpired);
   }, []);
+
+  // ── Check the session when the user returns to an idle tab ────────────────
+  // The expiry dialog is only ever raised by the axios interceptor, after an
+  // API call 401s and its refresh fails -- an idle tab makes no calls, so the
+  // dialog used to appear only once the user clicked something. Re-checking
+  // /auth/me when the tab becomes visible/focused again runs that same path:
+  // a live session is just refreshed quietly, an expired one raises the dialog
+  // right away. Skipped for signed-out users and while the dialog is open.
+  useEffect(() => {
+    if (!user || sessionExpired) return;
+
+    let lastCheck = 0;
+    const checkSession = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      // focus and visibilitychange usually fire together -- one check is enough.
+      if (now - lastCheck < 5_000) return;
+      lastCheck = now;
+      // The interceptor owns the outcome (refresh, or the session-expired
+      // event); nothing to do with the result here.
+      authService.getMe().catch(() => {});
+    };
+
+    document.addEventListener("visibilitychange", checkSession);
+    window.addEventListener("focus", checkSession);
+    return () => {
+      document.removeEventListener("visibilitychange", checkSession);
+      window.removeEventListener("focus", checkSession);
+    };
+  }, [user, sessionExpired]);
 
   const handleSessionExpiredAcknowledge = useCallback(() => {
     clearPerAccountClientCache();
