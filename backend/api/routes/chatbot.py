@@ -1,5 +1,6 @@
 """Authenticated employee web-chat endpoints."""
 
+import os
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -18,6 +19,15 @@ from backend.chatbot.services.chat_adapter_service import chat_adapter_service
 from backend.chatbot.services.session_service import SessionService
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+
+def _seatbook_api_base_url(request: Request) -> str:
+    """Return the current API origin, including its named Gateway stage."""
+    base_url = str(request.base_url).rstrip("/")
+    environment_name = os.getenv("ENVIRONMENT_NAME", "").strip().strip("/")
+    if environment_name and not base_url.endswith(f"/{environment_name}"):
+        return f"{base_url}/{environment_name}"
+    return base_url
 
 
 def _identity(current_user: dict[str, Any]) -> SeatBookIdentity:
@@ -40,7 +50,7 @@ async def create_session(
     db: AsyncSession = Depends(get_chatbot_db),
 ):
     identity = _identity(current_user)
-    async with seatbook_identity(identity, base_url=str(request.base_url)):
+    async with seatbook_identity(identity, base_url=_seatbook_api_base_url(request)):
         return await chat_adapter_service.create_session(body, db, identity)
 
 
@@ -53,7 +63,7 @@ async def send_message(
     db: AsyncSession = Depends(get_chatbot_db),
 ):
     identity = _identity(current_user)
-    async with seatbook_identity(identity, base_url=str(request.base_url)):
+    async with seatbook_identity(identity, base_url=_seatbook_api_base_url(request)):
         response = await chat_adapter_service.process_message(
             session_id, body, db, identity
         )
