@@ -1,13 +1,26 @@
 """Regression coverage for chatbot use of employee-saved preferences."""
 
 import asyncio
+import os
 from unittest.mock import ANY, AsyncMock, patch
 
-from backend.chatbot.services.chat_engine import ChatEngine
-from backend.chatbot.services.seat_backend_api_service import SeatBackendApiService
+
+def _chatbot_types():
+    """Import chatbot services after supplying collection-safe test settings."""
+    os.environ.setdefault(
+        "DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test"
+    )
+    os.environ.setdefault(
+        "SYNC_DATABASE_URL", "postgresql://test:test@localhost/test"
+    )
+    from backend.chatbot.services.chat_engine import ChatEngine
+    from backend.chatbot.services.seat_backend_api_service import SeatBackendApiService
+
+    return ChatEngine, SeatBackendApiService
 
 
 def test_preferences_flattens_dashboard_work_preferences_and_favorites():
+    _, SeatBackendApiService = _chatbot_types()
     service = SeatBackendApiService()
     service._request = AsyncMock(
         return_value={
@@ -36,6 +49,7 @@ def test_preferences_flattens_dashboard_work_preferences_and_favorites():
 
 
 def test_date_only_booking_uses_saved_location_preferences():
+    ChatEngine, _ = _chatbot_types()
     engine = ChatEngine()
     engine._get_context = AsyncMock(return_value={"booking_date": "2026-10-20"})
     engine._set_context_bulk = AsyncMock()
@@ -76,6 +90,7 @@ def test_date_only_booking_uses_saved_location_preferences():
 
 
 def test_book_seat_menu_prefills_saved_location_before_building_form():
+    ChatEngine, _ = _chatbot_types()
     engine = ChatEngine()
     session = type(
         "Session", (), {"id": "session-id", "current_menu_id": "main-menu"}
@@ -97,6 +112,7 @@ def test_book_seat_menu_prefills_saved_location_before_building_form():
 
 
 def test_missing_preferences_leave_location_fields_empty():
+    ChatEngine, _ = _chatbot_types()
     engine = ChatEngine()
     engine._get_context = AsyncMock(return_value={"booking_date": ""})
     engine._set_context_bulk = AsyncMock()
