@@ -1,0 +1,699 @@
+from __future__ import annotations
+
+import json
+import logging
+import os
+import time
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+from backend.chatbot.config import settings
+from backend.chatbot.deps.seatbook_auth import (
+    current_seatbook_client,
+    current_seatbook_user,
+)
+from backend.chatbot.services.telemetry_service import telemetry_service
+
+logger = logging.getLogger(__name__)
+
+TOKEN_COOKIE_NAMES = ("access_token", "refresh_token", "session_token")
+LOCATION_CACHE_TTL_SECONDS = 300
+
+
+class SeatBackendApiError(RuntimeError):
+    """A structured business error returned by the SeatBook backend."""
+
+    def __init__(self, *, status_code: int, code: str, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+        self.code = code
+        self.message = message
+
+
+class SeatBackendApiService:
+    """Client for the external seat-management backend.
+
+    The published backend uses SSO cookies. Prefer setting
+    SEAT_BACKEND_REFRESH_TOKEN, with access/session tokens optional. The legacy
+    SEAT_BACKEND_AUTH_COOKIE string is still supported for backward
+    compatibility.
+    """
+
+    def __init__(self):
+        self._client: httpx.AsyncClient | None = None
+        self._last_refresh_monotonic = 0.0
+        self._me: dict[str, Any] | None = None
+        self._past_bookings_cache: dict[
+            tuple[str, int, int],
+            tuple[float, tuple[list[dict[str, Any]], bool]],
+        ] = {}
+        self._location_cache: dict[
+            tuple[str, str, int],
+            tuple[float, list[dict[str, Any]]],
+        ] = {}
+        self._booking_policy_cache: dict[
+            str, tuple[float, dict[str, Any]]
+        ] = {}
+
+    @property
+    def enabled(self) -> bool:
+        return bool(settings.ENABLE_SEAT_BACKEND_API and settings.SEAT_BACKEND_API_URL)
+
+    async def list_sites(self) -> list[dict[str, Any]] | None:
+        cached = self._cached_location("sites", 0)
+        if cached is not None:
+            return cached
+        payload = await self._request(
+            "GET", "/sites", params={"status": "ACTIVE", "limit": 100}
+        )
+        return self._cache_location("sites", 0, self._items(payload))
+
+    async def list_buildings(self, site_id: int) -> list[dict[str, Any]] | None:
+        cached = self._cached_location("buildings", site_id)
+        if cached is not None:
+            return cached
+        payload = await self._request(
+            "GET",
+            "/buildings",
+            params={"site_id": site_id, "status": "ACTIVE", "limit": 100},
+        )
+        return self._cache_location("buildings", site_id, self._items(payload))
+
+    async def list_floors(self, building_id: int) -> list[dict[str, Any]] | None:
+        cached = self._cached_location("floors", building_id)
+        if cached is not None:
+            return cached
+        payload = await self._request(
+            "GET",
+            f"/buildings/{building_id}/floors",
+            params={"status": "ACTIVE", "limit": 100},
+        )
+        return self._cache_location("floors", building_id, self._items(payload))
+
+    def _location_cache_key(self, kind: str, parent_id: int) -> tuple[str, str, int]:
+        request_user = current_seatbook_user() or {}
+        tenant_id = str(request_user.get("tenant_id") or "").strip()
+        return tenant_id, kind, parent_id
+
+    def _cached_location(
+        self, kind: str, parent_id: int
+    ) -> list[dict[str, Any]] | None:
+        cached = self._location_cache.get(self._location_cache_key(kind, parent_id))
+        if not cached or time.monotonic() - cached[0] >= LOCATION_CACHE_TTL_SECONDS:
+            return None
+        return [dict(item) for item in cached[1]]
+
+    def _cache_location(
+        self,
+        kind: str,
+        parent_id: int,
+        items: list[dict[str, Any]] | None,
+    ) -> list[dict[str, Any]] | None:
+        if items is None:
+            return None
+        snapshot = [dict(item) for item in items]
+        self._location_cache[self._location_cache_key(kind, parent_id)] = (
+            time.monotonic(),
+            snapshot,
+        )
+        return [dict(item) for item in snapshot]
+
+    async def preferences(self) -> dict[str, Any] | None:
+        payload = await self._request("GET", "/preferences")
+        return payload if isinstance(payload, dict) else None
+
+    async def booking_policy(self) -> dict[str, Any] | None:
+        request_user = current_seatbook_user() or {}
+        tenant_id = str(request_user.get("tenant_id") or "").strip()
+        cached = self._booking_policy_cache.get(tenant_id) if tenant_id else None
+        if cached and time.monotonic() - cached[0] < LOCATION_CACHE_TTL_SECONDS:
+            return dict(cached[1])
+        payload = await self._request("GET", "/business-rules/booking-policy")
+        if not isinstance(payload, dict):
+            return None
+        if tenant_id:
+            self._booking_policy_cache[tenant_id] = (time.monotonic(), dict(payload))
+        return payload
+
+    async def me(self) -> dict[str, Any] | None:
+        request_user = current_seatbook_user()
+        if request_user is not None:
+            return request_user
+        if self._me is not None:
+            return self._me
+        payload = await self._request("GET", "/auth/me")
+        if isinstance(payload, dict):
+            self._me = payload
+            return payload
+        return None
+
+    async def user_id(self) -> int | None:
+        me = await self.me()
+        if not me:
+            return None
+        value = self._find_first_key(me, {"user_id", "userId", "id"})
+        try:
+            return int(value) if value is not None else None
+        except TypeError, ValueError:
+            return None
+
+    async def my_current_bookings(self) -> list[dict[str, Any]] | None:
+        payload = await self._request("GET", "/bookings/me/current")
+        return self._items(payload)
+
+    async def my_future_bookings(
+        self, *, page: int = 1, limit: int = 20
+    ) -> tuple[list[dict[str, Any]], bool] | None:
+        payload = await self._request(
+            "GET", "/bookings/me/future", params={"page": page, "limit": limit}
+        )
+        return self._paged_items(payload, limit)
+
+    async def my_past_bookings(
+        self, *, page: int = 1, limit: int = 20
+    ) -> tuple[list[dict[str, Any]], bool] | None:
+        request_user = current_seatbook_user() or {}
+        user_id = str(
+            request_user.get("user_id") or request_user.get("sub") or ""
+        ).strip()
+        cache_key = (user_id, page, limit)
+        cached = self._past_bookings_cache.get(cache_key) if user_id else None
+        if cached and time.monotonic() - cached[0] < 120:
+            rows, has_more = cached[1]
+            return list(rows), has_more
+
+        payload = await self._request(
+            "GET", "/bookings/me/past", params={"page": page, "limit": limit}
+        )
+        result = self._paged_items(payload, limit)
+        if result is not None and user_id:
+            rows, has_more = result
+            self._past_bookings_cache[cache_key] = (
+                time.monotonic(),
+                (list(rows), has_more),
+            )
+        return result
+
+    async def my_cancelled_bookings(
+        self, *, page: int = 1, limit: int = 20
+    ) -> tuple[list[dict[str, Any]], bool] | None:
+        payload = await self._request(
+            "GET", "/bookings/me/cancelled", params={"page": page, "limit": limit}
+        )
+        return self._paged_items(payload, limit)
+
+    async def available_seats(
+        self,
+        *,
+        floor_id: int,
+        booking_date: str,
+        amenity_ids: list[int] | None = None,
+        modify_booking_id: str | None = None,
+    ) -> list[dict[str, Any]] | None:
+        params: dict[str, Any] = {
+            "start_date": booking_date,
+            "end_date": booking_date,
+            "calendar_mode": False,
+        }
+        user_id = await self.user_id()
+        if user_id:
+            params["booked_for_user_id"] = user_id
+        if amenity_ids:
+            params["amenity_ids"] = amenity_ids
+        if modify_booking_id:
+            params["modifyBookingId"] = modify_booking_id
+        payload = await self._request(
+            "GET",
+            f"/floors/{floor_id}/seats",
+            params=params,
+            raise_on_status={400, 403, 409, 422},
+        )
+        return self._items(payload)
+
+    async def create_booking(
+        self,
+        *,
+        site_id: int,
+        building_id: int,
+        floor_id: int,
+        seat_id: int,
+        booking_date: str,
+    ) -> dict[str, Any] | None:
+        payload = {
+            "site_id": site_id,
+            "building_id": building_id,
+            "floor_id": floor_id,
+            "seat_id": seat_id,
+            "booking_date": booking_date,
+        }
+        user_id = await self.user_id()
+        if user_id:
+            payload["booked_for_user_id"] = user_id
+        return await self._request(
+            "POST",
+            "/bookings",
+            json=payload,
+            expected_status={200, 201},
+            raise_on_status={400, 403, 409, 422},
+        )
+
+    async def cancel_booking(
+        self, booking_id: str, *, reason: str = "Cancelled from chatbot"
+    ) -> dict[str, Any] | None:
+        return await self._request(
+            "POST",
+            f"/bookings/{booking_id}/cancel",
+            json={"cancellation_reason": reason},
+        )
+
+    async def modify_booking(
+        self,
+        booking_id: str,
+        *,
+        site_id: int,
+        building_id: int,
+        floor_id: int,
+        seat_id: int,
+        booking_date: str,
+    ) -> dict[str, Any] | None:
+        payload = {
+            "site_id": site_id,
+            "building_id": building_id,
+            "floor_id": floor_id,
+            "seat_id": seat_id,
+            "booking_date": booking_date,
+        }
+        user_id = await self.user_id()
+        if user_id:
+            payload["booked_for_user_id"] = user_id
+        return await self._request(
+            "POST",
+            f"/bookings/{booking_id}/modify",
+            json=payload,
+        )
+
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        expected_status: set[int] | None = None,
+        retry_refresh: bool = True,
+        raise_on_status: set[int] | None = None,
+    ) -> Any | None:
+        if expected_status is None:
+            expected_status = {200}
+        if not self.enabled:
+            return None
+
+        started = time.monotonic()
+        client = self._client_or_create()
+        self._sync_configured_cookies(client)
+        await self._refresh_if_due(client)
+        try:
+            response = await client.request(method, path, params=params, json=json)
+        except httpx.HTTPError as exc:
+            telemetry_service.record_seat_backend_call(
+                method=method,
+                path=path,
+                params=params,
+                elapsed_ms=(time.monotonic() - started) * 1000,
+                ok=False,
+                request_id=None,
+                error=str(exc),
+            )
+            logger.warning(
+                "event=seat_backend_call_failed method=%s path=%s error_type=%s elapsed_ms=%s",
+                method,
+                path,
+                type(exc).__name__,
+                round((time.monotonic() - started) * 1000, 2),
+            )
+            return None
+
+        if response.status_code == 401 and retry_refresh:
+            telemetry_service.record_seat_backend_call(
+                method=method,
+                path=path,
+                params=params,
+                status_code=response.status_code,
+                elapsed_ms=(time.monotonic() - started) * 1000,
+                ok=False,
+                request_id=None,
+                payload_shape="auth_retry",
+            )
+            await self._refresh(client, force=True)
+            return await self._request(
+                method,
+                path,
+                params=params,
+                json=json,
+                expected_status=expected_status,
+                retry_refresh=False,
+                raise_on_status=raise_on_status,
+            )
+
+        if response.status_code not in expected_status:
+            telemetry_service.record_seat_backend_call(
+                method=method,
+                path=path,
+                params=params,
+                status_code=response.status_code,
+                elapsed_ms=(time.monotonic() - started) * 1000,
+                ok=False,
+                request_id=None,
+                payload_shape="unexpected_status",
+            )
+            logger.warning(
+                "event=seat_backend_unexpected_status method=%s path=%s status_code=%s elapsed_ms=%s",
+                method,
+                path,
+                response.status_code,
+                round((time.monotonic() - started) * 1000, 2),
+            )
+            if raise_on_status and response.status_code in raise_on_status:
+                code, message = self._error_details(response)
+                raise SeatBackendApiError(
+                    status_code=response.status_code,
+                    code=code,
+                    message=message,
+                )
+            return None
+
+        try:
+            payload = response.json()
+        except ValueError:
+            telemetry_service.record_seat_backend_call(
+                method=method,
+                path=path,
+                params=params,
+                status_code=response.status_code,
+                elapsed_ms=(time.monotonic() - started) * 1000,
+                ok=False,
+                request_id=None,
+                payload_shape="non_json",
+            )
+            logger.info(
+                "Seat backend API response method=%s path=%s status=%s elapsed_ms=%s payload=non_json",
+                method,
+                path,
+                response.status_code,
+                round((time.monotonic() - started) * 1000, 2),
+            )
+            return None
+        elapsed_ms = (time.monotonic() - started) * 1000
+        payload_shape = self._payload_shape(payload)
+        item_count = self._payload_item_count(payload)
+        telemetry_service.record_seat_backend_call(
+            method=method,
+            path=path,
+            params=params,
+            status_code=response.status_code,
+            elapsed_ms=elapsed_ms,
+            ok=True,
+            request_id=None,
+            payload_shape=payload_shape,
+            item_count=item_count,
+        )
+        logger.info(
+            "Seat backend API response method=%s path=%s status=%s elapsed_ms=%s payload=%s item_count=%s",
+            method,
+            path,
+            response.status_code,
+            round(elapsed_ms, 2),
+            payload_shape,
+            item_count,
+        )
+        return payload
+
+    @staticmethod
+    def _error_details(response: httpx.Response) -> tuple[str, str]:
+        code = "seat_backend_error"
+        message = "The seat booking request could not be completed."
+        try:
+            payload = response.json()
+        except ValueError:
+            return code, message
+        if not isinstance(payload, dict):
+            return code, message
+        error = payload.get("error")
+        if isinstance(error, dict):
+            code = str(error.get("code") or code)
+            message = str(error.get("message") or message)
+        else:
+            detail = payload.get("detail")
+            if isinstance(detail, dict):
+                code = str(detail.get("code") or code)
+                message = str(detail.get("message") or message)
+            elif isinstance(detail, str):
+                message = detail
+        return code, message
+
+    def _client_or_create(self) -> httpx.AsyncClient:
+        request_client = current_seatbook_client()
+        if request_client is not None:
+            return request_client
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                base_url=str(settings.SEAT_BACKEND_API_URL).rstrip("/"),
+                timeout=float(settings.SEAT_BACKEND_TIMEOUT_SECONDS or 10.0),
+                trust_env=settings.SEAT_BACKEND_TRUST_ENV,
+                headers={"Accept": "application/json"},
+                cookies=self._configured_cookies(),
+            )
+        return self._client
+
+    async def _refresh_if_due(self, client: httpx.AsyncClient):
+        interval = max(60, int(settings.SEAT_BACKEND_REFRESH_INTERVAL_SECONDS or 840))
+        if time.monotonic() - self._last_refresh_monotonic >= interval:
+            await self._refresh(client)
+
+    async def _refresh(self, client: httpx.AsyncClient, *, force: bool = False):
+        if not self._configured_cookies() and not client.cookies:
+            return
+        try:
+            response = await client.post("/auth/refresh")
+        except httpx.HTTPError as exc:
+            logger.warning(
+                "event=seat_backend_refresh_failed error_type=%s", type(exc).__name__
+            )
+            return
+        if response.status_code == 200:
+            self._last_refresh_monotonic = time.monotonic()
+            self._me = None
+            self._save_cached_cookies(client.cookies)
+            return
+        if force:
+            logger.warning(
+                "event=seat_backend_refresh_failed status_code=%s", response.status_code
+            )
+
+    @staticmethod
+    def _items(payload: Any) -> list[dict[str, Any]] | None:
+        if payload is None:
+            return None
+        if isinstance(payload, list):
+            return [item for item in payload if isinstance(item, dict)]
+        if isinstance(payload, dict):
+            items = payload.get("items")
+            if isinstance(items, list):
+                return [item for item in items if isinstance(item, dict)]
+        return None
+
+    def _paged_items(
+        self, payload: Any, limit: int
+    ) -> tuple[list[dict[str, Any]], bool] | None:
+        items = self._items(payload)
+        if items is None:
+            return None
+        has_more = False
+        if isinstance(payload, dict):
+            pagination = payload.get("pagination") or {}
+            page = int(pagination.get("page") or 1)
+            total_pages = int(
+                pagination.get("total_pages") or pagination.get("totalPages") or page
+            )
+            has_more = page < total_pages
+        else:
+            has_more = len(items) > limit
+        return items[:limit], has_more
+
+    @staticmethod
+    def _parse_cookie_header(raw: str) -> dict[str, str]:
+        cookies: dict[str, str] = {}
+        for part in (raw or "").split(";"):
+            if "=" not in part:
+                continue
+            name, value = part.split("=", 1)
+            name = name.strip()
+            value = value.strip()
+            if name:
+                cookies[name] = value
+        return cookies
+
+    def _configured_cookies(self) -> dict[str, str]:
+        file_values = self._env_file_token_values()
+        cookies = self._parse_cookie_header(
+            file_values.get("SEAT_BACKEND_AUTH_COOKIE")
+            or settings.SEAT_BACKEND_AUTH_COOKIE
+        )
+        explicit = {
+            "access_token": file_values.get("SEAT_BACKEND_ACCESS_TOKEN")
+            or settings.SEAT_BACKEND_ACCESS_TOKEN,
+            "refresh_token": file_values.get("SEAT_BACKEND_REFRESH_TOKEN")
+            or settings.SEAT_BACKEND_REFRESH_TOKEN,
+            "session_token": file_values.get("SEAT_BACKEND_SESSION_TOKEN")
+            or settings.SEAT_BACKEND_SESSION_TOKEN,
+        }
+        for name, value in explicit.items():
+            if value:
+                cookies[name] = value
+        cached = self._cached_cookies()
+        if cached and not self._env_file_is_newer_than_cache():
+            cookies.update(cached)
+        return cookies
+
+    def _sync_configured_cookies(self, client: httpx.AsyncClient) -> None:
+        for name, value in self._configured_cookies().items():
+            if value:
+                client.cookies.set(name, value)
+
+    @staticmethod
+    def _env_file_token_values() -> dict[str, str]:
+        path = Path(".env")
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except OSError:
+            return {}
+        wanted = {
+            "SEAT_BACKEND_ACCESS_TOKEN",
+            "SEAT_BACKEND_REFRESH_TOKEN",
+            "SEAT_BACKEND_SESSION_TOKEN",
+            "SEAT_BACKEND_AUTH_COOKIE",
+        }
+        values: dict[str, str] = {}
+        for line in raw.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            key = key.strip()
+            if key not in wanted:
+                continue
+            value = value.strip().strip("\"'")
+            if value:
+                values[key] = value
+        return values
+
+    def _cached_cookies(self) -> dict[str, str]:
+        path = self._token_cache_path()
+        if not path:
+            return {}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {}
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Seat backend token cache could not be read: %s", exc)
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        raw_cookies = payload.get("cookies", payload)
+        if not isinstance(raw_cookies, dict):
+            return {}
+        return {
+            name: str(raw_cookies.get(name) or "")
+            for name in TOKEN_COOKIE_NAMES
+            if raw_cookies.get(name)
+        }
+
+    def _save_cached_cookies(self, cookies: httpx.Cookies) -> None:
+        path = self._token_cache_path()
+        if not path:
+            return
+        values = {
+            name: value
+            for name in TOKEN_COOKIE_NAMES
+            for value in [self._cookie_value(cookies, name)]
+            if value
+        }
+        if not values:
+            return
+        payload = {
+            "updated_at_unix": int(time.time()),
+            "cookies": values,
+        }
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = path.with_suffix(path.suffix + ".tmp")
+            tmp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            os.chmod(tmp_path, 0o600)
+            os.replace(tmp_path, path)
+        except OSError as exc:
+            logger.warning("Seat backend token cache could not be saved: %s", exc)
+
+    def _env_file_is_newer_than_cache(self) -> bool:
+        cache_path = self._token_cache_path()
+        if not cache_path:
+            return False
+        env_path = Path(".env")
+        try:
+            return env_path.stat().st_mtime > cache_path.stat().st_mtime
+        except OSError:
+            return False
+
+    @staticmethod
+    def _token_cache_path() -> Path | None:
+        raw_path = (settings.SEAT_BACKEND_TOKEN_CACHE_PATH or "").strip()
+        if not raw_path:
+            return None
+        return Path(raw_path)
+
+    @staticmethod
+    def _cookie_value(cookies: httpx.Cookies, name: str) -> str | None:
+        value = None
+        for cookie in cookies.jar:
+            if cookie.name == name:
+                value = cookie.value
+        return value
+
+    @staticmethod
+    def _payload_shape(payload: Any) -> str:
+        if isinstance(payload, list):
+            return "list"
+        if isinstance(payload, dict):
+            return "dict:" + ",".join(sorted(str(key) for key in payload)[:8])
+        return type(payload).__name__
+
+    @staticmethod
+    def _payload_item_count(payload: Any) -> int | None:
+        if isinstance(payload, list):
+            return len(payload)
+        if isinstance(payload, dict):
+            items = payload.get("items")
+            if isinstance(items, list):
+                return len(items)
+        return None
+
+    @classmethod
+    def _find_first_key(cls, payload: Any, keys: set[str]) -> Any | None:
+        if isinstance(payload, dict):
+            for key, value in payload.items():
+                if key in keys:
+                    return value
+                nested = cls._find_first_key(value, keys)
+                if nested is not None:
+                    return nested
+        elif isinstance(payload, list):
+            for item in payload:
+                nested = cls._find_first_key(item, keys)
+                if nested is not None:
+                    return nested
+        return None
+
+
+seat_backend_api_service = SeatBackendApiService()

@@ -32,6 +32,7 @@ from backend.api.routes.admin_dashboard import router as admin_dashboard_router
 from backend.api.routes.auth import router as auth_router
 from backend.api.routes.bookings import router as bookings_router
 from backend.api.routes.business_rules import router as business_rules_router
+from backend.api.routes.chatbot import router as chatbot_router
 from backend.api.routes.dashboard import router as dashboard_router
 from backend.api.routes.floor_layouts import router as floor_layout_router
 from backend.api.routes.guest_bookings import router as guest_bookings_router
@@ -95,6 +96,7 @@ app.include_router(auth_router)
 app.include_router(sso_router)
 app.include_router(bookings_router)
 app.include_router(business_rules_router)
+app.include_router(chatbot_router)
 app.include_router(guests_router)
 app.include_router(guest_visits_router)
 app.include_router(guest_bookings_router)

@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { BookOpen } from "lucide-react";
-import { ChatbotEmbed } from "@/features/chatbot/components/ChatbotEmbed";
+import { ChatbotPanel } from "@/features/chatbot/components/ChatbotPanel";
 import { fetchChatbotPolicy } from "@/features/configuration/services/configuration.service";
 
 
@@ -156,7 +156,7 @@ export default function MainLayout({
         {!showSidebarSkeleton &&
         user?.role?.toUpperCase() === "EMPLOYEE" &&
         employeeChatbotEnabled ? (
-          <ChatbotEmbed />
+          <ChatbotPanel />
         ) : null}
       </div>
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Providers } from "@/components/providers";
 import "./globals.css";
+import "../features/chatbot/components/chatbot.css";
 
 export const metadata: Metadata = {
   title:       "SeatBook",
