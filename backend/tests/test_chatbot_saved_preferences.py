@@ -73,3 +73,45 @@ def test_date_only_booking_uses_saved_location_preferences():
         },
         ANY,
     )
+
+
+def test_book_seat_menu_prefills_saved_location_before_building_form():
+    engine = ChatEngine()
+    session = type(
+        "Session", (), {"id": "session-id", "current_menu_id": "main-menu"}
+    )()
+    db = AsyncMock()
+    engine._reset_manual_booking_context = AsyncMock()
+    engine._apply_location_defaults_from_external_backend = AsyncMock()
+    engine._update_node = AsyncMock()
+    engine._build_when_where_card = AsyncMock(return_value="booking-form")
+
+    result = asyncio.run(engine._start_book_seat_entry(session, db))
+
+    assert result == "booking-form"
+    assert session.current_menu_id is None
+    engine._reset_manual_booking_context.assert_awaited_once_with("session-id", db)
+    engine._apply_location_defaults_from_external_backend.assert_awaited_once_with(
+        "session-id", {}, db
+    )
+
+
+def test_missing_preferences_leave_location_fields_empty():
+    engine = ChatEngine()
+    engine._get_context = AsyncMock(return_value={"booking_date": ""})
+    engine._set_context_bulk = AsyncMock()
+
+    with patch.object(
+        __import__(
+            "backend.chatbot.services.chat_engine", fromlist=["seat_backend_api_service"]
+        ).seat_backend_api_service,
+        "preferences",
+        AsyncMock(return_value={}),
+    ):
+        asyncio.run(
+            engine._apply_location_defaults_from_external_backend(
+                "session-id", {}, AsyncMock()
+            )
+        )
+
+    engine._set_context_bulk.assert_not_awaited()
