@@ -12,7 +12,6 @@ import asyncio
 import json
 import logging
 import math
-import random
 import re
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -2382,7 +2381,7 @@ class ChatEngine:
                     return resp
             else:
                 sample_size = min(5, len(available_rows))
-                candidate_rows = random.sample(available_rows, sample_size)
+                candidate_rows = available_rows[:sample_size]
                 seat_list_text = "Your previous seats are not available for that date. Here are available alternatives:"
 
         seat_cards = [
