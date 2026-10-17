@@ -101,10 +101,22 @@ class Settings(BaseSettings):
             self.DATABASE_URL = f"postgresql+asyncpg://{base}?ssl={sslmode}"
             self.SYNC_DATABASE_URL = f"postgresql://{base}?sslmode={sslmode}"
         elif not self.DATABASE_URL or not self.SYNC_DATABASE_URL:
-            raise ValueError(
-                "Configure DB_HOST, DB_NAME, DB_USER and DB_PASSWORD, or provide "
-                "both DATABASE_URL and SYNC_DATABASE_URL."
-            )
+            # In the integrated application, production credentials are loaded
+            # by the main backend from AWS Secrets Manager rather than exposed
+            # as raw Lambda environment variables. Reuse those resolved values
+            # so the chatbot connects to the same database securely.
+            from backend.core.config import get_settings
+
+            shared = get_settings()
+            user = quote_plus(shared.db_user)
+            password = quote_plus(shared.db_password)
+            database = quote_plus(shared.db_name)
+            sslmode = quote_plus(shared.db_sslmode)
+            base = f"{user}:{password}@{shared.db_host}:{shared.db_port}/{database}"
+            self.DATABASE_URL = f"postgresql+asyncpg://{base}?ssl={sslmode}"
+            self.SYNC_DATABASE_URL = f"postgresql://{base}?sslmode={sslmode}"
+            if not self.MAIN_APP_JWT_SECRET:
+                self.MAIN_APP_JWT_SECRET = shared.jwt_secret
         return self
 
     @property
