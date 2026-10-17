@@ -121,8 +121,18 @@ class SeatBackendApiService:
         return [dict(item) for item in snapshot]
 
     async def preferences(self) -> dict[str, Any] | None:
-        payload = await self._request("GET", "/preferences")
-        return payload if isinstance(payload, dict) else None
+        payload = await self._request("GET", "/dashboard/me")
+        if not isinstance(payload, dict):
+            return None
+
+        preferences = dict(payload.get("work_preferences") or {})
+        favorite_seat_ids: list[Any] = []
+        for key in ("favorite_seat", "second_favorite_seat", "third_favorite_seat"):
+            favorite = payload.get(key)
+            if isinstance(favorite, dict) and favorite.get("seat_id") is not None:
+                favorite_seat_ids.append(favorite["seat_id"])
+        preferences["favorite_seat_ids"] = favorite_seat_ids
+        return preferences
 
     async def booking_policy(self) -> dict[str, Any] | None:
         request_user = current_seatbook_user() or {}

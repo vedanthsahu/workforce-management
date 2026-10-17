@@ -600,16 +600,43 @@ class ChatEngine:
         entities: dict[str, Any],
         db: AsyncSession,
     ):
-        if not any(key in entities for key in ("site_id", "building_id", "floor_id")):
-            return
-
         ctx = await self._get_context(session_id, db)
         updates: dict[str, str] = {}
         site_id = self._safe_int(ctx.get("site_id"))
         building_id = self._safe_int(ctx.get("building_id"))
         floor_id = self._safe_int(ctx.get("floor_id"))
 
-        if site_id and not ctx.get("site_name"):
+        preferences = await seat_backend_api_service.preferences() or {}
+        preferred_site_id = self._safe_int(preferences.get("site_id"))
+        preferred_building_id = self._safe_int(preferences.get("building_id"))
+        preferred_floor_id = self._safe_int(preferences.get("floor_id"))
+
+        # Explicit location details from the prompt/form always win. Fill only
+        # the missing parts from the employee's saved profile preferences.
+        if not site_id and preferred_site_id:
+            site_id = preferred_site_id
+            updates["site_id"] = str(site_id)
+            updates["site_name"] = str(preferences.get("site_name") or "")
+        if (
+            site_id
+            and not building_id
+            and preferred_building_id
+            and (not preferred_site_id or site_id == preferred_site_id)
+        ):
+            building_id = preferred_building_id
+            updates["building_id"] = str(building_id)
+            updates["building_name"] = str(preferences.get("building_name") or "")
+        if (
+            building_id
+            and not floor_id
+            and preferred_floor_id
+            and (not preferred_building_id or building_id == preferred_building_id)
+        ):
+            floor_id = preferred_floor_id
+            updates["floor_id"] = str(floor_id)
+            updates["floor_name"] = str(preferences.get("floor_name") or "")
+
+        if site_id and not ctx.get("site_name") and not updates.get("site_name"):
             sites = await seat_backend_api_service.list_sites() or []
             site = next(
                 (row for row in sites if str(row.get("site_id")) == str(site_id)), None
@@ -649,7 +676,12 @@ class ChatEngine:
             if building:
                 updates["building_name"] = str(building.get("building_name") or "")
 
-        if floor_id and not ctx.get("floor_name") and building_id:
+        if (
+            floor_id
+            and not ctx.get("floor_name")
+            and not updates.get("floor_name")
+            and building_id
+        ):
             floors = await seat_backend_api_service.list_floors(building_id) or []
             floor = next(
                 (row for row in floors if str(row.get("floor_id")) == str(floor_id)),
