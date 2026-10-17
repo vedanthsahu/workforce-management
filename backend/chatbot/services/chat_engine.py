@@ -1848,6 +1848,7 @@ class ChatEngine:
     async def _start_book_seat_entry(self, session, db: AsyncSession) -> ChatResponse:
         session.current_menu_id = None
         await self._reset_manual_booking_context(session.id, db)
+        await self._apply_location_defaults_from_external_backend(session.id, {}, db)
         await self._update_node(session, Node.BOOK_WHEN_WHERE, "BOOKING_WHEN_WHERE", db)
         return await self._build_when_where_card(session, db)
 
