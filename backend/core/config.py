@@ -15,6 +15,7 @@ DEFAULT_JWT_ALLOWED_CLAIMS = (
     "user_id",
     "sub",
     "email",
+    "display_name",
     "role",
     "tenant_id",
     "session_id",
@@ -73,7 +74,7 @@ class Settings(BaseSettings):
     tenant_id: str
     redirect_uri: str
     frontend_url: str
-    additional_frontend_urls: str | tuple[str, ...] = ()
+    additional_frontend_urls: str | tuple[str, ...] = ("http://localhost:4200",)
     session_ttl: int = 3600
 
     aws_region: str

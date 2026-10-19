@@ -89,3 +89,24 @@ export async function updateBlockedSeatPolicy(
   const { data } = await axiosInstance.patch<BlockedSeatPolicy>("/business-rules/blocked-seat-policy", patch);
   return data;
 }
+
+export interface ChatbotPolicy {
+  employee_access_enabled: boolean;
+}
+
+export async function fetchChatbotPolicy(): Promise<ChatbotPolicy> {
+  const { data } = await axiosInstance.get<ChatbotPolicy>(
+    "/business-rules/chatbot-policy",
+  );
+  return data;
+}
+
+export async function updateChatbotPolicy(
+  patch: ChatbotPolicy,
+): Promise<ChatbotPolicy> {
+  const { data } = await axiosInstance.patch<ChatbotPolicy>(
+    "/business-rules/chatbot-policy",
+    patch,
+  );
+  return data;
+}
