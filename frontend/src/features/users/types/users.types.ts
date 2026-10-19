@@ -121,4 +121,5 @@ export interface ApiUserSearchResult {
   status: ApiUserStatus;
   employee_id: string | null;
   department: string | null;
+  office_location?: string | null;
 }
