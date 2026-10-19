@@ -54,6 +54,7 @@ interface RawBuilding {
   building_id: string;
   site_id: string;
   building_name: string;
+  status?: string | null;
 }
 
 interface RawFloor {
@@ -61,6 +62,7 @@ interface RawFloor {
   building_id?: string;
   floor_name?: string;
   floor_code?: string;
+  status?: string | null;
   layout_file_url?: string | null;
   active_layout?: { layout_file_url?: string | null };
   scheduled_layout?: {
@@ -119,6 +121,36 @@ export async function fetchBuildings(siteId: string): Promise<Building[]> {
     siteId: b.site_id,
     name: b.building_name,
   }));
+}
+
+// fetchBuildings only returns buildings a user can book. A saved preference (or
+// deep link) pointing at one that isn't in that list is either inactive or has
+// no active floor -- and the two deserve different messages. There's no
+// single-building endpoint, but GET /buildings without a status filter lists
+// every building of the office with its status, so find it there. Returns null
+// when the building doesn't exist (any longer).
+export async function fetchBuildingStatus(
+  siteId: string,
+  buildingId: string,
+): Promise<{ name: string; status: string | null } | null> {
+  const { data } = await axiosInstance.get<RawBuilding[]>("/buildings", {
+    params: { site_id: siteId },
+  });
+  const match = data.find((b) => String(b.building_id) === buildingId);
+  return match ? { name: match.building_name, status: match.status ?? null } : null;
+}
+
+// Same idea for a floor: GET /buildings/{id}/floors without a status filter
+// lists every floor with its status.
+export async function fetchFloorStatus(
+  buildingId: string,
+  floorId: string,
+): Promise<{ name: string; status: string | null } | null> {
+  const { data } = await axiosInstance.get<RawFloor[]>(`/buildings/${buildingId}/floors`);
+  const match = data.find((f) => String(f.floor_id) === floorId);
+  return match
+    ? { name: match.floor_name ?? match.floor_code ?? `Floor ${floorId}`, status: match.status ?? null }
+    : null;
 }
 
 // ── Floors ────────────────────────────────────────────────────────────────────

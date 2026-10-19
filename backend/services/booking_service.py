@@ -20,6 +20,18 @@ from backend.core.audit_actions import (
     GUEST_BOOKING_CREATED,
     GUEST_VISIT_CREATED,
 )
+from backend.core.authorization import (
+    CAN_CREATE_FOR_OTHERS_ROLES,
+    GUEST_OPERATOR_ROLES,
+    can_create_for_user,
+    can_manage_resource,
+)
+from backend.core.authorization import (
+    current_user_id as _current_user_id,
+)
+from backend.core.authorization import (
+    user_role as _user_role,
+)
 from backend.repositories.audit_repository import (
     actor_from_user,
     safe_write_audit_log,
@@ -97,23 +109,15 @@ from backend.services.notification_service import (
 logger = logging.getLogger(f"{LOGGER_NAME}.bookings")
 
 
-# Shared with guest_service.py so the guest-operator role set is defined once.
-GUEST_OPERATION_ROLES = {
-    "TENANT_ADMIN",
-    "FACILITATOR",
-    "FRONT_OFFICE",
-}
+# Shared with guest_service.py so the guest-operator role set is defined
+# once -- see backend.core.authorization for why FRONT_OFFICE isn't in
+# this set (their only confirmed access is check-in/check-out, handled
+# separately).
+GUEST_OPERATION_ROLES = GUEST_OPERATOR_ROLES
 ADMIN_SEAT_ACCESS_ROLES = {"PRODUCT_ADMIN", "TENANT_ADMIN"}
 
 def _can_book_guest(current_user: dict[str, Any]) -> bool:
     return _user_role(current_user) in GUEST_OPERATION_ROLES
-
-def _current_user_id(current_user: dict[str, Any]) -> str:
-    return str(current_user.get("user_id") or current_user.get("id") or "")
-
-
-def _user_role(user: dict[str, Any]) -> str:
-    return str(user.get("role_name") or user.get("role") or "").strip().upper()
 
 
 def _can_use_non_bookable_seat(current_user: dict[str, Any] | None) -> bool:
@@ -147,30 +151,31 @@ def _can_book_for_user(
     current_user: dict[str, Any],
     booking_user: dict[str, Any],
 ) -> bool:
-    current_user_id = _current_user_id(current_user)
-
-    if current_user_id == str(booking_user["user_id"]):
-        return True
-
-    role = _user_role(current_user)
-    if role in {"TENANT_ADMIN", "FACILITATOR"}:
-        return True
-
-    return (
-        role == "MANAGER"
-        and str(booking_user.get("manager_user_id") or "") == current_user_id
+    """Creating a *new* booking for booking_user -- role-based, not an
+    ownership check (there's no prior resource yet). Confirmed in
+    Rules.md: TENANT_ADMIN/FACILITATOR may originate one for someone
+    else; MANAGER is dormant (0 users hold it) and carries no authority
+    here -- left out deliberately, not an oversight."""
+    return can_create_for_user(
+        current_user,
+        subject_user_id=booking_user["user_id"],
     )
 
 
 def _can_manage_booking(
     *,
     current_user: dict[str, Any],
-    booking_user: dict[str, Any],
+    booked_by_user_id: Any,
+    booked_for_user_id: Any,
 ) -> bool:
-    """Return whether current user can mutate target user's bookings."""
-    return _can_book_for_user(
-        current_user=current_user,
-        booking_user=booking_user,
+    """EASY RULE for an *existing* booking: creator, subject, or
+    TENANT_ADMIN. No blanket facilitator/front-office access -- rights
+    here come only from actually being this booking's creator or subject.
+    """
+    return can_manage_resource(
+        current_user,
+        created_by_user_id=booked_by_user_id,
+        subject_user_id=booked_for_user_id,
     )
 
 
@@ -960,7 +965,8 @@ def cancel_booking_by_id(
 
         if not _can_manage_booking(
             current_user=current_user,
-            booking_user=booking_user,
+            booked_by_user_id=booking.get("booked_by_user_id"),
+            booked_for_user_id=booked_for_user_id,
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -1173,7 +1179,8 @@ def modify_booking(
  
         if not _can_manage_booking(
             current_user=current_user,
-            booking_user=booking_user,
+            booked_by_user_id=booking.get("booked_by_user_id"),
+            booked_for_user_id=booked_for_user_id,
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -2113,6 +2120,26 @@ payload: BookingEligibilityRequest,
     )
 
 
+def _require_delegation_role(current_user: dict[str, Any]) -> None:
+    """Gate the /bookings/delegated/* views by the caller's CURRENT role,
+    not by whether rows with their user_id as creator happen to exist.
+
+    These views are purely row-based (WHERE booked_by_user_id = caller) --
+    with no role check at all, someone who USED to be a FACILITATOR/
+    TENANT_ADMIN and got demoted to EMPLOYEE would still see every
+    booking/guest-visit they created while they held that access, forever,
+    since those rows don't disappear on demotion. Only a current
+    TENANT_ADMIN/FACILITATOR should be able to see this view at all."""
+    if _user_role(current_user) not in CAN_CREATE_FOR_OTHERS_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "delegation_view_not_allowed",
+                "message": "Only a TENANT_ADMIN or FACILITATOR can view delegated bookings.",
+            },
+        )
+
+
 def get_delegated_future_bookings(
     conn: PGConnection,
     *,
@@ -2122,6 +2149,7 @@ def get_delegated_future_bookings(
     seat_id: str | None = None,
     booking_date: date | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
+    _require_delegation_role(current_user)
 
     bookings = fetch_future_delegated_bookings(
         conn,
@@ -2164,6 +2192,7 @@ def get_delegated_current_bookings(
     seat_id: str | None = None,
     booking_date: date | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
+    _require_delegation_role(current_user)
 
     bookings = fetch_current_delegated_bookings(
         conn,
@@ -2206,6 +2235,7 @@ def get_delegated_past_bookings(
     seat_id: str | None = None,
     booking_date: date | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
+    _require_delegation_role(current_user)
 
     bookings = fetch_past_delegated_bookings(
         conn,
@@ -2247,6 +2277,7 @@ def get_delegated_cancelled_bookings(
     seat_id: str | None = None,
     booking_date: date | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
+    _require_delegation_role(current_user)
 
     bookings = fetch_cancelled_delegated_bookings(
         conn,

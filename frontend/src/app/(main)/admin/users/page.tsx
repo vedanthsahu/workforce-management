@@ -155,7 +155,7 @@ function UserManagementPage() {
           <h2 className="text-sm sm:text-base font-semibold text-gray-800 flex items-center gap-2">
             User Management
             <span className="text-[11px] font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
-              {summary?.filteredUsers ?? 0}
+              {isSearchMode ? users.length : summary?.filteredUsers ?? 0}
             </span>
           </h2>
           {/* Stays stacked/full-width until md: -- matches the breakpoint

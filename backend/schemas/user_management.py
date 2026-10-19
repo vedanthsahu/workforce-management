@@ -61,9 +61,7 @@ class UserSearchResponse(BaseModel):
 
     employee_id: str | None = None
     department: str | None = None
-
-
-
+    office_location: str | None = None
 
 
 class AdminUserDirectorySummary(CamelModel):
