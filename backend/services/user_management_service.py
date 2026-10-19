@@ -193,10 +193,14 @@ def admin_update_user_access_service(
 
     target_role = _user_role(target_user)
 
-    # Self-modification stays blocked for everyone except a Tenant Admin
-    # managing their own admin access -- that's the one case now allowed to
-    # be self-directed, same as managing another admin.
-    if is_self and target_role != "TENANT_ADMIN":
+    # Self-modification is blocked unconditionally, no role exceptions --
+    # confirmed explicitly, including for TENANT_ADMIN: "No matter who it
+    # is, they themselves can't have access-related things in profile,
+    # like status or role. They can't do for themselves." Matches
+    # Rules.md's own admin negative scenario #2. A previous version of
+    # this check exempted a Tenant Admin managing their own admin access;
+    # that exception contradicted the documented rule and is removed.
+    if is_self:
         safe_write_audit_log(
             conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
             current_user=current_user, resource_type="user", resource_id=str(target_user_id),

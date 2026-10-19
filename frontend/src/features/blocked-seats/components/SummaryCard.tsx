@@ -32,7 +32,8 @@ export default function SummaryCard({
           ? "border-indigo-300 ring-1 ring-indigo-100"
           : "border-gray-200",
         disabled &&
-          "cursor-not-allowed opacity-55 hover:translate-y-0 hover:shadow-sm active:scale-100",
+          // opacity-80 matches the zero-count cards on Offices/Buildings/Floors/etc.
+          "cursor-not-allowed opacity-80 hover:translate-y-0 hover:shadow-sm active:scale-100",
       )}
     >
       <span

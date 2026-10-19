@@ -53,7 +53,11 @@ def _visit(**overrides):
         "purpose_of_visit": "MEETING",
         "requires_seat": True,
         "visit_status": "SCHEDULED",
-        "created_by_user_id": "15",
+        # Matches GuestWorkflowTests.current_user's user_id ("10") -- the
+        # creator/subject-only authorization rule requires the caller to
+        # actually be this visit's creator or host, and most tests in this
+        # file exercise workflow mechanics, not authorization.
+        "created_by_user_id": "10",
     }
     row.update(overrides)
     return row
@@ -310,7 +314,13 @@ class GuestWorkflowTests(unittest.TestCase):
 
     def test_direct_modify_guest_visit_replaces_visit_and_linked_booking(self) -> None:
         conn = FakeConnection()
-        old_visit = _visit()
+        # created_by_user_id matches self.current_user ("10") -- the new
+        # creator/subject-only authorization rule requires the caller to
+        # actually be this visit's creator or host, which the _visit()
+        # default ("15") deliberately isn't; this test is exercising the
+        # modify-replace mechanics, not authorization, so the fixture needs
+        # to reflect an authorized caller.
+        old_visit = _visit(created_by_user_id="10")
         old_booking = _booking()
         new_visit = _visit(
             guest_visit_id="61",

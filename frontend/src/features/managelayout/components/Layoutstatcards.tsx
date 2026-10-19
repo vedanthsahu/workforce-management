@@ -84,6 +84,7 @@ export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps
     {
       label:      "Total Spaces",
       value:      total_seats,
+      disabled:   total_seats === 0,
       sub:        null as string | null,
       icon:       <ChairIcon />,
       iconBg:     "bg-indigo-50 text-indigo-500",
@@ -92,6 +93,7 @@ export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps
     {
       label:      "Configured",
       value:      configured_seats,
+      disabled:   configured_seats === 0,
       sub:        pct(configured_seats, total_seats),
       icon:       <CheckCircleIcon />,
       iconBg:     "bg-emerald-50 text-emerald-500",
@@ -100,6 +102,7 @@ export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps
     {
       label:      "Unconfigured",
       value:      unconfigured_seats,
+      disabled:   unconfigured_seats === 0,
       sub:        pct(unconfigured_seats, total_seats),
       icon:       <AlertCircleIcon />,
       iconBg:     "bg-amber-50 text-amber-500",
@@ -108,6 +111,7 @@ export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps
     {
       label:      "Non-bookable",
       value:      non_bookable_seats,
+      disabled:   non_bookable_seats === 0,
       sub:        pct(non_bookable_seats, total_seats),
       icon:       <LockIcon />,
       iconBg:     "bg-red-50 text-red-400",
@@ -116,6 +120,7 @@ export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps
     {
       label:      "Inactive",
       value:      inactive_seats ?? 0,
+      disabled:   (inactive_seats ?? 0) === 0,
       sub:        pct(inactive_seats ?? 0, total_seats),
       icon:       <PowerOffIcon />,
       iconBg:     "bg-gray-100 text-gray-500",
@@ -128,9 +133,15 @@ export default function LayoutStatCards({ stats, loading }: LayoutStatCardsProps
       {cards.map((card) => (
         <div
           key={card.label}
-          className="group bg-white rounded-xl border border-gray-100 px-3 py-3 sm:px-4 sm:py-4 flex items-center gap-2 sm:gap-3 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-gray-300"
+          className={`group bg-white rounded-xl border border-gray-100 px-3 py-3 sm:px-4 sm:py-4 flex items-center gap-2 sm:gap-3 transition-all duration-200 ${
+            card.disabled
+              ? "cursor-not-allowed opacity-80"
+              : "hover:-translate-y-1 hover:shadow-lg hover:border-gray-300"
+          }`}
         >
-          <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110 ${card.iconBg}`}>
+          <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 ${
+            card.disabled ? "" : "group-hover:scale-110"
+          } ${card.iconBg}`}>
             {card.icon}
           </div>
           <div className="min-w-0">
