@@ -16,10 +16,12 @@ import {
   fetchActivityPolicy,
   fetchBlockedSeatPolicy,
   fetchBookingPolicy,
+  fetchChatbotPolicy,
   fetchLayoutPolicy,
   updateActivityPolicy,
   updateBlockedSeatPolicy,
   updateBookingPolicy,
+  updateChatbotPolicy,
   updateLayoutPolicy,
 } from "../services/configuration.service";
 
@@ -133,6 +135,43 @@ function SettingRow({
   );
 }
 
+function ChatbotToggleRow({
+  enabled,
+  onChange,
+}: {
+  enabled: boolean;
+  onChange: (enabled: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-6 py-4 px-2 -mx-2 rounded-lg transition-colors hover:bg-gray-50">
+      <div className="min-w-0">
+        <p className="text-sm font-normal text-black">Employee chatbot access</p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Show the chatbot floating button when an employee is logged in.
+        </p>
+      </div>
+      <div className="w-48 shrink-0 flex items-center">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label="Employee chatbot access"
+          onClick={() => onChange(!enabled)}
+          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
+            enabled ? "bg-indigo-600" : "bg-gray-300"
+          }`}
+        >
+          <span
+            className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+              enabled ? "translate-x-5" : "translate-x-0.5"
+            }`}
+          />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ConfigurationsListPage() {
   const [configurations, setConfigurations] = useState<ConfigurationItem[]>(
     INITIAL_CONFIGURATIONS,
@@ -146,6 +185,8 @@ export default function ConfigurationsListPage() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [chatbotEnabled, setChatbotEnabled] = useState(false);
+  const [savedChatbotEnabled, setSavedChatbotEnabled] = useState(false);
 
   // The page scrolls, so an error banner at the top can be off-screen when
   // the user saved from further down -- bring it into view when it appears.
@@ -167,9 +208,12 @@ export default function ConfigurationsListPage() {
       fetchLayoutPolicy(),
       fetchBlockedSeatPolicy(),
       fetchActivityPolicy(),
+      fetchChatbotPolicy(),
     ])
-      .then(([booking, layout, blockedSeat, activity]) => {
+      .then(([booking, layout, blockedSeat, activity, chatbot]) => {
         if (cancelled) return;
+        setChatbotEnabled(chatbot.employee_access_enabled);
+        setSavedChatbotEnabled(chatbot.employee_access_enabled);
         setConfigurations((prev) =>
           prev.map((c) => {
             if (c.id === "activity-table-record-count") {
@@ -288,7 +332,8 @@ export default function ConfigurationsListPage() {
     return rows;
   }, [configurations, draft]);
 
-  const hasChanges = changedRows.length > 0;
+  const chatbotHasChanges = chatbotEnabled !== savedChatbotEnabled;
+  const hasChanges = changedRows.length > 0 || chatbotHasChanges;
   // draftKey -> error message for every field whose current value is invalid.
   const fieldErrors = useMemo(() => {
     const errors = new Map<string, string>();
@@ -318,7 +363,10 @@ export default function ConfigurationsListPage() {
     }));
   };
 
-  const handleDiscard = () => setDraft({});
+  const handleDiscard = () => {
+    setDraft({});
+    setChatbotEnabled(savedChatbotEnabled);
+  };
 
   // Save applies every dirty item in this batch. Backed items (see
   // BACKED_ITEM_IDS) round-trip through the real business-rule API one at a
@@ -505,6 +553,14 @@ export default function ConfigurationsListPage() {
         );
       }
 
+      if (chatbotHasChanges) {
+        const result = await updateChatbotPolicy({
+          employee_access_enabled: chatbotEnabled,
+        });
+        setChatbotEnabled(result.employee_access_enabled);
+        setSavedChatbotEnabled(result.employee_access_enabled);
+      }
+
       setConfigurations(nextConfigurations);
       setDraft({});
       setShowConfirm(false);
@@ -635,6 +691,21 @@ export default function ConfigurationsListPage() {
               </div>
             );
           })}
+
+          <div className="px-5 sm:px-6 py-5">
+            <div className="flex items-start gap-3 mb-1">
+              <div className="w-1 self-stretch rounded-full bg-linear-to-b from-indigo-500 to-indigo-300 mt-0.5" />
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Chatbot</h2>
+              </div>
+            </div>
+            <div className="pl-4">
+              <ChatbotToggleRow
+                enabled={chatbotEnabled}
+                onChange={setChatbotEnabled}
+              />
+            </div>
+          </div>
         </div>
 
         {/* NOTE */}
@@ -659,7 +730,7 @@ export default function ConfigurationsListPage() {
           className={`text-xs sm:text-sm ${hasChanges ? "text-black" : "text-gray-500"}`}
         >
           {hasChanges
-            ? `${changedRows.length} unsaved change${changedRows.length > 1 ? "s" : ""}`
+              ? `${changedRows.length + (chatbotHasChanges ? 1 : 0)} unsaved change${changedRows.length + (chatbotHasChanges ? 1 : 0) > 1 ? "s" : ""}`
             : "No unsaved changes"}
         </span>
         <div className="flex items-center gap-3">
@@ -705,6 +776,15 @@ export default function ConfigurationsListPage() {
               </span>
             </li>
           ))}
+          {chatbotHasChanges && (
+            <li className="flex items-center justify-between gap-3">
+              <span>Employee chatbot access</span>
+              <span className="font-medium text-gray-900">
+                {savedChatbotEnabled ? "Enabled" : "Disabled"} →{" "}
+                {chatbotEnabled ? "Enabled" : "Disabled"}
+              </span>
+            </li>
+          )}
         </ul>
       </ConfirmDialog>
     </div>
