@@ -14,11 +14,6 @@ from psycopg2 import errorcodes
 from psycopg2.extensions import connection as PGConnection
 
 from backend.core.app_logging import LOGGER_NAME
-from backend.core.authorization import (
-    FRONT_OFFICE,
-    can_check_in_out_guest_visit,
-    can_manage_resource,
-)
 from backend.core.audit_actions import (
     GUEST_BOOKING_CANCELLED,
     GUEST_BOOKING_CREATED,
@@ -35,6 +30,11 @@ from backend.core.audit_actions import (
     GUEST_VISIT_CREATED,
     GUEST_VISIT_MODIFIED,
     GUEST_VISIT_WORKFLOW_EXECUTED,
+)
+from backend.core.authorization import (
+    FRONT_OFFICE,
+    can_check_in_out_guest_visit,
+    can_manage_resource,
 )
 from backend.core.enums import BookingModificationReason
 from backend.repositories.audit_repository import safe_write_audit_log

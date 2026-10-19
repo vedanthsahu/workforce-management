@@ -98,10 +98,7 @@ def can_manage_resource(
     if created_by_user_id is not None and caller_id == str(created_by_user_id):
         return True
 
-    if subject_user_id is not None and caller_id == str(subject_user_id):
-        return True
-
-    return False
+    return subject_user_id is not None and caller_id == str(subject_user_id)
 
 
 def can_check_in_out_guest_visit(current_user: dict[str, Any]) -> bool:
