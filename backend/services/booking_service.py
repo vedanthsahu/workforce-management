@@ -13,14 +13,16 @@ from psycopg2 import errorcodes
 from psycopg2.extensions import connection as PGConnection
 
 from backend.core.app_logging import LOGGER_NAME
+from backend.core.audit_actions import (
+    BOOKING_CANCELLED,
+    BOOKING_CREATED,
+    BOOKING_MODIFIED,
+    GUEST_BOOKING_CREATED,
+    GUEST_VISIT_CREATED,
+)
 from backend.core.authorization import (
     CAN_CREATE_FOR_OTHERS_ROLES,
     GUEST_OPERATOR_ROLES,
-)
-from backend.core.authorization import (
-    TENANT_ADMIN as _TENANT_ADMIN,
-)
-from backend.core.authorization import (
     can_create_for_user,
     can_manage_resource,
 )
@@ -29,13 +31,6 @@ from backend.core.authorization import (
 )
 from backend.core.authorization import (
     user_role as _user_role,
-)
-from backend.core.audit_actions import (
-    BOOKING_CANCELLED,
-    BOOKING_CREATED,
-    BOOKING_MODIFIED,
-    GUEST_BOOKING_CREATED,
-    GUEST_VISIT_CREATED,
 )
 from backend.repositories.audit_repository import (
     actor_from_user,
