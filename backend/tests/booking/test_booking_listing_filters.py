@@ -130,7 +130,7 @@ class ServiceLayerSeatFilterSkipsGuestVisitsTests(unittest.TestCase):
         ):
             get_delegated_future_bookings(
                 conn=object(),
-                current_user={"tenant_id": "1", "user_id": "7"},
+                current_user={"tenant_id": "1", "user_id": "7", "role_name": "FACILITATOR"},
                 seat_id="15",
             )
         mock_guest_visits.assert_not_called()
@@ -148,7 +148,7 @@ class ServiceLayerSeatFilterSkipsGuestVisitsTests(unittest.TestCase):
         ):
             get_delegated_future_bookings(
                 conn=object(),
-                current_user={"tenant_id": "1", "user_id": "7"},
+                current_user={"tenant_id": "1", "user_id": "7", "role_name": "FACILITATOR"},
             )
         mock_guest_visits.assert_called_once()
 

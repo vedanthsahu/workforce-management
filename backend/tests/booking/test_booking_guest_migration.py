@@ -149,7 +149,11 @@ def _guest_payload() -> CreateGuestBookingRequest:
 
 
 class EmployeeBookingMigrationTests(unittest.TestCase):
-    def test_delegation_allows_only_self_direct_report_or_tenant_admin(self) -> None:
+    def test_delegation_allows_only_self_facilitator_or_tenant_admin(self) -> None:
+        # MANAGER is dormant (0 users hold it, per dev-notes/backend/Rules.md)
+        # and carries no authority in _can_book_for_user by design -- it is
+        # not a direct-report allowance anymore, deliberately, not an
+        # oversight.
         target = {"user_id": "20", "manager_user_id": "10"}
         self.assertTrue(
             booking_service._can_book_for_user(
@@ -157,7 +161,7 @@ class EmployeeBookingMigrationTests(unittest.TestCase):
                 booking_user=target,
             )
         )
-        self.assertTrue(
+        self.assertFalse(
             booking_service._can_book_for_user(
                 current_user={"user_id": "10", "role_name": "MANAGER"},
                 booking_user=target,
@@ -578,6 +582,14 @@ class GuestBookingMigrationTests(unittest.TestCase):
             guest_service,
             "fetch_booking_by_id_for_update",
             return_value=_guest_booking(booked_by_user_id="999"),
+        ), patch.object(
+            # booked_by_user_id ("999") deliberately differs from
+            # current_user ("10") below -- this test is about audit
+            # attribution, not authorization, so current_user is
+            # authorized via being the linked visit's host instead.
+            guest_service,
+            "fetch_guest_visit_by_id",
+            return_value={"host_user_id": "10"},
         ), patch.object(
             guest_service,
             "_resolve_guest",
