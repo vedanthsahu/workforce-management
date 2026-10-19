@@ -1,7 +1,12 @@
 "use client";
 import { displaySpaceCode } from "@/lib/spaceCode";
 import { useState, useRef, useEffect } from "react";
-import Select, { type MultiValue } from "react-select";
+import Select, {
+  components,
+  type DropdownIndicatorProps,
+  type MultiValue,
+  type SingleValue,
+} from "react-select";
 import {
   Mail, Phone, MapPin, Briefcase,
   Building2, UserCheck, BadgeCheck,
@@ -163,6 +168,27 @@ function SkillTag({ label }: { label: string }) {
 
 // ─── Cascade Select ───────────────────────────────────────────────────────────
 
+type CascadeOption = { value: string; label: string; inactive?: boolean };
+
+// Small amber pill shown after the name of an inactive office/building/floor.
+function InactivePill() {
+  return (
+    <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold leading-none text-amber-700">
+      Inactive
+    </span>
+  );
+}
+
+function CascadeChevron(props: DropdownIndicatorProps<CascadeOption, false>) {
+  return (
+    <components.DropdownIndicator {...props}>
+      <ChevronDown className="w-3.5 h-3.5" />
+    </components.DropdownIndicator>
+  );
+}
+
+// A custom (react-select) dropdown rather than a native <select>: a native
+// option can only show plain text, and inactive entries need a real pill.
 function CascadeSelect({
   label, value, onChange, options, disabled, loading, placeholder, disabledPlaceholder, required,
 }: {
@@ -170,7 +196,7 @@ function CascadeSelect({
   required?:    boolean;
   value:        string;
   onChange:     (val: string) => void;
-  options:      { value: string; label: string }[];
+  options:      CascadeOption[];
   disabled?:    boolean;
   loading?:     boolean;
   placeholder?: string;
@@ -184,26 +210,67 @@ function CascadeSelect({
     : disabled && disabledPlaceholder
       ? disabledPlaceholder
       : placeholder ?? "";
+  const selected = loading ? null : options.find((o) => o.value === value) ?? null;
 
   return (
     <div className="space-y-1.5">
       <Label className="text-[12px]">{label}{required && <span className="text-red-500"> *</span>}</Label>
       <div className="relative">
-        <select
-          value={loading ? "" : value}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled || loading}
-          aria-busy={loading || undefined}
-          className="w-full h-9 rounded-md border border-gray-200 bg-white pl-3 pr-8 text-[13px] text-gray-800 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {(loading || !value) && <option value="" disabled hidden>{shownPlaceholder}</option>}
-          {!loading && options.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-        {loading
-          ? <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 animate-spin pointer-events-none" />
-          : <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />}
+        <Select<CascadeOption, false>
+          instanceId={label}
+          aria-label={label}
+          options={loading ? [] : options}
+          value={selected}
+          onChange={(opt: SingleValue<CascadeOption>) => onChange(opt?.value ?? "")}
+          isDisabled={disabled || loading}
+          isLoading={loading}
+          isSearchable={false}
+          placeholder={shownPlaceholder}
+          noOptionsMessage={() => "No options available"}
+          formatOptionLabel={(opt) => (
+            <span className="flex items-center">
+              <span className="truncate">{opt.label}</span>
+              {opt.inactive && <InactivePill />}
+            </span>
+          )}
+          components={{ IndicatorSeparator: null, DropdownIndicator: CascadeChevron }}
+          menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+          styles={{
+            menuPortal: (base) => ({ ...base, zIndex: 60 }),
+            control: (base, state) => ({
+              ...base,
+              minHeight: 36,
+              borderRadius: 6,
+              backgroundColor: "#ffffff",
+              borderColor: state.isFocused ? "#3b82f6" : "#e5e7eb",
+              boxShadow: state.isFocused ? "0 0 0 2px rgb(59 130 246 / 0.4)" : "none",
+              opacity: state.isDisabled ? 0.5 : 1,
+              cursor: state.isDisabled ? "not-allowed" : "pointer",
+              ":hover": { borderColor: state.isFocused ? "#3b82f6" : "#d1d5db" },
+            }),
+            valueContainer: (base) => ({ ...base, padding: "0 12px" }),
+            singleValue: (base) => ({ ...base, margin: 0, fontSize: 13, color: "#1f2937" }),
+            placeholder: (base) => ({ ...base, margin: 0, fontSize: 13, color: "#6b7280" }),
+            dropdownIndicator: (base) => ({ ...base, padding: "0 10px", color: "#9ca3af" }),
+            menu: (base) => ({
+              ...base,
+              marginTop: 4,
+              border: "1px solid #e5e7eb",
+              borderRadius: 8,
+              boxShadow: "0 4px 10px rgb(0 0 0 / 0.08)",
+              overflow: "hidden",
+            }),
+            option: (base, state) => ({
+              ...base,
+              padding: "8px 12px",
+              fontSize: 13,
+              cursor: "pointer",
+              color: state.isSelected ? "#3730a3" : "#111827",
+              backgroundColor: state.isSelected ? "#eef2ff" : state.isFocused ? "#f3f4f6" : "#ffffff",
+              ":active": { backgroundColor: "#e5e7eb" },
+            }),
+          }}
+        />
       </div>
     </div>
   );
@@ -683,9 +750,11 @@ function EditPreferencesDialog({
     }
   };
 
-  const siteOptions     = sites.map((s) => ({ value: s.site_id,       label: s.site_name       }));
-  const buildingOptions = buildings.map((b) => ({ value: b.building_id,   label: b.building_name   }));
-  const floorOptions    = floors.map((f) => ({ value: f.floor_id,      label: f.floor_name      }));
+  // Every office/building/floor is listed; inactive ones get a pill.
+  const isInactive = (status: string | null | undefined) => String(status ?? "").toUpperCase() === "INACTIVE";
+  const siteOptions: CascadeOption[]     = sites.map((s) => ({ value: s.site_id,     label: s.site_name,     inactive: isInactive(s.status) }));
+  const buildingOptions: CascadeOption[] = buildings.map((b) => ({ value: b.building_id, label: b.building_name, inactive: isInactive(b.status) }));
+  const floorOptions: CascadeOption[]    = floors.map((f) => ({ value: f.floor_id,    label: f.floor_name,    inactive: isInactive(f.status) }));
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
