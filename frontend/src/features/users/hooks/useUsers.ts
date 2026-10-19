@@ -21,8 +21,6 @@ export const useUsers = () => {
   const setPage = useUsersFilterStore((s) => s.setPage);
   const setLimit = useUsersFilterStore((s) => s.setLimit);
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
@@ -60,34 +58,39 @@ export const useUsers = () => {
   // the Status filter dropdown. There's no "inactive only" mode on the
   // backend, just include/exclude, so an INACTIVE-only filter still has to
   // fetch both and narrow client-side.
-  const fetchSearch = useCallback(async (q: string) => {
+  const fetchSearch = useCallback(async (q: string, signal: AbortSignal) => {
     try {
       setLoading(true);
       const includeInactive = statusFilter !== "ACTIVE";
-      const results = await usersService.searchUsers(q, 50, includeInactive);
+      const results = await usersService.searchUsers(q, 50, includeInactive, signal);
       const scoped = statusFilter === "INACTIVE"
         ? results.filter((r) => r.status === "INACTIVE")
         : results;
       setUsers(scoped.map(mapSearchResultToUser));
       setSummary(null);
     } catch (error) {
+      // A cancelled request is expected (the user kept typing) -- the newer
+      // request owns the loading state, so bail out without touching it.
+      if (signal.aborted) return;
       console.error("Error searching users", error);
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   }, [statusFilter]);
 
+  // Short debounce + abort: each keystroke cancels the previous in-flight
+  // search, so a slow old response can never overwrite a newer one.
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
     const q = search.trim();
     if (!q) {
       setIsSearchMode(false);
       return;
     }
     setIsSearchMode(true);
-    debounceRef.current = setTimeout(() => fetchSearch(q), SEARCH_DEBOUNCE_MS);
+    const controller = new AbortController();
+    const timer = setTimeout(() => fetchSearch(q, controller.signal), SEARCH_DEBOUNCE_MS);
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      clearTimeout(timer);
+      controller.abort();
     };
   }, [search, fetchSearch]);
 
@@ -105,8 +108,6 @@ export const useUsers = () => {
     }
     setPage(1);
   }, [selectedRoles, statusFilter, setPage]);
-
-  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
   const totalPages = summary ? Math.max(1, Math.ceil(summary.filteredUsers / limit)) : 1;
 
