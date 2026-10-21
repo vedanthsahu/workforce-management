@@ -57,13 +57,15 @@ def _visit_row(*, site_id: str = "5", visit_date: date = TODAY) -> dict:
 
 
 class GuestVisitDetailScopeTests(unittest.TestCase):
-    """FRONT_OFFICE's home-site/today-only restriction was deliberately
-    removed (guest:view_visits already grants tenant-wide access via
-    role_permissions) -- any guest-operator role can now view any visit
-    regardless of site or date. These tests confirm that decision and that
-    a missing visit still 404s cleanly."""
+    """FRONT_OFFICE is a narrowly-scoped, often third-party role (the
+    "security guard at the door") -- confirmed explicitly: "He can just
+    see: today guest visits". Unlike FACILITATOR/TENANT_ADMIN (unrestricted
+    overseer access to any visit, any site, any date), FRONT_OFFICE may
+    only ever view a visit dated today -- site is not restricted, only
+    date. These tests confirm that split, and that a missing visit still
+    404s cleanly."""
 
-    def test_front_office_can_view_any_visit_regardless_of_site_or_date(self) -> None:
+    def test_front_office_cannot_view_a_visit_from_a_different_date(self) -> None:
         current_user = {
             "tenant_id": "3",
             "user_id": "9",
@@ -74,14 +76,15 @@ class GuestVisitDetailScopeTests(unittest.TestCase):
         with patch(
             "backend.services.guest_service.fetch_guest_visit_by_id",
             return_value=_visit_row(site_id="99", visit_date=YESTERDAY),
-        ):
-            response = get_guest_visit_details(
+        ), self.assertRaises(HTTPException) as context:
+            get_guest_visit_details(
                 conn=object(),
                 current_user=current_user,
                 guest_visit_id="60",
             )
 
-        self.assertEqual(response.guest_visit_id, "60")
+        self.assertEqual(context.exception.status_code, 403)
+        self.assertEqual(context.exception.detail["code"], "guest_visit_forbidden")
 
     def test_front_office_without_home_site_is_still_allowed(self) -> None:
         current_user = {

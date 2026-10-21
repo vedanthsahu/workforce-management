@@ -29,8 +29,12 @@ def fetch_sites(
     limit: int | None = None,
     search: str | None = None,
     status_filter: str | None = None,
+    bookable_only: bool = False,
 ) -> list[dict[str, Any]]:
-    """Fetch tenant-scoped sites with additive admin aggregate fields."""
+    """Fetch tenant-scoped sites with additive admin aggregate fields.
+
+    `bookable_only` keeps just the sites a booking flow can actually use: ones
+    with at least one ACTIVE building that has at least one ACTIVE floor."""
     query = f"""
         SELECT
             s.id::text AS site_id,
@@ -76,6 +80,20 @@ def fetch_sites(
         WHERE s.tenant_id = %s
     """
     params: list[Any] = [tenant_id]
+    if bookable_only:
+        query += """
+        AND EXISTS (
+            SELECT 1
+            FROM buildings AS bb
+            INNER JOIN floors AS bf
+                ON bf.tenant_id = bb.tenant_id
+               AND bf.building_id = bb.id
+            WHERE bb.tenant_id = s.tenant_id
+              AND bb.site_id = s.id
+              AND bb.status = 'ACTIVE'
+              AND bf.status = 'ACTIVE'
+        )
+    """
     query, params = _apply_status_filter(query, params, "s.status", status_filter)
     query, params = _apply_search_filter(
         query,
@@ -101,8 +119,11 @@ def fetch_buildings_by_site(
     limit: int | None = None,
     search: str | None = None,
     status_filter: str | None = None,
+    bookable_only: bool = False,
 ) -> list[dict[str, Any]]:
-    """Fetch buildings under one active tenant-scoped site."""
+    """Fetch buildings under one active tenant-scoped site.
+
+    `bookable_only` keeps just buildings with at least one ACTIVE floor."""
     query = f"""
         SELECT
             b.id::text AS building_id,
@@ -146,6 +167,16 @@ def fetch_buildings_by_site(
         AND b.site_id = %s
     """
         params.append(site_id)
+    if bookable_only:
+        query += """
+        AND EXISTS (
+            SELECT 1
+            FROM floors AS bf
+            WHERE bf.tenant_id = b.tenant_id
+              AND bf.building_id = b.id
+              AND bf.status = 'ACTIVE'
+        )
+    """
     query, params = _apply_status_filter(query, params, "b.status", status_filter)
     query, params = _apply_search_filter(
         query,
@@ -568,6 +599,125 @@ def deactivate_floors_by_building(
         )
         return cur.rowcount
 
+
+
+def activate_buildings_by_ids(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+    building_ids: list[int],
+) -> int:
+    """Reactivate a chosen subset of a site's currently-INACTIVE buildings.
+
+    Counterpart to deactivate_buildings_by_site, but explicit/opt-in: callers
+    pass exactly the building ids the user selected in the reactivation
+    checklist, rather than every inactive building under the site.
+    """
+    if not building_ids:
+        return 0
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE buildings
+            SET status = 'ACTIVE', updated_at = NOW()
+            WHERE tenant_id = %s
+              AND site_id = %s
+              AND id = ANY(%s)
+              AND status = 'INACTIVE'
+            """,
+            (tenant_id, site_id, building_ids),
+        )
+        return cur.rowcount
+
+
+def activate_floors_by_ids_for_site(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+    floor_ids: list[int],
+) -> int:
+    """Reactivate a chosen subset of a site's currently-INACTIVE floors.
+
+    Only reaches floors whose building is ACTIVE (already, or just reactivated
+    by activate_buildings_by_ids earlier in the same transaction) -- a floor
+    can never end up ACTIVE while its own building is still INACTIVE, even if
+    the caller selected it.
+    """
+    if not floor_ids:
+        return 0
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE floors
+            SET status = 'ACTIVE', updated_at = NOW()
+            WHERE tenant_id = %s
+              AND site_id = %s
+              AND id = ANY(%s)
+              AND status = 'INACTIVE'
+              AND building_id IN (
+                  SELECT id FROM buildings
+                  WHERE tenant_id = %s AND site_id = %s AND status = 'ACTIVE'
+              )
+            """,
+            (tenant_id, site_id, floor_ids, tenant_id, site_id),
+        )
+        return cur.rowcount
+
+
+def activate_floors_by_ids_for_building(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    building_id: str,
+    floor_ids: list[int],
+) -> int:
+    """Reactivate a chosen subset of a building's currently-INACTIVE floors.
+
+    Caller must ensure the building itself is ACTIVE before calling this.
+    """
+    if not floor_ids:
+        return 0
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE floors
+            SET status = 'ACTIVE', updated_at = NOW()
+            WHERE tenant_id = %s
+              AND building_id = %s
+              AND id = ANY(%s)
+              AND status = 'INACTIVE'
+            """,
+            (tenant_id, building_id, floor_ids),
+        )
+        return cur.rowcount
+
+
+def activate_site_by_id(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    site_id: str,
+) -> int:
+    """Reactivate a single currently-INACTIVE site.
+
+    Used only when a caller has explicitly opted in to also reactivating a
+    building's parent office alongside the building itself (see
+    update_building_metadata) -- never invoked implicitly.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE sites
+            SET status = 'ACTIVE', updated_at = NOW()
+            WHERE tenant_id = %s
+              AND id = %s
+              AND status = 'INACTIVE'
+            """,
+            (tenant_id, site_id),
+        )
+        return cur.rowcount
 
 
 def fetch_building_by_id(
@@ -1609,15 +1759,27 @@ def fetch_seat_configuration(
     """
     params: list[Any] = [tenant_id, seat_id]
     if booking_date is not None:
+        # booking_date is a bare calendar date with no timezone of its own --
+        # casting it straight to timestamptz would implicitly use the DB
+        # session's timezone (UTC), silently shifting the day boundary. This
+        # demo deployment anchors booking days to Asia/Kolkata. effective_from
+        # is compared against the START of the NEXT day (India-local), not
+        # booking_date's own midnight -- a direct publish's effective_from
+        # is the real-time instant it was published at (see
+        # activate_floor_layout), almost never midnight, so comparing
+        # against that day's own midnight would make a same-day publish
+        # look "not yet effective." See
+        # booking_repository.fetch_seat_for_booking for the fuller version
+        # of this comment.
         query += """
           AND layout_id = (
-              SELECT id
-              FROM floor_layouts
-              WHERE floor_id = seats.floor_id
-                AND tenant_id = seats.tenant_id
-                AND status IN ('PUBLISHED', 'SCHEDULED')
-                AND effective_from <= %s
-                AND (effective_till IS NULL OR effective_till > %s)
+              SELECT fl.id
+              FROM floor_layouts fl
+              WHERE fl.floor_id = seats.floor_id
+                AND fl.tenant_id = seats.tenant_id
+                AND fl.status IN ('PUBLISHED', 'SCHEDULED')
+                AND fl.effective_from < ((%s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')
+                AND (fl.effective_till IS NULL OR fl.effective_till > (%s::timestamp AT TIME ZONE 'Asia/Kolkata'))
           )
         """
         params.extend([booking_date, booking_date])

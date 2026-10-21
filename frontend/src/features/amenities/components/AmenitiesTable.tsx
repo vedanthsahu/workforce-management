@@ -4,18 +4,30 @@ import { Pencil } from "lucide-react";
 
 import { Amenity } from "../types/amenities.types";
 import { getCategoryColor } from "../utils/amenityColors";
+import {
+  APPLICABLE_SEAT_TYPE_LABELS,
+  type ApplicableSeatType,
+} from "../utils/applicableSeatTypes";
+
+function spaceTypesLabel(applicableSeatTypes: string[]): string {
+  if (!applicableSeatTypes || applicableSeatTypes.length === 0) return "All spaces";
+  return applicableSeatTypes
+    .map((t) => APPLICABLE_SEAT_TYPE_LABELS[t as ApplicableSeatType] ?? t)
+    .join(", ");
+}
 
 type Props = {
   data: Amenity[];
   onEdit: (amenity: Amenity) => void;
   highlightedAmenityId?: string | null;
+  /** Shown in place of the rows when `data` is empty -- e.g. "No inactive
+   * amenities found." when the status card filter is set to Inactive. */
+  emptyMessage?: string;
 };
 
-export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: Props) {
-  if (data.length === 0) {
-    return <p className="px-6 py-12 text-center text-gray-400 text-sm">No amenities found.</p>;
-  }
+const AMENITY_COLUMN_COUNT = 7;
 
+export default function AmenitiesTable({ data, onEdit, highlightedAmenityId, emptyMessage = "No amenities found." }: Props) {
   return (
     <>
       <style>{`
@@ -29,6 +41,9 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
 
       {/* ── Mobile card list (hidden on md+) ──────────────── */}
       <div className="md:hidden divide-y">
+        {data.length === 0 && (
+          <p className="px-6 py-12 text-center text-gray-400 text-sm">{emptyMessage}</p>
+        )}
         {data.map((amenity) => {
           const color = getCategoryColor(amenity.category_name);
           const Icon = color.icon;
@@ -54,6 +69,9 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
                     {amenity.is_active ? "Active" : "Inactive"}
                   </span>
                   <span className="text-xs text-gray-500">{amenity.assigned_seat_count} seats</span>
+                  <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600">
+                    {spaceTypesLabel(amenity.applicable_seat_types)}
+                  </span>
                 </div>
               </div>
               <button
@@ -70,12 +88,13 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
       {/* ── Desktop table (hidden below md) ───────────────── */}
       {/* ✅ CHANGED: removed overflow-x-auto here — parent div in page.tsx owns it now */}
       <div className="hidden md:block">
-        <table className="w-full text-xs" style={{ minWidth: "860px" }}>
+        <table className="w-full text-xs" style={{ minWidth: "1010px" }}>
           <colgroup>
             <col style={{ width: "170px" }} />
             <col style={{ width: "170px" }} />
             <col style={{ width: "220px" }} />
             <col style={{ width: "90px" }} />
+            <col style={{ width: "150px" }} />
             <col style={{ width: "110px" }} />
             <col style={{ width: "70px" }} />
           </colgroup>
@@ -85,11 +104,19 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
               <th className="pl-10 px-3 py-3 text-left font-bold">Category</th>
               <th className="pl-13 px-3 py-3 text-left font-bold">Description</th>
               <th className="px-3 py-3 text-center font-bold">Status</th>
-              <th className="px-3 py-3 text-center font-bold">Assigned Seats</th>
+              <th className="px-3 py-3 text-center font-bold">Space Type</th>
+              <th className="px-3 py-3 text-center font-bold">Assigned Spaces</th>
               <th className="px-3 py-3 text-center font-bold">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
+            {data.length === 0 && (
+              <tr>
+                <td colSpan={AMENITY_COLUMN_COUNT} className="py-16 text-center text-sm text-gray-400">
+                  {emptyMessage}
+                </td>
+              </tr>
+            )}
             {data.map((amenity) => {
               const color = getCategoryColor(amenity.category_name);
               const Icon = color.icon;
@@ -109,13 +136,18 @@ export default function AmenitiesTable({ data, onEdit, highlightedAmenityId }: P
                     </span>
                   </td>
                   <td className="px-3 py-3 text-black max-w-0">
-                    <span className="block truncate">{amenity.description}</span>
+                    <span className="block line-clamp-2">{amenity.description}</span>
                   </td>
                   <td className="px-3 py-3 text-center">
                     <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap ${
                       amenity.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
                     }`}>
                       {amenity.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 text-center">
+                    <span className="inline-flex px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap bg-gray-100 text-gray-600">
+                      {spaceTypesLabel(amenity.applicable_seat_types)}
                     </span>
                   </td>
                   <td className="px-3 py-3 text-center font-medium">

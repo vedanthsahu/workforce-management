@@ -40,6 +40,7 @@ FLOOR_CREATED = "floor.created"
 FLOOR_UPDATED = "floor.updated"
 SEAT_CONFIGURED = "seat.configured"
 SEAT_BLOCK_CREATED = "seat_block.created"
+SEAT_BLOCK_UPDATED = "seat_block.updated"
 SEAT_BLOCK_CANCELLED = "seat_block.cancelled"
 
 # ── Amenity events ────────────────────────────────────────────────────────────

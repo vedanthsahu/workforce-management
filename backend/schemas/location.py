@@ -104,6 +104,8 @@ class UpdateSiteRequest(BaseModel):
     address_line1: str | None = Field(default=None, max_length=255)
     address_line2: str | None = Field(default=None, max_length=255)
     status: HierarchyStatus | None = None
+    reactivate_building_ids: list[int] | None = None
+    reactivate_floor_ids: list[int] | None = None
 
     @field_validator(
         "site_name",
@@ -185,6 +187,8 @@ class UpdateBuildingRequest(BaseModel):
 
     building_name: str | None = Field(default=None, min_length=1, max_length=200)
     status: HierarchyStatus | None = None
+    reactivate_floor_ids: list[int] | None = None
+    reactivate_office: bool = False
 
     @field_validator("building_name", mode="before")
     @classmethod
@@ -299,6 +303,8 @@ class UpdateFloorRequest(BaseModel):
 
     floor_name: str | None = Field(default=None, min_length=1, max_length=200)
     status: HierarchyStatus | None = None
+    reactivate_building: bool = False
+    reactivate_office: bool = False
 
     @field_validator("floor_name", mode="before")
     @classmethod

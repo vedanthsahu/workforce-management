@@ -20,9 +20,12 @@ import {
   createGuestBooking,
   modifyBooking,
   modifyGuestBooking,
+  extractApiErrorMessage,
   fetchBuildings,
+  fetchBuildingStatus,
   fetchEmployeeWorkPreferences,
   fetchFloors,
+  fetchFloorStatus,
   fetchMyWorkPreferences,
   fetchPreferences,
   fetchSeatsWithAvailability,
@@ -31,13 +34,15 @@ import {
   resolveFloorLayoutUrl,
 } from "../services/Bookingform.service";
 import { guestVisitWorkflow } from "@/features/bookings/services/bookings.service";
-import { BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE, maxBookableDateIso } from "../utils/constants";
+import { bookingTooFarInAdvanceMessage, MULTI_DAY_BOOKING_NOT_SUPPORTED_MESSAGE } from "../utils/constants";
+import { maxDateIsoFromToday, useBookingPolicy } from "@/features/configuration/hooks/useBookingPolicy";
+import { todayIsoInIndia } from "@/lib/indiaDate";
 import { amenityAppliesTo, BookingSpaceType } from "../utils/spaceType";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayIsoInIndia();
 }
 
 // ── Default state ─────────────────────────────────────────────────────────────
@@ -50,7 +55,7 @@ const DEFAULT_STATE: BookingFormState = {
   toDate: todayIso(),
   preferences: [],
   selectedSeatId: null,
-  spaceType: "ALL",
+  spaceType: "SEAT",
 };
 
 // ── URL builder ───────────────────────────────────────────────────────────────
@@ -91,7 +96,7 @@ function buildUrl(
   if (form.toDate) params.set("toDate", form.toDate);
   if (form.selectedSeatId) params.set("seatId", form.selectedSeatId);
   if (form.preferences.length > 0) params.set("preferences", form.preferences.join(","));
-  if (form.spaceType && form.spaceType !== "ALL") params.set("spaceType", form.spaceType);
+  if (form.spaceType) params.set("spaceType", form.spaceType);
   if (guestParams?.guestId) params.set("guestId", guestParams.guestId);
   if (guestParams?.hostUserId) params.set("hostUserId", guestParams.hostUserId);
   if (guestParams?.guestType) params.set("guestType", guestParams.guestType);
@@ -184,7 +189,7 @@ export function useBookingForm() {
       toDate: initialToDate,
       selectedSeatId: searchParams.get("seatId") ?? null,
       preferences: prefillPreferences,
-      spaceType: (searchParams.get("spaceType") as BookingSpaceType | null) ?? "ALL",
+      spaceType: (searchParams.get("spaceType") as BookingSpaceType | null) ?? "SEAT",
     };
   });
 
@@ -221,6 +226,11 @@ export function useBookingForm() {
   // told the user nothing about which office that was) while still being
   // excluded from the list of choices offered when the dropdown is opened.
   const [inactiveSiteId, setInactiveSiteId] = useState<string | null>(null);
+  // Same for a saved building/floor that is no longer bookable (inactive, or a
+  // building with no active floor): it stays in its field so the user can see
+  // what was saved, but is hidden from the list of choices.
+  const [unavailableBuildingId, setUnavailableBuildingId] = useState<string | null>(null);
+  const [unavailableFloorId, setUnavailableFloorId] = useState<string | null>(null);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [floors, setFloors] = useState<Floor[]>([]);
   const [seats, setSeats] = useState<Seat[]>([]);
@@ -237,15 +247,39 @@ export function useBookingForm() {
   const [submitting, setSubmitting] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
+
+  const { employeeMaxAdvanceDays } = useBookingPolicy();
+  const maxBookableDate = maxDateIsoFromToday(employeeMaxAdvanceDays);
+  // Separate from `error` -- this is never a failure, just letting the
+  // admin know why the date they picked got adjusted. Shown as a quiet
+  // inline note next to the date fields, not the page's error banner (see
+  // setFromDate/setToDate below).
+  const [dateRangeNotice, setDateRangeNotice] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<CreateBookingResponse | null>(null);
 
   const [myPreferencesApplied, setMyPreferencesApplied] = useState(false);
+  // Selected preferences that don't apply to the currently-selected space
+  // type. Kept aside (not discarded) so switching Seat -> Cabin -> Seat gives
+  // the user's seat preferences back instead of silently clearing them.
+  const stashedPreferencesRef = useRef<string[]>([]);
+  // True once the user has clicked a seat on the map themselves -- from then
+  // on the modify-mode pre-selection below must never override their choice
+  // (including deselecting everything).
+  const userPickedSeatRef = useRef(false);
   const [userPrefsSettled, setUserPrefsSettled] = useState(false);
+  // Carries both the saved preference's ids AND names -- the synthetic-
+  // placeholder-injection effects below need the ids to confirm they're
+  // still labeling the SAME location the preference actually pointed at,
+  // not just tagging whatever is currently selected with these (fixed,
+  // never-updated) names once the admin picks something else entirely.
   const [savedPreferenceNames, setSavedPreferenceNames] = useState<{
+    siteId: string | null;
     siteName: string | null;
+    buildingId: string | null;
     buildingName: string | null;
+    floorId: string | null;
     floorName: string | null;
-  }>({ siteName: null, buildingName: null, floorName: null });
+  }>({ siteId: null, siteName: null, buildingId: null, buildingName: null, floorId: null, floorName: null });
 
   // ── Reset on clean /book navigation ──────────────────────────────────────
   // This only fires once the URL has genuinely settled to a param-less
@@ -268,8 +302,41 @@ export function useBookingForm() {
     setConfirmation(null);
     setError(null);
     setMyPreferencesApplied(false);
+    stashedPreferencesRef.current = [];
+    userPickedSeatRef.current = false;
     setUserPrefsSettled(false);
-    setSavedPreferenceNames({ siteName: null, buildingName: null, floorName: null });
+    setSavedPreferenceNames({ siteId: null, siteName: null, buildingId: null, buildingName: null, floorId: null, floorName: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.toString()]);
+
+  // ── Re-sync from a deep link pushed while this page is already mounted ───
+  // `form`/`step` above only read the URL through a lazy useState
+  // initializer, which runs exactly once at mount. A Quick Pick (or
+  // "Tomorrow's Booking") link in BookingSidebar calls router.push() to this
+  // SAME /book route with a new step/seatId/location — Next.js doesn't
+  // remount the page for a query-string-only navigation, so that initializer
+  // never re-runs and the click silently did nothing (the URL changed, the
+  // form/step didn't). This mirrors that same initial-read logic, just also
+  // triggered on later URL changes, guarded to skip whenever the URL is only
+  // echoing back the state this hook itself just pushed via navigateTo/goBack
+  // (which always update form/step before or alongside the push).
+  useEffect(() => {
+    if (!hasAnyParam) return;
+    const urlSeatId = searchParams.get("seatId");
+    const urlStep = parseInt(searchParams.get("step") ?? "1") as BookingStep;
+    if (urlSeatId === form.selectedSeatId && urlStep === step) return;
+
+    setForm((f) => ({
+      ...f,
+      siteId: searchParams.get("siteId") ?? f.siteId,
+      buildingId: searchParams.get("buildingId") ?? f.buildingId,
+      floorId: searchParams.get("floorId") ?? f.floorId,
+      fromDate: searchParams.get("fromDate") ?? f.fromDate,
+      toDate: searchParams.get("toDate") ?? f.toDate,
+      selectedSeatId: urlSeatId,
+      spaceType: (searchParams.get("spaceType") as BookingSpaceType | null) ?? f.spaceType,
+    }));
+    setStepState(urlStep);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.toString()]);
 
@@ -340,8 +407,11 @@ export function useBookingForm() {
           .filter((key): key is string => Boolean(key));
 
         setSavedPreferenceNames({
+          siteId: prefs.siteId,
           siteName: prefs.siteName,
+          buildingId: prefs.buildingId,
           buildingName: prefs.buildingName,
+          floorId: prefs.floorId,
           floorName: prefs.floorName,
         });
 
@@ -361,7 +431,14 @@ export function useBookingForm() {
           }),
           // Always apply current profile amenities; they reflect what the user
           // has set now, which is exactly what should show when modifying.
-          preferences: preferenceKeys.length > 0 ? preferenceKeys : f.preferences,
+          ...(preferenceKeys.length > 0 && (() => {
+            const fits = (key: string) => amenityAppliesTo(
+              availablePreferences.find((p) => p.key === key)?.applicable_seat_types,
+              f.spaceType as BookingSpaceType,
+            );
+            stashedPreferencesRef.current = preferenceKeys.filter((k) => !fits(k));
+            return { preferences: preferenceKeys.filter(fits) };
+          })()),
         }));
       })
       .catch(() => { })
@@ -390,16 +467,35 @@ export function useBookingForm() {
   // entries injected below, so it can't be used on its own to tell "genuinely
   // active" apart from "we made up a placeholder for this id".
   const realSiteIdsRef = useRef<Set<string>>(new Set());
+  // `loadingSites` starts false, so before the fetch below has even begun
+  // `realSiteIdsRef` is still empty and every selected office looks "missing".
+  // The saved-preference check further down waits for the fetch to settle
+  // (sitesSettled), and only treats a missing office as unbookable if it
+  // actually succeeded (sitesFetchedOkRef) -- a failed fetch proves nothing.
+  const sitesFetchedOkRef = useRef(false);
+  const [sitesSettled, setSitesSettled] = useState(false);
+  // Same for buildings and floors: the ids the real (bookable/ACTIVE) fetch
+  // returned, and which office/building those lists belong to. `null` while
+  // loading or after a failed fetch, so "not in the list" is only trusted once
+  // the list has genuinely loaded for the current office/building.
+  const realBuildingIdsRef = useRef<Set<string>>(new Set());
+  const [buildingsLoadedFor, setBuildingsLoadedFor] = useState<string | null>(null);
+  const realFloorIdsRef = useRef<Set<string>>(new Set());
+  const [floorsLoadedFor, setFloorsLoadedFor] = useState<string | null>(null);
 
   useEffect(() => {
     setLoadingSites(true);
     fetchSites()
       .then((data) => {
         realSiteIdsRef.current = new Set(data.map((s) => s.id));
+        sitesFetchedOkRef.current = true;
         setSites(data);
       })
       .catch((e) => setError(e.message))
-      .finally(() => setLoadingSites(false));
+      .finally(() => {
+        setLoadingSites(false);
+        setSitesSettled(true);
+      });
   }, []);
 
   useEffect(() => {
@@ -410,25 +506,58 @@ export function useBookingForm() {
       .finally(() => setLoadingPreferences(false));
   }, []);
 
+  // `cancelled` guards against an out-of-order response: switching Office A
+  // (many buildings, not yet cached, slow) -> Office B (one building,
+  // cached, fast) can let B's fetch land and auto-select its one building
+  // first, only for A's earlier, slower fetch to resolve afterward and
+  // overwrite it with A's stale building list -- the dropdown then shows
+  // A's old options while `form.siteId` already points at B. The cleanup
+  // below marks the previous effect run's callbacks as stale the moment
+  // `form.siteId` changes again, so a late response is simply discarded
+  // instead of clobbering whatever the current site actually resolved to.
   useEffect(() => {
-    if (!form.siteId) { setBuildings([]); setFloors([]); return; }
+    setBuildingsLoadedFor(null);
+    realBuildingIdsRef.current = new Set();
+    // Also switch the loading flag off here: when the office is cleared while
+    // a fetch is in flight, that fetch's own `.finally` is cancelled below and
+    // would otherwise leave the Building field stuck on "Loading…".
+    if (!form.siteId) { setBuildings([]); setFloors([]); setLoadingBuildings(false); return; }
+    let cancelled = false;
+    const siteIdForFetch = form.siteId;
     setBuildings([]);
     setFloors([]);
     setLoadingBuildings(true);
-    fetchBuildings(form.siteId)
-      .then(setBuildings)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoadingBuildings(false));
+    fetchBuildings(siteIdForFetch)
+      .then((data) => {
+        if (cancelled) return;
+        realBuildingIdsRef.current = new Set(data.map((b) => b.id));
+        setBuildings(data);
+        setBuildingsLoadedFor(siteIdForFetch);
+      })
+      .catch((e) => { if (!cancelled) setError(e.message); })
+      .finally(() => { if (!cancelled) setLoadingBuildings(false); });
+    return () => { cancelled = true; };
   }, [form.siteId]);
 
   useEffect(() => {
-    if (!form.buildingId) { setFloors([]); return; }
+    setFloorsLoadedFor(null);
+    realFloorIdsRef.current = new Set();
+    // Same reasoning as the buildings effect: don't leave "Loading…" stuck.
+    if (!form.buildingId) { setFloors([]); setLoadingFloors(false); return; }
+    let cancelled = false;
+    const buildingIdForFetch = form.buildingId;
     setFloors([]);
     setLoadingFloors(true);
-    fetchFloors(form.buildingId)
-      .then(setFloors)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoadingFloors(false));
+    fetchFloors(buildingIdForFetch)
+      .then((data) => {
+        if (cancelled) return;
+        realFloorIdsRef.current = new Set(data.map((f) => f.id));
+        setFloors(data);
+        setFloorsLoadedFor(buildingIdForFetch);
+      })
+      .catch((e) => { if (!cancelled) setError(e.message); })
+      .finally(() => { if (!cancelled) setLoadingFloors(false); });
+    return () => { cancelled = true; };
   }, [form.buildingId]);
 
   // ── Guarantee the selects can always render a saved-preference id ───────
@@ -448,7 +577,7 @@ export function useBookingForm() {
   // again and would otherwise re-trigger the same check indefinitely).
   const checkedSiteIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (loadingSites || !form.siteId) return;
+    if (loadingSites || !sitesSettled || !form.siteId) return;
     // realSiteIdsRef (not `sites`) is the source of truth for "genuinely in
     // the ACTIVE list" — `sites` also holds synthetic entries this same
     // effect injects below, so checking `sites` itself would immediately
@@ -459,7 +588,10 @@ export function useBookingForm() {
     checkedSiteIdsRef.current.add(form.siteId);
 
     const missingSiteId = form.siteId;
-    const siteName = savedPreferenceNames.siteName;
+    // Only label it from the saved preference if this missing id IS that
+    // preference's own site -- otherwise some other site that's merely
+    // missing/inactive would get mislabeled with an unrelated saved name.
+    const siteName = missingSiteId === savedPreferenceNames.siteId ? savedPreferenceNames.siteName : null;
     const injectPlaceholder = () => {
       if (!siteName) return;
       setSites((prev) =>
@@ -485,6 +617,36 @@ export function useBookingForm() {
           setError("This office is currently inactive and unavailable for booking. Please select a different office.");
           return;
         }
+        if (siteStatus === "ACTIVE" && !isModifyMode && sitesFetchedOkRef.current) {
+          // Active, yet missing from the bookable list: the list is fetched
+          // with bookable_only, so this office has no active building/floor
+          // and there is nothing to book there. Treat it like an inactive
+          // office: keep it in the field (so the user can see what was saved),
+          // hide it from the list of choices, and explain why. Skipped in
+          // modify mode, where the booking being edited already points here.
+          injectPlaceholder();
+          setInactiveSiteId(missingSiteId);
+          const officeMessage =
+            "This office has no buildings or floors available for booking. Please select a different office.";
+          const savedBuildingId = form.buildingId;
+          if (savedBuildingId) {
+            // A saved building that is itself the reason (typically an office
+            // with a single, now-inactive building): name it in the banner.
+            setUnavailableBuildingId(savedBuildingId);
+            fetchBuildingStatus(missingSiteId, savedBuildingId)
+              .then((info) =>
+                setError(
+                  info?.status === "INACTIVE"
+                    ? `Your saved building (${info.name}) is currently inactive, and this office has no other building available for booking. Please select a different office.`
+                    : officeMessage,
+                ),
+              )
+              .catch(() => setError(officeMessage));
+          } else {
+            setError(officeMessage);
+          }
+          return;
+        }
         // Not confirmed inactive (deleted, a transient lookup failure, or
         // some other reason it's missing) — fall back to the previous
         // behavior: show *something* labeled, rather than leave the select
@@ -492,10 +654,23 @@ export function useBookingForm() {
         injectPlaceholder();
       })
       .catch(injectPlaceholder);
-  }, [loadingSites, form.siteId, savedPreferenceNames.siteName]);
+  }, [loadingSites, sitesSettled, form.siteId, form.buildingId, isModifyMode, savedPreferenceNames.siteId, savedPreferenceNames.siteName]);
 
+  // Same "only label it if this IS the saved preference's own id" guard as
+  // the site effect above -- without it, changing Building/Floor away from
+  // the saved preference (e.g. switching to a different office entirely)
+  // kept mislabeling whatever the NEW current buildingId/floorId happened
+  // to be with the OLD preference's name, since savedPreferenceNames itself
+  // never changes after the initial prefill. That showed up as the old
+  // preference's building appearing as a second, wrongly-labeled option
+  // alongside the new office's real (and correctly auto-selected) building.
   useEffect(() => {
-    if (loadingBuildings || !form.buildingId || !savedPreferenceNames.buildingName) return;
+    if (
+      loadingBuildings ||
+      !form.buildingId ||
+      form.buildingId !== savedPreferenceNames.buildingId ||
+      !savedPreferenceNames.buildingName
+    ) return;
     const buildingName = savedPreferenceNames.buildingName;
     setBuildings((prev) => {
       if (prev.some((b) => b.id === form.buildingId)) return prev;
@@ -504,10 +679,15 @@ export function useBookingForm() {
         { id: form.buildingId, siteId: form.siteId, name: buildingName },
       ];
     });
-  }, [buildings, loadingBuildings, form.buildingId, form.siteId, savedPreferenceNames.buildingName]);
+  }, [buildings, loadingBuildings, form.buildingId, form.siteId, savedPreferenceNames.buildingId, savedPreferenceNames.buildingName]);
 
   useEffect(() => {
-    if (loadingFloors || !form.floorId || !savedPreferenceNames.floorName) return;
+    if (
+      loadingFloors ||
+      !form.floorId ||
+      form.floorId !== savedPreferenceNames.floorId ||
+      !savedPreferenceNames.floorName
+    ) return;
     const floorName = savedPreferenceNames.floorName;
     setFloors((prev) => {
       if (prev.some((f) => f.id === form.floorId)) return prev;
@@ -516,7 +696,78 @@ export function useBookingForm() {
         { id: form.floorId, buildingId: form.buildingId, name: floorName, number: 0 },
       ];
     });
-  }, [floors, loadingFloors, form.floorId, form.buildingId, savedPreferenceNames.floorName]);
+  }, [floors, loadingFloors, form.floorId, form.buildingId, savedPreferenceNames.floorId, savedPreferenceNames.floorName]);
+
+  // ── Saved building / floor that can no longer be booked ──────────────────
+  // The office check above covers an office with nothing bookable. These cover
+  // an office that IS bookable but whose saved building (inactive, or with no
+  // active floor) or saved floor (inactive) isn't. Like the office case: keep
+  // it in its field so the user can see what was saved, hide it from the list
+  // of choices, and say why -- never clear it silently. Each waits until the
+  // real list has loaded for the current office/building (a list that hasn't
+  // loaded yet proves nothing), and is skipped in modify mode, where the
+  // booking being edited already points at it.
+  const checkedBuildingKeysRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (isModifyMode || loadingBuildings || !form.siteId || !form.buildingId) return;
+    if (buildingsLoadedFor === null || buildingsLoadedFor !== form.siteId) return;
+    // An office that isn't itself bookable is handled by the office check.
+    if (!sitesSettled || !realSiteIdsRef.current.has(form.siteId)) return;
+    if (realBuildingIdsRef.current.has(form.buildingId)) return;
+
+    const key = `${form.siteId}:${form.buildingId}`;
+    if (checkedBuildingKeysRef.current.has(key)) return;
+    checkedBuildingKeysRef.current.add(key);
+
+    const siteId = form.siteId;
+    const buildingId = form.buildingId;
+    setUnavailableBuildingId(buildingId);
+    const fallback = "Your saved building is no longer available for booking. Please select a different building.";
+    fetchBuildingStatus(siteId, buildingId)
+      .then((info) => {
+        if (!info) { setError(fallback); return; }
+        // A link (as opposed to a saved preference) carries no name, so make
+        // sure the field has an option to display.
+        setBuildings((prev) =>
+          prev.some((b) => b.id === buildingId) ? prev : [...prev, { id: buildingId, siteId, name: info.name }],
+        );
+        setError(
+          info.status === "INACTIVE"
+            ? `Your saved building (${info.name}) is currently inactive. Please select a different building.`
+            : `Your saved building (${info.name}) has no floors available for booking. Please select a different building.`,
+        );
+      })
+      .catch(() => setError(fallback));
+  }, [isModifyMode, loadingBuildings, buildingsLoadedFor, sitesSettled, form.siteId, form.buildingId]);
+
+  const checkedFloorKeysRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (isModifyMode || loadingFloors || !form.buildingId || !form.floorId) return;
+    if (floorsLoadedFor === null || floorsLoadedFor !== form.buildingId) return;
+    // Only when the office and building themselves are fine -- otherwise their
+    // own banner already explains it.
+    if (!sitesSettled || !realSiteIdsRef.current.has(form.siteId)) return;
+    if (buildingsLoadedFor !== form.siteId || !realBuildingIdsRef.current.has(form.buildingId)) return;
+    if (realFloorIdsRef.current.has(form.floorId)) return;
+
+    const key = `${form.buildingId}:${form.floorId}`;
+    if (checkedFloorKeysRef.current.has(key)) return;
+    checkedFloorKeysRef.current.add(key);
+
+    const buildingId = form.buildingId;
+    const floorId = form.floorId;
+    setUnavailableFloorId(floorId);
+    const fallback = "Your saved floor is no longer available for booking. Please select a different floor.";
+    fetchFloorStatus(buildingId, floorId)
+      .then((info) => {
+        if (!info) { setError(fallback); return; }
+        setFloors((prev) =>
+          prev.some((f) => f.id === floorId) ? prev : [...prev, { id: floorId, buildingId, name: info.name, number: 0 }],
+        );
+        setError(`Your saved floor (${info.name}) is currently inactive. Please select a different floor.`);
+      })
+      .catch(() => setError(fallback));
+  }, [isModifyMode, loadingFloors, floorsLoadedFor, buildingsLoadedFor, sitesSettled, form.siteId, form.buildingId, form.floorId]);
 
   // ── Derive floor layout URL from the selected floor ───────────────────────
 
@@ -543,30 +794,73 @@ export function useBookingForm() {
     const match = buildings.find(
       (b) => b.name.toLowerCase() === prefillBuildingName.toLowerCase(),
     );
-    if (match) setForm((f) => ({ ...f, buildingId: match.id, floorId: "", selectedSeatId: null }));
+    // selectedSeatId is deliberately kept: in modify mode it's the booking's
+    // own seat from the URL, and this only resolves names -> ids for it.
+    if (match) setForm((f) => ({ ...f, buildingId: match.id, floorId: "" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildings, prefillBuildingName]);
-
-  useEffect(() => {
-    if (!prefillLocationName || prefillBuildingName || buildings.length !== 1 || form.buildingId) return;
-    setForm((f) => ({ ...f, buildingId: buildings[0].id }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buildings, prefillLocationName, prefillBuildingName]);
 
   useEffect(() => {
     if (!prefillFloorName || floors.length === 0 || form.floorId) return;
     const match = floors.find(
       (f) => f.name.toLowerCase() === prefillFloorName.toLowerCase(),
     );
-    if (match) setForm((f) => ({ ...f, floorId: match.id, selectedSeatId: null }));
+    if (match) setForm((f) => ({ ...f, floorId: match.id }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [floors, prefillFloorName]);
 
+  // Auto-select the only building/floor when there's nothing else to choose
+  // from — same "don't make them pick between one thing" pattern used in
+  // the admin Blocked Spaces flow (BlockedSeatsPage/BlockSeatsPage).
+  // Supersedes (and replaces) the old prefill-only single-building
+  // shortcut: this applies unconditionally whenever exactly one option
+  // exists, not just when a prefill name happens to be present.
+  //
+  // The `buildings[0].siteId === form.siteId` check is required, not
+  // optional: switching Office fires the siteId-change effect (which
+  // resets `buildings` to [] and refetches) in the SAME commit as this
+  // effect, since setSiteId also clears form.buildingId in that same
+  // update. React runs both effects off that one commit's snapshot, so
+  // this effect can observe `buildings` still holding the PREVIOUS site's
+  // (stale, not-yet-cleared) single building at the exact moment
+  // form.buildingId has already gone blank -- and without this guard it
+  // "auto-selects" that stale building, from the wrong site entirely.
+  // Confirmed via reproduction: switching a multi-building office to a
+  // single-building one re-selected the OLD office's building because its
+  // `buildings` array (length 1) hadn't been cleared yet in that render.
+  useEffect(() => {
+    if (form.buildingId || loadingBuildings || buildings.length !== 1) return;
+    if (buildings[0].siteId !== form.siteId) return;
+    setForm((f) => ({ ...f, buildingId: buildings[0].id, floorId: "", selectedSeatId: null }));
+  }, [form.buildingId, form.siteId, loadingBuildings, buildings]);
+
+  // Same stale-snapshot race as the building effect above, one level down:
+  // switching Building clears form.floorId in the same commit that resets
+  // `floors`, so this must confirm the single floor actually belongs to
+  // the CURRENT building before auto-selecting it.
+  useEffect(() => {
+    if (form.floorId || loadingFloors || floors.length !== 1) return;
+    if (floors[0].buildingId !== form.buildingId) return;
+    setForm((f) => ({ ...f, floorId: floors[0].id, selectedSeatId: null }));
+  }, [form.floorId, form.buildingId, loadingFloors, floors]);
+
+  // Modify mode: the booking's own seat (flagged "yours" by the availability
+  // call) is the selected seat until the user picks something else. Keyed on
+  // selectedSeatId too, because the step-2 URL change can sync an empty
+  // seatId back into the form after the seat was first selected.
+  useEffect(() => {
+    if (!isModifyMode || userPickedSeatRef.current || form.selectedSeatId) return;
+    const own = seats.find((s) => s.status === "yours");
+    if (own) setForm((f) => ({ ...f, selectedSeatId: own.id }));
+  }, [isModifyMode, seats, form.selectedSeatId]);
+
   useEffect(() => {
     if (!prefillSeatLabel || seats.length === 0 || form.selectedSeatId) return;
-    const match = seats.find(
-      (s) => s.label.toLowerCase() === prefillSeatLabel.toLowerCase(),
-    );
+    // In modify mode the booking's own seat comes back flagged "yours" --
+    // the most reliable match, since the label can differ from the code.
+    const match =
+      seats.find((s) => s.status === "yours") ??
+      seats.find((s) => s.label.toLowerCase() === prefillSeatLabel.toLowerCase());
     if (match) setForm((f) => ({ ...f, selectedSeatId: match.id }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seats, prefillSeatLabel]);
@@ -592,11 +886,12 @@ export function useBookingForm() {
     [availablePreferences, form.spaceType],
   );
 
-  // ── Re-fetch seats on step 2 page refresh ────────────────────────────────
+  // ── Re-fetch seats on step 2 page refresh (and once on step 3, for a deep
+  // link that skipped step 2 entirely — see the conflict check below) ──────
 
   useEffect(() => {
     if (
-      step === 2 &&
+      (step === 2 || step === 3) &&
       seats.length === 0 &&
       form.floorId &&
       form.fromDate &&
@@ -620,11 +915,49 @@ export function useBookingForm() {
         spaceType: form.spaceType,
       })
         .then(setSeats)
-        .catch((e) => setError(e instanceof Error ? e.message : "Failed to load seats"))
+        .catch((e) => {
+          // The availability endpoint can 409 for reasons that have nothing
+          // to do with a specific seat -- e.g. the admin already has another
+          // active booking in this date range (user_has_active_booking_in_range
+          // in booking_service.py runs before the seat-level query at all).
+          // extractApiErrorMessage surfaces that real message instead of
+          // Axios's generic "Request failed with status code 409". And for
+          // a deep link that skipped step 2 (Quick Pick, "Tomorrow's
+          // Booking"), this is discovered on landing at step 3 — same as a
+          // seat-specific conflict, that means back to step 1 with the
+          // error shown there, not a review summary sitting on top of it.
+          setError(extractApiErrorMessage(e, "Failed to load spaces"));
+          if (step === 3) {
+            const clearedForm = { ...form, selectedSeatId: null };
+            setForm(clearedForm);
+            navigateTo(1, clearedForm);
+          }
+        })
         .finally(() => setLoadingSeats(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, availablePreferences, userPrefsSettled]);
+
+  // ── Bounce off a conflict instead of ever showing Review & Confirm for it ──
+  // A seat reaching step 3 via a deep link (Quick Pick, "Tomorrow's Booking")
+  // skips step 2's own fetch entirely, so nothing had actually confirmed it
+  // was still bookable until the fetch above resolves. Rather than letting
+  // the review summary render for a seat that's no longer available (and
+  // only failing once the admin presses Confirm), this drops straight back
+  // to step 1 (Where & When — the Book a Space page itself) with the
+  // conflict explained at the top, same as a conflict caught before ever
+  // leaving that page (BookingSidebar's own pre-navigation check).
+  useEffect(() => {
+    if (step !== 3 || seats.length === 0 || !form.selectedSeatId) return;
+    const seat = seats.find((s) => s.id === form.selectedSeatId);
+    if (seat && seat.status !== "available" && seat.status !== "yours") {
+      const clearedForm = { ...form, selectedSeatId: null };
+      setError("This space is no longer available for the selected date(s). Please choose a different space.");
+      setForm(clearedForm);
+      navigateTo(1, clearedForm);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, seats, form.selectedSeatId]);
 
   // ── Field setters ─────────────────────────────────────────────────────────
 
@@ -648,26 +981,33 @@ export function useBookingForm() {
     setForm((f) => ({ ...f, floorId: v ?? "", selectedSeatId: null }));
   };
 
+  // Multi-day bookings aren't supported this release -- From and To always
+  // move together as a single day. "From" is the anchor: changing it always
+  // sticks and pulls "To" along with it, but changing "To" to a genuinely
+  // different day does NOT stick -- it falls back to matching "From"
+  // instead of overwriting it. Only an attempted change to "To" should show
+  // the multi-day notice; changing the anchor date is a normal single-day
+  // selection and silently moves both fields together.
   const setFromDate = (v: string) => {
-    if (v > maxBookableDateIso()) {
-      setError(BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE);
+    if (maxBookableDate && employeeMaxAdvanceDays != null && v > maxBookableDate) {
+      setError(bookingTooFarInAdvanceMessage(employeeMaxAdvanceDays));
       return;
     }
     setError(null);
-    setForm((f) => ({
-      ...f,
-      fromDate: v,
-      toDate: v,
-    }));
+    setDateRangeNotice(null);
+    setForm((f) => ({ ...f, fromDate: v, toDate: v }));
   };
 
   const setToDate = (v: string) => {
-    if (v > maxBookableDateIso()) {
-      setError(BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE);
+    if (maxBookableDate && employeeMaxAdvanceDays != null && v > maxBookableDate) {
+      setError(bookingTooFarInAdvanceMessage(employeeMaxAdvanceDays));
       return;
     }
     setError(null);
-    setForm((f) => ({ ...f, toDate: v }));
+    setDateRangeNotice(v !== form.fromDate ? MULTI_DAY_BOOKING_NOT_SUPPORTED_MESSAGE : null);
+    // Falls back to "From", discarding the picked value -- not
+    // { ...f, toDate: v }, which would let "To" win instead.
+    setForm((f) => ({ ...f, toDate: f.fromDate }));
   };
 
   const togglePreference = (key: string) => {
@@ -682,27 +1022,37 @@ export function useBookingForm() {
 
   const clearAll = () => setForm((f) => ({ ...f, preferences: [] }));
 
-  // Switching space type drops any already-selected preference that no
-  // longer applies under the new type (e.g. a Cabin-only amenity like "Desk
-  // Phone" selected while Cabin was active shouldn't silently keep filtering
-  // the search after switching to Conference Room, where it's not even
-  // shown as an option anymore).
+  // Switching space type stops applying any selected preference that doesn't
+  // fit the new type (e.g. a Cabin-only amenity like "Desk Phone" shouldn't
+  // keep filtering the search on Conference Room, where it's not even shown).
+  // Those selections are stashed rather than lost, and come back when the
+  // user switches to a type they apply to again.
   const setSpaceType = (next: BookingSpaceType) => {
     setError(null);
-    setForm((f) => ({
-      ...f,
-      spaceType: next,
-      preferences: f.preferences.filter((key) => {
-        const pref = availablePreferences.find((p) => p.key === key);
-        return amenityAppliesTo(pref?.applicable_seat_types, next);
-      }),
-    }));
+    setForm((f) => {
+      // Everything the user has picked, whether currently shown or stashed
+      // from an earlier type switch.
+      const all = Array.from(new Set([...f.preferences, ...stashedPreferencesRef.current]));
+      const fits = (key: string) =>
+        amenityAppliesTo(availablePreferences.find((p) => p.key === key)?.applicable_seat_types, next);
+      stashedPreferencesRef.current = all.filter((k) => !fits(k));
+      return { ...f, spaceType: next, preferences: all.filter(fits) };
+    });
   };
 
   // ── Step 1 → Step 2 ───────────────────────────────────────────────────────
 
+  // The selected office/building/floor is one we've flagged as unusable (an
+  // inactive office, or a saved building/floor that is inactive or has nothing
+  // bookable) and shown a banner for. It stays visible in its field, but the
+  // user has to pick something else before searching.
+  const selectionUnavailable =
+    (!!form.siteId && form.siteId === inactiveSiteId) ||
+    (!!form.buildingId && form.buildingId === unavailableBuildingId) ||
+    (!!form.floorId && form.floorId === unavailableFloorId);
+
   const findAvailableSeats = useCallback(async () => {
-    if (!form.floorId || !form.fromDate || !form.toDate) return;
+    if (!form.floorId || !form.fromDate || !form.toDate || selectionUnavailable) return;
     // No local "is this office inactive" guard here on purpose — the
     // backend's own availability check (get_available_seats_by_range in
     // booking_service.py) now rejects an inactive office with its own
@@ -745,11 +1095,12 @@ export function useBookingForm() {
     } finally {
       setLoadingSeats(false);
     }
-  }, [form, resolveAmenityIds, navigateTo, searchParams, modifyBookingId, bookedForUserId, guestId, isGuestBooking]);
+  }, [form, selectionUnavailable, resolveAmenityIds, navigateTo, searchParams, modifyBookingId, bookedForUserId, guestId, isGuestBooking]);
 
   // ── Step 2: select seat ───────────────────────────────────────────────────
 
   const selectSeat = (seatId: string | null) => {
+    userPickedSeatRef.current = true;
     setError(null);
     setForm((f) => ({ ...f, selectedSeatId: seatId }));
   };
@@ -826,13 +1177,13 @@ export function useBookingForm() {
       setStepState(3);
     } catch (err) {
       if (axios.isAxiosError(err)) {
-        const data = err.response?.data as { detail?: { message?: string } | string; message?: string; error?: { message?: string } } | undefined;
-        const msg =
-          (typeof data?.detail === "object" ? data?.detail?.message : typeof data?.detail === "string" ? data.detail : null)
-          ?? data?.error?.message
-          ?? data?.message
-          ?? err.message;
-        setError(msg);
+        // A 409 specifically means this exact conflict check (the one that
+        // sent the admin here) lost a last-second race, so it gets its own
+        // clear fallback instead of the generic one below.
+        const fallback = err.response?.status === 409
+          ? "This space was just booked by someone else. Please go back and choose a different space."
+          : "Something went wrong. Please try again.";
+        setError(extractApiErrorMessage(err, fallback));
       } else {
         setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       }
@@ -853,7 +1204,16 @@ export function useBookingForm() {
       return;
     }
     setError(null);
-    const prevStep = (step > 1 ? step - 1 : 1) as BookingStep;
+    // A Quick Pick (BookingSidebar) jumps straight to step 3 — or to step 2's
+    // floor map after a conflict — skipping the steps in between, the same
+    // shortcut the dashboard's Favourite Space dialog uses (source=dashboard,
+    // handled above). Back from either should return to step 1 (Where &
+    // When), not decrement into a step the admin never actually visited on
+    // the way in. `source` never survives a normal in-flow step transition
+    // (buildUrl doesn't carry it forward), so this only fires on the first
+    // Back click right after landing via the shortcut.
+    const cameFromShortcut = searchParams.get("source") === "book";
+    const prevStep = (cameFromShortcut ? 1 : step > 1 ? step - 1 : 1) as BookingStep;
     const clearedForm = prevStep < 2 ? { ...form, selectedSeatId: null } : form;
     setForm(clearedForm);
     navigateTo(prevStep, clearedForm);
@@ -874,8 +1234,9 @@ export function useBookingForm() {
     // it's a one-shot guard per component mount, and "Book Another Seat"
     // reuses this same mount instead of remounting.
     setMyPreferencesApplied(false);
+    stashedPreferencesRef.current = [];
     setUserPrefsSettled(false);
-    setSavedPreferenceNames({ siteName: null, buildingName: null, floorName: null });
+    setSavedPreferenceNames({ siteId: null, siteName: null, buildingId: null, buildingName: null, floorId: null, floorName: null });
     if (isModifyMode) {
       const forSomeone = isBookingForSomeone || isGuestModify || Boolean(bookedForUserId);
       router.push(forSomeone ? "/mybookings?tab=bookedForSomeone" : "/mybookings");
@@ -907,7 +1268,8 @@ export function useBookingForm() {
     !!form.buildingId &&
     !!form.floorId &&
     !!form.fromDate &&
-    !!form.toDate;
+    !!form.toDate &&
+    !selectionUnavailable;
 
   // Only meaningful in modify mode — true once the seat, date, or location
   // differs from the original booking. Gates the review/confirm actions so
@@ -926,6 +1288,8 @@ export function useBookingForm() {
     form,
     sites,
     inactiveSiteId,
+    unavailableBuildingId,
+    unavailableFloorId,
     buildings,
     floors,
     seats,
@@ -934,6 +1298,7 @@ export function useBookingForm() {
     confirmation,
     error,
     setError,
+    dateRangeNotice,
     loadingSites,
     loadingBuildings,
     loadingFloors,
@@ -947,7 +1312,7 @@ export function useBookingForm() {
     dayCount,
     step1Valid,
     hasBookingChanges,
-    maxBookableDate: maxBookableDateIso(),
+    maxBookableDate,
     isModifyMode,
     isAdminFlow,
     isBookingForSomeone,

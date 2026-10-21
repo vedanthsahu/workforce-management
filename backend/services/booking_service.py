@@ -20,6 +20,18 @@ from backend.core.audit_actions import (
     GUEST_BOOKING_CREATED,
     GUEST_VISIT_CREATED,
 )
+from backend.core.authorization import (
+    CAN_CREATE_FOR_OTHERS_ROLES,
+    GUEST_OPERATOR_ROLES,
+    can_create_for_user,
+    can_manage_resource,
+)
+from backend.core.authorization import (
+    current_user_id as _current_user_id,
+)
+from backend.core.authorization import (
+    user_role as _user_role,
+)
 from backend.repositories.audit_repository import (
     actor_from_user,
     safe_write_audit_log,
@@ -28,6 +40,8 @@ from backend.repositories.audit_repository import (
 from backend.repositories.booking_repository import (
     acquire_booking_slot_locks,
     cancel_booking,
+    fetch_admin_booking_person_suggestions,
+    fetch_admin_booking_seat_suggestions,
     fetch_admin_bookings,
     fetch_admin_bookings_summary,
     fetch_admin_guest_visits_without_booking,
@@ -95,22 +109,41 @@ from backend.services.notification_service import (
 logger = logging.getLogger(f"{LOGGER_NAME}.bookings")
 
 
-# Shared with guest_service.py so the guest-operator role set is defined once.
-GUEST_OPERATION_ROLES = {
-    "TENANT_ADMIN",
-    "FACILITATOR",
-    "FRONT_OFFICE",
-}
+# Shared with guest_service.py so the guest-operator role set is defined
+# once -- see backend.core.authorization for why FRONT_OFFICE isn't in
+# this set (their only confirmed access is check-in/check-out, handled
+# separately).
+GUEST_OPERATION_ROLES = GUEST_OPERATOR_ROLES
+ADMIN_SEAT_ACCESS_ROLES = {"PRODUCT_ADMIN", "TENANT_ADMIN"}
 
 def _can_book_guest(current_user: dict[str, Any]) -> bool:
     return _user_role(current_user) in GUEST_OPERATION_ROLES
 
-def _current_user_id(current_user: dict[str, Any]) -> str:
-    return str(current_user.get("user_id") or current_user.get("id") or "")
+
+def _can_use_non_bookable_seat(current_user: dict[str, Any] | None) -> bool:
+    return current_user is not None and _user_role(current_user) in ADMIN_SEAT_ACCESS_ROLES
 
 
-def _user_role(user: dict[str, Any]) -> str:
-    return str(user.get("role_name") or user.get("role") or "").strip().upper()
+def _allowed_block_types(current_user: dict[str, Any] | None) -> tuple[str, ...]:
+    """Return block types the caller is permitted to book through."""
+    if current_user is None:
+        return ()
+    role = _user_role(current_user)
+    if role in ADMIN_SEAT_ACCESS_ROLES:
+        return ("Restricted", "Exclusive")
+    if role == "FACILITATOR":
+        return ("Restricted",)
+    return ()
+
+
+def _raise_blocked_seat_conflict() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "booking_seat_blocked",
+            "message": "The requested seat is blocked for your role during the requested date range.",
+        },
+    )
 
 
 def _can_book_for_user(
@@ -118,30 +151,31 @@ def _can_book_for_user(
     current_user: dict[str, Any],
     booking_user: dict[str, Any],
 ) -> bool:
-    current_user_id = _current_user_id(current_user)
-
-    if current_user_id == str(booking_user["user_id"]):
-        return True
-
-    role = _user_role(current_user)
-    if role in {"TENANT_ADMIN", "FACILITATOR"}:
-        return True
-
-    return (
-        role == "MANAGER"
-        and str(booking_user.get("manager_user_id") or "") == current_user_id
+    """Creating a *new* booking for booking_user -- role-based, not an
+    ownership check (there's no prior resource yet). Confirmed in
+    Rules.md: TENANT_ADMIN/FACILITATOR may originate one for someone
+    else; MANAGER is dormant (0 users hold it) and carries no authority
+    here -- left out deliberately, not an oversight."""
+    return can_create_for_user(
+        current_user,
+        subject_user_id=booking_user["user_id"],
     )
 
 
 def _can_manage_booking(
     *,
     current_user: dict[str, Any],
-    booking_user: dict[str, Any],
+    booked_by_user_id: Any,
+    booked_for_user_id: Any,
 ) -> bool:
-    """Return whether current user can mutate target user's bookings."""
-    return _can_book_for_user(
-        current_user=current_user,
-        booking_user=booking_user,
+    """EASY RULE for an *existing* booking: creator, subject, or
+    TENANT_ADMIN. No blanket facilitator/front-office access -- rights
+    here come only from actually being this booking's creator or subject.
+    """
+    return can_manage_resource(
+        current_user,
+        created_by_user_id=booked_by_user_id,
+        subject_user_id=booked_for_user_id,
     )
 
 
@@ -488,7 +522,7 @@ def book_seat(
                     "message": "Bookings can only be created for ACTIVE seats.",
                 },
             )
-        if seat.get("is_bookable") is not True:
+        if seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(current_user):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -529,6 +563,15 @@ def book_seat(
                     "message": "The requested seat already has an active booking for that day.",
                 },
             )
+        if seat_has_active_block_in_range(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+            start_date=payload.booking_date,
+            end_date=payload.booking_date,
+            allowed_block_types=_allowed_block_types(current_user),
+        ):
+            _raise_blocked_seat_conflict()
 
         booking = insert_booking(
             conn,
@@ -821,6 +864,8 @@ def get_available_seats(
             floor_id=floor_id,
             booking_date=booking_date,
             amenity_ids=normalized_amenity_ids,
+            allow_non_bookable=_can_use_non_bookable_seat(current_user),
+            allowed_block_types=_allowed_block_types(current_user),
         )
     except psycopg2.Error as exc:
         raise HTTPException(
@@ -920,7 +965,8 @@ def cancel_booking_by_id(
 
         if not _can_manage_booking(
             current_user=current_user,
-            booking_user=booking_user,
+            booked_by_user_id=booking.get("booked_by_user_id"),
+            booked_for_user_id=booked_for_user_id,
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -1133,7 +1179,8 @@ def modify_booking(
  
         if not _can_manage_booking(
             current_user=current_user,
-            booking_user=booking_user,
+            booked_by_user_id=booking.get("booked_by_user_id"),
+            booked_for_user_id=booked_for_user_id,
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -1183,7 +1230,7 @@ def modify_booking(
                 },
             )
  
-        if target_seat.get("is_bookable") is not True:
+        if target_seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(current_user):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -1225,6 +1272,15 @@ def modify_booking(
                     "message": "The requested seat already has an active booking.",
                 },
             )
+        if seat_has_active_block_in_range(
+            conn,
+            tenant_id=tenant_id,
+            seat_id=str(payload.seat_id),
+            start_date=payload.booking_date,
+            end_date=payload.booking_date,
+            allowed_block_types=_allowed_block_types(current_user),
+        ):
+            _raise_blocked_seat_conflict()
  
         mark_booking_modified(
             conn,
@@ -1247,13 +1303,15 @@ def modify_booking(
             # otherwise a booking a facilitator made for someone else silently
             # looks self-booked (and vanishes from the facilitator's delegated-
             # bookings views) the moment anyone else modifies it. Who actually
-            # performed this edit is already captured correctly on the
-            # superseded row via mark_booking_modified's updated_by_user_id,
-            # and in the audit log below.
+            # performed this edit is also recorded in the audit log below, and
+            # on this new row's own updated_by_user_id -- the admin bookings
+            # screen only ever shows the active (replacement) row, never the
+            # superseded one, so that's the row that needs the attribution.
             booked_by_user_id=str(booking["booked_by_user_id"]),
             seat=target_seat,
             booking_date=payload.booking_date,
             modified_from_booking_id=booking_id,
+            updated_by_user_id=_current_user_id(current_user),
         )
 
         conn.commit()
@@ -1395,42 +1453,34 @@ def get_available_seats_by_range(
     normalized_amenity_ids = sorted(set(amenity_ids or []))
 
     try:
+        # Reject unauthorized guest-availability probes before performing
+        # any location lookups. Besides avoiding unnecessary database work,
+        # this prevents callers from inferring whether a floor exists.
+        if (
+            not calendar_mode
+            and is_guest_booking
+            and (current_user is None or not _can_book_guest(current_user))
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "guest_booking_not_allowed",
+                    "message": (
+                        "Only FACILITATOR and Tenant Admin users "
+                        "can check guest booking availability."
+                    ),
+                },
+            )
+
         # fetch_available_seats_by_range's own query INNER JOINs floors/
         # buildings/sites on status = 'ACTIVE', so an inactive office
         # silently comes back as zero seats — indistinguishable from "no
         # availability for these dates" (the check just below). Checking the
         # site's status explicitly here gives that case its own accurate
         # message instead of the generic "no seats available" one.
-        floor = fetch_floor_by_id(conn, tenant_id=tenant_id, floor_id=floor_id)
-        if floor and floor.get("site_id"):
-            site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=floor["site_id"])
-            if site and site.get("status") != "ACTIVE":
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail={
-                        "code": "office_inactive",
-                        "message": (
-                            "This office is currently inactive and unavailable "
-                            "for booking. Please select a different office."
-                        ),
-                    },
-                )
-
         # calendar_mode: caller only wants raw seat status (no booking-eligibility checks)
         if not calendar_mode:
             if is_guest_booking:
-                if current_user is None or not _can_book_guest(current_user):
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail={
-                            "code": "guest_booking_not_allowed",
-                            "message": (
-                                "Only FACILITATOR and Tenant Admin users "
-                                "can check guest booking availability."
-                            ),
-                        },
-                    )
-
                 if booked_for_guest_id is None:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
@@ -1496,6 +1546,25 @@ def get_available_seats_by_range(
                         "The booking owner already has an active booking in the requested date range.",
                     )
 
+        # The availability query joins only ACTIVE locations, so explicitly
+        # distinguish an inactive office from a floor with no free seats.
+        # Eligibility checks run first to avoid leaking location state and
+        # to skip this lookup when the booking subject already conflicts.
+        floor = fetch_floor_by_id(conn, tenant_id=tenant_id, floor_id=floor_id)
+        if floor and floor.get("site_id"):
+            site = fetch_site_by_id(conn, tenant_id=tenant_id, site_id=floor["site_id"])
+            if site and site.get("status") != "ACTIVE":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "office_inactive",
+                        "message": (
+                            "This office is currently inactive and unavailable "
+                            "for booking. Please select a different office."
+                        ),
+                    },
+                )
+
         seats = fetch_available_seats_by_range(
                 conn,
                 tenant_id=tenant_id,
@@ -1503,6 +1572,8 @@ def get_available_seats_by_range(
                 start_date=start_date,
                 end_date=end_date,
                 amenity_ids=normalized_amenity_ids,
+                allow_non_bookable=_can_use_non_bookable_seat(current_user),
+                allowed_block_types=_allowed_block_types(current_user),
                 exclude_booking_id=exclude_booking_id,
             )
 
@@ -1656,7 +1727,7 @@ def book_guest_seat(
                 },
             )
 
-        if seat.get("is_bookable") is not True:
+        if seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(current_user):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -2010,7 +2081,7 @@ payload: BookingEligibilityRequest,
                     "message": "Bookings can only be created for ACTIVE seats.",
                 },
             )
-        if seat.get("is_bookable") is not True:
+        if seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(current_user):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -2024,14 +2095,9 @@ payload: BookingEligibilityRequest,
             seat_id=str(payload.seat_id),
             start_date=payload.start_date,
             end_date=payload.end_date,
+            allowed_block_types=_allowed_block_types(current_user),
         ):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "code": "booking_seat_blocked",
-                    "message": "The requested seat is blocked during the requested date range.",
-                },
-            )
+            _raise_blocked_seat_conflict()
         if seat_has_active_booking_in_range(
             conn,
             tenant_id=tenant_id,
@@ -2054,6 +2120,26 @@ payload: BookingEligibilityRequest,
     )
 
 
+def _require_delegation_role(current_user: dict[str, Any]) -> None:
+    """Gate the /bookings/delegated/* views by the caller's CURRENT role,
+    not by whether rows with their user_id as creator happen to exist.
+
+    These views are purely row-based (WHERE booked_by_user_id = caller) --
+    with no role check at all, someone who USED to be a FACILITATOR/
+    TENANT_ADMIN and got demoted to EMPLOYEE would still see every
+    booking/guest-visit they created while they held that access, forever,
+    since those rows don't disappear on demotion. Only a current
+    TENANT_ADMIN/FACILITATOR should be able to see this view at all."""
+    if _user_role(current_user) not in CAN_CREATE_FOR_OTHERS_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "delegation_view_not_allowed",
+                "message": "Only a TENANT_ADMIN or FACILITATOR can view delegated bookings.",
+            },
+        )
+
+
 def get_delegated_future_bookings(
     conn: PGConnection,
     *,
@@ -2063,6 +2149,7 @@ def get_delegated_future_bookings(
     seat_id: str | None = None,
     booking_date: date | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
+    _require_delegation_role(current_user)
 
     bookings = fetch_future_delegated_bookings(
         conn,
@@ -2105,6 +2192,7 @@ def get_delegated_current_bookings(
     seat_id: str | None = None,
     booking_date: date | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
+    _require_delegation_role(current_user)
 
     bookings = fetch_current_delegated_bookings(
         conn,
@@ -2147,6 +2235,7 @@ def get_delegated_past_bookings(
     seat_id: str | None = None,
     booking_date: date | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
+    _require_delegation_role(current_user)
 
     bookings = fetch_past_delegated_bookings(
         conn,
@@ -2188,6 +2277,7 @@ def get_delegated_cancelled_bookings(
     seat_id: str | None = None,
     booking_date: date | None = None,
 ) -> list[BookingResponse] | PaginatedBookingResponse:
+    _require_delegation_role(current_user)
 
     bookings = fetch_cancelled_delegated_bookings(
         conn,
@@ -2219,6 +2309,22 @@ def get_delegated_cancelled_bookings(
     )
 
     return _booking_list_response(combined, page=page, limit=limit)
+
+
+def get_admin_person_suggestions(
+    conn: PGConnection, *, tenant_id: str, text: str, booking_type: str, limit: int
+) -> list[dict[str, Any]]:
+    """Search-as-you-type names/emails for the admin bookings person filter."""
+    return fetch_admin_booking_person_suggestions(
+        conn, tenant_id=tenant_id, text=text, booking_type=booking_type, limit=limit
+    )
+
+
+def get_admin_seat_suggestions(
+    conn: PGConnection, *, tenant_id: str, text: str, limit: int
+) -> list[dict[str, Any]]:
+    """Search-as-you-type seat codes for the admin bookings space filter."""
+    return fetch_admin_booking_seat_suggestions(conn, tenant_id=tenant_id, text=text, limit=limit)
 
 
 def get_admin_bookings(
@@ -2277,13 +2383,13 @@ def get_admin_bookings(
         summary = fetch_admin_bookings_summary(conn, **filters)
 
         guest_visits: list[dict[str, Any]] = []
-        # A guest visit without a booking can never have a seat_code, a
-        # booking_status (it has no bookings row at all), and is never an
-        # EMPLOYEE booking_type, so skip the query for those filters.
+        # A guest Visit Only row cannot have a seat_code or be an EMPLOYEE.
+        # It normally has no booking status, except that a cancelled seat
+        # booking is displayed as MODIFIED on the remaining guest visit.
         if (
             filters["booking_type"] != "EMPLOYEE"
             and filters["seat_code"] is None
-            and filters["booking_status"] is None
+            and filters["booking_status"] in (None, "MODIFIED")
         ):
             guest_visits = fetch_admin_guest_visits_without_booking(
                 conn,
@@ -2294,6 +2400,7 @@ def get_admin_bookings(
                 building_id=filters["building_id"],
                 floor_id=filters["floor_id"],
                 visit_status=filters["visit_status"],
+                booking_status=filters["booking_status"],
                 search=filters["search"],
                 booked_by_user_id=filters["booked_by_user_id"],
             )

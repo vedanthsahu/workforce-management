@@ -259,6 +259,7 @@ export async function getAvailableAmenities(): Promise<ApiAmenity[]> {
 
 export async function getSites(): Promise<ApiSite[]> {
   try {
+    // Every office, active or not -- the dialog marks inactive ones with a pill.
     const { data } = await axiosInstance.get<ApiSite[]>("/sites?page=1&limit=200");
     return data ?? [];
   } catch {

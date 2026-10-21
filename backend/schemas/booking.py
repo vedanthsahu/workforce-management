@@ -271,6 +271,16 @@ class AdminBookingListQuery(BaseModel):
     booked_by_user_id: int | None = Field(default=None, gt=0)
 
 
+class AdminPersonSuggestion(BaseModel):
+    name: str | None = None
+    email: str | None = None
+
+
+class AdminSeatSuggestion(BaseModel):
+    seat_code: str
+    seat_type: str | None = None
+
+
 class AdminBookingSummary(BaseModel):
     """Aggregate counts over the filtered (not paginated) admin booking dataset."""
 

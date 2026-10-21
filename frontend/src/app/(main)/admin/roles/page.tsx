@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import RolesTable from "@/features/roles/components/RolesTable";
 import RoleDetailModal from "@/features/roles/components/RoleDetailModal";
 import { useRoles } from "@/features/roles/hooks/useRoles";
@@ -47,22 +47,27 @@ export default function RoleManagementPage() {
               {totalRoles}
             </span>
           </h2>
-          <div className="w-full sm:w-auto">
+          <div className="relative w-full sm:w-56">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search roles..."
-              className="h-9 w-full sm:w-56 px-3 text-sm border rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              placeholder="Search by role name..."
+              className="h-9 w-full pl-9 pr-3 text-sm border rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             />
           </div>
         </div>
 
         <div className="w-full overflow-x-auto">
-          {loading ? (
-            <div className="p-6 text-sm text-gray-500">Loading...</div>
-          ) : (
-            <RolesTable roles={roles} onViewRole={setSelectedRole} activeRoleKey={null} />
-          )}
+          {/* Always render the table so the column header stays visible
+              while loading and when a search matches nothing. */}
+          <RolesTable
+            roles={roles}
+            onViewRole={setSelectedRole}
+            activeRoleKey={null}
+            loading={loading}
+            emptyMessage={search.trim() ? `No roles match "${search.trim()}".` : "No roles found."}
+          />
         </div>
 
         <div className="px-4 sm:px-6 py-3 border-t shrink-0 text-xs sm:text-sm text-gray-500">

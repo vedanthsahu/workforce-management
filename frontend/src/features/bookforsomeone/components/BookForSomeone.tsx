@@ -229,8 +229,8 @@ export function EmployeeSearch({ placeholder, selectedEmployee, onSelect, onClea
             fontFamily: "inherit",
             cursor: selectedEmployee ? "default" : "text",
           }}
-          onFocusCapture={(e) => { e.currentTarget.style.borderColor = "#4f46e5"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(79,70,229,0.1)"; }}
-          onBlurCapture={(e) => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.boxShadow = "none"; }}
+          onFocusCapture={fieldFocusRing}
+          onBlurCapture={fieldBlurRing}
           aria-label={placeholder}
           role="combobox"
           aria-expanded={isOpen}
@@ -335,8 +335,8 @@ export function BookingTypeSelector({ selected, onChange, disabledType }: Bookin
   const { can } = usePermissions();
 
   const options = [
-    { type: "internal" as BookingType, label: "Internal Employee", sub: "Book a seat for an employee in your organization", Icon: IconUser },
-    { type: "visitor" as BookingType, label: "Visitor / Guest", sub: "Book a seat for a visitor or guest", Icon: IconBadge },
+    { type: "internal" as BookingType, label: "Internal Employee", sub: "Book a space for an employee in your organization", Icon: IconUser },
+    { type: "visitor" as BookingType, label: "Visitor / Guest", sub: "Book a space for a visitor or guest", Icon: IconBadge },
   ].filter(({ type }) =>
     type === "internal" ? can("booking:book_for_employee") : can("booking:book_for_guest")
   );
@@ -412,7 +412,7 @@ export function InternalEmployeeForm({ selectedEmployee, onSelect, onClear, excl
     <div>
       <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Employee Details</h2>
       <p style={{ fontSize: "0.8125rem", color: "#6b7280", marginTop: 4, marginBottom: "1.25rem" }}>
-        Search and select the employee for whom you want to book a seat.
+        Search and select the employee for whom you want to book a space.
       </p>
 
       {/* Search */}
@@ -496,15 +496,28 @@ export function inputStyle(focused?: boolean): React.CSSProperties {
     width: "100%",
     height: 40,
     padding: "0 0.75rem",
-    border: `1.5px solid ${focused ? "#4f46e5" : "#e5e7eb"}`,
+    border: `1.5px solid ${focused ? "#3b82f6" : "#e5e7eb"}`,
     borderRadius: 8,
     fontSize: "0.875rem",
     color: "#111827",
     outline: "none",
     background: "#fff",
     fontFamily: "inherit",
-    boxShadow: focused ? "0 0 0 3px rgba(79,70,229,0.1)" : "none",
+    boxShadow: focused ? "0 0 0 3px rgba(59,130,246,0.1)" : "none",
   };
+}
+
+// Shared focus/blur highlight for search + dropdown fields in this wizard --
+// matches the app-wide focus:ring-2 focus:ring-blue-500 convention, applied
+// here via direct style mutation since these fields use inline styles rather
+// than Tailwind classes.
+export function fieldFocusRing(e: React.FocusEvent<HTMLElement>) {
+  e.currentTarget.style.borderColor = "#3b82f6";
+  e.currentTarget.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.1)";
+}
+export function fieldBlurRing(e: React.FocusEvent<HTMLElement>) {
+  e.currentTarget.style.borderColor = "#e5e7eb";
+  e.currentTarget.style.boxShadow = "none";
 }
 
 export function FieldLabel({ children, htmlFor, required }: { children: React.ReactNode; htmlFor?: string; required?: boolean }) {
@@ -526,7 +539,7 @@ interface FormFooterProps {
   infoText?: string;
 }
 
-export function FormFooter({ onSubmit, onBack, submitLabel = "Book a Seat", submitDisabled, infoText }: FormFooterProps) {
+export function FormFooter({ onSubmit, onBack, submitLabel = "Book a Space", submitDisabled, infoText }: FormFooterProps) {
   return (
     <div style={{ marginTop: "2rem" }}>
       {/* Info banner */}

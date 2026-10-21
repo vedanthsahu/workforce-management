@@ -218,7 +218,16 @@ class AdminManagementRepositoryTests(unittest.TestCase):
 
         combined_sql = " ".join(sql for sql, _ in cursor.executions)
         self.assertIn("assigned_seat_count", combined_sql)
-        self.assertIn("COUNT(DISTINCT sa.amenity_id)", combined_sql)
+        self.assertIn("FROM seat_amenities AS sa", combined_sql)
+        self.assertIn("INNER JOIN seats AS s", combined_sql)
+        self.assertIn("fl.is_published = TRUE", combined_sql)
+        self.assertIn("fl.status = 'PUBLISHED'", combined_sql)
+        # GROUP BY amenity_id (computed once for the whole tenant) joined
+        # back by id, rather than a LATERAL correlated subquery re-run once
+        # per amenity row -- same published-seats-only scoping, one pass
+        # over seat_amenities instead of N.
+        self.assertIn("GROUP BY sa.amenity_id", combined_sql)
+        self.assertIn("assignments.amenity_id = a.id", combined_sql)
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["active_amenities"], 1)
         self.assertEqual(result["items"][0]["assigned_seat_count"], 3)
@@ -279,7 +288,19 @@ class SearchUsersRepositoryTests(unittest.TestCase):
         sql, params = cursor.executions[0]
         self.assertIn("au.tenant_id = %s", sql)
         self.assertIn("LIKE '%% ' || %s || '%%'", sql)
-        self.assertEqual(params, ("1", "vedanth sahu", "vedanth sahu", "vedanth sahu", "vedanth sahu", 20))
+        self.assertIn("WHERE w.word LIKE %s || '%%'", sql)
+        self.assertEqual(
+            params,
+            (
+                "1",
+                "vedanth sahu",
+                "vedanth sahu",
+                "vedanth sahu",
+                "vedanth sahu",
+                "vedanth sahu",
+                20,
+            ),
+        )
 
     def test_search_wildcards_are_literal(self) -> None:
         cursor = FakeCursor(fetchall_values=[[]])

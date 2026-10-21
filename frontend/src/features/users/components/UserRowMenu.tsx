@@ -89,7 +89,7 @@ export default function UserRowMenu({ onChangeRole, openUpward = false, disabled
         ref={buttonRef}
         type="button"
         onClick={() => (open ? setOpen(false) : openMenu())}
-        className="inline-flex items-center justify-center w-8 h-8 rounded-md border hover:bg-gray-50 text-gray-500 transition-colors"
+        className="inline-flex items-center justify-center w-8 h-8 rounded-md border hover:bg-gray-50 text-gray-500 transition-colors cursor-pointer"
         title="Row actions"
       >
         <MoreVertical size={14} />
@@ -108,7 +108,7 @@ export default function UserRowMenu({ onChangeRole, openUpward = false, disabled
                 setOpen(false);
                 onChangeRole();
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
             >
               <ShieldEllipsis size={14} />
               Change Role

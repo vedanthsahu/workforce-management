@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -380,7 +380,7 @@ def _resolve_employee_max_advance_days(conn: PGConnection, *, tenant_id: str) ->
 
 def _site_local_today(tz_name: str | None) -> date:
     if not tz_name:
-        return datetime.now().date()
+        return datetime.now(UTC).date()
     return datetime.now(ZoneInfo(tz_name)).date()
 
 
@@ -390,7 +390,7 @@ def _effective_instant_for_date(effective_date: date, tz_name: str | None) -> da
     floor, not midnight UTC."""
     naive_midnight = datetime.combine(effective_date, time.min)
     if not tz_name:
-        return naive_midnight.replace(tzinfo=ZoneInfo("UTC"))
+        return naive_midnight.replace(tzinfo=UTC)
     return naive_midnight.replace(tzinfo=ZoneInfo(tz_name))
 
 
@@ -563,17 +563,27 @@ def reschedule_floor_layout(
         floor_id = str(layout["floor_id"])
         tz_name = fetch_site_timezone(conn, tenant_id=tenant_id, site_id=str(layout["site_id"]))
         site_today = _site_local_today(tz_name)
-        min_advance_days = _resolve_admin_min_advance_days(conn, tenant_id=tenant_id)
+        # Deliberately the employee window alone, NOT the full admin
+        # min_advance_days (window + buffer) a *new* schedule requires. The
+        # buffer exists to give a brand-new layout operational lead time
+        # (prep, communication) before it goes live -- but this layout's
+        # seats are already materialized (see _schedule_floor_layout), so
+        # there's nothing left to prepare. Only the booking-conflict floor
+        # (no user booking can land on a layout about to be replaced) is
+        # still load-bearing once a layout is already scheduled.
+        employee_max_advance_days = _resolve_employee_max_advance_days(
+            conn, tenant_id=tenant_id,
+        )
 
-        if effective_date < site_today + timedelta(days=min_advance_days):
+        if effective_date < site_today + timedelta(days=employee_max_advance_days):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
                     "code": "effective_date_too_soon",
                     "message": (
-                        f"Effective date must be at least {min_advance_days} days out, "
-                        "so no user booking can ever land on a layout that's about to "
-                        "be replaced."
+                        f"Effective date must be at least {employee_max_advance_days} "
+                        "days out, so no user booking can ever land on a layout "
+                        "that's about to be replaced."
                     ),
                 },
             )
@@ -598,13 +608,10 @@ def reschedule_floor_layout(
             )
 
         current_effective_from = layout["effective_from"]
-        employee_max_advance_days = _resolve_employee_max_advance_days(
-            conn, tenant_id=tenant_id,
-        )
         danger_window_start = current_effective_from - timedelta(
             days=employee_max_advance_days,
         )
-        if datetime.now(timezone.utc) >= danger_window_start:
+        if datetime.now(UTC) >= danger_window_start:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
@@ -710,8 +717,12 @@ def activate_floor_layout(
     effective_date: date | None = None,
 ) -> FloorLayoutResponse:
     """Publish one layout and archive any currently active layout on the
-    floor -- or, if `effective_date` is a future date, schedule it to take
-    over automatically once that date arrives instead of publishing now."""
+    floor -- or, if `effective_date` is a future date AND the floor already
+    has a published layout to protect, schedule it to take over
+    automatically once that date arrives instead of publishing now. A
+    floor with zero published layouts always publishes immediately,
+    regardless of effective_date -- see the floor_has_published_layout
+    check below."""
     tenant_id = str(current_user["tenant_id"])
     user_id = str(current_user["user_id"])
     failure_audit_action = FLOOR_LAYOUT_PUBLISHED
@@ -748,6 +759,30 @@ def activate_floor_layout(
             return FloorLayoutResponse(**layout)
 
         if effective_date is not None:
+            # The whole point of scheduling (a min-advance-days buffer
+            # before cutover) is protecting bookings a user could already
+            # have made against the floor's CURRENT published layout -- a
+            # layout that's about to be silently replaced out from under
+            # them. A floor with zero published layouts has nothing live to
+            # protect: no seat on it has ever been bookable, so no booking
+            # could possibly reference one. There's also no way to
+            # "unpublish" a layout once it's live (only a site can be
+            # deactivated), so this is the one moment a layout can safely
+            # skip the buffer entirely. Publish immediately regardless of
+            # whatever effective_date was passed -- this is a brand-new
+            # location, not a replacement. Only checked here (not
+            # unconditionally above) since it's irrelevant, and an
+            # avoidable DB call, whenever effective_date wasn't even given.
+            floor_has_published_layout = (
+                fetch_published_layout_for_floor(
+                    conn, tenant_id=tenant_id, floor_id=str(layout["floor_id"]),
+                )
+                is not None
+            )
+        else:
+            floor_has_published_layout = False
+
+        if effective_date is not None and floor_has_published_layout:
             tz_name = fetch_site_timezone(
                 conn, tenant_id=tenant_id, site_id=str(layout["site_id"]),
             )
@@ -788,7 +823,7 @@ def activate_floor_layout(
             # cycle (or the NULL every layout starts with). Without this,
             # date-aware reads (fl.effective_from <= booking_date) exclude
             # the row forever, since NULL <= anything is never true.
-            effective_from=datetime.now(timezone.utc),
+            effective_from=datetime.now(UTC),
         )
 
         publish_layout_seat_configurations(
@@ -1060,7 +1095,7 @@ def delete_floor_layout(
             danger_window_start = layout["effective_from"] - timedelta(
                 days=employee_max_advance_days,
             )
-            if datetime.now(timezone.utc) >= danger_window_start:
+            if datetime.now(UTC) >= danger_window_start:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail={

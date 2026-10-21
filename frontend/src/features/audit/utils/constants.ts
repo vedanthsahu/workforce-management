@@ -6,7 +6,7 @@ import { AuditEventStatus, AuditRequestMethod } from "../types/audit.types";
 // browser-native one so it matches the custom dropdowns (Entity/Action)
 // sitting next to it in the same filter row.
 export const AUDIT_SELECT_BASE_CLASS =
-  "h-10 pl-3 pr-8 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors cursor-pointer w-full";
+  "h-10 pl-3 pr-8 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer w-full";
 
 export const AUDIT_SELECT_ARROW_STYLE: CSSProperties = {
   backgroundImage:

@@ -54,7 +54,7 @@ export const ADMIN_BOOKINGS_EXPECT_RETURN_KEY = "adminBookings:expectReturn";
 
 // ─── Shared native-<select> styling (BookingManagementFilters) ────────────────
 export const SELECT_BASE_CLASS =
-  "h-10 pr-8 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors cursor-pointer w-full";
+  "h-10 pr-8 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer w-full";
 
 export const SELECT_ARROW_STYLE: CSSProperties = {
   backgroundImage:

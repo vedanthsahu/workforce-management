@@ -32,10 +32,12 @@ export const STAT_CARDS_CONFIG = [
     iconBg: "bg-amber-50",
     iconColor: "text-amber-500",
     viewAllColor: "text-amber-600 hover:text-amber-800",
+    // Backend overdue count is still a hardcoded placeholder.
+    comingSoon: true,
   },
   {
     key: "cancelled" as const,
-    label: "Cancelled / No Show",
+    label: "Cancelled",
     sublabel: "Today",
     icon: XCircle,
     accentBar: "bg-red-400",
@@ -52,7 +54,7 @@ export const VISITOR_TABLE_HEADERS = [
   "Host",
   "Visit Time",
   "Location",
-  "Seat Booked",
+  "Space Booked",
   "Status",
   "Actions",
 ];

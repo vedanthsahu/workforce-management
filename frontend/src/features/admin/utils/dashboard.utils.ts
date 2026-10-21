@@ -1,4 +1,5 @@
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import type {
   AdminActivityItem,
   OccupancyHierarchyItem,
@@ -123,7 +124,11 @@ export function mapHierarchyToTopOffices(items: OccupancyHierarchyItem[]): TopOf
       bookedSeats: item.bookedSeats,
       employeeBookedSeats: item.employeeBookedSeats,
       guestBookedSeats: item.guestBookedSeats,
-      totalSeats: item.totalSeats,
+      // availableSeats (active seats, minus any currently-blocked ones), not
+      // the raw totalSeats -- occupancyRate above is itself booked/available,
+      // so the "X out of Y" shown alongside it must use the same denominator
+      // or the two numbers won't agree.
+      totalSeats: item.availableSeats,
     }))
     .sort((a, b) => b.value - a.value);
 }
@@ -162,7 +167,7 @@ export function mapActivitiesToRecent(items: AdminActivityItem[]): RecentBooking
       name: item.bookedFor.name,
       email: item.bookedFor.email,
       office: item.site?.siteName ?? "",
-      seat: item.hasBooking ? item.seat?.seatCode ?? "—" : "Only Visit",
+      seat: item.hasBooking ? displaySpaceCode(item.seat?.seatCode) ?? "—" : "Only Visit",
       date: new Date(item.activityDate).toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
@@ -226,9 +231,10 @@ export const TREND_PERIOD_OPTIONS: { value: TrendPeriod; label: string }[] = [
 ];
 
 export const DONUT_META: Record<string, { label: string; color: string }> = {
-  booked: { label: "Reserved seats", color: "#4F46E5" },
-  blocked: { label: "Blocked seats", color: "#F59E0B" },
-  available: { label: "Available seats", color: "#10B981" },
+  booked: { label: "Reserved spaces", color: "#4F46E5" },
+  blocked: { label: "Blocked spaces", color: "#F59E0B" },
+  nonBookable: { label: "Non-bookable spaces", color: "#94A3B8" },
+  available: { label: "Available spaces", color: "#10B981" },
 };
 
 export const TOP_OFFICES_PER_PAGE = 5;

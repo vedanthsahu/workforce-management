@@ -1,9 +1,11 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Eye, MoreVertical, Pencil, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
+import { todayIsoInIndia } from "@/lib/indiaDate";
 import { AdminBooking } from "../types/adminBooking.types";
 import { BOOKING_STATUS_STYLES } from "../utils/constants";
 import { getBookingRowKey } from "../utils/mapAdminBooking";
@@ -48,7 +50,7 @@ function RowMenu({
   const isGuest = booking.person_type === "Guest";
   const hasVisit = isGuest && !!booking.guest_visit_id;
   const hasBooking = !!booking.booking_id;
-  const canMutate = booking.status !== "Cancelled" && booking.activity_date > new Date().toISOString().slice(0, 10);
+  const canMutate = booking.status !== "Cancelled" && booking.activity_date > todayIsoInIndia();
   const hasBothActions = canMutate && hasVisit && hasBooking;
 
   const openMenu = () => {
@@ -207,6 +209,8 @@ function PersonCell({ booking }: { booking: AdminBooking }) {
   );
 }
 
+const BOOKING_COLUMN_COUNT = 9;
+
 export default function BookingsTable({
   data,
   dateSort,
@@ -218,17 +222,13 @@ export default function BookingsTable({
   onCancelSeat,
   onCancelVisit,
 }: Props) {
-  if (data.length === 0) {
-    return <p className="px-6 py-12 text-center text-gray-400 text-sm">No bookings found.</p>;
-  }
-
   return (
     <div className="w-full overflow-x-auto">
       <table className="w-full text-xs" style={{ minWidth: "980px" }}>
         <thead className="text-xs text-blue-600 bg-blue-100 border-b sticky top-0 z-10">
           <tr>
             <th className="pl-11 pr-2 py-3 text-left font-bold max-w-45">Employee / Guest</th>
-            <th className="pl-8 pr-3 py-3 text-left font-bold">Seat</th>
+            <th className="pl-8 pr-3 py-3 text-left font-bold">Space</th>
             <th className="pl-3 pr-3 py-3 text-left font-bold">Office</th>
             <th className="pl-3 pr-1 py-3 text-left font-bold">Building</th>
             <th className="pl-5 pr-1 py-3 text-left font-bold">Floor</th>
@@ -249,6 +249,13 @@ export default function BookingsTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
+          {data.length === 0 && (
+            <tr>
+              <td colSpan={BOOKING_COLUMN_COUNT} className="py-16 text-center text-sm text-gray-400">
+                No bookings found.
+              </td>
+            </tr>
+          )}
           {data.map((booking) => {
             const rowKey = getBookingRowKey(booking);
             const isSelected = rowKey === selectedRowKey;
@@ -260,7 +267,7 @@ export default function BookingsTable({
                 <td className="pl-1 pr-3 py-3">
                   {booking.seat_code ? (
                     <>
-                      <p className="text-gray-900 font-medium">{booking.seat_code}</p>
+                      <p className="text-gray-900 font-medium">{displaySpaceCode(booking.seat_code)}</p>
                       <p className="text-[11px] text-gray-400">{booking.seat_type}</p>
                     </>
                   ) : (

@@ -1,6 +1,4 @@
-import { SeatStatus, SeatType } from "../types/seat.types";
-
-export const SEAT_TYPES: SeatType[] = ["STANDARD", "WINDOW", "CABIN", "ACCESSIBLE", "HOT_DESK"];
+import { SeatStatus } from "../types/seat.types";
 
 export const SEAT_STATUSES: SeatStatus[] = ["ACTIVE", "INACTIVE"];
 

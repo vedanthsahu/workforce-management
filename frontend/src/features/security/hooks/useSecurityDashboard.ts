@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import { securityService } from "../services/security.service";
 import { mapApiGuestVisitToVisitor, mapApiSummary } from "../utils/security.utils";
-import { useDebouncedValue } from "./Usedebouncedvalue";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import type { SecurityDashboardSummary, Site, Visitor } from "../types/security.types";
 
 const PAGE_SIZE = 10;
@@ -55,9 +55,11 @@ export const useSecurityDashboard = () => {
   }, [sites, selectedSiteId, user, authLoading]);
 
   // ── Guest visits: one call → both summary + items ────────────────────────
-  const fetchGuestVisits = useCallback(async () => {
+  // `silent` keeps the current rows on screen (no skeleton) — used after a
+  // check-in/out so only the affected row and the stat cards update.
+  const fetchGuestVisits = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
 
       const res = await securityService.getGuestVisits({
@@ -74,9 +76,14 @@ export const useSecurityDashboard = () => {
       console.error("Error fetching guest visits", err);
       setError("Failed to load dashboard data");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [selectedSiteId, debouncedSearch]);
+
+  const refreshInBackground = useCallback(
+    () => fetchGuestVisits({ silent: true }),
+    [fetchGuestVisits]
+  );
 
   // Wait for the site list to resolve (and auto-select) before fetching, so
   // this never briefly fetches an unscoped "all sites" result first.
@@ -117,6 +124,6 @@ export const useSecurityDashboard = () => {
     setSearch,
     loading,
     error,
-    refetch: fetchGuestVisits,
+    refetch: refreshInBackground,
   };
 };

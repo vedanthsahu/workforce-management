@@ -462,7 +462,9 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
               </Label>
               <Input
                 value={formData.layoutName}
-                onChange={(e) => setFormData((prev) => ({ ...prev, layoutName: e.target.value }))}
+                readOnly
+                aria-readonly="true"
+                className="bg-gray-50 text-gray-700 cursor-not-allowed"
                 placeholder="Auto-generated after floor selection"
               />
             </div>

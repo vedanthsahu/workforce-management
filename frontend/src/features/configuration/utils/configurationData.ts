@@ -6,6 +6,7 @@ import {
   FileText,
   Archive,
   Trash2,
+  Ban,
 } from "lucide-react";
 import type {
   ConfigurationField,
@@ -32,18 +33,18 @@ function getField(fields: ConfigurationField[], key: string): number {
 export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
   {
     id: "activity-table-record-count",
-    name: "Activity Table Record Count",
-    description: "Configure the default number of records to display in activity tables.",
+    name: "Recent Activity Table Record Count",
+    description: "Configure the number of records shown in the admin dashboard's Recent Activities table.",
     icon: ListChecks,
     iconBg: "bg-indigo-100",
     iconColor: "text-indigo-600",
     fields: [
-      field("records", "Record Count", "Record Count", 50, "records", "Number of rows shown per page in activity/recent-activity tables."),
+      field("records", "Record Count", "Record Count", 20, "records", "Number of most recent records shown in the admin dashboard's Recent Activities table."),
     ],
     lastUpdatedAt: "2026-05-02T10:30:00Z",
     lastUpdatedBy: "Admin User",
     describeRule: (fields) =>
-      `Activity tables will show ${getField(fields, "records")} records per page by default.`,
+      `The Recent Activities table will show the ${getField(fields, "records")} most recent records.`,
   },
   {
     id: "new-layout-publishing",
@@ -162,37 +163,58 @@ export const INITIAL_CONFIGURATIONS: ConfigurationItem[] = [
     describeRule: (fields) =>
       `Draft layouts hide after ${getField(fields, "draftDays")} days, Archived after ${getField(fields, "archivedDays")} days, and Discarded after ${getField(fields, "discardedDays")} days of inactivity.`,
   },
+  {
+    id: "blocked-seat-policy",
+    name: "Blocked Seat Policy",
+    description: "Configure the Upcoming/Expiring Soon thresholds, how many previous days of expired records the UI should keep visible, and how far ahead a seat can be blocked.",
+    icon: Ban,
+    iconBg: "bg-rose-100",
+    iconColor: "text-rose-600",
+    // Real values currently enforced server-side -- see
+    // BLOCKED_SEAT_DAYS_KEYS / resolve_blocked_seat_days in
+    // backend/services/business_rule_service.py.
+    fields: [
+      field("upcomingDays", "Upcoming Threshold", "Upcoming", 1, "days", "A block is flagged Upcoming if it starts within this many days from today."),
+      field("expiringSoonDays", "Expiring Soon Threshold", "Expiring Soon", 3, "days", "A block is flagged Expiring Soon if it ends within this many days from today."),
+      field("expiredWindowDays", "Expired Record Window", "Expired Window", 10, "days", "The Expired tab only shows records from the previous N days, ending on today."),
+      field("maxAdvanceDays", "Maximum Block Window", "Block Window", 180, "days", "How many days ahead a seat can be blocked, when creating, modifying or re-blocking a block (1 to 730)."),
+    ],
+    lastUpdatedAt: "2026-05-02T10:30:00Z",
+    lastUpdatedBy: "Admin User",
+    describeRule: (fields) =>
+      `Blocks are flagged Upcoming within ${getField(fields, "upcomingDays")} day(s), Expiring Soon within ${getField(fields, "expiringSoonDays")} day(s), and the Expired tab keeps only the previous ${getField(fields, "expiredWindowDays")} day(s) of records. Blocks can be set up to ${getField(fields, "maxAdvanceDays")} day(s) ahead.`,
+  },
 ];
 
 export const CONFIGURATION_SECTIONS: ConfigurationSection[] = [
   {
     id: "activity",
-    title: "Activity",
-    subtitle: "Control the data displayed in the Activity table on the Admin Dashboard.",
+    title: "Recent Activity",
     itemIds: ["activity-table-record-count"],
   },
   {
     id: "layout-management",
     title: "Layout Management",
-    subtitle: "Configure layout related settings and publishing rules.",
     itemIds: ["new-layout-publishing"],
   },
   {
     id: "employee-booking",
     title: "Employee Booking",
-    subtitle: "Configure how far in advance employees can book.",
     itemIds: ["booking-calendar-employee"],
   },
   {
     id: "visitor-booking",
     title: "Visitor Booking",
-    subtitle: "Configure how far in advance hosts can book for guests.",
     itemIds: ["visitor-booking"],
   },
   {
     id: "layout-visibility",
     title: "Layout Visibility",
-    subtitle: "Configure how long layouts with different statuses remain available in the UI before being automatically hidden.",
     itemIds: ["layout-visibility"],
+  },
+  {
+    id: "blocked-seat",
+    title: "Blocked Seat",
+    itemIds: ["blocked-seat-policy"],
   },
 ];

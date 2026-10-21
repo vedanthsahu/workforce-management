@@ -8,13 +8,18 @@ type Props = {
   roles: Role[];
   onViewRole: (role: Role) => void;
   activeRoleKey?: string | null;
+  // The header row always renders; only the body swaps to skeleton rows
+  // while loading, or to `emptyMessage` when nothing matches.
+  loading?: boolean;
+  emptyMessage?: string;
 };
 
-export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) {
-  if (roles.length === 0) {
-    return <p className="px-6 py-12 text-center text-gray-400 text-sm">No roles found.</p>;
-  }
+const ROLE_COLUMN_COUNT = 5;
+const SKELETON_ROW_COUNT = 4;
 
+export default function RolesTable({
+  roles, onViewRole, activeRoleKey, loading = false, emptyMessage = "No roles found.",
+}: Props) {
   return (
     <>
       <style>{`
@@ -38,7 +43,23 @@ export default function RolesTable({ roles, onViewRole, activeRoleKey }: Props) 
             className="roles-tbody-scroll block w-full max-h-125 divide-y divide-gray-100 overflow-y-auto"
             style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
           >
-            {roles.map((role) => (
+            {loading && Array.from({ length: SKELETON_ROW_COUNT }, (_, i) => (
+              <tr key={`skeleton-${i}`} className="table w-full" style={{ tableLayout: "fixed" }}>
+                <td className="py-3 pl-10 px-4 w-[24%]"><div className="h-5 w-24 rounded-md bg-gray-100 animate-pulse" /></td>
+                <td className="py-3 px-4 w-[38%]"><div className="h-4 w-4/5 rounded bg-gray-100 animate-pulse" /></td>
+                <td className="py-3 px-1 w-[10%]"><div className="h-4 w-6 rounded bg-gray-100 animate-pulse" /></td>
+                <td className="py-3 pl-8 pr-4 w-[16%]"><div className="h-4 w-8 rounded bg-gray-100 animate-pulse" /></td>
+                <td className="py-3 px-4 w-[10%]"><div className="h-8 w-8 rounded-md bg-gray-100 animate-pulse" /></td>
+              </tr>
+            ))}
+            {!loading && roles.length === 0 && (
+              <tr className="table w-full" style={{ tableLayout: "fixed" }}>
+                <td colSpan={ROLE_COLUMN_COUNT} className="py-16 text-center text-sm text-gray-400">
+                  {emptyMessage}
+                </td>
+              </tr>
+            )}
+            {!loading && roles.map((role) => (
               <tr
                 key={role.roleId}
                 className={`table w-full transition-colors ${

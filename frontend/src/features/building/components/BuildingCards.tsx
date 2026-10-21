@@ -18,6 +18,7 @@ type StatProps = {
   value: string;
   sub: string;
   selected?: boolean;
+  disabled?: boolean;
   onClick?: () => void;
 };
 
@@ -30,10 +31,6 @@ export default function BuildingCards({
     return null;
   }
 
-  const toggle = (value: "ACTIVE" | "INACTIVE") => {
-    onStatusFilterChange?.(statusFilter === value ? null : value);
-  };
-
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       <Stat
@@ -42,7 +39,9 @@ export default function BuildingCards({
         label="Total Buildings"
         value={stats.total_buildings.toString()}
         sub="Across all offices"
-        onClick={onStatusFilterChange ? () => onStatusFilterChange(null) : undefined}
+        selected={statusFilter === null}
+        disabled={stats.total_buildings === 0}
+        onClick={onStatusFilterChange && stats.total_buildings > 0 ? () => onStatusFilterChange(null) : undefined}
       />
       <Stat
         icon={<CheckCircle className="text-green-600" />}
@@ -51,7 +50,8 @@ export default function BuildingCards({
         value={stats.active_buildings.toString()}
         sub="Currently active"
         selected={statusFilter === "ACTIVE"}
-        onClick={onStatusFilterChange ? () => toggle("ACTIVE") : undefined}
+        disabled={stats.active_buildings === 0}
+        onClick={onStatusFilterChange && stats.active_buildings > 0 ? () => onStatusFilterChange("ACTIVE") : undefined}
       />
       <Stat
         icon={<PauseCircle className="text-orange-600" />}
@@ -60,9 +60,10 @@ export default function BuildingCards({
         value={stats.inactive_buildings.toString()}
         sub="Currently inactive"
         selected={statusFilter === "INACTIVE"}
-        onClick={onStatusFilterChange ? () => toggle("INACTIVE") : undefined}
+        disabled={stats.inactive_buildings === 0}
+        onClick={onStatusFilterChange && stats.inactive_buildings > 0 ? () => onStatusFilterChange("INACTIVE") : undefined}
       />
-      <Stat icon={<Armchair className="text-purple-600" />} bg="bg-purple-100" label="Total Seats" value={stats.total_seats.toString()} sub="Across all buildings" />
+      <Stat icon={<Armchair className="text-purple-600" />} bg="bg-purple-100" label="Total Spaces" value={stats.active_seats.toString()} sub="Across all buildings" />
     </div>
   );
 }
@@ -74,14 +75,16 @@ function Stat({
   value,
   sub,
   selected,
+  disabled,
   onClick,
 }: StatProps) {
+  const clickable = !!onClick && !disabled;
   return (
     <div
-      onClick={onClick}
-      className={`group flex items-center gap-3 p-3 sm:p-5 bg-white border rounded-2xl shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-gray-300 ${
-        onClick ? "cursor-pointer" : ""
-      } ${selected ? "border-2 border-blue-500 ring-2 ring-blue-100 shadow-md" : ""}`}
+      onClick={clickable ? onClick : undefined}
+      className={`group flex items-center gap-3 p-3 sm:p-5 bg-white border rounded-2xl shadow-sm transition-all duration-200 ${
+        clickable ? "cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:border-gray-300" : disabled ? "cursor-not-allowed opacity-80" : ""
+      } ${selected ? "border-indigo-300 ring-1 ring-indigo-100" : ""}`}
     >
       <div className={`p-2 sm:p-3 rounded-xl shrink-0 transition-transform duration-200 group-hover:scale-110 ${bg}`}>{icon}</div>
       <div>

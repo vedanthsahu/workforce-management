@@ -1,9 +1,13 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
 import { getCountries, getCountryCallingCode, type Country } from "react-phone-number-input";
+import flags from "react-phone-number-input/flags";
+import { AsYouType, getExampleNumber } from "libphonenumber-js/mobile";
+import mobileExamples from "libphonenumber-js/examples.mobile.json";
 import {
   Avatar,
   EmployeeSearch,
@@ -14,13 +18,15 @@ import {
   IconEdit,
   IconSearch,
   inputStyle,
+  fieldFocusRing,
+  fieldBlurRing,
 } from "./BookForSomeone";
 import {
   GUEST_TYPES,
-  GUEST_VISIT_TOO_FAR_IN_ADVANCE_MESSAGE,
-  maxGuestVisitDateIso,
+  guestVisitTooFarInAdvanceMessage,
   PURPOSE_OF_VISIT,
 } from "../constants/booking.constants";
+import { maxDateIsoFromToday } from "@/features/configuration/hooks/useBookingPolicy";
 import { useGuestSearch } from "../hooks/useBooking";
 import { createGuestSchema, sanitizePhoneNumber } from "../schemas/guest.schema";
 import {
@@ -173,6 +179,12 @@ function countryLabel(country: Country) {
   return `${COUNTRY_NAMES.of(country) ?? country} (+${getCountryCallingCode(country)})`;
 }
 
+function mobileExample(country: Country) {
+  const example = getExampleNumber(country, mobileExamples);
+  if (!example) return "Enter mobile number";
+  return new AsYouType(country).input(example.nationalNumber);
+}
+
 function localPhoneValue(phone: string, country: Country) {
   const prefix = `+${getCountryCallingCode(country)}`;
   return phone.startsWith(prefix) ? phone.slice(prefix.length).trim() : phone.replace(/\D/g, "");
@@ -206,6 +218,7 @@ function PhoneField({
   onBlur: () => void;
 }) {
   const callingCode = getCountryCallingCode(country);
+  const SelectedCountryFlag = flags[country];
   const [isCountryMenuOpen, setIsCountryMenuOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
   const [hoveredCountry, setHoveredCountry] = useState<Country | null>(null);
@@ -249,7 +262,7 @@ function PhoneField({
     <div>
       <FieldLabel htmlFor={id} required={required}>Phone Number</FieldLabel>
       <div style={{ display: "flex", gap: 6 }}>
-        <div ref={countryMenuRef} style={{ position: "relative", width: 74, flexShrink: 0 }}>
+        <div ref={countryMenuRef} style={{ position: "relative", width: 96, flexShrink: 0 }}>
           <button
             type="button"
             aria-label={`Country calling code: ${countryLabel(country)}`}
@@ -261,8 +274,17 @@ function PhoneField({
             }}
             title={countryLabel(country)}
             style={{ ...inputStyle(), width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 7px", cursor: "pointer", background: "#fff" }}
+            onFocusCapture={fieldFocusRing}
+            onBlurCapture={fieldBlurRing}
           >
-            <span>+{callingCode}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {SelectedCountryFlag && (
+                <span style={{ width: 20, height: 14, display: "inline-flex", overflow: "hidden", borderRadius: 2 }}>
+                  <SelectedCountryFlag title={COUNTRY_NAMES.of(country) ?? country} />
+                </span>
+              )}
+              <span>+{callingCode}</span>
+            </span>
             <span style={{ fontSize: 10, color: "#6b7280" }}>⌄</span>
           </button>
           {isCountryMenuOpen && (
@@ -270,7 +292,7 @@ function PhoneField({
               role="listbox"
               aria-label="Country calling codes"
               className="country-code-menu-scroll"
-              style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, width: 180, maxHeight: 150, overflowY: "auto", zIndex: 30, background: "#fff", border: "1px solid #d1d5db", borderRadius: 6, boxShadow: "0 8px 18px rgba(15, 23, 42, 0.16)", scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
+              style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, width: 260, maxHeight: 190, overflowY: "auto", zIndex: 30, background: "#fff", border: "1px solid #d1d5db", borderRadius: 6, boxShadow: "0 8px 18px rgba(15, 23, 42, 0.16)", scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
             >
               <input
                 type="search"
@@ -280,28 +302,38 @@ function PhoneField({
                 value={countrySearch}
                 onChange={(event) => setCountrySearch(event.target.value)}
                 style={{ width: "calc(100% - 12px)", height: 30, margin: 6, padding: "0 8px", border: "1px solid #d1d5db", borderRadius: 4, outline: "none", fontSize: 12 }}
+                onFocusCapture={fieldFocusRing}
+                onBlurCapture={fieldBlurRing}
               />
               {visibleCountries.length === 0 ? (
                 <div style={{ padding: "8px 9px", color: "#6b7280", fontSize: 12 }}>No country found</div>
-              ) : visibleCountries.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  role="option"
-                  aria-selected={option === country}
-                  onMouseEnter={() => setHoveredCountry(option)}
-                  onMouseLeave={() => setHoveredCountry(null)}
-                  onClick={() => {
-                    onCountryChange(option);
-                    setIsCountryMenuOpen(false);
-                    setCountrySearch("");
-                    setHoveredCountry(null);
-                  }}
-                  style={{ display: "block", width: "100%", border: 0, background: hoveredCountry === option ? "#eef2ff" : option === country ? "#eef2ff" : "#fff", color: "#111827", padding: "6px 9px", textAlign: "left", fontSize: 12, cursor: "pointer" }}
-                >
-                  {countryLabel(option)}
-                </button>
-              ))}
+              ) : visibleCountries.map((option) => {
+                const CountryFlag = flags[option];
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    role="option"
+                    aria-selected={option === country}
+                    onMouseEnter={() => setHoveredCountry(option)}
+                    onMouseLeave={() => setHoveredCountry(null)}
+                    onClick={() => {
+                      onCountryChange(option);
+                      setIsCountryMenuOpen(false);
+                      setCountrySearch("");
+                      setHoveredCountry(null);
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", border: 0, background: hoveredCountry === option ? "#374151" : option === country ? "#eef2ff" : "#fff", color: hoveredCountry === option ? "#fff" : "#111827", padding: "7px 9px", textAlign: "left", fontSize: 12, cursor: "pointer" }}
+                  >
+                    {CountryFlag && (
+                      <span style={{ width: 22, height: 15, display: "inline-flex", overflow: "hidden", borderRadius: 2, flexShrink: 0 }}>
+                        <CountryFlag title={COUNTRY_NAMES.of(option) ?? option} />
+                      </span>
+                    )}
+                    <span>{countryLabel(option)}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -309,12 +341,11 @@ function PhoneField({
           id={id}
           type="tel"
           inputMode="numeric"
-          maxLength={10}
-          pattern="[0-9]{10}"
+          maxLength={15}
           style={inputStyle()}
-          placeholder="9876543210"
+          placeholder={mobileExample(country)}
           value={localPhoneValue(phone, country)}
-          onChange={(event) => onPhoneChange(`+${callingCode} ${event.target.value.replace(/\D/g, "").slice(0, 10)}`)}
+          onChange={(event) => onPhoneChange(`+${callingCode} ${event.target.value.replace(/\D/g, "").slice(0, 15)}`)}
           onBlur={onBlur}
         />
       </div>
@@ -389,8 +420,8 @@ export function GuestSelectStep({ selectedGuest, view, onViewChange, onSelect, o
               paddingRight: selectedGuest ? 34 : 12,
               cursor: selectedGuest ? "default" : "text",
             }}
-            onFocusCapture={(e) => { e.currentTarget.style.borderColor = "#4f46e5"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(79,70,229,0.1)"; }}
-            onBlurCapture={(e) => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.boxShadow = "none"; }}
+            onFocusCapture={fieldFocusRing}
+            onBlurCapture={fieldBlurRing}
           />
           {selectedGuest && (
             <button
@@ -546,18 +577,11 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
   const handleChange = (field: keyof typeof form) => (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const rawValue = e.target.value;
-    const value = field === "phone"
-      ? sanitizePhoneNumber(e.target.value)
-      : field === "organization"
-        ? rawValue.replace(/\d/g, "")
-        : e.target.value;
+    const value = field === "phone" ? sanitizePhoneNumber(e.target.value) : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
+    setApiError(null);
     if (!touched[field]) setTouched((prev) => ({ ...prev, [field]: true }));
     validateField(field, value);
-    if (field === "organization" && /\d/.test(rawValue)) {
-      setErrors((prev) => ({ ...prev, organization: "Organization name must not contain numbers" }));
-    }
   };
 
   const handleBlur = (field: keyof typeof form) => () => {
@@ -566,16 +590,19 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
 
   const handlePhoneChange = (value: string) => {
     setForm((prev) => ({ ...prev, phone: value }));
+    setApiError(null);
     if (!touched.phone) setTouched((prev) => ({ ...prev, phone: true }));
     validateField("phone", value);
   };
 
   const handlePhoneCountryChange = (country: Country) => {
     setPhoneCountry(country);
-    setForm((prev) => ({
-      ...prev,
-      phone: prev.phone ? `+${getCountryCallingCode(country)} ${localPhoneValue(prev.phone, phoneCountry)}` : "",
-    }));
+    const phone = form.phone
+      ? `+${getCountryCallingCode(country)} ${localPhoneValue(form.phone, phoneCountry)}`
+      : "";
+    setForm((prev) => ({ ...prev, phone }));
+    setApiError(null);
+    if (phone) validateField("phone", phone);
   };
 
   const handleSave = async () => {
@@ -766,6 +793,8 @@ interface VisitDetailsStepProps {
   isLoadingBuildings: boolean;
   isLoadingFloors: boolean;
   readOnlyLocation?: boolean;
+  // Configuration → Visitor Booking window; null until the policy loads.
+  guestMaxAdvanceDays: number | null;
 }
 
 // ── Time slot dropdown ───────────────────────────────────────────────────────
@@ -809,6 +838,8 @@ function TimeSlotSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
+        onFocusCapture={fieldFocusRing}
+        onBlurCapture={fieldBlurRing}
       >
         <option value="">{placeholder}</option>
         {TIME_SLOTS.map((slot) => (
@@ -841,11 +872,12 @@ function LockedTooltip({ children, locked, message }: { children: React.ReactNod
   );
 }
 
-export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildings, floors, isLoadingBuildings, isLoadingFloors, readOnlyLocation = false }: VisitDetailsStepProps) {
-  const lockedMessage = "This field cannot be changed because a seat booking is linked to this visit. To change location or dates, use 'Edit Booking' instead.";
-  const maxVisitDate = maxGuestVisitDateIso();
-  const visitDateTooFar = visitDetails.visitDate > maxVisitDate;
-  const endDateTooFar = visitDetails.endDate > maxVisitDate;
+export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildings, floors, isLoadingBuildings, isLoadingFloors, readOnlyLocation = false, guestMaxAdvanceDays }: VisitDetailsStepProps) {
+  const lockedMessage = "This field cannot be changed because a space booking is linked to this visit. To change location or dates, use 'Edit Booking' instead.";
+  const maxVisitDate = maxDateIsoFromToday(guestMaxAdvanceDays);
+  const tooFarMessage = guestMaxAdvanceDays != null ? guestVisitTooFarInAdvanceMessage(guestMaxAdvanceDays) : "";
+  const visitDateTooFar = !!maxVisitDate && visitDetails.visitDate > maxVisitDate;
+  const endDateTooFar = !!maxVisitDate && visitDetails.endDate > maxVisitDate;
   return (
     <div>
       <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Visit Details</h2>
@@ -872,6 +904,8 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: "pointer" }}
               value={visitDetails.guestType}
               onChange={(e) => onChange({ guestType: e.target.value as GuestType })}
+              onFocusCapture={fieldFocusRing}
+              onBlurCapture={fieldBlurRing}
             >
               {GUEST_TYPES.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
             </select>
@@ -888,6 +922,8 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: "pointer" }}
               value={visitDetails.purposeOfVisit}
               onChange={(e) => onChange({ purposeOfVisit: e.target.value as PurposeOfVisit })}
+              onFocusCapture={fieldFocusRing}
+              onBlurCapture={fieldBlurRing}
             >
               {PURPOSE_OF_VISIT.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
@@ -918,6 +954,8 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               value={visitDetails.siteId}
               onChange={(e) => onChange({ siteId: e.target.value, buildingId: "", floorId: "" })}
               disabled={readOnlyLocation}
+              onFocusCapture={fieldFocusRing}
+              onBlurCapture={fieldBlurRing}
             >
               <option value="" disabled hidden>Select a Office</option>
               {sites.map((s) => <option key={s.id} value={s.id} className="office-select-option">{s.name}</option>)}
@@ -936,6 +974,8 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               value={visitDetails.buildingId}
               onChange={(e) => onChange({ buildingId: e.target.value, floorId: "" })}
               disabled={readOnlyLocation || !visitDetails.siteId}
+              onFocusCapture={fieldFocusRing}
+              onBlurCapture={fieldBlurRing}
             >
               <option value="" disabled hidden>
                 {!visitDetails.siteId ? "Select a office first" : isLoadingBuildings ? "Loading…" : "Select a building"}
@@ -956,6 +996,8 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
               value={visitDetails.floorId}
               onChange={(e) => onChange({ floorId: e.target.value })}
               disabled={readOnlyLocation || !visitDetails.buildingId}
+              onFocusCapture={fieldFocusRing}
+              onBlurCapture={fieldBlurRing}
             >
               <option value="" disabled hidden>
                 {!visitDetails.buildingId ? "Select a building first" : isLoadingFloors ? "Loading…" : "Select a floor"}
@@ -983,14 +1025,14 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
             onKeyDown={(e) => e.preventDefault()}
             onChange={(e) => {
               const val = e.target.value;
-              if (val > maxVisitDate) return;
+              if (maxVisitDate && val > maxVisitDate) return;
               const updates: Partial<VisitDetails> = { visitDate: val };
               if (!visitDetails.endDate || visitDetails.endDate < val) updates.endDate = val;
               onChange(updates);
             }}
           />
           {visitDateTooFar && (
-            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{GUEST_VISIT_TOO_FAR_IN_ADVANCE_MESSAGE}</p>
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{tooFarMessage}</p>
           )}
         </LockedTooltip>
         <LockedTooltip locked={readOnlyLocation} message={lockedMessage}>
@@ -1005,12 +1047,12 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
             disabled={readOnlyLocation}
             onKeyDown={(e) => e.preventDefault()}
             onChange={(e) => {
-              if (e.target.value > maxVisitDate) return;
+              if (maxVisitDate && e.target.value > maxVisitDate) return;
               onChange({ endDate: e.target.value });
             }}
           />
           {endDateTooFar && (
-            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{GUEST_VISIT_TOO_FAR_IN_ADVANCE_MESSAGE}</p>
+            <p style={{ fontSize: "0.75rem", color: "#dc2626", marginTop: 4 }}>{tooFarMessage}</p>
           )}
         </LockedTooltip>
       </div>
@@ -1064,15 +1106,15 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
   const options: { key: "yes" | "no"; label: string; sub: string; bullets: string[] }[] = [
     {
       key: "yes",
-      label: "Yes, book a seat",
+      label: "Yes, book a space",
       sub: "Reserve a workspace for this guest.",
-      bullets: ["Guest will have a dedicated seat", "Seat will be held for the selected time", "Ideal for longer or in-office visits"],
+      bullets: ["Guest will have a dedicated space", "Space will be held for the selected time", "Ideal for longer or in-office visits"],
     },
     {
       key: "no",
       label: "No, invite only",
-      sub: "Send an invite without reserving a seat.",
-      bullets: ["Guest does not need a seat", "Perfect for short or host-only visits", "Quick invite and arrival"],
+      sub: "Send an invite without reserving a space.",
+      bullets: ["Guest does not need a space", "Perfect for short or host-only visits", "Quick invite and arrival"],
     },
   ];
 
@@ -1081,7 +1123,7 @@ export function SeatRequiredStep({ value, onChange }: SeatRequiredStepProps) {
       <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#ecfdf5", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3" /><path d="M3 16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4z" /><path d="M5 18v2" /><path d="M19 18v2" /></svg>
       </div>
-      <h2 style={{ fontSize: "1.0625rem", fontWeight: 700, color: "#111827", marginBottom: 4 }}>Does this guest need a seat?</h2>
+      <h2 style={{ fontSize: "1.0625rem", fontWeight: 700, color: "#111827", marginBottom: 4 }}>Does this guest need a space?</h2>
       <p style={{ fontSize: "0.8125rem", color: "#6b7280", marginBottom: "1.75rem" }}>
         Choose the option that best fits this visitor&apos;s visit.
       </p>
@@ -1180,38 +1222,38 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
   const [apiError, setApiError] = useState<string | null>(null);
 
   const isDirty = (Object.keys(initialFormRef.current) as (keyof typeof form)[]).some((key) => {
-    const currentValue = typeof form[key] === "string" ? form[key].trim() : form[key];
-    const initialValue = typeof initialFormRef.current[key] === "string" ? initialFormRef.current[key].trim() : initialFormRef.current[key];
-    return currentValue !== initialValue;
+    // Phone is compared with all whitespace stripped, not just trimmed --
+    // the field's own onChange always reconstructs "+<code> <digits>" with
+    // an internal space, while the backend returns E.164 (no space), so a
+    // plain trim() would flag the field dirty on a no-op edit.
+    const normalize = (value: typeof form[typeof key]) =>
+      typeof value === "string" ? value.replace(key === "phone" ? /\s+/g : /^\s+|\s+$/g, "") : value;
+    return normalize(form[key]) !== normalize(initialFormRef.current[key]);
   });
   const isValid = createGuestSchema.safeParse(form).success;
   const canSave = isDirty && isValid && !saving;
 
   const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value;
-    const value = field === "phone"
-      ? sanitizePhoneNumber(e.target.value)
-      : field === "organization"
-        ? rawValue.replace(/\d/g, "")
-        : e.target.value;
+    const value = field === "phone" ? sanitizePhoneNumber(e.target.value) : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
+    setApiError(null);
     if (touched[field]) validateField(field, value);
-    if (field === "organization" && /\d/.test(rawValue)) {
-      setErrors((prev) => ({ ...prev, organization: "Organization name must not contain numbers" }));
-    }
   };
 
   const handlePhoneChange = (value: string) => {
     setForm((prev) => ({ ...prev, phone: value }));
+    setApiError(null);
     if (touched.phone) validateField("phone", value);
   };
 
   const handlePhoneCountryChange = (country: Country) => {
     setPhoneCountry(country);
-    setForm((prev) => ({
-      ...prev,
-      phone: prev.phone ? `+${getCountryCallingCode(country)} ${localPhoneValue(prev.phone, phoneCountry)}` : "",
-    }));
+    const phone = form.phone
+      ? `+${getCountryCallingCode(country)} ${localPhoneValue(form.phone, phoneCountry)}`
+      : "";
+    setForm((prev) => ({ ...prev, phone }));
+    setApiError(null);
+    if (phone) validateField("phone", phone);
   };
 
   const handleBlur = (field: string) => () => {
@@ -1366,10 +1408,10 @@ export function ConfirmInviteStep({ guest, visitDetails, sites, buildings, seatL
     ["Visit Date", visitDetails.visitDate || "—"],
     ["End Date", visitDetails.endDate || "—"],
     ["Time", [visitDetails.startTime, visitDetails.endTime].filter(Boolean).join(" – ") || "—"],
-    ["Requires Seat", hasSeat ? "Yes" : "No"],
+    ["Requires Space", hasSeat ? "Yes" : "No"],
     ...(hasSeat ? ([
       ["Floor", floorName || "—"],
-      ["Seat", seatLabel || "—"],
+      ["Space", displaySpaceCode(seatLabel) || "—"],
     ] as [string, string][]) : []),
     ["Notes", visitDetails.additionalNotes || "—"],
   ];

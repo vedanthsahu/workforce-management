@@ -1,11 +1,13 @@
 "use client";
 // SeatFiltersBar.tsx  – unchanged UI, exports defaultFilters helper
 
-import React from "react";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import React, { useState } from "react";
+import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
 import { SeatFilters } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 /** Call this to get a fresh "no filters applied" object */
 export function defaultFilters(): SeatFilters {
@@ -20,14 +22,28 @@ export function defaultFilters(): SeatFilters {
 
 interface Props {
   filters: SeatFilters;
-  // null = this tab's category has no sub-types (Cabins/Conference Rooms) —
-  // hide the Sub-type dropdown entirely rather than showing it disabled,
-  // which would read as "broken/coming soon" instead of "flat category."
-  subTypeOptions: string[] | null;
   preferences: Preference[];
   onUpdate: <K extends keyof SeatFilters>(key: K, value: SeatFilters[K]) => void;
   onReset: () => void;
   searchPlaceholder?: string;
+  // Masks (greys out, non-interactive) rather than hiding the bar entirely
+  // -- an admin should still see these filters exist, just not be able to
+  // use them yet, when there's nothing configured in this tab for them to
+  // meaningfully filter. Deliberately does NOT cover Search -- searching by
+  // code is meaningful even on an unconfigured seat, unlike Status/Bookable/
+  // Amenities, which have nothing real to match yet.
+  disabled?: boolean;
+  // Search DOES drive the map's highlight pulse, same as the other filters
+  // -- but only once something in this tab is actually configured (an
+  // unconfigured seat has no real values to match against on the map
+  // either). Passed separately from `disabled` because, unlike Status/
+  // Bookable/Amenities, Search stays enabled in List view regardless of
+  // configuration -- searching by code is still meaningful there even for
+  // unconfigured seats, since the table shows them as rows either way.
+  searchDisabled?: boolean;
+  // Type (Seat/Cabin/Conference Room) only makes sense on the All tab, where
+  // rows are mixed -- every other tab is already a single type.
+  showTypeFilter?: boolean;
 }
 
 function FilterSelect({
@@ -35,11 +51,13 @@ function FilterSelect({
   value,
   options,
   onChange,
+  disabled,
 }: {
   label: string;
   value: string;
   options: { value: string; label: string; dotColor?: string }[];
   onChange: (v: string) => void;
+  disabled?: boolean;
 }) {
   // "All"-ish is always the first option — anything else counts as active
   // and gets an inline clear (x) instead of relying on a separate,
@@ -51,11 +69,18 @@ function FilterSelect({
       <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
         {label}
       </label>
-      <div className="relative">
+      {/* title sits on this wrapper, not the <select> itself -- most
+          browsers (Chrome included) silently swallow a `title` on a
+          disabled form control and never show the hover tooltip at all. */}
+      <div
+        className="relative"
+        title={disabled ? "Configure at least one space in this tab to use this filter" : undefined}
+      >
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="h-9 w-full pl-3 pr-8 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors cursor-pointer"
+          disabled={disabled}
+          className="h-9 w-full pl-3 pr-8 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
           style={{
             // The clear (x) button takes over this exact spot when a filter
             // is active, so only one icon ever occupies the corner — showing
@@ -88,17 +113,128 @@ function FilterSelect({
   );
 }
 
+// Custom (non-native) single-select for the Amenities filter. A plain
+// <select> here would need color-styled <option> rows (dot + amenity
+// name), and browsers render that colored-option combination with their
+// own uncontrollable popup chrome (a dark highlighted first row, a heavy
+// grey scrollbar) that no CSS can override -- so this gets its own fully
+// styled Popover dropdown instead, matching the plainer native <select>
+// look of the other filters here.
+function AmenityFilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string; dotColor?: string }[];
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const isActive = value !== options[0]?.value;
+  const selected = options.find((o) => o.value === value) ?? options[0];
+
+  return (
+    <div className="flex flex-col gap-1 min-w-[180px] flex-shrink-0">
+      <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+        {label}
+      </label>
+      <div className="relative">
+        <Popover open={disabled ? false : open} onOpenChange={disabled ? undefined : setOpen}>
+          <PopoverTrigger
+            nativeButton={false}
+            disabled={disabled}
+            render={
+              <div
+                className={cn(
+                  "h-9 w-full pl-3 pr-8 flex items-center text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30",
+                  disabled
+                    ? "opacity-50 cursor-not-allowed bg-gray-50"
+                    : "cursor-pointer hover:border-gray-300"
+                )}
+                title={disabled ? "Configure at least one space in this tab to use this filter" : undefined}
+              >
+                <span className="truncate flex items-center gap-1.5">
+                  {selected?.dotColor && (
+                    <span
+                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ backgroundColor: selected.dotColor }}
+                    />
+                  )}
+                  {selected?.label}
+                </span>
+              </div>
+            }
+          />
+          <PopoverContent
+            align="start"
+            side="bottom"
+            collisionAvoidance={{ side: "none" }}
+            className="w-60 p-1 gap-0 rounded-lg border border-gray-200 bg-white shadow-md ring-0 max-h-64 min-h-0 overflow-y-auto scrollbar-thin"
+          >
+            {options.map((o) => {
+              const checked = o.value === value;
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(o.value);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-left transition-colors",
+                    checked ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-700 hover:bg-gray-50"
+                  )}
+                >
+                  {o.dotColor && (
+                    <span
+                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ backgroundColor: o.dotColor }}
+                    />
+                  )}
+                  <span className="truncate">{o.label}</span>
+                </button>
+              );
+            })}
+          </PopoverContent>
+        </Popover>
+        {isActive ? (
+          <button
+            type="button"
+            onClick={() => onChange(options[0].value)}
+            aria-label={`Clear ${label} filter`}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center text-gray-400 hover:text-gray-600"
+          >
+            <X size={12} />
+          </button>
+        ) : (
+          <ChevronDown
+            size={13}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function SeatFiltersBar({
   filters,
-  subTypeOptions,
   preferences,
   onUpdate,
   onReset,
-  searchPlaceholder = "Search by seat code…",
+  searchPlaceholder = "Search by code…",
+  disabled = false,
+  searchDisabled = false,
+  showTypeFilter = false,
 }: Props) {
   const activeCount = [
     filters.search.trim() !== "",
-    subTypeOptions != null && filters.seat_type !== "All",
+    showTypeFilter && filters.seat_type !== "All",
     filters.status !== "All",
     filters.bookable !== "All",
     filters.amenity !== "All",
@@ -120,7 +256,13 @@ export default function SeatFiltersBar({
         <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
           Search
         </label>
-        <div className="relative">
+        {/* title sits on this wrapper, not the <input> itself -- most
+            browsers (Chrome included) silently swallow a `title` on a
+            disabled form control and never show the hover tooltip. */}
+        <div
+          className="relative"
+          title={searchDisabled ? "Configure at least one space in this tab to use this filter" : undefined}
+        >
           <Search
             size={13}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -130,7 +272,8 @@ export default function SeatFiltersBar({
             placeholder={searchPlaceholder}
             value={filters.search}
             onChange={(e) => onUpdate("search", e.target.value)}
-            className={`h-9 pl-8 ${filters.search ? "pr-7" : "pr-3"} w-44 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-colors placeholder:text-gray-400`}
+            disabled={searchDisabled}
+            className={`h-9 pl-8 ${filters.search ? "pr-7" : "pr-3"} w-44 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50`}
           />
           {filters.search && (
             <button
@@ -145,11 +288,16 @@ export default function SeatFiltersBar({
         </div>
       </div>
 
-      {subTypeOptions && (
+      {showTypeFilter && (
         <FilterSelect
-          label="Sub-type"
+          label="Type"
           value={filters.seat_type}
-          options={subTypeOptions.map((t) => ({ value: t, label: t }))}
+          options={[
+            { value: "All", label: "All Types" },
+            { value: "SEAT", label: "Seat" },
+            { value: "CABIN", label: "Cabin" },
+            { value: "CONFERENCE_ROOM", label: "Conference Room" },
+          ]}
           onChange={(v) => onUpdate("seat_type", v)}
         />
       )}
@@ -163,25 +311,35 @@ export default function SeatFiltersBar({
           { value: "Inactive", label: "Inactive" },
           // { value: "Maintenance", label: "Maintenance" },
         ]}
-        onChange={(v) => onUpdate("status", v)}
+        onChange={(v) => {
+          onUpdate("status", v);
+          // Inactive spaces are always non-bookable, so the Bookable filter is
+          // hidden for them -- clear it so a hidden value can't keep filtering.
+          if (v === "Inactive") onUpdate("bookable", "All");
+        }}
+        disabled={disabled}
       />
 
-      <FilterSelect
-        label="Bookable"
-        value={filters.bookable}
-        options={[
-          { value: "All", label: "All" },
-          { value: "Yes", label: "Yes" },
-          { value: "No", label: "No" },
-        ]}
-        onChange={(v) => onUpdate("bookable", v)}
-      />
+      {filters.status !== "Inactive" && (
+        <FilterSelect
+          label="Bookable"
+          value={filters.bookable}
+          options={[
+            { value: "All", label: "All" },
+            { value: "Yes", label: "Yes" },
+            { value: "No", label: "No" },
+          ]}
+          onChange={(v) => onUpdate("bookable", v)}
+          disabled={disabled}
+        />
+      )}
 
-      <FilterSelect
+      <AmenityFilterSelect
         label="Amenities"
         value={filters.amenity}
         options={amenityOptions}
         onChange={(v) => onUpdate("amenity", v)}
+        disabled={disabled}
       />
 
       {/* Reset all — each field clears itself inline now, this is just a

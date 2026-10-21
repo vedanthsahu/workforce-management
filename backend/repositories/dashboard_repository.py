@@ -208,12 +208,26 @@ def fetch_admin_dashboard_summary(
                 -- PUBLISHED one, or a SCHEDULED one if selected_date falls
                 -- on/after its effective_from. Seats left over from a
                 -- superseded layout must not inflate total/available counts.
+                --
+                -- selected_date is a bare calendar date with no timezone of
+                -- its own -- casting it straight to timestamptz would
+                -- implicitly use the DB session's timezone (UTC), silently
+                -- shifting the day boundary. This demo deployment anchors
+                -- dashboard days to Asia/Kolkata. effective_from is compared
+                -- against the START of the NEXT day (India-local),
+                -- not selected_date's own midnight -- a direct publish's
+                -- effective_from is the real-time instant it was published
+                -- at (see activate_floor_layout), almost never midnight, so
+                -- comparing against that day's own midnight would make a
+                -- same-day publish look "not yet effective" and undercount
+                -- its seats. See booking_repository.fetch_seat_for_booking
+                -- for the fuller version of this comment.
                 INNER JOIN floor_layouts AS sfl
                     ON sfl.floor_id = st.floor_id
                    AND sfl.tenant_id = st.tenant_id
                    AND sfl.status IN ('PUBLISHED', 'SCHEDULED')
-                   AND sfl.effective_from <= %(selected_date)s
-                   AND (sfl.effective_till IS NULL OR sfl.effective_till > %(selected_date)s)
+                   AND sfl.effective_from < ((%(selected_date)s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')
+                   AND (sfl.effective_till IS NULL OR sfl.effective_till > (%(selected_date)s::timestamp AT TIME ZONE 'Asia/Kolkata'))
                    AND sfl.id = st.layout_id
                 WHERE st.tenant_id = %(tenant_id)s
                   AND (
@@ -407,8 +421,21 @@ def fetch_admin_dashboard_summary(
 
                     (
                         SELECT COUNT(*)
-                        FROM bookable_seats
+                        FROM scoped_seats
+                        WHERE status = 'ACTIVE'
                     ) AS total_seats,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM bookable_seats
+                    ) AS bookable_seats,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM scoped_seats
+                        WHERE status = 'ACTIVE'
+                          AND is_bookable = FALSE
+                    ) AS non_bookable_seats,
 
                     (
                         SELECT COUNT(*)
@@ -513,13 +540,13 @@ def fetch_admin_dashboard_summary(
             utilization_metrics AS (
                 SELECT
                     *,
-                    GREATEST(total_seats - blocked_seats, 0) AS available_seats,
+                    GREATEST(bookable_seats - blocked_seats, 0) AS available_seats,
                     COALESCE(
                         ROUND(
                             (
-                                booked_seats_count::numeric
+                                actual_booked_seats_today::numeric
                                 /
-                                NULLIF(GREATEST(total_seats - blocked_seats, 0), 0)
+                                NULLIF(GREATEST(bookable_seats - blocked_seats, 0), 0)
                             ) * 100,
                             1
                         ),
@@ -533,6 +560,7 @@ def fetch_admin_dashboard_summary(
                 total_buildings,
                 total_floors,
                 total_seats,
+                non_bookable_seats,
                 booked_seats_count AS booked_today,
                 actual_booked_seats_today AS booked_seats_today,
                 blocked_seats,
@@ -596,6 +624,9 @@ def _fetch_employee_activity_rows(
                 NULL::text AS guest_visit_id,
 
                 b.booking_status AS activity_status,
+
+                b.modified_from_booking_id::text AS modified_from_booking_id,
+                NULL::text AS modified_from_guest_visit_id,
 
                 b.booking_date AS activity_date,
 
@@ -673,6 +704,11 @@ def _fetch_employee_activity_rows(
 
               AND b.booking_type = 'EMPLOYEE'
 
+              -- A superseded booking (replaced by a reschedule/modify) must
+              -- not show up as its own separate activity row -- only the
+              -- active booking it was replaced by should appear.
+              AND b.booking_status <> 'MODIFIED'
+
               AND (%(activity_date)s IS NULL
                 OR b.booking_date = %(activity_date)s)
 
@@ -717,45 +753,40 @@ def _fetch_guest_activity_rows(
     building_id: str | None = None,
     floor_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """
-    Fetch guest visit activities.
-    """
+    """Fetch one current activity row for each guest visit."""
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
             SELECT
                 CASE
-                    WHEN b.id IS NULL
-                        THEN CONCAT('guest-visit-', gv.id::text)
-                    ELSE CONCAT('guest-booking-', b.id::text)
+                    WHEN gv.visit_status = 'CANCELLED' AND b.id IS NOT NULL
+                        THEN CONCAT('guest-booking-', b.id::text)
+                    ELSE CONCAT('guest-visit-', gv.id::text)
                 END AS activity_id,
-
                 CASE
-                    WHEN b.id IS NULL THEN 'GUEST_VISIT'
-                    ELSE 'GUEST_BOOKING'
+                    WHEN gv.visit_status = 'CANCELLED' AND b.id IS NOT NULL
+                        THEN 'GUEST_BOOKING'
+                    WHEN b.booking_status = 'CONFIRMED' THEN 'GUEST_BOOKING'
+                    ELSE 'GUEST_VISIT'
                 END AS activity_type,
+                (b.booking_status = 'CONFIRMED' OR (
+                    gv.visit_status = 'CANCELLED' AND b.id IS NOT NULL
+                )) AS has_booking,
 
-                (b.id IS NOT NULL) AS has_booking,
-
-                CASE
-                    WHEN b.id IS NULL
-                        THEN CONCAT('guest-visit-', gv.id::text)
-                    ELSE CONCAT('guest-booking-', b.id::text)
-                END AS activity_id,
-
-                CASE
-                    WHEN b.id IS NULL THEN 'GUEST_VISIT'
-                    ELSE 'GUEST_BOOKING'
-                END AS activity_type,
-
-                (b.id IS NOT NULL) AS has_booking,
-
-                b.id::text AS booking_id,
-
+                CASE WHEN b.booking_status = 'CONFIRMED'
+                    OR (gv.visit_status = 'CANCELLED' AND b.id IS NOT NULL)
+                    THEN b.id::text END AS booking_id,
                 gv.id::text AS guest_visit_id,
+                CASE
+                    WHEN gv.visit_status = 'CANCELLED'
+                        THEN COALESCE(b.booking_status, gv.visit_status)
+                    WHEN b.booking_status = 'CANCELLED' THEN 'MODIFIED'
+                    ELSE gv.visit_status
+                END AS activity_status,
 
-                gv.visit_status AS activity_status,
+                b.modified_from_booking_id::text AS modified_from_booking_id,
+                gv.modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
 
                 COALESCE(b.booking_date, gv.visit_date) AS activity_date,
 
@@ -772,39 +803,16 @@ def _fetch_guest_activity_rows(
                 NULL::text AS booked_for_role,
                 NULL::text AS booked_for_department,
                 NULL::text AS booked_for_job_title,
-
                 gv.guest_type AS booked_for_guest_type,
 
-                gv.id::text AS guest_visit_id,
-
-                gv.visit_status AS activity_status,
-
-                COALESCE(b.booking_date, gv.visit_date) AS activity_date,
-
-                booked_by.id::text AS booked_by_id,
-                booked_by.full_name AS booked_by_name,
-                booked_by.email AS booked_by_email,
-                UPPER(REPLACE(booked_by.role_name, ' ', '_')) AS booked_by_role,
-                booked_by.department AS booked_by_department,
-                booked_by.job_title AS booked_by_job_title,
-
-                g.id::text AS booked_for_id,
-                g.full_name AS booked_for_name,
-                g.email AS booked_for_email,
-                NULL::text AS booked_for_role,
-                NULL::text AS booked_for_department,
-                NULL::text AS booked_for_job_title,
-
-                gv.guest_type AS booked_for_guest_type,
-
-                s.id::text AS seat_id,
-                s.seat_code,
-                s.seat_type,
-                s.seat_neighborhood,
-                s.id::text AS seat_id,
-                s.seat_code,
-                s.seat_type,
-                s.seat_neighborhood,
+                CASE WHEN b.booking_status = 'CONFIRMED'
+                    OR gv.visit_status = 'CANCELLED' THEN s.id::text END AS seat_id,
+                CASE WHEN b.booking_status = 'CONFIRMED'
+                    OR gv.visit_status = 'CANCELLED' THEN s.seat_code END AS seat_code,
+                CASE WHEN b.booking_status = 'CONFIRMED'
+                    OR gv.visit_status = 'CANCELLED' THEN s.seat_type END AS seat_type,
+                CASE WHEN b.booking_status = 'CONFIRMED'
+                    OR gv.visit_status = 'CANCELLED' THEN s.seat_neighborhood END AS seat_neighborhood,
 
                 si.id::text AS site_id,
                 si.site_code,
@@ -818,8 +826,8 @@ def _fetch_guest_activity_rows(
                 fl.floor_code,
                 fl.floor_name,
 
-                gv.checked_in_at AS check_in_at,
-                gv.checked_out_at,
+                COALESCE(b.check_in_at, gv.checked_in_at) AS check_in_at,
+                COALESCE(b.checked_out_at, gv.checked_out_at) AS checked_out_at,
                 COALESCE(b.created_at, gv.created_at) AS created_at,
                 COALESCE(b.updated_at, gv.updated_at) AS updated_at
 
@@ -835,17 +843,13 @@ def _fetch_guest_activity_rows(
                 WHERE guest_booking.guest_visit_id = gv.id
                   AND guest_booking.tenant_id = gv.tenant_id
                   AND guest_booking.booking_type = 'GUEST'
-                ORDER BY
-                    guest_booking.created_at DESC,
-                    guest_booking.id DESC
+                  AND guest_booking.booking_status <> 'MODIFIED'
+                ORDER BY guest_booking.updated_at DESC, guest_booking.id DESC
                 LIMIT 1
             ) b ON TRUE
 
             LEFT JOIN app_users booked_by
-                ON booked_by.id = COALESCE(
-                    b.booked_by_user_id,
-                    gv.created_by_user_id
-                )
+                ON booked_by.id = COALESCE(b.booked_by_user_id, gv.created_by_user_id)
                AND booked_by.tenant_id = gv.tenant_id
 
             LEFT JOIN seats s
@@ -871,28 +875,23 @@ def _fetch_guest_activity_rows(
                AND fl.building_id = bu.id
 
             WHERE gv.tenant_id = %(tenant_id)s
-
-            
-            AND (%(activity_date)s IS NULL
+              AND gv.visit_status <> 'MODIFIED'
+              AND (%(activity_date)s IS NULL
                 OR COALESCE(b.booking_date, gv.visit_date) = %(activity_date)s)
               AND (
                     %(site_id)s IS NULL
                     OR COALESCE(b.site_id, gv.site_id) = %(site_id)s::bigint
               )
-
               AND (
                     %(building_id)s IS NULL
                     OR COALESCE(b.building_id, gv.building_id) = %(building_id)s::bigint
               )
-
               AND (
                     %(floor_id)s IS NULL
                     OR COALESCE(b.floor_id, gv.floor_id) = %(floor_id)s::bigint
               )
 
-            ORDER BY
-                COALESCE(b.updated_at, gv.updated_at) DESC,
-                gv.id DESC
+            ORDER BY COALESCE(b.updated_at, gv.updated_at) DESC, gv.id DESC
             LIMIT 100
             """,
             {
@@ -903,8 +902,6 @@ def _fetch_guest_activity_rows(
                 "floor_id": floor_id,
             },
         )
-
-
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
@@ -1175,9 +1172,24 @@ def fetch_hierarchy_occupancy(
                 FROM groups AS g
                 INNER JOIN seats AS s
                     ON s.{group_seat_column} = g.group_id
+                -- Only seats belonging to the floor's currently published
+                -- layout count toward Top Offices -- otherwise a seat left
+                -- over from a superseded layout inflates total_seats past
+                -- what the office/building/floor admin lists show (those
+                -- already scope to the published layout; see
+                -- _SEAT_IN_PUBLISHED_LAYOUT_SQL in location_repository.py).
+                INNER JOIN floor_layouts AS pfl
+                    ON pfl.floor_id = s.floor_id
+                   AND pfl.tenant_id = s.tenant_id
+                   AND pfl.is_published = TRUE
+                   AND pfl.status = 'PUBLISHED'
+                   AND pfl.id = s.layout_id
+                -- No is_bookable filter here -- total_seats must match the
+                -- office/building/floor admin lists' "Active Seats" count
+                -- (active_seat_count, which doesn't require is_bookable
+                -- either), not their separate "Bookable Seats" count.
                 WHERE s.tenant_id = %(tenant_id)s
                   AND s.status = 'ACTIVE'
-                  AND s.is_bookable = TRUE
             ),
 
             seat_counts AS (
@@ -1237,11 +1249,9 @@ def fetch_hierarchy_occupancy(
                     g.group_name,
                     COALESCE(sc.total_seats, 0)::integer AS total_seats,
                     COALESCE(bl.blocked_seats, 0)::integer AS blocked_seats,
-                    GREATEST(
-                        COALESCE(sc.total_seats, 0)
-                        - COALESCE(bl.blocked_seats, 0),
-                        0
-                    )::integer AS available_seats,
+                    -- Occupancy is measured against ALL active seats; blocked
+                    -- seats are no longer subtracted from the denominator.
+                    COALESCE(sc.total_seats, 0)::integer AS available_seats,
                     COALESCE(sbc.booked_seats, 0)::integer AS booked_seats,
                     COALESCE(sbc.employee_booked_seats, 0)::integer AS employee_booked_seats,
                     COALESCE(sbc.guest_booked_seats, 0)::integer AS guest_booked_seats

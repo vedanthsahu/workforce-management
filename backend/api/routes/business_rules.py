@@ -23,22 +23,36 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user, require_any_permission
 from backend.db.connection import get_db
 from backend.schemas.business_rule import (
+    ActivityPolicyResponse,
+    BlockedSeatPolicyResponse,
     BookingPolicyResponse,
+    ChatbotPolicyResponse,
     LayoutPolicyResponse,
     LayoutVisibilityDaysResponse,
+    UpdateActivityPolicyRequest,
+    UpdateBlockedSeatPolicyRequest,
     UpdateBookingPolicyRequest,
+    UpdateChatbotPolicyRequest,
     UpdateLayoutPolicyRequest,
 )
 from backend.services.business_rule_service import (
+    resolve_activity_record_count,
+    resolve_blocked_seat_days,
+    resolve_blocked_seat_max_advance_days,
     resolve_booking_advance_days,
+    resolve_chatbot_employee_access,
     resolve_layout_scheduling_gap,
     resolve_layout_visibility_days,
+    update_activity_record_count,
+    update_blocked_seat_days,
+    update_blocked_seat_max_advance_days,
+    update_chatbot_employee_access,
     update_employee_max_advance_days,
     update_guest_max_advance_days,
     update_layout_scheduling_buffer_days,
@@ -46,6 +60,60 @@ from backend.services.business_rule_service import (
 )
 
 router = APIRouter(prefix="/business-rules", tags=["business-rules"])
+
+
+def require_chatbot_configuration_admin(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+) -> dict[str, Any]:
+    role_name = str(
+        current_user.get("role_name") or current_user.get("role") or "",
+    ).strip().upper()
+    if role_name not in {"TENANT_ADMIN", "PRODUCT_ADMIN"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "chatbot_configuration_forbidden",
+                "message": "Only an administrator can change chatbot access.",
+            },
+        )
+    return current_user
+
+
+@router.get("/chatbot-policy", response_model=ChatbotPolicyResponse)
+def chatbot_policy(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> ChatbotPolicyResponse:
+    return ChatbotPolicyResponse(
+        employee_access_enabled=resolve_chatbot_employee_access(
+            conn,
+            tenant_id=str(current_user["tenant_id"]),
+        ),
+    )
+
+
+@router.patch("/chatbot-policy", response_model=ChatbotPolicyResponse)
+def update_chatbot_policy(
+    payload: UpdateChatbotPolicyRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_chatbot_configuration_admin),
+    ],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> ChatbotPolicyResponse:
+    tenant_id = str(current_user["tenant_id"])
+    update_chatbot_employee_access(
+        conn,
+        tenant_id=tenant_id,
+        enabled=payload.employee_access_enabled,
+        updated_by_user_id=str(current_user["user_id"]),
+    )
+    return ChatbotPolicyResponse(
+        employee_access_enabled=resolve_chatbot_employee_access(
+            conn,
+            tenant_id=tenant_id,
+        ),
+    )
 
 
 @router.get("/booking-policy", response_model=BookingPolicyResponse)
@@ -76,6 +144,102 @@ def layout_policy(
             archived=visibility_days["ARCHIVED"],
             deleted=visibility_days["DELETED"],
         ),
+    )
+
+
+@router.get("/activity-policy", response_model=ActivityPolicyResponse)
+def activity_policy(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> ActivityPolicyResponse:
+    tenant_id = str(current_user["tenant_id"])
+    return ActivityPolicyResponse(
+        record_count=resolve_activity_record_count(conn, tenant_id=tenant_id),
+    )
+
+
+@router.patch("/activity-policy", response_model=ActivityPolicyResponse)
+def update_activity_policy(
+    payload: UpdateActivityPolicyRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_any_permission(["admin_dashboard:view"])),
+    ],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> ActivityPolicyResponse:
+    tenant_id = str(current_user["tenant_id"])
+
+    if payload.record_count is not None:
+        update_activity_record_count(
+            conn, tenant_id=tenant_id,
+            new_value=payload.record_count,
+            updated_by_user_id=str(current_user["user_id"]),
+        )
+
+    return ActivityPolicyResponse(
+        record_count=resolve_activity_record_count(conn, tenant_id=tenant_id),
+    )
+
+
+def _blocked_seat_policy_response(
+    policy: dict[str, int], max_advance_days: int,
+) -> BlockedSeatPolicyResponse:
+    return BlockedSeatPolicyResponse(
+        upcoming_days=policy["UPCOMING"],
+        expiring_soon_days=policy["EXPIRING_SOON"],
+        expired_window_days=policy["EXPIRED_WINDOW"],
+        max_advance_days=max_advance_days,
+    )
+
+
+@router.get("/blocked-seat-policy", response_model=BlockedSeatPolicyResponse)
+def blocked_seat_policy(
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> BlockedSeatPolicyResponse:
+    tenant_id = str(current_user["tenant_id"])
+    return _blocked_seat_policy_response(
+        resolve_blocked_seat_days(conn, tenant_id=tenant_id),
+        resolve_blocked_seat_max_advance_days(conn, tenant_id=tenant_id),
+    )
+
+
+@router.patch("/blocked-seat-policy", response_model=BlockedSeatPolicyResponse)
+def update_blocked_seat_policy(
+    payload: UpdateBlockedSeatPolicyRequest,
+    current_user: Annotated[
+        dict[str, Any],
+        Depends(require_any_permission(["admin_dashboard:view"])),
+    ],
+    conn: Annotated[PGConnection, Depends(get_db)],
+) -> BlockedSeatPolicyResponse:
+    tenant_id = str(current_user["tenant_id"])
+    user_id = str(current_user["user_id"])
+
+    fields = {
+        "UPCOMING": payload.upcoming_days,
+        "EXPIRING_SOON": payload.expiring_soon_days,
+        "EXPIRED_WINDOW": payload.expired_window_days,
+    }
+    for setting_key, new_value in fields.items():
+        if new_value is not None:
+            update_blocked_seat_days(
+                conn, tenant_id=tenant_id,
+                setting_key=setting_key,
+                new_value=new_value,
+                updated_by_user_id=user_id,
+            )
+
+    if payload.max_advance_days is not None:
+        update_blocked_seat_max_advance_days(
+            conn, tenant_id=tenant_id,
+            new_value=payload.max_advance_days,
+            updated_by_user_id=user_id,
+        )
+
+    return _blocked_seat_policy_response(
+        resolve_blocked_seat_days(conn, tenant_id=tenant_id),
+        resolve_blocked_seat_max_advance_days(conn, tenant_id=tenant_id),
     )
 
 

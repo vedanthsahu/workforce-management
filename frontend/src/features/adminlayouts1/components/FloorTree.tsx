@@ -3,15 +3,9 @@
 import { useEffect, useRef, useState, useMemo, memo, useCallback } from "react";
 import { ChevronDown, ChevronRight, Building2, Search, X, Loader2 } from "lucide-react";
 import {
-  getSites,
-  getBuildings,
-  getFloors,
+  getDefaultOfficePreference,
 } from "@/features/adminlayouts1/services/locationService";
-import {
-  Site,
-  Building,
-  Floor,
-} from "@/features/adminlayouts1/types/layout.types";
+import { useLocationTreeStore } from "@/store/useLocationTreeStore";
 
 type Props = {
   onSelect: (data: {
@@ -46,111 +40,31 @@ const FloorTree = memo(function FloorTree({
   const [expandedTowers, setExpandedTowers] = useState<Set<string>>(new Set());
   const [selectedFloor, setSelectedFloor] = useState<string>("");
   const [search, setSearch] = useState("");
-
-  const [sites, setSites] = useState<Site[]>([]);
-  const [buildings, setBuildings] = useState<Record<string, Building[]>>({});
-  const [floors, setFloors] = useState<Record<string, Floor[]>>({});
-
-  const [loadingSites, setLoadingSites] = useState(true);
-  const [loadingBuildingsFor, setLoadingBuildingsFor] = useState<Set<string>>(new Set());
-  const [loadingFloorsFor, setLoadingFloorsFor] = useState<Set<string>>(new Set());
   const [isSearchLoading, setIsSearchLoading] = useState(false);
 
-  // Always-fresh refs so callbacks with stable identities never read stale state
-  const sitesRef = useRef<Site[]>([]);
-  const buildingsRef = useRef<Record<string, Building[]>>({});
-  const floorsRef = useRef<Record<string, Floor[]>>({});
-  const inFlightBuildingFetches = useRef<Map<string, Promise<Building[]>>>(new Map());
-  const inFlightFloorFetches = useRef<Map<string, Promise<Floor[]>>>(new Map());
+  // Hierarchy data + its fetchers now live in a shared store instead of
+  // local state, so they survive this component unmounting -- a second
+  // visit to this page in the same session reads straight from cache
+  // instead of re-running the whole sites -> buildings -> floors fetch
+  // chain from scratch (see useLocationTreeStore's own header comment).
+  const sites = useLocationTreeStore((s) => s.sites);
+  const sitesLoading = useLocationTreeStore((s) => s.sitesLoading);
+  const buildings = useLocationTreeStore((s) => s.buildingsCache);
+  const floors = useLocationTreeStore((s) => s.floorsCache);
+  const loadingBuildingsFor = useLocationTreeStore((s) => s.loadingBuildingsFor);
+  const loadingFloorsFor = useLocationTreeStore((s) => s.loadingFloorsFor);
+  const fetchSites = useLocationTreeStore((s) => s.fetchSites);
+  const fetchBuildingsForSite = useLocationTreeStore((s) => s.fetchBuildingsForSite);
+  const fetchFloorsForBuilding = useLocationTreeStore((s) => s.fetchFloorsForBuilding);
 
   // Stable ref for onSelect so effects never go stale
   const onSelectRef = useRef(onSelect);
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
 
-  useEffect(() => { sitesRef.current = sites; }, [sites]);
-  useEffect(() => { buildingsRef.current = buildings; }, [buildings]);
-  useEffect(() => { floorsRef.current = floors; }, [floors]);
-
-  // ── Boot: load sites only. Buildings/floors are fetched on demand ────────
-  // (per-site on expand, per-building on expand) instead of preloading the
-  // entire hierarchy — avoids firing one request per site/building on mount.
+  // ── Boot: load sites (instant if another visit already cached them) ─────
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoadingSites(true);
-      try {
-        const sitesData = await getSites();
-        if (!cancelled) setSites(sitesData);
-      } catch (err) {
-        console.error("[FloorTree] getSites:", err);
-      } finally {
-        if (!cancelled) setLoadingSites(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  // ── On-demand fetchers (cached, deduped against concurrent calls) ────────
-  const fetchBuildingsForSite = useCallback((siteId: string): Promise<Building[]> => {
-    const cached = buildingsRef.current[siteId];
-    if (cached) return Promise.resolve(cached);
-
-    const inFlight = inFlightBuildingFetches.current.get(siteId);
-    if (inFlight) return inFlight;
-
-    setLoadingBuildingsFor((prev) => new Set(prev).add(siteId));
-    const promise = getBuildings(siteId)
-      .then((blds) => {
-        setBuildings((prev) => ({ ...prev, [siteId]: blds }));
-        return blds;
-      })
-      .catch((err) => {
-        // Not cached on failure — leaves it retryable on the next expand/search.
-        console.error("[FloorTree] getBuildings:", err);
-        return [] as Building[];
-      })
-      .finally(() => {
-        setLoadingBuildingsFor((prev) => {
-          const next = new Set(prev);
-          next.delete(siteId);
-          return next;
-        });
-        inFlightBuildingFetches.current.delete(siteId);
-      });
-
-    inFlightBuildingFetches.current.set(siteId, promise);
-    return promise;
-  }, []);
-
-  const fetchFloorsForBuilding = useCallback((buildingId: string): Promise<Floor[]> => {
-    const cached = floorsRef.current[buildingId];
-    if (cached) return Promise.resolve(cached);
-
-    const inFlight = inFlightFloorFetches.current.get(buildingId);
-    if (inFlight) return inFlight;
-
-    setLoadingFloorsFor((prev) => new Set(prev).add(buildingId));
-    const promise = getFloors(buildingId)
-      .then((flrs) => {
-        setFloors((prev) => ({ ...prev, [buildingId]: flrs }));
-        return flrs;
-      })
-      .catch((err) => {
-        console.error("[FloorTree] getFloors:", err);
-        return [] as Floor[];
-      })
-      .finally(() => {
-        setLoadingFloorsFor((prev) => {
-          const next = new Set(prev);
-          next.delete(buildingId);
-          return next;
-        });
-        inFlightFloorFetches.current.delete(buildingId);
-      });
-
-    inFlightFloorFetches.current.set(buildingId, promise);
-    return promise;
-  }, []);
+    fetchSites();
+  }, [fetchSites]);
 
   // Loads everything (all buildings for all sites, all floors for all buildings)
   // — only invoked when the user actually searches, since search needs to match
@@ -158,7 +72,7 @@ const FloorTree = memo(function FloorTree({
   // already-cached sites/buildings/floors resolve instantly.
   const loadEverythingForSearch = useCallback(async (): Promise<FlatFloor[]> => {
     const buildingResults = await Promise.all(
-      sitesRef.current.map(async (site) => ({
+      sites.map(async (site) => ({
         site,
         blds: await fetchBuildingsForSite(site.site_id),
       }))
@@ -190,7 +104,7 @@ const FloorTree = memo(function FloorTree({
       }
     }
     return flat;
-  }, [fetchBuildingsForSite, fetchFloorsForBuilding]);
+  }, [sites, fetchBuildingsForSite, fetchFloorsForBuilding]);
 
   // ── Restore expand/select state immediately (cheap, synchronous) ─────────
   useEffect(() => {
@@ -202,29 +116,76 @@ const FloorTree = memo(function FloorTree({
     setSelectedFloor(initialFloorId || "");
   }, [initialSiteId, initialBuildingId, initialFloorId]);
 
+  // ── Fall back to the admin's own saved office/building/floor preference ──
+  // Only when there's nothing else to restore (fresh login, no floor
+  // selected yet -- see the effect above). Reuses the same GET /dashboard/me
+  // work_preferences the Profile page's "Seat Preferences" section already
+  // shows, rather than a separate tree-specific setting. If the admin has
+  // no saved preference either, this just resolves to nulls and the tree
+  // stays blank/collapsed, same as it always has. When a floor was saved
+  // too, this also selects it (same as clicking it) so its layouts load
+  // immediately instead of leaving "Select a floor to view layouts" up.
+  useEffect(() => {
+    if (initialSiteId) return;
+    let cancelled = false;
+    getDefaultOfficePreference().then(
+      ({ siteId, siteName, buildingId, buildingName, floorId, floorName }) => {
+        if (cancelled || !siteId) return;
+        setExpandedOffices((prev) => new Set(prev).add(siteId));
+        fetchBuildingsForSite(siteId);
+        if (buildingId) {
+          setExpandedTowers((prev) => new Set(prev).add(buildingId));
+          fetchFloorsForBuilding(buildingId);
+        }
+        if (buildingId && floorId) {
+          setSelectedFloor(floorId);
+          onSelectRef.current({
+            siteId,
+            buildingId,
+            floorId,
+            siteName: siteName ?? "",
+            buildingName: buildingName ?? "",
+            floorName: floorName ?? "",
+          });
+        }
+      }
+    );
+    return () => { cancelled = true; };
+  }, [initialSiteId, fetchBuildingsForSite, fetchFloorsForBuilding]);
+
   // ── Fetch just the initial site→building→floor path (not everything) so
   // the parent gets the resolved names for the restored selection. ─────────
+  // fetchBuildingsForSite/fetchFloorsForBuilding only need the ids we
+  // already have as props -- neither actually depends on `sites` being
+  // loaded first, so firing both together (instead of waiting on `sites`,
+  // then awaiting buildings, then awaiting floors in sequence) turns a
+  // 3-round-trip waterfall into one round trip's worth of wall-clock time.
+  // `sites` is only consulted afterward, just to resolve the site's own
+  // display name -- if it hasn't loaded yet by the time this resolves,
+  // this effect re-runs once `sites` populates (it's a dependency below)
+  // and re-fires onSelect with the name filled in; both fetches are
+  // already cached by then, so that second pass is instant.
   useEffect(() => {
     if (!initialSiteId || !initialBuildingId || !initialFloorId) return;
-    if (sites.length === 0) return;
-    const site = sites.find((s) => s.site_id === initialSiteId);
-    if (!site) return;
 
     let cancelled = false;
     (async () => {
-      const blds = await fetchBuildingsForSite(initialSiteId);
+      const [blds, flrs] = await Promise.all([
+        fetchBuildingsForSite(initialSiteId),
+        fetchFloorsForBuilding(initialBuildingId),
+      ]);
+      if (cancelled) return;
+
       const building = blds.find((b) => b.building_id === initialBuildingId);
-      if (cancelled || !building) return;
-
-      const flrs = await fetchFloorsForBuilding(initialBuildingId);
       const floor = flrs.find((f) => f.floor_id === initialFloorId);
-      if (cancelled || !floor) return;
+      if (!building || !floor) return;
 
+      const site = sites.find((s) => s.site_id === initialSiteId);
       onSelectRef.current({
         siteId: initialSiteId,
         buildingId: initialBuildingId,
         floorId: initialFloorId,
-        siteName: site.site_name,
+        siteName: site?.site_name ?? "",
         buildingName: building.building_name,
         floorName: floor.floor_name,
       });
@@ -284,33 +245,34 @@ const FloorTree = memo(function FloorTree({
     : null;
 
   // ── Expand / collapse — fetches children lazily on first expand ─────────
+  // The fetch call has to happen OUTSIDE the setState updater below, not
+  // inside it -- an updater function must be pure (React can, and in Strict
+  // Mode deliberately does, invoke it more than once to check exactly
+  // this), and fetchBuildingsForSite/fetchFloorsForBuilding call the
+  // store's own setState synchronously up front. Doing that from inside
+  // another component's state updater is what produced "Cannot update a
+  // component while rendering a different component".
   const toggleOffice = useCallback((siteId: string) => {
+    const isExpanding = !expandedOffices.has(siteId);
     setExpandedOffices((prev) => {
       const next = new Set(prev);
-      if (prev.has(siteId)) {
-        next.delete(siteId);
-      } else {
-        next.add(siteId);
-        fetchBuildingsForSite(siteId);
-      }
+      if (isExpanding) next.add(siteId); else next.delete(siteId);
       return next;
     });
-  }, [fetchBuildingsForSite]);
+    if (isExpanding) fetchBuildingsForSite(siteId);
+  }, [expandedOffices, fetchBuildingsForSite]);
 
   const toggleTower = useCallback((buildingId: string) => {
+    const isExpanding = !expandedTowers.has(buildingId);
     setExpandedTowers((prev) => {
       const next = new Set(prev);
-      if (prev.has(buildingId)) {
-        next.delete(buildingId);
-      } else {
-        next.add(buildingId);
-        fetchFloorsForBuilding(buildingId);
-      }
+      if (isExpanding) next.add(buildingId); else next.delete(buildingId);
       return next;
     });
-  }, [fetchFloorsForBuilding]);
+    if (isExpanding) fetchFloorsForBuilding(buildingId);
+  }, [expandedTowers, fetchFloorsForBuilding]);
 
-  const isBusy = loadingSites || isSearchLoading;
+  const isBusy = sitesLoading || isSearchLoading;
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -328,10 +290,10 @@ const FloorTree = memo(function FloorTree({
           value={search}
           onChange={(e) => handleSearch(e.target.value)}
           placeholder={
-            loadingSites ? "Loading sites…" : isSearchLoading ? "Searching…" : "Search floors..."
+            sitesLoading ? "Loading sites…" : isSearchLoading ? "Searching…" : "Search floors..."
           }
-          disabled={loadingSites}
-          className="w-full h-10 pl-9 pr-8 border rounded-md text-sm disabled:opacity-50 disabled:cursor-wait"
+          disabled={sitesLoading}
+          className="w-full h-10 pl-9 pr-8 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-wait"
         />
         {search && !isBusy && (
           <button

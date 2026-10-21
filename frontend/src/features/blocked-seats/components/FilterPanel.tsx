@@ -1,6 +1,7 @@
 import {
   Building2,
   CalendarDays,
+  ChevronDown,
   Layers3,
   MapPin,
   RotateCcw,
@@ -8,7 +9,11 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { BlockedSeatFilters, LocationOption } from "../types/blockedSeats.types";
+import { useEffect, useRef, useState } from "react";
+import type {
+  BlockedSeatFilters,
+  LocationOption,
+} from "../types/blockedSeats.types";
 import { BLOCK_TYPE_OPTIONS } from "../utils/constants";
 
 interface Props {
@@ -37,6 +42,131 @@ interface SelectFieldProps {
 
 const controlClass =
   "h-10 w-full rounded-xl border border-gray-200 bg-white pl-10 pr-3 text-[12.5px] font-normal text-gray-900 outline-none transition-colors focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400 sm:h-11 sm:text-[13px]";
+
+const formatDate = (value: string) =>
+  new Date(`${value}T00:00:00`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+function DateRangeField({
+  dateFrom,
+  dateTo,
+  onChange,
+}: {
+  dateFrom: string;
+  dateTo: string;
+  onChange: (from: string, to: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draftFrom, setDraftFrom] = useState(dateFrom);
+  const [draftTo, setDraftTo] = useState(dateTo);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setDraftFrom(dateFrom);
+    setDraftTo(dateTo);
+  }, [dateFrom, dateTo]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClickOutside = (event: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [open]);
+
+  const label =
+    dateFrom && dateTo
+      ? `${formatDate(dateFrom)} – ${formatDate(dateTo)}`
+      : "Select date range";
+
+  return (
+    <div ref={rootRef} className="relative mt-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className={controlClass.replace("pl-10", "px-3")}
+        aria-expanded={open}
+      >
+        <span className="flex items-center gap-2">
+          <CalendarDays size={15} className="shrink-0 text-gray-400" />
+          <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+          <ChevronDown size={15} className="shrink-0 text-gray-400" />
+        </span>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1 flex w-64 flex-col gap-3 rounded-lg border border-gray-200 bg-white p-3 shadow-lg">
+          <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
+            From
+            <input
+              type="date"
+              value={draftFrom}
+              onChange={(event) => {
+                const next = event.target.value;
+                setDraftFrom(next);
+                setDraftTo(next);
+              }}
+              onKeyDown={(event) => {
+                if (!["Tab", "Escape", "Shift"].includes(event.key)) {
+                  event.preventDefault();
+                }
+              }}
+              onPaste={(event) => event.preventDefault()}
+              className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
+            To
+            <input
+              type="date"
+              value={draftTo}
+              min={draftFrom || undefined}
+              onChange={(event) => setDraftTo(event.target.value)}
+              onKeyDown={(event) => {
+                if (!["Tab", "Escape", "Shift"].includes(event.key)) {
+                  event.preventDefault();
+                }
+              }}
+              onPaste={(event) => event.preventDefault()}
+              className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </label>
+          <div className="flex items-center justify-between gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                setDraftFrom("");
+                setDraftTo("");
+                onChange("", "");
+                setOpen(false);
+              }}
+              className="h-8 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              disabled={!draftFrom || !draftTo}
+              onClick={() => {
+                onChange(draftFrom, draftTo);
+                setOpen(false);
+              }}
+              className="h-8 rounded-lg bg-indigo-600 px-3 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Apply
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SelectField({
   label,
@@ -89,21 +219,17 @@ export default function FilterPanel({
   return (
     <section className="rounded-2xl border border-[#EBEBF5] bg-white p-4 shadow-sm sm:p-6">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5 xl:gap-4">
-        <label className="block min-w-0 text-[11px] font-medium text-gray-600 sm:text-[12px]">
-          Date
-          <span className="relative mt-1.5 block">
-            <CalendarDays
-              size={15}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-            <input
-              type="date"
-              value={filters.date}
-              onChange={(event) => onChange("date", event.target.value)}
-              className={controlClass}
-            />
-          </span>
-        </label>
+        <div className="block min-w-0 text-[11px] font-medium text-gray-600 sm:text-[12px]">
+          Date Range
+          <DateRangeField
+            dateFrom={filters.dateFrom}
+            dateTo={filters.dateTo}
+            onChange={(from, to) => {
+              onChange("dateFrom", from);
+              onChange("dateTo", to);
+            }}
+          />
+        </div>
         <SelectField
           label="Office"
           value={filters.siteId}
@@ -119,7 +245,9 @@ export default function FilterPanel({
         <SelectField
           label="Building"
           value={filters.buildingId}
-          placeholder={loadingBuildings ? "Loading Buildings…" : "All Buildings"}
+          placeholder={
+            loadingBuildings ? "Loading Buildings…" : "All Buildings"
+          }
           icon={Building2}
           options={buildings.map((option) => ({
             value: option.id,
@@ -164,7 +292,7 @@ export default function FilterPanel({
             <input
               value={filters.search}
               onChange={(event) => onChange("search", event.target.value)}
-              placeholder="Search by seat ID or reason"
+              placeholder="Search by space ID or reason"
               className={controlClass}
             />
           </span>

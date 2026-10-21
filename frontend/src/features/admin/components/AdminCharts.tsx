@@ -81,10 +81,12 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
 
   // BACKEND DATA
   const totalSeats = data.total_seats;
+  const nonBookable = data.non_bookable_seats;
+  const bookableSeats = Math.max(totalSeats - nonBookable, 0);
   const booked = data.booked_seats_today;
   const blocked = data.blocked_seats;
-  const available = Math.max(totalSeats - booked - blocked, 0);
-  const occupancy = ceilPercentage((booked / Math.max(totalSeats, 1)) * 100);
+  const available = Math.max(bookableSeats - booked - blocked, 0);
+  const occupancy = ceilPercentage((booked / Math.max(bookableSeats - blocked, 1)) * 100);
 
   // Booked/blocked percentages are each rounded independently, so the
   // available share is the remainder rather than its own independent
@@ -92,19 +94,27 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
   // than 100% (e.g. 1% + 1% + 100%).
   const bookedPct = ceilPercentage((booked / Math.max(totalSeats, 1)) * 100);
   const blockedPct = ceilPercentage((blocked / Math.max(totalSeats, 1)) * 100);
-  const availablePct = Math.max(100 - bookedPct - blockedPct, 0);
+  const nonBookablePct = ceilPercentage((nonBookable / Math.max(totalSeats, 1)) * 100);
+  const availablePct = Math.max(100 - bookedPct - blockedPct - nonBookablePct, 0);
   const donutPctByName: Record<string, number> = {
     booked: bookedPct,
     blocked: blockedPct,
+    nonBookable: nonBookablePct,
     available: availablePct,
   };
 
-  const donutLegend = [
-    { label: "Reserved seats", value: booked, dot: "bg-indigo-500" },
+  // Employees/Guests are a breakdown of Reserved seats (booked = employee +
+  // guest), so they render as an indented sub-list under that row instead of
+  // as their own top-level legend entries.
+  const reservedBreakdown = [
     { label: "Employees", value: data.employee_bookings_today, dot: "bg-purple-400" },
     { label: "Guests", value: data.guest_visit_booking_with_seat_today, dot: "bg-pink-400" },
-    { label: "Blocked seats", value: blocked, dot: "bg-amber-400" },
-    { label: "Available seats", value: available, dot: "bg-emerald-500" },
+  ];
+
+  const donutLegend = [
+    { label: "Blocked space", value: blocked, dot: "bg-amber-400" },
+    { label: "Non-bookable space", value: nonBookable, dot: "bg-slate-400" },
+    { label: "Available space", value: available, dot: "bg-emerald-500" },
   ];
 
   const renderDonutTooltip: NonNullable<ComponentProps<typeof ChartTooltip>["content"]> = ({
@@ -129,7 +139,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
           <span className="text-muted-foreground">{meta?.label ?? name}</span>
         </div>
         <div className="mt-1 font-mono font-medium tabular-nums text-foreground">
-          {value} seats <span className="text-muted-foreground">({pct}%)</span>
+          {value} spaces <span className="text-muted-foreground">({pct}%)</span>
         </div>
       </div>
     );
@@ -142,17 +152,18 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
       <Card className="transition-shadow duration-200 hover:shadow-md">
         <CardHeader>
           <CardTitle className="text-sm font-semibold">
-            Today&apos;s Seat Overview
+            Today&apos;s Space Overview
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="flex flex-col sm:flex-row items-center justify-center gap-6">
+        <CardContent className="flex flex-col sm:flex-row items-center justify-start gap-4 sm:gap-2 px-4 sm:px-6">
 
           <div className="relative w-40 h-40 shrink-0">
             <ChartContainer
               config={{
                 booked: { label: "Reserved", color: "#6366F1" },
                 blocked: { label: "Blocked", color: "#FBBF24" },
+                nonBookable: { label: "Non-bookable", color: "#94A3B8" },
                 available: { label: "Available", color: "#E5E7EB" },
               }}
               className="h-full w-full"
@@ -177,6 +188,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
                   data={[
                     { name: "booked", value: booked },
                     { name: "blocked", value: blocked },
+                    { name: "nonBookable", value: nonBookable },
                     { name: "available", value: available },
                   ]}
                   dataKey="value"
@@ -188,8 +200,10 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
                   cornerRadius={0}
                   stroke="none"
                 >
+                  {/* chandana */}
                   <Cell className="cursor-pointer transition-opacity hover:opacity-80" fill="url(#donut-booked)" />
                   <Cell className="cursor-pointer transition-opacity hover:opacity-80" fill="url(#donut-blocked)" />
+                  <Cell className="cursor-pointer transition-opacity hover:opacity-80" fill="#94A3B8" />
                   <Cell className="cursor-pointer transition-opacity hover:opacity-80" fill="#10B981" />
                 </Pie>
               </PieChart>
@@ -200,42 +214,62 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
                 {occupancy}%
               </p>
               <p className="text-xs font-medium text-black">
-                Seat occupancy
+                Space occupancy
               </p>
             </div>
           </div>
 
-          <div className="w-full space-y-2.5 text-sm">
-            {donutLegend.map((row) => (
-              <div key={row.label} className="flex items-center justify-between gap-3">
+          <div className="w-full min-w-0 space-y-2.5 text-sm">
+            {/* Reserved seats, with Employees/Guests as its breakdown */}
+            <div className="space-y-1.5">
+              <div className="flex items-start justify-between gap-3">
                 <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                  <span className={cn("h-2 w-2 shrink-0 rounded-full", row.dot)} />
-                  <span className="truncate">{row.label}</span>
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-indigo-500 mt-px" />
+                  <span>Reserved space</span>
                 </span>
-                <span
-                  className={cn(
-                    "shrink-0 tabular-nums text-gray-900",
-                    row.label === "Reserved seats"
-                      ? "text-base font-extrabold text-black"
-                      : "text-sm font-medium"
-                  )}
-                >
+                <span className="shrink-0 tabular-nums text-base font-extrabold text-black">
+                  {booked}
+                </span>
+              </div>
+
+              <div className="ml-1 space-y-1 border-l border-dashed border-gray-200 pl-3">
+                {reservedBreakdown.map((row) => (
+                  <div key={row.label} className="flex items-start justify-between gap-3">
+                    <span className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+                      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", row.dot, "mt-px")} />
+                      <span>{row.label}</span>
+                    </span>
+                    <span className="shrink-0 tabular-nums text-xs font-medium text-gray-900">
+                      {row.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {donutLegend.map((row) => (
+              <div key={row.label} className="flex items-start justify-between gap-3">
+                <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                  <span className={cn("h-2 w-2 shrink-0 rounded-full", row.dot, "mt-px")} />
+                  <span>{row.label}</span>
+                </span>
+                <span className="shrink-0 tabular-nums text-sm font-medium text-gray-900">
                   {row.value}
                 </span>
               </div>
             ))}
 
             <div className="mt-1 flex items-center justify-between gap-3 border-t border-dashed border-gray-200 pt-2.5">
-              <span className="text-xs font-medium text-muted-foreground">Total seats</span>
+              <span className="text-xs font-medium text-muted-foreground">Total Spaces</span>
               <span className="font-semibold tabular-nums text-gray-900">{totalSeats}</span>
             </div>
           </div>
 
         </CardContent>
 
-        <div className="mx-6 mb-5 mt-2 flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-600 ring-1 ring-inset ring-blue-100">
+        <div className="mx-4 sm:mx-6 mb-5 mt-2 flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-600 ring-1 ring-inset ring-blue-100">
           <Info className="w-4 h-4 shrink-0" />
-          Occupancy rate is calculated based on all bookable seats.
+          Occupancy rate is calculated based on all bookable spaces.
         </div>
       </Card>
 
@@ -250,7 +284,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
             <select
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value as TrendPeriod)}
-              className="h-8 cursor-pointer appearance-none rounded-lg border border-blue-500 bg-white pl-3 pr-8 text-xs font-medium text-gray-900 shadow-none transition-colors hover:bg-white focus:border-blue-500 focus:outline-none"
+              className="h-8 cursor-pointer appearance-none rounded-lg border border-blue-500 bg-white pl-3 pr-8 text-xs font-medium text-gray-900 shadow-none transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               {PERIOD_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value} className="bg-white text-gray-900">
@@ -285,7 +319,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
               </defs>
               <XAxis
                 dataKey="day"
-                axisLine={false}
+                axisLine={{ stroke: "#E5E7EB" }}
                 tickLine={false}
                 interval={0}
                 ticks={
@@ -297,7 +331,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
               <YAxis
                 domain={[0, 25]}
                 ticks={[0, 5, 10, 15, 20, 25]}
-                axisLine={false}
+                axisLine={{ stroke: "#E5E7EB" }}
                 tickLine={false}
                 width={40}
               />
@@ -318,7 +352,7 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
                       return (
                         <div className="flex w-full flex-col gap-0.5">
                           <span>
-                            Occupancy: {value}% ({bookedSeats} seats)
+                            Occupancy: {value}% ({bookedSeats} spaces)
                           </span>
                           <span className="text-muted-foreground">
                             Employees: {employeeBookedSeats} · Guests: {guestBookedSeats}
@@ -405,6 +439,6 @@ export default function AdminCharts({ data, trendData, selectedPeriod, setSelect
       </Card>
 
     </div>
-    
+
   );
 }

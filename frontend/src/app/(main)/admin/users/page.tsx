@@ -11,6 +11,7 @@ import { useUsers } from "@/features/users/hooks/useUsers";
 import type { User } from "@/features/users/types/users.types";
 import { TableSkeleton, TableBodySkeleton } from "@/components/ui/table-skeleton";
 import {
+  formatRoleLabel,
   normalizeRoleKey,
   USERS_PIN_DURATION as PIN_DURATION,
   USERS_PAGE_SIZES as PAGE_SIZES,
@@ -35,6 +36,17 @@ function UserManagementPage() {
   const pinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const roleFilterAppliedRef = useRef(false);
 
+  // Only the very first fetch (nothing has ever been shown yet) gets the
+  // full page-level skeleton, with its own placeholder header. Every fetch
+  // after that -- a search keystroke, a filter change, a page change --
+  // keeps rendering the real UsersTable (passing `loading` through for its
+  // own row-level skeleton), so the real header stays mounted the whole
+  // time instead of unmounting for the fake one and flashing back.
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  useEffect(() => {
+    if (!loading) setHasLoadedOnce(true);
+  }, [loading]);
+
   // Reset search/role/status filters on every mount so the page always starts
   // clean, without wiping the page/rows-per-page the user had set — those
   // should survive round-trips like navigating to change-role and back.
@@ -58,9 +70,9 @@ function UserManagementPage() {
     const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
     let message = "Changes saved successfully.";
     if (newRole && newStatus) {
-      message = `Role changed successfully to ${newRole} and status changed successfully to ${capitalize(newStatus)}.`;
+      message = `Role changed successfully to ${formatRoleLabel(newRole)} and status changed successfully to ${capitalize(newStatus)}.`;
     } else if (newRole) {
-      message = `Role changed successfully to ${newRole}.`;
+      message = `Role changed successfully to ${formatRoleLabel(newRole)}.`;
     } else if (newStatus) {
       message = `Status changed successfully to ${capitalize(newStatus)}.`;
     }
@@ -143,7 +155,7 @@ function UserManagementPage() {
           <h2 className="text-sm sm:text-base font-semibold text-gray-800 flex items-center gap-2">
             User Management
             <span className="text-[11px] font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
-              {summary?.filteredUsers ?? 0}
+              {isSearchMode ? users.length : summary?.filteredUsers ?? 0}
             </span>
           </h2>
           {/* Stays stacked/full-width until md: -- matches the breakpoint
@@ -179,13 +191,23 @@ function UserManagementPage() {
         </div>
 
         <div className="w-full h-full overflow-x-auto flex-1 min-h-0">
-          {loading ? (
+          {!hasLoadedOnce && loading ? (
             <TableBodySkeleton columns={5} rows={5} />
           ) : (
             <UsersTable
               users={users}
               highlightedUserId={highlightedId}
               onChangeRole={handleChangeRole}
+              loading={loading}
+              emptyMessage={
+                isSearchMode
+                  ? `No users match "${search}".`
+                  : statusFilter === "ACTIVE"
+                    ? "No active users found."
+                    : statusFilter === "INACTIVE"
+                      ? "No inactive users found."
+                      : "No users found."
+              }
             />
           )}
         </div>
@@ -209,7 +231,7 @@ function UserManagementPage() {
                 <select
                   value={limit}
                   onChange={(e) => setLimit(Number(e.target.value))}
-                  className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                  className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>

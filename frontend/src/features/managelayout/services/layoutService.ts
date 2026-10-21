@@ -125,6 +125,7 @@ export interface Preference {
   preference_type: string;
   description: string;
   icon_name: string;
+  applicable_seat_types: string[];
 }
 
 interface RawPreference {
@@ -133,6 +134,7 @@ interface RawPreference {
   category: string;
   description?: string;
   icon?: string;
+  applicable_seat_types?: string[] | null;
 }
 
 export async function fetchAllPreferences(): Promise<Preference[]> {
@@ -144,6 +146,7 @@ export async function fetchAllPreferences(): Promise<Preference[]> {
     preference_type: item.category,
     description:     item.description ?? "",
     icon_name:       item.icon ?? "",
+    applicable_seat_types: item.applicable_seat_types ?? [],
   }));
 }
 
@@ -152,7 +155,7 @@ export interface LayoutSeatsApiResponse {
   total_seats: number;
   configured_seats: number;
   pending_seats: number;           // API uses "pending" not "unconfigured"
-  items: { is_bookable: boolean }[];
+  items: { is_bookable: boolean; status?: string | null }[];
 }
 
 export async function fetchLayoutSeatStats(layoutId: string): Promise<LayoutSeatStats> {
@@ -167,7 +170,8 @@ export async function fetchLayoutSeatStats(layoutId: string): Promise<LayoutSeat
     total_seats:        data.total_seats,
     configured_seats:   data.configured_seats,
     unconfigured_seats: data.pending_seats,
-    non_bookable_seats: items.filter((s) => !s.is_bookable).length,
+    non_bookable_seats: items.filter((s) => s.status === "ACTIVE" && s.is_bookable === false).length,
+    inactive_seats:     items.filter((s) => s.status === "INACTIVE").length,
     bookable_seats:     items.filter((s) => s.is_bookable).length,
   };
 }

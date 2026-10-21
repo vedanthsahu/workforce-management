@@ -13,14 +13,16 @@ import ViewToggle from "@/features/managelayout1/components/ViewToggle";
 import SpaceCategoryTabs from "@/features/managelayout1/components/SpaceCategoryTabs";
 import SpaceStatCards from "@/features/managelayout1/components/SpaceStatCards";
 import { useManageSeats } from "@/features/managelayout1/hooks/Usemanageseats";
-import { SPACE_CATEGORY_LABELS } from "@/features/managelayout1/utils/spaceCategory";
+import { SPACE_CATEGORY_LABELS, type SpaceCategory } from "@/features/managelayout1/utils/spaceCategory";
+import type { SeatFilters } from "@/features/managelayout1/types/seat.types";
 import { usePublishLayout } from "@/features/managelayout/hooks/useLayoutDetails";
-import { fetchLayoutPolicy } from "@/features/managelayout/services/layoutService";
+import { fetchLayoutPolicy, getLayoutsByFloor } from "@/features/managelayout/services/layoutService";
 import { useLayoutsStore } from "@/store/useLayoutsStore";
 import { ManageSeatsSkeleton } from "@/features/managelayout1/components/ManageSeatsSkeleton";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { useNavigationGuardStore } from "@/store/useNavigationGuardStore";
+import { indiaDateIsoAfterDays } from "@/lib/indiaDate";
 
 // Fallback only -- used for the one render before the real tenant value
 // (GET /business-rules/layout-policy) has loaded, and if that call fails.
@@ -29,9 +31,7 @@ import { useNavigationGuardStore } from "@/store/useNavigationGuardStore";
 const FALLBACK_MIN_ADVANCE_DAYS = 45;
 
 function minEffectiveDateIso(minAdvanceDays: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + minAdvanceDays);
-  return d.toISOString().slice(0, 10);
+  return indiaDateIsoAfterDays(minAdvanceDays);
 }
 
 function ManageSeatsPage() {
@@ -61,7 +61,8 @@ function ManageSeatsPage() {
     filters,
     updateFilter,
     resetFilters,
-    subTypeOptions,
+    cardFilter,
+    setCardFilter,
     preferences,
     selected,
     toggleSelect,
@@ -82,6 +83,20 @@ function ManageSeatsPage() {
     isDirty,
     discardChanges,
   } = useManageSeats();
+
+  // The map highlights individual spaces by colour, which doesn't narrow
+  // meaningfully to a single space type (Seats/Cabins/Conference Rooms) -- the
+  // list is the view that actually reflects these. So picking one jumps to
+  // List, the same way picking a stat card does. "All" leaves the view alone.
+  const handleCategoryChange = (next: SpaceCategory) => {
+    setActiveCategory(next);
+    if (next !== "ALL") setView("list");
+  };
+
+  const handleFilterUpdate = <K extends keyof SeatFilters>(key: K, value: SeatFilters[K]) => {
+    updateFilter(key, value);
+    if (key === "seat_type" && value !== "All") setView("list");
+  };
 
   const {
     publishing,
@@ -111,7 +126,7 @@ function ManageSeatsPage() {
   const hasUnpublishedEdits = !!layout?.is_published && isDirty;
   useUnsavedChangesGuard(
     hasUnpublishedEdits,
-    "You have unpublished seat changes. If you leave now, they will be lost.",
+    "You have unpublished space changes. If you leave now, they will be lost.",
     discardChanges
   );
   const { requestNavigation } = useNavigationGuardStore();
@@ -124,6 +139,13 @@ function ManageSeatsPage() {
   const [effectiveDate, setEffectiveDate] = useState(() =>
     minEffectiveDateIso(FALLBACK_MIN_ADVANCE_DAYS)
   );
+  // The scheduling buffer only exists to protect bookings made against a
+  // floor's CURRENT published layout from being replaced out from under
+  // them -- a floor with none has nothing to protect (see
+  // activate_floor_layout in floor_layout_service.py). Defaults to true
+  // (safe/conservative: force the buffer) until this floor's own layouts
+  // have actually loaded.
+  const [floorHasPublishedLayout, setFloorHasPublishedLayout] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -137,8 +159,25 @@ function ManageSeatsPage() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    if (!floorId) return;
+    let active = true;
+    getLayoutsByFloor(floorId)
+      .then((layouts) => {
+        if (active) setFloorHasPublishedLayout(layouts.some((l) => l.status === "PUBLISHED"));
+      })
+      .catch((err) => {
+        console.error("[getLayoutsByFloor]", err);
+        // Fetch failed -- stay conservative and keep the buffer rather than
+        // silently allowing an immediate publish we couldn't actually verify.
+      });
+    return () => { active = false; };
+  }, [floorId]);
+
   const openPublishConfirm = () => {
-    setEffectiveDate(minEffectiveDateIso(minAdvanceDays));
+    // No published layout to protect -> publish today, not
+    // today+minAdvanceDays. minEffectiveDateIso(0) is just today's date.
+    setEffectiveDate(minEffectiveDateIso(floorHasPublishedLayout ? minAdvanceDays : 0));
     setShowPublishConfirm(true);
   };
 
@@ -211,7 +250,7 @@ function ManageSeatsPage() {
               <button
                 onClick={openPublishConfirm}
                 disabled={!canPublish || publishing}
-                title={!allConfigured ? `Configure all seats before publishing` : undefined}
+                title={!allConfigured ? `Configure all spaces before publishing` : undefined}
                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {publishing ? (
@@ -236,26 +275,45 @@ function ManageSeatsPage() {
           <SpaceCategoryTabs
             active={activeCategory}
             counts={categoryCounts}
-            onChange={setActiveCategory}
+            onChange={handleCategoryChange}
             disabled={statsLoading}
           />
 
           {/* STAT CARDS */}
-          <SpaceStatCards category={activeCategory} stats={categoryStats} loading={statsLoading} />
+          <SpaceStatCards
+            category={activeCategory}
+            stats={categoryStats}
+            loading={statsLoading}
+            cardFilter={cardFilter}
+            onCardFilterChange={(f) => { setCardFilter(f); setView("list"); }}
+          />
 
-          {/* FILTERS + VIEW TOGGLE */}
+          {/* FILTERS + VIEW TOGGLE — the filters (Status/Bookable/Amenities)
+              only make sense once at least one space in this tab is
+              actually configured. On an all-unconfigured tab, none of them
+              have anything real to match yet (an unconfigured space has no
+              status/bookable/amenity value), so picking any filter would
+              just empty the list and read as "the filter is broken" rather
+              than "there's nothing configured yet". Masked (greyed out,
+              non-interactive) rather than hidden, so the admin can still
+              see these filters exist -- just not use them until
+              categoryStats.configured says otherwise. The view toggle
+              stays fully available regardless, since switching map/list
+              isn't affected by this. */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
             <div className="min-w-0 flex-1">
               <SeatFiltersBar
                 filters={filters}
-                subTypeOptions={subTypeOptions}
                 preferences={preferences}
-                onUpdate={updateFilter}
+                onUpdate={handleFilterUpdate}
                 onReset={resetFilters}
                 searchPlaceholder={`Search by ${SPACE_CATEGORY_LABELS[activeCategory].singular.toLowerCase()} code…`}
+                disabled={categoryStats.configured === 0}
+                searchDisabled={view === "map" && categoryStats.configured === 0}
+                showTypeFilter={activeCategory === "ALL"}
               />
             </div>
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0 ml-auto">
               <ViewToggle view={view} onChange={setView} />
             </div>
           </div>
@@ -320,7 +378,9 @@ function ManageSeatsPage() {
           open={bulkOpen}
           onClose={closeBulkEdit}
           selectedIds={[...selected]}
+          seats={seats}
           layoutId={layout.layout_id}
+          category={activeCategory}
           preferences={preferences}
           onSave={saveBulk}
         />
@@ -328,7 +388,7 @@ function ManageSeatsPage() {
 
       <ConfirmDialog
         open={showPublishConfirm}
-        title={hasUnpublishedEdits ? "Publish pending seat changes?" : "Publish this layout?"}
+        title={hasUnpublishedEdits ? "Publish pending space changes?" : "Publish this layout?"}
         description={
           hasUnpublishedEdits
             // This path (PATCH /layout-seats/bulk-configuration) has no
@@ -359,11 +419,11 @@ function ManageSeatsPage() {
               <input
                 id="publish-effective-date"
                 type="date"
-                min={minEffectiveDateIso(minAdvanceDays)}
+                min={minEffectiveDateIso(floorHasPublishedLayout ? minAdvanceDays : 0)}
                 value={effectiveDate}
                 onChange={(e) => {
                   const value = e.target.value;
-                  const min = minEffectiveDateIso(minAdvanceDays);
+                  const min = minEffectiveDateIso(floorHasPublishedLayout ? minAdvanceDays : 0);
                   // The `min` attribute only greys out the calendar dropdown and
                   // marks the input :invalid — it does NOT stop a date typed
                   // directly into the MM/DD/YYYY segments from being accepted.
@@ -373,7 +433,7 @@ function ManageSeatsPage() {
                   // for the real minimum), this just avoids a round-trip.
                   setEffectiveDate(value && value < min ? min : value);
                 }}
-                className="w-full h-9 pl-8 pr-3 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+                className="w-full h-9 pl-8 pr-3 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </>

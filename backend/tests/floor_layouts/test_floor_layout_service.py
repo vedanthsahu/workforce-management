@@ -27,6 +27,17 @@ from backend.services.floor_layout_service import (
 _VISIBILITY_DAYS = {"DRAFT": 15, "ARCHIVED": 30, "DELETED": 5}
 
 
+def setUpModule() -> None:
+    # These service tests exercise layout lifecycle rules, not S3 URL signing.
+    # Keep response validation independent of application secrets and AWS.
+    unittest.enterModuleContext(
+        patch(
+            "backend.schemas.floor_layout.resolve_layout_file_url",
+            side_effect=lambda value: value,
+        )
+    )
+
+
 class FakeConnection:
     def __init__(self) -> None:
         self.commits = 0
@@ -280,6 +291,96 @@ class DeleteFloorLayoutServiceTests(unittest.TestCase):
 
         self.assertEqual(context.exception.status_code, 404)
         self.assertNotIn("delete", context.exception.detail["message"].lower())
+
+
+class ActivateFloorLayoutFirstPublishServiceTests(unittest.TestCase):
+    """A floor with zero published layouts has nothing live to protect --
+    no seat on it has ever been bookable, so no booking could reference
+    one, and there's no way to "unpublish" a layout once it exists. First
+    publish for a floor must always go immediate, even if a future
+    effective_date is passed -- only a floor that already has something
+    published needs the scheduling buffer."""
+
+    def setUp(self) -> None:
+        audit_patcher = patch(
+            "backend.services.floor_layout_service.safe_write_audit_log"
+        )
+        audit_patcher.start()
+        self.addCleanup(audit_patcher.stop)
+
+    def test_first_publish_ignores_future_effective_date(self) -> None:
+        conn = FakeConnection()
+        current_user = {"tenant_id": "1", "user_id": "5"}
+        future_date = (datetime.now(UTC) + timedelta(days=90)).date()
+
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=_layout_row(status="DRAFT"),
+            ),
+            patch(
+                "backend.services.floor_layout_service.fetch_published_layout_for_floor",
+                return_value=None,
+            ) as mock_fetch_published,
+            patch("backend.services.floor_layout_service.acquire_floor_publish_lock"),
+            patch(
+                "backend.services.floor_layout_service.archive_existing_published_layouts",
+            ) as mock_archive,
+            patch(
+                "backend.services.floor_layout_service.activate_floor_layout_record",
+                return_value=_layout_row(status="PUBLISHED"),
+            ) as mock_activate,
+            patch("backend.services.floor_layout_service.publish_layout_seat_configurations"),
+            patch("backend.services.floor_layout_service.reconcile_published_layout_seats"),
+            patch(
+                "backend.services.floor_layout_service._schedule_floor_layout",
+            ) as mock_schedule,
+        ):
+            response = activate_floor_layout(
+                conn, current_user=current_user, layout_id="10", effective_date=future_date,
+            )
+
+        self.assertEqual(response.status, "PUBLISHED")
+        mock_fetch_published.assert_called_once()
+        mock_schedule.assert_not_called()
+        mock_activate.assert_called_once()
+        mock_archive.assert_called_once()
+        self.assertEqual(conn.commits, 1)
+
+    def test_republish_with_existing_published_layout_still_schedules(self) -> None:
+        conn = FakeConnection()
+        current_user = {"tenant_id": "1", "user_id": "5"}
+        future_date = (datetime.now(UTC) + timedelta(days=90)).date()
+
+        with (
+            patch(
+                "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+                return_value=_layout_row(status="DRAFT"),
+            ),
+            patch(
+                "backend.services.floor_layout_service.fetch_published_layout_for_floor",
+                return_value=_layout_row(layout_id="20", status="PUBLISHED"),
+            ) as mock_fetch_published,
+            patch(
+                "backend.services.floor_layout_service.fetch_site_timezone",
+                return_value=None,
+            ),
+            patch(
+                "backend.services.floor_layout_service._schedule_floor_layout",
+                return_value=_layout_row(status="SCHEDULED"),
+            ) as mock_schedule,
+            patch(
+                "backend.services.floor_layout_service.activate_floor_layout_record",
+            ) as mock_activate,
+        ):
+            response = activate_floor_layout(
+                conn, current_user=current_user, layout_id="10", effective_date=future_date,
+            )
+
+        self.assertEqual(response["status"], "SCHEDULED")
+        mock_fetch_published.assert_called_once()
+        mock_schedule.assert_called_once()
+        mock_activate.assert_not_called()
 
 
 _SCHEDULING_GAP = {
@@ -581,6 +682,50 @@ class RescheduleFloorLayoutServiceTests(unittest.TestCase):
         self.assertEqual(context.exception.detail["code"], "effective_date_too_soon")
         mock_schedule.assert_not_called()
         self.assertEqual(conn.rollbacks, 1)
+
+    def test_reschedule_accepts_date_inside_admin_buffer_but_past_employee_window(
+        self,
+    ) -> None:
+        """Reschedule's floor is the employee booking window alone
+        (30 days in _SCHEDULING_GAP), not the full admin min_advance_days
+        (45, window + buffer) a *new* schedule requires -- a scheduled
+        layout's seats are already materialized, so the buffer's
+        lead-time rationale doesn't apply to just moving its date.
+        A date 35 days out (past the 30-day window, short of the
+        45-day min_advance_days) must be accepted, not rejected."""
+        conn = FakeConnection()
+        current_user = {"tenant_id": "1", "user_id": "5"}
+        current_effective_from = datetime.now(UTC) + timedelta(days=90)
+        new_date = (datetime.now(UTC) + timedelta(days=35)).date()
+        scheduled_row = _layout_row(
+            layout_id="10", status="SCHEDULED", effective_from=current_effective_from,
+        )
+
+        with patch(
+            "backend.services.floor_layout_service.fetch_floor_layout_by_id",
+            return_value=scheduled_row,
+        ), patch(
+            "backend.services.floor_layout_service.fetch_site_timezone",
+            return_value=None,
+        ), patch(
+            "backend.services.floor_layout_service.resolve_layout_scheduling_gap",
+            return_value=_SCHEDULING_GAP,
+        ), patch(
+            "backend.services.floor_layout_service.acquire_floor_publish_lock",
+        ), patch(
+            "backend.services.floor_layout_service.fetch_published_layout_for_floor",
+            return_value=None,
+        ), patch(
+            "backend.services.floor_layout_service.schedule_floor_layout_record",
+            return_value=_layout_row(layout_id="10", status="SCHEDULED"),
+        ) as mock_schedule:
+            response = reschedule_floor_layout(
+                conn, current_user=current_user, layout_id="10", effective_date=new_date,
+            )
+
+        self.assertEqual(response.status, "SCHEDULED")
+        mock_schedule.assert_called_once()
+        self.assertEqual(conn.commits, 1)
 
     def test_reschedule_non_scheduled_layout_returns_409(self) -> None:
         conn = FakeConnection()
