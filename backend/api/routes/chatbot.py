@@ -1,9 +1,8 @@
 """Authenticated employee web-chat endpoints."""
 
-import os
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user
@@ -21,15 +20,6 @@ from backend.db.connection import get_db
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
-def _seatbook_api_base_url(request: Request) -> str:
-    """Return the current API origin, including its named Gateway stage."""
-    base_url = str(request.base_url).rstrip("/")
-    environment_name = os.getenv("ENVIRONMENT_NAME", "").strip().strip("/")
-    if environment_name and not base_url.endswith(f"/{environment_name}"):
-        return f"{base_url}/{environment_name}"
-    return base_url
-
-
 def _identity(current_user: dict[str, Any]) -> SeatBookIdentity:
     return SeatBookIdentity(
         user_id=str(current_user["user_id"]),
@@ -45,12 +35,12 @@ def _identity(current_user: dict[str, Any]) -> SeatBookIdentity:
 @router.post("/session", response_model=SessionOut, status_code=status.HTTP_201_CREATED)
 async def create_session(
     body: CreateSessionRequest,
-    request: Request,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     db: PGConnection = Depends(get_db),
 ):
     identity = _identity(current_user)
-    async with seatbook_identity(identity, base_url=_seatbook_api_base_url(request)):
+    with seatbook_identity(current_user, db, background_tasks):
         return await chat_adapter_service.create_session(body, db, identity)
 
 
@@ -58,12 +48,12 @@ async def create_session(
 async def send_message(
     session_id: str,
     body: UserMessage,
-    request: Request,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     db: PGConnection = Depends(get_db),
 ):
     identity = _identity(current_user)
-    async with seatbook_identity(identity, base_url=_seatbook_api_base_url(request)):
+    with seatbook_identity(current_user, db, background_tasks):
         response = await chat_adapter_service.process_message(
             session_id, body, db, identity
         )
