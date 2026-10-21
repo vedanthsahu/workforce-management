@@ -4,10 +4,9 @@ import os
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user
-from backend.chatbot.database import get_db as get_chatbot_db
 from backend.chatbot.deps.seatbook_auth import SeatBookIdentity, seatbook_identity
 from backend.chatbot.schemas.chat import (
     ChatResponse,
@@ -17,6 +16,7 @@ from backend.chatbot.schemas.chat import (
 )
 from backend.chatbot.services.chat_adapter_service import chat_adapter_service
 from backend.chatbot.services.session_service import SessionService
+from backend.db.connection import get_db
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -47,7 +47,7 @@ async def create_session(
     body: CreateSessionRequest,
     request: Request,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
-    db: AsyncSession = Depends(get_chatbot_db),
+    db: PGConnection = Depends(get_db),
 ):
     identity = _identity(current_user)
     async with seatbook_identity(identity, base_url=_seatbook_api_base_url(request)):
@@ -60,7 +60,7 @@ async def send_message(
     body: UserMessage,
     request: Request,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
-    db: AsyncSession = Depends(get_chatbot_db),
+    db: PGConnection = Depends(get_db),
 ):
     identity = _identity(current_user)
     async with seatbook_identity(identity, base_url=_seatbook_api_base_url(request)):
@@ -79,7 +79,7 @@ async def send_message(
 async def get_session(
     session_id: str,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
-    db: AsyncSession = Depends(get_chatbot_db),
+    db: PGConnection = Depends(get_db),
 ):
     identity = _identity(current_user)
     session = await SessionService.get(
