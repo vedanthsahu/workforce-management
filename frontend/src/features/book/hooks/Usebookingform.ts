@@ -107,6 +107,23 @@ function buildUrl(
   return `/book?${params.toString()}`;
 }
 
+// Who an unavailable office/building/floor banner is talking about. `isSaved`
+// is true when the id is the saved work preference's own (not just something
+// picked or passed in a link). Booking for an employee names them; a guest
+// booking or a picked location says "selected"; self-booking keeps `selfPrefix`.
+function describeLocationOwner(
+  kind: "office" | "building" | "floor",
+  isSaved: boolean,
+  selfPrefix: string,
+  ctx: { bookedForUserId: string | null; bookingForName: string | null; isBookingForSomeone: boolean },
+): string {
+  if (ctx.bookedForUserId && isSaved) {
+    return `${ctx.bookingForName ?? "This user"}'s preferred ${kind}`;
+  }
+  if (ctx.isBookingForSomeone) return `The selected ${kind}`;
+  return selfPrefix;
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useBookingForm() {
@@ -591,7 +608,9 @@ export function useBookingForm() {
     // Only label it from the saved preference if this missing id IS that
     // preference's own site -- otherwise some other site that's merely
     // missing/inactive would get mislabeled with an unrelated saved name.
-    const siteName = missingSiteId === savedPreferenceNames.siteId ? savedPreferenceNames.siteName : null;
+    const isSavedSite = missingSiteId === savedPreferenceNames.siteId;
+    const siteName = isSavedSite ? savedPreferenceNames.siteName : null;
+    const officeOwner = describeLocationOwner("office", isSavedSite, "This office", { bookedForUserId, bookingForName, isBookingForSomeone });
     const injectPlaceholder = () => {
       if (!siteName) return;
       setSites((prev) =>
@@ -614,7 +633,7 @@ export function useBookingForm() {
           // letting a `<select>` display its label as the current value).
           injectPlaceholder();
           setInactiveSiteId(missingSiteId);
-          setError("This office is currently inactive and unavailable for booking. Please select a different office.");
+          setError(`${officeOwner} is currently inactive and unavailable for booking. Please select a different office.`);
           return;
         }
         if (siteStatus === "ACTIVE" && !isModifyMode && sitesFetchedOkRef.current) {
@@ -627,7 +646,7 @@ export function useBookingForm() {
           injectPlaceholder();
           setInactiveSiteId(missingSiteId);
           const officeMessage =
-            "This office has no buildings or floors available for booking. Please select a different office.";
+            `${officeOwner} has no buildings or floors available for booking. Please select a different office.`;
           const savedBuildingId = form.buildingId;
           if (savedBuildingId) {
             // A saved building that is itself the reason (typically an office
@@ -637,7 +656,7 @@ export function useBookingForm() {
               .then((info) =>
                 setError(
                   info?.status === "INACTIVE"
-                    ? `Your saved building (${info.name}) is currently inactive, and this office has no other building available for booking. Please select a different office.`
+                    ? `${describeLocationOwner("building", savedBuildingId === savedPreferenceNames.buildingId, "Your saved building", { bookedForUserId, bookingForName, isBookingForSomeone })} (${info.name}) is currently inactive, and this office has no other building available for booking. Please select a different office.`
                     : officeMessage,
                 ),
               )
@@ -654,7 +673,7 @@ export function useBookingForm() {
         injectPlaceholder();
       })
       .catch(injectPlaceholder);
-  }, [loadingSites, sitesSettled, form.siteId, form.buildingId, isModifyMode, savedPreferenceNames.siteId, savedPreferenceNames.siteName]);
+  }, [loadingSites, sitesSettled, form.siteId, form.buildingId, isModifyMode, savedPreferenceNames.siteId, savedPreferenceNames.siteName, savedPreferenceNames.buildingId, bookedForUserId, bookingForName, isBookingForSomeone]);
 
   // Same "only label it if this IS the saved preference's own id" guard as
   // the site effect above -- without it, changing Building/Floor away from
@@ -722,7 +741,8 @@ export function useBookingForm() {
     const siteId = form.siteId;
     const buildingId = form.buildingId;
     setUnavailableBuildingId(buildingId);
-    const fallback = "Your saved building is no longer available for booking. Please select a different building.";
+    const buildingOwner = describeLocationOwner("building", buildingId === savedPreferenceNames.buildingId, "Your saved building", { bookedForUserId, bookingForName, isBookingForSomeone });
+    const fallback = `${buildingOwner} is no longer available for booking. Please select a different building.`;
     fetchBuildingStatus(siteId, buildingId)
       .then((info) => {
         if (!info) { setError(fallback); return; }
@@ -733,12 +753,12 @@ export function useBookingForm() {
         );
         setError(
           info.status === "INACTIVE"
-            ? `Your saved building (${info.name}) is currently inactive. Please select a different building.`
-            : `Your saved building (${info.name}) has no floors available for booking. Please select a different building.`,
+            ? `${buildingOwner} (${info.name}) is currently inactive. Please select a different building.`
+            : `${buildingOwner} (${info.name}) has no floors available for booking. Please select a different building.`,
         );
       })
       .catch(() => setError(fallback));
-  }, [isModifyMode, loadingBuildings, buildingsLoadedFor, sitesSettled, form.siteId, form.buildingId]);
+  }, [isModifyMode, loadingBuildings, buildingsLoadedFor, sitesSettled, form.siteId, form.buildingId, savedPreferenceNames.buildingId, bookedForUserId, bookingForName, isBookingForSomeone]);
 
   const checkedFloorKeysRef = useRef<Set<string>>(new Set());
   useEffect(() => {
@@ -757,17 +777,18 @@ export function useBookingForm() {
     const buildingId = form.buildingId;
     const floorId = form.floorId;
     setUnavailableFloorId(floorId);
-    const fallback = "Your saved floor is no longer available for booking. Please select a different floor.";
+    const floorOwner = describeLocationOwner("floor", floorId === savedPreferenceNames.floorId, "Your saved floor", { bookedForUserId, bookingForName, isBookingForSomeone });
+    const fallback = `${floorOwner} is no longer available for booking. Please select a different floor.`;
     fetchFloorStatus(buildingId, floorId)
       .then((info) => {
         if (!info) { setError(fallback); return; }
         setFloors((prev) =>
           prev.some((f) => f.id === floorId) ? prev : [...prev, { id: floorId, buildingId, name: info.name, number: 0 }],
         );
-        setError(`Your saved floor (${info.name}) is currently inactive. Please select a different floor.`);
+        setError(`${floorOwner} (${info.name}) is currently inactive. Please select a different floor.`);
       })
       .catch(() => setError(fallback));
-  }, [isModifyMode, loadingFloors, floorsLoadedFor, buildingsLoadedFor, sitesSettled, form.siteId, form.buildingId, form.floorId]);
+  }, [isModifyMode, loadingFloors, floorsLoadedFor, buildingsLoadedFor, sitesSettled, form.siteId, form.buildingId, form.floorId, savedPreferenceNames.floorId, bookedForUserId, bookingForName, isBookingForSomeone]);
 
   // ── Derive floor layout URL from the selected floor ───────────────────────
 
