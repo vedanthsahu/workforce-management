@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from unittest.mock import ANY, AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 
 def _chatbot_types():
@@ -21,24 +21,32 @@ def _chatbot_types():
 
 def test_preferences_flattens_dashboard_work_preferences_and_favorites():
     _, SeatBackendApiService = _chatbot_types()
+    from backend.chatbot.deps.seatbook_auth import seatbook_identity
+
     service = SeatBackendApiService()
-    service._request = AsyncMock(
-        return_value={
-            "work_preferences": {
-                "site_id": "10",
-                "building_id": "20",
-                "floor_id": "30",
-                "site_name": "Hyderabad",
-            },
-            "favorite_seat": {"seat_id": "101"},
-            "second_favorite_seat": None,
-            "third_favorite_seat": {"seat_id": "103"},
-        }
-    )
+    dashboard = MagicMock()
+    dashboard.model_dump.return_value = {
+        "work_preferences": {
+            "site_id": "10",
+            "building_id": "20",
+            "floor_id": "30",
+            "site_name": "Hyderabad",
+        },
+        "favorite_seat": {"seat_id": "101"},
+        "second_favorite_seat": None,
+        "third_favorite_seat": {"seat_id": "103"},
+    }
 
-    result = asyncio.run(service.preferences())
+    with patch(
+        "backend.chatbot.services.seat_backend_api_service.get_dashboard_me",
+        return_value=dashboard,
+    ) as mock_get_dashboard:
+        with seatbook_identity(
+            {"user_id": "7", "tenant_id": "3"}, MagicMock(),
+        ):
+            result = asyncio.run(service.preferences())
 
-    service._request.assert_awaited_once_with("GET", "/dashboard/me")
+    mock_get_dashboard.assert_called_once()
     assert result == {
         "site_id": "10",
         "building_id": "20",
