@@ -1,7 +1,7 @@
 import json
 import logging
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from psycopg2.extensions import connection as PGConnection
 
 from backend.chatbot.deps.seatbook_auth import (
     SeatBookIdentity,
@@ -38,7 +38,7 @@ class ChatAdapterService:
     async def create_session(
         self,
         body: CreateSessionRequest,
-        db: AsyncSession,
+        db: PGConnection,
         identity: SeatBookIdentity | None = None,
     ) -> SessionOut:
         started = telemetry_service.timer()
@@ -101,7 +101,7 @@ class ChatAdapterService:
         self,
         session_id: str,
         body: UserMessage,
-        db: AsyncSession,
+        db: PGConnection,
         identity: SeatBookIdentity | None = None,
     ) -> ChatResponse | None:
         identity = identity or current_seatbook_identity()
@@ -156,7 +156,7 @@ class ChatAdapterService:
         except Exception:
             ok = False
             logger.exception("Error processing message")
-            await db.rollback()
+            db.rollback()
             response = ChatResponse(
                 session_id=session_id,
                 current_node=session.current_node,
