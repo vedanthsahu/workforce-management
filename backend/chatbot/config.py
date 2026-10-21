@@ -1,7 +1,5 @@
 from pathlib import Path
-from urllib.parse import quote_plus
 
-from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPOSITORY_ENV = Path(__file__).resolve().parents[2] / ".env"
@@ -15,24 +13,11 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Use the same AWS RDS settings as the main application. URL settings are
-    # retained only as backward-compatible overrides for existing deployments.
-    DB_HOST: str = ""
-    DB_PORT: int = 5432
-    DB_NAME: str = ""
-    DB_USER: str = ""
-    DB_PASSWORD: str = ""
-    DB_SSLMODE: str = "require"
-    DATABASE_URL: str = ""
-    SYNC_DATABASE_URL: str = ""
+    # No independent DB settings here -- the chatbot shares the main app's
+    # single database connection (backend.db.connection) rather than
+    # resolving its own credentials or URL.
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
-    # The integrated app signs chatbot tokens with the root JWT_SECRET.
-    # Keep MAIN_APP_JWT_SECRET as the standalone/deployment-compatible name,
-    # but always use JWT_SECRET when the shared root configuration provides it.
-    JWT_SECRET: str = ""
-    MAIN_APP_JWT_SECRET: str = ""
-    MAIN_APP_JWT_ALGORITHM: str = "HS256"
     ALLOWED_ORIGINS: str = "http://localhost:4200"
     DEFAULT_TENANT_ID: int = 3
     SESSION_TTL_MINUTES: int = 30
@@ -53,18 +38,10 @@ class Settings(BaseSettings):
     )
     ELASTICSEARCH_TIMEOUT_SECONDS: float = 2.0
     ADMIN_API_TOKEN: str = ""
+    # Booking-domain calls go straight into the main app's own service
+    # functions now (backend.chatbot.services.seat_backend_api_service) --
+    # this is just a kill switch, not a remote-API toggle anymore.
     ENABLE_SEAT_BACKEND_API: bool = True
-    SEAT_BACKEND_API_URL: str = (
-        "https://3284lwcmc1.execute-api.ap-south-1.amazonaws.com"
-    )
-    SEAT_BACKEND_ACCESS_TOKEN: str = ""
-    SEAT_BACKEND_REFRESH_TOKEN: str = ""
-    SEAT_BACKEND_SESSION_TOKEN: str = ""
-    SEAT_BACKEND_AUTH_COOKIE: str = ""
-    SEAT_BACKEND_TOKEN_CACHE_PATH: str = ".seat_backend_tokens.json"
-    SEAT_BACKEND_REFRESH_INTERVAL_SECONDS: int = 840
-    SEAT_BACKEND_TIMEOUT_SECONDS: float = 10.0
-    SEAT_BACKEND_TRUST_ENV: bool = False
     WHATSAPP_ENABLED: bool = False
     WHATSAPP_VERIFY_TOKEN: str = ""
     WHATSAPP_ACCESS_TOKEN: str = ""
@@ -85,39 +62,6 @@ class Settings(BaseSettings):
     WHATSAPP_BOOKING_FLOW_SCREEN: str = "BOOKING_FORM"
     WHATSAPP_BOOKING_FLOW_CTA: str = "Open booking form"
     NGROK_AUTHTOKEN: str = ""
-
-    @model_validator(mode="after")
-    def configure_database_urls(self) -> Settings:
-        if self.JWT_SECRET:
-            self.MAIN_APP_JWT_SECRET = self.JWT_SECRET
-
-        db_values = (self.DB_HOST, self.DB_NAME, self.DB_USER, self.DB_PASSWORD)
-        if all(db_values):
-            user = quote_plus(self.DB_USER)
-            password = quote_plus(self.DB_PASSWORD)
-            database = quote_plus(self.DB_NAME)
-            sslmode = quote_plus(self.DB_SSLMODE)
-            base = f"{user}:{password}@{self.DB_HOST}:{self.DB_PORT}/{database}"
-            self.DATABASE_URL = f"postgresql+asyncpg://{base}?ssl={sslmode}"
-            self.SYNC_DATABASE_URL = f"postgresql://{base}?sslmode={sslmode}"
-        elif not self.DATABASE_URL or not self.SYNC_DATABASE_URL:
-            # In the integrated application, production credentials are loaded
-            # by the main backend from AWS Secrets Manager rather than exposed
-            # as raw Lambda environment variables. Reuse those resolved values
-            # so the chatbot connects to the same database securely.
-            from backend.core.config import get_settings
-
-            shared = get_settings()
-            user = quote_plus(shared.db_user)
-            password = quote_plus(shared.db_password)
-            database = quote_plus(shared.db_name)
-            sslmode = quote_plus(shared.db_sslmode)
-            base = f"{user}:{password}@{shared.db_host}:{shared.db_port}/{database}"
-            self.DATABASE_URL = f"postgresql+asyncpg://{base}?ssl={sslmode}"
-            self.SYNC_DATABASE_URL = f"postgresql://{base}?sslmode={sslmode}"
-            if not self.MAIN_APP_JWT_SECRET:
-                self.MAIN_APP_JWT_SECRET = shared.jwt_secret
-        return self
 
     @property
     def allowed_origins_list(self) -> list[str]:

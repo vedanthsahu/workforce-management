@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from psycopg2.extensions import connection as PGConnection
 
 from backend.chatbot.services.confidence_service import confidence_service
 from backend.chatbot.services.entity_extractor import entity_extractor
@@ -63,7 +63,7 @@ class FreeTextService:
 
     async def interpret_message(
         self,
-        db: AsyncSession,
+        db: PGConnection,
         tenant_id: int,
         user_message: str,
         session_context: dict[str, str],

@@ -16,8 +16,7 @@ import re
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from psycopg2.extensions import connection as PGConnection
 
 from backend.chatbot.config import settings
 from backend.chatbot.models.chatbot import ChatbotSession
@@ -49,6 +48,11 @@ from backend.chatbot.services.seat_backend_api_service import (
     seat_backend_api_service,
 )
 from backend.chatbot.services.telemetry_service import telemetry_service
+from backend.repositories.chatbot_repository import (
+    fetch_chatbot_session,
+    update_chatbot_session_context,
+    update_chatbot_session_node,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +102,7 @@ class ChatEngine:
         session: ChatbotSession,
         user_text: str | None,
         form_data: dict[str, Any] | None,
-        db: AsyncSession,
+        db: PGConnection,
     ) -> ChatResponse:
         node = session.current_node
         telemetry_service.record_step(
@@ -272,7 +276,7 @@ class ChatEngine:
         self,
         session: ChatbotSession,
         result: FreeTextResult,
-        db: AsyncSession,
+        db: PGConnection,
     ) -> ChatResponse | None:
         logger.info(
             "event=free_text_routed intent=%s confidence=%s source=%s needs_confirmation=%s entity_keys=%s",
@@ -333,7 +337,7 @@ class ChatEngine:
         )
 
     async def _confirm_pending_free_text(
-        self, session: ChatbotSession, db: AsyncSession
+        self, session: ChatbotSession, db: PGConnection
     ) -> ChatResponse:
         ctx = await self._get_context(session.id, db)
         payload = ctx.get("pending_free_text")
@@ -354,7 +358,7 @@ class ChatEngine:
         session: ChatbotSession,
         intent: Intent,
         entities: dict[str, Any],
-        db: AsyncSession,
+        db: PGConnection,
     ) -> ChatResponse:
         logger.info(
             "event=free_text_execute intent=%s entity_keys=%s",
@@ -446,7 +450,7 @@ class ChatEngine:
         self,
         session: ChatbotSession,
         result: FreeTextResult,
-        db: AsyncSession,
+        db: PGConnection,
     ) -> ChatResponse | None:
         if result.intent in (
             Intent.GREETING,
@@ -487,7 +491,7 @@ class ChatEngine:
         self,
         session,
         entities: dict[str, Any],
-        db: AsyncSession,
+        db: PGConnection,
         intro_text: str | None = None,
     ) -> ChatResponse:
         await self._apply_entities_to_context(session.id, entities, db)
@@ -548,7 +552,7 @@ class ChatEngine:
         return resp
 
     async def _apply_entities_to_context(
-        self, session_id, entities: dict[str, Any], db: AsyncSession
+        self, session_id, entities: dict[str, Any], db: PGConnection
     ):
         context: dict[str, str] = {}
         for key in (
@@ -586,7 +590,7 @@ class ChatEngine:
         if context:
             await self._set_context_bulk(session_id, context, db)
 
-    async def _apply_booking_defaults(self, session_id, db: AsyncSession):
+    async def _apply_booking_defaults(self, session_id, db: PGConnection):
         if settings.ALLOW_MULTIPLE_SEATS:
             return
         ctx = await self._get_context(session_id, db)
@@ -597,7 +601,7 @@ class ChatEngine:
         self,
         session_id,
         entities: dict[str, Any],
-        db: AsyncSession,
+        db: PGConnection,
     ):
         ctx = await self._get_context(session_id, db)
         updates: dict[str, str] = {}
@@ -695,7 +699,7 @@ class ChatEngine:
             await self._set_context_bulk(session_id, updates, db)
 
     async def _booking_details_reset_context(
-        self, session, db: AsyncSession
+        self, session, db: PGConnection
     ) -> dict[str, str]:
         ctx = await self._get_context(session.id, db)
         if ctx.get("booking_prefill_source") == "free_text":
@@ -758,7 +762,7 @@ class ChatEngine:
         self,
         session,
         booking_date_str: str,
-        db: AsyncSession,
+        db: PGConnection,
     ) -> ChatResponse | None:
         try:
             booking_date = date.fromisoformat(booking_date_str)
@@ -809,7 +813,7 @@ class ChatEngine:
         self,
         session,
         booking_date_str: str,
-        db: AsyncSession,
+        db: PGConnection,
     ) -> ChatResponse | None:
         try:
             booking_date = date.fromisoformat(booking_date_str)
@@ -900,7 +904,7 @@ class ChatEngine:
         self,
         session,
         booking_date_str: str,
-        db: AsyncSession,
+        db: PGConnection,
     ) -> ChatResponse | None:
         """Channel adapters can use this to stop booking flow as soon as date is known."""
         return await self._build_duplicate_booking_response(
@@ -966,7 +970,7 @@ class ChatEngine:
             "Please contact the facility team if you need help with this booking."
         )
 
-    async def _build_help_response(self, session, db: AsyncSession) -> ChatResponse:
+    async def _build_help_response(self, session, db: PGConnection) -> ChatResponse:
         menu_resp = await self._build_dynamic_menu(session, None, "", db)
         return ChatResponse(
             session_id=str(session.id),
@@ -988,7 +992,7 @@ class ChatEngine:
             ],
         )
 
-    async def _build_greeting_response(self, session, db: AsyncSession) -> ChatResponse:
+    async def _build_greeting_response(self, session, db: PGConnection) -> ChatResponse:
         menu_resp = await self._build_dynamic_menu(session, None, "", db)
         return ChatResponse(
             session_id=str(session.id),
@@ -1245,7 +1249,7 @@ class ChatEngine:
     async def _start_quick_book_entry(
         self,
         session,
-        db: AsyncSession,
+        db: PGConnection,
         booking_date_str: str | None = None,
     ) -> ChatResponse:
         profile = await self._get_default_booking_profile(session.user_name, db)
@@ -1352,7 +1356,7 @@ class ChatEngine:
         return resp
 
     async def _get_default_booking_profile(
-        self, user_name: str, db: AsyncSession
+        self, user_name: str, db: PGConnection
     ) -> dict[str, Any] | None:
         return await self._get_external_default_booking_profile()
 
@@ -1810,7 +1814,7 @@ class ChatEngine:
         return preferred_ids
 
     async def _start_select_location_booking(
-        self, session, db: AsyncSession
+        self, session, db: PGConnection
     ) -> ChatResponse:
         telemetry_service.record_booking_event(
             "booking_flow_started", source="quick_book_select_location"
@@ -1844,14 +1848,14 @@ class ChatEngine:
         )
         return resp
 
-    async def _start_book_seat_entry(self, session, db: AsyncSession) -> ChatResponse:
+    async def _start_book_seat_entry(self, session, db: PGConnection) -> ChatResponse:
         session.current_menu_id = None
         await self._reset_manual_booking_context(session.id, db)
         await self._apply_location_defaults_from_external_backend(session.id, {}, db)
         await self._update_node(session, Node.BOOK_WHEN_WHERE, "BOOKING_WHEN_WHERE", db)
         return await self._build_when_where_card(session, db)
 
-    async def _reset_manual_booking_context(self, session_id, db: AsyncSession) -> None:
+    async def _reset_manual_booking_context(self, session_id, db: PGConnection) -> None:
         await self._set_context_bulk(
             session_id,
             {
@@ -1873,7 +1877,7 @@ class ChatEngine:
 
     # â”€â”€ STEP 1: WHEN + WHERE (Form Card) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     async def _build_when_where_card(
-        self, session, db: AsyncSession | None = None
+        self, session, db: PGConnection | None = None
     ) -> ChatResponse:
         ctx = await self._get_context(session.id, db) if db else {}
         policy = await seat_backend_api_service.booking_policy()
@@ -2015,7 +2019,7 @@ class ChatEngine:
         return await self._continue_to_available_seats(session, db)
 
     # â”€â”€ STEP 2: BOOKING DETAILS (Form Card) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    async def _build_details_card(self, session, db: AsyncSession) -> ChatResponse:
+    async def _build_details_card(self, session, db: PGConnection) -> ChatResponse:
         return await self._continue_to_available_seats(session, db)
 
     async def _handle_details(self, session, user_text, form_data, db):
@@ -2024,7 +2028,7 @@ class ChatEngine:
     async def _continue_to_available_seats(
         self,
         session,
-        db: AsyncSession,
+        db: PGConnection,
         intro_text: str | None = None,
     ) -> ChatResponse:
         await self._set_context_bulk(
@@ -2044,7 +2048,7 @@ class ChatEngine:
         return resp
 
     # â”€â”€ STEP 3: AVAILABLE SEATS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    async def _build_seat_list(self, session, db: AsyncSession) -> ChatResponse:
+    async def _build_seat_list(self, session, db: PGConnection) -> ChatResponse:
         ctx = await self._get_context(session.id, db)
         floor_id = self._safe_int(ctx.get("floor_id"))
         amenity_ids_str = ctx.get("amenity_ids", "")
@@ -2090,7 +2094,7 @@ class ChatEngine:
     async def _build_external_seat_list_response(
         self,
         session,
-        db: AsyncSession,
+        db: PGConnection,
         *,
         site_id: int | None,
         building_id: int | None,
@@ -2798,7 +2802,7 @@ class ChatEngine:
         return resp
 
     # â”€â”€ STEP 4: CONFIRMATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    async def _build_confirmation(self, session, db: AsyncSession) -> ChatResponse:
+    async def _build_confirmation(self, session, db: PGConnection) -> ChatResponse:
         ctx = await self._get_context(session.id, db)
 
         floor_id = self._safe_int(ctx.get("floor_id"))
@@ -2868,7 +2872,7 @@ class ChatEngine:
             return await self._go_to_main_menu(session, db)
 
     # â”€â”€ CREATE BOOKING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    async def _create_booking(self, session, db: AsyncSession) -> ChatResponse:
+    async def _create_booking(self, session, db: PGConnection) -> ChatResponse:
         ctx = await self._get_context(session.id, db)
 
         selected_ids_str = ctx.get("selected_seat_ids", ctx.get("seat_id", ""))
@@ -2886,7 +2890,7 @@ class ChatEngine:
     async def _modify_external_booking_for_rebook(
         self,
         session,
-        db: AsyncSession,
+        db: PGConnection,
         ctx: dict[str, str],
         selected_ids: list[int],
     ) -> ChatResponse:
@@ -2973,7 +2977,7 @@ class ChatEngine:
     async def _create_external_booking(
         self,
         session,
-        db: AsyncSession,
+        db: PGConnection,
         ctx: dict[str, str],
         selected_ids: list[int],
     ) -> ChatResponse:
@@ -3200,7 +3204,7 @@ class ChatEngine:
         return await self._build_my_bookings(session, db)
 
     async def _build_upcoming_bookings_from_menu(
-        self, session, db: AsyncSession
+        self, session, db: PGConnection
     ) -> ChatResponse:
         await self._set_context_bulk(
             session.id,
@@ -3216,7 +3220,7 @@ class ChatEngine:
         )
         return await self._build_my_bookings(session, db)
 
-    async def _show_more_bookings(self, session, db: AsyncSession) -> ChatResponse:
+    async def _show_more_bookings(self, session, db: PGConnection) -> ChatResponse:
         ctx = await self._get_context(session.id, db)
         list_mode = ctx.get("booking_list_mode") or "upcoming"
         if list_mode not in {"past", "upcoming", "cancelled"}:
@@ -3234,7 +3238,7 @@ class ChatEngine:
         )
         return await self._build_my_bookings(session, db)
 
-    async def _build_my_bookings(self, session, db: AsyncSession) -> ChatResponse:
+    async def _build_my_bookings(self, session, db: PGConnection) -> ChatResponse:
         ctx = await self._get_context(session.id, db)
         list_mode = ctx.get("booking_list_mode") or "upcoming"
         action = ctx.get("booking_action")
@@ -3283,7 +3287,7 @@ class ChatEngine:
     async def _build_external_my_bookings(
         self,
         session,
-        db: AsyncSession,
+        db: PGConnection,
         *,
         ctx: dict[str, str],
         list_mode: str,
@@ -3441,7 +3445,7 @@ class ChatEngine:
     async def _build_booking_history_fallback(
         self,
         session,
-        db: AsyncSession,
+        db: PGConnection,
         past_result: tuple[list[dict[str, Any]], bool] | None,
     ) -> ChatResponse | None:
         """Keep the empty state in the selected Upcoming tab."""
@@ -3714,7 +3718,7 @@ class ChatEngine:
         return options
 
     async def _build_cancel_confirmation_by_ref(
-        self, session, booking_ref: str, db: AsyncSession
+        self, session, booking_ref: str, db: PGConnection
     ) -> ChatResponse:
         return await self._build_booking_action_confirmation_by_ref(
             session, "cancel", booking_ref, db
@@ -3725,7 +3729,7 @@ class ChatEngine:
         session,
         action: str,
         booking_ref: str,
-        db: AsyncSession,
+        db: PGConnection,
     ) -> ChatResponse:
         return await self._build_booking_action_confirmation(
             session, action, booking_ref, db
@@ -3736,7 +3740,7 @@ class ChatEngine:
         session,
         action: str,
         booking_id: str,
-        db: AsyncSession,
+        db: PGConnection,
     ) -> ChatResponse:
         ctx = await self._get_context(session.id, db)
         external_summary = self._context_booking_summary(ctx, booking_id)
@@ -3855,7 +3859,7 @@ class ChatEngine:
         self,
         session,
         booking_id: str,
-        db: AsyncSession,
+        db: PGConnection,
         month_start: str | None = None,
     ) -> ChatResponse:
         ctx = await self._get_context(session.id, db)
@@ -4077,7 +4081,7 @@ class ChatEngine:
         session,
         booking_id: str,
         booking_date_str: str,
-        db: AsyncSession,
+        db: PGConnection,
     ) -> ChatResponse:
         telemetry_service.record_step(
             "rebook.date.selected",
@@ -4291,7 +4295,7 @@ class ChatEngine:
         }
 
     async def _inline_cancel_booking(
-        self, session, booking_id: str, db: AsyncSession
+        self, session, booking_id: str, db: PGConnection
     ) -> ChatResponse:
         ctx = await self._get_context(session.id, db)
         external_summary = self._context_booking_summary(ctx, booking_id)
@@ -4345,7 +4349,7 @@ class ChatEngine:
         return resp
 
     async def _inline_modify_booking(
-        self, session, booking_id: str, db: AsyncSession
+        self, session, booking_id: str, db: PGConnection
     ) -> ChatResponse:
         ctx = await self._get_context(session.id, db)
         external_summary = self._context_booking_summary(ctx, booking_id)
@@ -4422,12 +4426,12 @@ class ChatEngine:
         return resp
 
     # â”€â”€ UTILITIES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    async def _go_to_main_menu(self, session, db: AsyncSession) -> ChatResponse:
+    async def _go_to_main_menu(self, session, db: PGConnection) -> ChatResponse:
         session.current_menu_id = None
         await self._update_node(session, Node.MAIN_MENU, "NAVIGATING", db)
         return await self._build_dynamic_menu(session, None, "", db)
 
-    async def _abandon(self, session, db: AsyncSession) -> ChatResponse:
+    async def _abandon(self, session, db: PGConnection) -> ChatResponse:
         session.current_menu_id = None
         await self._update_node(session, Node.MAIN_MENU, "ABANDONED", db)
         return ChatResponse(
@@ -4440,13 +4444,19 @@ class ChatEngine:
         )
 
     async def _update_node(
-        self, session: ChatbotSession, node: str, state: str, db: AsyncSession
+        self, session: ChatbotSession, node: str, state: str, db: PGConnection
     ):
         session.current_node = node
         session.state = state
         session.updated_at = datetime.now(UTC)
-        await db.commit()
-        await db.refresh(session)
+        update_chatbot_session_node(
+            db,
+            session_id=session.id,
+            current_node=session.current_node,
+            state=session.state,
+            current_menu_id=session.current_menu_id,
+            updated_at=session.updated_at,
+        )
         await memory_service.set_session_state(
             session.id,
             state=session.state,
@@ -4454,30 +4464,27 @@ class ChatEngine:
             current_menu_id=session.current_menu_id,
         )
 
-    async def _get_context(self, session_id, db: AsyncSession) -> dict[str, str]:
+    async def _get_context(self, session_id, db: PGConnection) -> dict[str, str]:
         cached = await memory_service.get_context(session_id)
         if cached is not None:
             return cached
-        result = await db.execute(
-            select(ChatbotSession).where(ChatbotSession.id == session_id)
-        )
-        session = result.scalar_one_or_none()
-        context = dict(session.context_data or {}) if session else {}
+        row = fetch_chatbot_session(db, session_id=session_id)
+        context = dict(row.get("context_data") or {}) if row else {}
         await memory_service.set_context(session_id, context)
         return context
 
-    async def _set_context_bulk(self, session_id, kv: dict[str, str], db: AsyncSession):
-        result = await db.execute(
-            select(ChatbotSession).where(ChatbotSession.id == session_id)
-        )
-        session = result.scalar_one_or_none()
-        if session is None:
+    async def _set_context_bulk(self, session_id, kv: dict[str, str], db: PGConnection):
+        row = fetch_chatbot_session(db, session_id=session_id)
+        if row is None:
             return
-        context = dict(session.context_data or {})
+        context = dict(row.get("context_data") or {})
         context.update(kv)
-        session.context_data = context
-        session.updated_at = datetime.now(UTC)
-        await db.commit()
+        update_chatbot_session_context(
+            db,
+            session_id=session_id,
+            context_data=context,
+            updated_at=datetime.now(UTC),
+        )
         await memory_service.merge_context(session_id, kv)
 
     @staticmethod
