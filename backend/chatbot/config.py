@@ -1,6 +1,5 @@
 from pathlib import Path
 
-from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPOSITORY_ENV = Path(__file__).resolve().parents[2] / ".env"
@@ -19,12 +18,6 @@ class Settings(BaseSettings):
     # resolving its own credentials or URL.
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
-    # The integrated app signs chatbot tokens with the root JWT_SECRET.
-    # Keep MAIN_APP_JWT_SECRET as the standalone/deployment-compatible name,
-    # but always use JWT_SECRET when the shared root configuration provides it.
-    JWT_SECRET: str = ""
-    MAIN_APP_JWT_SECRET: str = ""
-    MAIN_APP_JWT_ALGORITHM: str = "HS256"
     ALLOWED_ORIGINS: str = "http://localhost:4200"
     DEFAULT_TENANT_ID: int = 3
     SESSION_TTL_MINUTES: int = 30
@@ -45,18 +38,10 @@ class Settings(BaseSettings):
     )
     ELASTICSEARCH_TIMEOUT_SECONDS: float = 2.0
     ADMIN_API_TOKEN: str = ""
+    # Booking-domain calls go straight into the main app's own service
+    # functions now (backend.chatbot.services.seat_backend_api_service) --
+    # this is just a kill switch, not a remote-API toggle anymore.
     ENABLE_SEAT_BACKEND_API: bool = True
-    SEAT_BACKEND_API_URL: str = (
-        "https://3284lwcmc1.execute-api.ap-south-1.amazonaws.com"
-    )
-    SEAT_BACKEND_ACCESS_TOKEN: str = ""
-    SEAT_BACKEND_REFRESH_TOKEN: str = ""
-    SEAT_BACKEND_SESSION_TOKEN: str = ""
-    SEAT_BACKEND_AUTH_COOKIE: str = ""
-    SEAT_BACKEND_TOKEN_CACHE_PATH: str = ".seat_backend_tokens.json"
-    SEAT_BACKEND_REFRESH_INTERVAL_SECONDS: int = 840
-    SEAT_BACKEND_TIMEOUT_SECONDS: float = 10.0
-    SEAT_BACKEND_TRUST_ENV: bool = False
     WHATSAPP_ENABLED: bool = False
     WHATSAPP_VERIFY_TOKEN: str = ""
     WHATSAPP_ACCESS_TOKEN: str = ""
@@ -77,19 +62,6 @@ class Settings(BaseSettings):
     WHATSAPP_BOOKING_FLOW_SCREEN: str = "BOOKING_FORM"
     WHATSAPP_BOOKING_FLOW_CTA: str = "Open booking form"
     NGROK_AUTHTOKEN: str = ""
-
-    @model_validator(mode="after")
-    def configure_jwt_secret(self) -> Settings:
-        if self.JWT_SECRET:
-            self.MAIN_APP_JWT_SECRET = self.JWT_SECRET
-        elif not self.MAIN_APP_JWT_SECRET:
-            # Production credentials are loaded by the main backend from AWS
-            # Secrets Manager rather than exposed as raw Lambda environment
-            # variables -- reuse the resolved value.
-            from backend.core.config import get_settings
-
-            self.MAIN_APP_JWT_SECRET = get_settings().jwt_secret
-        return self
 
     @property
     def allowed_origins_list(self) -> list[str]:
