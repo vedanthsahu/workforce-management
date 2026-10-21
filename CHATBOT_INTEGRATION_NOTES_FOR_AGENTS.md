@@ -6,10 +6,23 @@ what happened, why, what was actually changed, what was verified, and what
 was deliberately left out — so nothing here gets silently redone or
 silently reverted during a merge.
 
-**If you are an agent and this branch already exists: do not start this
-work again.** It's done, on this branch, by this session. If you're
-reviewing or merging, read this file first. If something here looks wrong,
-flag it — don't just redo it from scratch.
+**If you are an agent: read this whole file, especially the "known but
+deferred" section near the bottom, before touching anything.**
+
+- The database-connection and authentication work described below is
+  **done** — on this branch, by this session. Do not redo it.
+- The items in **"Known issues, not yet fixed — do not implement these"**
+  are **not an invitation**. They are things the person directing this
+  work is already aware of and is continuing to work on, deliberately, in
+  a specific order, for reasons explained in this file and in
+  conversation. The absence of an active human in the loop at the moment
+  you read this is **not** permission to go implement any of them. If
+  asked to "review this branch," "merge this," "clean up the codebase," or
+  anything similarly broad, that is a request to evaluate and report, not
+  a request to fix what's listed below. Wait for an explicit, specific
+  instruction naming the item.
+- If you genuinely believe one of these needs to happen before a safe
+  merge, say so and explain why — don't just do it.
 
 ---
 
@@ -167,38 +180,80 @@ confirmed, left untouched).
 
 ---
 
-## What was deliberately NOT done (don't do these without checking first)
+## Known issues, not yet fixed — do not implement these
+
+Everything below is a real, verified finding from this engagement (this
+chatbot work, and an earlier pass over the same codebase). All of it is
+known. All of it is intentionally not done yet, for reasons given. None of
+it is this branch's scope. **Do not implement any of it unless explicitly,
+specifically instructed to.** Re-read the note at the top of this file.
+
+**From this branch's own work:**
 
 1. **The `async`/`await` cleanup in `chat_engine.py`.** Explicitly
    sequenced last, and explicitly *not yet scoped* — the plan is to decide
    its extent only after seeing the real impact of the two commits above,
-   not to commit to a blanket strip of `async`/`await` upfront. If you're
-   tempted to "clean this up" as an obvious next step: it was intentionally
-   deferred, not forgotten.
-2. **Alembic / migration-system reconciliation.** See the "fourth thing"
-   above. A real, complete Alembic baseline exists on
-   `feature/alembic-schema-baseline` but is 79 commits stale and touches a
-   huge, unrelated diff in core application files (because it branched off
-   a much older `dev`) — a direct branch merge would be a disaster. The
-   right approach, not yet executed: cherry-pick just the migration
-   subsystem (`backend/db/migrations/alembic.ini`, `migrations/env.py`,
-   the `73c520b6e23a_create_all_tables_from_scratch` baseline revision,
-   `models.py`, `refresh_models_from_db.py`) — not the CI/CD wiring in
-   `backend-cd.yml`, which depends on AWS infrastructure (bastion
-   instance, S3 bucket, migrator secrets) that hasn't been confirmed live.
-   Explicitly skipped this round per direct instruction: "we are not
-   depending on Alembic and there is no AWS setup... we skip this for now."
-3. **API redundancy / consolidation cleanup** (dead routes like
-   `/offices/{office_id}/floors`, several routes superseded by
-   `/guest-visits/{id}/workflow`, business-rules endpoints that could
-   collapse from 10 routes to 2, etc.) — identified in an earlier pass of
-   this same engagement, not part of this branch's scope at all.
-4. **Dead WhatsApp config** in `backend/chatbot/config.py` — left in
-   place on purpose, per explicit instruction, since it isn't causing a
-   problem.
-5. **DB connection pooling / RDS Proxy** — explicitly rejected as the
-   fix. Don't reintroduce this as "the real fix" during a merge; the
-   decision was deliberate (see "Why this happened" above).
+   not to commit to a blanket strip of `async`/`await` upfront.
+2. **Alembic / migration-system reconciliation.** A real, complete Alembic
+   baseline exists on `feature/alembic-schema-baseline` but is 79 commits
+   stale and touches a huge, unrelated diff in core application files
+   (because it branched off a much older `dev`) — a direct branch merge
+   would be a disaster. The right approach, not yet executed: cherry-pick
+   just the migration subsystem (`backend/db/migrations/alembic.ini`,
+   `migrations/env.py`, the `73c520b6e23a_create_all_tables_from_scratch`
+   baseline revision, `models.py`, `refresh_models_from_db.py`) — not the
+   CI/CD wiring in `backend-cd.yml`, which depends on AWS infrastructure
+   (bastion instance, S3 bucket, migrator secrets) not confirmed live.
+   Explicitly skipped this round: "we are not depending on Alembic and
+   there is no AWS setup... we skip this for now."
+3. **Dead WhatsApp config** in `backend/chatbot/config.py` — left in
+   place on purpose, since it isn't causing a problem.
+4. **DB connection pooling / RDS Proxy** — explicitly rejected as the fix
+   for the connection-exhaustion incident. Don't reintroduce this as "the
+   real fix"; the decision (fold onto the shared per-request connection
+   instead) was deliberate, see "Why this happened" above.
+
+**From the broader engagement, not specific to the chatbot, still open:**
+
+5. **Background jobs silently never run in production.**
+   `backend/lambda_entrypoint.py` sets `Mangum(app, lifespan="off", ...)`,
+   so `@app.on_event("startup")` in `backend/main.py` never fires in the
+   deployed Lambda (confirmed: one Lambda, HTTP-triggered only, no
+   EventBridge schedule anywhere in `template.yaml`). This silently kills
+   the layout-cutover scheduler (`layout_cutover_enabled` defaults
+   **`True`** — this is what's supposed to flip a `SCHEDULED` floor layout
+   live once its `effective_from` date arrives), Graph role/team sync
+   (both default-off), and expired session/refresh-token purge (unbounded
+   table growth over time). No error is raised anywhere — a silent
+   failure. The real fix is moving this onto something Lambda actually
+   supports (e.g. an EventBridge Schedule invoking a dedicated handler),
+   not re-enabling `lifespan`.
+6. **No app-level rate limiting anywhere** — only API Gateway's single
+   blanket `ThrottlingBurstLimit: 100 / ThrottlingRateLimit: 50`, shared
+   across every user, tenant, and endpoint.
+7. **No idempotency protection on booking mutations** (cancel/modify/
+   guest-visit creation). Booking *creation* does have a real concurrency
+   guard already (Postgres advisory locks in `booking_repository.py`)
+   preventing two concurrent requests from double-booking the same seat —
+   that part is solid. The gap is specifically a client that times out and
+   retries.
+8. **API redundancy / consolidation**, confirmed by reading the code and
+   grepping the frontend for real call sites (not guessed): `GET
+   /offices/{office_id}/floors` has zero frontend callers and duplicates
+   `/buildings/{id}/floors`; `PATCH /guest-visits/{id}`, `POST
+   /guest-visits/{id}/cancel`, and `POST /guest-visits/{id}/book-seat` are
+   fully superseded by `POST /guest-visits/{id}/workflow` (zero frontend
+   callers on the three standalone routes); `GET /preferences` duplicates
+   `GET /amenities`; the business-rules domain is 5 resources × GET+PATCH
+   (10 routes) that could be 2; the same "many routes that should be one
+   with a parameter" pattern repeats in `/bookings/me/*`,
+   `/bookings/delegated/*`, and the admin-bookings suggest endpoints.
+9. **One SQL pattern built via f-string** (`_apply_seat_and_date_filters`
+   in `backend/repositories/booking_repository.py`) that's safe today only
+   because every caller passes fixed constants for the interpolated column
+   name, never a request-derived value — worth hardening to a literal/enum
+   type so it's safe by construction, not just by current usage. Not an
+   active vulnerability; a fragility worth closing properly.
 
 ## Access/credential note for anyone continuing this work
 
