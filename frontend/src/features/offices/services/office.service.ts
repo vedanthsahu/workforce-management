@@ -49,6 +49,13 @@ export const officeService = {
     return data;
   },
 
+  // GET SINGLE SITE (for read-only ancestor context in Building/Floor modals)
+  async getSiteById(site_id: string): Promise<Office> {
+    const { data } = await axiosInstance.get(`/sites/${site_id}`);
+
+    return data;
+  },
+
   async getOfficeStats(): Promise<OfficeStatsSummary> {
     const { data } = await axiosInstance.get(
       "/admin/dashboard/summary"
@@ -58,7 +65,7 @@ export const officeService = {
       total_offices: data.total_offices,
       active_sites: data.active_sites,
       inactive_sites: data.inactive_sites,
-      total_seats: data.total_seats,
+      active_seats: data.active_seats,
     };
   },
 };

@@ -1,20 +1,44 @@
 "use client";
 
 import { Eye } from "lucide-react";
-import { getRoleBadgeClass } from "../utils/users.utils";
+import { formatRoleLabel, getRoleBadgeClass } from "../utils/users.utils";
 import UserRowMenu from "./UserRowMenu";
 import type { User } from "../types/users.types";
+import { useAuthContext } from "@/features/auth/context/AuthContext";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Props = {
   users: User[];
   highlightedUserId?: string | null;
   onChangeRole: (user: User) => void;
+  /** Shown in place of the rows when `users` is empty -- e.g. "No inactive
+   * users found." when the Status filter is set to Inactive. Falls back to
+   * a generic message so callers that don't track a filter reason don't
+   * have to pass anything. */
+  emptyMessage?: string;
+  /** A background refresh (search debounce firing, a filter/page change) --
+   * shows skeleton rows in place of the real ones while the real header
+   * stays mounted throughout. Callers should keep rendering this component
+   * (rather than swapping it out for a page-level skeleton) whenever data
+   * has already been shown once, so the header never unmounts/remounts and
+   * visibly "flashes" on every keystroke in the search box. */
+  loading?: boolean;
 };
 
-export default function UsersTable({ users, highlightedUserId, onChangeRole }: Props) {
-  if (users.length === 0) {
-    return <p className="px-6 py-12 text-center text-gray-400 text-sm">No users found.</p>;
-  }
+const USERS_COLUMN_COUNT = 6;
+const SKELETON_ROW_COUNT = 6;
+
+export default function UsersTable({
+  users,
+  highlightedUserId,
+  onChangeRole,
+  emptyMessage = "No users found.",
+  loading = false,
+}: Props) {
+  // An admin can't change their own role/status through this table — doing
+  // so could lock them out of the page (or the tenant, if they demote or
+  // deactivate themselves) with no one else in the room to undo it.
+  const { user: currentUser } = useAuthContext();
 
   return (
     <>
@@ -32,133 +56,228 @@ export default function UsersTable({ users, highlightedUserId, onChangeRole }: P
 
       {/* ── Mobile card list ──────────────────────────────── */}
       <div className="md:hidden h-full overflow-y-auto divide-y divide-gray-100">
-        {users.map((user, index) => {
-          const isHighlighted = user.id === highlightedUserId;
-          return (
-            <div
-              key={user.id}
-              className={`px-4 py-3 flex items-center justify-between gap-3 ${isHighlighted ? "row-highlight" : ""}`}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-8 h-8 shrink-0 rounded-full bg-indigo-100 flex items-center justify-center text-[11px] font-semibold text-indigo-700">
-                  {initialsFor(user.fullName)}
-                </div>
-                <div className="min-w-0">
-                  <p className="font-medium text-sm text-gray-900 line-clamp-2">{user.fullName}</p>
-                  <p className="text-xs text-gray-400 line-clamp-2">{user.email}</p>
-                  {user.officeLocation && (
-                    <p className="text-xs text-gray-400 line-clamp-2">{user.officeLocation}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    <span
-                      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold ring-1 ${getRoleBadgeClass(
-                        user.currentRole
-                      )}`}
-                    >
-                      {user.currentRole}
-                    </span>
-                    <span
-                      className={`inline-flex items-center gap-1 text-xs font-medium ${user.status === "active" ? "text-emerald-600" : "text-gray-400"
-                        }`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                      {user.status === "active" ? "Active" : "Inactive"}
-                    </span>
-                  </div>
-                </div>
+        {loading ? (
+          Array.from({ length: SKELETON_ROW_COUNT }).map((_, i) => (
+            <div key={i} className="px-4 py-3 flex items-center gap-3">
+              <Skeleton className="w-8 h-8 rounded-full shrink-0" />
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <Skeleton className="h-3.5 w-32" />
+                <Skeleton className="h-3 w-40" />
               </div>
-              <UserRowMenu
-                onChangeRole={() => onChangeRole(user)}
-                openUpward={index === users.length - 1}
-              />
             </div>
-          );
-        })}
+          ))
+        ) : (
+          <>
+            {users.length === 0 && (
+              <p className="px-6 py-12 text-center text-gray-400 text-sm">
+                {emptyMessage}
+              </p>
+            )}
+            {users.map((user, index) => {
+              const isHighlighted = user.id === highlightedUserId;
+              return (
+                <div
+                  key={user.id}
+                  className={`px-4 py-3 flex items-center justify-between gap-3 ${isHighlighted ? "row-highlight" : ""}`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 shrink-0 rounded-full bg-indigo-100 flex items-center justify-center text-[11px] font-semibold text-indigo-700">
+                      {initialsFor(user.fullName)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm text-gray-900 line-clamp-2">
+                        {user.fullName}
+                      </p>
+                      <p className="text-xs text-gray-400 line-clamp-2">
+                        {user.email}
+                      </p>
+                      {user.officeLocation && (
+                        <p className="text-xs text-gray-400 line-clamp-2">
+                          {user.officeLocation}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span
+                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold ring-1 ${getRoleBadgeClass(
+                            user.currentRole,
+                          )}`}
+                        >
+                          {formatRoleLabel(user.currentRole)}
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1 text-xs font-medium ${
+                            user.status === "active"
+                              ? "text-emerald-600"
+                              : "text-gray-400"
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                          {user.status === "active" ? "Active" : "Inactive"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <UserRowMenu
+                    onChangeRole={() => onChangeRole(user)}
+                    openUpward={index === users.length - 1}
+                    disabledReason={
+                      user.id === currentUser?.user_id
+                        ? "You can't change your own role or status"
+                        : null
+                    }
+                  />
+                </div>
+              );
+            })}
+          </>
+        )}
       </div>
 
       {/* ── Desktop table ─────────────────────────────────── */}
       <div className="hidden md:flex md:flex-col w-full h-full overflow-x-auto">
-        <table className="w-full min-w-220 flex-1 min-h-0 flex flex-col text-left border-collapse" style={{ tableLayout: "fixed" }}>
+        <table
+          className="w-full min-w-220 flex-1 min-h-0 flex flex-col text-left border-collapse"
+          style={{ tableLayout: "fixed" }}
+        >
           {/* pr-2 reserves the same 8px the tbody's scrollbar takes, so header and body columns line up */}
           <thead className="block w-full shrink-0 pr-2 text-xs text-blue-600 bg-blue-100 border-b">
             <tr className="table w-full" style={{ tableLayout: "fixed" }}>
-              <th className="pl-15 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[18%]">Name</th>
-              <th className="pl-15 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[24%]">Email</th>
-              <th className="pl-6 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[16%]">Work Location</th>
-              <th className="pl-10 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[16%]">Current Role</th>
-              <th className="py-2.5 pl-10 pr-4 font-bold whitespace-nowrap text-left w-[14%]">Status</th>
-              <th className="pl-8 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[12%]">Action</th>
+              <th className="pl-15 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[18%]">
+                Name
+              </th>
+              <th className="pl-15 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[24%]">
+                Email
+              </th>
+              <th className="pl-6 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[16%]">
+                Work Location
+              </th>
+              <th className="pl-10 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[16%]">
+                Current Role
+              </th>
+              <th className="py-2.5 pl-10 pr-4 font-bold whitespace-nowrap text-left w-[14%]">
+                Status
+              </th>
+              <th className="pl-8 py-2.5 px-4 font-bold whitespace-nowrap text-left w-[12%]">
+                Action
+              </th>
             </tr>
           </thead>
           <tbody
             className="users-tbody-scroll block w-full flex-1 min-h-0 divide-y divide-gray-100 overflow-y-auto"
-            style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
+            style={{
+              scrollbarWidth: "thin",
+              scrollbarColor: "#e2e8f0 transparent",
+            }}
           >
-            {users.map((user, index) => {
-              const isHighlighted = user.id === highlightedUserId;
-              const isLastRow = index === users.length - 1;
-              return (
+            {loading ? (
+              Array.from({ length: SKELETON_ROW_COUNT }).map((_, i) => (
                 <tr
-                  key={user.id}
-                  className={`table w-full ${isHighlighted ? "row-highlight" : "hover:bg-gray-50/60 transition-colors"}`}
+                  key={i}
+                  className="table w-full"
                   style={{ tableLayout: "fixed" }}
                 >
-                  <td className="py-3 px-4 w-[18%] max-w-0">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-[11px] font-semibold text-indigo-700 shrink-0">
-                        {initialsFor(user.fullName)}
-                      </div>
-                      <span title={user.fullName} className="text-sm font-medium text-gray-900 line-clamp-2 min-w-0">
-                        {user.fullName}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="py-2 px-1 text-sm text-black w-[24%] max-w-0">
-                    <span title={user.email} className="block line-clamp-2">
-                      {user.email}
-                    </span>
-                  </td>
-                  <td className="pl-5 py-3 px-4 text-sm text-black w-[16%] max-w-0">
-                    <span title={user.officeLocation ?? undefined} className="block line-clamp-2">
-                      {user.officeLocation ?? "—"}
-                    </span>
-                  </td>
-                  <td className="pl-8 py-2 px-4 w-[16%]">
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ring-1 ${getRoleBadgeClass(
-                        user.currentRole
-                      )}`}
-                    >
-                      {user.currentRole}
-                    </span>
-                  </td>
-                  <td className="py-3 pl-8 pr-4 w-[14%]">
-                    <span
-                      className={`inline-flex items-center gap-1.5 text-sm font-medium ${user.status === "active" ? "text-emerald-600" : "text-gray-400"
-                        }`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                      {user.status === "active" ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 w-[12%]">
-                    <div className="flex items-center gap-3">
-                      {/* placeholder for now — not clickable */}
-                      <span
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-400 text-gray-300 cursor-not-allowed select-none opacity-50"
-                        title="View (coming soon)"
-                      >
-                        <Eye size={14} />
-                      </span>
-                      <UserRowMenu
-                        onChangeRole={() => onChangeRole(user)}
-                        openUpward={isLastRow}
+                  {Array.from({ length: USERS_COLUMN_COUNT }).map((_, col) => (
+                    <td key={col} className="py-3 px-4">
+                      <Skeleton
+                        className={`h-4 ${col === 0 ? "w-32" : col === USERS_COLUMN_COUNT - 1 ? "w-16" : "w-24"}`}
                       />
-                    </div>
-                  </td>
+                    </td>
+                  ))}
                 </tr>
-              );
-            })}
+              ))
+            ) : (
+              <>
+                {users.length === 0 && (
+                  <tr className="table w-full" style={{ tableLayout: "fixed" }}>
+                    <td
+                      colSpan={USERS_COLUMN_COUNT}
+                      className="py-16 text-center text-sm text-gray-400"
+                    >
+                      {emptyMessage}
+                    </td>
+                  </tr>
+                )}
+                {users.map((user, index) => {
+                  const isHighlighted = user.id === highlightedUserId;
+                  const isLastRow = index === users.length - 1;
+                  return (
+                    <tr
+                      key={user.id}
+                      className={`table w-full ${isHighlighted ? "row-highlight" : "hover:bg-gray-50/60 transition-colors"}`}
+                      style={{ tableLayout: "fixed" }}
+                    >
+                      <td className="py-3 px-4 w-[18%] max-w-0">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-[11px] font-semibold text-indigo-700 shrink-0">
+                            {initialsFor(user.fullName)}
+                          </div>
+                          <span
+                            title={user.fullName}
+                            className="text-sm font-medium text-gray-900 line-clamp-2 min-w-0"
+                          >
+                            {user.fullName}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-2 px-1 text-sm text-black w-[24%] max-w-0">
+                        <span title={user.email} className="block line-clamp-2">
+                          {user.email}
+                        </span>
+                      </td>
+                      <td className="pl-5 py-3 px-4 text-sm text-black w-[16%] max-w-0">
+                        <span
+                          title={user.officeLocation ?? undefined}
+                          className="block line-clamp-2"
+                        >
+                          {user.officeLocation ?? "—"}
+                        </span>
+                      </td>
+                      <td className="pl-8 py-2 px-4 w-[16%]">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ring-1 ${getRoleBadgeClass(
+                            user.currentRole,
+                          )}`}
+                        >
+                          {formatRoleLabel(user.currentRole)}
+                        </span>
+                      </td>
+                      <td className="py-3 pl-8 pr-4 w-[14%]">
+                        <span
+                          className={`inline-flex items-center gap-1.5 text-sm font-medium ${
+                            user.status === "active"
+                              ? "text-emerald-600"
+                              : "text-gray-400"
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                          {user.status === "active" ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 w-[12%]">
+                        <div className="flex items-center gap-3">
+                          {/* placeholder for now — not clickable */}
+                          <span
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-400 text-gray-300 cursor-not-allowed select-none opacity-50"
+                            title="View (coming soon)"
+                          >
+                            <Eye size={14} />
+                          </span>
+                          <UserRowMenu
+                            onChangeRole={() => onChangeRole(user)}
+                            openUpward={isLastRow}
+                            disabledReason={
+                              user.id === currentUser?.user_id
+                                ? "You can't change your own role or status"
+                                : null
+                            }
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </>
+            )}
           </tbody>
         </table>
       </div>

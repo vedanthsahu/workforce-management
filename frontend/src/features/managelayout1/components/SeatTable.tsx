@@ -5,7 +5,7 @@ import { Pencil, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from "lucide-re
 import { Seat } from "../types/seat.types";
 import { Preference } from "../types/layout.types";
 import { getAmenityColor } from "@/features/amenities/utils/amenityColors";
-import { SpaceCategory, SPACE_CATEGORY_LABELS, SPACE_CATEGORY_COLOR, categoryOf } from "../utils/spaceCategory";
+import { SpaceCategory, SPACE_CATEGORY_LABELS, SPACE_CATEGORY_COLOR, categoryOf, displaySpaceCode } from "../utils/spaceCategory";
 import { SEAT_TABLE_PAGE_SIZES as PAGE_SIZES } from "../utils/seatOptions.utils";
 
 interface Props {
@@ -51,6 +51,51 @@ const COLUMN_WIDTH: Record<ColumnKey, string> = {
   configuration: "140px",
   actions:       "100px",
 };
+
+// "+N" chip whose hover list opens downward, or upward when there isn't room
+// below it inside the table's scroll area (otherwise rows near the bottom
+// push the list out of view and the user has to scroll to read it).
+function AmenityOverflow({ count, children }: { count: number; children: React.ReactNode }) {
+  const [openUp, setOpenUp] = useState(false);
+
+  const handleEnter = (e: React.MouseEvent<HTMLDivElement>) => {
+    const wrapper = e.currentTarget;
+    const tooltip = wrapper.lastElementChild as HTMLElement | null;
+    if (!tooltip) return;
+
+    let boundary = window.innerHeight;
+    for (let el = wrapper.parentElement; el; el = el.parentElement) {
+      const { overflowY } = getComputedStyle(el);
+      if (overflowY === "auto" || overflowY === "scroll") {
+        boundary = Math.min(boundary, el.getBoundingClientRect().bottom);
+        break;
+      }
+    }
+
+    // The tooltip is display:none until hover, so measure it after it shows.
+    requestAnimationFrame(() => {
+      const needed = tooltip.offsetHeight + 8;
+      const spaceBelow = boundary - wrapper.getBoundingClientRect().bottom;
+      const spaceAbove = wrapper.getBoundingClientRect().top;
+      setOpenUp(spaceBelow < needed && spaceAbove > spaceBelow);
+    });
+  };
+
+  return (
+    <div className="relative inline-block group" onMouseEnter={handleEnter}>
+      <button type="button" className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-medium border border-gray-200 cursor-pointer focus:outline-none">
+        +{count}
+      </button>
+      <div
+        className={`hidden group-hover:block absolute right-0 w-auto bg-white border border-gray-200 rounded-md shadow-lg p-1.5 z-10 text-xs ${
+          openUp ? "bottom-full mb-1" : "mt-1"
+        }`}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 function Dash() {
   return <span className="text-gray-400 text-xs">—</span>;
@@ -205,18 +250,26 @@ export default function SeatTable({
     else onSelectAll();
   };
 
+  // A configured row's checkbox is disabled below -- "select all" must be
+  // disabled the same way once nothing on the page is actually selectable,
+  // not just when the page itself is empty. Otherwise it stays clickable
+  // and silently no-ops (or worse, looks actionable) once every row here
+  // is already configured.
+  const hasSelectableSeat = seats.some((s) => !s.is_configured);
+
   const renderHeaderCell = (key: ColumnKey) => {
     switch (key) {
       case "select":
         return (
-          <th key={key} className="px-3 py-3">
+          <th key={key} className="px-4 py-3 text-left">
             <input
               type="checkbox"
               checked={isAllSelected}
               ref={(el) => { if (el) el.indeterminate = isIndeterminate; }}
               onChange={handleSelectAll}
-              disabled={seats.length === 0}
-              className={`mr-2 w-4 h-4 rounded border-gray-300 accent-indigo-600 ${seats.length === 0 ? "opacity-40 cursor-not-allowed pointer-events-none" : "cursor-pointer"}`}
+              disabled={!hasSelectableSeat}
+              title={!hasSelectableSeat && seats.length > 0 ? "Every space here is already configured — use Edit to modify" : undefined}
+              className={`w-4 h-4 rounded border-gray-300 accent-indigo-600 ${!hasSelectableSeat ? "opacity-40 cursor-not-allowed pointer-events-none" : "cursor-pointer"}`}
             />
           </th>
         );
@@ -267,12 +320,15 @@ export default function SeatTable({
       case "select":
         return (
           <td key={key} className="px-4 py-3">
-            <input
-              type="checkbox"
-              checked={isSelected}
-              onChange={() => onToggleSelect(seat.seat_svg_id)}
-              className="w-4 h-4 rounded border-gray-300 accent-indigo-600 cursor-pointer"
-            />
+            <span title={seat.is_configured ? "Already configured — use Edit to modify" : undefined}>
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => !seat.is_configured && onToggleSelect(seat.seat_svg_id)}
+                disabled={seat.is_configured}
+                className={`w-4 h-4 rounded border-gray-300 accent-indigo-600 ${seat.is_configured ? "opacity-30 cursor-not-allowed pointer-events-none" : "cursor-pointer"}`}
+              />
+            </span>
           </td>
         );
       case "code":
@@ -282,7 +338,7 @@ export default function SeatTable({
               onClick={() => onEditSeat(seat)}
               className="text-indigo-600 font-semibold hover:text-indigo-800 hover:underline transition-colors text-sm"
             >
-              {seat.seat_code}
+              {displaySpaceCode(seat.seat_code, seat.seat_type)}
             </button>
           </td>
         );
@@ -333,35 +389,33 @@ export default function SeatTable({
                   );
                 })}
                 {seat.amenity_ids.length > 2 && (
-                  <div className="relative inline-block group">
-                    <button type="button" className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-medium border border-gray-200 cursor-pointer focus:outline-none">
-                      +{seat.amenity_ids.length - 2}
-                    </button>
-                    <div className="hidden group-hover:block absolute right-0 mt-1 w-auto bg-white border border-gray-200 rounded-md shadow-lg p-1.5 z-10 text-xs">
-                      {seat.amenity_ids.slice(2).map((id) => {
-                        const pref = prefMap[id];
-                        const name = pref?.preference_name ?? id;
-                        const cat = pref?.preference_type ?? null;
-                        const color = getAmenityColor(name, cat);
-                        return (
-                          <div key={id} className="py-0.5">
-                            <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-medium whitespace-nowrap border ${color.bg} ${color.text} ${color.border}`}>
-                              {name}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <AmenityOverflow count={seat.amenity_ids.length - 2}>
+                    {seat.amenity_ids.slice(2).map((id) => {
+                      const pref = prefMap[id];
+                      const name = pref?.preference_name ?? id;
+                      const cat = pref?.preference_type ?? null;
+                      const color = getAmenityColor(name, cat);
+                      return (
+                        <div key={id} className="py-0.5">
+                          <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-medium whitespace-nowrap border ${color.bg} ${color.text} ${color.border}`}>
+                            {name}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </AmenityOverflow>
                 )}
               </div>
             )}
           </td>
         );
       case "bookable":
-        return <td key={key} className="px-4 py-3"><BookablePill bookable={seat.is_bookable} /></td>;
+        // Hide the backend's default value for unconfigured seats — show
+        // "—" instead of "Yes", matching how Amenities renders when empty.
+        return <td key={key} className="px-4 py-3"><BookablePill bookable={seat.is_configured ? seat.is_bookable : null} /></td>;
       case "status":
-        return <td key={key} className="px-4 py-3"><StatusPill status={seat.status} /></td>;
+        // Same: mask the default "ACTIVE" for unconfigured seats.
+        return <td key={key} className="px-4 py-3"><StatusPill status={seat.is_configured ? seat.status : null} /></td>;
       case "configuration":
         return (
           <td key={key} className="px-4 py-3">
@@ -433,11 +487,14 @@ export default function SeatTable({
                   <tr
                     key={seat.seat_id}
                     className={`border-b border-gray-100 transition-colors ${isSelected
-                      ? "bg-indigo-50/60"
+                      ? "bg-indigo-50/60 hover:bg-indigo-50/60"
                       : seat.has_unpublished_changes
-                        ? "bg-amber-100/60"
-                        : idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"
-                      } hover:bg-indigo-50/40`}
+                        // Pending (unpublished) tint must survive hover -- a plain
+                        // hover:bg-indigo-50/40 here would wash it out, making the
+                        // row look "clean" the moment the admin mouses over it.
+                        ? "bg-amber-100/60 hover:bg-amber-100/60"
+                        : idx % 2 === 0 ? "bg-white hover:bg-indigo-50/40" : "bg-gray-50/40 hover:bg-indigo-50/40"
+                      }`}
                   >
                     {columns.map((key) => renderCell(key, seat, isSelected))}
                   </tr>
@@ -462,7 +519,7 @@ export default function SeatTable({
               <select
                 value={pageSize}
                 onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
               </select>

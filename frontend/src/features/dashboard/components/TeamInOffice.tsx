@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import Link from "next/link";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { TeamMember } from "../types/dashboard.types";
@@ -63,7 +64,7 @@ export function TeamInOffice({
                     <span className="text-[10px] text-gray-300">·</span>
                   )}
                   {m.seatCode && (
-                    <span className="text-[10px] text-gray-400 leading-tight">{m.seatCode}</span>
+                    <span className="text-[10px] text-gray-400 leading-tight">{displaySpaceCode(m.seatCode)}</span>
                   )}
                   {!m.floor && !m.seatCode && (
                     <span className="text-[10px] text-gray-400 leading-tight">—</span>

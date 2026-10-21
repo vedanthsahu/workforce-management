@@ -8,6 +8,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import AmenitiesPagination from "@/features/amenities/components/AmenitiesPagination";
 import { useBookings } from "../hooks/useBookings";
 import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 import { useBookingActions } from "../hooks/useBookingActions";
@@ -52,6 +53,14 @@ function StatCard({ label, value, subLabel, icon, iconBg, accentBorder }: StatCa
   );
 }
 
+function EmptyBookingsCard({ message }: { message: string }) {
+  return (
+    <div className="bg-white border border-[#EBEBF5] rounded-2xl px-5 py-16 text-center text-gray-400 text-[13.5px]">
+      {message}
+    </div>
+  );
+}
+
 function BookingStatsCards({ summary, delegatedCount, showOnBehalf }: { summary: BookingSummary; delegatedCount: number; showOnBehalf: boolean }) {
   const teamInOffice = summary.teamInOffice ?? 0;
   return (
@@ -67,7 +76,7 @@ function BookingStatsCards({ summary, delegatedCount, showOnBehalf }: { summary:
       <StatCard
         label="Completed"
         value={summary.completedThisMonth}
-        subLabel={`${summary.daysInOffice} days in office`}
+        subLabel={`${summary.daysInOffice} onsite days in this month`}
         icon={<CheckCircle2 className="size-5 text-emerald-600" />}
         iconBg="bg-emerald-100"
         accentBorder="border-l-emerald-500"
@@ -146,7 +155,6 @@ function MyBookingsToolbar({
     { label: "All",       value: "all"       },
     { label: "Confirmed", value: "confirmed" },
     { label: "Modified",  value: "modified"  },
-    { label: "Pending",   value: "pending"   },
   ];
 
   return (
@@ -184,11 +192,11 @@ function MyBookingsToolbar({
         </div>
 
         {/* Search */}
-        <div className="flex items-center gap-2 bg-gray-50 border border-[#EBEBF5] rounded-lg px-3 py-2 w-[200px]">
+        <div className="flex items-center gap-2 bg-gray-50 border border-[#EBEBF5] rounded-lg px-3 py-2 w-[200px] focus-within:ring-2 focus-within:ring-blue-500">
           <Search className="size-3.5 text-gray-400 shrink-0" />
           <input
             type="text"
-            placeholder="Search seat, location…"
+            placeholder="Search space, location…"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="border-none bg-transparent text-[13px] text-[#0f172a] outline-none w-full placeholder:text-gray-400"
@@ -266,7 +274,7 @@ function BfsToolbar({
         </div>
 
         {/* Search */}
-        <div className="flex items-center gap-2 bg-gray-50 border border-[#EBEBF5] rounded-lg px-3 py-2 w-[200px]">
+        <div className="flex items-center gap-2 bg-gray-50 border border-[#EBEBF5] rounded-lg px-3 py-2 w-[200px] focus-within:ring-2 focus-within:ring-blue-500">
           <Search className="size-3.5 text-gray-400 shrink-0" />
           <input
             type="text"
@@ -279,6 +287,33 @@ function BfsToolbar({
 
 
       </div>
+    </div>
+  );
+}
+
+const ITEMS_PER_PAGE = 10;
+
+// ── Pagination footer ─────────────────────────────────────────────────────────
+
+function BookingsPaginationFooter({
+  currentPage,
+  totalItems,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalItems: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalItems === 0) return null;
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-white border border-[#EBEBF5] rounded-xl px-4 sm:px-5 py-3 mt-1">
+      <span className="text-[12px] text-gray-400">
+        Showing {startIndex + 1} to {Math.min(startIndex + ITEMS_PER_PAGE, totalItems)} of {totalItems} entries
+      </span>
+      <AmenitiesPagination currentPage={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
     </div>
   );
 }
@@ -376,16 +411,24 @@ export default function MyBookingsPage() {
   const [bfsSearch, setBfsSearch]           = useState("");
   const [bfsBookingType, setBfsBookingType] = useState<BfsBookingType>("all");
 
+  // Pagination
+  const [myPage, setMyPage]   = useState(1);
+  const [bfsPage, setBfsPage] = useState(1);
+
+  const handleMyTabChange = (t: BookingTab) => { setActiveTab(t); setMyPage(1); };
+  const handleMySearchChange = (v: string) => { setMySearch(v); setMyPage(1); };
+  const handleMyStatusChange = (s: BookingStatus) => { setMyStatus(s); setMyPage(1); };
+
+  const handleBfsSubTabChange = (t: "upcoming" | "past" | "cancelled") => { setBfsSubTab(t); setBfsPage(1); };
+  const handleBfsSearchChange = (v: string) => { setBfsSearch(v); setBfsPage(1); };
+  const handleBfsBookingTypeChange = (t: BfsBookingType) => { setBfsBookingType(t); setBfsPage(1); };
+
   // ── Apply filters ──────────────────────────────────────────────────────────
   const filteredBookings = applyMyBookingFilters(displayedBookings, mySearch, myStatus);
 
   const upcomingCards = sortByDate(
     filteredBookings.filter((b) => b.status !== "cancelled" && isUpcoming(b.date)),
     true,
-  );
-  const pastCards = sortByDate(
-    filteredBookings.filter((b) => b.status !== "cancelled" && !isUpcoming(b.date)),
-    false,
   );
   const sortedDisplayed = sortByDate(
     filteredBookings,
@@ -409,6 +452,11 @@ export default function MyBookingsPage() {
       return new Date(a.fromDate).getTime() - new Date(b.fromDate).getTime();
     });
 
+  // ── Pagination slices ────────────────────────────────────────────────────
+  const paginatedUpcomingCards = upcomingCards.slice((myPage - 1) * ITEMS_PER_PAGE, myPage * ITEMS_PER_PAGE);
+  const paginatedSortedDisplayed = sortedDisplayed.slice((myPage - 1) * ITEMS_PER_PAGE, myPage * ITEMS_PER_PAGE);
+  const paginatedDelegated = filteredDelegated.slice((bfsPage - 1) * ITEMS_PER_PAGE, bfsPage * ITEMS_PER_PAGE);
+
   return (
     <>
       <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#F7F8FC]">
@@ -423,7 +471,7 @@ export default function MyBookingsPage() {
                 My Bookings
               </h1>
               <p className="text-[12px] sm:text-[12.5px] text-gray-400 mt-0.5">
-                View and manage your seat reservations
+                View and manage your space reservations
               </p>
             </div>
             <div className="flex gap-2.5 items-center">
@@ -476,11 +524,11 @@ export default function MyBookingsPage() {
             <>
               <MyBookingsToolbar
                 activeTab={activeTab}
-                onTabChange={setActiveTab}
+                onTabChange={handleMyTabChange}
                 search={mySearch}
-                onSearchChange={setMySearch}
+                onSearchChange={handleMySearchChange}
                 status={myStatus}
-                onStatusChange={setMyStatus}
+                onStatusChange={handleMyStatusChange}
               />
 
               <div className="flex flex-col gap-3.5">
@@ -492,57 +540,53 @@ export default function MyBookingsPage() {
                 {!isLoading && !error && activeTab === "upcoming" && (
                   <>
                     {upcomingCards.length > 0 ? (
-                      upcomingCards.map((booking) => (
-                        <BookingCard
-                          key={booking.id}
-                          booking={booking}
-                          onCancelClick={setCancelTarget}
-                          onModifyClick={handleModify}
-                          onModifyVisit={handleModifyVisit}
-
-                          onAddBooking={handleAddBooking}
-                          onCancelVisit={handleCancelVisit}
-                          onCancelBooking={handleCancelBookingOnly}
-                          showActions={!isToday(booking.date)}
-                        />
-                      ))
-                    ) : (
-                      <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
-                        No upcoming bookings found.
-                      </div>
-                    )}
-                    {pastCards.length > 0 && (
                       <>
-                        <p className="text-[11px] font-semibold tracking-widest uppercase text-gray-400 mt-2">Past Bookings</p>
-                        {pastCards.map((booking) => (
+                        {paginatedUpcomingCards.map((booking) => (
                           <BookingCard
                             key={booking.id}
                             booking={booking}
                             onCancelClick={setCancelTarget}
                             onModifyClick={handleModify}
-                            showActions={false}
+                            onModifyVisit={handleModifyVisit}
+
+                            onAddBooking={handleAddBooking}
+                            onCancelVisit={handleCancelVisit}
+                            onCancelBooking={handleCancelBookingOnly}
+                            showActions={!isToday(booking.date)}
                           />
                         ))}
+                        <BookingsPaginationFooter
+                          currentPage={myPage}
+                          totalItems={upcomingCards.length}
+                          onPageChange={setMyPage}
+                        />
                       </>
+                    ) : (
+                      <EmptyBookingsCard message="No upcoming bookings." />
                     )}
                   </>
                 )}
 
                 {!isLoading && !error && activeTab !== "upcoming" && (
                   sortedDisplayed.length === 0 ? (
-                    <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
-                      No {activeTab} bookings found.
-                    </div>
+                    <EmptyBookingsCard message={`No ${activeTab} bookings.`} />
                   ) : (
-                    sortedDisplayed.map((booking) => (
-                      <BookingCard
-                        key={booking.id}
-                        booking={booking}
-                        onCancelClick={setCancelTarget}
-                        onModifyClick={handleModify}
-                        showActions={activeTab !== "past" && activeTab !== "cancelled"}
+                    <>
+                      {paginatedSortedDisplayed.map((booking) => (
+                        <BookingCard
+                          key={booking.id}
+                          booking={booking}
+                          onCancelClick={setCancelTarget}
+                          onModifyClick={handleModify}
+                          showActions={activeTab !== "past" && activeTab !== "cancelled"}
+                        />
+                      ))}
+                      <BookingsPaginationFooter
+                        currentPage={myPage}
+                        totalItems={sortedDisplayed.length}
+                        onPageChange={setMyPage}
                       />
-                    ))
+                    </>
                   )
                 )}
               </div>
@@ -554,35 +598,40 @@ export default function MyBookingsPage() {
             <>
               <BfsToolbar
                 subTab={bfsSubTab}
-                onSubTabChange={setBfsSubTab}
+                onSubTabChange={handleBfsSubTabChange}
                 search={bfsSearch}
-                onSearchChange={setBfsSearch}
+                onSearchChange={handleBfsSearchChange}
                 bookingType={bfsBookingType}
-                onBookingTypeChange={setBfsBookingType}
+                onBookingTypeChange={handleBfsBookingTypeChange}
               />
 
               <div className="flex flex-col gap-3.5">
                 {isLoading ? (
                   <MyBookingsSkeleton />
                 ) : filteredDelegated.length === 0 ? (
-                  <div className="text-center py-16 text-gray-400 text-[13.5px] bg-white rounded-xl border border-dashed border-gray-200">
-                    No {bfsSubTab} delegated bookings found.
-                  </div>
+                  <EmptyBookingsCard message={`No ${bfsSubTab} delegated bookings.`} />
                 ) : (
-                  filteredDelegated.map((booking) => (
-                    <BookingCard
-                      key={booking.id}
-                      booking={booking}
-                      onCancelClick={setCancelTarget}
-                      onModifyClick={handleModify}
-                      onModifyVisit={handleModifyVisit}
-                      onAddBooking={handleAddBooking}
-                      onCancelBooking={handleCancelBookingOnly}
-                      onCancelVisit={handleCancelVisit}
-                      showActions={bfsSubTab === "upcoming" && !isToday(booking.date)}
-                      variant="delegated"
+                  <>
+                    {paginatedDelegated.map((booking) => (
+                      <BookingCard
+                        key={booking.id}
+                        booking={booking}
+                        onCancelClick={setCancelTarget}
+                        onModifyClick={handleModify}
+                        onModifyVisit={handleModifyVisit}
+                        onAddBooking={handleAddBooking}
+                        onCancelBooking={handleCancelBookingOnly}
+                        onCancelVisit={handleCancelVisit}
+                        showActions={bfsSubTab === "upcoming" && !isToday(booking.date)}
+                        variant="delegated"
+                      />
+                    ))}
+                    <BookingsPaginationFooter
+                      currentPage={bfsPage}
+                      totalItems={filteredDelegated.length}
+                      onPageChange={setBfsPage}
                     />
-                  ))
+                  </>
                 )}
               </div>
             </>
@@ -596,9 +645,6 @@ export default function MyBookingsPage() {
             </span>
             <span className="flex items-center gap-1.5 text-[12px] text-gray-500">
               <span className="w-2 h-2 rounded-full bg-amber-500" />Modified
-            </span>
-            <span className="flex items-center gap-1.5 text-[12px] text-gray-500">
-              <span className="w-2 h-2 rounded-full bg-amber-500" />Pending
             </span>
             <span className="flex items-center gap-1.5 text-[12px] text-gray-500">
               <span className="w-2 h-2 rounded-full bg-red-500" />Cancelled

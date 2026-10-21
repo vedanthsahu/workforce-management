@@ -23,6 +23,7 @@ from jinja2 import (
 from backend.core.app_logging import LOGGER_NAME
 from backend.core.config import Settings, get_settings
 from backend.core.retry import aws_retry
+from backend.core.seat_categorization import display_space_code
 
 logger = logging.getLogger(f"{LOGGER_NAME}.notifications")
 
@@ -61,7 +62,7 @@ def booking_notification_details(booking: dict[str, Any]) -> dict[str, str]:
     Absent values are empty strings (never placeholders or database ids) so the
     templates render only the rows that apply to the event.
     """
-    seat = str(booking.get("seat_code") or "").strip()
+    seat = display_space_code(str(booking.get("seat_code") or "").strip())
     location = ", ".join(
         str(value)
         for value in (

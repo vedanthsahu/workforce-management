@@ -1,14 +1,27 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ChevronDown, Info, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle2, Info, X } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { CONFIGURATION_SECTIONS, INITIAL_CONFIGURATIONS } from "../utils/configurationData";
-import type { ConfigurationField, ConfigurationItem } from "../types/configuration.types";
+import { ConfigurationSkeleton } from "./ConfigurationSkeleton";
 import {
+  CONFIGURATION_SECTIONS,
+  INITIAL_CONFIGURATIONS,
+} from "../utils/configurationData";
+import type {
+  ConfigurationField,
+  ConfigurationItem,
+} from "../types/configuration.types";
+import {
+  fetchActivityPolicy,
+  fetchBlockedSeatPolicy,
   fetchBookingPolicy,
+  fetchChatbotPolicy,
   fetchLayoutPolicy,
+  updateActivityPolicy,
+  updateBlockedSeatPolicy,
   updateBookingPolicy,
+  updateChatbotPolicy,
   updateLayoutPolicy,
 } from "../services/configuration.service";
 
@@ -17,28 +30,22 @@ import {
 // "max bookings within N days" concepts were removed from this page
 // entirely -- nothing in the booking flow actually enforces either of
 // them, they were mock-only placeholders with no server-side counterpart
-// (see the Configuration-page audit that found this). Only
-// activity-table-record-count remains an unbacked, local-only mock.
+// (see the Configuration-page audit that found this).
 const BACKED_ITEM_IDS = new Set([
+  "activity-table-record-count",
   "new-layout-publishing",
   "booking-calendar-employee",
   "visitor-booking",
   "layout-visibility",
+  "blocked-seat-policy",
 ]);
 
-function withFieldValue(fields: ConfigurationField[], key: string, value: number): ConfigurationField[] {
+function withFieldValue(
+  fields: ConfigurationField[],
+  key: string,
+  value: number,
+): ConfigurationField[] {
   return fields.map((f) => (f.key === key ? { ...f, value } : f));
-}
-
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("en-US", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 function draftKey(itemId: string, fieldKey: string): string {
@@ -53,6 +60,18 @@ type ChangedRow = {
   unit: string;
 };
 
+const POSITIVE_VALUE_ERROR = "Value should be greater than 0.";
+
+// Per-field upper bounds, keyed by draftKey(itemId, fieldKey). Fields not
+// listed here only need to be > 0. The activity record count is capped at
+// 100 because the admin activities API never returns more than 100 rows.
+const FIELD_MAX_VALUES: Record<string, number> = {
+  "activity-table-record-count:records": 100,
+};
+
+const rangeError = (max: number) =>
+  `Value should be greater than 0 and less than or equal to ${max}.`;
+
 /** One editable setting row: label + helper text on the left, a compact
  * number input + unit on the right. Layout Visibility's fields use their
  * own cardTitle/cardDescription (shorter, purpose-built for this row);
@@ -63,83 +82,214 @@ function SettingRow({
   value,
   unit,
   onChange,
+  error,
   readOnly = false,
 }: {
   label: string;
   description: string;
-  value: number;
+  value: number | string;
   unit: string;
   onChange: (raw: string) => void;
+  error?: string;
   readOnly?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-6 py-4">
+    <div className="flex items-center justify-between gap-6 py-4 px-2 -mx-2 rounded-lg transition-colors hover:bg-gray-50">
       <div className="min-w-0">
         <p className="text-sm font-normal text-black">
           {label}
-          {readOnly && <span className="ml-1.5 text-xs text-gray-400 font-normal">(calculated)</span>}
+          {readOnly && (
+            <span className="ml-1.5 text-xs text-gray-400 font-normal">
+              (calculated)
+            </span>
+          )}
         </p>
-        {description && <p className="text-xs text-gray-500 mt-0.5">{description}</p>}
+        {description && (
+          <p className="text-xs text-gray-500 mt-0.5">{description}</p>
+        )}
       </div>
-      <div className="flex items-center gap-2.5 shrink-0">
-        <input
-          type="number"
-          min={0}
-          value={value}
-          readOnly={readOnly}
-          onChange={(e) => !readOnly && onChange(e.target.value)}
-          className={`w-20 h-10 px-3 text-center text-sm font-semibold rounded-lg border transition-colors ${
-            readOnly
-              ? "border-gray-200 bg-gray-100 text-gray-500 cursor-not-allowed"
-              : "border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+      <div className="w-48 shrink-0">
+        <div className="flex items-center gap-2.5">
+          <input
+            type="number"
+            min={1}
+            value={value}
+            readOnly={readOnly}
+            aria-invalid={!!error}
+            onChange={(e) => !readOnly && onChange(e.target.value)}
+            className={`w-20 h-10 px-3 text-center text-sm font-semibold rounded-lg border transition-colors ${
+              readOnly
+                ? "border-gray-200 bg-gray-100 text-gray-500 cursor-not-allowed"
+                : error
+                  ? "border-red-400 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-200"
+                  : "border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            }`}
+          />
+          <span className="text-xs font-medium text-gray-400 w-16">{unit}</span>
+        </div>
+        {error && (
+          <p className="mt-1 text-xs font-medium text-red-600">{error}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChatbotToggleRow({
+  enabled,
+  onChange,
+}: {
+  enabled: boolean;
+  onChange: (enabled: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-6 py-4 px-2 -mx-2 rounded-lg transition-colors hover:bg-gray-50">
+      <div className="min-w-0">
+        <p className="text-sm font-normal text-black">Employee chatbot access</p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Show the chatbot floating button when an employee is logged in.
+        </p>
+      </div>
+      <div className="w-48 shrink-0 flex items-center">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label="Employee chatbot access"
+          onClick={() => onChange(!enabled)}
+          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
+            enabled ? "bg-indigo-600" : "bg-gray-300"
           }`}
-        />
-        <span className="text-xs font-medium text-gray-400 w-16">{unit}</span>
+        >
+          <span
+            className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+              enabled ? "translate-x-5" : "translate-x-0.5"
+            }`}
+          />
+        </button>
       </div>
     </div>
   );
 }
 
 export default function ConfigurationsListPage() {
-  const [configurations, setConfigurations] = useState<ConfigurationItem[]>(INITIAL_CONFIGURATIONS);
+  const [configurations, setConfigurations] = useState<ConfigurationItem[]>(
+    INITIAL_CONFIGURATIONS,
+  );
   // Keyed by "<itemId>:<fieldKey>" -- only touched fields get an entry, so
   // "is this field dirty" is just "is its key present here", not a value
   // comparison that could false-negative if someone types back to the
   // original number.
-  const [draft, setDraft] = useState<Record<string, number>>({});
-  const [detailsOpen, setDetailsOpen] = useState(true);
+  const [draft, setDraft] = useState<Record<string, string>>({});
   const [showConfirm, setShowConfirm] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [chatbotEnabled, setChatbotEnabled] = useState(false);
+  const [savedChatbotEnabled, setSavedChatbotEnabled] = useState(false);
+
+  // The page scrolls, so an error banner at the top can be off-screen when
+  // the user saved from further down -- bring it into view when it appears.
+  const errorBannerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (errorMessage) errorBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [errorMessage]);
+  const [loading, setLoading] = useState(true);
 
   // Replace the hardcoded mock values for backend-backed items with the
-  // tenant's real, currently-effective ones as soon as they load -- until
-  // then the page still renders instantly with the mock defaults instead
-  // of a blank/loading state.
+  // tenant's real, currently-effective ones as soon as they load. The
+  // ConfigurationSkeleton (below) stays up for exactly as long as this
+  // real fetch takes, not a fixed/fake delay.
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([fetchBookingPolicy(), fetchLayoutPolicy()])
-      .then(([booking, layout]) => {
+    Promise.all([
+      fetchBookingPolicy(),
+      fetchLayoutPolicy(),
+      fetchBlockedSeatPolicy(),
+      fetchActivityPolicy(),
+      fetchChatbotPolicy(),
+    ])
+      .then(([booking, layout, blockedSeat, activity, chatbot]) => {
         if (cancelled) return;
+        setChatbotEnabled(chatbot.employee_access_enabled);
+        setSavedChatbotEnabled(chatbot.employee_access_enabled);
         setConfigurations((prev) =>
           prev.map((c) => {
+            if (c.id === "activity-table-record-count") {
+              return {
+                ...c,
+                fields: withFieldValue(c.fields, "records", activity.record_count),
+              };
+            }
             if (c.id === "new-layout-publishing") {
               let fields = withFieldValue(c.fields, "days", layout.buffer_days);
-              fields = withFieldValue(fields, "totalDays", layout.min_advance_days);
+              fields = withFieldValue(
+                fields,
+                "totalDays",
+                layout.min_advance_days,
+              );
               return { ...c, fields };
             }
             if (c.id === "booking-calendar-employee") {
-              return { ...c, fields: withFieldValue(c.fields, "durationDays", booking.employee_max_advance_days) };
+              return {
+                ...c,
+                fields: withFieldValue(
+                  c.fields,
+                  "durationDays",
+                  booking.employee_max_advance_days,
+                ),
+              };
             }
             if (c.id === "visitor-booking") {
-              return { ...c, fields: withFieldValue(c.fields, "durationDays", booking.guest_max_advance_days) };
+              return {
+                ...c,
+                fields: withFieldValue(
+                  c.fields,
+                  "durationDays",
+                  booking.guest_max_advance_days,
+                ),
+              };
             }
             if (c.id === "layout-visibility") {
-              let fields = withFieldValue(c.fields, "draftDays", layout.visibility_days.draft);
-              fields = withFieldValue(fields, "archivedDays", layout.visibility_days.archived);
-              fields = withFieldValue(fields, "discardedDays", layout.visibility_days.deleted);
+              let fields = withFieldValue(
+                c.fields,
+                "draftDays",
+                layout.visibility_days.draft,
+              );
+              fields = withFieldValue(
+                fields,
+                "archivedDays",
+                layout.visibility_days.archived,
+              );
+              fields = withFieldValue(
+                fields,
+                "discardedDays",
+                layout.visibility_days.deleted,
+              );
+              return { ...c, fields };
+            }
+            if (c.id === "blocked-seat-policy") {
+              let fields = withFieldValue(
+                c.fields,
+                "upcomingDays",
+                blockedSeat.upcoming_days,
+              );
+              fields = withFieldValue(
+                fields,
+                "expiringSoonDays",
+                blockedSeat.expiring_soon_days,
+              );
+              fields = withFieldValue(
+                fields,
+                "expiredWindowDays",
+                blockedSeat.expired_window_days,
+              );
+              fields = withFieldValue(
+                fields,
+                "maxAdvanceDays",
+                blockedSeat.max_advance_days,
+              );
               return { ...c, fields };
             }
             return c;
@@ -150,6 +300,9 @@ export default function ConfigurationsListPage() {
         // Real values failed to load -- the mock defaults stay on screen
         // rather than the page breaking; Save still round-trips to the
         // backend and will surface its own error if that's still down.
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
 
     return () => {
@@ -164,37 +317,74 @@ export default function ConfigurationsListPage() {
     for (const item of configurations) {
       for (const f of item.fields) {
         const key = draftKey(item.id, f.key);
-        if (key in draft && draft[key] !== f.value) {
-          const label = item.multiField ? f.cardTitle ?? f.label : f.label;
-          rows.push({ key, label, from: f.value, to: draft[key], unit: f.unit });
+        if (key in draft && Number(draft[key]) !== f.value) {
+          const label = item.multiField ? (f.cardTitle ?? f.label) : f.label;
+          rows.push({
+            key,
+            label,
+            from: f.value,
+            to: Number(draft[key]),
+            unit: f.unit,
+          });
         }
       }
     }
     return rows;
   }, [configurations, draft]);
 
-  const hasChanges = changedRows.length > 0;
+  const chatbotHasChanges = chatbotEnabled !== savedChatbotEnabled;
+  const hasChanges = changedRows.length > 0 || chatbotHasChanges;
+  // draftKey -> error message for every field whose current value is invalid.
+  const fieldErrors = useMemo(() => {
+    const errors = new Map<string, string>();
+    for (const item of configurations) {
+      for (const field of item.fields) {
+        if (field.readOnly) continue;
+        const key = draftKey(item.id, field.key);
+        const rawValue = key in draft ? draft[key] : String(field.value);
+        const value = Number(rawValue);
+        const max = FIELD_MAX_VALUES[key];
+        const tooLow = rawValue.trim() === "" || !Number.isFinite(value) || value <= 0;
+        const tooHigh = max !== undefined && value > max;
+        if (tooLow || tooHigh) {
+          errors.set(key, max !== undefined ? rangeError(max) : POSITIVE_VALUE_ERROR);
+        }
+      }
+    }
+    return errors;
+  }, [configurations, draft]);
+  const hasInvalidValues = fieldErrors.size > 0;
 
   const handleFieldChange = (itemId: string, fieldKey: string, raw: string) => {
-    const parsed = Number(raw);
+    const normalized = raw.replace(/^0+(?=\d)/, "");
     setDraft((prev) => ({
       ...prev,
-      [draftKey(itemId, fieldKey)]: Number.isFinite(parsed) ? Math.max(0, parsed) : 0,
+      [draftKey(itemId, fieldKey)]: normalized,
     }));
   };
 
-  const handleDiscard = () => setDraft({});
+  const handleDiscard = () => {
+    setDraft({});
+    setChatbotEnabled(savedChatbotEnabled);
+  };
 
   // Save applies every dirty item in this batch. Backed items (see
   // BACKED_ITEM_IDS) round-trip through the real business-rule API one at a
   // time; unbacked items just apply their draft value locally, matching the
   // previous per-item modal's behavior now folded into one multi-item save.
   const confirmApply = async () => {
+    if (hasInvalidValues) {
+      setErrorMessage(fieldErrors.values().next().value ?? POSITIVE_VALUE_ERROR);
+      setShowConfirm(false);
+      return;
+    }
     setErrorMessage(null);
     setSaving(true);
     try {
       const now = new Date().toISOString();
-      const changedItemIds = Array.from(new Set(changedRows.map((r) => r.key.split(":")[0])));
+      const changedItemIds = Array.from(
+        new Set(changedRows.map((r) => r.key.split(":")[0])),
+      );
 
       let nextConfigurations = configurations;
 
@@ -204,21 +394,45 @@ export default function ConfigurationsListPage() {
 
         const fieldsWithDraft = item.fields.map((f) => {
           const key = draftKey(itemId, f.key);
-          return key in draft ? { ...f, value: draft[key] } : f;
+          return key in draft ? { ...f, value: Number(draft[key]) } : f;
         });
 
         let resolvedFields = fieldsWithDraft;
 
         if (BACKED_ITEM_IDS.has(itemId)) {
-          if (itemId === "new-layout-publishing") {
+          if (itemId === "activity-table-record-count") {
+            const records = fieldsWithDraft.find((f) => f.key === "records")?.value;
+            const result = await updateActivityPolicy({ record_count: records });
+            resolvedFields = withFieldValue(
+              fieldsWithDraft,
+              "records",
+              result.record_count,
+            );
+          } else if (itemId === "new-layout-publishing") {
             const days = fieldsWithDraft.find((f) => f.key === "days")?.value;
             const result = await updateLayoutPolicy({ buffer_days: days });
-            resolvedFields = withFieldValue(fieldsWithDraft, "days", result.buffer_days);
-            resolvedFields = withFieldValue(resolvedFields, "totalDays", result.min_advance_days);
+            resolvedFields = withFieldValue(
+              fieldsWithDraft,
+              "days",
+              result.buffer_days,
+            );
+            resolvedFields = withFieldValue(
+              resolvedFields,
+              "totalDays",
+              result.min_advance_days,
+            );
           } else if (itemId === "booking-calendar-employee") {
-            const durationDays = fieldsWithDraft.find((f) => f.key === "durationDays")?.value;
-            const result = await updateBookingPolicy({ employee_max_advance_days: durationDays });
-            resolvedFields = withFieldValue(fieldsWithDraft, "durationDays", result.employee_max_advance_days);
+            const durationDays = fieldsWithDraft.find(
+              (f) => f.key === "durationDays",
+            )?.value;
+            const result = await updateBookingPolicy({
+              employee_max_advance_days: durationDays,
+            });
+            resolvedFields = withFieldValue(
+              fieldsWithDraft,
+              "durationDays",
+              result.employee_max_advance_days,
+            );
             // The layout card's "Effective After (Total)" is derived from
             // this same window -- refresh it too so it doesn't go stale
             // until that card happens to be opened/saved next. Applied
@@ -228,34 +442,123 @@ export default function ConfigurationsListPage() {
               const layoutResult = await fetchLayoutPolicy();
               nextConfigurations = nextConfigurations.map((c) =>
                 c.id === "new-layout-publishing"
-                  ? { ...c, fields: withFieldValue(c.fields, "totalDays", layoutResult.min_advance_days) }
+                  ? {
+                      ...c,
+                      fields: withFieldValue(
+                        c.fields,
+                        "totalDays",
+                        layoutResult.min_advance_days,
+                      ),
+                    }
                   : c,
               );
             } catch {
               // Non-fatal -- the booking window save itself already succeeded.
             }
           } else if (itemId === "visitor-booking") {
-            const durationDays = fieldsWithDraft.find((f) => f.key === "durationDays")?.value;
-            const result = await updateBookingPolicy({ guest_max_advance_days: durationDays });
-            resolvedFields = withFieldValue(fieldsWithDraft, "durationDays", result.guest_max_advance_days);
-          } else if (itemId === "layout-visibility") {
-            const draftDays = fieldsWithDraft.find((f) => f.key === "draftDays")?.value;
-            const archivedDays = fieldsWithDraft.find((f) => f.key === "archivedDays")?.value;
-            const discardedDays = fieldsWithDraft.find((f) => f.key === "discardedDays")?.value;
-            const result = await updateLayoutPolicy({
-              visibility_days: { draft: draftDays, archived: archivedDays, deleted: discardedDays },
+            const durationDays = fieldsWithDraft.find(
+              (f) => f.key === "durationDays",
+            )?.value;
+            const result = await updateBookingPolicy({
+              guest_max_advance_days: durationDays,
             });
-            resolvedFields = withFieldValue(fieldsWithDraft, "draftDays", result.visibility_days.draft);
-            resolvedFields = withFieldValue(resolvedFields, "archivedDays", result.visibility_days.archived);
-            resolvedFields = withFieldValue(resolvedFields, "discardedDays", result.visibility_days.deleted);
+            resolvedFields = withFieldValue(
+              fieldsWithDraft,
+              "durationDays",
+              result.guest_max_advance_days,
+            );
+          } else if (itemId === "layout-visibility") {
+            const draftDays = fieldsWithDraft.find(
+              (f) => f.key === "draftDays",
+            )?.value;
+            const archivedDays = fieldsWithDraft.find(
+              (f) => f.key === "archivedDays",
+            )?.value;
+            const discardedDays = fieldsWithDraft.find(
+              (f) => f.key === "discardedDays",
+            )?.value;
+            const result = await updateLayoutPolicy({
+              visibility_days: {
+                draft: draftDays,
+                archived: archivedDays,
+                deleted: discardedDays,
+              },
+            });
+            resolvedFields = withFieldValue(
+              fieldsWithDraft,
+              "draftDays",
+              result.visibility_days.draft,
+            );
+            resolvedFields = withFieldValue(
+              resolvedFields,
+              "archivedDays",
+              result.visibility_days.archived,
+            );
+            resolvedFields = withFieldValue(
+              resolvedFields,
+              "discardedDays",
+              result.visibility_days.deleted,
+            );
+          } else if (itemId === "blocked-seat-policy") {
+            const upcomingDays = fieldsWithDraft.find(
+              (f) => f.key === "upcomingDays",
+            )?.value;
+            const expiringSoonDays = fieldsWithDraft.find(
+              (f) => f.key === "expiringSoonDays",
+            )?.value;
+            const expiredWindowDays = fieldsWithDraft.find(
+              (f) => f.key === "expiredWindowDays",
+            )?.value;
+            const maxAdvanceDays = fieldsWithDraft.find(
+              (f) => f.key === "maxAdvanceDays",
+            )?.value;
+            const result = await updateBlockedSeatPolicy({
+              upcoming_days: upcomingDays,
+              expiring_soon_days: expiringSoonDays,
+              expired_window_days: expiredWindowDays,
+              max_advance_days: maxAdvanceDays,
+            });
+            resolvedFields = withFieldValue(
+              fieldsWithDraft,
+              "upcomingDays",
+              result.upcoming_days,
+            );
+            resolvedFields = withFieldValue(
+              resolvedFields,
+              "expiringSoonDays",
+              result.expiring_soon_days,
+            );
+            resolvedFields = withFieldValue(
+              resolvedFields,
+              "expiredWindowDays",
+              result.expired_window_days,
+            );
+            resolvedFields = withFieldValue(
+              resolvedFields,
+              "maxAdvanceDays",
+              result.max_advance_days,
+            );
           }
         }
 
         nextConfigurations = nextConfigurations.map((c) =>
           c.id === itemId
-            ? { ...c, fields: resolvedFields, lastUpdatedAt: now, lastUpdatedBy: "Admin User" }
+            ? {
+                ...c,
+                fields: resolvedFields,
+                lastUpdatedAt: now,
+                lastUpdatedBy: "Admin User",
+              }
             : c,
         );
+      }
+
+      if (chatbotHasChanges) {
+        const result = await updateChatbotPolicy({
+          employee_access_enabled: chatbotEnabled,
+        });
+        setChatbotEnabled(result.employee_access_enabled);
+        setSavedChatbotEnabled(result.employee_access_enabled);
       }
 
       setConfigurations(nextConfigurations);
@@ -264,19 +567,20 @@ export default function ConfigurationsListPage() {
       setSavedMessage("Configuration updated successfully.");
       setTimeout(() => setSavedMessage(null), 4000);
     } catch {
-      setErrorMessage("Failed to save one or more configuration changes. Please try again.");
+      // Close the confirm dialog in the same update as raising the error so
+      // the banner isn't hidden behind the modal.
+      setShowConfirm(false);
+      setErrorMessage(
+        "Failed to save one or more configuration changes. Please try again.",
+      );
     } finally {
       setSaving(false);
     }
   };
 
-  const mostRecentUpdate = useMemo(
-    () =>
-      configurations.reduce((latest, item) =>
-        new Date(item.lastUpdatedAt) > new Date(latest.lastUpdatedAt) ? item : latest
-      ),
-    [configurations]
-  );
+  if (loading) {
+    return <ConfigurationSkeleton />;
+  }
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip bg-[#f8fafc]">
@@ -289,19 +593,29 @@ export default function ConfigurationsListPage() {
               </span>
               {savedMessage}
             </div>
-            <button onClick={() => setSavedMessage(null)} className="p-1 rounded hover:bg-green-100/70 transition-colors">
+            <button
+              onClick={() => setSavedMessage(null)}
+              className="p-1 rounded hover:bg-green-100/70 transition-colors"
+            >
               <X size={14} />
             </button>
           </div>
         )}
 
         {errorMessage && (
-          <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-sm font-medium text-red-700">
+          <div
+            ref={errorBannerRef}
+            role="alert"
+            className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-sm font-medium text-red-700"
+          >
             <div className="flex items-center gap-2">
               <Info size={16} />
               {errorMessage}
             </div>
-            <button onClick={() => setErrorMessage(null)} className="p-1 rounded hover:opacity-70">
+            <button
+              onClick={() => setErrorMessage(null)}
+              className="p-1 rounded hover:opacity-70"
+            >
               <X size={14} />
             </button>
           </div>
@@ -309,7 +623,9 @@ export default function ConfigurationsListPage() {
 
         {/* HEADER */}
         <div>
-          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Configuration</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">
+            Configuration
+          </h1>
           <p className="text-xs sm:text-sm text-gray-500 mt-1">
             Update your settings, then save your changes.
           </p>
@@ -328,7 +644,9 @@ export default function ConfigurationsListPage() {
                 <div className="flex items-start gap-3 mb-1">
                   <div className="w-1 self-stretch rounded-full bg-linear-to-b from-indigo-500 to-indigo-300 mt-0.5" />
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900">{section.title}</h2>
+                    <h2 className="text-lg font-semibold text-gray-900">
+                      {section.title}
+                    </h2>
                   </div>
                 </div>
 
@@ -343,15 +661,15 @@ export default function ConfigurationsListPage() {
                       // stay distinguishable (Visitor Booking's two fields,
                       // Layout Visibility's Draft/Archived/Discarded cards).
                       const label = item.multiField
-                        ? f.cardTitle ?? f.label
+                        ? (f.cardTitle ?? f.label)
                         : item.fields.length === 1
-                        ? item.name
-                        : f.label;
+                          ? item.name
+                          : f.label;
                       const description = item.multiField
-                        ? f.cardDescription ?? f.helperText
+                        ? (f.cardDescription ?? f.helperText)
                         : item.fields.length === 1
-                        ? item.description
-                        : f.helperText;
+                          ? item.description
+                          : f.helperText;
 
                       return (
                         <SettingRow
@@ -360,16 +678,34 @@ export default function ConfigurationsListPage() {
                           description={description}
                           value={value}
                           unit={f.unit}
+                          error={fieldErrors.get(key)}
                           readOnly={f.readOnly}
-                          onChange={(raw) => handleFieldChange(item.id, f.key, raw)}
+                          onChange={(raw) =>
+                            handleFieldChange(item.id, f.key, raw)
+                          }
                         />
                       );
-                    })
+                    }),
                   )}
                 </div>
               </div>
             );
           })}
+
+          <div className="px-5 sm:px-6 py-5">
+            <div className="flex items-start gap-3 mb-1">
+              <div className="w-1 self-stretch rounded-full bg-linear-to-b from-indigo-500 to-indigo-300 mt-0.5" />
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Chatbot</h2>
+              </div>
+            </div>
+            <div className="pl-4">
+              <ChatbotToggleRow
+                enabled={chatbotEnabled}
+                onChange={setChatbotEnabled}
+              />
+            </div>
+          </div>
         </div>
 
         {/* NOTE */}
@@ -380,35 +716,21 @@ export default function ConfigurationsListPage() {
           <div>
             <p className="text-sm font-semibold text-indigo-900">Note</p>
             <p className="text-xs text-indigo-700 mt-1">
-              These configuration settings control key application behaviors. Changes will be applied across the
-              system based on the defined rules.
+              These configuration settings control key application behaviors.
+              Changes will be applied across the system based on the defined
+              rules.
             </p>
           </div>
-        </div>
-
-        {/* UPDATE DETAILS */}
-        <div>
-          <button
-            type="button"
-            onClick={() => setDetailsOpen((o) => !o)}
-            className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            <ChevronDown size={14} className={`transition-transform ${detailsOpen ? "" : "-rotate-90"}`} />
-            Update details
-          </button>
-          {detailsOpen && (
-            <p className="text-xs text-black mt-1.5 ml-[21px]">
-              All settings last updated {formatDateTime(mostRecentUpdate.lastUpdatedAt)} by {mostRecentUpdate.lastUpdatedBy}.
-            </p>
-          )}
         </div>
       </div>
 
       {/* STICKY SAVE BAR */}
       <div className="sticky bottom-0 left-0 right-0 flex items-center justify-between gap-4 px-5 sm:px-8 py-4 bg-white/95 backdrop-blur border-t border-gray-200">
-        <span className={`text-xs sm:text-sm ${hasChanges ? "text-black" : "text-gray-500"}`}>
+        <span
+          className={`text-xs sm:text-sm ${hasChanges ? "text-black" : "text-gray-500"}`}
+        >
           {hasChanges
-            ? `${changedRows.length} unsaved change${changedRows.length > 1 ? "s" : ""}`
+              ? `${changedRows.length + (chatbotHasChanges ? 1 : 0)} unsaved change${changedRows.length + (chatbotHasChanges ? 1 : 0) > 1 ? "s" : ""}`
             : "No unsaved changes"}
         </span>
         <div className="flex items-center gap-3">
@@ -424,7 +746,7 @@ export default function ConfigurationsListPage() {
           </button>
           <button
             type="button"
-            disabled={!hasChanges || saving}
+            disabled={!hasChanges || hasInvalidValues || saving}
             onClick={() => setShowConfirm(true)}
             className="h-9 px-4 rounded-xl bg-linear-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-sm font-medium text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:from-indigo-600 disabled:to-indigo-700 transition-all shadow-sm hover:shadow-md hover:shadow-indigo-200"
           >
@@ -444,13 +766,25 @@ export default function ConfigurationsListPage() {
       >
         <ul className="space-y-1.5 text-xs text-gray-600">
           {changedRows.map((row) => (
-            <li key={row.key} className="flex items-center justify-between gap-3">
+            <li
+              key={row.key}
+              className="flex items-center justify-between gap-3"
+            >
               <span>{row.label}</span>
               <span className="font-medium text-gray-900">
                 {row.from} → {row.to} {row.unit}
               </span>
             </li>
           ))}
+          {chatbotHasChanges && (
+            <li className="flex items-center justify-between gap-3">
+              <span>Employee chatbot access</span>
+              <span className="font-medium text-gray-900">
+                {savedChatbotEnabled ? "Enabled" : "Disabled"} →{" "}
+                {chatbotEnabled ? "Enabled" : "Disabled"}
+              </span>
+            </li>
+          )}
         </ul>
       </ConfirmDialog>
     </div>

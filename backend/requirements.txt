@@ -5,7 +5,11 @@ annotated-doc==0.0.4
 annotated-types==0.7.0
     # via pydantic
 anyio==4.13.0
-    # via starlette
+    # via
+    #   httpx
+    #   starlette
+asyncpg==0.32.0
+    # via seat-management
 boto3==1.43.56
     # via seat-management
 botocore==1.43.56
@@ -14,7 +18,10 @@ botocore==1.43.56
     #   s3transfer
     #   seat-management
 certifi==2026.2.25
-    # via requests
+    # via
+    #   httpcore
+    #   httpx
+    #   requests
 cffi==2.0.0 ; platform_python_implementation != 'PyPy'
     # via cryptography
 charset-normalizer==3.4.7
@@ -29,11 +36,20 @@ ecdsa==0.19.2
     # via python-jose
 fastapi==0.136.0
     # via seat-management
+greenlet==3.5.6
+    # via sqlalchemy
 h11==0.16.0
-    # via uvicorn
+    # via
+    #   httpcore
+    #   uvicorn
+httpcore==1.0.9
+    # via httpx
+httpx==0.28.1
+    # via seat-management
 idna==3.11
     # via
     #   anyio
+    #   httpx
     #   requests
 jinja2==3.1.6
     # via seat-management
@@ -45,6 +61,8 @@ mangum==0.21.0
     # via seat-management
 markupsafe==3.0.3
     # via jinja2
+phonenumbers==9.0.39
+    # via seat-management
 psycopg2-binary==2.9.11
     # via seat-management
 pyasn1==0.6.3
@@ -73,6 +91,8 @@ python-jose==3.5.0
     # via seat-management
 python-multipart==0.0.26
     # via seat-management
+rapidfuzz==3.14.6
+    # via seat-management
 requests==2.33.1
     # via seat-management
 rsa==4.9.1
@@ -83,6 +103,8 @@ six==1.17.0
     # via
     #   ecdsa
     #   python-dateutil
+sqlalchemy==2.1.4
+    # via seat-management
 starlette==1.0.0
     # via fastapi
 structlog==26.1.0
@@ -95,6 +117,7 @@ typing-extensions==4.15.0
     #   mangum
     #   pydantic
     #   pydantic-core
+    #   sqlalchemy
     #   typing-inspection
 typing-inspection==0.4.2
     # via

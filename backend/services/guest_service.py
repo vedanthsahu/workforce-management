@@ -31,6 +31,11 @@ from backend.core.audit_actions import (
     GUEST_VISIT_MODIFIED,
     GUEST_VISIT_WORKFLOW_EXECUTED,
 )
+from backend.core.authorization import (
+    FRONT_OFFICE,
+    can_check_in_out_guest_visit,
+    can_manage_resource,
+)
 from backend.core.enums import BookingModificationReason
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.booking_repository import (
@@ -121,6 +126,7 @@ from backend.schemas.pagination import PaginationMetadata
 from backend.services.booking_service import (
     GUEST_OPERATION_ROLES,
     _apply_modified_display_status,
+    _can_use_non_bookable_seat,
     _display_cancellation_reason,
     _normalize_cancellation_reason,
     _user_role,
@@ -157,10 +163,7 @@ def _require_guest_operator(current_user: dict[str, Any]) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "code": "guest_operation_not_allowed",
-                "message": (
-                    "Guest operations require the FACILITATOR, TENANT_ADMIN, "
-                    "or FRONT_OFFICE role."
-                ),
+                "message": "Guest operations require the FACILITATOR or TENANT_ADMIN role.",
             },
         )
 
@@ -335,6 +338,7 @@ def _resolve_seat(
     floor_id: str,
     seat_id: str,
     booking_date: date,
+    current_user: dict[str, Any],
 ) -> dict[str, Any]:
     seat = fetch_seat_for_booking(
         conn,
@@ -361,7 +365,7 @@ def _resolve_seat(
                 "message": "Bookings can only target ACTIVE seats.",
             },
         )
-    if seat.get("is_bookable") is not True:
+    if seat.get("is_bookable") is not True and not _can_use_non_bookable_seat(current_user):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -1052,6 +1056,7 @@ def create_guest_booking(
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
             booking_date=payload.visit_date,
+            current_user=current_user,
         )
 
         # Same seat/date race as employee bookings -- no DB constraint
@@ -1266,6 +1271,26 @@ def cancel_guest_booking(
             booking_id=booking_id,
         )
         _validate_mutable_guest_booking(booking, action="cancel")
+
+        _linked_visit = fetch_guest_visit_by_id(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=str(booking["guest_visit_id"]),
+        ) if booking.get("guest_visit_id") else None
+
+        if not can_manage_resource(
+            current_user,
+            created_by_user_id=booking.get("booked_by_user_id"),
+            subject_user_id=_linked_visit.get("host_user_id") if _linked_visit else None,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "guest_booking_forbidden",
+                    "message": "You are not allowed to cancel this guest booking.",
+                },
+            )
+
         guest = _resolve_guest(
             conn,
             tenant_id=tenant_id,
@@ -1386,6 +1411,26 @@ def modify_guest_booking(
         _validate_mutable_guest_booking(booking, action="modify")
         guest_id = str(booking["booked_for_guest_id"])
         guest_visit_id = str(booking["guest_visit_id"])
+
+        _linked_visit = fetch_guest_visit_by_id(
+            conn,
+            tenant_id=tenant_id,
+            guest_visit_id=guest_visit_id,
+        )
+
+        if not can_manage_resource(
+            current_user,
+            created_by_user_id=booking.get("booked_by_user_id"),
+            subject_user_id=_linked_visit.get("host_user_id") if _linked_visit else None,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "guest_booking_forbidden",
+                    "message": "You are not allowed to modify this guest booking.",
+                },
+            )
+
         guest = _resolve_guest(
             conn,
             tenant_id=tenant_id,
@@ -1413,6 +1458,7 @@ def modify_guest_booking(
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
             booking_date=payload.booking_date,
+            current_user=current_user,
         )
 
         acquire_booking_slot_locks(
@@ -1476,6 +1522,7 @@ def modify_guest_booking(
             seat=target_seat,
             booking_date=payload.booking_date,
             modified_from_booking_id=booking_id,
+            updated_by_user_id=_current_user_id(current_user),
         )
         recalculate_guest_visit_requires_seat(
             conn,
@@ -1832,6 +1879,13 @@ def list_guest_visits(
 
     tenant_id = str(current_user["tenant_id"])
 
+    # Front office may only ever see today's guest visits -- confirmed
+    # explicitly: "He can just see: today guest visits". Clamp regardless
+    # of what the caller requested rather than erroring, since the only
+    # legitimate front-office UI never asks for anything else.
+    if _user_role(current_user) == FRONT_OFFICE:
+        visit_scope = "CURRENT"
+
     summary = fetch_guest_visit_summary(
         conn,
         tenant_id=tenant_id,
@@ -1895,6 +1949,17 @@ def get_guest_visit_details(
             detail="Guest visit not found.",
         )
 
+    # Same "today only" restriction as the list endpoint, applied here too
+    # so a front-office caller can't bypass it by guessing/iterating ids.
+    if _user_role(current_user) == FRONT_OFFICE and row.get("visit_date") != date.today():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "guest_visit_forbidden",
+                "message": "You can only view today's guest visits.",
+            },
+        )
+
     return GuestVisitListItem(**row)
 
 
@@ -1928,6 +1993,18 @@ def guest_visit_check_in(
         _visit_before_ci = fetch_guest_visit_by_id(
             conn, tenant_id=tenant_id, guest_visit_id=guest_visit_id,
         )
+        if _visit_before_ci is None:
+            raise LookupError(f"Guest visit {guest_visit_id} was not found.")
+
+        if not can_check_in_out_guest_visit(current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "guest_visit_forbidden",
+                    "message": "You are not allowed to check in this guest visit.",
+                },
+            )
+
         check_in_guest_visit(
             conn,
             tenant_id=tenant_id,
@@ -2003,6 +2080,18 @@ def guest_visit_check_out(
         _visit_before_co = fetch_guest_visit_by_id(
             conn, tenant_id=tenant_id, guest_visit_id=guest_visit_id,
         )
+        if _visit_before_co is None:
+            raise LookupError(f"Guest visit {guest_visit_id} was not found.")
+
+        if not can_check_in_out_guest_visit(current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "guest_visit_forbidden",
+                    "message": "You are not allowed to check out this guest visit.",
+                },
+            )
+
         check_out_guest_visit(
             conn,
             tenant_id=tenant_id,
@@ -2091,6 +2180,19 @@ def create_booking_for_existing_guest_visit(
                 "Guest visit not found."
             )
 
+        if not can_manage_resource(
+            current_user,
+            created_by_user_id=visit.get("created_by_user_id"),
+            subject_user_id=visit.get("host_user_id"),
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "guest_visit_forbidden",
+                    "message": "You are not allowed to book a seat for this guest visit.",
+                },
+            )
+
         if visit["visit_status"] != "SCHEDULED":
             raise ValueError(
                 "Only scheduled visits can receive seat bookings."
@@ -2113,6 +2215,7 @@ def create_booking_for_existing_guest_visit(
             floor_id=str(payload.floor_id),
             seat_id=str(payload.seat_id),
             booking_date=visit["visit_date"],
+            current_user=current_user,
         )
 
         if has_active_booking_conflict(
@@ -2120,6 +2223,7 @@ def create_booking_for_existing_guest_visit(
             tenant_id=tenant_id,
             seat_id=str(payload.seat_id),
             booking_date=visit["visit_date"],
+            current_user=current_user,
         ):
             _raise_seat_booking_conflict()
 
@@ -2189,6 +2293,22 @@ def cancel_guest_visit_record(
             tenant_id=tenant_id,
             guest_visit_id=guest_visit_id,
         )
+
+        if visit_for_email is None:
+            raise LookupError(f"Guest visit {guest_visit_id} was not found.")
+
+        if not can_manage_resource(
+            current_user,
+            created_by_user_id=visit_for_email.get("created_by_user_id"),
+            subject_user_id=visit_for_email.get("host_user_id"),
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "guest_visit_forbidden",
+                    "message": "You are not allowed to cancel this guest visit.",
+                },
+            )
 
         active_booking = (
             fetch_active_booking_by_guest_visit(
@@ -2350,6 +2470,19 @@ def modify_guest_visit(
         if visit is None:
             raise LookupError(
                 "Guest visit not found."
+            )
+
+        if not can_manage_resource(
+            current_user,
+            created_by_user_id=visit.get("created_by_user_id"),
+            subject_user_id=visit.get("host_user_id"),
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "guest_visit_forbidden",
+                    "message": "You are not allowed to modify this guest visit.",
+                },
             )
 
         if visit["visit_status"] != "SCHEDULED":
@@ -2647,6 +2780,7 @@ def _require_workflow_visit(
     visit: dict[str, Any] | None,
     *,
     require_scheduled: bool,
+    current_user: dict[str, Any],
 ) -> dict[str, Any]:
     if visit is None:
         raise HTTPException(
@@ -2654,6 +2788,18 @@ def _require_workflow_visit(
             detail={
                 "code": "guest_visit_not_found",
                 "message": "Guest visit not found.",
+            },
+        )
+    if not can_manage_resource(
+        current_user,
+        created_by_user_id=visit.get("created_by_user_id"),
+        subject_user_id=visit.get("host_user_id"),
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "guest_visit_forbidden",
+                "message": "You are not allowed to act on this guest visit.",
             },
         )
     if require_scheduled and visit.get("visit_status") != "SCHEDULED":
@@ -2743,6 +2889,7 @@ def execute_guest_visit_workflow(
                     guest_visit_id=guest_visit_id,
                 ),
                 require_scheduled=True,
+                current_user=current_user,
             )
             _validate_visit_times(payload.start_time, payload.end_time)
             _resolve_host(
@@ -2835,6 +2982,7 @@ def execute_guest_visit_workflow(
                     guest_visit_id=guest_visit_id,
                 ),
                 require_scheduled=True,
+                current_user=current_user,
             )
             booking = fetch_active_booking_for_guest_visit(
                 conn,
@@ -2879,6 +3027,7 @@ def execute_guest_visit_workflow(
                 floor_id=str(payload.floor_id),
                 seat_id=seat_id,
                 booking_date=payload.visit_date,
+                current_user=current_user,
             )
             if guest_has_active_booking_on_date(
                 conn,
@@ -2945,6 +3094,7 @@ def execute_guest_visit_workflow(
                 seat=seat,
                 booking_date=payload.visit_date,
                 modified_from_booking_id=old_booking_id,
+                updated_by_user_id=_current_user_id(current_user),
             )
             recalculate_guest_visit_requires_seat(
                 conn,
@@ -3005,6 +3155,7 @@ def execute_guest_visit_workflow(
                     guest_visit_id=guest_visit_id,
                 ),
                 require_scheduled=True,
+                current_user=current_user,
             )
             if fetch_active_booking_for_guest_visit(
                 conn,
@@ -3040,6 +3191,7 @@ def execute_guest_visit_workflow(
                 floor_id=str(payload.floor_id),
                 booking_date=payload.visit_date,
                 seat_id=seat_id,
+                current_user=current_user,
             )
             if guest_has_active_booking_on_date(
                 conn,
@@ -3108,6 +3260,7 @@ def execute_guest_visit_workflow(
                     guest_visit_id=guest_visit_id,
                 ),
                 require_scheduled=False,
+                current_user=current_user,
             )
             booking = fetch_active_booking_for_guest_visit(
                 conn,
@@ -3175,6 +3328,7 @@ def execute_guest_visit_workflow(
                     guest_visit_id=guest_visit_id,
                 ),
                 require_scheduled=True,
+                current_user=current_user,
             )
             booking = fetch_active_booking_for_guest_visit(
                 conn,

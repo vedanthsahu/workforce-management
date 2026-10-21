@@ -1,3 +1,4 @@
+import { displaySpaceCode } from "@/lib/spaceCode";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { Seat, Preference } from "../types/Bookingform.types";
@@ -68,7 +69,7 @@ function parseSvgDimensions(svgText: string): { w: number; h: number } {
 // per status instead.
 const FALLBACK_FILL: Record<string, string> = {
   available: "#22C55E",
-  yours: "#22C55E",
+  yours: "#3B82F6",
   selected: "#6366f1",
   best_match: "#EAB308",
   partial_match: "#FDE047",
@@ -137,11 +138,13 @@ function withAddedAttrs(openTag: string, className: string, extraStyle: string):
 
 function getPaletteKey(seat: SeatWithSvgId, isSelected: boolean): string {
   if (isSelected) return "selected";
+  // In modify mode the booking's own seat arrives pre-selected, which is what
+  // shows it in blue. It must NOT keep a permanent "yours" colour: once the
+  // user picks a different seat, this one goes back to its normal state.
   if (seat.status !== "available" && seat.status !== "yours") return seat.status;
   const match = seat.preferenceMatchStatus;
   if (match === "FULL_MATCH" || seat.uiState === "BEST_MATCH") return "best_match";
   if (match === "PARTIAL_MATCH") return "partial_match";
-  if (seat.status === "yours") return "yours";
   return "available";
 }
 
@@ -648,7 +651,7 @@ const SeatTooltip: React.FC<{
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 800, color: "#111827", letterSpacing: "-0.02em" }}>
-              {seat.label}
+              {displaySpaceCode(seat.label)}
             </div>
             {seat.status === "yours" && (
               <div style={{ fontSize: 10, color: "#6b7280", marginTop: 1 }}>Your booking</div>
@@ -700,7 +703,7 @@ const SeatTooltip: React.FC<{
               <div style={{ borderTop: "1px solid #f3f4f6" }} />
               <div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
-                  Seat Type
+                  Space Type
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                   {seat.amenities.map((a) => (
@@ -787,7 +790,7 @@ const SeatTooltip: React.FC<{
             <div style={{ borderTop: "1px solid #f3f4f6" }} />
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
-                Seat Type
+                Space Type
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 {seat.amenities.map((a) => (
@@ -865,7 +868,7 @@ const SeatTooltip: React.FC<{
             marginTop: 2, fontSize: 10, color: "#9ca3af", textAlign: "center",
             background: "#f9fafb", borderRadius: 6, padding: "4px 0",
           }}>
-            {seat.status === "yours" ? "↩ Click to deselect" : "↵ Click to select this seat"}
+            {seat.status === "yours" ? "↩ Click to deselect" : "↵ Click to select this space"}
           </div>
         )}
       </div>
@@ -1452,7 +1455,7 @@ export const SvgFloorMapPage: React.FC<SvgFloorMapPageProps> = ({
             </span>
           </div>
           <span className="text-[10px] text-gray-400 select-none">
-            Scroll to zoom · Drag to pan · Click a seat to select
+            Scroll to zoom · Drag to pan · Click a space to select
           </span>
         </div>
       )}

@@ -1,3 +1,5 @@
+import { todayIsoInIndia } from "@/lib/indiaDate";
+
 export type BookingStatus =
   | "Scheduled"
   | "Confirmed"
@@ -105,7 +107,7 @@ export interface AdminBookingFloorOption {
 export function defaultAdminBookingFilters(): AdminBookingFilters {
   // Date Range defaults to today so the page loads showing today's bookings
   // without the admin needing to pick a date and click Search first.
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayIsoInIndia();
   return {
     search: "",
     site: "",
@@ -209,6 +211,7 @@ export interface AdminBookingRaw {
 export interface AdminBookingSummary {
   total_bookings: number;
   confirmed_bookings: number;
+  not_checked_in_bookings: number;
   cancelled_bookings: number;
   modified_bookings: number;
   completed_bookings: number;

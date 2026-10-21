@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useState, useRef, useEffect } from "react";
 import { Calendar, Hash, Clock, Pencil, X, ChevronDown, CalendarPlus, FileEdit } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -109,18 +110,21 @@ export function BookingCard({
   variant = "my",
 }: BookingCardProps) {
   const isCancelled = booking.status === "cancelled";
+  const isModified  = booking.status === "modified";
   // "(self)" only applies to a genuine self-booking (booked by and for the
-  // same person) that its own owner then cancelled themselves. Guests have
-  // no user account, so bookedForUserId is always undefined for guest/visit
-  // bookings — they never qualify and always show the actual actor's name.
+  // same person) that its own owner then cancelled/modified themselves. Guests
+  // have no user account, so bookedForUserId is always undefined for guest/
+  // visit bookings — they never qualify and always show the actual actor's
+  // name (same rule the admin bookings list uses, see mapAdminBooking.ts).
   const isGenuineSelfBooking =
     !!booking.bookedForUserId && booking.bookedForUserId === booking.bookedByUserId;
-  const isSelfCancel =
-    isCancelled &&
+  const isSelfActed =
+    (isCancelled || isModified) &&
     isGenuineSelfBooking &&
     !!booking.updatedByUserId &&
     booking.updatedByUserId === booking.bookedForUserId;
   const showCancelledBy = isCancelled && !!booking.updatedByName;
+  const showModifiedBy  = isModified  && !!booking.updatedByName;
   const bType = booking.bookingType ?? "self";
   const isVisitOnly = bType === "visit";
   const isGuest = bType === "guest";
@@ -166,7 +170,7 @@ export function BookingCard({
             }
             items={[
               { label: "Modify Visit", icon: <FileEdit className="size-3.5" />, onClick: () => onModifyVisit?.(booking) },
-              { label: "Book a Seat", icon: <CalendarPlus className="size-3.5" />, onClick: () => onAddBooking?.(booking) },
+              { label: "Book a Space", icon: <CalendarPlus className="size-3.5" />, onClick: () => onAddBooking?.(booking) },
             ]}
           />
           <button type="button" onClick={() => onCancelVisit?.(booking)} className={btnCancel}>
@@ -191,7 +195,7 @@ export function BookingCard({
             }
             items={[
               { label: "Edit Visit", icon: <FileEdit className="size-3.5" />, onClick: () => onModifyVisit?.(booking) },
-              { label: "Edit Seat", icon: <Pencil className="size-3.5" />, onClick: () => onModifyClick(booking) },
+              { label: "Edit Space", icon: <Pencil className="size-3.5" />, onClick: () => onModifyClick(booking) },
             ]}
           />
           <MiniDropdown
@@ -203,7 +207,7 @@ export function BookingCard({
               </span>
             }
             items={[
-              { label: "Cancel Seat", icon: <X className="size-3.5" />, onClick: () => onCancelBooking?.(booking), className: "text-red-600" },
+              { label: "Cancel Space", icon: <X className="size-3.5" />, onClick: () => onCancelBooking?.(booking), className: "text-red-600" },
               { label: "Cancel Booking", icon: <X className="size-3.5" />, onClick: () => onCancelVisit?.(booking), className: "text-red-600" },
             ]}
           />
@@ -253,9 +257,9 @@ export function BookingCard({
           <p className="text-[14px] font-bold text-[#0f172a] truncate">{booking.location}</p>
 
           {isVisitOnly ? (
-            <p className="text-[12px] text-orange-500 mt-0.5">{booking.floor || "No seat reserved"}</p>
+            <p className="text-[12px] text-orange-500 mt-0.5">{booking.floor || "No space reserved"}</p>
           ) : (
-            <p className="text-[12px] text-gray-500 mt-0.5">{booking.floor} · Seat {booking.seat}</p>
+            <p className="text-[12px] text-gray-500 mt-0.5">{booking.floor} · Space {displaySpaceCode(booking.seat)}</p>
           )}
 
           <div className="flex items-center gap-1.5 mt-1.5 text-[12px] text-gray-500">
@@ -283,7 +287,14 @@ export function BookingCard({
           {showCancelledBy && (
             <p className="text-[13px] font-medium text-gray-500 mt-1.5">
               Cancelled by <span className="font-bold text-gray-600">{booking.updatedByName}</span>
-              {isSelfCancel && " (self)"}
+              {isSelfActed && " (self)"}
+            </p>
+          )}
+
+          {showModifiedBy && (
+            <p className="text-[13px] font-medium text-gray-500 mt-1.5">
+              Modified by <span className="font-bold text-gray-600">{booking.updatedByName}</span>
+              {isSelfActed && " (self)"}
             </p>
           )}
         </div>

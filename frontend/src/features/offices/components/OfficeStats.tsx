@@ -14,19 +14,20 @@ interface StatCardProps {
   value: string;
   sub: string;
   selected?: boolean;
+  disabled?: boolean;
   onClick?: () => void;
 }
 
-function StatCard({ icon, bg, label, value, sub, selected, onClick }: StatCardProps) {
-  const clickable = !!onClick;
+function StatCard({ icon, bg, label, value, sub, selected, disabled, onClick }: StatCardProps) {
+  const clickable = !!onClick && !disabled;
   return (
     <Card
-      onClick={onClick}
-      className={`group flex flex-row items-center gap-3 sm:gap-4 p-3 sm:p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${
-        clickable ? "cursor-pointer" : ""
+      onClick={clickable ? onClick : undefined}
+      className={`group flex flex-row items-center gap-3 sm:gap-4 p-3 sm:p-5 transition-all duration-200 ${
+        clickable ? "cursor-pointer hover:-translate-y-1 hover:shadow-lg" : disabled ? "cursor-not-allowed opacity-80" : ""
       } ${
         selected
-          ? "border-2 border-blue-500 ring-2 ring-blue-100 shadow-md"
+          ? "border border-indigo-300 ring-1 ring-indigo-100"
           : ""
       }`}
     >
@@ -61,7 +62,9 @@ export default function OfficeStats({ stats, statusFilter = null, onStatusFilter
         label="Total Offices"
         value={stats.total_offices.toString()}
         sub="Across all tenants"
-        onClick={onStatusFilterChange ? () => onStatusFilterChange(null) : undefined}
+        selected={statusFilter === null}
+        disabled={stats.total_offices === 0}
+        onClick={onStatusFilterChange && stats.total_offices > 0 ? () => onStatusFilterChange(null) : undefined}
       />
       <StatCard
         icon={<CheckCircle className="text-green-600" />}
@@ -70,7 +73,8 @@ export default function OfficeStats({ stats, statusFilter = null, onStatusFilter
         value={stats.active_sites.toString()}
         sub="Currently active"
         selected={statusFilter === "ACTIVE"}
-        onClick={onStatusFilterChange ? () => toggle("ACTIVE") : undefined}
+        disabled={stats.active_sites === 0}
+        onClick={onStatusFilterChange && stats.active_sites > 0 ? () => toggle("ACTIVE") : undefined}
       />
       <StatCard
         icon={<PauseCircle className="text-yellow-600" />}
@@ -79,13 +83,14 @@ export default function OfficeStats({ stats, statusFilter = null, onStatusFilter
         value={stats.inactive_sites.toString()}
         sub="Currently inactive"
         selected={statusFilter === "INACTIVE"}
-        onClick={onStatusFilterChange ? () => toggle("INACTIVE") : undefined}
+        disabled={stats.inactive_sites === 0}
+        onClick={onStatusFilterChange && stats.inactive_sites > 0 ? () => toggle("INACTIVE") : undefined}
       />
       <StatCard
         icon={<Armchair className="text-purple-600" />}
         bg="bg-purple-100"
-        label="Total Seats"
-        value={stats.total_seats.toString()}
+        label="Total Spaces"
+        value={stats.active_seats.toString()}
         sub="Across all offices"
       />
     </div>

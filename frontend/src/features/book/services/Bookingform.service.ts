@@ -1,3 +1,4 @@
+import axios from "axios";
 import { axiosInstance } from "@/lib/http/axios";
 import {
   Site,
@@ -11,7 +12,33 @@ import {
   PreferenceMatchStatus,
   UiState,
   FetchSeatsParams,
+  QuickPickSeat,
+  NextBooking,
 } from "../types/Bookingform.types";
+
+// Every backend error (whatever HTTPException it started as) is normalized
+// server-side into {"error": {"code", "message"}} (see main.py's
+// http_exception_handler) — but a caught error might still be a plain
+// string detail, a differently-shaped body, or no response at all (a
+// network failure). This pulls out the real message wherever it lives, so a
+// genuine business-rule conflict (e.g. "you already have a booking that
+// day" from the availability endpoint itself, not just from creating the
+// booking) never falls through to Axios's own generic
+// "Request failed with status code {n}".
+export function extractApiErrorMessage(err: unknown, fallback: string): string {
+  if (axios.isAxiosError(err)) {
+    const data = err.response?.data as
+      | { detail?: { message?: string } | string; message?: string; error?: { message?: string } }
+      | undefined;
+    const extracted =
+      (typeof data?.detail === "object" ? data?.detail?.message : typeof data?.detail === "string" ? data.detail : null)
+      ?? data?.error?.message
+      ?? data?.message
+      ?? null;
+    return extracted ?? fallback;
+  }
+  return err instanceof Error ? err.message : fallback;
+}
 
 // ── Raw API shapes ────────────────────────────────────────────────────────────
 
@@ -27,6 +54,7 @@ interface RawBuilding {
   building_id: string;
   site_id: string;
   building_name: string;
+  status?: string | null;
 }
 
 interface RawFloor {
@@ -34,6 +62,7 @@ interface RawFloor {
   building_id?: string;
   floor_name?: string;
   floor_code?: string;
+  status?: string | null;
   layout_file_url?: string | null;
   active_layout?: { layout_file_url?: string | null };
   scheduled_layout?: {
@@ -49,13 +78,15 @@ interface RawPreference {
   category?: string | null;
   description?: string | null;
   icon?: string | null;
+  applicable_seat_types?: string[] | null;
 }
 
 // ── Sites ─────────────────────────────────────────────────────────────────────
 
 export async function fetchSites(): Promise<Site[]> {
+  // bookable_only: skip offices with no active building/floor -- nothing to book there.
   const { data } = await axiosInstance.get<RawSite[]>("/sites", {
-    params: { status: "ACTIVE" },
+    params: { status: "ACTIVE", bookable_only: true },
   });
   return data.map((s) => ({
     id: s.site_id,
@@ -81,14 +112,45 @@ export async function fetchSiteStatus(siteId: string): Promise<string | null> {
 // ── Buildings ─────────────────────────────────────────────────────────────────
 
 export async function fetchBuildings(siteId: string): Promise<Building[]> {
+  // bookable_only: skip buildings with no active floor.
   const { data } = await axiosInstance.get<RawBuilding[]>("/buildings", {
-    params: { site_id: siteId, status: "ACTIVE" },
+    params: { site_id: siteId, status: "ACTIVE", bookable_only: true },
   });
   return data.map((b) => ({
     id: b.building_id,
     siteId: b.site_id,
     name: b.building_name,
   }));
+}
+
+// fetchBuildings only returns buildings a user can book. A saved preference (or
+// deep link) pointing at one that isn't in that list is either inactive or has
+// no active floor -- and the two deserve different messages. There's no
+// single-building endpoint, but GET /buildings without a status filter lists
+// every building of the office with its status, so find it there. Returns null
+// when the building doesn't exist (any longer).
+export async function fetchBuildingStatus(
+  siteId: string,
+  buildingId: string,
+): Promise<{ name: string; status: string | null } | null> {
+  const { data } = await axiosInstance.get<RawBuilding[]>("/buildings", {
+    params: { site_id: siteId },
+  });
+  const match = data.find((b) => String(b.building_id) === buildingId);
+  return match ? { name: match.building_name, status: match.status ?? null } : null;
+}
+
+// Same idea for a floor: GET /buildings/{id}/floors without a status filter
+// lists every floor with its status.
+export async function fetchFloorStatus(
+  buildingId: string,
+  floorId: string,
+): Promise<{ name: string; status: string | null } | null> {
+  const { data } = await axiosInstance.get<RawFloor[]>(`/buildings/${buildingId}/floors`);
+  const match = data.find((f) => String(f.floor_id) === floorId);
+  return match
+    ? { name: match.floor_name ?? match.floor_code ?? `Floor ${floorId}`, status: match.status ?? null }
+    : null;
 }
 
 // ── Floors ────────────────────────────────────────────────────────────────────
@@ -236,7 +298,7 @@ export async function fetchAvailability(params: {
         ...(params.calendarMode
           ? { calendar_mode: true }
           : {}),
-        ...(params.spaceType && params.spaceType !== "ALL"
+        ...(params.spaceType
           ? { space_type: params.spaceType }
           : {}),
       },
@@ -286,11 +348,11 @@ export async function fetchSeatsWithAvailability(
 
     const status = (() => {
       const raw = normalizeRangeStatus(a.availability?.status);
-      if (
-        currentSeatId &&
-        String(a.seat_id) === String(currentSeatId) &&
-        raw === "unavailable"
-      ) {
+      // When modifying a booking, the backend excludes that booking from its
+      // own conflict check (see exclude_booking_id in locations.py), so the
+      // seat comes back "available", not "unavailable" -- match on
+      // currentSeatId alone rather than requiring raw === "unavailable".
+      if (currentSeatId && String(a.seat_id) === String(currentSeatId)) {
         return "yours" as const;
       }
       return raw;
@@ -428,6 +490,7 @@ export async function fetchPreferences(): Promise<Preference[]> {
     category: a.category ?? null,
     description: a.description ?? null,
     icon: a.icon ?? null,
+    applicable_seat_types: a.applicable_seat_types ?? null,
   }));
 }
 
@@ -491,4 +554,157 @@ export async function fetchEmployeeWorkPreferences(
     `/dashboard/employee/${userId}`
   );
   return parseWorkPreferences(data);
+}
+
+// ── Sidebar: quick-pick seats — GET /dashboard/me ────────────────────────────
+// Reuses the same favorite_seat/second_favorite_seat fields as the dashboard's
+// favourite-seat widget (most-booked / 2nd most-booked CONFIRMED seat).
+
+interface RawFavouriteSeat {
+  seat_id: string;
+  seat_code?: string | null;
+  floor_id?: string | null;
+  floor_name?: string | null;
+  building_id?: string | null;
+  building_name?: string | null;
+  site_id?: string | null;
+  site_name?: string | null;
+}
+
+interface RawDashboardMeFavourites {
+  favorite_seat: RawFavouriteSeat | null;
+  second_favorite_seat?: RawFavouriteSeat | null;
+  third_favorite_seat?: RawFavouriteSeat | null;
+}
+
+function toQuickPick(
+  seat: RawFavouriteSeat | null | undefined,
+  tag: QuickPickSeat["tag"]
+): QuickPickSeat | null {
+  if (!seat) return null;
+  return {
+    id: seat.seat_id,
+    label: seat.seat_code ?? seat.seat_id,
+    tag,
+    floor: seat.floor_name ?? (seat.floor_id ? `Floor ${seat.floor_id}` : ""),
+    siteId: seat.site_id ?? null,
+    buildingId: seat.building_id ?? null,
+    floorId: seat.floor_id ?? null,
+  };
+}
+
+// Up to 3 quick picks now (favourite + 2 "frequently booked" runners-up,
+// see fetch_favorite_seat's LIMIT 3 in user_repository.py) -- the 2nd and
+// 3rd share the same "frequent" styling, only the top seat gets the
+// distinct favourite treatment.
+export async function fetchQuickPickSeats(): Promise<QuickPickSeat[]> {
+  const { data } = await axiosInstance.get<RawDashboardMeFavourites>("/dashboard/me");
+  return [
+    toQuickPick(data.favorite_seat, "favourite"),
+    toQuickPick(data.second_favorite_seat ?? null, "frequent"),
+    toQuickPick(data.third_favorite_seat ?? null, "frequent"),
+  ].filter((p): p is QuickPickSeat => p !== null);
+}
+
+// Whether a quick-pick seat is actually free for the given date(s) --
+// shared by useBookingSidebar (filters the list down to only seats worth
+// offering as a shortcut) and BookingSidebar's own click-time re-check
+// (guards against the date changing, or a race, between that filtering and
+// the actual click).
+// A seat only has availability rows for the dates its own layout covers. When
+// the floor switches to a scheduled layout inside the range, the seat reports
+// "FULLY_AVAILABLE" for just the covered days -- so FULLY_AVAILABLE alone is
+// not proof the whole range is bookable. The favourite may not even exist in
+// the scheduled layout, so every requested date must be covered.
+export function seatCoversRange(
+  availability: Pick<SeatAvailabilitySummary, "total_requested_days"> | null | undefined,
+  fromDate: string,
+  toDate: string,
+): boolean {
+  if (!availability) return false;
+  const from = Date.parse(`${fromDate}T00:00:00Z`);
+  const to = Date.parse(`${toDate}T00:00:00Z`);
+  if (Number.isNaN(from) || Number.isNaN(to) || to < from) return false;
+  const requestedDays = Math.round((to - from) / 86400000) + 1;
+  return availability.total_requested_days >= requestedDays;
+}
+
+export async function isQuickPickSeatAvailable(
+  seat: QuickPickSeat,
+  fromDate: string,
+  toDate: string
+): Promise<boolean> {
+  if (!seat.floorId) return false;
+  const seats = await fetchAvailability({ floorId: seat.floorId, fromDate, toDate });
+  const match = seats.find((s) => String(s.seat_id) === String(seat.id));
+  return (
+    match?.availability?.status === "FULLY_AVAILABLE" &&
+    seatCoversRange(match.availability, fromDate, toDate)
+  );
+}
+
+// ── Sidebar: next booking — GET /bookings/me/future ─────────────────────────
+
+interface RawFutureBooking {
+  booking_id: string;
+  seat_code?: string | null;
+  site_name?: string | null;
+  building_name?: string | null;
+  floor_name?: string | null;
+  booking_date: string;
+  from_date?: string | null;
+  to_date?: string | null;
+  booking_status: string;
+}
+
+export async function fetchNextBooking(): Promise<NextBooking | null> {
+  const { data } = await axiosInstance.get<RawFutureBooking[]>("/bookings/me/future");
+
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowIso = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
+
+  const active = data.filter((b) => (b.booking_status ?? "").toUpperCase() !== "CANCELLED");
+
+  const matchesDate = (b: RawFutureBooking, iso: string) => {
+    const from = b.from_date ?? b.booking_date;
+    const to = b.to_date ?? b.booking_date;
+    return iso >= from && iso <= to;
+  };
+
+  // Prefer tomorrow specifically -- that's the common case and reads best
+  // ("Tomorrow's Booking"). If nothing lands there, fall back to whichever
+  // still-upcoming (today or later) booking starts soonest, so the sidebar
+  // has something useful to show instead of going empty the moment the
+  // admin's next booking is two days out rather than one.
+  const tomorrowMatch = active.find((b) => matchesDate(b, tomorrowIso));
+  if (tomorrowMatch) {
+    return {
+      bookingId: tomorrowMatch.booking_id,
+      seatCode: tomorrowMatch.seat_code ?? null,
+      siteName: tomorrowMatch.site_name ?? null,
+      buildingName: tomorrowMatch.building_name ?? null,
+      floorName: tomorrowMatch.floor_name ?? null,
+      bookingDate: tomorrowIso,
+      isTomorrow: true,
+    };
+  }
+
+  const upcoming = active
+    .filter((b) => (b.from_date ?? b.booking_date) >= todayIso)
+    .sort((a, b) => (a.from_date ?? a.booking_date).localeCompare(b.from_date ?? b.booking_date));
+  const next = upcoming[0];
+  if (!next) return null;
+
+  return {
+    bookingId: next.booking_id,
+    seatCode: next.seat_code ?? null,
+    siteName: next.site_name ?? null,
+    buildingName: next.building_name ?? null,
+    floorName: next.floor_name ?? null,
+    bookingDate: next.from_date ?? next.booking_date,
+    isTomorrow: false,
+  };
 }

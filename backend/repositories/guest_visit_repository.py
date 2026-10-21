@@ -98,15 +98,20 @@ def _append_guest_visit_filters(
         params.append(requires_seat)
 
     if search:
-        pattern = f"%{search.strip()}%"
+        # Word-prefix match on the guest's name, matching the search-as-you-go
+        # behavior used across the admin list pages: "santi" and "rao" both
+        # match "Santiago Rao" (start of the first or a later word), but
+        # "iago" (mid-word) does not. The first ILIKE covers a prefix of the
+        # full name (also catches multi-word queries like "santiago rao");
+        # the second covers a later word by requiring a preceding space.
+        term = search.strip()
         query += """
             AND (
                 g.full_name ILIKE %s
-                OR g.email ILIKE %s
-                OR g.phone ILIKE %s
+                OR g.full_name ILIKE %s
             )
         """
-        params.extend([pattern, pattern, pattern])
+        params.extend([f"{term}%", f"% {term}%"])
 
     return query
 

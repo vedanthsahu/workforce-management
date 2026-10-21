@@ -30,6 +30,19 @@ type PersistedSearchState = {
   hasApplied: boolean;
 };
 
+// updated_at is already the unified field the backend sends for BOTH row
+// sources (b.updated_at for a BOOKING row, gv.updated_at for a bare
+// GUEST_VISIT row -- see fetch_admin_bookings/
+// fetch_admin_guest_visits_without_booking), so no per-type branching is
+// needed here. Falls back to created_at, then epoch 0, so a row missing
+// updated_at doesn't crash the sort or win a tiebreak it shouldn't.
+function lastModifiedMs(item: AdminBookingRaw): number {
+  const iso = item.updated_at ?? item.created_at;
+  if (!iso) return 0;
+  const ms = new Date(iso).getTime();
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
 export default function AdminBookingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -223,20 +236,43 @@ export default function AdminBookingsPage() {
           allItems = allItems.concat(next.items);
         }
 
-        // Prefer the BOOKING row over a same-visit GUEST_VISIT row so a
-        // cancelled/modified booking's guest visit doesn't get counted twice.
-        const byKey = new Map<string, (typeof allItems)[number]>();
-        allItems.forEach((item, index) => {
-          const key = item.guest_visit_id ?? item.booking_id ?? `${item.activity_source}-${index}`;
-          const existing = byKey.get(key);
-          if (!existing || (item.activity_source === "BOOKING" && existing.activity_source !== "BOOKING")) {
-            byKey.set(key, item);
-          }
+        // A BOOKING row and a same-visit GUEST_VISIT row only ever coexist
+        // when there's no *active* (CONFIRMED) booking for that visit (see
+        // fetch_admin_guest_visits_without_booking's join) -- which happens
+        // in exactly two situations: the whole visit was cancelled together
+        // with its seat (both rows describe the very same cancelled event,
+        // so showing one is correct), or only the seat was cancelled via
+        // "Cancel Booking" while the guest visit itself is still active
+        // (two genuinely different, non-redundant states -- a dead seat
+        // booking and a live, still-modifiable visit -- that must both stay
+        // visible, or the admin loses any sign the visit is still on).
+        // Grouping by guest_visit_id and only collapsing a group when every
+        // row in it is actually Cancelled tells those two cases apart.
+        const byGuestVisit = new Map<string, (typeof allItems)>();
+        const standaloneItems: typeof allItems = [];
+        allItems.forEach((item) => {
+          if (!item.guest_visit_id) { standaloneItems.push(item); return; }
+          const group = byGuestVisit.get(item.guest_visit_id) ?? [];
+          group.push(item);
+          byGuestVisit.set(item.guest_visit_id, group);
         });
-        const dedupedItems = [...byKey.values()];
 
-        // "Confirmed" stays a superset that includes Modified rows too. Every
-        // other specific status is an exact match; "All" keeps everything.
+        const dedupedItems: typeof allItems = [...standaloneItems];
+        byGuestVisit.forEach((group) => {
+          if (group.length === 1 || !group.every((item) => resolveStatus(item) === "Cancelled")) {
+            dedupedItems.push(...group);
+            return;
+          }
+          // Same cancelled event, told twice -- keep just the BOOKING row.
+          dedupedItems.push(group.find((item) => item.activity_source === "BOOKING") ?? group[0]);
+        });
+
+        // "Confirmed" stays a superset that includes Modified rows too.
+        // "Not Checked In" (the Guest tab's card, not a real BookingStatus)
+        // is Scheduled + Confirmed + Modified combined -- a Modified booking
+        // hasn't been checked in either, same as Confirmed's own definition
+        // below. Every other specific status is an exact match; "All" keeps
+        // everything.
         const matchingItems =
           appliedFilters.status === "All"
             ? dedupedItems
@@ -244,6 +280,9 @@ export default function AdminBookingsPage() {
                 const status = resolveStatus(item);
                 if (appliedFilters.status === "Confirmed") {
                   return status === "Confirmed" || status === "Modified";
+                }
+                if (appliedFilters.status === "Not Checked In") {
+                  return status === "Scheduled" || status === "Confirmed" || status === "Modified";
                 }
                 return status === appliedFilters.status;
               });
@@ -256,11 +295,30 @@ export default function AdminBookingsPage() {
         const checkedInCount = matchingItems.filter((item) => !!item.check_in_at).length;
         const checkedOutCount = matchingItems.filter((item) => !!item.checked_out_at).length;
         const guestCount = matchingItems.filter((item) => item.booking_type === "GUEST").length;
+        // Scheduled + Confirmed + Modified, minus whichever of those have
+        // since been checked in -- resolveStatus already only returns
+        // "Scheduled"/"Confirmed"/"Modified" for a row with no check_in_at
+        // (Checked In/Checked Out take priority over the raw booking_status),
+        // so this is naturally "not yet checked in" without needing an
+        // explicit subtraction. Matches the "Not Checked In" click-filter's
+        // own definition above -- the card's count and what clicking it
+        // actually shows in the table must always agree.
+        const notCheckedInCount = matchingItems.filter((item) => {
+          const status = resolveStatus(item);
+          return status === "Scheduled" || status === "Confirmed" || status === "Modified";
+        }).length;
 
         setAllBookings(matchingItems);
         setSummary({
           total_bookings: matchingItems.length,
-          confirmed_bookings: matchingItems.length - checkedInCount,
+          // Matches the "Confirmed" click-filter's own definition above
+          // (status === "Confirmed" || "Modified") -- the card's count and
+          // what clicking it actually shows in the table must always agree.
+          confirmed_bookings: matchingItems.filter((item) => {
+            const status = resolveStatus(item);
+            return status === "Confirmed" || status === "Modified";
+          }).length,
+          not_checked_in_bookings: notCheckedInCount,
           cancelled_bookings: matchingItems.filter((item) => resolveStatus(item) === "Cancelled").length,
           modified_bookings: matchingItems.filter((item) => resolveStatus(item) === "Modified").length,
           completed_bookings: matchingItems.filter((item) => resolveStatus(item) === "Completed").length,
@@ -306,11 +364,19 @@ export default function AdminBookingsPage() {
   // are correct relative to page 1's regardless of dateSort direction —
   // sorting only the current page's rows (the previous behavior) broke as
   // soon as there was more than one page.
+  //
+  // Same booking_date is broken by updated_at DESC (most recently modified
+  // first, via lastModifiedMs above) -- this always runs newest-first
+  // regardless of dateSort, since it's a same-day tiebreak, not itself
+  // something the toggle should flip.
   const sortedBookings = useMemo(() => {
     const items = [...allBookings];
     items.sort((a, b) => {
-      const diff = new Date(a.booking_date ?? 0).getTime() - new Date(b.booking_date ?? 0).getTime();
-      return dateSort === "asc" ? diff : -diff;
+      const aDate = new Date(a.booking_date ?? 0).getTime();
+      const bDate = new Date(b.booking_date ?? 0).getTime();
+      const dateDiff = aDate - bDate;
+      if (dateDiff !== 0) return dateSort === "asc" ? dateDiff : -dateDiff;
+      return lastModifiedMs(b) - lastModifiedMs(a);
     });
     return items;
   }, [allBookings, dateSort]);
@@ -327,7 +393,8 @@ export default function AdminBookingsPage() {
     () => ({
       todays_bookings: summary?.total_bookings ?? 0,
       checked_in: summary?.checked_in_bookings ?? 0,
-      not_checked_in: summary?.confirmed_bookings ?? 0,
+      not_checked_in: summary?.not_checked_in_bookings ?? 0,
+      confirmed: summary?.confirmed_bookings ?? 0,
       cancelled: summary?.cancelled_bookings ?? 0,
       guests: summary?.guest_bookings ?? 0,
     }),
@@ -442,11 +509,19 @@ export default function AdminBookingsPage() {
             <Plus size={15} />
             Book for Someone
           </button>
-          <button className="inline-flex items-center gap-2 h-9 px-4 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-sm font-medium">
+          <button
+            disabled
+            aria-disabled="true"
+            className="inline-flex items-center gap-2 h-9 px-4 bg-white border border-gray-200 text-gray-400 rounded-xl text-sm font-medium cursor-not-allowed opacity-60"
+          >
             <Download size={15} />
             Export
           </button>
-          <button className="h-9 w-9 flex items-center justify-center bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-xl">
+          <button
+            disabled
+            aria-disabled="true"
+            className="h-9 w-9 flex items-center justify-center bg-white border border-gray-200 text-gray-400 rounded-xl cursor-not-allowed opacity-60"
+          >
             <MoreHorizontal size={16} />
           </button>
         </div>
@@ -476,7 +551,12 @@ export default function AdminBookingsPage() {
       {hasApplied && (
         <>
           {/* STATS */}
-          <BookingStatCards stats={stats} onFilterClick={handleStatCardFilter} activeStatus={appliedFilters.status} />
+          <BookingStatCards
+            stats={stats}
+            bookingType={appliedFilters.bookingType}
+            onFilterClick={handleStatCardFilter}
+            activeStatus={appliedFilters.status}
+          />
 
           {/* TABLE */}
           <div className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col">
@@ -520,7 +600,7 @@ export default function AdminBookingsPage() {
                         setItemsPerPage(Number(e.target.value));
                         setCurrentPage(1);
                       }}
-                      className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      className="h-7 px-2 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       {BOOKING_PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
                     </select>

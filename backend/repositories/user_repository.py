@@ -1137,10 +1137,10 @@ def fetch_favorite_seat(
     *,
     tenant_id: str,
     user_id: str,
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    """Return the top two most-booked seats that exist in the current published layout.
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
+    """Return the top three most-booked seats that exist in the current published layout.
 
-    Returns a (first, second) tuple; either element may be None.
+    Returns a (first, second, third) tuple; any element may be None.
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -1197,14 +1197,15 @@ def fetch_favorite_seat(
                 s.floor_id,
                 fl.floor_name
             ORDER BY booking_count DESC, last_booked_date DESC, s.id
-            LIMIT 2
+            LIMIT 3
             """,
             (tenant_id, user_id),
         )
         rows = cur.fetchall()
     first  = dict(rows[0]) if len(rows) > 0 else None
     second = dict(rows[1]) if len(rows) > 1 else None
-    return first, second
+    third  = dict(rows[2]) if len(rows) > 2 else None
+    return first, second, third
 
 
 def fetch_days_in_office(
@@ -1364,8 +1365,18 @@ def search_users(
     include_inactive: bool = False,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
-    search_text = " ".join(search_text.lower().split())
-    search_text = search_text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    def sql_escape(value: str) -> str:
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    normalized = " ".join(search_text.lower().split())
+    search_text = sql_escape(normalized)
+    # The email column is compared in its word-normalized form (non-
+    # alphanumeric -> space, see the WHERE clause below), so the query must
+    # go through the exact same normalization -- otherwise a query that
+    # still has its punctuation (e.g. "alen.walker@sgxdev.com") can never
+    # match "alen walker sgxdev com" and email search silently finds nothing
+    # for anything but a single bare word.
+    email_search_text = sql_escape(re.sub(r"[^a-z0-9]+", " ", normalized).strip())
 
     status_clause = ""
     if not include_inactive:
@@ -1381,18 +1392,37 @@ def search_users(
               AND (
                     (' ' || regexp_replace(lower(coalesce(au.full_name, '')), '\s+', ' ', 'g'))
                         LIKE '%% ' || %s || '%%'
+                 -- Email, word-prefix matched the same way as full_name --
+                 -- non-alphanumeric characters (., @, _, -) count as word
+                 -- breaks, so "gowda" matches "chandana.gowda@company.com".
+                 OR (' ' || regexp_replace(lower(coalesce(au.email, '')), '[^a-z0-9]+', ' ', 'g'))
+                        LIKE '%% ' || %s || '%%'
                  OR lower(coalesce(au.employee_id, ''))
                         LIKE %s || '%%'
                  OR coalesce(au.mobile_phone, '')
                         LIKE %s || '%%'
               )
             ORDER BY
-                CASE
-                    WHEN lower(coalesce(au.full_name, ''))
-                         LIKE %s || '%%'
-                    THEN 1
-                    ELSE 2
-                END,
+                -- Rank by which word of full_name the query matched (0 = the
+                -- first word), not just "matched somewhere vs. not" -- so
+                -- e.g. searching "i" ranks "Indore" (word 0) above "Hyderabad
+                -- Irrum Manzil" (word 1) instead of leaving that tie to
+                -- alphabetical order. A match that's only in email/
+                -- employee_id/mobile_phone (no full_name word match) sorts
+                -- after every full_name match.
+                COALESCE(
+                    (
+                        SELECT MIN(w.ord) - 1
+                        FROM unnest(
+                            regexp_split_to_array(
+                                regexp_replace(lower(coalesce(au.full_name, '')), '\s+', ' ', 'g'),
+                                ' '
+                            )
+                        ) WITH ORDINALITY AS w(word, ord)
+                        WHERE w.word LIKE %s || '%%'
+                    ),
+                    999
+                ),
                 au.full_name,
                 au.id
             LIMIT %s
@@ -1402,6 +1432,7 @@ def search_users(
 
                 # WHERE
                 search_text,
+                email_search_text,
                 search_text,
                 search_text,
 

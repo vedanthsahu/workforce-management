@@ -1,14 +1,48 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLogin } from "../hooks/useLogin";
 
+// User-facing messages only -- say what happened to the user and what to do
+// next, never which backend step failed (no status codes, no "token
+// exchange", no raw exception text). Grouped by what the user should do
+// about it, not by the technical error code, since several unrelated
+// failures share the same correct next step. Anything not listed here falls
+// back to the generic message below (see errorMessage state).
 const LOGIN_ERROR_MESSAGES: Record<string, string> = {
-  inactive_user: "Your account is inactive. Please contact your administrator for access.",
+  inactive_user:
+    "Your account is inactive. Please contact your administrator for access.",
+
+  // Tenant/organization not recognized or not active for sign-in.
+  unknown_tenant:
+    "Your organization isn't set up for sign-in yet. Please contact your administrator.",
+  tenant_resolution_ambiguous:
+    "Your organization isn't set up for sign-in yet. Please contact your administrator.",
+
+  // Sign-in link was stale, already used, or the back/forward button was
+  // used mid-flow -- restarting from the login page resolves all of these.
+  missing_code: "Your sign-in link has expired or already been used. Please try signing in again.",
+  missing_state: "Your sign-in link has expired or already been used. Please try signing in again.",
+  invalid_state: "Your sign-in link has expired or already been used. Please try signing in again.",
+
+  // Couldn't finish linking/creating the account -- not something a retry
+  // alone fixes.
+  sso_identity_conflict:
+    "We couldn't sign you in with this account. Please contact your administrator.",
+  invalid_graph_profile:
+    "We couldn't sign you in with this account. Please contact your administrator.",
+
+  // Transient failures talking to Microsoft or our own sign-in service --
+  // genuinely retry-able.
+  microsoft_auth_error: "We couldn't sign you in. Please try again in a moment.",
+  missing_tenant_claim: "We couldn't sign you in. Please try again in a moment.",
+  tenant_resolution_failed: "We couldn't sign you in. Please try again in a moment.",
+  token_exchange_failed: "We couldn't sign you in. Please try again in a moment.",
+  sso_failed: "We couldn't sign you in. Please try again in a moment.",
 };
 
 export function LoginForm() {
@@ -16,9 +50,13 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const errorCode = searchParams.get("error");
-  const errorMessage = errorCode
-    ? (LOGIN_ERROR_MESSAGES[errorCode] ?? "Something went wrong. Please try again.")
-    : null;
+  const [errorMessage, setErrorMessage] = useState<string | null>(() =>
+    errorCode
+      ? (LOGIN_ERROR_MESSAGES[errorCode] ??
+        "Something went wrong. Please try again.")
+      : null,
+  );
+  const emailRegistration = register("email");
 
   useEffect(() => {
     if (errorCode) {
@@ -27,11 +65,24 @@ export function LoginForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const submitLogin = (event: React.FormEvent<HTMLFormElement>) => {
+    setErrorMessage(null);
+    void handleSubmit(event);
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={submitLogin} className="space-y-4">
       {errorMessage && (
         <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3.5 py-3">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 mt-0.5">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            className="shrink-0 mt-0.5"
+          >
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -46,7 +97,14 @@ export function LoginForm() {
         </Label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
               <rect x="2" y="4" width="20" height="16" rx="2" />
               <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
             </svg>
@@ -56,7 +114,11 @@ export function LoginForm() {
             type="email"
             placeholder="abc@solugenix.com"
             className="pl-9 h-11 text-sm border-gray-200 focus-visible:ring-indigo-500"
-            {...register("email")}
+            {...emailRegistration}
+            onChange={(event) => {
+              setErrorMessage(null);
+              void emailRegistration.onChange(event);
+            }}
           />
         </div>
         {errors.email && (
@@ -71,9 +133,24 @@ export function LoginForm() {
       >
         {isSubmitting ? (
           <span className="flex items-center gap-2">
-            <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+            <svg
+              className="animate-spin w-4 h-4"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8z"
+              />
             </svg>
             Redirecting...
           </span>
@@ -85,10 +162,10 @@ export function LoginForm() {
       {/* SSO hint */}
       <div className="pt-2 flex items-center gap-2 text-xs text-gray-400">
         <svg width="14" height="14" viewBox="0 0 21 21" fill="none">
-          <rect x="0"  y="0"  width="9" height="9" fill="#F25022"/>
-          <rect x="11" y="0"  width="9" height="9" fill="#7FBA00"/>
-          <rect x="0"  y="11" width="9" height="9" fill="#00A4EF"/>
-          <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+          <rect x="0" y="0" width="9" height="9" fill="#F25022" />
+          <rect x="11" y="0" width="9" height="9" fill="#7FBA00" />
+          <rect x="0" y="11" width="9" height="9" fill="#00A4EF" />
+          <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
         </svg>
         You&apos;ll be redirected to Microsoft to complete sign in.
       </div>

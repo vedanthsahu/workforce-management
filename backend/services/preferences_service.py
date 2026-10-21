@@ -57,6 +57,7 @@ AMENITY_UPDATE_FIELDS = {
     "icon_name",
     "category_id",
     "is_active",
+    "applicable_seat_types",
 }
 AMENITY_NON_NULL_FIELDS = {"amenity_name", "category_id", "is_active"}
 AMENITY_FORBIDDEN_UPDATE_FIELDS = {
@@ -261,6 +262,14 @@ def _validate_preference_location(
     building_id: str | None,
     floor_id: str | None,
 ) -> None:
+    if site_id is None or building_id is None or floor_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_preference_location",
+                "message": "siteId, buildingId and floorId are all required.",
+            },
+        )
     if building_id is not None and site_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -611,6 +620,7 @@ def create_amenity(
             category_id=str(payload.category_id),
             category_name=str(category["category_name"]),
             is_active=payload.is_active,
+            applicable_seat_types=list(payload.applicable_seat_types),
         )
         conn.commit()
     except HTTPException:

@@ -2,7 +2,7 @@
 
 import type { ApiUser, ApiUserSearchResult, ApiUserStatus, User } from "../types/users.types";
 
-export { getRoleBadgeClass } from "@/features/roles/utils/roles.utils";
+export { getRoleBadgeClass, formatRoleLabel } from "@/features/roles/utils/roles.utils";
 
 export function mapApiUserToUser(item: ApiUser): User {
   return {
@@ -31,7 +31,7 @@ export function mapSearchResultToUser(item: ApiUserSearchResult): User {
     mobilePhone: "",
     status: item.status === "ACTIVE" ? "active" : "inactive",
     currentRole: item.role_name,
-    officeLocation: null,
+    officeLocation: item.office_location ?? null,
   };
 }
 
@@ -70,7 +70,7 @@ export const USERS_PIN_DURATION = 4000;
 export const USERS_PAGE_SIZES = [10, 25, 50, 75, 100];
 
 // Search input debounce (useUsers hook)
-export const SEARCH_DEBOUNCE_MS = 350;
+export const SEARCH_DEBOUNCE_MS = 150;
 
 // ─── StatusFilterDropdown options ───────────────────────────────────────────
 export const STATUS_FILTER_OPTIONS: { key: ApiUserStatus | "ALL"; label: string }[] = [

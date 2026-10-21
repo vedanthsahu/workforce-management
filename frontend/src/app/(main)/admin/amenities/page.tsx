@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
-import AmenitiesCards      from "@/features/amenities/components/AmenitiesCards";
+import AmenitiesCards, { AmenitiesStatusFilter } from "@/features/amenities/components/AmenitiesCards";
 import AmenitiesFilters    from "@/features/amenities/components/AmenitiesFilters";
 import AmenitiesTable      from "@/features/amenities/components/AmenitiesTable";
 import EditAmenityModal    from "@/features/amenities/components/EditAmenityModal";
@@ -12,6 +12,7 @@ import { useAmenities } from "@/features/amenities/hooks/useAmenities";
 import { Amenity } from "@/features/amenities/types/amenities.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
 import { AMENITIES_PIN_DURATION as PIN_DURATION } from "@/features/amenities/utils/constants";
+import { searchMatchRank } from "@/lib/searchRank";
 
 function AmenitiesPage() {
   const router = useRouter();
@@ -27,6 +28,14 @@ function AmenitiesPage() {
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const statusFilter: AmenitiesStatusFilter =
+    status === "ACTIVE" || status === "INACTIVE" ? status : null;
+
+  const handleStatusFilterChange = (filter: AmenitiesStatusFilter) => {
+    setStatus(filter ?? "");
+    setCurrentPage(1);
+  };
 
   // ─── Shared helper: pin + highlight a row for PIN_DURATION ───────────────
   const activatePin = (id: string, message: string) => {
@@ -67,17 +76,11 @@ function AmenitiesPage() {
   };
 
   // ─── Filter ───────────────────────────────────────────────────────────────
-  const filteredAmenities = (data?.items || []).filter((a) => {
-    const name = (a.amenity_name || "").toLowerCase();
-    const query = search.toLowerCase();
-    if (query.length === 0) return true;
-    let i = 0;
-    for (const char of name) {
-      if (char === query[i]) i++;
-      if (i === query.length) return true;
-    }
-    return false;
-  });
+  const filteredAmenities = (data?.items || [])
+    .map((a) => ({ amenity: a, rank: searchMatchRank(a.amenity_name || "", search) }))
+    .filter((x): x is { amenity: Amenity; rank: number } => x.rank !== null)
+    .sort((a, b) => a.rank - b.rank)
+    .map((x) => x.amenity);
 
   // ─── Pin the edited/added row to top temporarily ──────────────────────────
   const sortedAmenities = pinnedId
@@ -138,6 +141,8 @@ function AmenitiesPage() {
                 }
               : null
           }
+          statusFilter={statusFilter}
+          onStatusFilterChange={handleStatusFilterChange}
         />
       )}
 
@@ -170,6 +175,15 @@ function AmenitiesPage() {
               data={paginatedAmenities}
               onEdit={handleEdit}
               highlightedAmenityId={highlightedId}
+              emptyMessage={
+                search
+                  ? `No amenities match "${search}".`
+                  : statusFilter === "ACTIVE"
+                    ? "No active amenities found."
+                    : statusFilter === "INACTIVE"
+                      ? "No inactive amenities found."
+                      : "No amenities found."
+              }
             />
           )}
         </div>

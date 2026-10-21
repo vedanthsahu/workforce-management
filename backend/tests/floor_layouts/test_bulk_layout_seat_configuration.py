@@ -375,17 +375,22 @@ class BulkLayoutSeatConfigurationServiceTests(unittest.TestCase):
         live `seats` table."""
         conn = FakeConnection()
         payload = BulkLayoutSeatConfigurationUpdateRequest(
-            defaults={"seat_type": "CONFERENCE_ROOM", "capacity": 10},
+            # Capacities sent by the browser (99/77) are ignored: each room's
+            # capacity is read from its own SVG id (MR-C10 / MR-C20).
+            defaults={"seat_type": "CONFERENCE_ROOM", "capacity": 99},
             seats=[
                 {"layout_seat_mapping_id": 1},
-                {"layout_seat_mapping_id": 2, "capacity": 20},
+                {"layout_seat_mapping_id": 2, "capacity": 77},
             ],
         )
 
         with (
             patch(
                 "backend.services.location_service.fetch_layout_seat_mappings_by_ids",
-                return_value={"1": _mapping_row("1"), "2": _mapping_row("2")},
+                return_value={
+                    "1": {**_mapping_row("1"), "svg_element_id": "HYD-PRV-F11-MR-C10-01"},
+                    "2": {**_mapping_row("2"), "svg_element_id": "HYD-PRV-F11-MR-C20-02"},
+                },
             ),
             patch(
                 "backend.services.location_service.update_layout_seat_mapping_configurations_bulk",

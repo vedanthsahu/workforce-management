@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySpaceCode } from "@/lib/spaceCode";
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
@@ -10,8 +11,9 @@ import {
 import axios from "axios";
 import { cn } from "@/lib/utils";
 import type { FavouriteSeat } from "../types/dashboard.types";
-import { fetchAvailability } from "@/features/book/services/Bookingform.service";
-import { BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE, maxBookableDateIso } from "@/features/book/utils/constants";
+import { fetchAvailability, seatCoversRange } from "@/features/book/services/Bookingform.service";
+import { bookingTooFarInAdvanceMessage } from "@/features/book/utils/constants";
+import { maxDateIsoFromToday, useBookingPolicy } from "@/features/configuration/hooks/useBookingPolicy";
 import { axiosInstance } from "@/lib/http/axios";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -62,7 +64,11 @@ type AvailState =
   | { phase: "self_conflict"; message: string }
   | { phase: "unavailable"; secondAvailable: boolean | null };
 
-type DayStatus = "available" | "booked" | "blocked";
+// "outside_layout" = a date this seat's own layout doesn't cover (the floor
+// switches to a scheduled layout, where the favourite seat may or may not
+// exist). Not offered for quick booking -- the user books those dates via
+// the normal Book a space flow instead.
+type DayStatus = "available" | "booked" | "blocked" | "outside_layout";
 
 // ── URL builders ─────────────────────────────────────────────────────────────
 
@@ -98,9 +104,10 @@ async function checkSelfEligibility(date: string): Promise<void> {
 async function isSeatAvailable(seat: FavouriteSeat, date: string): Promise<boolean> {
   if (!seat.floorId) return false;
   const seats = await fetchAvailability({ floorId: seat.floorId, fromDate: date });
-  const match = seats.find((s) => s.seat_id === seat.id);
+  const match = seats.find((s) => String(s.seat_id) === String(seat.id));
   if (!match) return false;
-  return match.availability.status === "FULLY_AVAILABLE";
+  // The date must fall inside this seat's own layout (see seatCoversRange).
+  return match.availability.status === "FULLY_AVAILABLE" && seatCoversRange(match.availability, date, date);
 }
 
 // ── Inline mini-calendar ──────────────────────────────────────────────────────
@@ -118,7 +125,8 @@ interface CalendarProps {
 
 function BookingCalendar({ selected, onSelect, month, onMonthChange, dayStatuses, loading }: CalendarProps) {
   const today = todayDate();
-  const maxDate = maxBookableDateIso();
+  const { employeeMaxAdvanceDays } = useBookingPolicy();
+  const maxDate = maxDateIsoFromToday(employeeMaxAdvanceDays);
   const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
   const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0);
 
@@ -169,36 +177,46 @@ function BookingCalendar({ selected, onSelect, month, onMonthChange, dayStatuses
 
           const dateStr = toDateStr(date);
           const isPast = date < today;
-          const isTooFarAhead = dateStr > maxDate;
+          const isTooFarAhead = maxDate !== undefined && dateStr > maxDate;
           const isToday = date.getTime() === today.getTime();
           const isSelected = selected ? toDateStr(selected) === dateStr : false;
           const status = dayStatuses.get(dateStr);
           const isAvail = status === "available";
           const isBooked = status === "booked";
           const isBlocked = status === "blocked";
+          const isOutsideLayout = status === "outside_layout";
           // Booked = fav seat taken, but user can still pick the date to try 2nd fav / browse all
-          const isDisabled = isPast || isBlocked || isTooFarAhead;
+          const isDisabled = isPast || isBlocked || isTooFarAhead || isOutsideLayout;
+
+          // The tooltip sits on a wrapper, not the <button>: browsers commonly
+          // swallow `title` on a disabled control, so the hover never shows.
+          const tooltip = isTooFarAhead && employeeMaxAdvanceDays != null
+            ? bookingTooFarInAdvanceMessage(employeeMaxAdvanceDays)
+            : isOutsideLayout
+              ? "Selected date is outside the Quick Book window."
+              : undefined;
 
           return (
+            <div key={dateStr} title={tooltip} className="w-full">
             <button
-              key={dateStr}
               onClick={() => !isDisabled && onSelect(date)}
               disabled={isDisabled}
               className={cn(
                 "relative flex flex-col items-center justify-center w-full aspect-square rounded-md text-[11px] font-medium transition-all duration-100",
+                // let the hover fall through to the wrapper so its tooltip shows
+                tooltip && isDisabled && "pointer-events-none",
                 isSelected
                   ? "bg-indigo-600 text-white font-bold shadow-sm"
                   : isDisabled
                     ? "cursor-not-allowed"
                     : "hover:bg-indigo-50 cursor-pointer",
                 !isSelected && isToday && "ring-1 ring-indigo-400",
-                !isSelected && (isPast || isTooFarAhead) && "text-gray-300",
+                !isSelected && (isPast || isTooFarAhead || isOutsideLayout) && "text-gray-300",
                 !isSelected && !isTooFarAhead && isAvail && "text-emerald-700 font-semibold",
                 !isSelected && !isTooFarAhead && isBooked && "text-red-300",
                 !isSelected && !isTooFarAhead && isBlocked && "text-gray-300",
-                !isSelected && !isPast && !isTooFarAhead && !isAvail && !isBooked && !isBlocked && "text-gray-700",
+                !isSelected && !isPast && !isTooFarAhead && !isAvail && !isBooked && !isBlocked && !isOutsideLayout && "text-gray-700",
               )}
-              title={isTooFarAhead ? BOOKING_TOO_FAR_IN_ADVANCE_MESSAGE : undefined}
             >
               {date.getDate()}
               {/* Status dot */}
@@ -211,6 +229,7 @@ function BookingCalendar({ selected, onSelect, month, onMonthChange, dayStatuses
                 />
               )}
             </button>
+            </div>
           );
         })}
       </div>
@@ -230,7 +249,7 @@ function BookingCalendar({ selected, onSelect, month, onMonthChange, dayStatuses
           Selected
         </span>
       </div>
-      <p className="text-[9.5px] text-gray-400 mt-1 px-1">Bookings can only be made up to 30 days in advance.</p>
+      
     </div>
   );
 }
@@ -290,13 +309,11 @@ export default function FavSeatBookingDialog({
         })(),
       ]);
 
-      // Coerce both sides to string; fall back to seat_code match if seat_id differs
-      const match = allSeats.find(
-        (s) => String(s.seat_id) === String(seat.id) || s.seat_code === seat.seatCode
-      );
-      if (!match?.availability) return;
-
-      const av = match.availability;
+      // Match by id only. A seat_code fallback could pick the same-coded seat
+      // of a SCHEDULED layout, whose rows start where this seat's layout ends,
+      // and that would wrongly make the post-switch dates look bookable.
+      const match = allSeats.find((s) => String(s.seat_id) === String(seat.id));
+      const av: Partial<NonNullable<typeof match>["availability"] & object> = match?.availability ?? {};
       const map = new Map<string, DayStatus>();
       // Normalize to YYYY-MM-DD in case API returns datetime-like strings
       const key = (d: string) => String(d).substring(0, 10);
@@ -317,9 +334,24 @@ export default function FavSeatBookingDialog({
         }
       );
 
+      // Every date in range that this seat's layout has no row for is past the
+      // end of its layout (the floor moves to a scheduled layout) -- grey it
+      // out. Uses the seat's own availability rows, so no extra API is needed.
+      for (
+        let d = new Date(fromDate + "T00:00:00");
+        toDateStr(d) <= toDate;
+        d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)
+      ) {
+        const k = toDateStr(d);
+        if (!map.has(k)) map.set(k, "outside_layout");
+      }
+
       // Overlay user's own bookings — these dates must show red (self-conflict)
-      // regardless of whether the favourite seat itself is physically available.
-      myBookedDates.forEach((d) => { if (map.has(d)) map.set(d, "booked"); });
+      // regardless of whether the favourite seat itself is physically available,
+      // and even when the availability data has no entry for that date at all
+      // (otherwise a date it doesn't cover would show as plain/bookable).
+      // Only dates inside this fetch's range -- past ones render as disabled.
+      myBookedDates.forEach((d) => { if (d >= fromDate && d <= toDate) map.set(d, "booked"); });
 
       setDayStatuses(map);
     } catch (err: unknown) {
@@ -338,7 +370,7 @@ export default function FavSeatBookingDialog({
     } finally {
       setCalLoading(false);
     }
-  }, [seat.floorId, seat.id, seat.seatCode]);
+  }, [seat.floorId, seat.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -471,9 +503,9 @@ export default function FavSeatBookingDialog({
 
           <div className="flex items-center gap-1.5 mb-1.5">
             <Star className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-            <span className="text-[11px] font-semibold text-white/80 uppercase tracking-widest">Favourite Seat</span>
+            <span className="text-[11px] font-semibold text-white/80 uppercase tracking-widest">Favourite Space</span>
           </div>
-          <h2 className="text-xl font-bold text-white leading-none mb-1">{seat.label}</h2>
+          <h2 className="text-xl font-bold text-white leading-none mb-1">{displaySpaceCode(seat.label)}</h2>
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
             {floorPart && (
               <span className="flex items-center gap-1 text-[10.5px] font-medium text-indigo-100 bg-white/15 rounded-full px-2 py-0.5">
@@ -541,8 +573,8 @@ export default function FavSeatBookingDialog({
                 <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
                   <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold text-red-900 leading-snug">Your favourite seats are unavailable</p>
-                    <p className="text-[10px] text-red-600 mt-0.5">Choose a different seat to continue booking.</p>
+                    <p className="text-[11px] font-semibold text-red-900 leading-snug">Your favourite spaces are unavailable</p>
+                    <p className="text-[10px] text-red-600 mt-0.5">Choose a different space to continue booking.</p>
                   </div>
                 </div>
               );
@@ -553,8 +585,8 @@ export default function FavSeatBookingDialog({
                 <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
                   <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold text-red-900 leading-snug">{seat.label} is already booked</p>
-                    <p className="text-[10px] text-red-600 mt-0.5">Someone else has reserved this seat on this date.</p>
+                    <p className="text-[11px] font-semibold text-red-900 leading-snug">{displaySpaceCode(seat.label)} is already booked</p>
+                    <p className="text-[10px] text-red-600 mt-0.5">Someone else has reserved this space on this date.</p>
                   </div>
                 </div>
 
@@ -629,7 +661,7 @@ export default function FavSeatBookingDialog({
                 className="flex-[2] py-2 text-[13px] font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 shadow-md shadow-indigo-200"
               >
                 <MapPin className="w-3 h-3" />
-                Browse all seats
+                Browse all spaces
               </button>
             </div>
           )}

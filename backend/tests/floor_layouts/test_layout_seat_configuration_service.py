@@ -237,19 +237,23 @@ class UpdateLayoutSeatConfigurationCapacityTests(unittest.TestCase):
     endpoint, and cascades into the live `seats` row on a PUBLISHED layout
     exactly like status/amenities already do."""
 
-    def test_capacity_is_passed_through_to_the_mapping_update_and_response(
+    def test_capacity_is_read_from_the_svg_id_not_the_request(
         self,
     ) -> None:
         conn = FakeConnection()
         current_user = {"tenant_id": "1", "user_id": "5"}
+        # The browser's capacity (99) must be ignored: MR-C12 in the id wins.
         payload = LayoutSeatConfigurationUpdateRequest(
-            seat_type="CONFERENCE_ROOM", capacity=12
+            seat_type="CONFERENCE_ROOM", capacity=99
         )
 
         with (
             patch(
                 "backend.services.location_service.fetch_layout_seat_mapping_by_id",
-                return_value=_mapping_row("20", layout_id="100"),
+                return_value={
+                    **_mapping_row("20", layout_id="100"),
+                    "svg_element_id": "HYD-PRV-F11-MR-C12-20",
+                },
             ),
             patch(
                 "backend.services.location_service.update_layout_seat_mapping_configuration",

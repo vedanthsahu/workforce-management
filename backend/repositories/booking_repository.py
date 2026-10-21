@@ -251,7 +251,17 @@ def fetch_future_delegated_guest_visits_without_booking(
                 f.floor_name,
 
                 gv.visit_date AS booking_date,
-                gv.visit_status AS booking_status,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM bookings cancelled_booking
+                        WHERE cancelled_booking.guest_visit_id = gv.id
+                          AND cancelled_booking.tenant_id = gv.tenant_id
+                          AND cancelled_booking.booking_type = 'GUEST'
+                          AND cancelled_booking.booking_status = 'CANCELLED'
+                    ) THEN 'MODIFIED'
+                    ELSE gv.visit_status
+                END AS booking_status,
 
                 NULL AS source_channel,
 
@@ -390,7 +400,17 @@ def fetch_current_delegated_guest_visits_without_booking(
                 f.floor_name,
 
                 gv.visit_date AS booking_date,
-                gv.visit_status AS booking_status,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM bookings cancelled_booking
+                        WHERE cancelled_booking.guest_visit_id = gv.id
+                          AND cancelled_booking.tenant_id = gv.tenant_id
+                          AND cancelled_booking.booking_type = 'GUEST'
+                          AND cancelled_booking.booking_status = 'CANCELLED'
+                    ) THEN 'MODIFIED'
+                    ELSE gv.visit_status
+                END AS booking_status,
 
                 NULL AS source_channel,
 
@@ -530,7 +550,17 @@ def fetch_past_delegated_guest_visits_without_booking(
                 f.floor_name,
 
                 gv.visit_date AS booking_date,
-                gv.visit_status AS booking_status,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM bookings cancelled_booking
+                        WHERE cancelled_booking.guest_visit_id = gv.id
+                          AND cancelled_booking.tenant_id = gv.tenant_id
+                          AND cancelled_booking.booking_type = 'GUEST'
+                          AND cancelled_booking.booking_status = 'CANCELLED'
+                    ) THEN 'MODIFIED'
+                    ELSE gv.visit_status
+                END AS booking_status,
 
                 NULL AS source_channel,
 
@@ -630,6 +660,7 @@ def fetch_admin_guest_visits_without_booking(
     building_id: str | None = None,
     floor_id: str | None = None,
     visit_status: str | None = None,
+    booking_status: str | None = None,
     search: str | None = None,
     booked_by_user_id: str | None = None,
 ) -> list[dict[str, Any]]:
@@ -646,6 +677,16 @@ def fetch_admin_guest_visits_without_booking(
         "gv.tenant_id = %s",
         "b.id IS NULL",
         "gv.visit_status <> 'MODIFIED'",
+        # A fully cancelled visit keeps its cancelled booking row (and its
+        # seat details) in fetch_admin_bookings; do not add a second visit row.
+        (
+            "NOT (gv.visit_status = 'CANCELLED' AND EXISTS ("
+            "SELECT 1 FROM bookings cancelled_booking "
+            "WHERE cancelled_booking.guest_visit_id = gv.id "
+            "AND cancelled_booking.tenant_id = gv.tenant_id "
+            "AND cancelled_booking.booking_type = 'GUEST' "
+            "AND cancelled_booking.booking_status = 'CANCELLED'))"
+        ),
     ]
     params: list[Any] = [tenant_id]
 
@@ -667,6 +708,18 @@ def fetch_admin_guest_visits_without_booking(
     if visit_status is not None:
         conditions.append("gv.visit_status = %s")
         params.append(visit_status)
+    if booking_status == "MODIFIED":
+        conditions.append(
+            "EXISTS (SELECT 1 FROM bookings cancelled_booking "
+            "WHERE cancelled_booking.guest_visit_id = gv.id "
+            "AND cancelled_booking.tenant_id = gv.tenant_id "
+            "AND cancelled_booking.booking_type = 'GUEST' "
+            "AND cancelled_booking.booking_status = 'CANCELLED')"
+        )
+    elif booking_status is not None:
+        # This source represents only Visit Only rows. Other status filters
+        # are satisfied by the bookings-table query.
+        conditions.append("FALSE")
     if booked_by_user_id is not None:
         conditions.append("gv.created_by_user_id = %s")
         params.append(booked_by_user_id)
@@ -716,7 +769,17 @@ def fetch_admin_guest_visits_without_booking(
                 f.floor_name,
 
                 gv.visit_date AS booking_date,
-                gv.visit_status AS booking_status,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM bookings cancelled_booking
+                        WHERE cancelled_booking.guest_visit_id = gv.id
+                          AND cancelled_booking.tenant_id = gv.tenant_id
+                          AND cancelled_booking.booking_type = 'GUEST'
+                          AND cancelled_booking.booking_status = 'CANCELLED'
+                    ) THEN 'MODIFIED'
+                    ELSE gv.visit_status
+                END AS booking_status,
 
                 NULL AS source_channel,
 
@@ -849,12 +912,34 @@ def fetch_seat_for_booking(
             -- one, or a SCHEDULED one if booking_date is on/after its
             -- effective_from. Seats left over from a superseded layout
             -- (retired or not) must never match here.
+            --
+            -- booking_date is a bare calendar date with no timezone of its
+            -- own -- casting it straight to timestamptz would implicitly
+            -- use the DB session's timezone (UTC), silently shifting the day
+            -- boundary. This demo deployment explicitly interprets booking
+            -- calendar dates in Asia/Kolkata.
+            --
+            -- effective_from is compared against the START of the day
+            -- AFTER booking_date (India-local), not booking_date itself --
+            -- a scheduled layout's effective_from is always local midnight
+            -- midnight, but a direct publish's is the real-time instant it
+            -- was published at (see activate_floor_layout), which is
+            -- almost never midnight. Comparing against booking_date's own
+            -- midnight would make a same-day direct publish (e.g.
+            -- published at 2:45pm India time) look "not yet effective" for
+            -- bookings dated that same day, even though it's already live.
+            -- Comparing against the NEXT day's midnight instead asks the
+            -- right question: has this layout's effective_from happened at
+            -- any point during booking_date, India-local. effective_till
+            -- stays anchored to booking_date's own midnight (not shifted),
+            -- since a layout that ends AT booking_date's start was never
+            -- valid for that day at all.
             JOIN floor_layouts fl
                 ON fl.floor_id = s.floor_id
             AND fl.tenant_id = s.tenant_id
             AND fl.status IN ('PUBLISHED', 'SCHEDULED')
-            AND fl.effective_from <= %s
-            AND (fl.effective_till IS NULL OR fl.effective_till > %s)
+            AND fl.effective_from < ((%s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')
+            AND (fl.effective_till IS NULL OR fl.effective_till > (%s::timestamp AT TIME ZONE 'Asia/Kolkata'))
             AND fl.id = s.layout_id
 
             WHERE s.id = %s
@@ -1133,8 +1218,9 @@ def seat_has_active_block_in_range(
     seat_id: str,
     start_date: date,
     end_date: date,
+    allowed_block_types: tuple[str, ...] = (),
 ) -> bool:
-    """Return whether a seat has an ACTIVE block overlapping a date range."""
+    """Return whether a role-blocking ACTIVE block overlaps a date range."""
     query = """
         SELECT 1
         FROM blocked_seats
@@ -1143,11 +1229,15 @@ def seat_has_active_block_in_range(
           AND status = 'ACTIVE'
           AND blocked_from <= %s
           AND blocked_to >= %s
+          AND NOT (block_type = ANY(%s::text[]))
         LIMIT 1
     """
 
     with conn.cursor() as cur:
-        cur.execute(query, (tenant_id, seat_id, end_date, start_date))
+        cur.execute(
+            query,
+            (tenant_id, seat_id, end_date, start_date, list(allowed_block_types)),
+        )
         return cur.fetchone() is not None
 
 
@@ -1161,10 +1251,16 @@ def insert_booking(
     booking_date: date,
     source_channel: str = "WEB",
     modified_from_booking_id: str | None = None,
+    updated_by_user_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Insert an EMPLOYEE booking using hierarchy values
     derived from the seat row.
+
+    updated_by_user_id is only passed when this row is replacing a modified
+    booking (modify_booking) -- it records who performed the modification,
+    since this new row (not the superseded one) is what the admin bookings
+    screen shows as "Modified". Left unset for a plain new booking.
     """
 
     normalized_source = source_channel.strip().upper()
@@ -1197,7 +1293,9 @@ def insert_booking(
 
                 source_channel,
 
-                modified_from_booking_id
+                modified_from_booking_id,
+
+                updated_by_user_id
             )
             VALUES (
                 %s,
@@ -1215,6 +1313,8 @@ def insert_booking(
                 'EMPLOYEE',
 
                 'CONFIRMED',
+
+                %s,
 
                 %s,
 
@@ -1238,6 +1338,8 @@ def insert_booking(
                 normalized_source,
 
                 modified_from_booking_id,
+
+                updated_by_user_id,
             ),
         )
 
@@ -1397,7 +1499,7 @@ def cancel_future_guest_bookings_for_guest(
             WHERE tenant_id = %s
               AND booking_type = 'GUEST'
               AND booked_for_guest_id = %s
-              AND booking_date >= CURRENT_DATE
+              AND booking_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
               AND booking_status = 'CONFIRMED'
             """,
             (cancellation_reason, updated_by_user_id, tenant_id, guest_id),
@@ -1753,6 +1855,8 @@ def fetch_available_seats_by_range(
     start_date: date,
     end_date: date,
     amenity_ids: list[int],
+    allow_non_bookable: bool = False,
+    allowed_block_types: tuple[str, ...] = (),
     exclude_booking_id: str | None = None,
 ) -> list[dict[str, Any]]:
 
@@ -1791,6 +1895,11 @@ def fetch_available_seats_by_range(
                 FROM seats s
                 CROSS JOIN requested_dates rd
 
+                INNER JOIN sites st
+                    ON st.id = s.site_id
+                   AND st.tenant_id = s.tenant_id
+                   AND st.status = 'ACTIVE'
+
                 -- Only seats belonging to whichever layout covers each
                 -- individual date in the range are eligible -- correlated
                 -- against rd.booking_date, not a single flat "PUBLISHED"
@@ -1798,12 +1907,25 @@ def fetch_available_seats_by_range(
                 -- layout cutover: early dates in the range may resolve to
                 -- the current PUBLISHED layout while later ones resolve to
                 -- a SCHEDULED one. Everything else is a stale/orphaned row.
+                --
+                -- rd.booking_date is a bare calendar date with no timezone
+                -- of its own -- casting it straight to timestamptz would
+                -- implicitly use the DB session's timezone (UTC), silently
+                -- shifting the day boundary. This demo deployment anchors
+                -- booking days to Asia/Kolkata. effective_from is compared
+                -- against the START of the NEXT day (India-local),
+                -- not rd.booking_date's own midnight -- a direct publish's
+                -- effective_from is the real-time instant it was published
+                -- at (see activate_floor_layout), almost never midnight, so
+                -- comparing against that day's own midnight would make a
+                -- same-day publish look "not yet effective." See the fuller
+                -- version of this comment on fetch_seat_for_booking above.
                 INNER JOIN floor_layouts fl
                     ON fl.floor_id = s.floor_id
                    AND fl.tenant_id = s.tenant_id
                    AND fl.status IN ('PUBLISHED', 'SCHEDULED')
-                   AND fl.effective_from <= rd.booking_date
-                   AND (fl.effective_till IS NULL OR fl.effective_till > rd.booking_date)
+                   AND fl.effective_from < ((rd.booking_date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')
+                   AND (fl.effective_till IS NULL OR fl.effective_till > (rd.booking_date::timestamp AT TIME ZONE 'Asia/Kolkata'))
                    AND fl.id = s.layout_id
                 INNER JOIN floors flr
                     ON flr.id = s.floor_id
@@ -1813,10 +1935,6 @@ def fetch_available_seats_by_range(
                     ON bldg.id = s.building_id
                    AND bldg.tenant_id = s.tenant_id
                    AND bldg.status = 'ACTIVE'
-                INNER JOIN sites st
-                    ON st.id = s.site_id
-                   AND st.tenant_id = s.tenant_id
-                   AND st.status = 'ACTIVE'
 
                 WHERE s.tenant_id = %s
                   AND s.floor_id = %s
@@ -1853,6 +1971,7 @@ def fetch_available_seats_by_range(
                     ON bl.seat_id = sd.seat_id
                    AND bl.tenant_id = %s
                    AND bl.status = 'ACTIVE'
+                   AND NOT (bl.block_type = ANY(%s::text[]))
                    AND sd.booking_date
                         BETWEEN bl.blocked_from
                         AND bl.blocked_to
@@ -1922,7 +2041,7 @@ def fetch_available_seats_by_range(
                     CASE
 
                         WHEN s.status <> 'ACTIVE'
-                             OR s.is_bookable IS NOT TRUE
+                             OR (s.is_bookable IS NOT TRUE AND %s IS NOT TRUE)
                             THEN 'UNAVAILABLE'
 
                         WHEN bsd.seat_id IS NOT NULL
@@ -2150,9 +2269,11 @@ def fetch_available_seats_by_range(
                         exclude_booking_id,
 
                         tenant_id,
+                        list(allowed_block_types),
 
                         tenant_id,
 
+                        allow_non_bookable,
                         tenant_id,
                         floor_id,
                     ),
@@ -2169,6 +2290,8 @@ def fetch_available_seats(
     floor_id: str,
     booking_date: date,
     amenity_ids: list[int],
+    allow_non_bookable: bool = False,
+    allowed_block_types: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     """Fetch computed availability and preference state for floor seats."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -2195,6 +2318,7 @@ def fetch_available_seats(
                 WHERE bl.tenant_id = %s
                   AND bl.floor_id = %s
                   AND bl.status = 'ACTIVE'
+                  AND NOT (bl.block_type = ANY(%s::text[]))
                   AND bl.blocked_from <= %s
                   AND bl.blocked_to >= %s
             ),
@@ -2229,7 +2353,8 @@ def fetch_available_seats(
                     COALESCE(am.matched_amenity_count, 0)::integer AS matched_amenity_count,
                     rc.requested_amenity_count,
                     CASE
-                        WHEN s.status <> 'ACTIVE' OR s.is_bookable IS NOT TRUE
+                        WHEN s.status <> 'ACTIVE'
+                             OR (s.is_bookable IS NOT TRUE AND %s IS NOT TRUE)
                             THEN 'UNAVAILABLE'
                         WHEN bs.seat_id IS NOT NULL
                             THEN 'BOOKED'
@@ -2245,6 +2370,10 @@ def fetch_available_seats(
                     ON bls.seat_id = s.id
                 LEFT JOIN amenity_matches AS am
                     ON am.seat_id = s.id
+                INNER JOIN sites st
+                    ON st.id = s.site_id
+                   AND st.tenant_id = s.tenant_id
+                   AND st.status = 'ACTIVE'
                 -- Only seats belonging to whichever layout actually covers
                 -- the requested booking_date are eligible -- the currently
                 -- PUBLISHED one, or a SCHEDULED one if booking_date falls
@@ -2253,12 +2382,25 @@ def fetch_available_seats(
                 -- now for a date inside a SCHEDULED layout's window must
                 -- see that layout's seats, not the one about to be
                 -- superseded.
+                --
+                -- booking_date is a bare calendar date with no timezone of
+                -- its own -- casting it straight to timestamptz would
+                -- implicitly use the DB session's timezone (UTC), silently
+                -- shifting the day boundary. This demo deployment anchors
+                -- booking days to Asia/Kolkata. effective_from is compared
+                -- against the START of the NEXT day (India-local),
+                -- not booking_date's own midnight -- a direct publish's
+                -- effective_from is the real-time instant it was published
+                -- at (see activate_floor_layout), almost never midnight, so
+                -- comparing against that day's own midnight would make a
+                -- same-day publish look "not yet effective." See the fuller
+                -- version of this comment on fetch_seat_for_booking above.
                 INNER JOIN floor_layouts fl
                     ON fl.floor_id = s.floor_id
                    AND fl.tenant_id = s.tenant_id
                    AND fl.status IN ('PUBLISHED', 'SCHEDULED')
-                   AND fl.effective_from <= %s
-                   AND (fl.effective_till IS NULL OR fl.effective_till > %s)
+                   AND fl.effective_from < ((%s::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')
+                   AND (fl.effective_till IS NULL OR fl.effective_till > (%s::timestamp AT TIME ZONE 'Asia/Kolkata'))
                    AND fl.id = s.layout_id
                 INNER JOIN floors flr
                     ON flr.id = s.floor_id
@@ -2268,10 +2410,6 @@ def fetch_available_seats(
                     ON bldg.id = s.building_id
                    AND bldg.tenant_id = s.tenant_id
                    AND bldg.status = 'ACTIVE'
-                INNER JOIN sites st
-                    ON st.id = s.site_id
-                   AND st.tenant_id = s.tenant_id
-                   AND st.status = 'ACTIVE'
                 WHERE s.tenant_id = %s
                   AND s.floor_id = %s
             )
@@ -2324,8 +2462,10 @@ def fetch_available_seats(
                 booking_date,
                 tenant_id,
                 floor_id,
+                list(allowed_block_types),
                 booking_date,
                 booking_date,
+                allow_non_bookable,
                 tenant_id,
                 booking_date,
                 booking_date,
@@ -2348,9 +2488,15 @@ def insert_guest_booking(
     booking_date: date,
     source_channel: str = "WEB",
     modified_from_booking_id: str | None = None,
+    updated_by_user_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Insert a GUEST booking linked to a guest visit.
+
+    updated_by_user_id is only passed when this row is replacing a modified
+    booking -- it records who performed the modification, since this new
+    row (not the superseded one) is what the admin bookings screen shows as
+    "Modified". Left unset for a plain new booking.
     """
 
     normalized_source = source_channel.strip().upper()
@@ -2386,7 +2532,9 @@ def insert_guest_booking(
 
                 source_channel,
 
-                modified_from_booking_id
+                modified_from_booking_id,
+
+                updated_by_user_id
 
             )
             VALUES (
@@ -2408,6 +2556,8 @@ def insert_guest_booking(
                 'GUEST',
 
                 'CONFIRMED',
+
+                %s,
 
                 %s,
 
@@ -2433,6 +2583,8 @@ def insert_guest_booking(
                 normalized_source,
 
                 modified_from_booking_id,
+
+                updated_by_user_id,
             ),
         )
 
@@ -2555,7 +2707,18 @@ def _build_admin_booking_filters(
     row's own visit_status (see BOOKING_SELECT_FROM's gv join). Since only
     GUEST-type rows have a guest_visit at all, a visit_status filter
     naturally excludes EMPLOYEE rows (gv is NULL for those)."""
-    conditions = ["b.tenant_id = %s"]
+    conditions = [
+        "b.tenant_id = %s",
+        # A seat-only cancellation is represented as one seatless MODIFIED
+        # guest-visit row. Keep the cancelled booking only when its guest
+        # visit was cancelled too, so that row retains the booking details.
+        (
+            "NOT (b.booking_type = 'GUEST' "
+            "AND b.booking_status = 'CANCELLED' "
+            "AND gv.visit_status IS NOT NULL "
+            "AND gv.visit_status <> 'CANCELLED')"
+        ),
+    ]
     params: list[Any] = [tenant_id]
 
     if start_date is not None:
@@ -2658,6 +2821,107 @@ def fetch_admin_bookings(
         rows = cur.fetchall()
 
     return [dict(row) for row in rows]
+
+
+def _escape_like(text: str) -> str:
+    """Escape LIKE wildcards so user input is matched literally."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def fetch_admin_booking_person_suggestions(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    text: str,
+    booking_type: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Distinct people (employees or guests) with a booking/visit matching
+    `text` on name or email, best matches first: name starts with the text,
+    then a name word starts with it, then email starts with it, then any
+    other contains-match."""
+    escaped = _escape_like(text)
+    if booking_type == "EMPLOYEE":
+        source = """
+            SELECT u.full_name AS name, u.email AS email
+            FROM bookings b
+            INNER JOIN app_users u
+                ON u.id = b.booked_for_user_id
+               AND u.tenant_id = b.tenant_id
+            WHERE b.tenant_id = %(tenant_id)s
+              AND b.booking_type = 'EMPLOYEE'
+        """
+    else:
+        source = """
+            SELECT g.full_name AS name, g.email AS email
+            FROM guest_visits gv
+            INNER JOIN guests g
+                ON g.id = gv.guest_id
+               AND g.tenant_id = gv.tenant_id
+            WHERE gv.tenant_id = %(tenant_id)s
+        """
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT name, email
+            FROM (
+                SELECT DISTINCT name, email
+                FROM ({source}) AS people
+                WHERE name ILIKE '%%' || %(text)s || '%%'
+                   OR email ILIKE '%%' || %(text)s || '%%'
+            ) AS matches
+            ORDER BY
+                CASE
+                    WHEN name ILIKE %(text)s || '%%' THEN 0
+                    WHEN name ILIKE '%% ' || %(text)s || '%%' THEN 1
+                    WHEN email ILIKE %(text)s || '%%' THEN 2
+                    ELSE 3
+                END,
+                name,
+                email
+            LIMIT %(limit)s
+            """,
+            {"tenant_id": tenant_id, "text": escaped, "limit": limit},
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
+def fetch_admin_booking_seat_suggestions(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    text: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Distinct booked seat codes matching `text`, best matches first: code
+    starts with the text, then a code segment starts with it, then contains."""
+    escaped = _escape_like(text)
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT seat_code, seat_type
+            FROM (
+                SELECT DISTINCT s.seat_code, s.seat_type
+                FROM bookings b
+                INNER JOIN seats s
+                    ON s.id = b.seat_id
+                   AND s.tenant_id = b.tenant_id
+                WHERE b.tenant_id = %(tenant_id)s
+                  AND s.seat_code ILIKE '%%' || %(text)s || '%%'
+            ) AS matches
+            ORDER BY
+                CASE
+                    WHEN seat_code ILIKE %(text)s || '%%' THEN 0
+                    WHEN seat_code ILIKE '%%-' || %(text)s || '%%' THEN 1
+                    ELSE 2
+                END,
+                seat_code
+            LIMIT %(limit)s
+            """,
+            {"tenant_id": tenant_id, "text": escaped, "limit": limit},
+        )
+        return [dict(row) for row in cur.fetchall()]
 
 
 def fetch_admin_bookings_summary(

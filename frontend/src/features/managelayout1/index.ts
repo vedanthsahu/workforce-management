@@ -8,6 +8,7 @@ export { default as BulkEditModal }      from "./components/BulkEditModal";
 export { default as ViewToggle }         from "./components/ViewToggle";
 export { default as SpaceCategoryTabs }  from "./components/SpaceCategoryTabs";
 export { default as SpaceStatCards }     from "./components/SpaceStatCards";
+export { default as AmenityChecklist }   from "./components/AmenityChecklist";
 
 // Services
 export * from "./services/seatService";
