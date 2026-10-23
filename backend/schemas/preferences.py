@@ -90,10 +90,6 @@ class AmenityResponse(BaseModel):
     applicable_seat_types: list[str] = Field(default_factory=list)
 
 
-class PreferencesResponse(BaseModel):
-    amenities: list[AmenityResponse]
-
-
 PreferredSeatType = Literal[
     "STANDARD",
     "WINDOW",

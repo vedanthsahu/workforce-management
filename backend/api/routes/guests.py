@@ -63,6 +63,8 @@ def create_guest_record(
     )
 
 
+# Future Scope API -- no caller today; kept for the planned guest-detail
+# screen and the admin/facilitator overseer view of a specific guest.
 @router.get("/{guest_id}", response_model=GuestResponse)
 def fetch_guest_record(
     guest_id: Annotated[int, Path(gt=0)],
@@ -91,6 +93,8 @@ def update_guest_record(
     )
 
 
+# Future Scope API -- no caller today; kept for the planned guest
+# blacklist/reactivate control (no UI exists for it yet).
 @router.patch("/{guest_id}/status", response_model=GuestResponse)
 def update_guest_status_record(
     guest_id: Annotated[int, Path(gt=0)],
@@ -106,6 +110,8 @@ def update_guest_status_record(
     )
 
 
+# Future Scope API -- no caller today; kept for the planned admin/
+# facilitator overseer view (a guest's full visit history).
 @router.get("/{guest_id}/visits", response_model=GuestVisitHistoryResponse)
 def fetch_guest_visit_history_record(
     guest_id: Annotated[int, Path(gt=0)],

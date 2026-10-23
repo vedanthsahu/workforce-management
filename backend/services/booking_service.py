@@ -915,12 +915,14 @@ def cancel_booking_by_id(
                 },
             )
 
-        if booking["booking_date"] <= date.today():
+        # Today's booking can still be cancelled until it is used -- the
+        # status check above already rejects CHECKED_IN/COMPLETED/NO_SHOW.
+        if booking["booking_date"] < date.today():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
                     "code": "booking_not_mutable",
-                    "message": "Only future bookings can be cancelled.",
+                    "message": "Past bookings can no longer be cancelled.",
                 },
             )
 
@@ -1128,12 +1130,14 @@ def modify_booking(
                 },
             )
 
-        if booking["booking_date"] <= date.today():
+        # Today's booking can still be modified until it is used -- the
+        # status check below already rejects CHECKED_IN/COMPLETED/NO_SHOW.
+        if booking["booking_date"] < date.today():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
                     "code": "booking_not_mutable",
-                    "message": "Only future bookings can be modified.",
+                    "message": "Past bookings can no longer be modified.",
                 },
             )
  

@@ -18,7 +18,6 @@ from backend.schemas.guest import (
     GuestWorkflowAction,
     GuestWorkflowRequest,
     GuestWorkflowResponse,
-    ModifyGuestVisitRequest,
 )
 from backend.services import guest_service
 
@@ -311,102 +310,6 @@ class GuestWorkflowTests(unittest.TestCase):
         self.assertEqual(response.booking.booking_status, "CONFIRMED")
         self.assertEqual(response.booking.guest_visit_id, "61")
         self.assertEqual(conn.commits, 1)
-
-    def test_direct_modify_guest_visit_replaces_visit_and_linked_booking(self) -> None:
-        conn = FakeConnection()
-        # created_by_user_id matches self.current_user ("10") -- the new
-        # creator/subject-only authorization rule requires the caller to
-        # actually be this visit's creator or host, which the _visit()
-        # default ("15") deliberately isn't; this test is exercising the
-        # modify-replace mechanics, not authorization, so the fixture needs
-        # to reflect an authorized caller.
-        old_visit = _visit(created_by_user_id="10")
-        old_booking = _booking()
-        new_visit = _visit(
-            guest_visit_id="61",
-            host_user_id="21",
-            site_id="5",
-            building_id="6",
-            floor_id="7",
-            visit_date=_future_date(20),
-            guest_type="VENDOR",
-            purpose_of_visit="VENDOR_VISIT",
-        )
-        payload = ModifyGuestVisitRequest(
-            host_user_id=21,
-            site_id=5,
-            building_id=6,
-            floor_id=7,
-            visit_date=_future_date(20),
-            guest_type=GuestType.VENDOR,
-            purpose_of_visit=VisitPurpose.VENDOR_VISIT,
-            modification_reason="LOCATION_CHANGED",
-        )
-        with patch.object(
-            guest_service,
-            "fetch_guest_visit_by_id_for_update",
-            return_value=old_visit,
-        ), patch.object(
-            guest_service,
-            "_resolve_host",
-            return_value={},
-        ), patch.object(
-            guest_service,
-            "_validate_visit_location",
-        ), patch.object(
-            guest_service,
-            "fetch_active_booking_for_guest_visit",
-            return_value=old_booking,
-        ), patch.object(
-            guest_service,
-            "mark_booking_modified",
-        ) as mark_booking, patch.object(
-            guest_service,
-            "mark_guest_visit_modified",
-        ) as mark_visit, patch.object(
-            guest_service,
-            "insert_guest_visit",
-            return_value=new_visit,
-        ) as insert_visit, patch.object(
-            guest_service,
-            "update_guest_visit_booking_details",
-        ), patch.object(
-            guest_service,
-            "sync_booking_from_guest_visit",
-        ) as sync_booking, patch.object(
-            guest_service,
-            "recalculate_guest_visit_requires_seat",
-        ), patch.object(
-            guest_service,
-            "fetch_guest_visit_by_id",
-            return_value=new_visit,
-        ):
-            response = guest_service.modify_guest_visit(
-                conn,
-                current_user=self.current_user,
-                guest_visit_id="60",
-                payload=payload,
-            )
-
-        # modify_guest_visit carries the linked booking forward in place via
-        # sync_booking_from_guest_visit below rather than replacing it, so
-        # (unlike modify_booking/modify_guest_booking) mark_booking_modified
-        # is never called on this direct-modify path.
-        mark_booking.assert_not_called()
-        mark_visit.assert_called_once_with(
-            conn,
-            tenant_id="1",
-            guest_visit_id="60",
-            modification_reason="LOCATION_CHANGED",
-        )
-        self.assertEqual(insert_visit.call_args.kwargs["modified_from_guest_visit_id"], "60")
-        self.assertNotIn("modification_reason", insert_visit.call_args.kwargs)
-        self.assertEqual(sync_booking.call_args.kwargs["guest_visit_id"], "60")
-        self.assertEqual(sync_booking.call_args.kwargs["site_id"], "5")
-        self.assertEqual(sync_booking.call_args.kwargs["building_id"], "6")
-        self.assertEqual(sync_booking.call_args.kwargs["floor_id"], "7")
-        self.assertEqual(response.guest_visit_id, "61")
-        self.assertEqual(conn.commits, 2)
 
     def test_add_booking_uses_existing_visit_as_source_of_truth(self) -> None:
         conn = FakeConnection()

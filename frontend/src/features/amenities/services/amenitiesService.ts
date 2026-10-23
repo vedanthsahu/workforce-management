@@ -27,13 +27,24 @@ export const amenitiesService = {
     return data;
   },
 
-  // GET PREFERENCES
+  // GET PREFERENCES -- the active-amenity catalog, reusing the same
+  // endpoint and data as the admin amenities list (status=active).
   async getPreferences(): Promise<PreferencesResponse> {
-    const { data } = await axiosInstance.get(
-      "/preferences"
-    );
+    const { data } = await axiosInstance.get("/amenities", {
+      params: { status: "active", limit: 200 },
+    });
 
-    return data;
+    return {
+      amenities: (data.items ?? []).map((a: Amenity) => ({
+        id: a.amenity_id,
+        key: a.amenity_key,
+        name: a.amenity_name,
+        category: a.category_name,
+        description: a.description,
+        icon: a.icon_name,
+        applicable_seat_types: a.applicable_seat_types,
+      })),
+    };
   },
 
   // CREATE AMENITY

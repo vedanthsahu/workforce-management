@@ -1,14 +1,21 @@
 """Shared resource-ownership authorization.
 
-The rule (per dev-notes/backend/Rules.md, confirmed explicitly -- not
-inferred): a caller may act on an *existing* resource only if they are
-its creator or its subject ("acted upon"). No role gets a bypass here,
-TENANT_ADMIN included -- an admin's privilege is only ever that they
-happen to be the creator or subject of *this* resource, same as anyone
-else. (This is a deliberate, later correction: TENANT_ADMIN originally
-had an unconditional bypass here; Rules.md explicitly narrowed it --
-"Admin can't change bookings unless he himself is the one who created
-or he is the acted upon.")
+The base rule (per dev-notes/backend/Rules.md): a caller may act on an
+*existing* resource only if they are its creator or its subject ("acted
+upon") -- unless their role carries an explicit bypass. TENANT_ADMIN
+carries one (2026-10-23, reversing the earlier narrowing below): an
+admin can manage any booking, guest-booking, or guest-visit regardless
+of who created or is the subject of it, so they are never blocked from
+acting in a crisis. FACILITATOR gets no such bypass here -- their
+rights on an *existing* resource still come only from being its actual
+creator or subject; see ``can_create_for_user``/``GUEST_OPERATOR_ROLES``
+for the separate, role-based allowances FACILITATOR does have.
+
+(History: TENANT_ADMIN originally had this same unconditional bypass,
+then Rules.md explicitly narrowed it away -- "Admin can't change
+bookings unless he himself is the one who created or he is the acted
+upon." The 2026-10-23 change reverses that narrowing by direct
+instruction.)
 
 Two separate things layer on top of that base rule, each confirmed in
 Rules.md:
@@ -85,14 +92,19 @@ def can_manage_resource(
     created_by_user_id: Any,
     subject_user_id: Any = None,
 ) -> bool:
-    """The base rule for an *existing* resource: creator or subject.
-    Nothing else -- no role, TENANT_ADMIN included, gets a bypass.
+    """The rule for an *existing* resource: creator, subject, or
+    TENANT_ADMIN. TENANT_ADMIN is an unconditional bypass here (see the
+    module docstring) -- every other role's rights still come only from
+    actually being the resource's creator or subject.
 
     ``created_by_user_id`` is who actually made the resource (e.g.
     ``booked_by_user_id`` / ``created_by_user_id``). ``subject_user_id``
     is who it's for (e.g. ``booked_for_user_id`` / ``host_user_id``) --
     optional since not every resource has a distinct subject.
     """
+    if user_role(current_user) == TENANT_ADMIN:
+        return True
+
     caller_id = current_user_id(current_user)
 
     if created_by_user_id is not None and caller_id == str(created_by_user_id):

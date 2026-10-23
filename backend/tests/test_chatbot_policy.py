@@ -2,14 +2,9 @@
 
 from unittest.mock import ANY, MagicMock, patch
 
-import pytest
-from fastapi import HTTPException
-
-from backend.api.routes.business_rules import (
-    require_chatbot_configuration_admin,
-    router,
-)
+from backend.api.routes.business_rules import router
 from backend.services.business_rule_service import (
+    BUSINESS_RULE_SETTERS,
     CHATBOT_EMPLOYEE_ACCESS_KEY,
     resolve_chatbot_employee_access,
     update_chatbot_employee_access,
@@ -23,21 +18,16 @@ def test_chatbot_policy_routes_are_registered() -> None:
         for method in route.methods
     }
 
+    # The chatbot policy's write used to have its own PATCH route with its
+    # own admin-only role gate, separate from the other four policies'
+    # admin_dashboard:view gate. Both are now one uniform POST
+    # /business-rules (see business_rules.py's module docstring) --
+    # chatbot_policy.employee_access_enabled is just one more id in
+    # BUSINESS_RULE_SETTERS, gated the same as every other setting.
     assert ("GET", "/business-rules/chatbot-policy") in operations
-    assert ("PATCH", "/business-rules/chatbot-policy") in operations
-
-
-@pytest.mark.parametrize("role", ["TENANT_ADMIN", "PRODUCT_ADMIN"])
-def test_chatbot_policy_write_accepts_admin_roles(role: str) -> None:
-    user = {"role_name": role}
-    assert require_chatbot_configuration_admin(user) is user
-
-
-@pytest.mark.parametrize("role", ["EMPLOYEE", "FACILITATOR", "MANAGER", "FRONT_OFFICE"])
-def test_chatbot_policy_write_rejects_non_admin_roles(role: str) -> None:
-    with pytest.raises(HTTPException) as exc_info:
-        require_chatbot_configuration_admin({"role_name": role})
-    assert exc_info.value.status_code == 403
+    assert ("POST", "/business-rules") in operations
+    assert ("PATCH", "/business-rules/chatbot-policy") not in operations
+    assert "chatbot_policy.employee_access_enabled" in BUSINESS_RULE_SETTERS
 
 
 @patch("backend.services.business_rule_service.fetch_business_rule_value")

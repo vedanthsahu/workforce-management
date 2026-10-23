@@ -9,6 +9,7 @@ from psycopg2 import errorcodes
 from psycopg2.extensions import connection as PGConnection
 
 from backend.core.audit_actions import USER_PREFERENCES_UPDATED
+from backend.core.authorization import can_create_for_user
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.dashboard_repository import (
     fetch_building_scope,
@@ -17,7 +18,6 @@ from backend.repositories.dashboard_repository import (
 )
 from backend.repositories.preferences_repository import (
     count_amenities_for_category,
-    fetch_active_amenities,
     fetch_amenities,
     fetch_amenity_by_id,
     fetch_amenity_categories,
@@ -35,6 +35,7 @@ from backend.repositories.preferences_repository import (
     update_amenity_category,
     upsert_user_work_preferences,
 )
+from backend.repositories.user_repository import fetch_user_by_id
 from backend.schemas.preferences import (
     AdminAmenityResponse,
     AmenityCategoryListResponse,
@@ -87,32 +88,6 @@ CATEGORY_FORBIDDEN_UPDATE_FIELDS = {
 }
 
 
-def get_preferences(
-    conn: PGConnection,
-    *,
-    tenant_id: str,
-) -> dict:
-
-    try:
-        amenities = fetch_active_amenities(
-            conn,
-            tenant_id=tenant_id,
-        )
-
-        return {
-            "amenities": amenities,
-        }
-
-    except psycopg2.Error as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "preferences_fetch_failed",
-                "message": "Failed to fetch preferences.",
-            },
-        ) from exc
-
-
 def get_my_preferences(
     conn: PGConnection,
     *,
@@ -140,6 +115,50 @@ def get_my_preferences(
         floor_name=work_preferences.get("floor_name"),
         seat_type=work_preferences.get("seat_type"),
         amenities=[AmenityResponse(**row) for row in amenities],
+    )
+
+
+def get_preferences_for_user(
+    conn: PGConnection,
+    *,
+    current_user: dict[str, Any],
+    target_user_id: str,
+) -> MyPreferencesResponse:
+    """One employee's saved work-location/amenity preferences, for a
+    facilitator or admin pre-filling a delegated booking -- same
+    delegation rule as originating a booking for someone else
+    (can_create_for_user), since that's the only reason this is read.
+    Guests are out of scope: they have no saved preferences.
+
+    Replaces the old GET /dashboard/employee/{user_id}, which built the
+    caller a full dashboard payload (profile, days-in-office, team rank,
+    manager, favourite seats) just to read this one field off it.
+    """
+    tenant_id = str(current_user["tenant_id"])
+
+    target_user = fetch_user_by_id(conn, tenant_id=tenant_id, user_id=target_user_id)
+    if target_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "employee_not_found",
+                "message": "The requested employee was not found in this tenant.",
+            },
+        )
+
+    if not can_create_for_user(current_user, subject_user_id=target_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "preferences_view_forbidden",
+                "message": "You are not allowed to view this employee's preferences.",
+            },
+        )
+
+    return get_my_preferences(
+        conn,
+        tenant_id=tenant_id,
+        user_id=target_user_id,
     )
 
 
