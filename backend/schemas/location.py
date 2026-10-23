@@ -430,31 +430,3 @@ class LayoutSeatConfigurationResponse(BaseModel):
     capacity: int | None = None
 
 
-class SeatConfigurationUpdateRequest(BaseModel):
-    """Payload for soft seat configuration changes."""
-
-    model_config = ConfigDict(extra="allow")
-
-    status: HierarchyStatus | None = None
-    is_bookable: bool | None = None
-
-    @field_validator("status", mode="before")
-    @classmethod
-    def normalize_status(cls, value: str | None) -> str | None:
-        return _uppercase_status(value)
-
-
-class SeatConfigurationResponse(BaseModel):
-    seat_id: str
-    site_id: str
-    building_id: str
-    floor_id: str
-    seat_code: str
-    status: str
-    is_bookable: bool
-
-
-class BulkSeatConfigurationUpdateRequest(SeatConfigurationUpdateRequest):
-    """Payload for applying one configuration to multiple seats at once."""
-
-    seat_ids: list[int] = Field(min_length=1)

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import boto3
+import psycopg2
 from botocore.client import BaseClient
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import BackgroundTasks
@@ -19,11 +20,13 @@ from jinja2 import (
     TemplateError,
     select_autoescape,
 )
+from psycopg2.extensions import connection as PGConnection
 
 from backend.core.app_logging import LOGGER_NAME
 from backend.core.config import Settings, get_settings
 from backend.core.retry import aws_retry
 from backend.core.seat_categorization import display_space_code
+from backend.repositories.user_repository import fetch_admin_notification_emails
 
 logger = logging.getLogger(f"{LOGGER_NAME}.notifications")
 
@@ -98,6 +101,35 @@ def booking_notification_details(booking: dict[str, Any]) -> dict[str, str]:
         "seat_name": seat,
         "location": location,
     }
+
+
+def resolve_admin_notification_recipients(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+) -> list[str]:
+    """Return every email that should receive a tenant-wide admin
+    notification: the static settings override plus every active
+    TENANT_ADMIN in the tenant.
+
+    Shared by every "notify all admins" event -- floor-layout
+    upload/publish today, blocked-seat creation as of this change --
+    so there is exactly one definition of "all admins" to keep in sync.
+    """
+    settings = get_settings()
+    recipients = list(settings.notification_admin_emails)
+
+    try:
+        recipients.extend(
+            fetch_admin_notification_emails(conn, tenant_id=tenant_id)
+        )
+    except psycopg2.Error:
+        logger.exception(
+            "notification.recipient_lookup_failed tenant_id=%s",
+            tenant_id,
+        )
+
+    return _normalize_emails(recipients)
 
 
 class NotificationService:
@@ -243,6 +275,18 @@ class NotificationService:
             context=context,
         )
 
+    def send_blocked_seats_created(
+        self,
+        to_emails: list[str],
+        context: dict[str, Any],
+    ) -> None:
+        self.send_email(
+            to_emails=to_emails,
+            subject="Seats blocked",
+            template_name="blocked_seats_created.html",
+            context=context,
+        )
+
     def _build_ses_client(self) -> BaseClient:
         return boto3.client(
         "ses",
@@ -339,6 +383,21 @@ def queue_floor_layout_uploaded_notification(
         background_tasks,
         method_name="send_floor_layout_uploaded",
         event_name="floor_layout_uploaded",
+        to_emails=to_emails,
+        context=context,
+    )
+
+
+def queue_blocked_seats_created_notification(
+    background_tasks: BackgroundTasks,
+    *,
+    to_emails: list[str],
+    context: dict[str, Any],
+) -> None:
+    _queue_notification(
+        background_tasks,
+        method_name="send_blocked_seats_created",
+        event_name="blocked_seats_created",
         to_emails=to_emails,
         context=context,
     )

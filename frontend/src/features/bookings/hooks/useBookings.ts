@@ -31,6 +31,13 @@ interface UseBookingsReturn {
   refreshBookings:   () => void;
 }
 
+// Roles the backend allows to call /bookings/delegated/* (see _require_delegation_role).
+const DELEGATION_ROLES = ["TENANT_ADMIN", "FACILITATOR"];
+
+// Resolves to [] if the request fails (e.g. 403), so one optional call can't break the page.
+const settledOrEmpty = (request: Promise<Booking[]>): Promise<Booking[]> =>
+  request.catch(() => []);
+
 export function useBookings(): UseBookingsReturn {
   const [activeTab, setActiveTab]             = useState<BookingTab>("upcoming");
   const [isLoading, setIsLoading]             = useState(true);
@@ -79,16 +86,26 @@ export function useBookings(): UseBookingsReturn {
       setCurrentUserId(uid);
       setTeamGroups(groups);
 
-      const [current, future, past, cancelled, delCurrent, delFuture, delPast, delCancelled] = await Promise.all([
+      const role = user.role?.trim().toUpperCase();
+      const canViewDelegated = !role || DELEGATION_ROLES.includes(role);
+
+      // Personal bookings: open to every role, so a failure here is a real error.
+      const [current, future, past, cancelled] = await Promise.all([
         fetchCurrentBookings(uid),
         fetchFutureBookings(uid),
         fetchPastBookings(uid),
         fetchCancelledBookings(uid),
-        fetchDelegatedCurrentBookings(uid),
-        fetchDelegatedFutureBookings(uid),
-        fetchDelegatedPastBookings(uid),
-        fetchDelegatedCancelledBookings(uid),
       ]);
+
+      // Delegated bookings: skipped for other roles; never break the page if they fail.
+      const [delCurrent, delFuture, delPast, delCancelled] = canViewDelegated
+        ? await Promise.all([
+            settledOrEmpty(fetchDelegatedCurrentBookings(uid)),
+            settledOrEmpty(fetchDelegatedFutureBookings(uid)),
+            settledOrEmpty(fetchDelegatedPastBookings(uid)),
+            settledOrEmpty(fetchDelegatedCancelledBookings(uid)),
+          ])
+        : ([[], [], [], []] as Booking[][]);
 
       setCurrentBookings(current);
       setFutureBookings(future);

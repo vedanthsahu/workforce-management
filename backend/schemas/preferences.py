@@ -90,10 +90,6 @@ class AmenityResponse(BaseModel):
     applicable_seat_types: list[str] = Field(default_factory=list)
 
 
-class PreferencesResponse(BaseModel):
-    amenities: list[AmenityResponse]
-
-
 PreferredSeatType = Literal[
     "STANDARD",
     "WINDOW",
@@ -121,10 +117,15 @@ class UpdateMyPreferencesRequest(BaseModel):
 class MyPreferencesResponse(BaseModel):
     site_id: str | None = None
     site_name: str | None = None
+    # Current status of the saved location, so the UI can flag a saved
+    # preference that has since become inactive.
+    site_status: str | None = None
     building_id: str | None = None
     building_name: str | None = None
+    building_status: str | None = None
     floor_id: str | None = None
     floor_name: str | None = None
+    floor_status: str | None = None
     seat_type: str | None = None
     amenities: list[AmenityResponse] = Field(default_factory=list)
 

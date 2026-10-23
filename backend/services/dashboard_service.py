@@ -10,21 +10,18 @@ import psycopg2
 from fastapi import HTTPException, status
 from psycopg2.extensions import connection as PGConnection
 
-from backend.repositories.preferences_repository import fetch_active_amenities
 from backend.repositories.user_repository import (
     fetch_days_in_office,
     fetch_days_in_office_current_month,
     fetch_days_in_office_current_year,
     fetch_favorite_seat,
     fetch_team_rank_current_year,
-    fetch_user_by_id,
     fetch_user_profile_context,
 )
 from backend.schemas.dashboard import (
     DashboardManagerResponse,
     DashboardMeResponse,
     DashboardOfficeInfoResponse,
-    DashboardPreferencesResponse,
     DashboardProfileMetadataResponse,
 )
 from backend.services.preferences_service import get_my_preferences
@@ -42,68 +39,6 @@ def get_dashboard_me(
     )
 
 
-def _current_user_id(current_user: dict[str, Any]) -> str:
-    return str(current_user.get("user_id") or current_user.get("id") or "")
-
-
-def _user_role(user: dict[str, Any]) -> str:
-    return str(user.get("role_name") or user.get("role") or "").strip().upper()
-
-
-def _can_view_dashboard_for(
-    *,
-    current_user: dict[str, Any],
-    target_user: dict[str, Any],
-) -> bool:
-    """Same delegation rule used for booking on someone else's behalf:
-    self, TENANT_ADMIN, FACILITATOR, or the target's own MANAGER."""
-    current_user_id = _current_user_id(current_user)
-
-    if current_user_id == str(target_user["user_id"]):
-        return True
-
-    role = _user_role(current_user)
-    if role in {"TENANT_ADMIN", "FACILITATOR"}:
-        return True
-
-    return (
-        role == "MANAGER"
-        and str(target_user.get("manager_user_id") or "") == current_user_id
-    )
-
-
-def get_dashboard_for_employee(
-    conn: PGConnection,
-    *,
-    current_user: dict[str, Any],
-    target_user_id: str,
-) -> DashboardMeResponse:
-    """Return one employee's dashboard (incl. saved work_preferences) for a
-    facilitator/admin/manager to pre-fill a delegated seat booking with."""
-    tenant_id = str(current_user["tenant_id"])
-
-    target_user = fetch_user_by_id(conn, tenant_id=tenant_id, user_id=target_user_id)
-    if target_user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "employee_not_found",
-                "message": "The requested employee was not found in this tenant.",
-            },
-        )
-
-    if not _can_view_dashboard_for(current_user=current_user, target_user=target_user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": "dashboard_forbidden",
-                "message": "You are not allowed to view this employee's dashboard.",
-            },
-        )
-
-    return get_dashboard_for_user(conn, tenant_id=tenant_id, user_id=target_user_id)
-
-
 def get_dashboard_for_user(
     conn: PGConnection,
     *,
@@ -115,10 +50,6 @@ def get_dashboard_for_user(
             conn,
             tenant_id=tenant_id,
             user_id=user_id,
-        )
-        amenities = fetch_active_amenities(
-            conn,
-            tenant_id=tenant_id,
         )
 
         work_preferences = get_my_preferences(
@@ -188,7 +119,6 @@ def get_dashboard_for_user(
         mobile_phone=profile.get("mobile_phone"),
         manager=_build_manager(profile),
         office_info=_build_office_info(profile),
-        preferences=DashboardPreferencesResponse(amenities=amenities),
         work_preferences=work_preferences,
         profile_metadata=DashboardProfileMetadataResponse(
             status=profile.get("status"),

@@ -85,21 +85,17 @@ def _can_view_user_resource(
     current_user: dict[str, Any],
     target_user: dict[str, Any],
 ) -> bool:
-    """Same delegation rule used for dashboards/bookings: self, TENANT_ADMIN,
-    FACILITATOR, or the target's own MANAGER."""
+    """Self or TENANT_ADMIN only -- a user's own detail and booking history
+    are not a FACILITATOR delegation surface (unlike booking creation
+    itself), and MANAGER is dormant. Narrowed by direct instruction
+    (2026-10-23) from the earlier self/TENANT_ADMIN/FACILITATOR/MANAGER-
+    of-target rule."""
     current_user_id = _current_user_id(current_user)
 
     if current_user_id == str(target_user.get("id") or target_user.get("user_id") or ""):
         return True
 
-    role = _user_role(current_user)
-    if role in {"TENANT_ADMIN", "FACILITATOR"}:
-        return True
-
-    return (
-        role == "MANAGER"
-        and str(target_user.get("manager_user_id") or "") == current_user_id
-    )
+    return _user_role(current_user) == "TENANT_ADMIN"
 
 
 def update_my_profile(
