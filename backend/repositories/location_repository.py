@@ -20,7 +20,23 @@ _SEAT_IN_PUBLISHED_LAYOUT_SQL = """
                     AND status = 'PUBLISHED'
               )"""
 
- 
+
+def _floor_has_published_layout_sql(floor_alias: str) -> str:
+    """Extra AND-clause: the floor aliased `floor_alias` has a published layout.
+
+    A floor with no published layout has nothing to book, so `bookable_only`
+    (sites/buildings/floors) skips it."""
+    return f"""
+              AND EXISTS (
+                  SELECT 1
+                  FROM floor_layouts AS pl
+                  WHERE pl.tenant_id = {floor_alias}.tenant_id
+                    AND pl.floor_id = {floor_alias}.id
+                    AND pl.is_published = TRUE
+                    AND pl.status = 'PUBLISHED'
+              )"""
+
+
 def fetch_sites(
     conn: PGConnection,
     *,
@@ -34,7 +50,8 @@ def fetch_sites(
     """Fetch tenant-scoped sites with additive admin aggregate fields.
 
     `bookable_only` keeps just the sites a booking flow can actually use: ones
-    with at least one ACTIVE building that has at least one ACTIVE floor."""
+    with at least one ACTIVE building that has at least one ACTIVE floor with
+    a published layout."""
     query = f"""
         SELECT
             s.id::text AS site_id,
@@ -92,6 +109,7 @@ def fetch_sites(
               AND bb.site_id = s.id
               AND bb.status = 'ACTIVE'
               AND bf.status = 'ACTIVE'
+        """ + _floor_has_published_layout_sql("bf") + """
         )
     """
     query, params = _apply_status_filter(query, params, "s.status", status_filter)
@@ -123,7 +141,8 @@ def fetch_buildings_by_site(
 ) -> list[dict[str, Any]]:
     """Fetch buildings under one active tenant-scoped site.
 
-    `bookable_only` keeps just buildings with at least one ACTIVE floor."""
+    `bookable_only` keeps just buildings with at least one ACTIVE floor that
+    has a published layout."""
     query = f"""
         SELECT
             b.id::text AS building_id,
@@ -175,6 +194,7 @@ def fetch_buildings_by_site(
             WHERE bf.tenant_id = b.tenant_id
               AND bf.building_id = b.id
               AND bf.status = 'ACTIVE'
+        """ + _floor_has_published_layout_sql("bf") + """
         )
     """
     query, params = _apply_status_filter(query, params, "b.status", status_filter)
@@ -204,11 +224,13 @@ def fetch_floors_by_building(
     limit: int | None = None,
     search: str | None = None,
     status_filter: str | None = None,
+    bookable_only: bool = False,
 ) -> list[dict[str, Any]]:
     """Fetch tenant-scoped floors, optionally narrowed to one building and/or site.
 
     With both `building_id` and `site_id` omitted, returns every floor across
-    every office/building for the tenant.
+    every office/building for the tenant. `bookable_only` keeps just floors
+    with a published layout.
     """
     query = f"""
         SELECT
@@ -331,6 +353,8 @@ def fetch_floors_by_building(
     if site_id is not None:
         query += " AND f.site_id = %s"
         params.append(site_id)
+    if bookable_only:
+        query += " AND COALESCE(layout_counts.published_layout_exists, FALSE) = TRUE"
     query, params = _apply_status_filter(query, params, "f.status", status_filter)
     query, params = _apply_search_filter(
         query,
@@ -1786,45 +1810,6 @@ def fetch_seat_configuration(
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(query, params)
-        row = cur.fetchone()
-    return dict(row) if row else None
-
-
-def update_seat_configuration(
-    conn: PGConnection,
-    *,
-    tenant_id: str,
-    seat_id: str,
-    updates: dict[str, Any],
-) -> dict[str, Any] | None:
-    """Update soft seat configuration flags only."""
-    assignments: list[str] = []
-    params: list[Any] = []
-    for field_name, value in updates.items():
-        assignments.append(f"{field_name} = %s")
-        params.append(value)
-    assignments.append("updated_at = NOW()")
-    params.extend([tenant_id, seat_id])
-
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            f"""
-            UPDATE seats
-            SET {", ".join(assignments)}
-            WHERE tenant_id = %s
-              AND id = %s
-            RETURNING
-                id::text AS seat_id,
-                site_id::text AS site_id,
-                building_id::text AS building_id,
-                floor_id::text AS floor_id,
-                layout_id::text AS layout_id,
-                seat_code,
-                status,
-                is_bookable
-            """,
-            params,
-        )
         row = cur.fetchone()
     return dict(row) if row else None
 

@@ -16,7 +16,6 @@ from backend.core.audit_actions import (
     BUILDING_UPDATED,
     FLOOR_CREATED,
     FLOOR_UPDATED,
-    SEAT_CONFIGURED,
     SITE_CREATED,
     SITE_UPDATED,
 )
@@ -43,7 +42,6 @@ from backend.repositories.location_repository import (
     fetch_floors_by_building,
     fetch_layout_seat_mapping_by_id,
     fetch_layout_seat_mappings_by_ids,
-    fetch_seat_configuration,
     fetch_site_by_id,
     fetch_site_duplicates,
     fetch_sites,
@@ -56,7 +54,6 @@ from backend.repositories.location_repository import (
     update_floor,
     update_layout_seat_mapping_configuration,
     update_layout_seat_mapping_configurations_bulk,
-    update_seat_configuration,
     update_site,
     upsert_operational_seat,
     upsert_operational_seats_bulk,
@@ -64,15 +61,12 @@ from backend.repositories.location_repository import (
 from backend.schemas.location import (
     BuildingResponse,
     BulkLayoutSeatConfigurationUpdateRequest,
-    BulkSeatConfigurationUpdateRequest,
     CreateBuildingRequest,
     CreateFloorRequest,
     CreateSiteRequest,
     FloorResponse,
     LayoutSeatConfigurationResponse,
     LayoutSeatConfigurationUpdateRequest,
-    SeatConfigurationResponse,
-    SeatConfigurationUpdateRequest,
     SiteDetailsResponse,
     SiteHierarchySummary,
     SiteResponse,
@@ -126,23 +120,6 @@ FLOOR_FORBIDDEN_UPDATE_FIELDS = {
     "created_at",
     "updated_at",
 }
-
-SEAT_CONFIGURATION_FIELDS = {"status", "is_bookable"}
-SEAT_FORBIDDEN_CONFIGURATION_FIELDS = {
-    "site_id",
-    "building_id",
-    "floor_id",
-    "seat_code",
-    "layout_id",
-    "coordinates",
-    "svg_element_id",
-    "map_x",
-    "map_y",
-    "map_width",
-    "map_height",
-    "rotation_angle",
-}
-
 
 def get_sites(
     conn: PGConnection,
@@ -996,6 +973,7 @@ def get_floors_by_building(
     limit: int | None = None,
     search: str | None = None,
     status_filter: str | None = None,
+    bookable_only: bool = False,
 ) -> list[FloorResponse]:
     """Return tenant-scoped floors, optionally narrowed to one building and/or site."""
     status_filter = _normalize_status_filter(status_filter)
@@ -1009,6 +987,7 @@ def get_floors_by_building(
             limit=limit,
             search=search,
             status_filter=status_filter,
+            bookable_only=bookable_only,
         )
     except psycopg2.Error as exc:
         logger.exception("location.db_error")
@@ -1235,178 +1214,6 @@ def update_floor_metadata(
         changed_fields=[k for k in updates if floor.get(k) != updates[k]] or None,
     )
     return _build_floor_response(updated_floor)
-
-
-def update_seat_configuration_metadata(
-    conn: PGConnection,
-    *,
-    tenant_id: str,
-    seat_id: str,
-    payload: SeatConfigurationUpdateRequest,
-    current_user: dict[str, Any],
-) -> SeatConfigurationResponse:
-    """Update seat status/bookability without touching hierarchy or layout fields."""
-    _reject_extra_fields(payload, SEAT_FORBIDDEN_CONFIGURATION_FIELDS)
-    updates = _extract_updates(payload, SEAT_CONFIGURATION_FIELDS)
-    _reject_empty_updates(updates)
-    _reject_null_updates(updates, {"status", "is_bookable"})
-
-    try:
-        seat = fetch_seat_configuration(
-            conn,
-            tenant_id=tenant_id,
-            seat_id=seat_id,
-        )
-        if seat is None:
-            _raise_not_found("seat")
-
-        updated_seat = update_seat_configuration(
-            conn,
-            tenant_id=tenant_id,
-            seat_id=seat_id,
-            updates=updates,
-        )
-        if updated_seat is None:
-            _raise_not_found("seat")
-
-        if updated_seat.get("layout_id") is not None:
-            touch_floor_layout_updated_by(
-                conn,
-                tenant_id=tenant_id,
-                layout_id=str(updated_seat["layout_id"]),
-                updated_by_user_id=str(current_user["user_id"]),
-            )
-
-        conn.commit()
-    except HTTPException as he:
-        conn.rollback()
-        _d = he.detail if isinstance(he.detail, dict) else {}
-        safe_write_audit_log(
-            conn, action=SEAT_CONFIGURED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="seat", resource_id=seat_id,
-            event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
-        )
-        raise
-    except psycopg2.Error as exc:
-        conn.rollback()
-        logger.exception("location.db_error")
-        safe_write_audit_log(
-            conn, action=SEAT_CONFIGURED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="seat", resource_id=seat_id,
-            event_status="FAILURE",
-            failure_code="seat_conflict" if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "seat_configuration_update_failed",
-            failure_reason="Duplicate record." if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "Failed to update seat configuration.",
-        )
-        _raise_write_error(
-            exc,
-            duplicate_code="seat_conflict",
-            fallback_code="seat_configuration_update_failed",
-            fallback_message="Failed to update seat configuration.",
-        )
-
-    safe_write_audit_log(
-        conn, action=SEAT_CONFIGURED, tenant_id=tenant_id,
-        current_user=current_user, resource_type="seat", resource_id=seat_id,
-        old_values={k: seat.get(k) for k in updates},
-        new_values=updates,
-        changed_fields=[k for k in updates if seat.get(k) != updates[k]] or None,
-    )
-    return SeatConfigurationResponse(**updated_seat)
-
-
-def update_seats_configuration_bulk(
-    conn: PGConnection,
-    *,
-    tenant_id: str,
-    payload: BulkSeatConfigurationUpdateRequest,
-    current_user: dict[str, Any],
-) -> list[SeatConfigurationResponse]:
-    """Apply one configuration to multiple seats in a single transaction.
-
-    Every seat gets the exact same status/is_bookable update. All-or-nothing:
-    if any seat_id fails validation, none of the seats are updated.
-    """
-    _reject_extra_fields(payload, SEAT_FORBIDDEN_CONFIGURATION_FIELDS)
-    updates = _extract_updates(payload, SEAT_CONFIGURATION_FIELDS)
-    _reject_empty_updates(updates)
-    _reject_null_updates(updates, {"status", "is_bookable"})
-
-    seat_ids = [str(seat_id) for seat_id in dict.fromkeys(payload.seat_ids)]
-    audit_entries: list[tuple[str, dict[str, Any]]] = []
-    responses: list[SeatConfigurationResponse] = []
-    touched_layout_ids: set[str] = set()
-
-    try:
-        for seat_id in seat_ids:
-            seat = fetch_seat_configuration(
-                conn,
-                tenant_id=tenant_id,
-                seat_id=seat_id,
-            )
-            if seat is None:
-                _raise_not_found("seat")
-
-            updated_seat = update_seat_configuration(
-                conn,
-                tenant_id=tenant_id,
-                seat_id=seat_id,
-                updates=updates,
-            )
-            if updated_seat is None:
-                _raise_not_found("seat")
-
-            if updated_seat.get("layout_id") is not None:
-                touched_layout_ids.add(str(updated_seat["layout_id"]))
-
-            audit_entries.append((seat_id, seat))
-            responses.append(SeatConfigurationResponse(**updated_seat))
-
-        for layout_id in touched_layout_ids:
-            touch_floor_layout_updated_by(
-                conn,
-                tenant_id=tenant_id,
-                layout_id=layout_id,
-                updated_by_user_id=str(current_user["user_id"]),
-            )
-
-        conn.commit()
-    except HTTPException as he:
-        conn.rollback()
-        _d = he.detail if isinstance(he.detail, dict) else {}
-        safe_write_audit_log(
-            conn, action=SEAT_CONFIGURED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="seat", resource_id=",".join(seat_ids),
-            event_status="DENIED" if he.status_code == 403 else "FAILURE",
-            failure_code=_d.get("code"), failure_reason=_d.get("message"),
-        )
-        raise
-    except psycopg2.Error as exc:
-        conn.rollback()
-        logger.exception("location.db_error")
-        safe_write_audit_log(
-            conn, action=SEAT_CONFIGURED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="seat", resource_id=",".join(seat_ids),
-            event_status="FAILURE",
-            failure_code="seat_conflict" if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "seat_configuration_update_failed",
-            failure_reason="Duplicate record." if exc.pgcode == errorcodes.UNIQUE_VIOLATION else "Failed to update seat configuration.",
-        )
-        _raise_write_error(
-            exc,
-            duplicate_code="seat_conflict",
-            fallback_code="seat_configuration_update_failed",
-            fallback_message="Failed to update seat configuration.",
-        )
-
-    for seat_id, seat in audit_entries:
-        safe_write_audit_log(
-            conn, action=SEAT_CONFIGURED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="seat", resource_id=seat_id,
-            old_values={k: seat.get(k) for k in updates},
-            new_values=updates,
-            changed_fields=[k for k in updates if seat.get(k) != updates[k]] or None,
-        )
-    return responses
 
 
 def _build_floor_response(floor: dict[str, object]) -> FloorResponse:

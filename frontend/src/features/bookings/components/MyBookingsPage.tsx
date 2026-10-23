@@ -19,6 +19,18 @@ import { TABS } from "../utils/constants";
 import { isUpcoming, isToday, sortByDate } from "../utils/bookingHelpers";
 import type { Booking, BookingSummary, BookingTab } from "../types/bookings.types";
 
+// Modify / Cancel on a booking card. Future bookings always; today's only for
+// employee bookings (own "self", booked for you "on_behalf", or booked for
+// another employee "employee") -- the backend allows a same-day change to those
+// (until they're checked in / completed), but still rejects guest bookings and
+// visits for today.
+function canChangeBooking(booking: Booking): boolean {
+  return (
+    !isToday(booking.date) ||
+    (booking.bookingType !== "guest" && booking.bookingType !== "visit")
+  );
+}
+
 // ── Stat card ─────────────────────────────────────────────────────────────────
 
 type StatCardProps = {
@@ -552,7 +564,7 @@ export default function MyBookingsPage() {
                             onAddBooking={handleAddBooking}
                             onCancelVisit={handleCancelVisit}
                             onCancelBooking={handleCancelBookingOnly}
-                            showActions={!isToday(booking.date)}
+                            showActions={canChangeBooking(booking)}
                           />
                         ))}
                         <BookingsPaginationFooter
@@ -622,7 +634,7 @@ export default function MyBookingsPage() {
                         onAddBooking={handleAddBooking}
                         onCancelBooking={handleCancelBookingOnly}
                         onCancelVisit={handleCancelVisit}
-                        showActions={bfsSubTab === "upcoming" && !isToday(booking.date)}
+                        showActions={bfsSubTab === "upcoming" && canChangeBooking(booking)}
                         variant="delegated"
                       />
                     ))}

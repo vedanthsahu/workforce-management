@@ -22,7 +22,6 @@ from backend.schemas.preferences import (
     CreateAmenityCategoryRequest,
     CreateAmenityRequest,
     MyPreferencesResponse,
-    PreferencesResponse,
     UpdateAmenityCategoryRequest,
     UpdateAmenityRequest,
     UpdateMyPreferencesRequest,
@@ -34,7 +33,7 @@ from backend.services.preferences_service import (
     get_amenity,
     get_amenity_categories,
     get_amenity_category,
-    get_preferences,
+    get_preferences_for_user,
     update_amenity_category_metadata,
     update_amenity_metadata,
     update_my_preferences,
@@ -44,20 +43,22 @@ router = APIRouter(tags=["preferences"])
 
 
 @router.get(
-    "/preferences",
-    response_model=PreferencesResponse,
+    "/preferences/{user_id}",
+    response_model=MyPreferencesResponse,
 )
-def preferences(
+def preferences_for_user(
+    user_id: str,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
-) -> PreferencesResponse:
-
-    payload = get_preferences(
+) -> MyPreferencesResponse:
+    """A specific employee's saved preferences -- for a facilitator or
+    admin pre-filling a delegated booking. Self, TENANT_ADMIN, and
+    FACILITATOR only; see get_preferences_for_user."""
+    return get_preferences_for_user(
         conn,
-        tenant_id=current_user["tenant_id"],
+        current_user=current_user,
+        target_user_id=user_id,
     )
-
-    return PreferencesResponse(**payload)
 
 
 @router.post(
@@ -118,6 +119,8 @@ def amenity_categories(
     )
 
 
+# Future Scope API -- no caller today; the amenities admin screen edits
+# from list data only. Kept for the planned category-management UI.
 @router.get(
     "/amenity-categories/{category_id}",
     response_model=AmenityCategoryResponse,
@@ -134,6 +137,8 @@ def amenity_category(
     )
 
 
+# Future Scope API -- no caller today; kept for the planned
+# category-management UI (see the comment on the GET detail route above).
 @router.post(
     "/amenity-categories",
     response_model=AmenityCategoryResponse,
@@ -164,6 +169,8 @@ def create_amenity_category_route(
     return result
 
 
+# Future Scope API -- no caller today; kept for the planned
+# category-management UI (see the comment on the GET detail route above).
 @router.patch(
     "/amenity-categories/{category_id}",
     response_model=AmenityCategoryResponse,
@@ -219,6 +226,8 @@ def create_amenity_route(
     return result
 
 
+# Future Scope API -- no caller today; amenity edit currently uses list
+# data. Kept for a planned standalone amenity-detail view.
 @router.get("/amenities/{amenity_id}", response_model=AdminAmenityResponse)
 def amenity_detail(
     amenity_id: Annotated[int, Path(gt=0)],

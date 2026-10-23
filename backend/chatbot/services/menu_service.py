@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from psycopg2.extensions import connection as PGConnection
 
 
 @dataclass
@@ -65,13 +65,13 @@ class MenuService:
         ]
 
     async def get_children(
-        self, parent_id: int | None, tenant_id: int, db: AsyncSession
+        self, parent_id: int | None, tenant_id: int, db: PGConnection
     ) -> list[MenuNode]:
         del tenant_id, db
         return self._default_root_menu() if parent_id is None else []
 
     async def get_menu_item(
-        self, menu_id: int, tenant_id: int, db: AsyncSession
+        self, menu_id: int, tenant_id: int, db: PGConnection
     ) -> MenuNode | None:
         del tenant_id, db
         return next(

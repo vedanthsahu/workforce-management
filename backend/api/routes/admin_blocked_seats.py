@@ -5,7 +5,15 @@ from __future__ import annotations
 from datetime import date
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Path,
+    Query,
+    status,
+)
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import require_any_permission, require_permission
@@ -183,6 +191,7 @@ def blockable_floor_layout(
 )
 def block_seats(
     payload: CreateBlockedSeatsRequest,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[dict[str, Any], Depends(require_permission("seat:block"))],
     conn: Annotated[PGConnection, Depends(get_db)],
 ) -> CreateBlockedSeatsResponse:
@@ -191,6 +200,7 @@ def block_seats(
         tenant_id=str(current_user["tenant_id"]),
         payload=payload,
         current_user=current_user,
+        background_tasks=background_tasks,
     )
 
 

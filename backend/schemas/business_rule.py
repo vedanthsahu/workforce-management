@@ -9,6 +9,8 @@ rules catalog rows.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -32,32 +34,9 @@ class LayoutPolicyResponse(BaseModel):
     visibility_days: LayoutVisibilityDaysResponse
 
 
-class UpdateBookingPolicyRequest(BaseModel):
-    """Each field is optional so a caller can update just one rule without
-    resending values it isn't touching."""
-
-    employee_max_advance_days: int | None = Field(default=None, gt=0)
-    guest_max_advance_days: int | None = Field(default=None, gt=0)
-
-
-class UpdateLayoutVisibilityDaysRequest(BaseModel):
-    draft: int | None = Field(default=None, gt=0)
-    archived: int | None = Field(default=None, gt=0)
-    deleted: int | None = Field(default=None, gt=0)
-
-
-class UpdateLayoutPolicyRequest(BaseModel):
-    buffer_days: int | None = Field(default=None, gt=0)
-    visibility_days: UpdateLayoutVisibilityDaysRequest | None = None
-
-
 class ActivityPolicyResponse(BaseModel):
     # Rows shown in the admin dashboard's Recent Activities table.
     record_count: int
-
-
-class UpdateActivityPolicyRequest(BaseModel):
-    record_count: int | None = Field(default=None, gt=0)
 
 
 class BlockedSeatPolicyResponse(BaseModel):
@@ -71,16 +50,40 @@ class BlockedSeatPolicyResponse(BaseModel):
     max_advance_days: int
 
 
-class UpdateBlockedSeatPolicyRequest(BaseModel):
-    upcoming_days: int | None = Field(default=None, gt=0)
-    expiring_soon_days: int | None = Field(default=None, gt=0)
-    expired_window_days: int | None = Field(default=None, gt=0)
-    max_advance_days: int | None = Field(default=None, gt=0, le=730)
-
-
 class ChatbotPolicyResponse(BaseModel):
     employee_access_enabled: bool
 
 
-class UpdateChatbotPolicyRequest(BaseModel):
-    employee_access_enabled: bool
+class BusinessRuleUpdateItem(BaseModel):
+    """One setting change. `id` is a stable dotted key -- see
+    business_rule_service.BUSINESS_RULE_SETTER_IDS for the full list
+    (e.g. "booking_policy.guest_max_advance_days",
+    "layout_policy.visibility_days.draft",
+    "chatbot_policy.employee_access_enabled")."""
+
+    id: str
+    value: Any
+
+
+class UpdateBusinessRulesRequest(BaseModel):
+    """Replaces the old one-PATCH-per-policy shape: a caller sends only
+    the specific settings it's changing, by id, in one request -- same
+    "update just what you're touching" contract as before, just not
+    bound to one policy area per call."""
+
+    updates: list[BusinessRuleUpdateItem] = Field(min_length=1)
+
+
+class BusinessRulesResponse(BaseModel):
+    """The tenant's full resolved business-rule state across all policy
+    areas -- returned after POST /business-rules so the caller can
+    refresh every dependent field from one response, instead of the
+    old pattern of re-fetching a second policy's GET after changing a
+    value it derives from (see ConfigurationsListPage.tsx's old
+    fetchLayoutPolicy() follow-up call after a booking-policy save)."""
+
+    booking_policy: BookingPolicyResponse
+    layout_policy: LayoutPolicyResponse
+    activity_policy: ActivityPolicyResponse
+    blocked_seat_policy: BlockedSeatPolicyResponse
+    chatbot_policy: ChatbotPolicyResponse

@@ -411,29 +411,6 @@ def fetch_graph_me(access_token: str) -> dict[str, Any]:
     )
 
 
-def fetch_graph_groups(access_token: str) -> dict[str, Any]:
-    """Fetch Microsoft Graph group memberships for the signed-in user.
-
-    Args:
-        access_token: Microsoft Graph bearer token.
-
-    Returns:
-        dict[str, Any]: Provider response for the ``/me/memberOf`` endpoint.
-
-    Side Effects:
-        Performs an outbound HTTP GET to Microsoft Graph.
-
-    Failure Modes:
-        Raises ``GraphAPIError`` when the token is missing or the request
-        cannot be completed successfully.
-    """
-    return _graph_get(
-        access_token,
-        "/me/memberOf",
-        params={"$select": "id,displayName"},
-    )
-
-
 def check_graph_group_membership(
     access_token: str,
     *,

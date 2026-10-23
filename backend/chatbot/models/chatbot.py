@@ -1,61 +1,60 @@
+"""Chatbot-owned data shapes (chatbot_sessions, chatbot_messages).
+
+Plain dataclasses, not SQLAlchemy ORM models -- the chatbot used to manage
+these tables through its own SQLAlchemy async engine; that's gone, and
+backend/repositories/chatbot_repository.py now reads/writes these tables
+the same way every other repository in this codebase does (raw psycopg2).
+These dataclasses are just the shape repository rows get turned into, so
+the rest of the chatbot code (which reads session.tenant_id, session.state,
+etc.) didn't need to change.
 """
-Chatbot-owned tables. These are created and managed exclusively by the chatbot service.
-Use chatbot_ prefix to avoid collision with existing application tables.
-"""
+
+from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
-
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.orm import relationship
-
-from backend.chatbot.database import Base
+from typing import Any
 
 
-class ChatbotSession(Base):
-    __tablename__ = "chatbot_sessions"
+@dataclass
+class ChatbotSession:
+    id: uuid.UUID
+    tenant_id: int
+    user_name: str
+    state: str
+    current_node: str
+    created_at: datetime
+    updated_at: datetime
+    expires_at: datetime
+    current_menu_id: int | None = None
+    context_data: dict[str, Any] = field(default_factory=dict)
 
-    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    tenant_id = Column(Integer, nullable=False, default=3)
-    user_name = Column(String(255), nullable=False)
-    state = Column(String(50), nullable=False, default="INITIATED")
-    # State values: INITIATED, NAVIGATING, BOOKING_WHEN_WHERE, BOOKING_DETAILS,
-    #               SELECTING_SEAT, CONFIRMING, COMPLETED, ABANDONED, CANCELLED
-    current_node = Column(String(100), nullable=False, default="MAIN_MENU")
-    current_menu_id = Column(Integer, nullable=True)
-    context_data = Column(MutableDict.as_mutable(JSONB), nullable=False, default=dict)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(
-        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
-    )
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-
-    messages = relationship(
-        "ChatbotMessage", back_populates="session", cascade="all, delete-orphan"
-    )
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> ChatbotSession:
+        return cls(
+            id=row["id"],
+            tenant_id=row["tenant_id"],
+            user_name=row["user_name"],
+            state=row["state"],
+            current_node=row["current_node"],
+            current_menu_id=row.get("current_menu_id"),
+            context_data=dict(row.get("context_data") or {}),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            expires_at=row["expires_at"],
+        )
 
 
-class ChatbotMessage(Base):
-    __tablename__ = "chatbot_messages"
-
-    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    session_id = Column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("chatbot_sessions.id"),
-        nullable=False,
-        index=True,
-    )
-    direction = Column(String(10), nullable=False)  # IN | OUT
-    message_text = Column(Text, nullable=False)
-    message_type = Column(String(30), nullable=False, default="TEXT")
-    # Message types: TEXT, OPTIONS, FORM_CARD, SEAT_LIST, CONFIRMATION, SUCCESS, ERROR
-    node_id = Column(String(100))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-
-    session = relationship("ChatbotSession", back_populates="messages")
+@dataclass
+class ChatbotMessage:
+    id: uuid.UUID
+    session_id: uuid.UUID
+    direction: str
+    message_text: str
+    message_type: str
+    created_at: datetime
+    node_id: str | None = None
 
 
 __all__ = ["ChatbotMessage", "ChatbotSession"]

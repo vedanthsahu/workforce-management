@@ -139,6 +139,34 @@ GUEST_VISIT_RETURNING_FIELDS = """
 """
 
 
+def fetch_active_guest_visit_for_date(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_id: str,
+    visit_date: date,
+) -> dict[str, Any] | None:
+    """One guest may have at most one active visit per day. CANCELLED and
+    MODIFIED (superseded by a later modify-replace) don't count -- a
+    cancelled or replaced visit never blocks a new one for that day."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            f"""
+            SELECT {GUEST_VISIT_RETURNING_FIELDS}
+            FROM guest_visits
+            WHERE tenant_id = %s
+              AND guest_id = %s
+              AND visit_date = %s
+              AND visit_status NOT IN ('CANCELLED', 'MODIFIED')
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (tenant_id, guest_id, visit_date),
+        )
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
 def insert_guest_visit(
     conn: PGConnection,
     *,

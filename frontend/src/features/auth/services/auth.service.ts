@@ -3,12 +3,6 @@ import type { User } from "../types/auth.types";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-export interface ChatbotToken {
-  access_token: string;
-  token_type: "bearer";
-  expires_in: number;
-}
-
 export const authService = {
   // Single entry point for both SSO flows -- the login API itself, nothing
   // separate. The backend reads the email's domain (there's one single
@@ -29,12 +23,5 @@ export const authService = {
   // Backend clears access_token + refresh_token cookies
   async logout(): Promise<void> {
     await axiosInstance.post("/auth/logout");
-  },
-
-  async getChatbotToken(): Promise<ChatbotToken> {
-    const { data } = await axiosInstance.post<ChatbotToken>(
-      "/auth/chatbot-token",
-    );
-    return data;
   },
 };
