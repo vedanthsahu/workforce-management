@@ -1,12 +1,7 @@
 "use client";
 import { displaySpaceCode } from "@/lib/spaceCode";
 import { useState, useRef, useEffect } from "react";
-import Select, {
-  components,
-  type DropdownIndicatorProps,
-  type MultiValue,
-  type SingleValue,
-} from "react-select";
+import Select, { type MultiValue } from "react-select";
 import {
   Mail, Phone, MapPin, Briefcase,
   Building2, UserCheck, BadgeCheck,
@@ -168,26 +163,6 @@ function SkillTag({ label }: { label: string }) {
 
 // ─── Cascade Select ───────────────────────────────────────────────────────────
 
-type CascadeOption = { value: string; label: string; inactive?: boolean; pillLabel?: string };
-
-// Small amber pill shown after the name of an office/building/floor that can't
-// be booked: "Inactive", or a custom label such as "No layout".
-function InactivePill({ label = "Inactive" }: { label?: string }) {
-  return (
-    <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold leading-none text-amber-700">
-      {label}
-    </span>
-  );
-}
-
-function CascadeChevron(props: DropdownIndicatorProps<CascadeOption, false>) {
-  return (
-    <components.DropdownIndicator {...props}>
-      <ChevronDown className="w-3.5 h-3.5" />
-    </components.DropdownIndicator>
-  );
-}
-
 // A custom (react-select) dropdown rather than a native <select>: a native
 // option can only show plain text, and inactive entries need a real pill.
 function CascadeSelect({
@@ -215,7 +190,6 @@ function CascadeSelect({
     : disabled && disabledPlaceholder
       ? disabledPlaceholder
       : placeholder ?? "";
-  const selected = loading ? null : options.find((o) => o.value === value) ?? null;
 
   return (
     <div className="space-y-1.5">
@@ -673,6 +647,9 @@ function EditPreferencesDialog({
       .catch(() => { if (active) setFloors([]); })
       .finally(() => { if (active) setLoadingFloors(false); });
     return () => { active = false; };
+    // Intentionally keyed on the building only: re-running when the saved floor
+    // changes would refetch floors and reset the user's in-progress selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBuildingId]);
 
   const handleSiteChange = (id: string) => {
