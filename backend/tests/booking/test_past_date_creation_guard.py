@@ -12,9 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from backend.core.enums import GuestType
 from backend.schemas.booking import CreateBookingRequest
-from backend.schemas.guest import CreateGuestBookingRequest, CreateGuestVisitRequest
+from backend.schemas.guest import CreateGuestVisitRequest
 from backend.services.booking_service import book_seat
-from backend.services.guest_service import create_guest_booking, create_guest_visit
+from backend.services.guest_service import create_guest_visit
 
 TODAY = date.today()
 YESTERDAY = TODAY - timedelta(days=1)
@@ -226,8 +226,8 @@ class GuestVisitPastDateGuardTests(unittest.TestCase):
 
 
 class GuestBookingPastDateGuardTests(unittest.TestCase):
-    def _payload(self, visit_date: date) -> CreateGuestBookingRequest:
-        return CreateGuestBookingRequest(
+    def _payload(self, visit_date: date) -> CreateGuestVisitRequest:
+        return CreateGuestVisitRequest(
             guest_id=1,
             host_user_id=1,
             site_id=1,
@@ -242,7 +242,7 @@ class GuestBookingPastDateGuardTests(unittest.TestCase):
         with patch(
             "backend.services.guest_service._resolve_guest",
         ) as mock_resolve_guest, self.assertRaises(HTTPException) as context:
-            create_guest_booking(
+            create_guest_visit(
                 conn=FakeConnection(),
                 current_user=GUEST_OPERATOR_CALLER,
                 payload=self._payload(YESTERDAY),
@@ -257,7 +257,7 @@ class GuestBookingPastDateGuardTests(unittest.TestCase):
             "backend.services.guest_service._resolve_guest",
             side_effect=HTTPException(status_code=418, detail="reached"),
         ), self.assertRaises(HTTPException) as context:
-            create_guest_booking(
+            create_guest_visit(
                 conn=FakeConnection(),
                 current_user=GUEST_OPERATOR_CALLER,
                 payload=self._payload(TOMORROW),
@@ -314,8 +314,8 @@ class GuestBookingMaxAdvanceGuardTests(unittest.TestCase):
     """Guest bookings (visit + seat) share the guest visit's 15-day window,
     not the 30-day employee seat booking limit."""
 
-    def _payload(self, visit_date: date) -> CreateGuestBookingRequest:
-        return CreateGuestBookingRequest(
+    def _payload(self, visit_date: date) -> CreateGuestVisitRequest:
+        return CreateGuestVisitRequest(
             guest_id=1,
             host_user_id=1,
             site_id=1,
@@ -330,7 +330,7 @@ class GuestBookingMaxAdvanceGuardTests(unittest.TestCase):
         with patch(
             "backend.services.guest_service._resolve_guest",
         ) as mock_resolve_guest, self.assertRaises(HTTPException) as context:
-            create_guest_booking(
+            create_guest_visit(
                 conn=FakeConnection(),
                 current_user=GUEST_OPERATOR_CALLER,
                 payload=self._payload(SIXTEEN_DAYS_OUT),
@@ -347,7 +347,7 @@ class GuestBookingMaxAdvanceGuardTests(unittest.TestCase):
             "backend.services.guest_service._resolve_guest",
             side_effect=HTTPException(status_code=418, detail="reached"),
         ), self.assertRaises(HTTPException) as context:
-            create_guest_booking(
+            create_guest_visit(
                 conn=FakeConnection(),
                 current_user=GUEST_OPERATOR_CALLER,
                 payload=self._payload(FIFTEEN_DAYS_OUT),

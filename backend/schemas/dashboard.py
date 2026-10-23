@@ -8,7 +8,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from backend.schemas.auth import FavoriteSeatResponse
-from backend.schemas.preferences import AmenityResponse, MyPreferencesResponse
+from backend.schemas.preferences import MyPreferencesResponse
 
 
 class DashboardManagerResponse(BaseModel):
@@ -26,10 +26,6 @@ class DashboardOfficeInfoResponse(BaseModel):
     city: str | None = None
     country: str | None = None
     timezone: str | None = None
-
-
-class DashboardPreferencesResponse(BaseModel):
-    amenities: list[AmenityResponse] = []
 
 
 class DashboardProfileMetadataResponse(BaseModel):
@@ -57,12 +53,14 @@ class DashboardMeResponse(BaseModel):
     mobile_phone: str | None = None
     manager: DashboardManagerResponse | None = None
     office_info: DashboardOfficeInfoResponse | None = None
-    preferences: DashboardPreferencesResponse | None = None
     profile_metadata: DashboardProfileMetadataResponse | None = None
 
     # User-saved defaults from POST /preferences/me (user_work_preferences +
-    # user_preferred_amenities), distinct from `preferences` above which is
-    # the full tenant amenity catalog used to populate a selection UI.
+    # user_preferred_amenities). A selection UI that needs the full tenant
+    # amenity catalog (not this user's saved subset) gets it from GET
+    # /amenities directly -- it used to be duplicated here as `preferences`
+    # under the full tenant catalog, which nothing read and which looked
+    # like personalized data while actually being the opposite; removed.
     work_preferences: MyPreferencesResponse | None = None
 
     favorite_seat: FavoriteSeatResponse | None = None

@@ -140,7 +140,8 @@ interface RawFloor {
 export async function fetchFloors(buildingId: string): Promise<Floor[]> {
   const { data } = await axiosInstance.get<RawFloor[]>(
     `/buildings/${buildingId}/floors`,
-    { params: { status: "ACTIVE" } },
+    // bookable_only: skip floors with no published layout -- nothing to book there.
+    { params: { status: "ACTIVE", bookable_only: true } },
   );
   return data.map((f) => ({
     id: f.floor_id,

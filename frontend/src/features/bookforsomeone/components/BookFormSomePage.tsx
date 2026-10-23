@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { useBookingForm, useSiteBuildingOptions } from "../hooks/useBooking";
 import type { BookingType, GuestType, PurposeOfVisit, VisitDetails } from "../types/booking";
-import { checkGuestBookingEligibility } from "../services/booking.service";
+import { checkGuestBookingEligibility, fetchSites, fetchBuildings, fetchFloors } from "../services/booking.service";
 import { fetchEmployeeWorkPreferences } from "@/features/book/services/Bookingform.service";
 import { guestVisitWorkflow, type GuestWorkflowAction } from "@/features/bookings/services/bookings.service";
 import { BookingTypeSelector, FormFooter, InternalEmployeeForm } from "./BookForSomeone";
@@ -138,8 +138,8 @@ export default function BookForSomeonePage() {
   }, [editVisitId, searchParams, setFormState]);
 
   // Auto-populate Office/Building/Floor from the selected host employee's
-  // saved work preferences (GET /dashboard/employee/{id} — same endpoint the
-  // seat-booking flow already uses to prefill an employee's own booking).
+  // saved work preferences (GET /preferences/{id} — the facilitator/admin
+  // delegation path for prefilling someone else's booking).
   // A guest has no preferences of its own, so the host's location stands in
   // for it — this covers the Guest path for both Admin and Facilitator,
   // since they share this same wizard.
@@ -167,18 +167,29 @@ export default function BookForSomeonePage() {
     if (!isBlank && !isUntouchedAutoFill) return;
 
     hostPrefsAppliedForId.current = hostId;
+    // Fill only the levels that are still bookable (same lists the dropdowns
+    // use). An inactive/unbookable saved office, building or floor is left
+    // blank -- never filled in, and never swapped for the first list entry.
     fetchEmployeeWorkPreferences(hostId)
-      .then((prefs) => {
-        // The host may have changed again while this was in flight.
-        if (currentHostId.current !== hostId) return;
-        // Any inactive/missing saved location -> fill in none of the three.
-        const location = prefs?.siteId && prefs.locationActive
-          ? { siteId: prefs.siteId, buildingId: prefs.buildingId ?? "", floorId: prefs.floorId ?? "" }
-          : { siteId: "", buildingId: "", floorId: "" };
-        autoFilledLocation.current = location.siteId ? location : null;
-        updateVisitDetails(location);
+      .then(async (prefs) => {
+        if (!prefs?.siteId) return;
+        const siteList = await fetchSites();
+        if (!siteList.some((s) => s.id === prefs.siteId)) return;
+
+        const fill: Partial<VisitDetails> = { siteId: prefs.siteId };
+        if (prefs.buildingId) {
+          const buildingList = await fetchBuildings(prefs.siteId);
+          if (buildingList.some((b) => b.id === prefs.buildingId)) {
+            fill.buildingId = prefs.buildingId;
+            if (prefs.floorId) {
+              const floorList = await fetchFloors(prefs.buildingId);
+              if (floorList.some((f) => f.id === prefs.floorId)) fill.floorId = prefs.floorId;
+            }
+          }
+        }
+        updateVisitDetails(fill);
       })
-      .catch(() => {});
+      .catch(() => { });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visitDetails.hostEmployee?.id, bookingType, editVisitId, updateVisitDetails]);
 
@@ -595,14 +606,14 @@ export default function BookForSomeonePage() {
                         ? (step === 4
                           ? () => setFormState((prev) => ({ ...prev, step: 2 }))
                           : () => {
-                              // Return to wherever the user came from (admin bookings
-                              // or my bookings); fall back if opened directly.
-                              if (window.history.length > 1) {
-                                router.back();
-                              } else {
-                                router.push(isAdminFlow ? "/admin/bookings" : "/mybookings?tab=bookedForSomeone");
-                              }
-                            })
+                            // Return to wherever the user came from (admin bookings
+                            // or my bookings); fall back if opened directly.
+                            if (window.history.length > 1) {
+                              router.back();
+                            } else {
+                              router.push(isAdminFlow ? "/admin/bookings" : "/mybookings?tab=bookedForSomeone");
+                            }
+                          })
                         : step > 1
                           ? goBack
                           : undefined

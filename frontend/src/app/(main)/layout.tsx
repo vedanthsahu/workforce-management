@@ -36,6 +36,14 @@ function SidebarSkeleton() {
     </div>
   );
 }
+const GUARDED_PREFIXES = [
+  "/admin",
+  "/front_office",
+  "/mybookings",
+  "/find",
+  "/book-for-someone",
+];
+
 export default function MainLayout({
   children,
 }: {
@@ -51,7 +59,26 @@ export default function MainLayout({
     (!pathname.startsWith("/admin") ||
       user?.role === "TENANT_ADMIN") &&
     (!pathname.startsWith("/front_office") ||
-      user?.role === "FRONT_OFFICE");
+      user?.role === "FRONT_OFFICE") &&
+    // The admin / front-office menus have no "My bookings" entry (role-based in
+    // AppSidebar), and admins hold booking:view_own anyway, so check the role too.
+    (!pathname.startsWith("/mybookings") ||
+      (user?.role !== "TENANT_ADMIN" &&
+        user?.role !== "FRONT_OFFICE" &&
+        !!user?.permissions?.includes("booking:view_own"))) &&
+    // Same permission the sidebar uses to show the "Find teammates" link.
+    (!pathname.startsWith("/find") ||
+      !!user?.permissions?.includes("teammate:view")) &&
+    // Same permissions the sidebar uses to show the "Book for someone" link.
+    (!pathname.startsWith("/book-for-someone") ||
+      !!user?.permissions?.some(
+        (p) => p === "booking:book_for_employee" || p === "booking:book_for_guest",
+      ));
+
+  // Routes gated by roleAllowed above. Their content is held back until the user
+  // is known, so a blocked user never sees the page (or fires its requests)
+  // before being redirected.
+  const guardedPath = GUARDED_PREFIXES.some((p) => pathname.startsWith(p));
 
   useEffect(() => {
     if (isLoading) return;
@@ -151,7 +178,7 @@ export default function MainLayout({
             </header>
           )}
 
-          {children}
+          {isLoading && guardedPath ? null : children}
         </div>
         {!showSidebarSkeleton &&
         user?.role?.toUpperCase() === "EMPLOYEE" &&

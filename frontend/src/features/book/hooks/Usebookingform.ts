@@ -22,8 +22,13 @@ import {
   modifyGuestBooking,
   extractApiErrorMessage,
   fetchBuildings,
+  fetchBuildingStatus,
+  diagnoseSiteUnbookable,
+  diagnoseBuildingUnbookable,
+  type UnbookableReason,
   fetchEmployeeWorkPreferences,
   fetchFloors,
+  fetchFloorStatus,
   fetchMyWorkPreferences,
   fetchPreferences,
   fetchSeatsWithAvailability,
@@ -103,6 +108,34 @@ function buildUrl(
   if (guestParams?.endTime) params.set("endTime", guestParams.endTime);
   if (guestParams?.notes) params.set("notes", guestParams.notes);
   return `/book?${params.toString()}`;
+}
+
+// Who an unavailable office/building/floor banner is talking about. `isSaved`
+// is true when the id is the saved work preference's own (not just something
+// picked or passed in a link). Booking for an employee names them; a guest
+// booking or a picked location says "selected"; self-booking keeps `selfPrefix`.
+function describeLocationOwner(
+  kind: "office" | "building" | "floor",
+  isSaved: boolean,
+  selfPrefix: string,
+  ctx: { bookedForUserId: string | null; bookingForName: string | null; isBookingForSomeone: boolean },
+): string {
+  if (ctx.bookedForUserId && isSaved) {
+    return `${ctx.bookingForName ?? "This user"}'s preferred ${kind}`;
+  }
+  if (ctx.isBookingForSomeone) return `The selected ${kind}`;
+  return selfPrefix;
+}
+
+// Why a location can't be booked, as the clause that follows its owner phrase
+// ("<owner> has no floor with a published layout, so it can't be booked.").
+function unbookableReasonText(reason: UnbookableReason, kind: "office" | "building"): string {
+  switch (reason) {
+    case "NO_ACTIVE_BUILDING": return "has no active building";
+    case "NO_ACTIVE_FLOOR":    return kind === "office" ? "has no active floor in any of its buildings" : "has no active floor";
+    case "NO_PUBLISHED_LAYOUT": return "has no floor with a published layout";
+    default:                   return kind === "office" ? "has no buildings or floors available for booking" : "has no floors available for booking";
+  }
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -217,13 +250,15 @@ export function useBookingForm() {
   }));
 
   const [sites, setSites] = useState<Site[]>([]);
-  // The id of a site that's currently filled into the form (from a saved
-  // preference/prefill) but confirmed INACTIVE — kept separate from `sites`
-  // itself so the office select can keep *displaying* this office's name
-  // (clearing the selection to blank alongside "this office is inactive"
-  // told the user nothing about which office that was) while still being
-  // excluded from the list of choices offered when the dropdown is opened.
+  // The saved/prefilled office, building and floor that are confirmed unusable
+  // (inactive, or with nothing bookable under them). They stay filled in their
+  // fields so the user can see what was saved -- shown greyed out and not
+  // selectable (see Bookaseatpage.tsx) -- with a banner saying why. Kept apart
+  // from `sites`/`buildings`/`floors` so those lists still hold only real,
+  // bookable entries plus the stand-ins needed to display the saved value.
   const [inactiveSiteId, setInactiveSiteId] = useState<string | null>(null);
+  const [unavailableBuildingId, setUnavailableBuildingId] = useState<string | null>(null);
+  const [unavailableFloorId, setUnavailableFloorId] = useState<string | null>(null);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [floors, setFloors] = useState<Floor[]>([]);
   const [seats, setSeats] = useState<Seat[]>([]);
@@ -371,7 +406,7 @@ export function useBookingForm() {
   // ── Auto-fill office/building/floor/amenities from saved preferences ─────
   // Self-booking: GET /dashboard/me, on a fresh visit or once the form's
   // location fields are actually empty (see the f.siteId check below).
-  // Facilitator booking for an employee: GET /dashboard/employee/{id}, using
+  // Facilitator booking for an employee: GET /preferences/{id}, using
   // whoever bookedForUserId points at — that flow always carries a `step`/
   // `bookedForUserId` param (so hasAnyParam is always true for it) but never
   // a siteId of its own, so it must still get the location prefill.
@@ -460,16 +495,35 @@ export function useBookingForm() {
   // entries injected below, so it can't be used on its own to tell "genuinely
   // active" apart from "we made up a placeholder for this id".
   const realSiteIdsRef = useRef<Set<string>>(new Set());
+  // `loadingSites` starts false, so before the fetch below has even begun
+  // `realSiteIdsRef` is still empty and every selected office looks "missing".
+  // The saved-preference check further down waits for the fetch to settle
+  // (sitesSettled), and only treats a missing office as unbookable if it
+  // actually succeeded (sitesFetchedOkRef) -- a failed fetch proves nothing.
+  const sitesFetchedOkRef = useRef(false);
+  const [sitesSettled, setSitesSettled] = useState(false);
+  // Same for buildings and floors: the ids the real (bookable/ACTIVE) fetch
+  // returned, and which office/building those lists belong to. `null` while
+  // loading or after a failed fetch, so "not in the list" is only trusted once
+  // the list has genuinely loaded for the current office/building.
+  const realBuildingIdsRef = useRef<Set<string>>(new Set());
+  const [buildingsLoadedFor, setBuildingsLoadedFor] = useState<string | null>(null);
+  const realFloorIdsRef = useRef<Set<string>>(new Set());
+  const [floorsLoadedFor, setFloorsLoadedFor] = useState<string | null>(null);
 
   useEffect(() => {
     setLoadingSites(true);
     fetchSites()
       .then((data) => {
         realSiteIdsRef.current = new Set(data.map((s) => s.id));
+        sitesFetchedOkRef.current = true;
         setSites(data);
       })
       .catch((e) => setError(e.message))
-      .finally(() => setLoadingSites(false));
+      .finally(() => {
+        setLoadingSites(false);
+        setSitesSettled(true);
+      });
   }, []);
 
   useEffect(() => {
@@ -490,25 +544,45 @@ export function useBookingForm() {
   // `form.siteId` changes again, so a late response is simply discarded
   // instead of clobbering whatever the current site actually resolved to.
   useEffect(() => {
-    if (!form.siteId) { setBuildings([]); setFloors([]); return; }
+    setBuildingsLoadedFor(null);
+    realBuildingIdsRef.current = new Set();
+    // Also switch the loading flag off here: when the office is cleared while
+    // a fetch is in flight, that fetch's own `.finally` is cancelled below and
+    // would otherwise leave the Building field stuck on "Loading…".
+    if (!form.siteId) { setBuildings([]); setFloors([]); setLoadingBuildings(false); return; }
     let cancelled = false;
+    const siteIdForFetch = form.siteId;
     setBuildings([]);
     setFloors([]);
     setLoadingBuildings(true);
-    fetchBuildings(form.siteId)
-      .then((data) => { if (!cancelled) setBuildings(data); })
+    fetchBuildings(siteIdForFetch)
+      .then((data) => {
+        if (cancelled) return;
+        realBuildingIdsRef.current = new Set(data.map((b) => b.id));
+        setBuildings(data);
+        setBuildingsLoadedFor(siteIdForFetch);
+      })
       .catch((e) => { if (!cancelled) setError(e.message); })
       .finally(() => { if (!cancelled) setLoadingBuildings(false); });
     return () => { cancelled = true; };
   }, [form.siteId]);
 
   useEffect(() => {
-    if (!form.buildingId) { setFloors([]); return; }
+    setFloorsLoadedFor(null);
+    realFloorIdsRef.current = new Set();
+    // Same reasoning as the buildings effect: don't leave "Loading…" stuck.
+    if (!form.buildingId) { setFloors([]); setLoadingFloors(false); return; }
     let cancelled = false;
+    const buildingIdForFetch = form.buildingId;
     setFloors([]);
     setLoadingFloors(true);
-    fetchFloors(form.buildingId)
-      .then((data) => { if (!cancelled) setFloors(data); })
+    fetchFloors(buildingIdForFetch)
+      .then((data) => {
+        if (cancelled) return;
+        realFloorIdsRef.current = new Set(data.map((f) => f.id));
+        setFloors(data);
+        setFloorsLoadedFor(buildingIdForFetch);
+      })
       .catch((e) => { if (!cancelled) setError(e.message); })
       .finally(() => { if (!cancelled) setLoadingFloors(false); });
     return () => { cancelled = true; };
@@ -531,7 +605,7 @@ export function useBookingForm() {
   // again and would otherwise re-trigger the same check indefinitely).
   const checkedSiteIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (loadingSites || !form.siteId) return;
+    if (loadingSites || !sitesSettled || !form.siteId) return;
     // realSiteIdsRef (not `sites`) is the source of truth for "genuinely in
     // the ACTIVE list" — `sites` also holds synthetic entries this same
     // effect injects below, so checking `sites` itself would immediately
@@ -545,7 +619,10 @@ export function useBookingForm() {
     // Only label it from the saved preference if this missing id IS that
     // preference's own site -- otherwise some other site that's merely
     // missing/inactive would get mislabeled with an unrelated saved name.
-    const siteName = missingSiteId === savedPreferenceNames.siteId ? savedPreferenceNames.siteName : null;
+    const isSavedSite = missingSiteId === savedPreferenceNames.siteId;
+    const siteName = isSavedSite ? savedPreferenceNames.siteName : null;
+    const officeOwner = describeLocationOwner("office", isSavedSite, isSavedSite ? "Your saved office" : "The selected office", { bookedForUserId, bookingForName, isBookingForSomeone });
+    const officeLabel = siteName ? ` (${siteName})` : "";
     const injectPlaceholder = () => {
       if (!siteName) return;
       setSites((prev) =>
@@ -554,21 +631,51 @@ export function useBookingForm() {
           : [...prev, { id: missingSiteId, name: siteName, city: "", country: "", timezone: "" }]
       );
     };
+    // An unusable office keeps the saved office, building and floor in their
+    // fields (so the user sees what was saved) but flags all three, so they
+    // look and behave the same: greyed out, not selectable, with the banner
+    // explaining why.
+    const flagUnusableOffice = () => {
+      injectPlaceholder();
+      setInactiveSiteId(missingSiteId);
+      if (form.buildingId) setUnavailableBuildingId(form.buildingId);
+      if (form.floorId) setUnavailableFloorId(form.floorId);
+    };
 
     fetchSiteStatus(missingSiteId)
       .then((siteStatus) => {
         if (siteStatus === "INACTIVE") {
-          // Keep the selection and inject the placeholder as usual — so the
-          // office field still shows this office's name, giving the message
-          // below something concrete to refer to — but flag its id so the
-          // dropdown can hide it from the list of choices without clearing
-          // the field, matching how the select is rendered in
-          // Bookaseatpage.tsx (this option gets the `hidden` attribute
-          // there, which removes it from the opened list while still
-          // letting a `<select>` display its label as the current value).
-          injectPlaceholder();
-          setInactiveSiteId(missingSiteId);
-          setError("This office is currently inactive and unavailable for booking. Please select a different office.");
+          flagUnusableOffice();
+          setError(`${officeOwner}${officeLabel} is currently inactive and unavailable for booking. Please select a different office.`);
+          return;
+        }
+        if (siteStatus === "ACTIVE" && !isModifyMode && sitesFetchedOkRef.current) {
+          // Active, yet missing from the bookable list: the list is fetched
+          // with bookable_only, so this office has no active building/floor
+          // and there is nothing to book there. Treat it like an inactive
+          // office: keep it in the field, flagged, and explain why. Skipped in
+          // modify mode, where the booking being edited already points here.
+          flagUnusableOffice();
+          const savedBuildingId = form.buildingId;
+          // Say exactly why (no active building / no active floor / no floor
+          // with a published layout) instead of a generic "nothing available".
+          const officeMessage = (reason: UnbookableReason) =>
+            `${officeOwner}${officeLabel} ${unbookableReasonText(reason, "office")}, so it can't be booked. Please select a different office.`;
+          const diagnosis = diagnoseSiteUnbookable(missingSiteId).catch((): UnbookableReason => "UNKNOWN");
+          if (savedBuildingId) {
+            // A saved building that is itself the reason (typically an office
+            // with a single, now-inactive building): name it in the banner.
+            Promise.all([fetchBuildingStatus(missingSiteId, savedBuildingId).catch(() => null), diagnosis])
+              .then(([info, reason]) =>
+                setError(
+                  info?.status === "INACTIVE"
+                    ? `${describeLocationOwner("building", savedBuildingId === savedPreferenceNames.buildingId, "Your saved building", { bookedForUserId, bookingForName, isBookingForSomeone })} (${info.name}) is currently inactive, and this office has no other building available for booking. Please select a different office.`
+                    : officeMessage(reason),
+                ),
+              );
+          } else {
+            diagnosis.then((reason) => setError(officeMessage(reason)));
+          }
           return;
         }
         // Not confirmed inactive (deleted, a transient lookup failure, or
@@ -578,7 +685,7 @@ export function useBookingForm() {
         injectPlaceholder();
       })
       .catch(injectPlaceholder);
-  }, [loadingSites, form.siteId, savedPreferenceNames.siteId, savedPreferenceNames.siteName]);
+  }, [loadingSites, sitesSettled, form.siteId, form.buildingId, form.floorId, isModifyMode, savedPreferenceNames.siteId, savedPreferenceNames.siteName, savedPreferenceNames.buildingId, bookedForUserId, bookingForName, isBookingForSomeone]);
 
   // Same "only label it if this IS the saved preference's own id" guard as
   // the site effect above -- without it, changing Building/Floor away from
@@ -621,6 +728,92 @@ export function useBookingForm() {
       ];
     });
   }, [floors, loadingFloors, form.floorId, form.buildingId, savedPreferenceNames.floorId, savedPreferenceNames.floorName]);
+
+  // ── Saved building / floor that can no longer be booked ──────────────────
+  // The office check above covers an office with nothing bookable. These cover
+  // an office that IS bookable but whose saved building (inactive, or with no
+  // active floor) or saved floor (inactive) isn't. Like the office case: keep
+  // it (leave the field on its placeholder) and say why, naming what it was --
+  // never clear it silently. Each waits until the
+  // real list has loaded for the current office/building (a list that hasn't
+  // loaded yet proves nothing), and is skipped in modify mode, where the
+  // booking being edited already points at it.
+  const checkedBuildingKeysRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (isModifyMode || loadingBuildings || !form.siteId || !form.buildingId) return;
+    if (buildingsLoadedFor === null || buildingsLoadedFor !== form.siteId) return;
+    // An office that isn't itself bookable is handled by the office check.
+    if (!sitesSettled || !realSiteIdsRef.current.has(form.siteId)) return;
+    if (realBuildingIdsRef.current.has(form.buildingId)) return;
+
+    const key = `${form.siteId}:${form.buildingId}`;
+    if (checkedBuildingKeysRef.current.has(key)) return;
+    checkedBuildingKeysRef.current.add(key);
+
+    const siteId = form.siteId;
+    const buildingId = form.buildingId;
+    // Keep the building in its field, flagged -- and its floor with it, so
+    // the two look and behave the same (greyed out, not selectable).
+    setUnavailableBuildingId(buildingId);
+    if (form.floorId) setUnavailableFloorId(form.floorId);
+    const buildingOwner = describeLocationOwner("building", buildingId === savedPreferenceNames.buildingId, buildingId === savedPreferenceNames.buildingId ? "Your saved building" : "The selected building", { bookedForUserId, bookingForName, isBookingForSomeone });
+    const fallback = `${buildingOwner} is no longer available for booking. Please select a different building.`;
+    fetchBuildingStatus(siteId, buildingId)
+      .then((info) => {
+        if (!info) { setError(fallback); return; }
+        // A link (as opposed to a saved preference) carries no name, so make
+        // sure the field has an option to display.
+        setBuildings((prev) =>
+          prev.some((b) => b.id === buildingId) ? prev : [...prev, { id: buildingId, siteId, name: info.name }],
+        );
+        if (info.status === "INACTIVE") {
+          setError(`${buildingOwner} (${info.name}) is currently inactive. Please select a different building.`);
+          return;
+        }
+        // Active but not bookable: say whether it has no active floor or no
+        // floor with a published layout.
+        return diagnoseBuildingUnbookable(buildingId)
+          .catch((): UnbookableReason => "UNKNOWN")
+          .then((reason) =>
+            setError(`${buildingOwner} (${info.name}) ${unbookableReasonText(reason, "building")}, so it can't be booked. Please select a different building.`),
+          );
+      })
+      .catch(() => setError(fallback));
+  }, [isModifyMode, loadingBuildings, buildingsLoadedFor, sitesSettled, form.siteId, form.buildingId, form.floorId, savedPreferenceNames.buildingId, bookedForUserId, bookingForName, isBookingForSomeone]);
+
+  const checkedFloorKeysRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (isModifyMode || loadingFloors || !form.buildingId || !form.floorId) return;
+    if (floorsLoadedFor === null || floorsLoadedFor !== form.buildingId) return;
+    // Only when the office and building themselves are fine -- otherwise their
+    // own banner already explains it.
+    if (!sitesSettled || !realSiteIdsRef.current.has(form.siteId)) return;
+    if (buildingsLoadedFor !== form.siteId || !realBuildingIdsRef.current.has(form.buildingId)) return;
+    if (realFloorIdsRef.current.has(form.floorId)) return;
+
+    const key = `${form.buildingId}:${form.floorId}`;
+    if (checkedFloorKeysRef.current.has(key)) return;
+    checkedFloorKeysRef.current.add(key);
+
+    const buildingId = form.buildingId;
+    const floorId = form.floorId;
+    setUnavailableFloorId(floorId);
+    const floorOwner = describeLocationOwner("floor", floorId === savedPreferenceNames.floorId, floorId === savedPreferenceNames.floorId ? "Your saved floor" : "The selected floor", { bookedForUserId, bookingForName, isBookingForSomeone });
+    const fallback = `${floorOwner} is no longer available for booking. Please select a different floor.`;
+    fetchFloorStatus(buildingId, floorId)
+      .then((info) => {
+        if (!info) { setError(fallback); return; }
+        setFloors((prev) =>
+          prev.some((f) => f.id === floorId) ? prev : [...prev, { id: floorId, buildingId, name: info.name, number: 0 }],
+        );
+        setError(
+          String(info.status ?? "").toUpperCase() === "INACTIVE"
+            ? `${floorOwner} (${info.name}) is currently inactive. Please select a different floor.`
+            : `${floorOwner} (${info.name}) has no published floor layout, so it can't be booked. Please select a different floor.`,
+        );
+      })
+      .catch(() => setError(fallback));
+  }, [isModifyMode, loadingFloors, floorsLoadedFor, buildingsLoadedFor, sitesSettled, form.siteId, form.buildingId, form.floorId, savedPreferenceNames.floorId, bookedForUserId, bookingForName, isBookingForSomeone]);
 
   // ── Derive floor layout URL from the selected floor ───────────────────────
 
@@ -895,8 +1088,16 @@ export function useBookingForm() {
 
   // ── Step 1 → Step 2 ───────────────────────────────────────────────────────
 
+  // The selected office/building/floor is one we've flagged as unusable and
+  // shown a banner for. It stays visible in its field, but the user has to
+  // pick something else before searching.
+  const selectionUnavailable =
+    (!!form.siteId && form.siteId === inactiveSiteId) ||
+    (!!form.buildingId && form.buildingId === unavailableBuildingId) ||
+    (!!form.floorId && form.floorId === unavailableFloorId);
+
   const findAvailableSeats = useCallback(async () => {
-    if (!form.floorId || !form.fromDate || !form.toDate) return;
+    if (!form.floorId || !form.fromDate || !form.toDate || selectionUnavailable) return;
     // No local "is this office inactive" guard here on purpose — the
     // backend's own availability check (get_available_seats_by_range in
     // booking_service.py) now rejects an inactive office with its own
@@ -939,7 +1140,7 @@ export function useBookingForm() {
     } finally {
       setLoadingSeats(false);
     }
-  }, [form, resolveAmenityIds, navigateTo, searchParams, modifyBookingId, bookedForUserId, guestId, isGuestBooking]);
+  }, [form, selectionUnavailable, resolveAmenityIds, navigateTo, searchParams, modifyBookingId, bookedForUserId, guestId, isGuestBooking]);
 
   // ── Step 2: select seat ───────────────────────────────────────────────────
 
@@ -1112,7 +1313,8 @@ export function useBookingForm() {
     !!form.buildingId &&
     !!form.floorId &&
     !!form.fromDate &&
-    !!form.toDate;
+    !!form.toDate &&
+    !selectionUnavailable;
 
   // Only meaningful in modify mode — true once the seat, date, or location
   // differs from the original booking. Gates the review/confirm actions so
@@ -1131,6 +1333,8 @@ export function useBookingForm() {
     form,
     sites,
     inactiveSiteId,
+    unavailableBuildingId,
+    unavailableFloorId,
     buildings,
     floors,
     seats,
