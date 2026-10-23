@@ -13,7 +13,6 @@ from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import RedirectResponse, Response
 from psycopg2.extensions import connection as PGConnection
 
-from backend.api.deps import get_current_user
 from backend.core.app_logging import LOGGER_NAME
 from backend.core.audit_actions import USER_LOGIN
 from backend.core.config import get_settings
@@ -31,7 +30,6 @@ from backend.core.sso import (
     build_gateway_sso_url,
     decode_gateway_token,
     exchange_code_for_token,
-    fetch_graph_groups,
     fetch_graph_manager,
     fetch_graph_me,
     verify_id_token,
@@ -301,15 +299,6 @@ def auth_callback(
     _clear_state_cookie(response)
     debug("=== auth_callback complete, redirecting ===")
     return response
-@router.get("/graph/me", response_model=None)
-def graph_me(
-    request: Request,
-    _: Annotated[dict[str, Any], Depends(get_current_user)],
-):
-    try:
-        return fetch_graph_me(_require_graph_access_token(request))
-    except GraphAPIError as exc:
-        return _error_response(exc.status_code, exc.code, exc.message, exc.details)
 
 
 @router.get("/auth/sso-gateway-callback", response_model=None)
@@ -462,28 +451,6 @@ def auth_sso_gateway_callback(
     )
     debug("=== gateway callback complete, redirecting ===")
     return response
-
-
-@router.get("/graph/groups", response_model=None)
-def graph_groups(
-    request: Request,
-    _: Annotated[dict[str, Any], Depends(get_current_user)],
-):
-    try:
-        return fetch_graph_groups(_require_graph_access_token(request))
-    except GraphAPIError as exc:
-        return _error_response(exc.status_code, exc.code, exc.message, exc.details)
-
-
-@router.get("/graph/manager", response_model=None)
-def graph_manager(
-    request: Request,
-    _: Annotated[dict[str, Any], Depends(get_current_user)],
-):
-    try:
-        return fetch_graph_manager(_require_graph_access_token(request))
-    except GraphAPIError as exc:
-        return _error_response(exc.status_code, exc.code, exc.message, exc.details)
 
 
 def _provision_first_time_user(
@@ -718,17 +685,6 @@ def _resolve_manager_subject_identifier(graph_manager: dict[str, Any]) -> str | 
     if manager_id and len(manager_id) > 150:
         raise ValueError("Manager Graph id exceeds schema length.")
     return manager_id or None
-
-
-def _require_graph_access_token(request: Request) -> str:
-    access_token = str(request.cookies.get(SESSION_TOKEN_COOKIE_NAME) or "").strip()
-    if not access_token:
-        raise GraphAPIError(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            code="missing_graph_session",
-            message="Microsoft Graph access token is missing from the current session.",
-        )
-    return access_token
 
 
 def _set_auth_cookies(response: Response, auth_tokens: AuthTokens) -> None:

@@ -25,7 +25,6 @@ from backend.core.audit_actions import (
     FLOOR_LAYOUT_SCHEDULE_CANCELLED,
     FLOOR_LAYOUT_SCHEDULED,
 )
-from backend.core.config import get_settings
 from backend.core.enums import LayoutStatus
 from backend.core.error_diagnostics import print_error_diagnostic
 from backend.core.storage import upload_svg_to_s3
@@ -91,7 +90,6 @@ LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS: bool = True
 # this goes anywhere near production. Nothing else about the code changes
 # between the two.
 LAYOUT_VISIBILITY_INTERVAL_UNIT: str = "days"
-from backend.repositories.user_repository import fetch_admin_notification_emails
 from backend.schemas.floor_layout import (
     CreateFloorLayoutRequest,
     FloorLayoutResponse,
@@ -101,6 +99,7 @@ from backend.schemas.floor_layout import (
 from backend.services.notification_service import (
     format_notification_value,
     queue_floor_layout_uploaded_notification,
+    resolve_admin_notification_recipients,
 )
 
 logger = logging.getLogger(f"{LOGGER_NAME}.floor_layouts")
@@ -1212,7 +1211,7 @@ def _queue_floor_layout_uploaded_email(
     try:
         queue_floor_layout_uploaded_notification(
             background_tasks,
-            to_emails=_resolve_admin_notification_recipients(
+            to_emails=resolve_admin_notification_recipients(
                 conn,
                 tenant_id=tenant_id,
             ),
@@ -1224,41 +1223,6 @@ def _queue_floor_layout_uploaded_email(
             layout.get("layout_id"),
             tenant_id,
         )
-
-
-def _resolve_admin_notification_recipients(
-    conn: PGConnection,
-    *,
-    tenant_id: str,
-) -> list[str]:
-    settings = get_settings()
-    recipients = list(settings.notification_admin_emails)
-
-    try:
-        recipients.extend(
-            fetch_admin_notification_emails(
-                conn,
-                tenant_id=tenant_id,
-            )
-        )
-    except psycopg2.Error:
-        logger.exception(
-            "notification.recipient_lookup_failed event=floor_layout_uploaded tenant_id=%s",
-            tenant_id,
-        )
-
-    normalized: list[str] = []
-    seen: set[str] = set()
-    for email in recipients:
-        candidate = str(email or "").strip()
-        if not candidate:
-            continue
-        key = candidate.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        normalized.append(candidate)
-    return normalized
 
 
 def _floor_layout_email_context(layout: dict[str, Any]) -> dict[str, str]:

@@ -1790,45 +1790,6 @@ def fetch_seat_configuration(
     return dict(row) if row else None
 
 
-def update_seat_configuration(
-    conn: PGConnection,
-    *,
-    tenant_id: str,
-    seat_id: str,
-    updates: dict[str, Any],
-) -> dict[str, Any] | None:
-    """Update soft seat configuration flags only."""
-    assignments: list[str] = []
-    params: list[Any] = []
-    for field_name, value in updates.items():
-        assignments.append(f"{field_name} = %s")
-        params.append(value)
-    assignments.append("updated_at = NOW()")
-    params.extend([tenant_id, seat_id])
-
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            f"""
-            UPDATE seats
-            SET {", ".join(assignments)}
-            WHERE tenant_id = %s
-              AND id = %s
-            RETURNING
-                id::text AS seat_id,
-                site_id::text AS site_id,
-                building_id::text AS building_id,
-                floor_id::text AS floor_id,
-                layout_id::text AS layout_id,
-                seat_code,
-                status,
-                is_bookable
-            """,
-            params,
-        )
-        row = cur.fetchone()
-    return dict(row) if row else None
-
-
 def _apply_status_filter(
     query: str,
     params: list[Any],

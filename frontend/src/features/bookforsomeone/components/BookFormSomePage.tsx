@@ -138,8 +138,8 @@ export default function BookForSomeonePage() {
   }, [editVisitId, searchParams, setFormState]);
 
   // Auto-populate Office/Building/Floor from the selected host employee's
-  // saved work preferences (GET /dashboard/employee/{id} — same endpoint the
-  // seat-booking flow already uses to prefill an employee's own booking).
+  // saved work preferences (GET /preferences/{id} — the facilitator/admin
+  // delegation path for prefilling someone else's booking).
   // A guest has no preferences of its own, so the host's location stands in
   // for it — this covers the Guest path for both Admin and Facilitator,
   // since they share this same wizard. Only fills in when the fields are
