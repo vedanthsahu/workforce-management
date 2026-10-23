@@ -404,13 +404,11 @@ const BookASeatPage: React.FC = () => {
                         settling on the real (possibly inactive) one. */}
                     <option value="" disabled hidden>{loadingSites ? "Loading…" : "Select office"}</option>
                     {officeOptions.map((s) => (
-                      // An inactive office stays as the current value (so the
-                      // field still shows its name, matching the "this
-                      // office is inactive" message above it) but is hidden
-                      // from the dropdown's own list of choices — `hidden`
-                      // on the currently-selected <option> keeps it out of
-                      // the opened list while a <select> still displays a
-                      // hidden option's label as its current value.
+                      // A saved office that can't be booked stays as the
+                      // current value (so the field shows what was saved, next
+                      // to the banner) but is hidden from the opened list of
+                      // choices -- the same treatment as the building and
+                      // floor below.
                       <option
                         key={s.id}
                         value={s.id}
@@ -433,9 +431,14 @@ const BookASeatPage: React.FC = () => {
                   >
                     <option value="" disabled hidden>{loadingBuildings ? "Loading…" : "Select building"}</option>
                     {buildings.map((b) => (
-                      // An unavailable saved building stays as the current value
-                      // (matching the banner above) but is hidden from the list.
-                      <option key={b.id} value={b.id} hidden={b.id === unavailableBuildingId} style={{ color: '#111827' }}>{b.name}</option>
+                      <option
+                        key={b.id}
+                        value={b.id}
+                        hidden={b.id === unavailableBuildingId}
+                        style={{ color: '#111827' }}
+                      >
+                        {b.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -450,8 +453,14 @@ const BookASeatPage: React.FC = () => {
                   >
                     <option value="" disabled hidden>{loadingFloors ? "Loading…" : "Select floor"}</option>
                     {floors.map((f) => (
-                      // Same for an unavailable saved floor.
-                      <option key={f.id} value={f.id} hidden={f.id === unavailableFloorId} style={{ color: '#111827' }}>{f.name}</option>
+                      <option
+                        key={f.id}
+                        value={f.id}
+                        hidden={f.id === unavailableFloorId}
+                        style={{ color: '#111827' }}
+                      >
+                        {f.name}
+                      </option>
                     ))}
                   </select>
                 </div>

@@ -996,6 +996,7 @@ def get_floors_by_building(
     limit: int | None = None,
     search: str | None = None,
     status_filter: str | None = None,
+    bookable_only: bool = False,
 ) -> list[FloorResponse]:
     """Return tenant-scoped floors, optionally narrowed to one building and/or site."""
     status_filter = _normalize_status_filter(status_filter)
@@ -1009,6 +1010,7 @@ def get_floors_by_building(
             limit=limit,
             search=search,
             status_filter=status_filter,
+            bookable_only=bookable_only,
         )
     except psycopg2.Error as exc:
         logger.exception("location.db_error")

@@ -168,13 +168,14 @@ function SkillTag({ label }: { label: string }) {
 
 // ─── Cascade Select ───────────────────────────────────────────────────────────
 
-type CascadeOption = { value: string; label: string; inactive?: boolean };
+type CascadeOption = { value: string; label: string; inactive?: boolean; pillLabel?: string };
 
-// Small amber pill shown after the name of an inactive office/building/floor.
-function InactivePill() {
+// Small amber pill shown after the name of an office/building/floor that can't
+// be booked: "Inactive", or a custom label such as "No layout".
+function InactivePill({ label = "Inactive" }: { label?: string }) {
   return (
     <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold leading-none text-amber-700">
-      Inactive
+      {label}
     </span>
   );
 }
@@ -230,7 +231,7 @@ function CascadeSelect({
           formatOptionLabel={(opt) => (
             <span className="flex items-center">
               <span className="truncate">{opt.label}</span>
-              {opt.inactive && <InactivePill />}
+              {(opt.inactive || opt.pillLabel) && <InactivePill label={opt.inactive ? "Inactive" : opt.pillLabel} />}
             </span>
           )}
           components={{ IndicatorSeparator: null, DropdownIndicator: CascadeChevron }}
@@ -754,7 +755,13 @@ function EditPreferencesDialog({
   const isInactive = (status: string | null | undefined) => String(status ?? "").toUpperCase() === "INACTIVE";
   const siteOptions: CascadeOption[]     = sites.map((s) => ({ value: s.site_id,     label: s.site_name,     inactive: isInactive(s.status) }));
   const buildingOptions: CascadeOption[] = buildings.map((b) => ({ value: b.building_id, label: b.building_name, inactive: isInactive(b.status) }));
-  const floorOptions: CascadeOption[]    = floors.map((f) => ({ value: f.floor_id,    label: f.floor_name,    inactive: isInactive(f.status) }));
+  // An active floor with no published layout can't be booked either, so flag it too.
+  const floorOptions: CascadeOption[]    = floors.map((f) => ({
+    value: f.floor_id,
+    label: f.floor_name,
+    inactive: isInactive(f.status),
+    pillLabel: !f.published_layout_exists ? "No layout" : undefined,
+  }));
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>

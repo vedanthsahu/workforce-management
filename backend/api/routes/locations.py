@@ -225,6 +225,7 @@ def floors_by_building(
     limit: Annotated[int | None, Query(ge=1, le=200)] = None,
     search: Annotated[str | None, Query()] = None,
     status_filter: Annotated[str | None, Query(alias="status")] = None,
+    bookable_only: Annotated[bool, Query()] = False,
 ) -> list[FloorResponse]:
 
     return get_floors_by_building(
@@ -235,6 +236,7 @@ def floors_by_building(
         limit=limit,
         search=search,
         status_filter=status_filter,
+        bookable_only=bookable_only,
     )
 
 
@@ -259,6 +261,7 @@ def floors_by_office(
     limit: Annotated[int | None, Query(ge=1, le=200)] = None,
     search: Annotated[str | None, Query()] = None,
     status_filter: Annotated[str | None, Query(alias="status")] = None,
+    bookable_only: Annotated[bool, Query()] = False,
 ) -> list[FloorResponse]:
     return get_floors_by_building(
         conn,
@@ -268,6 +271,7 @@ def floors_by_office(
         limit=limit,
         search=search,
         status_filter=status_filter,
+        bookable_only=bookable_only,
     )
 
 
@@ -292,6 +296,7 @@ def floors(
     limit: Annotated[int | None, Query(ge=1, le=200)] = None,
     search: Annotated[str | None, Query()] = None,
     status_filter: Annotated[str | None, Query(alias="status")] = None,
+    bookable_only: Annotated[bool, Query()] = False,
 ) -> list[FloorResponse]:
     """List floors for the tenant, optionally narrowed to one site and/or building."""
     return get_floors_by_building(
@@ -303,6 +308,7 @@ def floors(
         limit=limit,
         search=search,
         status_filter=status_filter,
+        bookable_only=bookable_only,
     )
 
 
