@@ -159,10 +159,13 @@ def fetch_user_work_preferences(
                 wp.preference_id::text AS preference_id,
                 wp.default_site_id::text AS site_id,
                 si.site_name,
+                si.status AS site_status,
                 wp.default_building_id::text AS building_id,
                 bu.building_name,
+                bu.status AS building_status,
                 wp.default_floor_id::text AS floor_id,
                 fl.floor_name,
+                fl.status AS floor_status,
                 wp.preferred_seat_type AS seat_type,
                 wp.created_at,
                 wp.updated_at

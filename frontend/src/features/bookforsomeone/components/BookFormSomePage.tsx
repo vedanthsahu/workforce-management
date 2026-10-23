@@ -142,29 +142,45 @@ export default function BookForSomeonePage() {
   // seat-booking flow already uses to prefill an employee's own booking).
   // A guest has no preferences of its own, so the host's location stands in
   // for it — this covers the Guest path for both Admin and Facilitator,
-  // since they share this same wizard. Only fills in when the fields are
-  // still blank, so it never clobbers a location already chosen (manually,
-  // or via editVisitId's own prefill above); re-fetches if a different host
-  // is picked while the fields are still blank.
+  // since they share this same wizard.
+  //
+  // The location follows the host: picking a different host replaces the
+  // location this effect filled in (or clears it if the new host's saved
+  // office/building/floor is missing or inactive, so the user picks manually).
+  // A location the user chose or edited by hand is never overwritten, nor is
+  // the one set by editVisitId's own prefill above.
   const hostPrefsAppliedForId = useRef<string | null>(null);
+  const autoFilledLocation = useRef<{ siteId: string; buildingId: string; floorId: string } | null>(null);
+  const currentHostId = useRef<string | undefined>(undefined);
+  currentHostId.current = visitDetails.hostEmployee?.id;
+
   useEffect(() => {
     const hostId = visitDetails.hostEmployee?.id;
     if (bookingType !== "visitor" || editVisitId || !hostId) return;
     if (hostPrefsAppliedForId.current === hostId) return;
-    if (visitDetails.siteId || visitDetails.buildingId || visitDetails.floorId) return;
+
+    const { siteId, buildingId, floorId } = visitDetails;
+    const filled = autoFilledLocation.current;
+    const isBlank = !siteId && !buildingId && !floorId;
+    const isUntouchedAutoFill =
+      !!filled && siteId === filled.siteId && buildingId === filled.buildingId && floorId === filled.floorId;
+    if (!isBlank && !isUntouchedAutoFill) return;
 
     hostPrefsAppliedForId.current = hostId;
     fetchEmployeeWorkPreferences(hostId)
       .then((prefs) => {
-        if (!prefs?.siteId) return;
-        updateVisitDetails({
-          siteId: prefs.siteId,
-          buildingId: prefs.buildingId ?? "",
-          floorId: prefs.floorId ?? "",
-        });
+        // The host may have changed again while this was in flight.
+        if (currentHostId.current !== hostId) return;
+        // Any inactive/missing saved location -> fill in none of the three.
+        const location = prefs?.siteId && prefs.locationActive
+          ? { siteId: prefs.siteId, buildingId: prefs.buildingId ?? "", floorId: prefs.floorId ?? "" }
+          : { siteId: "", buildingId: "", floorId: "" };
+        autoFilledLocation.current = location.siteId ? location : null;
+        updateVisitDetails(location);
       })
       .catch(() => {});
-  }, [visitDetails.hostEmployee?.id, bookingType, editVisitId, visitDetails.siteId, visitDetails.buildingId, visitDetails.floorId, updateVisitDetails]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visitDetails.hostEmployee?.id, bookingType, editVisitId, updateVisitDetails]);
 
   // Auto-select the only building/floor when there's nothing else to choose
   // from — same "don't make them pick between one thing" pattern used in
@@ -184,6 +200,19 @@ export default function BookForSomeonePage() {
     if (buildings[0].siteId !== visitDetails.siteId) return;
     updateVisitDetails({ buildingId: buildings[0].id, floorId: "" });
   }, [visitDetails.buildingId, visitDetails.siteId, isLoadingBuildings, buildings, updateVisitDetails]);
+
+  // The host-prefs prefill above can set a floor id that isn't in the ACTIVE
+  // floors list (e.g. the host's saved floor was deactivated since). A native
+  // <select> with a value matching no option silently displays its first
+  // option, so the form looks fine while the stale (inactive) id is what gets
+  // submitted -- the backend then rejects it as "location inactive". Drop any
+  // floor that isn't one of the loaded active floors for the current building.
+  useEffect(() => {
+    if (editVisitId || !visitDetails.floorId || isLoadingFloors || floors.length === 0) return;
+    if (floors[0].buildingId !== visitDetails.buildingId) return;
+    if (floors.some((f) => f.id === visitDetails.floorId)) return;
+    updateVisitDetails({ floorId: "" });
+  }, [editVisitId, visitDetails.floorId, visitDetails.buildingId, isLoadingFloors, floors, updateVisitDetails]);
 
   useEffect(() => {
     if (visitDetails.floorId || isLoadingFloors || floors.length !== 1) return;

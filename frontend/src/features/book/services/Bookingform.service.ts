@@ -470,10 +470,13 @@ export async function fetchPreferences(): Promise<Preference[]> {
 interface RawWorkPreferences {
   site_id?: string | null;
   site_name?: string | null;
+  site_status?: string | null;
   building_id?: string | null;
   building_name?: string | null;
+  building_status?: string | null;
   floor_id?: string | null;
   floor_name?: string | null;
+  floor_status?: string | null;
   amenities?: { id: string }[];
 }
 
@@ -488,6 +491,8 @@ export interface MyWorkPreferences {
   buildingName: string | null;
   floorId: string | null;
   floorName: string | null;
+  // False when the saved office, building or floor has since been deactivated.
+  locationActive: boolean;
   amenityIds: string[];
 }
 
@@ -502,6 +507,9 @@ function parseWorkPreferences(data: RawDashboardMe): MyWorkPreferences | null {
     buildingName: wp.building_name ?? null,
     floorId: wp.floor_id ?? null,
     floorName: wp.floor_name ?? null,
+    locationActive: [wp.site_status, wp.building_status, wp.floor_status].every(
+      (status) => !status || status === "ACTIVE",
+    ),
     amenityIds: (wp.amenities ?? []).map((a) => a.id),
   };
 }

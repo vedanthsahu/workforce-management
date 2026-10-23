@@ -134,10 +134,13 @@ def get_my_preferences(
     return MyPreferencesResponse(
         site_id=work_preferences.get("site_id"),
         site_name=work_preferences.get("site_name"),
+        site_status=work_preferences.get("site_status"),
         building_id=work_preferences.get("building_id"),
         building_name=work_preferences.get("building_name"),
+        building_status=work_preferences.get("building_status"),
         floor_id=work_preferences.get("floor_id"),
         floor_name=work_preferences.get("floor_name"),
+        floor_status=work_preferences.get("floor_status"),
         seat_type=work_preferences.get("seat_type"),
         amenities=[AmenityResponse(**row) for row in amenities],
     )
@@ -335,6 +338,16 @@ def _validate_preference_location(
                     "message": "floorId does not belong to buildingId.",
                 },
             )
+
+    # Only an ACTIVE office, building and floor can be saved as a preference.
+    if any(row["status"] != "ACTIVE" for row in (site, building, floor)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "inactive_preference_location",
+                "message": "The office, building and floor must all be active.",
+            },
+        )
 
 
 def _validate_preferred_amenity_ids(

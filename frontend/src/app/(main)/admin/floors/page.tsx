@@ -193,7 +193,10 @@ function FloorsPage() {
             }
             onBuildingChange={handleTableBuildingChange}
             search={search}
-            setSearch={setSearch}
+            setSearch={(value) => {
+              setSearch(value);
+              setCurrentPage(1);
+            }}
           />
         </div>
 

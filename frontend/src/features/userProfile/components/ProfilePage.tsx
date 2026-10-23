@@ -164,13 +164,17 @@ function SkillTag({ label }: { label: string }) {
 // ─── Cascade Select ───────────────────────────────────────────────────────────
 
 function CascadeSelect({
-  label, value, onChange, options, disabled, loading, placeholder, disabledPlaceholder, required,
+  label, value, onChange, options, saved, disabled, loading, placeholder, disabledPlaceholder, required,
 }: {
   label:        string;
   required?:    boolean;
   value:        string;
   onChange:     (val: string) => void;
   options:      { value: string; label: string }[];
+  // The user's currently saved choice. If it is no longer one of `options`
+  // (e.g. it became inactive) it still shows in the closed field, but as a
+  // hidden option, so it never appears in the dropdown list.
+  saved?:       { value: string; label: string } | null;
   disabled?:    boolean;
   loading?:     boolean;
   placeholder?: string;
@@ -197,6 +201,9 @@ function CascadeSelect({
           className="w-full h-9 rounded-md border border-gray-200 bg-white pl-3 pr-8 text-[13px] text-gray-800 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {(loading || !value) && <option value="" disabled hidden>{shownPlaceholder}</option>}
+          {!loading && saved && saved.value === value && !options.some((o) => o.value === value) && (
+            <option value={saved.value} hidden>{saved.label}</option>
+          )}
           {!loading && options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
@@ -562,6 +569,8 @@ function EditPreferencesDialog({
     getSites()
       .then((data) => {
         setSites(data);
+        // Only ACTIVE offices are listed. A saved office that is no longer
+        // active stays in the field (see CascadeSelect `saved`), not the list.
         // Only one office -> pick it, unless a saved office is already set.
         if (data.length === 1) setSelectedSiteId((prev) => prev || data[0].site_id);
       })
@@ -611,6 +620,11 @@ function EditPreferencesDialog({
     return () => { active = false; };
   }, [selectedSiteId]);
 
+  // A floor can't outlive its building: no building -> no floor.
+  useEffect(() => {
+    if (!selectedBuildingId) setSelectedFloorId("");
+  }, [selectedBuildingId]);
+
   // Fetch the floor list for the selected building — same rule: no selection
   // resets here beyond dropping a floor that doesn't belong to this building.
   useEffect(() => {
@@ -622,9 +636,11 @@ function EditPreferencesDialog({
         if (!active) return;
         setFloors(data);
         setSelectedFloorId((prev) => {
-          // A floor id left over from a previous building/record must never
-          // survive -- drop it if it isn't one of this building's floors.
-          const kept = prev && data.some((f) => f.floor_id === prev) ? prev : "";
+          // A floor id left over from a previous building must never survive --
+          // drop it unless it is one of this building's floors or the user's
+          // own saved floor (which stays in the field even if now inactive).
+          const isSaved = prev === (preferences.preferredFloorId ?? "");
+          const kept = prev && (isSaved || data.some((f) => f.floor_id === prev)) ? prev : "";
           // Only one floor -> pick it.
           return kept || (data.length === 1 ? data[0].floor_id : "");
         });
@@ -646,8 +662,14 @@ function EditPreferencesDialog({
   };
 
   // All four are mandatory: office, building, floor and at least one amenity.
+  // The three locations must also be ACTIVE ones from the lists -- a saved
+  // choice that has since become inactive is shown but can't be re-saved.
+  const locationActive =
+    sites.some((s) => s.site_id === selectedSiteId) &&
+    buildings.some((b) => b.building_id === selectedBuildingId) &&
+    floors.some((f) => f.floor_id === selectedFloorId);
   const formComplete =
-    !!selectedSiteId && !!selectedBuildingId && !!selectedFloorId && selectedAmenityIds.length > 0;
+    locationActive && selectedAmenityIds.length > 0;
 
   // Save stays disabled on open and only enables once the user has changed
   // something -- re-saving the stored preferences unchanged is a no-op.
@@ -662,12 +684,12 @@ function EditPreferencesDialog({
 
   const canSave =
     formComplete && isDirty && !loadingAmenities && !amenitiesError &&
-    !loadingBuildings && !loadingFloors;
+    !loadingSites && !loadingBuildings && !loadingFloors;
 
   const handleSubmit = async () => {
     setError("");
     if (!formComplete) {
-      setError("Please select an office, building, floor and at least one amenity.");
+      setError("Please select an active office, building, floor and at least one amenity.");
       return;
     }
     try {
@@ -682,6 +704,17 @@ function EditPreferencesDialog({
       setError(e instanceof Error ? e.message : "Something went wrong.");
     }
   };
+
+  const savedLabel = (name: string, inactive: boolean) => (inactive ? `${name} (Inactive)` : name);
+  const savedSite = preferences.preferredOfficeId
+    ? { value: preferences.preferredOfficeId, label: savedLabel(preferences.preferredOfficeName, preferences.preferredOfficeInactive) }
+    : null;
+  const savedBuilding = preferences.preferredBuildingId
+    ? { value: preferences.preferredBuildingId, label: savedLabel(preferences.preferredBuildingName, preferences.preferredBuildingInactive) }
+    : null;
+  const savedFloor = preferences.preferredFloorId
+    ? { value: preferences.preferredFloorId, label: savedLabel(preferences.preferredFloorName, preferences.preferredFloorInactive) }
+    : null;
 
   const siteOptions     = sites.map((s) => ({ value: s.site_id,       label: s.site_name       }));
   const buildingOptions = buildings.map((b) => ({ value: b.building_id,   label: b.building_name   }));
@@ -707,6 +740,7 @@ function EditPreferencesDialog({
             value={selectedSiteId}
             onChange={handleSiteChange}
             options={siteOptions}
+            saved={savedSite}
             loading={loadingSites}
             placeholder="Select office"
           />
@@ -718,6 +752,7 @@ function EditPreferencesDialog({
             value={selectedBuildingId}
             onChange={handleBuildingChange}
             options={buildingOptions}
+            saved={savedBuilding}
             disabled={!selectedSiteId}
             loading={loadingBuildings}
             placeholder="Select building"
@@ -731,6 +766,7 @@ function EditPreferencesDialog({
             value={selectedFloorId}
             onChange={setSelectedFloorId}
             options={floorOptions}
+            saved={savedFloor}
             disabled={!selectedBuildingId}
             loading={loadingFloors}
             placeholder="Select floor"
@@ -853,10 +889,12 @@ function ProfileSkeleton() {
 // ─── Preference display row ───────────────────────────────────────────────────
 
 function PrefDisplayRow({
-  icon: Icon, label, value,
+  icon: Icon, label, value, inactive,
   color = "bg-gray-50", iconColor = "text-gray-400",
 }: {
   icon: React.ElementType; label: string; value: string;
+  // The saved location has been deactivated since it was chosen.
+  inactive?: boolean;
   color?: string; iconColor?: string;
 }) {
   return (
@@ -866,7 +904,14 @@ function PrefDisplayRow({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[11px] text-gray-400 font-medium leading-none mb-1">{label}</p>
-        <p className="text-[12.5px] text-gray-700 font-medium leading-snug">{value}</p>
+        <p className="text-[12.5px] text-gray-700 font-medium leading-snug">
+          {value}
+          {inactive && (
+            <span className="ml-2 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200 align-middle">
+              Inactive
+            </span>
+          )}
+        </p>
       </div>
     </div>
   );
@@ -1187,6 +1232,7 @@ export default function ProfilePage() {
                   icon={Building}
                   label="Default Office"
                   value={preferences.preferredOfficeName}
+                  inactive={preferences.preferredOfficeInactive}
                   color="bg-blue-100"
                   iconColor="text-blue-600"
                 />
@@ -1194,6 +1240,7 @@ export default function ProfilePage() {
                   icon={Building2}
                   label="Default Building"
                   value={preferences.preferredBuildingName}
+                  inactive={preferences.preferredBuildingInactive}
                   color="bg-indigo-100"
                   iconColor="text-indigo-600"
                 />
@@ -1201,6 +1248,7 @@ export default function ProfilePage() {
                   icon={Layers}
                   label="Default Floor"
                   value={preferences.preferredFloorName}
+                  inactive={preferences.preferredFloorInactive}
                   color="bg-violet-100"
                   iconColor="text-violet-600"
                 />
