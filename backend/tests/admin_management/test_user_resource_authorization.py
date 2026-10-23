@@ -67,23 +67,10 @@ class UserResourceAuthorizationTests(unittest.TestCase):
 
         self.assertEqual(response.id, "15")
 
-    def test_manager_can_view_direct_reports_details(self) -> None:
+    def test_manager_cannot_view_direct_reports_details(self) -> None:
+        # Narrowed 2026-10-23: MANAGER (dormant) no longer gets a bypass
+        # here at all, report or not -- self or TENANT_ADMIN only.
         current_user = {"user_id": "51", "tenant_id": "3", "role_name": "MANAGER"}
-
-        with patch(
-            "backend.services.user_management_service.fetch_user_details_by_id",
-            return_value=TARGET_USER,
-        ):
-            response = get_user_by_id_service(
-                conn=object(),
-                current_user=current_user,
-                user_id="15",
-            )
-
-        self.assertEqual(response.id, "15")
-
-    def test_manager_cannot_view_non_report_details(self) -> None:
-        current_user = {"user_id": "99", "tenant_id": "3", "role_name": "MANAGER"}
 
         with patch(
             "backend.services.user_management_service.fetch_user_details_by_id",
@@ -97,19 +84,38 @@ class UserResourceAuthorizationTests(unittest.TestCase):
 
         self.assertEqual(context.exception.status_code, 403)
 
-    def test_facilitator_and_tenant_admin_can_view_any_user(self) -> None:
+    def test_facilitator_cannot_view_another_users_details(self) -> None:
+        # Narrowed 2026-10-23: viewing a specific user's detail/bookings is
+        # not a FACILITATOR delegation surface, unlike booking creation
+        # itself (can_create_for_user) -- self or TENANT_ADMIN only.
+        current_user = {"user_id": "1", "tenant_id": "3", "role_name": "FACILITATOR"}
+
+        with patch(
+            "backend.services.user_management_service.fetch_user_details_by_id",
+            return_value=TARGET_USER,
+        ), self.assertRaises(HTTPException) as context:
+            get_user_by_id_service(
+                conn=object(),
+                current_user=current_user,
+                user_id="15",
+            )
+
+        self.assertEqual(context.exception.status_code, 403)
+
+    def test_tenant_admin_can_view_any_user(self) -> None:
+        current_user = {"user_id": "1", "tenant_id": "3", "role_name": "TENANT_ADMIN"}
+
         with patch(
             "backend.services.user_management_service.fetch_user_details_by_id",
             return_value=TARGET_USER,
         ):
-            for role in ("FACILITATOR", "TENANT_ADMIN"):
-                with self.subTest(role=role):
-                    response = get_user_by_id_service(
-                        conn=object(),
-                        current_user={"user_id": "1", "tenant_id": "3", "role_name": role},
-                        user_id="15",
-                    )
-                    self.assertEqual(response.id, "15")
+            response = get_user_by_id_service(
+                conn=object(),
+                current_user=current_user,
+                user_id="15",
+            )
+
+        self.assertEqual(response.id, "15")
 
     def test_employee_cannot_view_another_employees_bookings(self) -> None:
         current_user = {"user_id": "7", "tenant_id": "3", "role_name": "EMPLOYEE"}

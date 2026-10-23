@@ -65,6 +65,8 @@ async def send_message(
     return response
 
 
+# Future Scope API -- no caller today; the panel keeps session state
+# client-side. Kept for a planned session-resume feature.
 @router.get("/session/{session_id}", response_model=SessionOut)
 async def get_session(
     session_id: str,

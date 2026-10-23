@@ -6,7 +6,6 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from psycopg2.extensions import connection as PGConnection
-from pydantic import BaseModel
 
 from backend.api.deps import get_current_user
 from backend.core.config import get_settings
@@ -15,8 +14,6 @@ from backend.core.security import (
     REFRESH_TOKEN_COOKIE_NAME,
     SESSION_TOKEN_COOKIE_NAME,
     build_auth_cookie_settings,
-    build_jwt_payload,
-    sign_jwt,
 )
 from backend.db.connection import get_db
 from backend.schemas.auth import MessageResponse, UserResponse
@@ -29,39 +26,6 @@ from backend.services.auth_service import (
 
 router = APIRouter(tags=["auth"])
 
-
-class ChatbotTokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    expires_in: int
-
-
-@router.post("/auth/chatbot-token", response_model=ChatbotTokenResponse)
-def chatbot_token(
-    request: Request,
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
-) -> ChatbotTokenResponse:
-    """Issue a short-lived token for the logged-in user's chatbot session."""
-    settings = get_settings()
-    auth_claims = getattr(request.state, "auth_claims", {})
-    session_id = str(auth_claims.get("session_id") or "").strip()
-    payload = build_jwt_payload(
-        current_user,
-        extra_claims={
-            "session_id": session_id or None,
-            "display_name": (
-                current_user.get("display_name")
-                or current_user.get("full_name")
-                or current_user.get("name")
-                or current_user.get("email")
-            ),
-            "role": current_user.get("role_name") or current_user.get("role"),
-        },
-    )
-    return ChatbotTokenResponse(
-        access_token=sign_jwt(payload),
-        expires_in=settings.jwt_access_token_ttl,
-    )
 
 @router.post("/auth/logout", response_model=MessageResponse)
 def logout(

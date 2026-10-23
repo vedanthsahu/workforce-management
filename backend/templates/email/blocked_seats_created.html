@@ -1,0 +1,19 @@
+{% extends "_base.html" %}
+{% from "_macros.html" import heading, lead, details_open, details_close, row, reason_note %}
+{% block title %}Seats blocked{% endblock %}
+{% block preheader %}{{ seat_count }} seat{{ "s" if seat_count != "1" else "" }} blocked on {{ floor }}, {{ building }}.{% endblock %}
+{% block content %}
+{{ heading("Seats blocked") }}
+{{ lead("One or more seats have been blocked in SeatBook and are no longer available for the selected period.") }}
+{{ details_open() }}
+{{ row("Seats", seat_codes) }}
+{{ row("Site", site) }}
+{{ row("Building", building) }}
+{{ row("Floor", floor) }}
+{{ row("Blocked from", blocked_from) }}
+{{ row("Blocked to", blocked_to) }}
+{{ row("Block type", block_type) }}
+{{ row("Blocked by", blocked_by) }}
+{{ details_close() }}
+{{ reason_note(reason) }}
+{% endblock %}

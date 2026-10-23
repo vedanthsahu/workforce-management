@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from datetime import date, timedelta
 from typing import Any
 
 import psycopg2
-from fastapi import HTTPException, status
+from fastapi import BackgroundTasks, HTTPException, status
 from psycopg2 import errorcodes
 from psycopg2.extensions import connection as PGConnection
 
+from backend.core.app_logging import LOGGER_NAME
 from backend.core.audit_actions import (
     SEAT_BLOCK_CANCELLED,
     SEAT_BLOCK_CREATED,
@@ -51,6 +53,14 @@ from backend.services.business_rule_service import (
     resolve_blocked_seat_days,
     resolve_blocked_seat_max_advance_days,
 )
+from backend.services.notification_service import (
+    format_notification_value,
+    format_person,
+    queue_blocked_seats_created_notification,
+    resolve_admin_notification_recipients,
+)
+
+logger = logging.getLogger(f"{LOGGER_NAME}.blocked_seats")
 
 BLOCK_TYPE_REASONS = {
     "Operational block": "Operational block",
@@ -334,6 +344,7 @@ def create_blocked_seats(
     tenant_id: str,
     payload: CreateBlockedSeatsRequest,
     current_user: dict[str, Any],
+    background_tasks: BackgroundTasks | None = None,
 ) -> CreateBlockedSeatsResponse:
     if payload.blocked_from < date.today():
         raise HTTPException(
@@ -510,11 +521,71 @@ def create_blocked_seats(
         },
         metadata={"seat_ids": seat_ids, "block_ids": block_ids},
     )
+    _queue_blocked_seats_created_email(
+        background_tasks,
+        conn=conn,
+        tenant_id=tenant_id,
+        rows=rows,
+        current_user=current_user,
+    )
     return CreateBlockedSeatsResponse(
         message=f"{len(rows)} seat{'s' if len(rows) != 1 else ''} blocked successfully.",
         created_count=len(rows),
         items=[_response(row) for row in rows],
     )
+
+
+def _queue_blocked_seats_created_email(
+    background_tasks: BackgroundTasks | None,
+    *,
+    conn: PGConnection,
+    tenant_id: str,
+    rows: list[dict[str, Any]],
+    current_user: dict[str, Any],
+) -> None:
+    if background_tasks is None or not rows:
+        return
+
+    try:
+        queue_blocked_seats_created_notification(
+            background_tasks,
+            to_emails=resolve_admin_notification_recipients(
+                conn,
+                tenant_id=tenant_id,
+            ),
+            context=_blocked_seats_email_context(rows, current_user=current_user),
+        )
+    except Exception:
+        logger.exception(
+            "notification.queue_failed event=blocked_seats_created tenant_id=%s",
+            tenant_id,
+        )
+
+
+def _blocked_seats_email_context(
+    rows: list[dict[str, Any]],
+    *,
+    current_user: dict[str, Any],
+) -> dict[str, str]:
+    first = rows[0]
+    seat_codes = ", ".join(sorted(str(row["seat_code"]) for row in rows))
+    return {
+        "seat_count": format_notification_value(len(rows)),
+        "seat_codes": seat_codes,
+        "site": format_notification_value(first.get("site_name")),
+        "building": format_notification_value(first.get("building_name")),
+        "floor": format_notification_value(first.get("floor_name")),
+        "blocked_from": format_notification_value(first.get("blocked_from")),
+        "blocked_to": format_notification_value(first.get("blocked_to")),
+        "block_type": format_notification_value(first.get("block_type")),
+        "reason": format_notification_value(first.get("reason")),
+        "blocked_by": format_person(
+            current_user.get("display_name")
+            or current_user.get("full_name")
+            or current_user.get("name"),
+            current_user.get("email"),
+        ),
+    }
 
 
 def cancel_seat_block(

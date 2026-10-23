@@ -378,7 +378,7 @@ export function useBookingForm() {
   // ── Auto-fill office/building/floor/amenities from saved preferences ─────
   // Self-booking: GET /dashboard/me, on a fresh visit or once the form's
   // location fields are actually empty (see the f.siteId check below).
-  // Facilitator booking for an employee: GET /dashboard/employee/{id}, using
+  // Facilitator booking for an employee: GET /preferences/{id}, using
   // whoever bookedForUserId points at — that flow always carries a `step`/
   // `bookedForUserId` param (so hasAnyParam is always true for it) but never
   // a siteId of its own, so it must still get the location prefill.

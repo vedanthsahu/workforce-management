@@ -132,6 +132,8 @@ def get_user_by_id(
     )
 
 
+# Future Scope API -- no caller today; kept for the planned admin/
+# facilitator overseer view (a specific user's booking history).
 @router.get(
     "/users/{user_id}/bookings",
     response_model=UserBookingHistoryResponse,

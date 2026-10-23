@@ -18,11 +18,8 @@ import {
   fetchBookingPolicy,
   fetchChatbotPolicy,
   fetchLayoutPolicy,
-  updateActivityPolicy,
-  updateBlockedSeatPolicy,
-  updateBookingPolicy,
-  updateChatbotPolicy,
-  updateLayoutPolicy,
+  updateBusinessRules,
+  type BusinessRuleUpdate,
 } from "../services/configuration.service";
 
 // Only these items are backed by a real tenant business rule (see
@@ -368,10 +365,13 @@ export default function ConfigurationsListPage() {
     setChatbotEnabled(savedChatbotEnabled);
   };
 
-  // Save applies every dirty item in this batch. Backed items (see
-  // BACKED_ITEM_IDS) round-trip through the real business-rule API one at a
-  // time; unbacked items just apply their draft value locally, matching the
-  // previous per-item modal's behavior now folded into one multi-item save.
+  // Save applies every dirty item in this batch. Unbacked items just apply
+  // their draft value locally. Backed items (see BACKED_ITEM_IDS) and the
+  // chatbot toggle go into one batch of {id, value} settings and round-trip
+  // through a single POST /business-rules -- not one PATCH per card -- and
+  // the combined response refreshes every backed card at once (including
+  // derived fields like the layout card's "Effective After (Total)", which
+  // used to need its own extra fetch after a booking-policy save).
   const confirmApply = async () => {
     if (hasInvalidValues) {
       setErrorMessage(fieldErrors.values().next().value ?? POSITIVE_VALUE_ERROR);
@@ -386,179 +386,101 @@ export default function ConfigurationsListPage() {
         new Set(changedRows.map((r) => r.key.split(":")[0])),
       );
 
-      let nextConfigurations = configurations;
-
-      for (const itemId of changedItemIds) {
-        const item = nextConfigurations.find((c) => c.id === itemId);
-        if (!item) continue;
-
-        const fieldsWithDraft = item.fields.map((f) => {
-          const key = draftKey(itemId, f.key);
+      // Apply every changed item's draft value locally first and stamp who
+      // touched it. Backed items get their fields overwritten below with
+      // the server's confirmed values once the batch save succeeds.
+      let nextConfigurations = configurations.map((item) => {
+        if (!changedItemIds.includes(item.id)) return item;
+        const fields = item.fields.map((f) => {
+          const key = draftKey(item.id, f.key);
           return key in draft ? { ...f, value: Number(draft[key]) } : f;
         });
+        return { ...item, fields, lastUpdatedAt: now, lastUpdatedBy: "Admin User" };
+      });
 
-        let resolvedFields = fieldsWithDraft;
+      const getDraftValue = (itemId: string, fieldKey: string): number =>
+        nextConfigurations
+          .find((c) => c.id === itemId)
+          ?.fields.find((f) => f.key === fieldKey)?.value ?? 0;
 
-        if (BACKED_ITEM_IDS.has(itemId)) {
-          if (itemId === "activity-table-record-count") {
-            const records = fieldsWithDraft.find((f) => f.key === "records")?.value;
-            const result = await updateActivityPolicy({ record_count: records });
-            resolvedFields = withFieldValue(
-              fieldsWithDraft,
-              "records",
-              result.record_count,
-            );
-          } else if (itemId === "new-layout-publishing") {
-            const days = fieldsWithDraft.find((f) => f.key === "days")?.value;
-            const result = await updateLayoutPolicy({ buffer_days: days });
-            resolvedFields = withFieldValue(
-              fieldsWithDraft,
-              "days",
-              result.buffer_days,
-            );
-            resolvedFields = withFieldValue(
-              resolvedFields,
-              "totalDays",
-              result.min_advance_days,
-            );
-          } else if (itemId === "booking-calendar-employee") {
-            const durationDays = fieldsWithDraft.find(
-              (f) => f.key === "durationDays",
-            )?.value;
-            const result = await updateBookingPolicy({
-              employee_max_advance_days: durationDays,
-            });
-            resolvedFields = withFieldValue(
-              fieldsWithDraft,
-              "durationDays",
-              result.employee_max_advance_days,
-            );
-            // The layout card's "Effective After (Total)" is derived from
-            // this same window -- refresh it too so it doesn't go stale
-            // until that card happens to be opened/saved next. Applied
-            // directly to nextConfigurations since that item may not itself
-            // be part of this save batch.
-            try {
-              const layoutResult = await fetchLayoutPolicy();
-              nextConfigurations = nextConfigurations.map((c) =>
-                c.id === "new-layout-publishing"
-                  ? {
-                      ...c,
-                      fields: withFieldValue(
-                        c.fields,
-                        "totalDays",
-                        layoutResult.min_advance_days,
-                      ),
-                    }
-                  : c,
-              );
-            } catch {
-              // Non-fatal -- the booking window save itself already succeeded.
-            }
-          } else if (itemId === "visitor-booking") {
-            const durationDays = fieldsWithDraft.find(
-              (f) => f.key === "durationDays",
-            )?.value;
-            const result = await updateBookingPolicy({
-              guest_max_advance_days: durationDays,
-            });
-            resolvedFields = withFieldValue(
-              fieldsWithDraft,
-              "durationDays",
-              result.guest_max_advance_days,
-            );
-          } else if (itemId === "layout-visibility") {
-            const draftDays = fieldsWithDraft.find(
-              (f) => f.key === "draftDays",
-            )?.value;
-            const archivedDays = fieldsWithDraft.find(
-              (f) => f.key === "archivedDays",
-            )?.value;
-            const discardedDays = fieldsWithDraft.find(
-              (f) => f.key === "discardedDays",
-            )?.value;
-            const result = await updateLayoutPolicy({
-              visibility_days: {
-                draft: draftDays,
-                archived: archivedDays,
-                deleted: discardedDays,
-              },
-            });
-            resolvedFields = withFieldValue(
-              fieldsWithDraft,
-              "draftDays",
-              result.visibility_days.draft,
-            );
-            resolvedFields = withFieldValue(
-              resolvedFields,
-              "archivedDays",
-              result.visibility_days.archived,
-            );
-            resolvedFields = withFieldValue(
-              resolvedFields,
-              "discardedDays",
-              result.visibility_days.deleted,
-            );
-          } else if (itemId === "blocked-seat-policy") {
-            const upcomingDays = fieldsWithDraft.find(
-              (f) => f.key === "upcomingDays",
-            )?.value;
-            const expiringSoonDays = fieldsWithDraft.find(
-              (f) => f.key === "expiringSoonDays",
-            )?.value;
-            const expiredWindowDays = fieldsWithDraft.find(
-              (f) => f.key === "expiredWindowDays",
-            )?.value;
-            const maxAdvanceDays = fieldsWithDraft.find(
-              (f) => f.key === "maxAdvanceDays",
-            )?.value;
-            const result = await updateBlockedSeatPolicy({
-              upcoming_days: upcomingDays,
-              expiring_soon_days: expiringSoonDays,
-              expired_window_days: expiredWindowDays,
-              max_advance_days: maxAdvanceDays,
-            });
-            resolvedFields = withFieldValue(
-              fieldsWithDraft,
-              "upcomingDays",
-              result.upcoming_days,
-            );
-            resolvedFields = withFieldValue(
-              resolvedFields,
-              "expiringSoonDays",
-              result.expiring_soon_days,
-            );
-            resolvedFields = withFieldValue(
-              resolvedFields,
-              "expiredWindowDays",
-              result.expired_window_days,
-            );
-            resolvedFields = withFieldValue(
-              resolvedFields,
-              "maxAdvanceDays",
-              result.max_advance_days,
-            );
-          }
+      const updates: BusinessRuleUpdate[] = [];
+      for (const itemId of changedItemIds) {
+        if (!BACKED_ITEM_IDS.has(itemId)) continue;
+        if (itemId === "activity-table-record-count") {
+          updates.push({
+            id: "activity_policy.record_count",
+            value: getDraftValue(itemId, "records"),
+          });
+        } else if (itemId === "new-layout-publishing") {
+          updates.push({
+            id: "layout_policy.buffer_days",
+            value: getDraftValue(itemId, "days"),
+          });
+        } else if (itemId === "booking-calendar-employee") {
+          updates.push({
+            id: "booking_policy.employee_max_advance_days",
+            value: getDraftValue(itemId, "durationDays"),
+          });
+        } else if (itemId === "visitor-booking") {
+          updates.push({
+            id: "booking_policy.guest_max_advance_days",
+            value: getDraftValue(itemId, "durationDays"),
+          });
+        } else if (itemId === "layout-visibility") {
+          updates.push(
+            { id: "layout_policy.visibility_days.draft", value: getDraftValue(itemId, "draftDays") },
+            { id: "layout_policy.visibility_days.archived", value: getDraftValue(itemId, "archivedDays") },
+            { id: "layout_policy.visibility_days.deleted", value: getDraftValue(itemId, "discardedDays") },
+          );
+        } else if (itemId === "blocked-seat-policy") {
+          updates.push(
+            { id: "blocked_seat_policy.upcoming_days", value: getDraftValue(itemId, "upcomingDays") },
+            { id: "blocked_seat_policy.expiring_soon_days", value: getDraftValue(itemId, "expiringSoonDays") },
+            { id: "blocked_seat_policy.expired_window_days", value: getDraftValue(itemId, "expiredWindowDays") },
+            { id: "blocked_seat_policy.max_advance_days", value: getDraftValue(itemId, "maxAdvanceDays") },
+          );
         }
-
-        nextConfigurations = nextConfigurations.map((c) =>
-          c.id === itemId
-            ? {
-                ...c,
-                fields: resolvedFields,
-                lastUpdatedAt: now,
-                lastUpdatedBy: "Admin User",
-              }
-            : c,
-        );
+      }
+      if (chatbotHasChanges) {
+        updates.push({ id: "chatbot_policy.employee_access_enabled", value: chatbotEnabled });
       }
 
-      if (chatbotHasChanges) {
-        const result = await updateChatbotPolicy({
-          employee_access_enabled: chatbotEnabled,
+      if (updates.length > 0) {
+        const result = await updateBusinessRules(updates);
+
+        nextConfigurations = nextConfigurations.map((c) => {
+          if (c.id === "activity-table-record-count") {
+            return { ...c, fields: withFieldValue(c.fields, "records", result.activity_policy.record_count) };
+          }
+          if (c.id === "new-layout-publishing") {
+            let fields = withFieldValue(c.fields, "days", result.layout_policy.buffer_days);
+            fields = withFieldValue(fields, "totalDays", result.layout_policy.min_advance_days);
+            return { ...c, fields };
+          }
+          if (c.id === "booking-calendar-employee") {
+            return { ...c, fields: withFieldValue(c.fields, "durationDays", result.booking_policy.employee_max_advance_days) };
+          }
+          if (c.id === "visitor-booking") {
+            return { ...c, fields: withFieldValue(c.fields, "durationDays", result.booking_policy.guest_max_advance_days) };
+          }
+          if (c.id === "layout-visibility") {
+            let fields = withFieldValue(c.fields, "draftDays", result.layout_policy.visibility_days.draft);
+            fields = withFieldValue(fields, "archivedDays", result.layout_policy.visibility_days.archived);
+            fields = withFieldValue(fields, "discardedDays", result.layout_policy.visibility_days.deleted);
+            return { ...c, fields };
+          }
+          if (c.id === "blocked-seat-policy") {
+            let fields = withFieldValue(c.fields, "upcomingDays", result.blocked_seat_policy.upcoming_days);
+            fields = withFieldValue(fields, "expiringSoonDays", result.blocked_seat_policy.expiring_soon_days);
+            fields = withFieldValue(fields, "expiredWindowDays", result.blocked_seat_policy.expired_window_days);
+            fields = withFieldValue(fields, "maxAdvanceDays", result.blocked_seat_policy.max_advance_days);
+            return { ...c, fields };
+          }
+          return c;
         });
-        setChatbotEnabled(result.employee_access_enabled);
-        setSavedChatbotEnabled(result.employee_access_enabled);
+
+        setChatbotEnabled(result.chatbot_policy.employee_access_enabled);
+        setSavedChatbotEnabled(result.chatbot_policy.employee_access_enabled);
       }
 
       setConfigurations(nextConfigurations);

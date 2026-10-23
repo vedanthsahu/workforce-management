@@ -71,16 +71,6 @@ interface RawFloor {
   } | null;
 }
 
-interface RawPreference {
-  id: string;
-  key: string;
-  name: string;
-  category?: string | null;
-  description?: string | null;
-  icon?: string | null;
-  applicable_seat_types?: string[] | null;
-}
-
 // ── Sites ─────────────────────────────────────────────────────────────────────
 
 export async function fetchSites(): Promise<Site[]> {
@@ -435,13 +425,16 @@ export async function createBooking(
   return data;
 }
 
-// ── Create guest booking — POST /guest-bookings ───────────────────────────────
+// ── Create guest booking — POST /guest-visits (seat_id given) ─────────────────
+// Merged into the guest-visit creation endpoint: seat_id present means
+// "create the visit and book this seat for it", replacing the old, separate
+// POST /guest-bookings.
 
 export async function createGuestBooking(
   payload: CreateGuestBookingPayload
 ): Promise<CreateBookingResponse> {
   const { data } = await axiosInstance.post<CreateBookingResponse>(
-    "/guest-bookings",
+    "/guest-visits",
     payload
   );
   return data;
@@ -481,15 +474,28 @@ export async function modifyGuestBooking(
 
 // ── Preferences ───────────────────────────────────────────────────────────────
 
+interface RawAdminAmenity {
+  amenity_id: string;
+  amenity_key: string;
+  amenity_name: string;
+  category_name?: string | null;
+  description?: string | null;
+  icon_name?: string | null;
+  applicable_seat_types?: string[] | null;
+}
+
 export async function fetchPreferences(): Promise<Preference[]> {
-  const { data } = await axiosInstance.get<{ amenities: RawPreference[] }>("/preferences");
-  return data.amenities.map((a) => ({
-    id: a.id,
-    key: a.key,
-    name: a.name,
-    category: a.category ?? null,
+  const { data } = await axiosInstance.get<{ items: RawAdminAmenity[] }>(
+    "/amenities",
+    { params: { status: "active", limit: 200 } },
+  );
+  return data.items.map((a) => ({
+    id: a.amenity_id,
+    key: a.amenity_key,
+    name: a.amenity_name,
+    category: a.category_name ?? null,
     description: a.description ?? null,
-    icon: a.icon ?? null,
+    icon: a.icon_name ?? null,
     applicable_seat_types: a.applicable_seat_types ?? null,
   }));
 }
@@ -544,16 +550,17 @@ export async function fetchMyWorkPreferences(): Promise<MyWorkPreferences | null
 }
 
 // ── Saved location/amenity preferences for a specific employee ──────────────
-// GET /dashboard/employee/{userId} — same shape as /dashboard/me, used when a
-// facilitator/admin/manager books a seat on behalf of that employee.
+// GET /preferences/{userId} — used when a facilitator/admin books a seat on
+// behalf of that employee. Replaces the old /dashboard/employee/{userId},
+// which built a full dashboard payload just to read this one field off it.
 
 export async function fetchEmployeeWorkPreferences(
   userId: string
 ): Promise<MyWorkPreferences | null> {
-  const { data } = await axiosInstance.get<RawDashboardMe>(
-    `/dashboard/employee/${userId}`
+  const { data } = await axiosInstance.get<RawWorkPreferences>(
+    `/preferences/${userId}`
   );
-  return parseWorkPreferences(data);
+  return parseWorkPreferences({ work_preferences: data });
 }
 
 // ── Sidebar: quick-pick seats — GET /dashboard/me ────────────────────────────

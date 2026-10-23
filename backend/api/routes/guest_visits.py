@@ -14,8 +14,6 @@ from backend.api.deps import (
 from backend.db.connection import get_db
 from backend.schemas.booking import BookingResponse
 from backend.schemas.guest import (
-    AttachSeatToGuestVisitRequest,
-    CancelGuestVisitRequest,
     CreateGuestVisitRequest,
     GuestVisitListItem,
     GuestVisitListResponse,
@@ -23,18 +21,14 @@ from backend.schemas.guest import (
     GuestVisitStatusUpdateResponse,
     GuestWorkflowRequest,
     GuestWorkflowResponse,
-    ModifyGuestVisitRequest,
 )
 from backend.services.guest_service import (
-    cancel_guest_visit_record,
-    create_booking_for_existing_guest_visit,
     create_guest_visit,
     execute_guest_visit_workflow,
     get_guest_visit_details,
     guest_visit_check_in,
     guest_visit_check_out,
     list_guest_visits,
-    modify_guest_visit,
 )
 
 router = APIRouter(prefix="/guest-visits", tags=["guest-visits"])
@@ -42,7 +36,7 @@ router = APIRouter(prefix="/guest-visits", tags=["guest-visits"])
 
 @router.post(
     "",
-    response_model=GuestVisitResponse,
+    response_model=GuestVisitResponse | BookingResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def create_guest_visit_record(
@@ -50,7 +44,9 @@ def create_guest_visit_record(
     background_tasks: BackgroundTasks,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
-) -> GuestVisitResponse:
+) -> GuestVisitResponse | BookingResponse:
+    """seat_id absent on the payload -> visit only. seat_id present ->
+    visit + booking, atomically (replaces the old POST /guest-bookings)."""
     return create_guest_visit(
         conn,
         current_user=current_user,
@@ -58,6 +54,9 @@ def create_guest_visit_record(
         background_tasks=background_tasks,
     )
 
+# Future Scope API -- no caller today; kept for the planned admin/
+# facilitator overseer view (look up one guest visit directly, e.g. from
+# a user's or guest's profile), not dead code.
 @router.get(
     "/{guest_visit_id}",
     response_model=GuestVisitListItem,
@@ -146,84 +145,6 @@ def check_out_visit(
         conn,
         current_user=current_user,
         guest_visit_id=guest_visit_id,
-    )
-
-
-@router.post(
-    "/{guest_visit_id}/book-seat",
-    response_model=BookingResponse,
-)
-def book_seat_for_existing_guest_visit(
-    guest_visit_id: str,
-    payload: AttachSeatToGuestVisitRequest,
-    current_user: Annotated[
-        dict[str, Any],
-        Depends(require_permission("booking:book_for_guest"))
-    ],
-    conn: Annotated[
-        PGConnection,
-        Depends(get_db),
-    ],
-):
-    return create_booking_for_existing_guest_visit(
-        conn,
-        current_user=current_user,
-        guest_visit_id=guest_visit_id,
-        payload=payload,
-    )
-
-
-@router.post(
-    "/{guest_visit_id}/cancel",
-    response_model=GuestVisitStatusUpdateResponse,
-)
-def cancel_visit(
-    guest_visit_id: str,
-    payload: CancelGuestVisitRequest,
-    background_tasks: BackgroundTasks,
-    current_user: Annotated[
-        dict[str, Any],
-        Depends(require_permission("guest:manage"))
-    ],
-    conn: Annotated[
-        PGConnection,
-        Depends(get_db),
-    ],
-):
-
-    return cancel_guest_visit_record(
-        conn,
-        current_user=current_user,
-        guest_visit_id=guest_visit_id,
-        cancellation_reason=payload.cancellation_reason,
-        background_tasks=background_tasks,
-    )
-
-
-@router.patch(
-    "/{guest_visit_id}",
-    response_model=GuestVisitResponse,
-)
-def modify_visit(
-    guest_visit_id: str,
-    payload: ModifyGuestVisitRequest,
-    background_tasks: BackgroundTasks,
-    current_user: Annotated[
-        dict[str, Any],
-        Depends(require_permission("guest:manage"))
-    ],
-    conn: Annotated[
-        PGConnection,
-        Depends(get_db),
-    ],
-):
-
-    return modify_guest_visit(
-        conn,
-        current_user=current_user,
-        guest_visit_id=guest_visit_id,
-        payload=payload,
-        background_tasks=background_tasks,
     )
 
 

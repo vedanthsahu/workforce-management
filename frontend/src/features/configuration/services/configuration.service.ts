@@ -29,23 +29,8 @@ export async function fetchBookingPolicy(): Promise<BookingPolicy> {
   return data;
 }
 
-export async function updateBookingPolicy(
-  patch: Partial<BookingPolicy>,
-): Promise<BookingPolicy> {
-  const { data } = await axiosInstance.patch<BookingPolicy>("/business-rules/booking-policy", patch);
-  return data;
-}
-
 export async function fetchLayoutPolicy(): Promise<LayoutPolicy> {
   const { data } = await axiosInstance.get<LayoutPolicy>("/business-rules/layout-policy");
-  return data;
-}
-
-export async function updateLayoutPolicy(patch: {
-  buffer_days?: number;
-  visibility_days?: Partial<LayoutVisibilityDays>;
-}): Promise<LayoutPolicy> {
-  const { data } = await axiosInstance.patch<LayoutPolicy>("/business-rules/layout-policy", patch);
   return data;
 }
 
@@ -56,13 +41,6 @@ export interface ActivityPolicy {
 
 export async function fetchActivityPolicy(): Promise<ActivityPolicy> {
   const { data } = await axiosInstance.get<ActivityPolicy>("/business-rules/activity-policy");
-  return data;
-}
-
-export async function updateActivityPolicy(
-  patch: Partial<ActivityPolicy>,
-): Promise<ActivityPolicy> {
-  const { data } = await axiosInstance.patch<ActivityPolicy>("/business-rules/activity-policy", patch);
   return data;
 }
 
@@ -83,13 +61,6 @@ export async function fetchBlockedSeatPolicy(): Promise<BlockedSeatPolicy> {
   return data;
 }
 
-export async function updateBlockedSeatPolicy(
-  patch: Partial<BlockedSeatPolicy>,
-): Promise<BlockedSeatPolicy> {
-  const { data } = await axiosInstance.patch<BlockedSeatPolicy>("/business-rules/blocked-seat-policy", patch);
-  return data;
-}
-
 export interface ChatbotPolicy {
   employee_access_enabled: boolean;
 }
@@ -101,12 +72,34 @@ export async function fetchChatbotPolicy(): Promise<ChatbotPolicy> {
   return data;
 }
 
-export async function updateChatbotPolicy(
-  patch: ChatbotPolicy,
-): Promise<ChatbotPolicy> {
-  const { data } = await axiosInstance.patch<ChatbotPolicy>(
-    "/business-rules/chatbot-policy",
-    patch,
-  );
+// ─────────────────────────────────────────────────────────────────────────────
+// Writes -- one POST replacing the old one-PATCH-per-policy-area routes (see
+// backend/api/routes/business_rules.py). A caller sends only the specific
+// settings it's changing, by id (business_rule_service.BUSINESS_RULE_SETTERS
+// has the full list), and gets back every policy's fresh resolved state in
+// one response -- so a save that affects a derived field on another card
+// (e.g. the booking window feeding the layout card's "Effective After
+// (Total)") never needs a second round-trip to pick that up.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface BusinessRules {
+  booking_policy: BookingPolicy;
+  layout_policy: LayoutPolicy;
+  activity_policy: ActivityPolicy;
+  blocked_seat_policy: BlockedSeatPolicy;
+  chatbot_policy: ChatbotPolicy;
+}
+
+export interface BusinessRuleUpdate {
+  id: string;
+  value: number | boolean;
+}
+
+export async function updateBusinessRules(
+  updates: BusinessRuleUpdate[],
+): Promise<BusinessRules> {
+  const { data } = await axiosInstance.post<BusinessRules>("/business-rules", {
+    updates,
+  });
   return data;
 }
