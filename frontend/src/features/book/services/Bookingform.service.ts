@@ -63,6 +63,7 @@ interface RawFloor {
   floor_name?: string;
   floor_code?: string;
   status?: string | null;
+  published_layout_exists?: boolean | null;
   layout_file_url?: string | null;
   active_layout?: { layout_file_url?: string | null };
   scheduled_layout?: {
@@ -130,6 +131,47 @@ export async function fetchBuildingStatus(
   return match ? { name: match.building_name, status: match.status ?? null } : null;
 }
 
+// Why an office / building drops out of the bookable lists. The bookable_only
+// lists silently leave out anything with no active building, no active floor,
+// or no floor with a published layout, so work out which one it is from the
+// unfiltered lists (every building / floor with its status and
+// published_layout_exists) to give the user a precise message.
+export type UnbookableReason =
+  | "NO_ACTIVE_BUILDING"
+  | "NO_ACTIVE_FLOOR"
+  | "NO_PUBLISHED_LAYOUT"
+  | "UNKNOWN";
+
+const isActiveStatus = (status?: string | null) =>
+  String(status ?? "").toUpperCase() === "ACTIVE";
+
+export async function diagnoseSiteUnbookable(siteId: string): Promise<UnbookableReason> {
+  const [{ data: buildings }, { data: floors }] = await Promise.all([
+    axiosInstance.get<RawBuilding[]>("/buildings", { params: { site_id: siteId } }),
+    axiosInstance.get<RawFloor[]>("/floors", { params: { site_id: siteId } }),
+  ]);
+  const activeBuildingIds = new Set(
+    buildings.filter((b) => isActiveStatus(b.status)).map((b) => String(b.building_id)),
+  );
+  if (activeBuildingIds.size === 0) return "NO_ACTIVE_BUILDING";
+  const usable = floors.filter(
+    (f) => isActiveStatus(f.status) && activeBuildingIds.has(String(f.building_id)),
+  );
+  if (usable.length === 0) return "NO_ACTIVE_FLOOR";
+  if (!usable.some((f) => f.published_layout_exists)) return "NO_PUBLISHED_LAYOUT";
+  return "UNKNOWN";
+}
+
+export async function diagnoseBuildingUnbookable(buildingId: string): Promise<UnbookableReason> {
+  const { data: floors } = await axiosInstance.get<RawFloor[]>("/floors", {
+    params: { building_id: buildingId },
+  });
+  const active = floors.filter((f) => isActiveStatus(f.status));
+  if (active.length === 0) return "NO_ACTIVE_FLOOR";
+  if (!active.some((f) => f.published_layout_exists)) return "NO_PUBLISHED_LAYOUT";
+  return "UNKNOWN";
+}
+
 // Same idea for a floor: GET /buildings/{id}/floors without a status filter
 // lists every floor with its status.
 export async function fetchFloorStatus(
@@ -151,7 +193,8 @@ export async function fetchFloorStatus(
 export async function fetchFloors(buildingId: string): Promise<Floor[]> {
   const { data } = await axiosInstance.get<RawFloor[]>(
     `/buildings/${buildingId}/floors`,
-    { params: { status: "ACTIVE" } },
+    // bookable_only: skip floors with no published layout -- nothing to book there.
+    { params: { status: "ACTIVE", bookable_only: true } },
   );
   return data.map((f) => ({
     id: f.floor_id,
