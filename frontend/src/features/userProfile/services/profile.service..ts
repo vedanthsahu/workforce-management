@@ -105,18 +105,26 @@ function mapAuthMe(api: ApiAuthMe): AccountInfo {
   };
 }
 
-function mapPreferences(api: ApiDashboardMe): SeatPreferences {
-  const wp = api.work_preferences;
+const isInactive = (status: string | null | undefined) => !!status && status !== "ACTIVE";
+
+function mapWorkPreferences(wp: ApiWorkPreferences | null | undefined): SeatPreferences {
   return {
-    preferredOfficeId:     wp?.site_id       ?? "",
-    preferredOfficeName:   wp?.site_name     ?? "—",
-    preferredBuildingId:   wp?.building_id   ?? "",
-    preferredBuildingName: wp?.building_name ?? "—",
-    preferredFloorId:      wp?.floor_id      ?? "",
-    preferredFloorName:    wp?.floor_name    ?? "—",
-    preferredSeatType:     wp?.seat_type     ?? null,
-    preferredAmenities:    (wp?.amenities ?? []).map((a) => ({ id: a.id, name: a.name, category: a.category })),
+    preferredOfficeId:         wp?.site_id       ?? "",
+    preferredOfficeName:       wp?.site_name     ?? "—",
+    preferredOfficeInactive:   isInactive(wp?.site_status),
+    preferredBuildingId:       wp?.building_id   ?? "",
+    preferredBuildingName:     wp?.building_name ?? "—",
+    preferredBuildingInactive: isInactive(wp?.building_status),
+    preferredFloorId:          wp?.floor_id      ?? "",
+    preferredFloorName:        wp?.floor_name    ?? "—",
+    preferredFloorInactive:    isInactive(wp?.floor_status),
+    preferredSeatType:         wp?.seat_type     ?? null,
+    preferredAmenities:        (wp?.amenities ?? []).map((a) => ({ id: a.id, name: a.name, category: a.category })),
   };
+}
+
+function mapPreferences(api: ApiDashboardMe): SeatPreferences {
+  return mapWorkPreferences(api.work_preferences);
 }
 
 function computeActivitySummary(bookings: BookingData): ActivitySummary {
@@ -230,16 +238,7 @@ export async function updatePreferences(
     payload,
   );
 
-  return {
-    preferredOfficeId:     data.site_id       ?? "",
-    preferredOfficeName:   data.site_name     ?? "—",
-    preferredBuildingId:   data.building_id   ?? "",
-    preferredBuildingName: data.building_name ?? "—",
-    preferredFloorId:      data.floor_id      ?? "",
-    preferredFloorName:    data.floor_name    ?? "—",
-    preferredSeatType:     data.seat_type     ?? null,
-    preferredAmenities:    (data.amenities ?? []).map((a) => ({ id: a.id, name: a.name, category: a.category })),
-  };
+  return mapWorkPreferences(data);
 }
 
 export async function uploadAvatar(_file: File): Promise<string> {
@@ -259,7 +258,7 @@ export async function getAvailableAmenities(): Promise<ApiAmenity[]> {
 
 export async function getSites(): Promise<ApiSite[]> {
   try {
-    const { data } = await axiosInstance.get<ApiSite[]>("/sites?page=1&limit=200");
+    const { data } = await axiosInstance.get<ApiSite[]>("/sites?page=1&limit=200&status=ACTIVE&bookable_only=true");
     return data ?? [];
   } catch {
     return [];
@@ -269,7 +268,7 @@ export async function getSites(): Promise<ApiSite[]> {
 export async function getBuildingsBySite(siteId: string): Promise<ApiBuilding[]> {
   try {
     const { data } = await axiosInstance.get<ApiBuilding[]>(
-      `/buildings?site_id=${siteId}&page=1&limit=200`,
+      `/buildings?site_id=${siteId}&page=1&limit=200&status=ACTIVE&bookable_only=true`,
     );
     return data ?? [];
   } catch {
@@ -280,7 +279,7 @@ export async function getBuildingsBySite(siteId: string): Promise<ApiBuilding[]>
 export async function getFloorsByBuilding(buildingId: string): Promise<ApiFloor[]> {
   try {
     const { data } = await axiosInstance.get<ApiFloor[]>(
-      `/buildings/${buildingId}/floors?page=1&limit=200`,
+      `/buildings/${buildingId}/floors?page=1&limit=200&status=ACTIVE`,
     );
     return data ?? [];
   } catch {

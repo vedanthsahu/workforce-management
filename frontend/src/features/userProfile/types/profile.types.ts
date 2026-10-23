@@ -27,10 +27,13 @@ export interface ApiProfileMetadata {
 export interface ApiWorkPreferences {
   site_id:          string | null;
   site_name:        string | null;
+  site_status?:     string | null;
   building_id:      string | null;
   building_name:    string | null;
+  building_status?: string | null;
   floor_id:         string | null;
   floor_name:       string | null;
+  floor_status?:    string | null;
   seat_type:        string | null;
   amenities:        ApiAmenity[];
 }
@@ -212,6 +215,10 @@ export interface SeatPreferences {
   preferredBuildingName: string;
   preferredFloorId:   string;
   preferredFloorName: string;
+  // The saved location still exists but has since been deactivated.
+  preferredOfficeInactive:   boolean;
+  preferredBuildingInactive: boolean;
+  preferredFloorInactive:    boolean;
   preferredSeatType:  string | null;
   preferredAmenities: { id: string; name: string; category: string }[]; // id+name+category for display
 }
