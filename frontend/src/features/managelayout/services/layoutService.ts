@@ -128,24 +128,26 @@ export interface Preference {
   applicable_seat_types: string[];
 }
 
-interface RawPreference {
-  id: number | string;
-  name: string;
-  category: string;
+interface RawAdminAmenity {
+  amenity_id: number | string;
+  amenity_name: string;
+  category_name: string;
   description?: string;
-  icon?: string;
+  icon_name?: string;
   applicable_seat_types?: string[] | null;
 }
 
 export async function fetchAllPreferences(): Promise<Preference[]> {
-  const { data } = await axiosInstance.get<{ amenities: RawPreference[] } | RawPreference[]>("/preferences");
-  const raw: RawPreference[] = Array.isArray(data) ? data : data.amenities ?? [];
-  return raw.map((item) => ({
-    preference_id:   String(item.id),
-    preference_name: item.name,
-    preference_type: item.category,
+  const { data } = await axiosInstance.get<{ items: RawAdminAmenity[] }>(
+    "/amenities",
+    { params: { status: "active", limit: 200 } },
+  );
+  return (data.items ?? []).map((item) => ({
+    preference_id:   String(item.amenity_id),
+    preference_name: item.amenity_name,
+    preference_type: item.category_name,
     description:     item.description ?? "",
-    icon_name:       item.icon ?? "",
+    icon_name:       item.icon_name ?? "",
     applicable_seat_types: item.applicable_seat_types ?? [],
   }));
 }

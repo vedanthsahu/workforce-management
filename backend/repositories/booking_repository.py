@@ -2836,29 +2836,32 @@ def fetch_admin_booking_person_suggestions(
     booking_type: str,
     limit: int,
 ) -> list[dict[str, Any]]:
-    """Distinct people (employees or guests) with a booking/visit matching
-    `text` on name or email, best matches first: name starts with the text,
-    then a name word starts with it, then email starts with it, then any
-    other contains-match."""
+    """Distinct people (employees or guests) matching `text` on name or
+    email, best matches first: name starts with the text, then a name
+    word starts with it, then email starts with it, then any other
+    contains-match.
+
+    Searches the tenant's whole active directory, not just people who
+    already have a booking -- an admin checking "did X book, or were
+    they never supposed to" needs to find X either way. Scoping this to
+    existing bookings/visits only made a correctly-empty result (X has
+    no bookings) look identical to a broken search (X can't be found at
+    all), which is worse than a predictable zero-row result.
+    """
     escaped = _escape_like(text)
     if booking_type == "EMPLOYEE":
         source = """
             SELECT u.full_name AS name, u.email AS email
-            FROM bookings b
-            INNER JOIN app_users u
-                ON u.id = b.booked_for_user_id
-               AND u.tenant_id = b.tenant_id
-            WHERE b.tenant_id = %(tenant_id)s
-              AND b.booking_type = 'EMPLOYEE'
+            FROM app_users u
+            WHERE u.tenant_id = %(tenant_id)s
+              AND u.status = 'ACTIVE'
         """
     else:
         source = """
             SELECT g.full_name AS name, g.email AS email
-            FROM guest_visits gv
-            INNER JOIN guests g
-                ON g.id = gv.guest_id
-               AND g.tenant_id = gv.tenant_id
-            WHERE gv.tenant_id = %(tenant_id)s
+            FROM guests g
+            WHERE g.tenant_id = %(tenant_id)s
+              AND g.status = 'ACTIVE'
         """
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:

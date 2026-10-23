@@ -85,21 +85,17 @@ def _can_view_user_resource(
     current_user: dict[str, Any],
     target_user: dict[str, Any],
 ) -> bool:
-    """Same delegation rule used for dashboards/bookings: self, TENANT_ADMIN,
-    FACILITATOR, or the target's own MANAGER."""
+    """Self or TENANT_ADMIN only -- a user's own detail and booking history
+    are not a FACILITATOR delegation surface (unlike booking creation
+    itself), and MANAGER is dormant. Narrowed by direct instruction
+    (2026-10-23) from the earlier self/TENANT_ADMIN/FACILITATOR/MANAGER-
+    of-target rule."""
     current_user_id = _current_user_id(current_user)
 
     if current_user_id == str(target_user.get("id") or target_user.get("user_id") or ""):
         return True
 
-    role = _user_role(current_user)
-    if role in {"TENANT_ADMIN", "FACILITATOR"}:
-        return True
-
-    return (
-        role == "MANAGER"
-        and str(target_user.get("manager_user_id") or "") == current_user_id
-    )
+    return _user_role(current_user) == "TENANT_ADMIN"
 
 
 def update_my_profile(
@@ -193,10 +189,14 @@ def admin_update_user_access_service(
 
     target_role = _user_role(target_user)
 
-    # Self-modification stays blocked for everyone except a Tenant Admin
-    # managing their own admin access -- that's the one case now allowed to
-    # be self-directed, same as managing another admin.
-    if is_self and target_role != "TENANT_ADMIN":
+    # Self-modification is blocked unconditionally, no role exceptions --
+    # confirmed explicitly, including for TENANT_ADMIN: "No matter who it
+    # is, they themselves can't have access-related things in profile,
+    # like status or role. They can't do for themselves." Matches
+    # Rules.md's own admin negative scenario #2. A previous version of
+    # this check exempted a Tenant Admin managing their own admin access;
+    # that exception contradicted the documented rule and is removed.
+    if is_self:
         safe_write_audit_log(
             conn, action=USER_ACCESS_UPDATED, tenant_id=tenant_id,
             current_user=current_user, resource_type="user", resource_id=str(target_user_id),

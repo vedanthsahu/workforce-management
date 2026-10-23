@@ -36,6 +36,20 @@ const EMPLOYEE_BOOKING_CANCEL_REASONS = [
   "Other",
 ];
 
+// Used when an admin cancels someone else's booking or guest space from Admin
+// Bookings -- reasons from the admin's side, not "I changed my mind" ones.
+const ADMIN_BOOKING_CANCEL_REASONS = [
+  "Requested by the employee",
+  "Space unavailable (maintenance / repair)",
+  "Floor layout or seating changed",
+  "Space needed for an administrative block",
+  "Office closure / holiday",
+  "Booking made in error",
+  "Employee on leave or no longer with the organization",
+  "Policy or rule violation",
+  "Other",
+];
+
 const VISIT_CANCEL_REASONS = [
   "Visit postponed",
   "Visit cancelled by guest",
@@ -51,11 +65,15 @@ type CancelBookingDialogProps = {
   open: boolean;
   booking: Booking | null;
   cancelMode?: "booking" | "visit";
+  // "owner" (default): the person cancelling their own booking, or one they
+  // booked. "admin": an admin cancelling someone else's booking from Admin
+  // Bookings -- different reasons and "the booking for <name>" wording.
+  audience?: "owner" | "admin";
   onConfirm: (reason: string) => Promise<void>;
   onClose: () => void;
 };
 
-export function CancelBookingDialog({ open, booking, cancelMode = "booking", onConfirm, onClose }: CancelBookingDialogProps) {
+export function CancelBookingDialog({ open, booking, cancelMode = "booking", audience = "owner", onConfirm, onClose }: CancelBookingDialogProps) {
   const [selectedReason, setSelectedReason] = useState("");
   const [otherReason, setOtherReason] = useState("");
   const [loading, setLoading] = useState(false);
@@ -80,11 +98,14 @@ export function CancelBookingDialog({ open, booking, cancelMode = "booking", onC
     : isSeatOnlyCancel
       ? "Keep Space"
       : "Keep Booking";
+  const isAdmin = audience === "admin";
   const reasons = cancelMode === "visit"
     ? VISIT_CANCEL_REASONS
-    : bType === "guest"
-      ? BOOKING_CANCEL_REASONS
-      : EMPLOYEE_BOOKING_CANCEL_REASONS;
+    : isAdmin
+      ? ADMIN_BOOKING_CANCEL_REASONS
+      : bType === "guest"
+        ? BOOKING_CANCEL_REASONS
+        : EMPLOYEE_BOOKING_CANCEL_REASONS;
 
   const finalReason = selectedReason === "Other" ? otherReason.trim() : selectedReason;
 
@@ -156,7 +177,16 @@ export function CancelBookingDialog({ open, booking, cancelMode = "booking", onC
                 </span>
               ) : (
                 <span>
-                  Are you sure you want to cancel your booking at{" "}
+                  Are you sure you want to cancel{" "}
+                  {isAdmin ? (
+                    <>
+                      the booking for{" "}
+                      <strong className="text-gray-700">{booking.bookedForName ?? "this employee"}</strong>
+                    </>
+                  ) : (
+                    "your booking"
+                  )}{" "}
+                  at{" "}
                   <strong className="text-gray-700">
                     {booking.location} · {booking.floor} · Space {displaySpaceCode(booking.seat)}
                   </strong>{" "}

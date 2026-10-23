@@ -141,12 +141,24 @@ export default function SpaceStatCards({ category, stats, loading, cardFilter = 
 
   return (
     <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4`}>
-      {cards.map((card) => (
+      {cards.map((card) => {
+        // Same convention as the Offices/Buildings/Floors/Amenities cards: a
+        // card with nothing behind it (count 0) isn't clickable, doesn't lift
+        // on hover and shows muted -- filtering by it could only produce an
+        // empty list. A selected card stays clickable so it can still be
+        // un-selected if its count drops to 0 while it's active.
+        const disabled = card.value === 0 && !card.selected;
+        const clickable = !!card.onClick && !disabled;
+        return (
         <div
           key={card.label}
-          onClick={card.onClick}
-          className={`group bg-white rounded-xl border px-3 py-3 sm:px-4 sm:py-4 flex items-center gap-2 sm:gap-3 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-gray-300 ${
-            card.onClick ? "cursor-pointer" : ""
+          onClick={clickable ? card.onClick : undefined}
+          className={`group bg-white rounded-xl border px-3 py-3 sm:px-4 sm:py-4 flex items-center gap-2 sm:gap-3 transition-all duration-200 ${
+            clickable
+              ? "cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:border-gray-300"
+              : disabled
+                ? "cursor-not-allowed opacity-80"
+                : ""
           } ${card.selected ? "border-2 border-indigo-500 ring-2 ring-indigo-100 shadow-md" : "border-gray-100"}`}
         >
           <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110 ${card.iconBg}`}>
@@ -165,7 +177,8 @@ export default function SpaceStatCards({ category, stats, loading, cardFilter = 
             </p>
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import BookASeatPage from "@/features/book/components/Bookaseatpage";
+import { BookRouteGuard } from "@/features/book/components/BookRouteGuard";
 import { BookaSeatSkeleton } from "@/features/book/components/BookaSeatSkeleton";
 
 export default function Book() {
@@ -11,7 +12,9 @@ export default function Book() {
         </div>
       </main>
     }>
-      <BookASeatPage />
+      <BookRouteGuard>
+        <BookASeatPage />
+      </BookRouteGuard>
     </Suspense>
   );
 }

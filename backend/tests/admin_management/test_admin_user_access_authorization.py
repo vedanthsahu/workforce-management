@@ -251,35 +251,31 @@ class PeerAdminDemotionProtectionTests(unittest.TestCase):
             context.exception.detail["code"], "self_modification_not_allowed"
         )
 
-    def test_allows_tenant_admin_self_modification(self) -> None:
-        """A Tenant Admin managing another admin's access now also covers
-        managing their own -- e.g. deactivating themselves."""
+    def test_self_modification_is_blocked_even_for_tenant_admin(self) -> None:
+        """Self-modification has no role exception, TENANT_ADMIN included --
+        confirmed explicitly: "No matter who it is, they themselves can't
+        have access-related things in profile, like status or role. They
+        can't do for themselves." A previous version of this check exempted
+        a Tenant Admin managing their own admin access; that exception
+        contradicted Rules.md's own admin negative scenario #2 ("Admin
+        should not be able to change the role by himself") and is removed."""
         conn = FakeConnection()
-        updated = {**_target("TENANT_ADMIN", user_id=CALLER["user_id"]), "status": "INACTIVE"}
 
         with patch(
             "backend.services.user_management_service.fetch_user_by_id",
             return_value=_target("TENANT_ADMIN", user_id=CALLER["user_id"]),
-        ), patch(
-            "backend.services.user_management_service.count_active_tenant_admins",
-            return_value=1,
-        ), patch(
-            "backend.services.user_management_service.admin_update_user_access",
-            return_value=updated,
-        ) as mock_update, patch(
-            "backend.services.user_management_service.revoke_all_user_sessions",
-        ), patch(
-            "backend.services.user_management_service.record_auth_event",
-        ):
-            response = admin_update_user_access_service(
+        ), self.assertRaises(HTTPException) as context:
+            admin_update_user_access_service(
                 conn,
                 current_user=CALLER,
                 target_user_id=CALLER["user_id"],
                 payload=AdminUserAccessUpdateRequest(role_name="TENANT_ADMIN", status="INACTIVE"),
             )
 
-        self.assertEqual(response.status, "INACTIVE")
-        mock_update.assert_called_once()
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertEqual(
+            context.exception.detail["code"], "self_modification_not_allowed"
+        )
 
     def test_nonexistent_target_still_returns_404(self) -> None:
         conn = FakeConnection()

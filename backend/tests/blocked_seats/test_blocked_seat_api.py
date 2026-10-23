@@ -16,6 +16,7 @@ from backend.schemas.blocked_seat import (
     UpdateBlockedSeatRequest,
 )
 from backend.services.blocked_seat_service import (
+    _queue_blocked_seats_created_email,
     cancel_seat_block,
     create_blocked_seats,
     get_blockable_floor_layout,
@@ -427,6 +428,90 @@ class BlockedSeatServiceTests(unittest.TestCase):
         conn.commit.assert_called_once()
         self.assertEqual(insert.call_args.kwargs["reason"], "Operational block")
         self.assertEqual(response.created_count, 1)
+
+    @patch("backend.services.blocked_seat_service.resolve_admin_notification_recipients")
+    @patch("backend.services.blocked_seat_service.queue_blocked_seats_created_notification")
+    @patch("backend.services.blocked_seat_service.safe_write_audit_log")
+    @patch("backend.services.blocked_seat_service.fetch_blocked_seats_by_ids")
+    @patch("backend.services.blocked_seat_service.insert_blocked_seats")
+    @patch("backend.services.blocked_seat_service.fetch_conflicting_booking_seat_codes")
+    @patch("backend.services.blocked_seat_service.fetch_blockable_floor_layout")
+    @patch("backend.services.blocked_seat_service.fetch_seats_for_block")
+    def test_create_notifies_all_admins(
+        self,
+        fetch_seats: MagicMock,
+        fetch_layout: MagicMock,
+        fetch_conflicts: MagicMock,
+        insert: MagicMock,
+        fetch_created: MagicMock,
+        _audit: MagicMock,
+        queue_notification: MagicMock,
+        resolve_recipients: MagicMock,
+    ) -> None:
+        conn = MagicMock()
+        fetch_seats.return_value = [
+            {
+                "id": 501,
+                "seat_code": "3570",
+                "site_id": 1,
+                "building_id": 14,
+                "floor_id": 16,
+                "status": "ACTIVE",
+                "is_bookable": False,
+            }
+        ]
+        fetch_layout.return_value = {"resources": [{"resource_id": "501"}]}
+        fetch_conflicts.return_value = []
+        insert.return_value = ["10"]
+        fetch_created.return_value = [_row()]
+        resolve_recipients.return_value = ["admin@example.com"]
+        start = date.today()
+        background_tasks = MagicMock()
+
+        create_blocked_seats(
+            conn,
+            tenant_id="1",
+            payload=CreateBlockedSeatsRequest(
+                seat_ids=[501],
+                block_type="Operational block",
+                blocked_from=start,
+                blocked_to=start + timedelta(days=2),
+                reason="Repair",
+            ),
+            current_user={
+                "user_id": "7",
+                "tenant_id": "1",
+                "role_name": "TENANT_ADMIN",
+                "email": "creator@example.com",
+            },
+            background_tasks=background_tasks,
+        )
+
+        resolve_recipients.assert_called_once_with(conn, tenant_id="1")
+        queue_notification.assert_called_once()
+        self.assertIs(queue_notification.call_args.args[0], background_tasks)
+        self.assertEqual(
+            queue_notification.call_args.kwargs["to_emails"], ["admin@example.com"]
+        )
+        context = queue_notification.call_args.kwargs["context"]
+        self.assertEqual(context["seat_codes"], "3570")
+        self.assertEqual(context["blocked_by"], "creator@example.com")
+
+    @patch("backend.services.blocked_seat_service.queue_blocked_seats_created_notification")
+    def test_create_without_background_tasks_skips_notification(
+        self, queue_notification: MagicMock
+    ) -> None:
+        # Backward-compatible default: callers that don't pass
+        # background_tasks (e.g. the other tests in this file) must not
+        # queue a notification or raise.
+        _queue_blocked_seats_created_email(
+            None,
+            conn=MagicMock(),
+            tenant_id="1",
+            rows=[_row()],
+            current_user={"user_id": "7", "tenant_id": "1"},
+        )
+        queue_notification.assert_not_called()
 
     @patch("backend.services.blocked_seat_service.safe_write_audit_log")
     @patch("backend.services.blocked_seat_service.fetch_conflicting_booking_seat_codes")

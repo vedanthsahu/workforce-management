@@ -6,44 +6,6 @@ from psycopg2.extensions import connection as PGConnection
 from psycopg2.extras import RealDictCursor
 
 
-def fetch_active_amenities(
-    conn: PGConnection,
-    *,
-    tenant_id: str,
-) -> list[dict[str, Any]]:
-
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            """
-            SELECT
-                amenities.id::text AS id,
-                amenities.amenity_key AS key,
-                amenities.amenity_name AS name,
-                COALESCE(ac.category_name, amenities.category) AS category,
-                amenities.description,
-                amenities.icon_name AS icon,
-                COALESCE(amenities.applicable_seat_types, '{}') AS applicable_seat_types
-            FROM amenities
-            LEFT JOIN amenity_categories AS ac
-                ON ac.id = amenities.category_id
-               AND (
-                    ac.tenant_id = amenities.tenant_id
-                    OR ac.tenant_id IS NULL
-               )
-            WHERE amenities.tenant_id = %s
-              AND amenities.is_active = true
-            ORDER BY
-                COALESCE(ac.category_name, amenities.category),
-                amenities.amenity_name
-            """,
-            (tenant_id,),
-        )
-
-        rows = cur.fetchall()
-
-    return [dict(row) for row in rows]
-
-
 def fetch_amenity_ids(
     conn: PGConnection,
     *,

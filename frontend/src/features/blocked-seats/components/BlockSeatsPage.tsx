@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   cancelBooking,
   cancelGuestBooking,
@@ -101,6 +102,8 @@ export default function BlockSeatsPage() {
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const [conflictPage, setConflictPage] = useState(1);
+  const [cancelTarget, setCancelTarget] = useState<BlockedSeatConflict | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const [loadingConflictSeatIds, setLoadingConflictSeatIds] = useState<string[]>([]);
   const loadVersion = useRef(0);
   const layoutRequest = useRef<AbortController | null>(null);
@@ -356,13 +359,19 @@ export default function BlockSeatsPage() {
       if (layoutRequest.current === controller) layoutRequest.current = null;
     }
   };
-  const cancel = async (b: BlockedSeatConflict) => {
+  // Asks for confirmation in the app's own ConfirmDialog (rendered at the
+  // bottom of this page) instead of the browser's built-in confirm().
+  const cancel = (b: BlockedSeatConflict) => {
     if (!b.booking_id) {
       setError("Booking details are incomplete. Reload the seats and try again.");
       return;
     }
-    if (!confirm(`Cancel booking for ${displaySpaceCode(b.seat_code)} on ${b.booking_date}?`))
-      return;
+    setCancelTarget(b);
+  };
+  const confirmCancel = async () => {
+    const b = cancelTarget;
+    if (!b?.booking_id) return;
+    setCancelling(true);
     try {
       const action =
         b.booking_type === "GUEST" ? cancelGuestBooking : cancelBooking;
@@ -370,6 +379,9 @@ export default function BlockSeatsPage() {
       resolveBooking(b);
     } catch (requestError: unknown) {
       setError(apiErrorMessage(requestError, "Unable to cancel this booking."));
+    } finally {
+      setCancelling(false);
+      setCancelTarget(null);
     }
   };
   const move = async (b: BlockedSeatConflict, seat: SeatOption) => {
@@ -995,6 +1007,26 @@ export default function BlockSeatsPage() {
           </footer>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!cancelTarget}
+        title="Cancel this booking?"
+        description={
+          cancelTarget
+            ? `The booking for ${displaySpaceCode(cancelTarget.seat_code)} on ${cancelTarget.booking_date}${
+                cancelTarget.booked_for_name ? ` (${cancelTarget.booked_for_name})` : ""
+              } will be cancelled so the space can be blocked.`
+            : ""
+        }
+        confirmLabel={cancelling ? "Cancelling…" : "Cancel booking"}
+        cancelLabel="Keep booking"
+        destructive
+        loading={cancelling}
+        onConfirm={() => void confirmCancel()}
+        onClose={() => {
+          if (!cancelling) setCancelTarget(null);
+        }}
+      />
     </main>
   );
 }

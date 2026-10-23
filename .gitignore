@@ -131,3 +131,9 @@ __pycache__/
 
 
 node_modules/
+
+# Personal/engineering-context files -- kept locally, shared when needed,
+# not meant to be pushed.
+dev-notes/
+docs/
+backend/docs.zip
