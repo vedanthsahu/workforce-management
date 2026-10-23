@@ -626,6 +626,7 @@ export default function AdminBookingsPage() {
             open={!!cancelTarget}
             booking={cancelTarget ? mapAdminBookingToDialogBooking(cancelTarget) : null}
             cancelMode={cancelMode}
+            audience="admin"
             onConfirm={confirmCancel}
             onClose={closeCancel}
           />
