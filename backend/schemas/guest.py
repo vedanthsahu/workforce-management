@@ -134,12 +134,20 @@ class GuestVisitBase(BaseModel):
 
 
 class CreateGuestVisitRequest(GuestVisitBase):
-    pass
+    """seat_id absent -> create the visit only. seat_id present -> create
+    the visit and book that seat for it atomically (floor_id is then
+    required, since a seat can't be resolved without its floor). Replaces
+    the old separate CreateGuestBookingRequest/POST /guest-bookings --
+    the two were already the same fields plus seat_id/floor_id made
+    required, not two genuinely different shapes."""
 
+    seat_id: int | None = Field(default=None, gt=0)
 
-class CreateGuestBookingRequest(GuestVisitBase):
-    floor_id: int = Field(gt=0)
-    seat_id: int = Field(gt=0)
+    @model_validator(mode="after")
+    def _floor_required_with_seat(self) -> CreateGuestVisitRequest:
+        if self.seat_id is not None and self.floor_id is None:
+            raise ValueError("floor_id is required when seat_id is given.")
+        return self
 
 
 class GuestVisitResponse(BaseModel):

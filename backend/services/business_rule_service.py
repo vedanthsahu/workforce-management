@@ -471,3 +471,195 @@ def _upsert_or_500(
                 "message": str(exc),
             },
         ) from exc
+
+
+def get_all_business_rules(conn: PGConnection, *, tenant_id: str) -> dict[str, Any]:
+    """The tenant's full resolved business-rule state across every policy
+    area, in the same shape as BusinessRulesResponse. Used to answer
+    POST /business-rules with one combined, up-to-date payload instead
+    of making the caller re-fetch each policy's own GET afterward."""
+    gap = resolve_layout_scheduling_gap(conn, tenant_id=tenant_id)
+    visibility_days = resolve_layout_visibility_days(conn, tenant_id=tenant_id)
+    blocked_seat_days = resolve_blocked_seat_days(conn, tenant_id=tenant_id)
+
+    return {
+        "booking_policy": resolve_booking_advance_days(conn, tenant_id=tenant_id),
+        "layout_policy": {
+            "employee_max_advance_days": gap["employee_max_advance_days"],
+            "buffer_days": gap["buffer_days"],
+            "min_advance_days": gap["min_advance_days"],
+            "visibility_days": {
+                "draft": visibility_days["DRAFT"],
+                "archived": visibility_days["ARCHIVED"],
+                "deleted": visibility_days["DELETED"],
+            },
+        },
+        "activity_policy": {
+            "record_count": resolve_activity_record_count(conn, tenant_id=tenant_id),
+        },
+        "blocked_seat_policy": {
+            "upcoming_days": blocked_seat_days["UPCOMING"],
+            "expiring_soon_days": blocked_seat_days["EXPIRING_SOON"],
+            "expired_window_days": blocked_seat_days["EXPIRED_WINDOW"],
+            "max_advance_days": resolve_blocked_seat_max_advance_days(conn, tenant_id=tenant_id),
+        },
+        "chatbot_policy": {
+            "employee_access_enabled": resolve_chatbot_employee_access(conn, tenant_id=tenant_id),
+        },
+    }
+
+
+def _as_int(value: Any, *, setting_id: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_business_rule_value",
+                "message": f"{setting_id} requires a numeric value.",
+            },
+        )
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_business_rule_value",
+                "message": f"{setting_id} requires a numeric value.",
+            },
+        ) from exc
+
+
+def _as_bool(value: Any, *, setting_id: str) -> bool:
+    if not isinstance(value, bool):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_business_rule_value",
+                "message": f"{setting_id} requires a true/false value.",
+            },
+        )
+    return value
+
+
+def _set_booking_employee_max_advance_days(conn, *, tenant_id, value, updated_by_user_id, setting_id):
+    update_employee_max_advance_days(
+        conn, tenant_id=tenant_id, new_value=_as_int(value, setting_id=setting_id),
+        updated_by_user_id=updated_by_user_id,
+    )
+
+
+def _set_booking_guest_max_advance_days(conn, *, tenant_id, value, updated_by_user_id, setting_id):
+    update_guest_max_advance_days(
+        conn, tenant_id=tenant_id, new_value=_as_int(value, setting_id=setting_id),
+        updated_by_user_id=updated_by_user_id,
+    )
+
+
+def _set_layout_buffer_days(conn, *, tenant_id, value, updated_by_user_id, setting_id):
+    update_layout_scheduling_buffer_days(
+        conn, tenant_id=tenant_id, new_value=_as_int(value, setting_id=setting_id),
+        updated_by_user_id=updated_by_user_id,
+    )
+
+
+def _make_layout_visibility_setter(status_key: str):
+    def _setter(conn, *, tenant_id, value, updated_by_user_id, setting_id):
+        update_layout_visibility_days(
+            conn, tenant_id=tenant_id, status_key=status_key,
+            new_value=_as_int(value, setting_id=setting_id),
+            updated_by_user_id=updated_by_user_id,
+        )
+
+    return _setter
+
+
+def _set_activity_record_count(conn, *, tenant_id, value, updated_by_user_id, setting_id):
+    update_activity_record_count(
+        conn, tenant_id=tenant_id, new_value=_as_int(value, setting_id=setting_id),
+        updated_by_user_id=updated_by_user_id,
+    )
+
+
+def _make_blocked_seat_days_setter(setting_key: str):
+    def _setter(conn, *, tenant_id, value, updated_by_user_id, setting_id):
+        update_blocked_seat_days(
+            conn, tenant_id=tenant_id, setting_key=setting_key,
+            new_value=_as_int(value, setting_id=setting_id),
+            updated_by_user_id=updated_by_user_id,
+        )
+
+    return _setter
+
+
+def _set_blocked_seat_max_advance_days(conn, *, tenant_id, value, updated_by_user_id, setting_id):
+    update_blocked_seat_max_advance_days(
+        conn, tenant_id=tenant_id, new_value=_as_int(value, setting_id=setting_id),
+        updated_by_user_id=updated_by_user_id,
+    )
+
+
+def _set_chatbot_employee_access(conn, *, tenant_id, value, updated_by_user_id, setting_id):
+    update_chatbot_employee_access(
+        conn, tenant_id=tenant_id, enabled=_as_bool(value, setting_id=setting_id),
+        updated_by_user_id=updated_by_user_id,
+    )
+
+
+# Every writable business-rule setting, by the dotted id the frontend sends
+# in POST /business-rules. Adding a new writable setting means adding one
+# entry here (plus its own resolve_*/update_* pair above, same as today) --
+# nothing else in the route or dispatch layer changes.
+BUSINESS_RULE_SETTERS: dict[str, Any] = {
+    "booking_policy.employee_max_advance_days": _set_booking_employee_max_advance_days,
+    "booking_policy.guest_max_advance_days": _set_booking_guest_max_advance_days,
+    "layout_policy.buffer_days": _set_layout_buffer_days,
+    "layout_policy.visibility_days.draft": _make_layout_visibility_setter("DRAFT"),
+    "layout_policy.visibility_days.archived": _make_layout_visibility_setter("ARCHIVED"),
+    "layout_policy.visibility_days.deleted": _make_layout_visibility_setter("DELETED"),
+    "activity_policy.record_count": _set_activity_record_count,
+    "blocked_seat_policy.upcoming_days": _make_blocked_seat_days_setter("UPCOMING"),
+    "blocked_seat_policy.expiring_soon_days": _make_blocked_seat_days_setter("EXPIRING_SOON"),
+    "blocked_seat_policy.expired_window_days": _make_blocked_seat_days_setter("EXPIRED_WINDOW"),
+    "blocked_seat_policy.max_advance_days": _set_blocked_seat_max_advance_days,
+    "chatbot_policy.employee_access_enabled": _set_chatbot_employee_access,
+}
+
+
+def update_business_rules(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    updates: list[tuple[str, Any]],
+    updated_by_user_id: str,
+) -> dict[str, Any]:
+    """Apply a batch of individually-identified setting changes (replaces
+    the old one-PATCH-per-policy-area routes), then return the tenant's
+    full resolved state so the caller never needs a follow-up GET.
+
+    Each setting still validates and commits exactly as it did under its
+    old dedicated PATCH route (see each update_* function above) -- this
+    only adds a thin id -> setter dispatch in front of them. An update
+    that fails partway through a multi-item batch leaves the settings
+    before it applied, same as today's single PATCH already does when it
+    touches more than one field (e.g. the three visibility_days keys).
+    """
+    for setting_id, value in updates:
+        setter = BUSINESS_RULE_SETTERS.get(setting_id)
+        if setter is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "unknown_business_rule_id",
+                    "message": f"Unknown business rule id: {setting_id}",
+                },
+            )
+        setter(
+            conn,
+            tenant_id=tenant_id,
+            value=value,
+            updated_by_user_id=updated_by_user_id,
+            setting_id=setting_id,
+        )
+
+    return get_all_business_rules(conn, tenant_id=tenant_id)

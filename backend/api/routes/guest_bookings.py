@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query
 from psycopg2.extensions import connection as PGConnection
 
 from backend.api.deps import get_current_user
@@ -16,10 +16,8 @@ from backend.schemas.booking import (
     ModifyBookingRequest,
     PaginatedBookingResponse,
 )
-from backend.schemas.guest import CreateGuestBookingRequest
 from backend.services.guest_service import (
     cancel_guest_booking,
-    create_guest_booking,
     get_guest_booking,
     list_guest_bookings,
     modify_guest_booking,
@@ -28,6 +26,8 @@ from backend.services.guest_service import (
 router = APIRouter(prefix="/guest-bookings", tags=["guest-bookings"])
 
 
+# Future Scope API -- no caller today; kept for the planned admin/
+# facilitator overseer view of all guest bookings tenant-wide.
 @router.get("", response_model=list[BookingResponse] | PaginatedBookingResponse)
 def fetch_guest_bookings(
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
@@ -49,25 +49,15 @@ def fetch_guest_bookings(
     )
 
 
-@router.post(
-    "",
-    response_model=BookingResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_guest_booking_record(
-    payload: CreateGuestBookingRequest,
-    background_tasks: BackgroundTasks,
-    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
-    conn: Annotated[PGConnection, Depends(get_db)],
-) -> BookingResponse:
-    return create_guest_booking(
-        conn,
-        current_user=current_user,
-        payload=payload,
-        background_tasks=background_tasks,
-    )
+#   POST "" (create a guest booking) used to live here. It's been merged
+#   into POST /guest-visits (see guest_visits.py) -- that endpoint now
+#   creates a visit, or a visit + booking when seat_id is given, since
+#   the two were already the same fields plus seat_id/floor_id made
+#   required, not two genuinely different operations.
 
 
+# Future Scope API -- no caller today; kept for the planned overseer
+# view (look up one guest booking directly, e.g. from a guest's profile).
 @router.get("/{booking_id}", response_model=BookingResponse)
 def fetch_guest_booking(
     booking_id: Annotated[int, Path(gt=0)],

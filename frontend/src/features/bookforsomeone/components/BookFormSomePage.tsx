@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { useBookingForm, useSiteBuildingOptions } from "../hooks/useBooking";
 import type { BookingType, GuestType, PurposeOfVisit, VisitDetails } from "../types/booking";
-import { checkGuestBookingEligibility } from "../services/booking.service";
+import { checkGuestBookingEligibility, fetchSites, fetchBuildings, fetchFloors } from "../services/booking.service";
 import { fetchEmployeeWorkPreferences } from "@/features/book/services/Bookingform.service";
 import { guestVisitWorkflow, type GuestWorkflowAction } from "@/features/bookings/services/bookings.service";
 import { BookingTypeSelector, FormFooter, InternalEmployeeForm } from "./BookForSomeone";
@@ -138,8 +138,8 @@ export default function BookForSomeonePage() {
   }, [editVisitId, searchParams, setFormState]);
 
   // Auto-populate Office/Building/Floor from the selected host employee's
-  // saved work preferences (GET /dashboard/employee/{id} — same endpoint the
-  // seat-booking flow already uses to prefill an employee's own booking).
+  // saved work preferences (GET /preferences/{id} — the facilitator/admin
+  // delegation path for prefilling someone else's booking).
   // A guest has no preferences of its own, so the host's location stands in
   // for it — this covers the Guest path for both Admin and Facilitator,
   // since they share this same wizard. Only fills in when the fields are
@@ -154,14 +154,27 @@ export default function BookForSomeonePage() {
     if (visitDetails.siteId || visitDetails.buildingId || visitDetails.floorId) return;
 
     hostPrefsAppliedForId.current = hostId;
+    // Fill only the levels that are still bookable (same lists the dropdowns
+    // use). An inactive/unbookable saved office, building or floor is left
+    // blank -- never filled in, and never swapped for the first list entry.
     fetchEmployeeWorkPreferences(hostId)
-      .then((prefs) => {
+      .then(async (prefs) => {
         if (!prefs?.siteId) return;
-        updateVisitDetails({
-          siteId: prefs.siteId,
-          buildingId: prefs.buildingId ?? "",
-          floorId: prefs.floorId ?? "",
-        });
+        const siteList = await fetchSites();
+        if (!siteList.some((s) => s.id === prefs.siteId)) return;
+
+        const fill: Partial<VisitDetails> = { siteId: prefs.siteId };
+        if (prefs.buildingId) {
+          const buildingList = await fetchBuildings(prefs.siteId);
+          if (buildingList.some((b) => b.id === prefs.buildingId)) {
+            fill.buildingId = prefs.buildingId;
+            if (prefs.floorId) {
+              const floorList = await fetchFloors(prefs.buildingId);
+              if (floorList.some((f) => f.id === prefs.floorId)) fill.floorId = prefs.floorId;
+            }
+          }
+        }
+        updateVisitDetails(fill);
       })
       .catch(() => {});
   }, [visitDetails.hostEmployee?.id, bookingType, editVisitId, visitDetails.siteId, visitDetails.buildingId, visitDetails.floorId, updateVisitDetails]);

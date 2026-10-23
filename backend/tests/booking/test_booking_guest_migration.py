@@ -15,10 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from backend.core.enums import GuestType, VisitPurpose
 from backend.repositories import booking_repository, guest_visit_repository
 from backend.schemas.booking import ModifyBookingRequest
-from backend.schemas.guest import (
-    CreateGuestBookingRequest,
-    CreateGuestVisitRequest,
-)
+from backend.schemas.guest import CreateGuestVisitRequest
 from backend.services import booking_service, guest_service
 
 
@@ -54,9 +51,11 @@ class FakeConnection:
 
 class GuestFakeConnection(FakeConnection):
     """FakeConnection variant that also answers .cursor() -- needed because
-    create_guest_visit/create_guest_booking now resolve their advance-days
-    limit via resolve_booking_advance_days(), which queries business rules
-    through conn.cursor(). Only used within GuestBookingMigrationTests,
+    create_guest_visit (visit-only, or visit+booking when seat_id is
+    given -- see its merge with the old create_guest_booking) resolves
+    its advance-days limit via resolve_booking_advance_days(), which
+    queries business rules through conn.cursor(). Only used within
+    GuestBookingMigrationTests,
     whose setUp already mocks out safe_write_audit_log entirely, so this
     doesn't risk the audit-log's own internal commit() double-counting
     conn.commits the way it would for EmployeeBookingMigrationTests above."""
@@ -134,8 +133,8 @@ def _guest_booking(**overrides):
     return row
 
 
-def _guest_payload() -> CreateGuestBookingRequest:
-    return CreateGuestBookingRequest(
+def _guest_payload() -> CreateGuestVisitRequest:
+    return CreateGuestVisitRequest(
         guest_id=50,
         host_user_id=20,
         site_id=2,
@@ -357,7 +356,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
 
     def test_guest_permission_failure(self) -> None:
         with self.assertRaises(HTTPException) as context:
-            guest_service.create_guest_booking(
+            guest_service.create_guest_visit(
                 FakeConnection(),
                 current_user={
                     "tenant_id": "1",
@@ -427,6 +426,48 @@ class GuestBookingMigrationTests(unittest.TestCase):
         self.assertFalse(response.requires_seat)
         self.assertEqual(conn.commits, 1)
 
+    def test_guest_visit_rejects_a_second_active_visit_same_guest_same_day(self) -> None:
+        # One guest, one day, one visit -- a second active (non-cancelled,
+        # non-modified) visit for the same guest on the same day is a
+        # conflict, not a new row.
+        conn = GuestFakeConnection()
+        payload = CreateGuestVisitRequest(
+            guest_id=50,
+            host_user_id=20,
+            site_id=2,
+            building_id=3,
+            visit_date=_future_date(),
+            guest_type=GuestType.CUSTOMER,
+            purpose_of_visit=VisitPurpose.MEETING,
+        )
+        with patch.object(
+            guest_service, "_resolve_guest", return_value={},
+        ), patch.object(
+            guest_service, "_resolve_host", return_value={},
+        ), patch.object(
+            guest_service, "_validate_visit_location",
+        ), patch.object(
+            guest_service,
+            "fetch_active_guest_visit_for_date",
+            return_value={"guest_visit_id": "59"},
+        ), patch.object(
+            guest_service, "insert_guest_visit",
+        ) as insert_visit:
+            with self.assertRaises(HTTPException) as context:
+                guest_service.create_guest_visit(
+                    conn,
+                    current_user=self.current_user,
+                    payload=payload,
+                )
+
+        self.assertEqual(context.exception.status_code, 409)
+        self.assertEqual(
+            context.exception.detail["code"], "guest_visit_already_exists"
+        )
+        self.assertEqual(context.exception.detail["guest_visit_id"], "59")
+        insert_visit.assert_not_called()
+        self.assertEqual(conn.rollbacks, 1)
+
     def test_guest_booking_creation_is_atomic(self) -> None:
         conn = GuestFakeConnection()
         guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
@@ -450,7 +491,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
             "insert_guest_booking",
             return_value=_guest_booking(),
         ) as insert_booking:
-            response = guest_service.create_guest_booking(
+            response = guest_service.create_guest_visit(
                 conn,
                 current_user=self.current_user,
                 payload=_guest_payload(),
@@ -481,7 +522,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
             guest_service,
             "insert_guest_booking",
         ) as insert_booking, self.assertRaises(HTTPException):
-            guest_service.create_guest_booking(
+            guest_service.create_guest_visit(
                 conn,
                 current_user=self.current_user,
                 payload=_guest_payload(),
@@ -508,13 +549,10 @@ class GuestBookingMigrationTests(unittest.TestCase):
             return_value={"guest_visit_id": "60"},
         ), patch.object(
             guest_service,
-            "update_guest_visit_requires_seat",
-        ), patch.object(
-            guest_service,
             "insert_guest_booking",
             side_effect=psycopg2.DatabaseError("booking failed"),
         ), self.assertRaises(HTTPException):
-            guest_service.create_guest_booking(
+            guest_service.create_guest_visit(
                 conn,
                 current_user=self.current_user,
                 payload=_guest_payload(),
@@ -534,7 +572,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
             guest_service,
             "insert_guest_visit",
         ) as insert_visit, self.assertRaises(HTTPException) as context:
-            guest_service.create_guest_booking(
+            guest_service.create_guest_visit(
                 conn,
                 current_user=self.current_user,
                 payload=_guest_payload(),
@@ -544,6 +582,35 @@ class GuestBookingMigrationTests(unittest.TestCase):
         self.assertEqual(
             context.exception.detail["code"],
             "booking_guest_conflict",
+        )
+        insert_visit.assert_not_called()
+
+    def test_guest_booking_rejects_a_second_active_visit_same_guest_same_day(
+        self,
+    ) -> None:
+        # A guest can already have a visit with no booking attached (e.g.
+        # created via POST /guest-visits) -- guest_has_active_booking_on_date
+        # alone wouldn't catch that, since there's no booking yet. The
+        # visit-level guard must catch it too.
+        conn = GuestFakeConnection()
+        guest_patch, host_patch, seat_patch, lock_patch = self._guest_create_patches()
+        with guest_patch, host_patch, seat_patch, lock_patch, patch.object(
+            guest_service,
+            "fetch_active_guest_visit_for_date",
+            return_value={"guest_visit_id": "59"},
+        ), patch.object(
+            guest_service,
+            "insert_guest_visit",
+        ) as insert_visit, self.assertRaises(HTTPException) as context:
+            guest_service.create_guest_visit(
+                conn,
+                current_user=self.current_user,
+                payload=_guest_payload(),
+            )
+
+        self.assertEqual(context.exception.status_code, 409)
+        self.assertEqual(
+            context.exception.detail["code"], "guest_visit_already_exists"
         )
         insert_visit.assert_not_called()
 
@@ -562,7 +629,7 @@ class GuestBookingMigrationTests(unittest.TestCase):
             guest_service,
             "insert_guest_visit",
         ) as insert_visit, self.assertRaises(HTTPException) as context:
-            guest_service.create_guest_booking(
+            guest_service.create_guest_visit(
                 conn,
                 current_user=self.current_user,
                 payload=_guest_payload(),

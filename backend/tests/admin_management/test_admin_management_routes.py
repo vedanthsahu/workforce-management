@@ -74,9 +74,6 @@ class AdminManagementRouteTests(unittest.TestCase):
         self.assertIn(("PATCH", "/buildings/{building_id}"), route_map)
         self.assertIn(("POST", "/floors"), route_map)
         self.assertIn(("PATCH", "/floors/{floor_id}"), route_map)
-        self.assertIn(("GET", "/offices/{office_id}/floors"), route_map)
-        self.assertIn(("PATCH", "/seats/{seat_id}/configuration"), route_map)
-        self.assertIn(("PATCH", "/seats/bulk-configuration"), route_map)
         self.assertIn(("PATCH", "/layout-seats/{layout_seat_mapping_id}/configuration"), route_map)
         self.assertIn(("PATCH", "/layout-seats/bulk-configuration"), route_map)
 
@@ -105,8 +102,6 @@ class LocationMutationsRequirePermissionTests(unittest.TestCase):
         ("PATCH", "/buildings/{building_id}"),
         ("POST", "/floors"),
         ("PATCH", "/floors/{floor_id}"),
-        ("PATCH", "/seats/{seat_id}/configuration"),
-        ("PATCH", "/seats/bulk-configuration"),
         ("PATCH", "/layout-seats/{layout_seat_mapping_id}/configuration"),
         ("PATCH", "/layout-seats/bulk-configuration"),
     ]
@@ -136,8 +131,6 @@ class LocationMutationsRequirePermissionTests(unittest.TestCase):
         self,
     ) -> None:
         for method, path in (
-            ("PATCH", "/seats/{seat_id}/configuration"),
-            ("PATCH", "/seats/bulk-configuration"),
             ("PATCH", "/layout-seats/{layout_seat_mapping_id}/configuration"),
             ("PATCH", "/layout-seats/bulk-configuration"),
         ):

@@ -246,10 +246,29 @@ export async function uploadAvatar(_file: File): Promise<string> {
   return "";
 }
 
+interface RawAdminAmenity {
+  amenity_id: string;
+  amenity_key: string;
+  amenity_name: string;
+  category_name: string | null;
+  description: string | null;
+  icon_name: string | null;
+}
+
 export async function getAvailableAmenities(): Promise<ApiAmenity[]> {
   try {
-    const { data } = await axiosInstance.get<{ amenities: ApiAmenity[] }>("/preferences");
-    return data.amenities ?? [];
+    const { data } = await axiosInstance.get<{ items: RawAdminAmenity[] }>(
+      "/amenities",
+      { params: { status: "active", limit: 200 } },
+    );
+    return (data.items ?? []).map((a) => ({
+      id: a.amenity_id,
+      key: a.amenity_key,
+      name: a.amenity_name,
+      category: a.category_name ?? "",
+      description: a.description ?? "",
+      icon: a.icon_name ?? "",
+    }));
   } catch {
     return [];
   }

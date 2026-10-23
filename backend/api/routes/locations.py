@@ -21,15 +21,12 @@ from backend.schemas.booking import AvailableSeatListResponse
 from backend.schemas.location import (
     BuildingResponse,
     BulkLayoutSeatConfigurationUpdateRequest,
-    BulkSeatConfigurationUpdateRequest,
     CreateBuildingRequest,
     CreateFloorRequest,
     CreateSiteRequest,
     FloorResponse,
     LayoutSeatConfigurationResponse,
     LayoutSeatConfigurationUpdateRequest,
-    SeatConfigurationResponse,
-    SeatConfigurationUpdateRequest,
     SiteDetailsResponse,
     SiteResponse,
     UpdateBuildingRequest,
@@ -51,8 +48,6 @@ from backend.services.location_service import (
     update_floor_metadata,
     update_layout_seat_configuration,
     update_layout_seat_configurations_bulk,
-    update_seat_configuration_metadata,
-    update_seats_configuration_bulk,
     update_site_metadata,
 )
 
@@ -225,6 +220,7 @@ def floors_by_building(
     limit: Annotated[int | None, Query(ge=1, le=200)] = None,
     search: Annotated[str | None, Query()] = None,
     status_filter: Annotated[str | None, Query(alias="status")] = None,
+    bookable_only: Annotated[bool, Query()] = False,
 ) -> list[FloorResponse]:
 
     return get_floors_by_building(
@@ -235,39 +231,7 @@ def floors_by_building(
         limit=limit,
         search=search,
         status_filter=status_filter,
-    )
-
-
-@router.get(
-    "/offices/{office_id}/floors",
-    response_model=list[FloorResponse],
-)
-def floors_by_office(
-    office_id: Annotated[int, Path(gt=0)],
-
-    current_user: Annotated[
-        dict[str, Any],
-        Depends(get_current_user),
-    ],
-
-    conn: Annotated[
-        PGConnection,
-        Depends(get_db),
-    ],
-
-    page: Annotated[int, Query(ge=1)] = 1,
-    limit: Annotated[int | None, Query(ge=1, le=200)] = None,
-    search: Annotated[str | None, Query()] = None,
-    status_filter: Annotated[str | None, Query(alias="status")] = None,
-) -> list[FloorResponse]:
-    return get_floors_by_building(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        building_id=str(office_id),
-        page=page,
-        limit=limit,
-        search=search,
-        status_filter=status_filter,
+        bookable_only=bookable_only,
     )
 
 
@@ -292,6 +256,7 @@ def floors(
     limit: Annotated[int | None, Query(ge=1, le=200)] = None,
     search: Annotated[str | None, Query()] = None,
     status_filter: Annotated[str | None, Query(alias="status")] = None,
+    bookable_only: Annotated[bool, Query()] = False,
 ) -> list[FloorResponse]:
     """List floors for the tenant, optionally narrowed to one site and/or building."""
     return get_floors_by_building(
@@ -303,6 +268,7 @@ def floors(
         limit=limit,
         search=search,
         status_filter=status_filter,
+        bookable_only=bookable_only,
     )
 
 
@@ -339,48 +305,6 @@ def update_floor_route(
     ],
 ) -> FloorResponse:
     return update_floor_metadata(conn, tenant_id=str(current_user["tenant_id"]), floor_id=str(floor_id), payload=payload, current_user=current_user)
-
-
-@router.patch(
-    "/seats/{seat_id}/configuration",
-    response_model=SeatConfigurationResponse,
-)
-def update_seat_configuration_route(
-    seat_id: Annotated[int, Path(gt=0)],
-    payload: SeatConfigurationUpdateRequest,
-    current_user: Annotated[
-        dict[str, Any],
-        Depends(require_any_permission(["location:manage", "layout:upload"])),
-    ],
-    conn: Annotated[
-        PGConnection,
-        Depends(get_db),
-    ],
-) -> SeatConfigurationResponse:
-    return update_seat_configuration_metadata(conn, tenant_id=str(current_user["tenant_id"]), seat_id=str(seat_id), payload=payload, current_user=current_user)
-
-
-@router.patch(
-    "/seats/bulk-configuration",
-    response_model=list[SeatConfigurationResponse],
-)
-def update_seats_bulk_configuration_route(
-    payload: BulkSeatConfigurationUpdateRequest,
-    current_user: Annotated[
-        dict[str, Any],
-        Depends(require_any_permission(["location:manage", "layout:upload"])),
-    ],
-    conn: Annotated[
-        PGConnection,
-        Depends(get_db),
-    ],
-) -> list[SeatConfigurationResponse]:
-    return update_seats_configuration_bulk(
-        conn,
-        tenant_id=str(current_user["tenant_id"]),
-        payload=payload,
-        current_user=current_user,
-    )
 
 
 @router.get(
