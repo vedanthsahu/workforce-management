@@ -951,7 +951,7 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
             <select
               id="visitSite"
               style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: readOnlyLocation ? "not-allowed" : "pointer", opacity: readOnlyLocation ? 0.6 : 1 }}
-              value={visitDetails.siteId}
+              value={sites.some((s) => s.id === visitDetails.siteId) ? visitDetails.siteId : ""}
               onChange={(e) => onChange({ siteId: e.target.value, buildingId: "", floorId: "" })}
               disabled={readOnlyLocation}
               onFocusCapture={fieldFocusRing}
@@ -971,7 +971,7 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
             <select
               id="visitBuilding"
               style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: readOnlyLocation || !visitDetails.siteId ? "not-allowed" : "pointer", opacity: readOnlyLocation ? 0.6 : 1 }}
-              value={visitDetails.buildingId}
+              value={buildings.some((b) => b.id === visitDetails.buildingId) ? visitDetails.buildingId : ""}
               onChange={(e) => onChange({ buildingId: e.target.value, floorId: "" })}
               disabled={readOnlyLocation || !visitDetails.siteId}
               onFocusCapture={fieldFocusRing}
@@ -993,7 +993,7 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
             <select
               id="visitFloor"
               style={{ ...inputStyle(), paddingRight: 32, appearance: "none", cursor: readOnlyLocation || !visitDetails.buildingId ? "not-allowed" : "pointer", opacity: readOnlyLocation ? 0.6 : 1 }}
-              value={visitDetails.floorId}
+              value={floors.some((f) => f.id === visitDetails.floorId) ? visitDetails.floorId : ""}
               onChange={(e) => onChange({ floorId: e.target.value })}
               disabled={readOnlyLocation || !visitDetails.buildingId}
               onFocusCapture={fieldFocusRing}
