@@ -139,3 +139,17 @@ docs/*
 # Business-facing application documentation is versioned; other docs stay local.
 !docs/application/
 backend/docs.zip
+
+# Version the tester-facing API package while keeping other generated/local
+# documentation (including Postman's Local Mode v3 conversion) ignored.
+!backend/docs/
+backend/docs/*
+!backend/docs/api/
+backend/docs/api/*
+!backend/docs/api/generate_api_assets.py
+!backend/docs/api/seat-management.openapi.json
+!backend/docs/api/seat-management.postman_collection.json
+!backend/docs/api/seat-management.postman_environment.json
+!backend/docs/api/API_REFERENCE.md
+!backend/docs/api/ROLE_ACCESS_MATRIX.md
+!backend/docs/api/POSTMAN_GUIDE.md
