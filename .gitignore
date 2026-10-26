@@ -135,5 +135,7 @@ node_modules/
 # Personal/engineering-context files -- kept locally, shared when needed,
 # not meant to be pushed.
 dev-notes/
-docs/
+docs/*
+# Business-facing application documentation is versioned; other docs stay local.
+!docs/application/
 backend/docs.zip
