@@ -13,6 +13,7 @@ from backend.db.connection import get_db
 from backend.schemas.audit import (
     AuditLogDetailResponse,
     AuditLogListResponse,
+    AuditEventStatus,
     AuditSortBy,
     AuditSortDir,
 )
@@ -75,7 +76,7 @@ def admin_audit_logs(
         Query(description="Exact match on audit_logs.entity_type, e.g. 'building'."),
     ] = None,
     event_status: Annotated[
-        str | None,
+        AuditEventStatus | None,
         Query(alias="status", description="Exact match on audit_logs.event_status: SUCCESS, FAILURE, or DENIED."),
     ] = None,
     start_date: Annotated[
@@ -138,8 +139,9 @@ def admin_audit_logs(
     summary="Get one audit log entry",
     description=(
         "Return the full detail of a single tenant-scoped audit_logs row -- "
-        "including the old/new-values JSON diff, request metadata, IP address "
-        "and user agent -- for the admin Audit Logs detail drawer. "
+        "including a redacted old/new-values diff and request/correlation "
+        "identifiers -- for the admin Audit Logs detail drawer. Raw failure "
+        "details and technical request payloads are not returned. "
         "Requires admin_dashboard:view or an admin role."
     ),
     responses={
