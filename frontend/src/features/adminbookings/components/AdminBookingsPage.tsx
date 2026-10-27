@@ -152,6 +152,7 @@ export default function AdminBookingsPage() {
     confirmCancel,
     modifySeat,
     modifyVisit,
+    addBooking,
   } = useAdminBookingActions({
     onCancelled: () => {
       setSelectedBooking(null);
@@ -577,6 +578,7 @@ export default function AdminBookingsPage() {
                   onView={setSelectedBooking}
                   onModifySeat={modifySeat}
                   onModifyVisit={modifyVisit}
+                  onAddBooking={addBooking}
                   onCancelSeat={(b) => openCancelSeat(b)}
                   onCancelVisit={(b) => openCancelVisit(b)}
                 />
