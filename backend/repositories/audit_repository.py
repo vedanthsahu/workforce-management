@@ -287,9 +287,8 @@ AUDIT_DETAIL_SELECT_FIELDS = """
     al.old_values,
     al.new_values,
     al.changed_fields,
-    al.metadata,
-    al.failure_code,
-    al.failure_reason,
+    al.metadata->>'target_user_id' AS target_user_id,
+    al.metadata->>'target_email' AS target_email,
     al.occurred_at,
     al.created_at
 """
@@ -312,7 +311,7 @@ _AUDIT_SORT_COLUMNS: dict[str, str] = {
     "actor": "COALESCE(au.display_name, au.full_name, al.actor_email)",
 }
 
-_JSON_FIELDS = ("old_values", "new_values", "changed_fields", "metadata")
+_JSON_FIELDS = ("old_values", "new_values", "changed_fields")
 
 
 def _parse_json_fields(row: dict[str, Any]) -> dict[str, Any]:
@@ -379,12 +378,14 @@ def _build_audit_log_filters(
             params.append(end_date + timedelta(days=1))
 
     if search is not None:
-        # Name-only, to match the type-ahead "search as you go" pattern the
-        # admin Audit Logs filter bar uses (same as the Book for Someone
-        # employee search) -- not action/module/entity, those have their own
-        # dedicated dropdown filters.
-        conditions.append("COALESCE(au.display_name, au.full_name) ILIKE %s")
-        params.append(f"%{search}%")
+        conditions.append(
+            "(COALESCE(au.display_name, au.full_name, '') ILIKE %s "
+            "OR COALESCE(al.actor_email, '') ILIKE %s "
+            "OR COALESCE(al.entity_id, '') ILIKE %s "
+            "OR COALESCE(al.metadata->>'target_email', '') ILIKE %s)"
+        )
+        pattern = f"%{search}%"
+        params.extend([pattern, pattern, pattern, pattern])
 
     return " AND ".join(conditions), params
 
@@ -482,9 +483,8 @@ def fetch_audit_logs_summary(
             SELECT
                 COUNT(*)::integer AS total_events,
                 COUNT(*) FILTER (WHERE al.event_status = 'SUCCESS')::integer AS successful_events,
-                -- "Failed" on the summary cards covers both FAILURE and DENIED
-                -- outcomes -- anything that isn't a clean SUCCESS.
-                COUNT(*) FILTER (WHERE al.event_status <> 'SUCCESS')::integer AS failed_events,
+                COUNT(*) FILTER (WHERE al.event_status = 'FAILURE')::integer AS failed_events,
+                COUNT(*) FILTER (WHERE al.event_status = 'DENIED')::integer AS denied_events,
                 COUNT(DISTINCT al.actor_user_id)::integer AS unique_users
             {AUDIT_SELECT_FROM}
             WHERE {where_clause}
@@ -500,6 +500,7 @@ def fetch_audit_logs_summary(
             "total_events": 0,
             "successful_events": 0,
             "failed_events": 0,
+            "denied_events": 0,
             "unique_users": 0,
         }
     )

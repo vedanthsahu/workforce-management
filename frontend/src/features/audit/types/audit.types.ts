@@ -8,13 +8,30 @@ export type AuditEventStatus = "SUCCESS" | "FAILURE" | "DENIED";
  * falls back to the uppercased prefix for anything unmapped) -- these are
  * just the values backend/repositories/audit_repository.py's
  * _ACTION_PREFIX_TO_MODULE currently produces. */
-export type AuditModule = "AUTH" | "BOOKING" | "GUEST" | "LOCATION" | "AMENITY" | (string & {});
+export type AuditModule =
+  | "AUTH"
+  | "BOOKING"
+  | "GUEST"
+  | "LOCATION"
+  | "AMENITY"
+  | (string & {});
 
-export type AuditRequestMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE" | (string & {});
+export type AuditRequestMethod =
+  | "GET"
+  | "POST"
+  | "PATCH"
+  | "PUT"
+  | "DELETE"
+  | (string & {});
 
 export type AuditSourceChannel = "WEB" | "MOBILE" | "API" | (string & {});
 
-export type AuditSortBy = "occurred_at" | "action" | "module" | "status" | "actor";
+export type AuditSortBy =
+  | "occurred_at"
+  | "action"
+  | "module"
+  | "status"
+  | "actor";
 export type AuditSortDir = "asc" | "desc";
 
 /** GET /admin/audit item shape -- deliberately lightweight (see
@@ -31,6 +48,7 @@ export interface AuditLogListItemRaw {
   entity_type: string | null;
   entity_id: string | null;
   event_status: AuditEventStatus;
+  failure_summary: string | null;
   request_method: AuditRequestMethod | null;
   source_channel: AuditSourceChannel | null;
   occurred_at: string;
@@ -47,9 +65,9 @@ export interface AuditLogDetailRaw extends AuditLogListItemRaw {
   old_values: Record<string, unknown> | null;
   new_values: Record<string, unknown> | null;
   changed_fields: string[] | null;
-  metadata: Record<string, unknown> | null;
-  failure_code: string | null;
-  failure_reason: string | null;
+  target_user_id: string | null;
+  target_email: string | null;
+  failure_summary: string | null;
   created_at: string;
 }
 
@@ -66,6 +84,7 @@ export interface AuditLogListItem {
   entityType: string;
   entityId: string;
   status: AuditEventStatus;
+  failureSummary: string;
   requestMethod: AuditRequestMethod;
   sourceChannel: AuditSourceChannel;
   occurredAt: string;
@@ -81,8 +100,8 @@ export interface AuditLog extends AuditLogListItem {
   oldValues: Record<string, unknown> | null;
   newValues: Record<string, unknown> | null;
   changedFields: string[] | null;
-  failureCode: string | null;
-  failureReason: string | null;
+  targetUserId: string;
+  targetEmail: string;
   createdAt: string;
 }
 
@@ -113,7 +132,7 @@ export function defaultAuditLogFilters(): AuditLogFilters {
     action: "All",
     module: "All",
     entity: "All",
-    status: "All",
+    status: "SUCCESS",
     timeMode: "date",
     dateFrom: todayIso,
     dateTo: todayIso,
@@ -125,6 +144,7 @@ export interface AuditLogSummary {
   total_events: number;
   successful_events: number;
   failed_events: number;
+  denied_events: number;
   unique_users: number;
 }
 

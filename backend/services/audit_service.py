@@ -24,6 +24,58 @@ from backend.schemas.audit import (
 )
 
 
+_SENSITIVE_FIELD_MARKERS = (
+    "api_key",
+    "apikey",
+    "authorization",
+    "cookie",
+    "credential",
+    "password",
+    "private_key",
+    "secret",
+    "session_id",
+    "token",
+)
+
+
+def _redact_sensitive_values(value: object) -> object:
+    """Keep business before/after data useful without returning credentials."""
+    if isinstance(value, dict):
+        return {
+            key: (
+                "[REDACTED]"
+                if any(marker in key.lower() for marker in _SENSITIVE_FIELD_MARKERS)
+                else _redact_sensitive_values(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_sensitive_values(item) for item in value]
+    return value
+
+
+def _prepare_audit_row(row: dict, *, detail: bool = False) -> dict:
+    """Build the non-sensitive admin representation of a stored audit row."""
+    prepared = dict(row)
+    # These remain stored for technical investigation and existing logging,
+    # but are intentionally not part of the normal administrator response.
+    prepared.pop("failure_code", None)
+    prepared.pop("failure_reason", None)
+    prepared.pop("metadata", None)
+    status_value = prepared.get("event_status")
+    prepared["failure_summary"] = (
+        "Access to this action was denied."
+        if status_value == "DENIED"
+        else "The action could not be completed."
+        if status_value == "FAILURE"
+        else None
+    )
+    if detail:
+        prepared["old_values"] = _redact_sensitive_values(prepared.get("old_values"))
+        prepared["new_values"] = _redact_sensitive_values(prepared.get("new_values"))
+    return prepared
+
+
 def get_audit_logs(
     conn: PGConnection,
     *,
@@ -94,7 +146,7 @@ def get_audit_logs(
         ) from exc
 
     return AuditLogListResponse(
-        items=[AuditLogListItemResponse(**row) for row in rows],
+        items=[AuditLogListItemResponse(**_prepare_audit_row(row)) for row in rows],
         summary=AuditLogSummary(**summary_row),
         filter_options=[AuditLogFilterOption(**row) for row in filter_option_rows],
         pagination={
@@ -134,4 +186,4 @@ def get_audit_log_by_id(
             },
         )
 
-    return AuditLogDetailResponse(**row)
+    return AuditLogDetailResponse(**_prepare_audit_row(row, detail=True))

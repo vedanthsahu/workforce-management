@@ -32,6 +32,7 @@ class AuditLogListItemResponse(BaseModel):
     entity_type: str | None = None
     entity_id: str | None = None
     event_status: AuditEventStatus
+    failure_summary: str | None = None
     request_method: str | None = None
     source_channel: str | None = None
     occurred_at: datetime
@@ -64,6 +65,7 @@ class AuditLogSummary(BaseModel):
     total_events: int = 0
     successful_events: int = 0
     failed_events: int = 0
+    denied_events: int = 0
     unique_users: int = 0
 
 
@@ -107,6 +109,7 @@ class AuditLogListResponse(BaseModel):
                     "total_events": 828,
                     "successful_events": 713,
                     "failed_events": 115,
+                    "denied_events": 12,
                     "unique_users": 21,
                 },
                 "filter_options": [
@@ -121,8 +124,7 @@ class AuditLogListResponse(BaseModel):
 
 
 class AuditLogDetailResponse(BaseModel):
-    """Full audit_logs row, including the JSON old/new-values diff, for the
-    admin Audit Logs detail drawer."""
+    """Admin-safe audit detail with redacted changes and request references."""
 
     id: str
     actor_user_id: str | None = None
@@ -144,9 +146,9 @@ class AuditLogDetailResponse(BaseModel):
     old_values: dict[str, Any] | None = None
     new_values: dict[str, Any] | None = None
     changed_fields: list[str] | None = None
-    metadata: dict[str, Any] | None = None
-    failure_code: str | None = None
-    failure_reason: str | None = None
+    target_user_id: str | None = None
+    target_email: str | None = None
+    failure_summary: str | None = None
     occurred_at: datetime
     created_at: datetime
 

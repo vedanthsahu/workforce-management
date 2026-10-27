@@ -52,10 +52,10 @@ export const AUDIT_METHOD_FALLBACK_STYLE = "bg-gray-100 text-gray-600";
 // (it's just badge coloring, independent of the options list).
 
 export const AUDIT_STATUS_OPTIONS: { value: string; label: string }[] = [
-  { value: "All", label: "All Status" },
-  { value: "SUCCESS", label: "Success" },
-  { value: "FAILURE", label: "Failure" },
-  { value: "DENIED", label: "Denied" },
+  { value: "All", label: "All Results" },
+  { value: "SUCCESS", label: "Completed" },
+  { value: "FAILURE", label: "Failed" },
+  { value: "DENIED", label: "Access Denied" },
 ];
 
 export const AUDIT_PAGE_SIZES = [10, 25, 50, 75, 100];
@@ -68,27 +68,45 @@ export const AUDIT_PAGE_SIZES = [10, 25, 50, 75, 100];
 // the bare number shown on the chip itself (unit is implied by the group
 // header); `label` is the full "N min/hr/day" text used for the trigger
 // button and any other place the value needs to stand alone.
-type AuditRelativeTimeOption = { value: number; label: string; shortLabel: string };
+type AuditRelativeTimeOption = {
+  value: number;
+  label: string;
+  shortLabel: string;
+};
 
 function minuteOption(minutes: number): AuditRelativeTimeOption {
-  return { value: minutes * 60, label: `${minutes} min`, shortLabel: `${minutes}` };
+  return {
+    value: minutes * 60,
+    label: `${minutes} min`,
+    shortLabel: `${minutes}`,
+  };
 }
 function hourOption(hours: number): AuditRelativeTimeOption {
-  return { value: hours * 60 * 60, label: hours === 1 ? "1 hr" : `${hours} hrs`, shortLabel: `${hours}` };
+  return {
+    value: hours * 60 * 60,
+    label: hours === 1 ? "1 hr" : `${hours} hrs`,
+    shortLabel: `${hours}`,
+  };
 }
 function dayOption(days: number): AuditRelativeTimeOption {
-  return { value: days * 24 * 60 * 60, label: days === 1 ? "1 day" : `${days} days`, shortLabel: `${days}` };
+  return {
+    value: days * 24 * 60 * 60,
+    label: days === 1 ? "1 day" : `${days} days`,
+    shortLabel: `${days}`,
+  };
 }
 
-export const AUDIT_RELATIVE_TIME_GROUPS: { label: string; options: AuditRelativeTimeOption[] }[] = [
+export const AUDIT_RELATIVE_TIME_GROUPS: {
+  label: string;
+  options: AuditRelativeTimeOption[];
+}[] = [
   { label: "Minutes", options: [5, 10, 15, 30, 45].map(minuteOption) },
   { label: "Hours", options: [1, 2, 3, 6, 8, 12].map(hourOption) },
   { label: "Days", options: [1, 2, 3, 4, 5, 6].map(dayOption) },
 ];
 
-export const AUDIT_RELATIVE_TIME_OPTIONS: AuditRelativeTimeOption[] = AUDIT_RELATIVE_TIME_GROUPS.flatMap(
-  (group) => group.options
-);
+export const AUDIT_RELATIVE_TIME_OPTIONS: AuditRelativeTimeOption[] =
+  AUDIT_RELATIVE_TIME_GROUPS.flatMap((group) => group.options);
 
 export function moduleBadgeStyle(module: string): string {
   return AUDIT_MODULE_STYLES[module] ?? AUDIT_MODULE_FALLBACK_STYLE;
@@ -120,15 +138,12 @@ export const AUDIT_DETAIL_MIN_PANEL_WIDTH = 320;
 // context once thead/tbody go display:block, so widths can't be set via a
 // single <colgroup> the way a normal table would).
 export const AUDIT_TABLE_COL = {
-  actor: "w-[15%]",
-  time: "w-[11%]",
-  action: "w-[15%]",
-  module: "w-[10%]",
-  entity: "w-[10%]",
-  status: "w-[9%]",
-  method: "w-[9%]",
-  source: "w-[8%]",
-  view: "w-[6%]",
+  time: "w-[16%]",
+  actor: "w-[22%]",
+  action: "w-[24%]",
+  entity: "w-[21%]",
+  status: "w-[13%]",
+  view: "w-[4%]",
 };
 
 // ─── useAuditLogs default sort ───────────────────────────────────────────────

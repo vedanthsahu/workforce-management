@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Download, KeyRound, ShieldAlert, XCircle } from "lucide-react";
 import AuditLogFilters from "./AuditLogFilters";
 import AuditStatCards from "./AuditStatCards";
 import AuditLogsTable from "./AuditLogsTable";
@@ -9,8 +10,19 @@ import { AuditLogsSkeleton } from "./AuditLogsSkeleton";
 import AmenitiesPagination from "@/features/amenities/components/AmenitiesPagination";
 import { useAuditLogs } from "../hooks/useAuditLogs";
 import { auditService } from "../services/audit.service";
-import { AuditLog, AuditLogListItem, defaultAuditLogFilters } from "../types/audit.types";
-import { mapAuditLogDetailToUi, mapAuditLogListItemToUi } from "../utils/mapAuditLog";
+import {
+  AuditLog,
+  AuditLogListItem,
+  defaultAuditLogFilters,
+} from "../types/audit.types";
+import {
+  affectedResourceLabel,
+  auditActivityLabel,
+  auditStatusLabel,
+  formatAuditDateTime,
+  mapAuditLogDetailToUi,
+  mapAuditLogListItemToUi,
+} from "../utils/mapAuditLog";
 import { AUDIT_PAGE_SIZES } from "../utils/constants";
 
 export default function AuditLogsPage() {
@@ -20,23 +32,30 @@ export default function AuditLogsPage() {
   // click (or Clear), and it alone drives useAuditLogs -- same staged-filter
   // pattern as AdminBookingsPage/BookingManagementFilters.
   const [filters, setFilters] = useState(defaultAuditLogFilters());
-  const [appliedFilters, setAppliedFilters] = useState(defaultAuditLogFilters());
+  const [appliedFilters, setAppliedFilters] = useState(
+    defaultAuditLogFilters(),
+  );
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AuditLog | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
-  const { response, loading, page, setPage, pageSize, setPageSize } = useAuditLogs(appliedFilters);
+  const { response, loading, page, setPage, pageSize, setPageSize } =
+    useAuditLogs(appliedFilters);
 
-  const items = useMemo(() => (response?.items ?? []).map(mapAuditLogListItemToUi), [response]);
+  const items = useMemo(
+    () => (response?.items ?? []).map(mapAuditLogListItemToUi),
+    [response],
+  );
 
   const summary = response?.summary;
   const stats = {
     total: summary?.total_events ?? 0,
     successful: summary?.successful_events ?? 0,
     failed: summary?.failed_events ?? 0,
-    uniqueUsers: summary?.unique_users ?? 0,
+    denied: summary?.denied_events ?? 0,
   };
 
   const pagination = response?.pagination;
@@ -44,7 +63,10 @@ export default function AuditLogsPage() {
   const totalPages = Math.max(1, pagination?.total_pages ?? 1);
   const startIndex = (page - 1) * pageSize;
 
-  const handleUpdateFilter = <K extends keyof typeof filters>(key: K, value: (typeof filters)[K]) => {
+  const handleUpdateFilter = <K extends keyof typeof filters>(
+    key: K,
+    value: (typeof filters)[K],
+  ) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -56,6 +78,86 @@ export default function AuditLogsPage() {
     const defaults = defaultAuditLogFilters();
     setFilters(defaults);
     setAppliedFilters(defaults);
+  };
+
+  const applyQuickView = (updates: Partial<typeof filters>) => {
+    const next = { ...defaultAuditLogFilters(), ...updates };
+    setFilters(next);
+    setAppliedFilters(next);
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const isRelative = appliedFilters.timeMode === "relative";
+      const common = {
+        search: appliedFilters.search.trim() || undefined,
+        action:
+          appliedFilters.action !== "All" ? appliedFilters.action : undefined,
+        module:
+          appliedFilters.module !== "All" ? appliedFilters.module : undefined,
+        entity:
+          appliedFilters.entity !== "All" ? appliedFilters.entity : undefined,
+        status:
+          appliedFilters.status !== "All" ? appliedFilters.status : undefined,
+        startDate: !isRelative
+          ? appliedFilters.dateFrom || undefined
+          : undefined,
+        endDate: !isRelative ? appliedFilters.dateTo || undefined : undefined,
+        lastSeconds: isRelative
+          ? (appliedFilters.lastSeconds ?? undefined)
+          : undefined,
+        limit: 100,
+      };
+      const first = await auditService.list({ ...common, page: 1 });
+      const rows = [...first.items];
+      for (
+        let pageNumber = 2;
+        pageNumber <= first.pagination.total_pages;
+        pageNumber += 1
+      ) {
+        const next = await auditService.list({ ...common, page: pageNumber });
+        rows.push(...next.items);
+      }
+      const csvRows = rows
+        .map(mapAuditLogListItemToUi)
+        .map((item) => [
+          formatAuditDateTime(item.occurredAt),
+          item.actorName,
+          item.actorEmail,
+          item.actorRole,
+          auditActivityLabel(item),
+          affectedResourceLabel(item),
+          auditStatusLabel(item.status),
+          item.failureSummary,
+        ]);
+      const escape = (value: string) => `"${value.replaceAll('"', '""')}"`;
+      const csv = [
+        [
+          "Time",
+          "Performed By",
+          "Email",
+          "Role",
+          "Activity",
+          "Affected Resource",
+          "Result",
+          "Reason",
+        ],
+        ...csvRows,
+      ]
+        .map((row) => row.map((value) => escape(String(value))).join(","))
+        .join("\r\n");
+      const url = URL.createObjectURL(
+        new Blob([csv], { type: "text/csv;charset=utf-8" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleSelectRow = (item: AuditLogListItem) => {
@@ -93,9 +195,24 @@ export default function AuditLogsPage() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip p-4 sm:p-6 space-y-4 sm:space-y-6 bg-[#f8fafc]">
       {/* HEADER */}
-      <div>
-        <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Audit Logs</h1>
-        <p className="text-xs sm:text-sm text-gray-500 mt-1">Track and monitor user activities and system changes</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">
+            Audit Logs
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">
+            Review administrative and security activity
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={exporting || !response?.pagination.total}
+          className="h-10 px-4 inline-flex items-center gap-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <Download size={15} />
+          {exporting ? "Exporting…" : "Export CSV"}
+        </button>
       </div>
 
       {/* FILTERS CARD */}
@@ -109,21 +226,67 @@ export default function AuditLogsPage() {
         />
       </div>
 
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs font-medium text-gray-500 mr-1">
+          Quick views:
+        </span>
+        <button
+          type="button"
+          onClick={() => applyQuickView({ status: "DENIED" })}
+          className="h-8 px-3 inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-white border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors"
+        >
+          <ShieldAlert size={13} />
+          Access Denied
+        </button>
+        <button
+          type="button"
+          onClick={() => applyQuickView({ status: "FAILURE" })}
+          className="h-8 px-3 inline-flex items-center gap-1.5 text-xs font-medium text-red-700 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+        >
+          <XCircle size={13} />
+          Failed Activities
+        </button>
+        <button
+          type="button"
+          onClick={() => applyQuickView({ module: "AUTH" })}
+          className="h-8 px-3 inline-flex items-center gap-1.5 text-xs font-medium text-indigo-700 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
+        >
+          <KeyRound size={13} />
+          Access &amp; Permissions
+        </button>
+      </div>
+
       {/* STATS */}
       <AuditStatCards stats={stats} />
 
       {/* TABLE */}
       <div className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col overflow-hidden">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-900">
+            Recent Activity
+          </h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Select an activity to see who performed it, what was affected, and
+            what changed.
+          </p>
+        </div>
         {loading ? (
-          <p className="px-6 py-12 text-center text-gray-400 text-sm">Loading audit events…</p>
+          <p className="px-6 py-12 text-center text-gray-400 text-sm">
+            Loading audit events…
+          </p>
         ) : (
-          <AuditLogsTable data={items} selectedId={selectedId} onSelect={handleSelectRow} />
+          <AuditLogsTable
+            data={items}
+            selectedId={selectedId}
+            onSelect={handleSelectRow}
+          />
         )}
 
         {/* FOOTER */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-t shrink-0 text-xs sm:text-sm text-gray-500">
           <span>
-            {total > 0 && `Showing ${startIndex + 1} to ${Math.min(startIndex + pageSize, total)} of ${total} results`}
+            {total > 0 &&
+              `Showing ${startIndex + 1} to ${Math.min(startIndex + pageSize, total)} of ${total} results`}
           </span>
           <div className="flex items-center gap-3 self-center sm:self-auto">
             {total >= AUDIT_PAGE_SIZES[0] && (
@@ -144,7 +307,11 @@ export default function AuditLogsPage() {
                 </select>
               </div>
             )}
-            <AmenitiesPagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+            <AmenitiesPagination
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+            />
           </div>
         </div>
       </div>
