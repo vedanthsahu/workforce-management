@@ -1,7 +1,7 @@
 "use client";
 
 import { displaySpaceCode } from "@/lib/spaceCode";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Eye, MoreVertical, Pencil, XCircle } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarPlus, ChevronLeft, ChevronRight, Eye, MoreVertical, Pencil, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
@@ -22,6 +22,8 @@ type Props = {
   onView: (booking: AdminBooking) => void;
   onModifySeat: (booking: AdminBooking) => void;
   onModifyVisit: (booking: AdminBooking) => void;
+  /** Adds a seat to a visit-only guest invite. */
+  onAddBooking: (booking: AdminBooking) => void;
   onCancelSeat: (booking: AdminBooking) => void;
   onCancelVisit: (booking: AdminBooking) => void;
 };
@@ -31,6 +33,7 @@ function RowMenu({
   onView,
   onModifySeat,
   onModifyVisit,
+  onAddBooking,
   onCancelSeat,
   onCancelVisit,
 }: {
@@ -38,6 +41,7 @@ function RowMenu({
   onView: (b: AdminBooking) => void;
   onModifySeat: (b: AdminBooking) => void;
   onModifyVisit: (b: AdminBooking) => void;
+  onAddBooking: (b: AdminBooking) => void;
   onCancelSeat: (b: AdminBooking) => void;
   onCancelVisit: (b: AdminBooking) => void;
 }) {
@@ -115,6 +119,8 @@ function RowMenu({
           trailingIcon: ChevronRight,
         });
       } else if (hasVisit) {
+        // Visit-only guest (no seat yet): a space can still be added later.
+        items.push({ label: "Book a Space", onClick: () => onAddBooking(booking), icon: CalendarPlus });
         items.push({ label: "Edit Visit", onClick: () => onModifyVisit(booking), icon: Pencil });
         items.push({ label: "Cancel Visit", onClick: () => onCancelVisit(booking), icon: XCircle, variant: "danger" });
       } else if (hasBooking) {
@@ -219,6 +225,7 @@ export default function BookingsTable({
   onView,
   onModifySeat,
   onModifyVisit,
+  onAddBooking,
   onCancelSeat,
   onCancelVisit,
 }: Props) {
@@ -301,6 +308,7 @@ export default function BookingsTable({
                       onView={onView}
                       onModifySeat={onModifySeat}
                       onModifyVisit={onModifyVisit}
+                      onAddBooking={onAddBooking}
                       onCancelSeat={onCancelSeat}
                       onCancelVisit={onCancelVisit}
                     />
