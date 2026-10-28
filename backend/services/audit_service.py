@@ -12,9 +12,9 @@ from psycopg2.extensions import connection as PGConnection
 from backend.repositories.audit_repository import (
     fetch_audit_log_by_id,
     fetch_audit_log_filter_options,
-    fetch_audit_value_display_names,
     fetch_audit_logs,
     fetch_audit_logs_summary,
+    fetch_audit_value_display_names,
 )
 from backend.schemas.audit import (
     AuditLogDetailResponse,

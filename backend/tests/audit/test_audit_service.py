@@ -1,12 +1,12 @@
 from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
+from backend.repositories.audit_repository import _build_audit_log_filters
 from backend.services.audit_service import (
     _apply_audit_display_names,
     _prepare_audit_row,
     get_audit_logs,
 )
-from backend.repositories.audit_repository import _build_audit_log_filters
 
 
 def _list_row(status: str = "SUCCESS") -> dict:

@@ -11,9 +11,9 @@ from psycopg2.extensions import connection as PGConnection
 from backend.api.deps import require_any_permission
 from backend.db.connection import get_db
 from backend.schemas.audit import (
+    AuditCategory,
     AuditLogDetailResponse,
     AuditLogListResponse,
-    AuditCategory,
     AuditSortBy,
     AuditSortDir,
 )
