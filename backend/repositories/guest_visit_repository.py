@@ -185,7 +185,10 @@ def insert_guest_visit(
     requires_seat: bool,
     created_by_user_id: str,
     modified_from_guest_visit_id: str | None = None,
+    updated_by_user_id: str | None = None,
 ) -> dict[str, Any]:
+    """updated_by_user_id is only passed when this row replaces a modified
+    visit, so the list can show who made the change ("Modified by ...")."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
@@ -205,11 +208,12 @@ def insert_guest_visit(
                 requires_seat,
                 visit_status,
                 created_by_user_id,
-                modified_from_guest_visit_id
+                modified_from_guest_visit_id,
+                updated_by_user_id
             )
             VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                'SCHEDULED', %s, %s
+                'SCHEDULED', %s, %s, %s
             )
             RETURNING {GUEST_VISIT_RETURNING_FIELDS}
             """,
@@ -229,6 +233,7 @@ def insert_guest_visit(
                 requires_seat,
                 created_by_user_id,
                 modified_from_guest_visit_id,
+                updated_by_user_id,
             ),
         )
         row = cur.fetchone()
