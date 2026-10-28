@@ -1591,13 +1591,15 @@ def _validate_mutable_guest_booking(
                 "message": "Guest booking is missing its guest or visit reference.",
             },
         )
-    if booking["booking_date"] <= date.today():
+    # Today's guest booking can still be changed until it is used -- the status
+    # check below already rejects CHECKED_IN/COMPLETED and the like.
+    if booking["booking_date"] < date.today():
         action_phrase = "cancelled" if action == "cancel" else "modified"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "booking_not_mutable",
-                "message": f"Only future guest bookings can be {action_phrase}.",
+                "message": f"Past guest bookings can no longer be {action_phrase}.",
             },
         )
     if booking["booking_status"] in {
@@ -2269,6 +2271,7 @@ def execute_guest_visit_workflow(
                 # booking_service.modify_booking.
                 created_by_user_id=str(visit["created_by_user_id"]),
                 modified_from_guest_visit_id=guest_visit_id,
+                updated_by_user_id=_current_user_id(current_user),
             )
             result = _build_guest_workflow_response(
                 conn,
@@ -2417,6 +2420,7 @@ def execute_guest_visit_workflow(
                 # booking_service.modify_booking.
                 created_by_user_id=str(visit["created_by_user_id"]),
                 modified_from_guest_visit_id=guest_visit_id,
+                updated_by_user_id=_current_user_id(current_user),
             )
             new_visit_id = str(new_visit["guest_visit_id"])
             new_booking = insert_guest_booking(
