@@ -24,7 +24,6 @@ from backend.schemas.audit import (
     AuditLogSummary,
 )
 
-
 _SENSITIVE_FIELD_MARKERS = (
     "api_key",
     "apikey",
