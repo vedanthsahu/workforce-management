@@ -310,7 +310,7 @@ export default function FilterPanel({
             type="button"
             disabled={!enabled}
             onClick={onSearch}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 sm:h-11 sm:text-[13px]"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40 sm:h-11 sm:text-[13px]"
           >
             <Search size={15} />
             Search

@@ -670,7 +670,7 @@ export default function ConfigurationsListPage() {
             type="button"
             disabled={!hasChanges || hasInvalidValues || saving}
             onClick={() => setShowConfirm(true)}
-            className="h-9 px-4 rounded-xl bg-linear-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-sm font-medium text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:from-indigo-600 disabled:to-indigo-700 transition-all shadow-sm hover:shadow-md hover:shadow-indigo-200"
+            className="h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-sm font-medium text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-blue-600 transition-colors shadow-sm"
           >
             Save changes
           </button>
