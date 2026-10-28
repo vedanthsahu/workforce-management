@@ -2208,8 +2208,13 @@ def execute_guest_visit_workflow(
     """Execute one explicit guest visit/booking workflow atomically."""
     _require_guest_operator(current_user)
     tenant_id = str(current_user["tenant_id"])
-    _iso = lambda v: v.isoformat() if v is not None else None
-    _s = lambda v: str(v) if v is not None else None
+
+    def _iso(value: Any) -> str | None:
+        return value.isoformat() if value is not None else None
+
+    def _s(value: Any) -> str | None:
+        return str(value) if value is not None else None
+
     _aud_old: dict | None = None
     _aud_new: dict | None = None
     _aud_changed: list | None = None

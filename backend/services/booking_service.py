@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """services/booking_service.py Service-layer booking workflows for day-based seat reservations."""
+
+from __future__ import annotations
 
 import logging
 import math
