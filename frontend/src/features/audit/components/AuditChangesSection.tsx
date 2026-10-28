@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { AuditLog } from "../types/audit.types";
 import {
+  auditDisplayFieldKeys,
   formatEntityLabel,
   formatFieldLabel,
   formatFieldValue,
@@ -183,7 +184,11 @@ export default function AuditChangesSection({ log }: Props) {
   }
 
   if (category === "CREATE") {
-    const fields = Object.keys(log.newValues ?? {});
+    const fields = auditDisplayFieldKeys(
+      Object.keys(log.newValues ?? {}),
+      null,
+      log.newValues,
+    );
     return (
       <div className="space-y-3">
         <SectionTitle>Changes</SectionTitle>
@@ -206,7 +211,11 @@ export default function AuditChangesSection({ log }: Props) {
   }
 
   if (category === "DELETE") {
-    const fields = Object.keys(log.oldValues ?? {});
+    const fields = auditDisplayFieldKeys(
+      Object.keys(log.oldValues ?? {}),
+      log.oldValues,
+      null,
+    );
     return (
       <div className="space-y-3">
         <SectionTitle>Changes</SectionTitle>
@@ -261,7 +270,11 @@ export default function AuditChangesSection({ log }: Props) {
   const keys =
     hasOld && hasNew
       ? updateFieldKeys(log)
-      : Object.keys((hasNew ? log.newValues : log.oldValues) ?? {});
+      : auditDisplayFieldKeys(
+          Object.keys((hasNew ? log.newValues : log.oldValues) ?? {}),
+          log.oldValues,
+          log.newValues,
+        );
 
   return (
     <div className="space-y-3">
