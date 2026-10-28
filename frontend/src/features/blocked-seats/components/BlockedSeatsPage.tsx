@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
+import { getApiErrorMessage } from "@/lib/apiError";
 import SummaryCard from "./SummaryCard";
 import FilterPanel from "./FilterPanel";
 import BlockedSeatsTable from "./BlockedSeatsTable";
@@ -36,21 +37,6 @@ const EMPTY_RESPONSE: BlockedSeatListResponse = {
   pagination: { total: 0, page: 1, limit: 10, total_pages: 0 },
 };
 const EMPTY_SUMMARY: BlockedSeatSummary = EMPTY_RESPONSE.summary;
-const apiErrorMessage = (error: unknown, fallback: string) =>
-  (
-    error as {
-      response?: {
-        data?: { detail?: { message?: string }; error?: { message?: string } };
-      };
-    }
-  ).response?.data?.detail?.message ??
-  (
-    error as {
-      response?: { data?: { error?: { message?: string } } };
-    }
-  ).response?.data?.error?.message ??
-  fallback;
-
 export default function BlockedSeatsPage() {
   const router = useRouter();
   const [category, setCategory] = useState<BlockCategory>("active");
@@ -130,7 +116,7 @@ export default function BlockedSeatsPage() {
         if (!cancelled) {
           setResponse(EMPTY_RESPONSE);
           setError(
-            apiErrorMessage(requestError, "Unable to load blocked spaces."),
+            getApiErrorMessage(requestError, "Unable to load blocked spaces."),
           );
         }
       })

@@ -11,7 +11,7 @@ import {
 import { useRouter, usePathname } from "next/navigation";
 import { markSessionEstablished, clearSessionEstablished } from "@/lib/http/axios";
 import { authService } from "../services/auth.service";
-import type { AuthContextType, User } from "../types/auth.types";
+import type { AuthContextType, ConnectionErrorKind, User } from "../types/auth.types";
 import {
   Dialog,
   DialogContent,
@@ -57,6 +57,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const didInitialCheck = useRef(false);
 
+  // Set when the first /me check could not be answered at all -- as opposed to
+  // "no valid session". "unreachable": no response (offline, server down);
+  // "server": the server answered with an error (5xx and similar, e.g. its
+  // database is down). `user` stays undefined in that case, which keeps
+  // `isLoading` true, so without this the app would sit on its loading skeleton
+  // forever with no message. Not cleared when a retry starts, so the error
+  // screen stays up until the check actually succeeds.
+  const [connectionError, setConnectionError] = useState<ConnectionErrorKind | null>(null);
+
+  const checkSession = useCallback((): Promise<void> => {
+    setIsLoading(true);
+
+    return authService
+      .getMe()
+      .then((u) => {
+        setUser(u);
+        setConnectionError(null);
+        markSessionEstablished();
+      })
+      .catch((err) => {
+        const status         = err?.response?.status;
+        const isNetworkError = !err?.response;
+
+        if (isNetworkError) {
+          setUser((prev) => prev);
+          setConnectionError("unreachable");
+        } else if (status === 401) {
+          // No valid session (and the interceptor's refresh failed). Resolve
+          // user to null -- leaving it undefined keeps isLoading true forever,
+          // so MainLayout never reaches its redirect to /login.
+          setUser(null);
+          setConnectionError(null);
+        } else if (status === 403) {
+          setUser(null);
+          setConnectionError(null);
+        } else {
+          // A server error: no answer about who the user is, so offer a retry
+          // instead of loading forever.
+          setUser((prev) => prev);
+          setConnectionError("server");
+        }
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, []);
+
   // ── Initial auth check — runs once on mount ──────────────────────────────
   useEffect(() => {
     if (didInitialCheck.current) return;
@@ -69,34 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setIsLoading(true);
-
-    authService
-      .getMe()
-      .then((u) => {
-        setUser(u);
-        markSessionEstablished();
-      })
-      .catch((err) => {
-        const status         = err?.response?.status;
-        const isNetworkError = !err?.response;
-
-        if (isNetworkError) {
-          setUser((prev) => prev);
-        } else if (status === 401) {
-          // No valid session (and the interceptor's refresh failed). Resolve
-          // user to null -- leaving it undefined keeps isLoading true forever,
-          // so MainLayout never reaches its redirect to /login.
-          setUser(null);
-        } else if (status === 403) {
-          setUser(null);
-        } else {
-          setUser((prev) => prev);
-        }
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+    checkSession();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -208,6 +228,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading:       isLoading || user === undefined,
         isAuthenticated: !!user,
         logout,
+        connectionError,
+        retry:           checkSession,
       }}
     >
       {children}

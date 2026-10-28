@@ -1,6 +1,7 @@
 "use client";
 
 import { displaySpaceCode } from "@/lib/spaceCode";
+import { getApiErrorMessage } from "@/lib/apiError";
 import { useEffect, useState } from "react";
 import { Ban, Loader2, X } from "lucide-react";
 import { blockedSeatsService } from "../services/blockedSeatsService";
@@ -24,18 +25,6 @@ interface Props {
 }
 
 const today = () => new Date().toLocaleDateString("en-CA");
-const errorMessage = (error: unknown, fallback: string) =>
-  (
-    error as {
-      response?: {
-        data?: { detail?: { message?: string }; error?: { message?: string } };
-      };
-    }
-  ).response?.data?.detail?.message ??
-  (
-    error as { response?: { data?: { error?: { message?: string } } } }
-  ).response?.data?.error?.message ??
-  fallback;
 
 const fieldClass =
   "mt-1.5 h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400";
@@ -97,7 +86,7 @@ export default function BlockedSeatActionPanel({
       .catch((requestError: unknown) => {
         if (!cancelled) {
           setHistory([]);
-          setError(errorMessage(requestError, "Unable to load audit history."));
+          setError(getApiErrorMessage(requestError, "Unable to load audit history."));
         }
       })
       .finally(() => {
@@ -151,7 +140,7 @@ export default function BlockedSeatActionPanel({
       onChanged();
       onClose();
     } catch (requestError: unknown) {
-      setError(errorMessage(requestError, "Unable to save the seat block."));
+      setError(getApiErrorMessage(requestError, "Unable to save the seat block."));
     } finally {
       setSaving(false);
     }
@@ -169,7 +158,7 @@ export default function BlockedSeatActionPanel({
       onChanged();
       onClose();
     } catch (requestError: unknown) {
-      setError(errorMessage(requestError, "Unable to unblock the seat."));
+      setError(getApiErrorMessage(requestError, "Unable to unblock the seat."));
     } finally {
       setSaving(false);
     }

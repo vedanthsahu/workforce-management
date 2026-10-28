@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getApiErrorMessage } from "@/lib/apiError";
 import { Office , OfficeStatsSummary,} from "../types/office.types";
 import { officeService } from "../services/office.service";
 
@@ -34,7 +35,7 @@ export default function useOffices() {
 
       console.error("OFFICE API ERROR:", err);
 
-      setError("Failed to fetch offices");
+      setError(getApiErrorMessage(err, "We couldn't load the offices. Please try again."));
 
     } finally {
 
