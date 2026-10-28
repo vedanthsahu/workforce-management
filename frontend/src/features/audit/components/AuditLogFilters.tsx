@@ -617,7 +617,7 @@ export default function AuditLogFilters({ filters, onUpdate, onSearch, onClear, 
           <button
             type="button"
             onClick={onSearch}
-            className="h-10 px-5 flex items-center gap-1.5 text-sm font-medium text-white bg-indigo-700 hover:bg-indigo-800 rounded-lg transition-colors shadow-sm"
+            className="h-10 px-5 flex items-center gap-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-sm"
           >
             <Search size={14} />
             Search

@@ -216,7 +216,7 @@ export default function BlockedSeatsPage() {
         </div>
         <button
           onClick={() => router.push("/admin/blocked-seats/block")}
-          className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-lg bg-indigo-600 px-4 text-[12.5px] font-semibold text-white transition-colors hover:bg-indigo-700 sm:self-auto sm:text-[13px]"
+          className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-xl bg-blue-600 px-4 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 sm:self-auto sm:text-[13px]"
         >
           <Plus size={17} />
           Block Spaces
