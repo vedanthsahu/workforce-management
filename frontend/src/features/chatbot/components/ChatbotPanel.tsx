@@ -2,6 +2,8 @@
 
 import { FormEvent, KeyboardEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
+import axios from 'axios';
+import { getApiErrorMessage } from '@/lib/apiError';
 import {
   BotMessage,
   BookingCardData,
@@ -57,6 +59,8 @@ export function ChatbotPanel() {
   const seatSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressAutoScrollRef = useRef(false);
   const initializingRef = useRef(false);
+  // Set by Close: the conversation was cleared, so reopening must start a new one.
+  const needsFreshSessionRef = useRef(false);
 
   const minDate = useMemo(() => new Date().toISOString().split('T')[0], []);
   const nameIsValid = nameInput.trim().length >= 2 && nameInput.trim().length <= 50;
@@ -143,8 +147,19 @@ export function ChatbotPanel() {
     setShowNameInput(false);
   }
 
-  function togglePanel() {
-    setIsOpen((open) => !open);
+  // Close: hide the panel and clear the conversation (Minimize only hides it).
+  function closeChat() {
+    resetChatState();
+    needsFreshSessionRef.current = true;
+    setIsOpen(false);
+  }
+
+  function openChat() {
+    setIsOpen(true);
+    if (needsFreshSessionRef.current) {
+      needsFreshSessionRef.current = false;
+      void initializeSession();
+    }
   }
 
   function addUserMessage(text: string) {
@@ -532,7 +547,7 @@ export function ChatbotPanel() {
           <div className="header-actions">
             <button className="header-btn" onClick={refreshChat} disabled={isLoading} title="Refresh chat" aria-label="Refresh chat"><RefreshIcon /></button>
             <button className="header-btn" onClick={() => setIsOpen(false)} title="Minimize" aria-label="Minimize"><MinusIcon /></button>
-            <button className="header-btn" onClick={togglePanel} title="Close" aria-label="Close"><CloseIcon /></button>
+            <button className="header-btn" onClick={closeChat} title="Close" aria-label="Close"><CloseIcon /></button>
           </div>
         </header>
 
@@ -625,7 +640,7 @@ export function ChatbotPanel() {
         <button
           type="button"
           className="chatbot-float-btn"
-          onClick={() => setIsOpen(true)}
+          onClick={openChat}
           aria-label="Open SeatBook assistant"
           title="Open SeatBook assistant"
         >
@@ -1188,12 +1203,16 @@ function bookingDateTone(value: string): 'past' | 'today' | 'future' {
 }
 
 function userFriendlyError(error: unknown) {
-  const raw = error instanceof Error ? error.message : '';
+  const unreachable =
+    'I am having trouble reaching the booking service right now. Please try again in a few minutes, or use Restart Chat.';
+  // No response at all, or a server error: keep the chatbot's own wording.
+  if (axios.isAxiosError(error) && (!error.response || error.response.status >= 500)) return unreachable;
+  const raw = getApiErrorMessage(error, '');
   if (raw.toLowerCase().includes('session not found') || raw.toLowerCase().includes('expired')) {
     return 'Your chat session has expired. Please use Restart Chat to continue with a fresh session.';
   }
   if (raw) return raw;
-  return 'I am having trouble reaching the booking service right now. Please try again in a few minutes, or use Restart Chat.';
+  return unreachable;
 }
 
 function requireInitialResponse(session: SessionOut): ChatResponse {
