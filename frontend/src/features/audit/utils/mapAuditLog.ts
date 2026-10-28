@@ -179,13 +179,61 @@ export function getAuditEventCategory(
 export function updateFieldKeys(
   log: Pick<AuditLog, "changedFields" | "oldValues" | "newValues">,
 ): string[] {
-  if (log.changedFields && log.changedFields.length > 0)
-    return log.changedFields;
-  const keys = new Set<string>([
-    ...Object.keys(log.oldValues ?? {}),
-    ...Object.keys(log.newValues ?? {}),
-  ]);
-  return [...keys];
+  const keys =
+    log.changedFields && log.changedFields.length > 0
+      ? log.changedFields
+      : [
+          ...new Set([
+            ...Object.keys(log.oldValues ?? {}),
+            ...Object.keys(log.newValues ?? {}),
+          ]),
+        ];
+  return auditDisplayFieldKeys(keys, log.oldValues, log.newValues);
+}
+
+function valuesMatch(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (left == null || right == null) return false;
+  if (typeof left === "object" || typeof right === "object") {
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+  return String(left).trim() === String(right).trim();
+}
+
+/** Collapse redundant aliases such as site/site_name only when their values match. */
+export function auditDisplayFieldKeys(
+  keys: string[],
+  oldValues: Record<string, unknown> | null,
+  newValues: Record<string, unknown> | null,
+): string[] {
+  const keySet = new Set(keys);
+
+  return keys.filter((key) => {
+    if (!key.endsWith("_name")) return true;
+
+    const base = key.slice(0, -"_name".length);
+    const canonicalKey = keySet.has(base)
+      ? base
+      : keySet.has(`${base}_id`)
+        ? `${base}_id`
+        : null;
+    if (!canonicalKey) return true;
+
+    const oldAlias = oldValues?.[key];
+    const oldCanonical = oldValues?.[canonicalKey];
+    const newAlias = newValues?.[key];
+    const newCanonical = newValues?.[canonicalKey];
+    const oldMatches =
+      oldAlias === undefined && oldCanonical === undefined
+        ? true
+        : valuesMatch(oldAlias, oldCanonical);
+    const newMatches =
+      newAlias === undefined && newCanonical === undefined
+        ? true
+        : valuesMatch(newAlias, newCanonical);
+
+    return !(oldMatches && newMatches);
+  });
 }
 
 /** "booking" -> "Booking", "guest_visit" -> "Guest Visit"; falls back to the
