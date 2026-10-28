@@ -27,7 +27,6 @@ import {
   AUDIT_RELATIVE_TIME_OPTIONS,
   AUDIT_SELECT_ARROW_STYLE,
   AUDIT_SELECT_BASE_CLASS,
-  AUDIT_STATUS_OPTIONS,
 } from "../utils/constants";
 
 type Props = {
@@ -584,13 +583,12 @@ export default function AuditLogFilters({
     onUpdate("module", defaults.module);
     onUpdate("entity", defaults.entity);
     onUpdate("action", defaults.action);
-    onUpdate("status", defaults.status);
     onUpdate("dateFrom", defaults.dateFrom);
     onUpdate("dateTo", defaults.dateTo);
     onUpdate("lastSeconds", defaults.lastSeconds);
   };
 
-  // Chips summarizing whichever of Module/Entity/Action/Status aren't "All" --
+  // Chips summarizing whichever of Module/Entity/Action aren't "All" --
   // each one's remove button reuses the same cascading reset as its select so
   // clearing Module from a chip also clears the now-stale Entity/Action picks.
   const activeFilterChips = [
@@ -612,12 +610,6 @@ export default function AuditLogFilters({
       value: optionLabel(actionOptions, filters.action),
       onRemove: () => onUpdate("action", "All"),
     },
-    filters.status !== "All" && {
-      key: "status",
-      label: "Status",
-      value: optionLabel(AUDIT_STATUS_OPTIONS, filters.status),
-      onRemove: () => onUpdate("status", "All"),
-    },
   ].filter(
     (
       chip,
@@ -631,7 +623,7 @@ export default function AuditLogFilters({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-end gap-3 flex-wrap">
         <div className="w-70.5 flex flex-col gap-1">
           <TimeModeToggle
             mode={filters.timeMode}
@@ -682,12 +674,13 @@ export default function AuditLogFilters({
             options={actionOptions}
           />
         </div>
-        <div className="w-42 flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Result</label>
-          <NativeSelect
-            value={filters.status}
-            onChange={(v) => onUpdate("status", v)}
-            options={AUDIT_STATUS_OPTIONS}
+        <div className="flex flex-col gap-1 w-60">
+          <label className="text-xs font-medium text-gray-600">
+            People or Resource
+          </label>
+          <UserSearchField
+            value={filters.search}
+            onChange={(name) => onUpdate("search", name)}
           />
         </div>
       </div>
@@ -719,16 +712,6 @@ export default function AuditLogFilters({
       )}
 
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">
-            People or Resource
-          </label>
-          <UserSearchField
-            value={filters.search}
-            onChange={(name) => onUpdate("search", name)}
-          />
-        </div>
-
         <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto justify-end">
           <button
             type="button"
@@ -741,7 +724,7 @@ export default function AuditLogFilters({
           <button
             type="button"
             onClick={onSearch}
-            className="h-10 px-5 flex items-center gap-1.5 text-sm font-medium text-white bg-indigo-700 hover:bg-indigo-800 rounded-lg transition-colors shadow-sm"
+            className="h-10 px-5 flex items-center gap-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm"
           >
             <Search size={14} />
             Search

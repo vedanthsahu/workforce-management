@@ -337,6 +337,7 @@ def _build_audit_log_filters(
     action: str | None = None,
     module: str | None = None,
     entity_type: str | None = None,
+    category: str | None = None,
     event_status: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
@@ -358,6 +359,15 @@ def _build_audit_log_filters(
     if event_status is not None:
         conditions.append("al.event_status = %s")
         params.append(event_status)
+    if category == "ACCESS":
+        conditions.append("al.action IN ('user.login', 'user.logout')")
+    elif category == "BUSINESS":
+        conditions.append("al.module IN ('BOOKING', 'GUEST')")
+    elif category == "ADMIN":
+        conditions.append(
+            "al.action NOT IN ('user.login', 'user.logout') "
+            "AND al.module NOT IN ('BOOKING', 'GUEST')"
+        )
 
     # The admin UI toggles between an explicit Date Range and a relative
     # "Last N seconds/minutes/hours" quick filter -- only one is ever active
@@ -397,6 +407,7 @@ def fetch_audit_logs(
     action: str | None = None,
     module: str | None = None,
     entity_type: str | None = None,
+    category: str | None = None,
     event_status: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
@@ -419,6 +430,7 @@ def fetch_audit_logs(
         action=action,
         module=module,
         entity_type=entity_type,
+        category=category,
         event_status=event_status,
         start_date=start_date,
         end_date=end_date,
@@ -482,10 +494,18 @@ def fetch_audit_logs_summary(
             f"""
             SELECT
                 COUNT(*)::integer AS total_events,
-                COUNT(*) FILTER (WHERE al.event_status = 'SUCCESS')::integer AS successful_events,
-                COUNT(*) FILTER (WHERE al.event_status = 'FAILURE')::integer AS failed_events,
-                COUNT(*) FILTER (WHERE al.event_status = 'DENIED')::integer AS denied_events,
-                COUNT(DISTINCT al.actor_user_id)::integer AS unique_users
+                COUNT(*)::integer AS successful_events,
+                COUNT(DISTINCT al.actor_user_id)::integer AS unique_users,
+                COUNT(*) FILTER (
+                    WHERE al.action IN ('user.login', 'user.logout')
+                )::integer AS access_events,
+                COUNT(*) FILTER (
+                    WHERE al.module IN ('BOOKING', 'GUEST')
+                )::integer AS business_events,
+                COUNT(*) FILTER (
+                    WHERE al.action NOT IN ('user.login', 'user.logout')
+                      AND al.module NOT IN ('BOOKING', 'GUEST')
+                )::integer AS admin_events
             {AUDIT_SELECT_FROM}
             WHERE {where_clause}
             """,
@@ -499,9 +519,10 @@ def fetch_audit_logs_summary(
         else {
             "total_events": 0,
             "successful_events": 0,
-            "failed_events": 0,
-            "denied_events": 0,
             "unique_users": 0,
+            "access_events": 0,
+            "business_events": 0,
+            "admin_events": 0,
         }
     )
 
@@ -529,6 +550,7 @@ def fetch_audit_log_filter_options(
             SELECT DISTINCT module, entity_type, action
             FROM audit_logs
             WHERE tenant_id = %s
+              AND event_status = 'SUCCESS'
             ORDER BY module, entity_type, action
             """,
             (tenant_id,),
@@ -551,6 +573,7 @@ def fetch_audit_log_by_id(
             {AUDIT_SELECT_FROM}
             WHERE al.tenant_id = %s
               AND al.id = %s
+              AND al.event_status = 'SUCCESS'
             """,
             (tenant_id, audit_id),
         )
@@ -560,3 +583,88 @@ def fetch_audit_log_by_id(
         return None
 
     return _parse_json_fields(dict(row))
+
+
+_AUDIT_ID_LOOKUPS: dict[str, str] = {
+    "site_id": "SELECT id::text, site_name FROM sites WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "home_site_id": "SELECT id::text, site_name FROM sites WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "default_site_id": "SELECT id::text, site_name FROM sites WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "building_id": "SELECT id::text, building_name FROM buildings WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "default_building_id": "SELECT id::text, building_name FROM buildings WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "floor_id": "SELECT id::text, floor_name FROM floors WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "default_floor_id": "SELECT id::text, floor_name FROM floors WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "seat_id": "SELECT id::text, seat_code FROM seats WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "amenity_id": "SELECT id::text, amenity_name FROM amenities WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "amenity_ids": "SELECT id::text, amenity_name FROM amenities WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "category_id": (
+        "SELECT id::text, category_name FROM amenity_categories "
+        "WHERE (tenant_id = %s OR tenant_id IS NULL) AND id = ANY(%s::bigint[])"
+    ),
+    "amenity_category_id": (
+        "SELECT id::text, category_name FROM amenity_categories "
+        "WHERE (tenant_id = %s OR tenant_id IS NULL) AND id = ANY(%s::bigint[])"
+    ),
+    "guest_id": "SELECT id::text, full_name FROM guests WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "booked_for_guest_id": "SELECT id::text, full_name FROM guests WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "user_id": "SELECT id::text, COALESCE(display_name, full_name, email) FROM app_users WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "target_user_id": "SELECT id::text, COALESCE(display_name, full_name, email) FROM app_users WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "host_user_id": "SELECT id::text, COALESCE(display_name, full_name, email) FROM app_users WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "booked_by_user_id": "SELECT id::text, COALESCE(display_name, full_name, email) FROM app_users WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "booked_for_user_id": "SELECT id::text, COALESCE(display_name, full_name, email) FROM app_users WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "created_by_user_id": "SELECT id::text, COALESCE(display_name, full_name, email) FROM app_users WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "updated_by_user_id": "SELECT id::text, COALESCE(display_name, full_name, email) FROM app_users WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "created_user_id": "SELECT id::text, COALESCE(display_name, full_name, email) FROM app_users WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "updated_user_id": "SELECT id::text, COALESCE(display_name, full_name, email) FROM app_users WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "layout_id": "SELECT id::text, layout_name FROM floor_layouts WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "floor_layout_id": "SELECT id::text, layout_name FROM floor_layouts WHERE tenant_id = %s AND id = ANY(%s::bigint[])",
+    "booking_id": (
+        "SELECT b.id::text, COALESCE(s.seat_code, 'Booking #' || b.id::text) "
+        "FROM bookings b LEFT JOIN seats s ON s.tenant_id = b.tenant_id AND s.id = b.seat_id "
+        "WHERE b.tenant_id = %s AND b.id = ANY(%s::bigint[])"
+    ),
+    "modified_from_booking_id": (
+        "SELECT b.id::text, COALESCE(s.seat_code, 'Booking #' || b.id::text) "
+        "FROM bookings b LEFT JOIN seats s ON s.tenant_id = b.tenant_id AND s.id = b.seat_id "
+        "WHERE b.tenant_id = %s AND b.id = ANY(%s::bigint[])"
+    ),
+    "guest_visit_id": (
+        "SELECT gv.id::text, COALESCE(g.full_name, 'Guest visit #' || gv.id::text) "
+        "FROM guest_visits gv LEFT JOIN guests g ON g.tenant_id = gv.tenant_id AND g.id = gv.guest_id "
+        "WHERE gv.tenant_id = %s AND gv.id = ANY(%s::bigint[])"
+    ),
+    "modified_from_guest_visit_id": (
+        "SELECT gv.id::text, COALESCE(g.full_name, 'Guest visit #' || gv.id::text) "
+        "FROM guest_visits gv LEFT JOIN guests g ON g.tenant_id = gv.tenant_id AND g.id = gv.guest_id "
+        "WHERE gv.tenant_id = %s AND gv.id = ANY(%s::bigint[])"
+    ),
+}
+
+
+def fetch_audit_value_display_names(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    old_values: dict[str, Any] | None,
+    new_values: dict[str, Any] | None,
+) -> dict[str, dict[str, str]]:
+    """Resolve known audit identifier fields to tenant-scoped display names."""
+    values_by_field: dict[str, set[str]] = {}
+    for values in (old_values, new_values):
+        for field, raw_value in (values or {}).items():
+            if field not in _AUDIT_ID_LOOKUPS or raw_value is None:
+                continue
+            candidates = raw_value if isinstance(raw_value, list) else [raw_value]
+            identifiers = {str(value) for value in candidates if str(value).isdigit()}
+            if identifiers:
+                values_by_field.setdefault(field, set()).update(identifiers)
+
+    resolved: dict[str, dict[str, str]] = {}
+    with conn.cursor() as cur:
+        for field, identifiers in values_by_field.items():
+            cur.execute(_AUDIT_ID_LOOKUPS[field], (tenant_id, sorted(identifiers)))
+            resolved[field] = {
+                str(identifier): str(display_name)
+                for identifier, display_name in cur.fetchall()
+                if display_name
+            }
+    return resolved

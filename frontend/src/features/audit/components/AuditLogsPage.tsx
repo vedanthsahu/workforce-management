@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, KeyRound, ShieldAlert, XCircle } from "lucide-react";
+import { Clock3, Download, KeyRound, MapPin, Sparkles } from "lucide-react";
 import AuditLogFilters from "./AuditLogFilters";
 import AuditStatCards from "./AuditStatCards";
 import AuditLogsTable from "./AuditLogsTable";
@@ -53,9 +53,9 @@ export default function AuditLogsPage() {
   const summary = response?.summary;
   const stats = {
     total: summary?.total_events ?? 0,
-    successful: summary?.successful_events ?? 0,
-    failed: summary?.failed_events ?? 0,
-    denied: summary?.denied_events ?? 0,
+    access: summary?.access_events ?? 0,
+    business: summary?.business_events ?? 0,
+    admin: summary?.admin_events ?? 0,
   };
 
   const pagination = response?.pagination;
@@ -98,8 +98,10 @@ export default function AuditLogsPage() {
           appliedFilters.module !== "All" ? appliedFilters.module : undefined,
         entity:
           appliedFilters.entity !== "All" ? appliedFilters.entity : undefined,
-        status:
-          appliedFilters.status !== "All" ? appliedFilters.status : undefined,
+        category:
+          appliedFilters.category !== "All"
+            ? appliedFilters.category
+            : undefined,
         startDate: !isRelative
           ? appliedFilters.dateFrom || undefined
           : undefined,
@@ -232,32 +234,56 @@ export default function AuditLogsPage() {
         </span>
         <button
           type="button"
-          onClick={() => applyQuickView({ status: "DENIED" })}
-          className="h-8 px-3 inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-white border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors"
+          onClick={() =>
+            applyQuickView({
+              timeMode: "relative",
+              dateFrom: "",
+              dateTo: "",
+              lastSeconds: 3600,
+            })
+          }
+          className="h-8 px-3 inline-flex items-center gap-1.5 text-xs font-medium text-sky-700 bg-white border border-sky-200 rounded-lg hover:bg-sky-50 transition-colors"
         >
-          <ShieldAlert size={13} />
-          Access Denied
+          <Clock3 size={13} />
+          Last 1 Hour
         </button>
         <button
           type="button"
-          onClick={() => applyQuickView({ status: "FAILURE" })}
-          className="h-8 px-3 inline-flex items-center gap-1.5 text-xs font-medium text-red-700 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
-        >
-          <XCircle size={13} />
-          Failed Activities
-        </button>
-        <button
-          type="button"
-          onClick={() => applyQuickView({ module: "AUTH" })}
+          onClick={() =>
+            applyQuickView({ module: "AUTH", action: "user.access_updated" })
+          }
           className="h-8 px-3 inline-flex items-center gap-1.5 text-xs font-medium text-indigo-700 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
         >
           <KeyRound size={13} />
-          Access &amp; Permissions
+          User Access Changes
+        </button>
+        <button
+          type="button"
+          onClick={() => applyQuickView({ module: "LOCATION" })}
+          className="h-8 px-3 inline-flex items-center gap-1.5 text-xs font-medium text-teal-700 bg-white border border-teal-200 rounded-lg hover:bg-teal-50 transition-colors"
+        >
+          <MapPin size={13} />
+          Location Changes
+        </button>
+        <button
+          type="button"
+          onClick={() => applyQuickView({ module: "AMENITY" })}
+          className="h-8 px-3 inline-flex items-center gap-1.5 text-xs font-medium text-violet-700 bg-white border border-violet-200 rounded-lg hover:bg-violet-50 transition-colors"
+        >
+          <Sparkles size={13} />
+          Amenity Changes
         </button>
       </div>
 
       {/* STATS */}
-      <AuditStatCards stats={stats} />
+      <AuditStatCards
+        stats={stats}
+        activeCategory={appliedFilters.category}
+        onCategoryChange={(category) => {
+          setFilters((current) => ({ ...current, category }));
+          setAppliedFilters((current) => ({ ...current, category }));
+        }}
+      />
 
       {/* TABLE */}
       <div className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col overflow-hidden">

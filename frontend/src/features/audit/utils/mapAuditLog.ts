@@ -75,6 +75,7 @@ export function mapAuditLogListItemToUi(
 export function mapAuditLogDetailToUi(raw: AuditLogDetailRaw): AuditLog {
   return {
     ...mapListItemFields(raw),
+    entityDisplayName: raw.entity_display_name ?? "",
     requestPath: raw.request_path ?? "",
     requestId: raw.request_id ?? "",
     correlationId: raw.correlation_id ?? "",
@@ -202,7 +203,12 @@ export function formatEntityLabel(entityType: string, module: string): string {
 
 /** "building_code" -> "Building Code", "site_id" -> "Site ID" */
 export function formatFieldLabel(key: string): string {
-  return key
+  const displayKey = key.endsWith("_id")
+    ? key.slice(0, -3)
+    : key.endsWith("_ids")
+      ? key.slice(0, -4)
+      : key;
+  return displayKey
     .split("_")
     .filter(Boolean)
     .map((word) =>
@@ -261,8 +267,10 @@ export function auditActivityLabel(
 }
 
 export function affectedResourceLabel(
-  log: Pick<AuditLogListItem, "entityType" | "entityId">,
+  log: Pick<AuditLogListItem, "entityType" | "entityId"> &
+    Partial<Pick<AuditLog, "entityDisplayName">>,
 ): string {
+  if (log.entityDisplayName) return log.entityDisplayName;
   const entity = formatEntityLabel(log.entityType, "record");
   return log.entityId ? `${entity} #${log.entityId}` : entity;
 }

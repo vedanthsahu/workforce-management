@@ -57,6 +57,7 @@ export interface AuditLogListItemRaw {
 /** GET /admin/audit/{id} response shape -- full audit_logs row (see
  * backend/schemas/audit.py AuditLogDetailResponse). */
 export interface AuditLogDetailRaw extends AuditLogListItemRaw {
+  entity_display_name: string | null;
   request_path: string | null;
   request_id: string | null;
   correlation_id: string | null;
@@ -92,6 +93,7 @@ export interface AuditLogListItem {
 
 /** UI-shaped full record used by the detail sheet. */
 export interface AuditLog extends AuditLogListItem {
+  entityDisplayName: string;
   requestPath: string;
   requestId: string;
   correlationId: string;
@@ -109,13 +111,14 @@ export interface AuditLog extends AuditLogListItem {
  * mutually exclusive (a toggle, not two independent filters): "date" sends
  * dateFrom/dateTo, "relative" sends lastSeconds. See useAuditLogs.ts. */
 export type AuditTimeMode = "date" | "relative";
+export type AuditCategory = "All" | "ACCESS" | "BUSINESS" | "ADMIN";
 
 export interface AuditLogFilters {
   search: string;
   action: string;
   module: string;
   entity: string;
-  status: string;
+  category: AuditCategory;
   timeMode: AuditTimeMode;
   dateFrom: string;
   dateTo: string;
@@ -132,7 +135,7 @@ export function defaultAuditLogFilters(): AuditLogFilters {
     action: "All",
     module: "All",
     entity: "All",
-    status: "SUCCESS",
+    category: "All",
     timeMode: "date",
     dateFrom: todayIso,
     dateTo: todayIso,
@@ -143,9 +146,10 @@ export function defaultAuditLogFilters(): AuditLogFilters {
 export interface AuditLogSummary {
   total_events: number;
   successful_events: number;
-  failed_events: number;
-  denied_events: number;
   unique_users: number;
+  access_events: number;
+  business_events: number;
+  admin_events: number;
 }
 
 export interface AuditLogPagination {
