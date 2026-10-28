@@ -12,16 +12,7 @@ import { deleteLayout, rescheduleLayout } from "@/features/adminlayouts1/service
 import type { Seat } from "@/features/managelayout1/types/seat.types";
 import { ROOM_SVG_ID_PATTERN, LEGEND } from "../utils/layoutTable.utils";
 import { useLayoutVisibilityDays } from "@/features/configuration/hooks/useLayoutVisibilityDays";
-
-function extractApiErrorMessage(err: unknown, fallback: string): string {
-  return (
-    (err as { response?: { data?: { error?: { message?: string }; message?: string; detail?: { message?: string } } } })
-      ?.response?.data?.error?.message ||
-    (err as { response?: { data?: { detail?: { message?: string } } } })?.response?.data?.detail?.message ||
-    (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-    fallback
-  );
-}
+import { getApiErrorMessage } from "@/lib/apiError";
 
 type Props = {
   selection: LayoutSelection;
@@ -311,7 +302,7 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
         return next;
       });
     } catch (err: unknown) {
-      setDiscardError(extractApiErrorMessage(err, "Failed to discard layout. Please try again."));
+      setDiscardError(getApiErrorMessage(err, "Failed to discard layout. Please try again."));
     } finally {
       setDiscarding(false);
     }
@@ -335,7 +326,7 @@ export default function LayoutTable({ selection, selectedLayoutId }: Props) {
       invalidateFloor(rescheduleTarget.floor_id);
       await fetchLayouts(rescheduleTarget.floor_id);
     } catch (err: unknown) {
-      setRescheduleError(extractApiErrorMessage(err, "Failed to change the effective date. Please try again."));
+      setRescheduleError(getApiErrorMessage(err, "Failed to change the effective date. Please try again."));
     } finally {
       setRescheduling(false);
     }

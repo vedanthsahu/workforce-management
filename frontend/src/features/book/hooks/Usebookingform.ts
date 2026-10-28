@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
+import { getApiErrorMessage } from "@/lib/apiError";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePermissions } from "@/features/dashboard/hooks/usePermissions";
 import {
@@ -519,7 +520,7 @@ export function useBookingForm() {
         sitesFetchedOkRef.current = true;
         setSites(data);
       })
-      .catch((e) => setError(e.message))
+      .catch((e) => setError(getApiErrorMessage(e, "We couldn't load the offices. Please try again.")))
       .finally(() => {
         setLoadingSites(false);
         setSitesSettled(true);
@@ -530,7 +531,7 @@ export function useBookingForm() {
     setLoadingPreferences(true);
     fetchPreferences()
       .then(setAvailablePreferences)
-      .catch((e) => setError(e.message))
+      .catch((e) => setError(getApiErrorMessage(e, "We couldn't load the amenity options. Please try again.")))
       .finally(() => setLoadingPreferences(false));
   }, []);
 
@@ -562,7 +563,7 @@ export function useBookingForm() {
         setBuildings(data);
         setBuildingsLoadedFor(siteIdForFetch);
       })
-      .catch((e) => { if (!cancelled) setError(e.message); })
+      .catch((e) => { if (!cancelled) setError(getApiErrorMessage(e, "We couldn't load the buildings. Please try again.")); })
       .finally(() => { if (!cancelled) setLoadingBuildings(false); });
     return () => { cancelled = true; };
   }, [form.siteId]);
@@ -583,7 +584,7 @@ export function useBookingForm() {
         setFloors(data);
         setFloorsLoadedFor(buildingIdForFetch);
       })
-      .catch((e) => { if (!cancelled) setError(e.message); })
+      .catch((e) => { if (!cancelled) setError(getApiErrorMessage(e, "We couldn't load the floors. Please try again.")); })
       .finally(() => { if (!cancelled) setLoadingFloors(false); });
     return () => { cancelled = true; };
   }, [form.buildingId]);
@@ -1126,17 +1127,7 @@ export function useBookingForm() {
       setSeats(data);
       navigateTo(2, form);
     } catch (e) {
-      if (axios.isAxiosError(e)) {
-        const data = e.response?.data as { detail?: { message?: string } | string; message?: string; error?: { message?: string } } | undefined;
-        const msg =
-          (typeof data?.detail === "object" ? data?.detail?.message : typeof data?.detail === "string" ? data.detail : null)
-          ?? data?.error?.message
-          ?? data?.message
-          ?? e.message;
-        setError(msg);
-      } else {
-        setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
-      }
+      setError(getApiErrorMessage(e));
     } finally {
       setLoadingSeats(false);
     }

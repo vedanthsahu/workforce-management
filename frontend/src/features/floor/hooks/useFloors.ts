@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { getApiErrorMessage } from "@/lib/apiError";
 
 import { floorService } from "../services/floorService";
 import {
@@ -91,7 +92,7 @@ export const useFloors = () => {
     } catch (error) {
       if (requestId !== latestFloorsRequest.current) return;
       console.error(error);
-      setError("Failed to load floors");
+      setError(getApiErrorMessage(error, "We couldn't load the floors. Please try again."));
     } finally {
       if (requestId === latestFloorsRequest.current) setLoading(false);
     }
