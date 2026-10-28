@@ -26,7 +26,10 @@ export function useAuditLogs(appliedFilters: AuditLogFilters) {
         action: appliedFilters.action !== "All" ? appliedFilters.action : undefined,
         module: appliedFilters.module !== "All" ? appliedFilters.module : undefined,
         entity: appliedFilters.entity !== "All" ? appliedFilters.entity : undefined,
-        status: appliedFilters.status !== "All" ? appliedFilters.status : undefined,
+        category:
+          appliedFilters.category !== "All"
+            ? appliedFilters.category
+            : undefined,
         startDate: !isRelative ? appliedFilters.dateFrom || undefined : undefined,
         endDate: !isRelative ? appliedFilters.dateTo || undefined : undefined,
         lastSeconds: isRelative ? appliedFilters.lastSeconds ?? undefined : undefined,

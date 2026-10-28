@@ -51,13 +51,6 @@ export const AUDIT_METHOD_FALLBACK_STYLE = "bg-gray-100 text-gray-600";
 // of sync with what's actually in the data. AUDIT_MODULE_STYLES above stays
 // (it's just badge coloring, independent of the options list).
 
-export const AUDIT_STATUS_OPTIONS: { value: string; label: string }[] = [
-  { value: "All", label: "All Results" },
-  { value: "SUCCESS", label: "Completed" },
-  { value: "FAILURE", label: "Failed" },
-  { value: "DENIED", label: "Access Denied" },
-];
-
 export const AUDIT_PAGE_SIZES = [10, 25, 50, 75, 100];
 
 // Preset quick-time-filter options -- value is seconds, sent to the backend

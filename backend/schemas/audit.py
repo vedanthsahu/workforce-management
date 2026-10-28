@@ -15,6 +15,7 @@ AuditEventStatus = Literal["SUCCESS", "FAILURE", "DENIED"]
 
 AuditSortBy = Literal["occurred_at", "action", "module", "status", "actor"]
 AuditSortDir = Literal["asc", "desc"]
+AuditCategory = Literal["ACCESS", "BUSINESS", "ADMIN"]
 
 
 class AuditLogListItemResponse(BaseModel):
@@ -64,9 +65,10 @@ class AuditLogSummary(BaseModel):
 
     total_events: int = 0
     successful_events: int = 0
-    failed_events: int = 0
-    denied_events: int = 0
     unique_users: int = 0
+    access_events: int = 0
+    business_events: int = 0
+    admin_events: int = 0
 
 
 class AuditLogFilterOption(BaseModel):
@@ -108,8 +110,6 @@ class AuditLogListResponse(BaseModel):
                 "summary": {
                     "total_events": 828,
                     "successful_events": 713,
-                    "failed_events": 115,
-                    "denied_events": 12,
                     "unique_users": 21,
                 },
                 "filter_options": [
@@ -135,6 +135,7 @@ class AuditLogDetailResponse(BaseModel):
     module: str
     entity_type: str | None = None
     entity_id: str | None = None
+    entity_display_name: str | None = None
     event_status: AuditEventStatus
     request_method: str | None = None
     request_path: str | None = None

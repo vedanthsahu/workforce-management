@@ -1,11 +1,8 @@
 "use client";
 
-import {
-  FileText,
-  CheckCircle2,
-  AlertTriangle,
-  ShieldAlert,
-} from "lucide-react";
+import { Database, FileText, LogIn, ShieldCheck } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { AuditCategory } from "../types/audit.types";
 
 type StatProps = {
   icon: React.ReactNode;
@@ -13,60 +10,86 @@ type StatProps = {
   label: string;
   value: number;
   sublabel: string;
+  selected?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
 };
 
 export interface AuditStats {
   total: number;
-  successful: number;
-  failed: number;
-  denied: number;
+  access: number;
+  business: number;
+  admin: number;
 }
 
-export default function AuditStatCards({ stats }: { stats: AuditStats }) {
-  const successPct = stats.total
-    ? Math.round((stats.successful / stats.total) * 100)
-    : 0;
-  const failedPct = stats.total
-    ? Math.round((stats.failed / stats.total) * 100)
-    : 0;
+type Props = {
+  stats: AuditStats;
+  activeCategory: AuditCategory;
+  onCategoryChange: (category: AuditCategory) => void;
+};
+
+export default function AuditStatCards({ stats, activeCategory, onCategoryChange }: Props) {
+  const select = (category: AuditCategory) =>
+    onCategoryChange(activeCategory === category ? "All" : category);
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
       <Stat
         icon={<FileText className="text-blue-600" />}
         bg="bg-blue-100"
         label="Total Activities"
         value={stats.total}
-        sublabel="All recorded activity"
+        sublabel="Successful activity"
+        selected={activeCategory === "All"}
+        onClick={() => onCategoryChange("All")}
       />
       <Stat
-        icon={<CheckCircle2 className="text-green-600" />}
-        bg="bg-green-100"
-        label="Completed"
-        value={stats.successful}
-        sublabel={`${successPct}% of total events`}
+        icon={<LogIn className="text-indigo-600" />}
+        bg="bg-indigo-100"
+        label="Access Activity"
+        value={stats.access}
+        sublabel="Sign-ins and sign-outs"
+        selected={activeCategory === "ACCESS"}
+        disabled={stats.access === 0}
+        onClick={() => select("ACCESS")}
       />
       <Stat
-        icon={<AlertTriangle className="text-red-600" />}
-        bg="bg-red-100"
-        label="Failed"
-        value={stats.failed}
-        sublabel={`${failedPct}% of total events`}
+        icon={<Database className="text-violet-600" />}
+        bg="bg-violet-100"
+        label="Booking & Guest Changes"
+        value={stats.business}
+        sublabel="Booking and guest records"
+        selected={activeCategory === "BUSINESS"}
+        disabled={stats.business === 0}
+        onClick={() => select("BUSINESS")}
       />
       <Stat
-        icon={<ShieldAlert className="text-amber-600" />}
-        bg="bg-amber-100"
-        label="Access Denied"
-        value={stats.denied}
-        sublabel="Restricted attempts"
+        icon={<ShieldCheck className="text-teal-600" />}
+        bg="bg-teal-100"
+        label="Administrative Changes"
+        value={stats.admin}
+        sublabel="Configuration and access updates"
+        selected={activeCategory === "ADMIN"}
+        disabled={stats.admin === 0}
+        onClick={() => select("ADMIN")}
       />
     </div>
   );
 }
 
-function Stat({ icon, bg, label, value, sublabel }: StatProps) {
+function Stat({ icon, bg, label, value, sublabel, selected, disabled, onClick }: StatProps) {
   return (
-    <div className="flex items-center gap-3 p-3 sm:p-5 bg-white border border-gray-200 rounded-2xl shadow-sm">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={selected}
+      className={cn(
+        "flex items-center gap-3 p-3 sm:p-5 bg-white border rounded-2xl shadow-sm text-left transition-colors",
+        selected ? "border-indigo-400 ring-2 ring-indigo-100" : "border-gray-200 hover:border-indigo-200",
+        disabled && "opacity-50 cursor-not-allowed hover:border-gray-200",
+      )}
+    >
       <div className={`p-2 sm:p-3 rounded-xl shrink-0 ${bg}`}>{icon}</div>
       <div className="min-w-0">
         <p className="text-xs sm:text-sm text-gray-500 whitespace-nowrap">
@@ -79,6 +102,6 @@ function Stat({ icon, bg, label, value, sublabel }: StatProps) {
           {sublabel}
         </p>
       </div>
-    </div>
+    </button>
   );
 }

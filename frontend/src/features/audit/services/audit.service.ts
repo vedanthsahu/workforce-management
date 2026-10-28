@@ -6,7 +6,7 @@ export interface AuditLogListParams {
   action?: string;
   module?: string;
   entity?: string;
-  status?: string;
+  category?: "ACCESS" | "BUSINESS" | "ADMIN";
   startDate?: string;
   endDate?: string;
   /** Relative "Last N seconds" quick filter -- takes precedence over startDate/endDate when set. */
