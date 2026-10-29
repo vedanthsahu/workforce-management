@@ -2545,36 +2545,82 @@ def execute_guest_visit_workflow(
                 booking_date=payload.visit_date,
             ):
                 _raise_seat_booking_conflict()
+            # Same date/site/building (and floor, when the visit has one) is
+            # the normal flow. Anything else is a modification: the original
+            # visit is retained as MODIFIED and replaced by a new visit.
+            visit_changed = (
+                visit.get("visit_date") != payload.visit_date
+                or str(visit.get("site_id")) != str(payload.site_id)
+                or str(visit.get("building_id")) != str(payload.building_id)
+                or (
+                    visit.get("floor_id") is not None
+                    and str(visit.get("floor_id")) != str(payload.floor_id)
+                )
+            )
+            target_visit_id = guest_visit_id
+            if visit_changed:
+                mark_guest_visit_modified(
+                    conn,
+                    tenant_id=tenant_id,
+                    guest_visit_id=guest_visit_id,
+                    modification_reason=_enum_value(payload.modification_reason),
+                )
+                replacement_visit = insert_guest_visit(
+                    conn,
+                    tenant_id=tenant_id,
+                    guest_id=str(visit["guest_id"]),
+                    host_user_id=str(visit["host_user_id"]),
+                    site_id=str(payload.site_id),
+                    building_id=str(payload.building_id),
+                    floor_id=str(payload.floor_id),
+                    visit_date=payload.visit_date,
+                    guest_type=_enum_value(visit["guest_type"]),
+                    purpose_of_visit=_enum_value(visit.get("purpose_of_visit")),
+                    start_time=visit.get("start_time"),
+                    end_time=visit.get("end_time"),
+                    notes=visit.get("notes"),
+                    requires_seat=True,
+                    created_by_user_id=str(visit["created_by_user_id"]),
+                    modified_from_guest_visit_id=guest_visit_id,
+                )
+                target_visit_id = str(replacement_visit["guest_visit_id"])
             new_booking = insert_guest_booking(
                 conn,
                 tenant_id=tenant_id,
                 guest_id=str(visit["guest_id"]),
-                guest_visit_id=guest_visit_id,
+                guest_visit_id=target_visit_id,
                 booked_by_user_id=_current_user_id(current_user),
                 seat=seat,
                 booking_date=payload.visit_date,
             )
-            update_guest_visit_booking_details(
-                conn,
-                tenant_id=tenant_id,
-                guest_visit_id=guest_visit_id,
-                site_id=str(payload.site_id),
-                building_id=str(payload.building_id),
-                floor_id=str(payload.floor_id),
-                visit_date=payload.visit_date,
-            )
+            if not visit_changed:
+                # Only fills a floor the visit left blank; nothing is replaced.
+                update_guest_visit_booking_details(
+                    conn,
+                    tenant_id=tenant_id,
+                    guest_visit_id=guest_visit_id,
+                    site_id=str(payload.site_id),
+                    building_id=str(payload.building_id),
+                    floor_id=str(payload.floor_id),
+                    visit_date=payload.visit_date,
+                )
             recalculate_guest_visit_requires_seat(
                 conn,
                 tenant_id=tenant_id,
-                guest_visit_id=guest_visit_id,
+                guest_visit_id=target_visit_id,
             )
             result = _build_guest_workflow_response(
                 conn,
                 tenant_id=tenant_id,
                 action=payload.action,
-                guest_visit_id=guest_visit_id,
+                guest_visit_id=target_visit_id,
                 booking_id=str(new_booking["booking_id"]),
-                message="Booking added to guest visit.",
+                message=(
+                    "Guest visit modified and booking added; "
+                    "the prior visit was retained."
+                    if visit_changed
+                    else "Booking added to guest visit."
+                ),
             )
             _aud_new = {
                 "guest_id": visit.get("guest_id"),

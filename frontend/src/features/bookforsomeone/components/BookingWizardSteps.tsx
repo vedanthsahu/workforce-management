@@ -765,8 +765,8 @@ function CreateGuestForm({ onCancel, onSave }: CreateGuestFormProps) {
             height: 40,
             padding: "0 1.25rem",
             borderRadius: 8,
-            border: "1.5px solid #4f46e5",
-            background: isSaving ? "#a5b4fc" : "#4f46e5",
+            border: "1.5px solid #2563eb",
+            background: isSaving ? "#93c5fd" : "#2563eb",
             fontSize: "0.875rem",
             fontWeight: 600,
             color: "#fff",
@@ -1026,9 +1026,9 @@ export function VisitDetailsStep({ guest, visitDetails, onChange, sites, buildin
             onChange={(e) => {
               const val = e.target.value;
               if (maxVisitDate && val > maxVisitDate) return;
-              const updates: Partial<VisitDetails> = { visitDate: val };
-              if (!visitDetails.endDate || visitDetails.endDate < val) updates.endDate = val;
-              onChange(updates);
+              // End Date follows Visit Date; it can still be moved later
+              // for a multi-day visit.
+              onChange({ visitDate: val, endDate: val });
             }}
           />
           {visitDateTooFar && (
@@ -1370,7 +1370,7 @@ function EditGuestForm({ guest, onCancel, onSave }: EditGuestFormProps) {
           Cancel
         </button>
         <button type="button" onClick={handleSave} disabled={!canSave}
-          style={{ padding: "0.5rem 1.25rem", fontSize: "0.875rem", fontWeight: 600, color: "#fff", background: "#4f46e5", border: "none", borderRadius: 8, cursor: canSave ? "pointer" : "not-allowed", opacity: canSave ? 1 : 0.6, fontFamily: "inherit", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          style={{ padding: "0.5rem 1.25rem", fontSize: "0.875rem", fontWeight: 600, color: "#fff", background: "#2563eb", border: "none", borderRadius: 8, cursor: canSave ? "pointer" : "not-allowed", opacity: canSave ? 1 : 0.6, fontFamily: "inherit", display: "flex", alignItems: "center", gap: "0.5rem" }}>
           {saving && <span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />}
           {saving ? "Saving…" : "Save Changes"}
         </button>
@@ -1499,8 +1499,8 @@ export function SuccessStep({
             height: 40,
             padding: "0 1.25rem",
             borderRadius: 8,
-            border: "1.5px solid #4f46e5",
-            background: "#4f46e5",
+            border: "1.5px solid #2563eb",
+            background: "#2563eb",
             fontSize: "0.875rem",
             fontWeight: 600,
             color: "#fff",

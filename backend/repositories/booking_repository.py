@@ -131,6 +131,8 @@ BOOKING_SELECT_FIELDS = """
     b.modified_from_booking_id::text AS modified_from_booking_id,
     b.modification_reason,
 
+    gv.modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
+
     b.created_at,
     b.updated_at,
 
