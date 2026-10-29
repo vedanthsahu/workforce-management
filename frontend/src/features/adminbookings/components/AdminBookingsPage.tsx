@@ -152,6 +152,7 @@ export default function AdminBookingsPage() {
     confirmCancel,
     modifySeat,
     modifyVisit,
+    addBooking,
   } = useAdminBookingActions({
     onCancelled: () => {
       setSelectedBooking(null);
@@ -504,7 +505,7 @@ export default function AdminBookingsPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => router.push("/book-for-someone")}
-            className="inline-flex items-center gap-2 h-9 px-4 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-sm font-medium shadow-sm"
+            className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm"
           >
             <Plus size={15} />
             Book for Someone
@@ -577,6 +578,7 @@ export default function AdminBookingsPage() {
                   onView={setSelectedBooking}
                   onModifySeat={modifySeat}
                   onModifyVisit={modifyVisit}
+                  onAddBooking={addBooking}
                   onCancelSeat={(b) => openCancelSeat(b)}
                   onCancelVisit={(b) => openCancelVisit(b)}
                 />
