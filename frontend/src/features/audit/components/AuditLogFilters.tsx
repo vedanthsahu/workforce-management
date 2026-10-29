@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CalendarDays, Clock, ChevronDown, RotateCcw, Search, X } from "lucide-react";
+import {
+  CalendarDays,
+  Clock,
+  ChevronDown,
+  RotateCcw,
+  Search,
+  X,
+} from "lucide-react";
 import { auditService } from "../services/audit.service";
 import {
   AuditLogFilterOptionRaw,
@@ -10,18 +17,24 @@ import {
   AuditTimeMode,
   defaultAuditLogFilters,
 } from "../types/audit.types";
-import { deriveAuditFilterOptions, initialsOf, mapAuditLogListItemToUi } from "../utils/mapAuditLog";
+import {
+  deriveAuditFilterOptions,
+  initialsOf,
+  mapAuditLogListItemToUi,
+} from "../utils/mapAuditLog";
 import {
   AUDIT_RELATIVE_TIME_GROUPS,
   AUDIT_RELATIVE_TIME_OPTIONS,
   AUDIT_SELECT_ARROW_STYLE,
   AUDIT_SELECT_BASE_CLASS,
-  AUDIT_STATUS_OPTIONS,
 } from "../utils/constants";
 
 type Props = {
   filters: AuditLogFiltersType;
-  onUpdate: <K extends keyof AuditLogFiltersType>(key: K, value: AuditLogFiltersType[K]) => void;
+  onUpdate: <K extends keyof AuditLogFiltersType>(
+    key: K,
+    value: AuditLogFiltersType[K],
+  ) => void;
   onSearch: () => void;
   onClear: () => void;
   /** Every real (module, entity_type, action) combination for the tenant --
@@ -31,7 +44,11 @@ type Props = {
 
 function formatDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function DateRangeField({
@@ -56,13 +73,17 @@ function DateRangeField({
   useEffect(() => {
     if (!open) return;
     const onClickOutside = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      if (rootRef.current && !rootRef.current.contains(e.target as Node))
+        setOpen(false);
     };
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, [open]);
 
-  const label = dateFrom && dateTo ? `${formatDate(dateFrom)} – ${formatDate(dateTo)}` : "Select date range";
+  const label =
+    dateFrom && dateTo
+      ? `${formatDate(dateFrom)} – ${formatDate(dateTo)}`
+      : "Select date range";
 
   return (
     <div ref={rootRef} className="relative">
@@ -93,7 +114,8 @@ function DateRangeField({
                 setDraftTo(next);
               }}
               onKeyDown={(e) => {
-                if (!["Tab", "Escape", "Shift"].includes(e.key)) e.preventDefault();
+                if (!["Tab", "Escape", "Shift"].includes(e.key))
+                  e.preventDefault();
               }}
               onPaste={(e) => e.preventDefault()}
               className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -107,7 +129,8 @@ function DateRangeField({
               min={draftFrom || undefined}
               onChange={(e) => setDraftTo(e.target.value)}
               onKeyDown={(e) => {
-                if (!["Tab", "Escape", "Shift"].includes(e.key)) e.preventDefault();
+                if (!["Tab", "Escape", "Shift"].includes(e.key))
+                  e.preventDefault();
               }}
               onPaste={(e) => e.preventDefault()}
               className="h-9 px-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -143,7 +166,13 @@ function DateRangeField({
   );
 }
 
-function TimeModeToggle({ mode, onChange }: { mode: AuditTimeMode; onChange: (mode: AuditTimeMode) => void }) {
+function TimeModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: AuditTimeMode;
+  onChange: (mode: AuditTimeMode) => void;
+}) {
   return (
     <div className="flex items-center gap-3">
       {(
@@ -159,7 +188,9 @@ function TimeModeToggle({ mode, onChange }: { mode: AuditTimeMode; onChange: (mo
             type="button"
             onClick={() => onChange(key)}
             className={`text-xs font-medium pb-0.5 border-b-2 transition-colors duration-150 ${
-              active ? "border-indigo-600 text-indigo-600 font-semibold" : "border-transparent text-gray-600 hover:text-gray-700"
+              active
+                ? "border-indigo-600 text-indigo-600 font-semibold"
+                : "border-transparent text-gray-600 hover:text-gray-700"
             }`}
           >
             {label}
@@ -216,7 +247,8 @@ function CustomSelect({
   useEffect(() => {
     if (!open) return;
     const onClickOutside = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      if (rootRef.current && !rootRef.current.contains(e.target as Node))
+        setOpen(false);
     };
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
@@ -232,14 +264,20 @@ function CustomSelect({
         className="h-10 pl-3 pr-8 relative flex items-center text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors w-full text-left"
       >
         <span className="flex-1 truncate">{selectedLabel}</span>
-        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        <ChevronDown
+          size={14}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+        />
       </button>
 
       {open && (
         <ul
           role="listbox"
           className="absolute top-full left-0 mt-1 w-full max-h-60 overflow-y-auto bg-white border border-gray-200 shadow-lg z-20 py-1"
-          style={{ scrollbarWidth: "thin", scrollbarColor: "#d1d5db transparent" }}
+          style={{
+            scrollbarWidth: "thin",
+            scrollbarColor: "#d1d5db transparent",
+          }}
         >
           {options.map((o) => {
             const active = o.value === value;
@@ -271,20 +309,29 @@ function CustomSelect({
  * style chip grid instead of the old <select>. Picking a chip applies
  * immediately and closes the popover, since there's nothing else to
  * configure (unlike the date range's two inputs + Apply). */
-function RelativeTimeField({ value, onChange }: { value: number | null; onChange: (seconds: number | null) => void }) {
+function RelativeTimeField({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (seconds: number | null) => void;
+}) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const onClickOutside = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      if (rootRef.current && !rootRef.current.contains(e.target as Node))
+        setOpen(false);
     };
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, [open]);
 
-  const label = AUDIT_RELATIVE_TIME_OPTIONS.find((o) => o.value === value)?.label ?? "Select time range";
+  const label =
+    AUDIT_RELATIVE_TIME_OPTIONS.find((o) => o.value === value)?.label ??
+    "Select time range";
   const showClear = value !== null;
 
   return (
@@ -296,7 +343,10 @@ function RelativeTimeField({ value, onChange }: { value: number | null; onChange
       >
         <span className="flex-1 truncate">{label}</span>
       </button>
-      <Clock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+      <Clock
+        size={14}
+        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+      />
       {showClear ? (
         <button
           type="button"
@@ -306,7 +356,10 @@ function RelativeTimeField({ value, onChange }: { value: number | null; onChange
           <X size={14} />
         </button>
       ) : (
-        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        <ChevronDown
+          size={14}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+        />
       )}
 
       {open && (
@@ -349,7 +402,13 @@ function RelativeTimeField({ value, onChange }: { value: number | null; onChange
  * fetch-suggestions-from-the-backend pattern as the employee search on
  * Bookings > Book for Someone (BookingManagementFilters.tsx), just backed by
  * GET /admin/audit's name-only `search` instead of admin bookings. */
-function UserSearchField({ value, onChange }: { value: string; onChange: (name: string) => void }) {
+function UserSearchField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (name: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<AuditLogListItem[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -357,7 +416,8 @@ function UserSearchField({ value, onChange }: { value: string; onChange: (name: 
   useEffect(() => {
     if (!open) return;
     const onClickOutside = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      if (rootRef.current && !rootRef.current.contains(e.target as Node))
+        setOpen(false);
     };
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
@@ -398,10 +458,13 @@ function UserSearchField({ value, onChange }: { value: string; onChange: (name: 
 
   return (
     <div ref={rootRef} className="relative w-60">
-      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+      <Search
+        size={14}
+        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+      />
       <input
         type="text"
-        placeholder="Search by user name"
+        placeholder="Search people or resource ID"
         value={value}
         onChange={(e) => {
           onChange(e.target.value);
@@ -431,11 +494,20 @@ function UserSearchField({ value, onChange }: { value: string; onChange: (name: 
       {open && value.trim() && (
         <div className="absolute top-[calc(100%+6px)] left-0 right-0 z-30 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
           {suggestions.length === 0 ? (
-            <p className="px-4 py-3 text-xs text-gray-400 text-center">No matches for &quot;{value}&quot;</p>
+            <p className="px-4 py-3 text-xs text-gray-400 text-center">
+              No matches for &quot;{value}&quot;
+            </p>
           ) : (
-            <ul role="listbox" className="py-1 max-h-60 overflow-y-auto divide-y divide-gray-100">
+            <ul
+              role="listbox"
+              className="py-1 max-h-60 overflow-y-auto divide-y divide-gray-100"
+            >
               {suggestions.map((log) => (
-                <li key={log.actorUserId || log.actorName} role="option" aria-selected={false}>
+                <li
+                  key={log.actorUserId || log.actorName}
+                  role="option"
+                  aria-selected={false}
+                >
                   <button
                     type="button"
                     onMouseDown={(e) => {
@@ -449,8 +521,12 @@ function UserSearchField({ value, onChange }: { value: string; onChange: (name: 
                       {initialsOf(log.actorName)}
                     </span>
                     <span className="flex-1 min-w-0">
-                      <p className="text-[13px] font-medium text-gray-800 truncate">{log.actorName}</p>
-                      <p className="text-[11px] text-gray-400 truncate">{log.actorEmail}</p>
+                      <p className="text-[13px] font-medium text-gray-800 truncate">
+                        {log.actorName}
+                      </p>
+                      <p className="text-[11px] text-gray-400 truncate">
+                        {log.actorEmail}
+                      </p>
                     </span>
                   </button>
                 </li>
@@ -463,16 +539,22 @@ function UserSearchField({ value, onChange }: { value: string; onChange: (name: 
   );
 }
 
-function optionLabel(options: { value: string; label: string }[], value: string): string {
+function optionLabel(
+  options: { value: string; label: string }[],
+  value: string,
+): string {
   return options.find((o) => o.value === value)?.label ?? value;
 }
 
-export default function AuditLogFilters({ filters, onUpdate, onSearch, onClear, filterOptions }: Props) {
-  const { moduleOptions, entityOptions, actionOptions } = deriveAuditFilterOptions(
-    filterOptions,
-    filters.module,
-    filters.entity
-  );
+export default function AuditLogFilters({
+  filters,
+  onUpdate,
+  onSearch,
+  onClear,
+  filterOptions,
+}: Props) {
+  const { moduleOptions, entityOptions, actionOptions } =
+    deriveAuditFilterOptions(filterOptions, filters.module, filters.entity);
 
   // Module -> Entity -> Action is a real hierarchy (see deriveAuditFilterOptions),
   // so narrowing an upstream level resets whatever's downstream -- otherwise
@@ -501,13 +583,12 @@ export default function AuditLogFilters({ filters, onUpdate, onSearch, onClear, 
     onUpdate("module", defaults.module);
     onUpdate("entity", defaults.entity);
     onUpdate("action", defaults.action);
-    onUpdate("status", defaults.status);
     onUpdate("dateFrom", defaults.dateFrom);
     onUpdate("dateTo", defaults.dateTo);
     onUpdate("lastSeconds", defaults.lastSeconds);
   };
 
-  // Chips summarizing whichever of Module/Entity/Action/Status aren't "All" --
+  // Chips summarizing whichever of Module/Entity/Action aren't "All" --
   // each one's remove button reuses the same cascading reset as its select so
   // clearing Module from a chip also clears the now-stale Entity/Action picks.
   const activeFilterChips = [
@@ -529,19 +610,25 @@ export default function AuditLogFilters({ filters, onUpdate, onSearch, onClear, 
       value: optionLabel(actionOptions, filters.action),
       onRemove: () => onUpdate("action", "All"),
     },
-    filters.status !== "All" && {
-      key: "status",
-      label: "Status",
-      value: optionLabel(AUDIT_STATUS_OPTIONS, filters.status),
-      onRemove: () => onUpdate("status", "All"),
-    },
-  ].filter((chip): chip is { key: string; label: string; value: string; onRemove: () => void } => Boolean(chip));
+  ].filter(
+    (
+      chip,
+    ): chip is {
+      key: string;
+      label: string;
+      value: string;
+      onRemove: () => void;
+    } => Boolean(chip),
+  );
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-end gap-3 flex-wrap">
         <div className="w-70.5 flex flex-col gap-1">
-          <TimeModeToggle mode={filters.timeMode} onChange={handleTimeModeChange} />
+          <TimeModeToggle
+            mode={filters.timeMode}
+            onChange={handleTimeModeChange}
+          />
           {filters.timeMode === "date" ? (
             <DateRangeField
               dateFrom={filters.dateFrom}
@@ -552,32 +639,57 @@ export default function AuditLogFilters({ filters, onUpdate, onSearch, onClear, 
               }}
             />
           ) : (
-            <RelativeTimeField value={filters.lastSeconds} onChange={(seconds) => onUpdate("lastSeconds", seconds)} />
+            <RelativeTimeField
+              value={filters.lastSeconds}
+              onChange={(seconds) => onUpdate("lastSeconds", seconds)}
+            />
           )}
         </div>
 
         <div className="w-41 flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Module</label>
-          <NativeSelect value={filters.module} onChange={handleModuleChange} options={moduleOptions} />
+          <label className="text-xs font-medium text-gray-600">
+            Activity Category
+          </label>
+          <NativeSelect
+            value={filters.module}
+            onChange={handleModuleChange}
+            options={moduleOptions}
+          />
         </div>
         <div className="w-41 flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Entity</label>
-          <CustomSelect value={filters.entity} onChange={handleEntityChange} options={entityOptions} />
+          <label className="text-xs font-medium text-gray-600">
+            Resource Type
+          </label>
+          <CustomSelect
+            value={filters.entity}
+            onChange={handleEntityChange}
+            options={entityOptions}
+          />
         </div>
         <div className="w-42 flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Action</label>
-          <CustomSelect value={filters.action} onChange={(v) => onUpdate("action", v)} options={actionOptions} />
+          <label className="text-xs font-medium text-gray-600">Activity</label>
+          <CustomSelect
+            value={filters.action}
+            onChange={(v) => onUpdate("action", v)}
+            options={actionOptions}
+          />
         </div>
-        <div className="w-42 flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Status</label>
-          <NativeSelect value={filters.status} onChange={(v) => onUpdate("status", v)} options={AUDIT_STATUS_OPTIONS} />
+        <div className="flex flex-col gap-1 w-60">
+          <label className="text-xs font-medium text-gray-600">
+            People or Resource
+          </label>
+          <UserSearchField
+            value={filters.search}
+            onChange={(name) => onUpdate("search", name)}
+          />
         </div>
       </div>
 
       {activeFilterChips.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-medium text-gray-500">
-            {activeFilterChips.length} filter{activeFilterChips.length > 1 ? "s" : ""} selected:
+            {activeFilterChips.length} filter
+            {activeFilterChips.length > 1 ? "s" : ""} selected:
           </span>
           {activeFilterChips.map((chip) => (
             <span
@@ -600,11 +712,6 @@ export default function AuditLogFilters({ filters, onUpdate, onSearch, onClear, 
       )}
 
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Search</label>
-          <UserSearchField value={filters.search} onChange={(name) => onUpdate("search", name)} />
-        </div>
-
         <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto justify-end">
           <button
             type="button"
@@ -617,7 +724,7 @@ export default function AuditLogFilters({ filters, onUpdate, onSearch, onClear, 
           <button
             type="button"
             onClick={onSearch}
-            className="h-10 px-5 flex items-center gap-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-sm"
+            className="h-10 px-5 flex items-center gap-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm"
           >
             <Search size={14} />
             Search
