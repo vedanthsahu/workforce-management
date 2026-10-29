@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, KeyboardEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { MessageCircle } from 'lucide-react';
+import { ArrowRight, Building2, CalendarDays, Layers, MapPin, MessageCircle } from 'lucide-react';
 import axios from 'axios';
 import { getApiErrorMessage } from '@/lib/apiError';
 import {
@@ -51,10 +51,14 @@ export function ChatbotPanel() {
   const [selectedSeats, setSelectedSeats] = useState<SeatCard[]>([]);
   const [seatHeadcount, setSeatHeadcount] = useState(1);
   const [seatSearchText, setSeatSearchText] = useState('');
-  const [bookingTabLoading, setBookingTabLoading] = useState<'upcoming' | 'past' | 'cancelled' | null>(null);
+  // Which bookings list (by message index) is loading which tab; other lists stay as they are.
+  const [bookingTabLoading, setBookingTabLoading] = useState<{ index: number; mode: 'upcoming' | 'past' | 'cancelled' } | null>(null);
   const [initializationError, setInitializationError] = useState('');
+  // Node the server last reported; drives the "Step n of 2" label on booking forms.
+  const [currentNode, setCurrentNode] = useState('');
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const replaceBookingListRef = useRef(false);
+  // Message index of the bookings list whose tab was clicked; the reply replaces that list.
+  const replaceBookingListRef = useRef<number | null>(null);
   const replaceRebookCalendarRef = useRef(false);
   const seatSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressAutoScrollRef = useRef(false);
@@ -189,6 +193,7 @@ export function ChatbotPanel() {
   }
 
   function processResponse(response: ChatResponse) {
+    setCurrentNode(response.current_node);
     if (replaceRebookCalendarRef.current && response.messages.some((message) => message.type === 'REBOOK_CALENDAR')) {
       replaceRebookCalendarRef.current = false;
       setMessages((current) => {
@@ -201,20 +206,18 @@ export function ChatbotPanel() {
       });
       return;
     }
-    if (replaceBookingListRef.current && response.messages.some((message) => message.type === 'BOOKING_LIST')) {
-      replaceBookingListRef.current = false;
+    const replaceIndex = replaceBookingListRef.current;
+    if (replaceIndex !== null && response.messages.some((message) => message.type === 'BOOKING_LIST')) {
+      replaceBookingListRef.current = null;
       setBookingTabLoading(null);
-      setMessages((current) => {
-        const lastBookingListIndex = current.findLastIndex((message) => message.botMessage?.type === 'BOOKING_LIST');
-        const keepUntil = lastBookingListIndex >= 0 ? lastBookingListIndex : current.length;
-        return [
-          ...current.slice(0, keepUntil),
-          ...response.messages.map((message) => ({ from: 'bot' as const, botMessage: message, timestamp: new Date() })),
-        ];
-      });
+      setMessages((current) => [
+        ...current.slice(0, replaceIndex),
+        ...response.messages.map((message) => ({ from: 'bot' as const, botMessage: message, timestamp: new Date() })),
+        ...current.slice(replaceIndex + 1),
+      ]);
       return;
     }
-    replaceBookingListRef.current = false;
+    replaceBookingListRef.current = null;
     replaceRebookCalendarRef.current = false;
     setBookingTabLoading(null);
 
@@ -257,14 +260,14 @@ export function ChatbotPanel() {
     void dispatchMessage({ text: String(value), message_type: 'TEXT' });
   }
 
-  function selectBookingTab(value: string) {
+  function selectBookingTab(value: string, listIndex: number) {
     if (!sessionId || isLoading) return;
     const mode = value.includes('past') ? 'past' : value.includes('cancelled') ? 'cancelled' : 'upcoming';
     setActiveFormCard(null);
     setActiveDropdownKey(null);
     suppressAutoScrollRef.current = true;
-    setBookingTabLoading(mode);
-    replaceBookingListRef.current = true;
+    setBookingTabLoading({ index: listIndex, mode });
+    replaceBookingListRef.current = listIndex;
     void dispatchMessage({
       form_data: { action: 'booking_list_mode', mode },
       message_type: 'FORM_SUBMIT',
@@ -585,13 +588,17 @@ export function ChatbotPanel() {
                     <button type="button" onClick={retryInitialization} disabled={isLoading}>Retry</button>
                   </div>
                 ) : null}
+                {messages.length > 0 ? <div className="date-divider">Today</div> : null}
                 {messages.map((message, index) => (
                   <div key={`${message.timestamp.toISOString()}-${index}`} className={`message-row ${message.from === 'user' ? 'user-row' : ''}`}>
-                    {message.from === 'bot' ? <div className="bot-msg-avatar"><AssistantIcon /></div> : null}
+                    {message.from === 'bot' ? (
+                      <div className={`bot-msg-avatar ${messages[index - 1]?.from === 'bot' ? 'avatar-hidden' : ''}`}><AssistantIcon /></div>
+                    ) : null}
                     {message.from === 'bot' && message.botMessage ? (
                       <div className="bot-bubble-wrap">{renderBotMessage(
                         message.botMessage,
                         index === messages.findLastIndex((item) => item.botMessage?.type === 'SEAT_LIST'),
+                        index,
                       )}</div>
                     ) : null}
                     {message.from === 'user' ? <div className="user-bubble">{message.userText}</div> : null}
@@ -650,15 +657,15 @@ export function ChatbotPanel() {
     </div>
   );
 
-  function renderBotMessage(message: BotMessage, isLatestSeatList = false): ReactNode {
+  function renderBotMessage(message: BotMessage, isLatestSeatList = false, messageIndex = -1): ReactNode {
     if (message.type === 'TEXT') {
       const classes = ['bot-bubble', 'text-bubble'];
       if (message.text?.includes('OK') || message.text?.includes('cancelled')) classes.push('info-bubble');
       if (message.text?.includes('already have') || message.text?.includes('already booked')) classes.push('warning-bubble');
+      const text = isGreetingMessage(message.text) ? greetingDisplayText(message.text) : message.text;
       return (
         <div className={classes.join(' ')}>
-          <div dangerouslySetInnerHTML={{ __html: markdownSimple(message.text) }} />
-          {isGreetingMessage(message.text) ? <div className="message-time">10:30 AM</div> : null}
+          <div dangerouslySetInnerHTML={{ __html: markdownSimple(text) }} />
         </div>
       );
     }
@@ -804,37 +811,48 @@ export function ChatbotPanel() {
 
     if (message.type === 'BOOKING_LIST' && message.booking_list) {
       const displayedMode = message.booking_list.mode || bookingListMode(message.text);
-      const mode = bookingTabLoading || displayedMode;
+      // Only the list whose tab was clicked shows the loading state.
+      const listLoading = bookingTabLoading?.index === messageIndex ? bookingTabLoading.mode : null;
+      const mode = listLoading || displayedMode;
       const total = message.booking_list.total || message.booking_list.bookings.length;
       const isEmpty = message.booking_list.bookings.length === 0;
       return (
-        <div className={`booking-board ${bookingTabLoading ? 'is-tab-loading' : ''}`}>
+        <div className={`booking-board ${listLoading ? 'is-tab-loading' : ''}`}>
           <div className="booking-tabs">
-            <button className={`booking-tab ${mode === 'upcoming' ? 'active' : ''}`} onClick={() => selectBookingTab('my bookings')} disabled={isLoading}>
+            <button className={`booking-tab ${mode === 'upcoming' ? 'active' : ''}`} onClick={() => selectBookingTab('my bookings', messageIndex)} disabled={isLoading}>
               Upcoming {mode === 'upcoming' ? `(${total})` : ''}
             </button>
-            <button className={`booking-tab ${mode === 'past' ? 'active' : ''}`} onClick={() => selectBookingTab('show past bookings')} disabled={isLoading}>
+            <button className={`booking-tab ${mode === 'past' ? 'active' : ''}`} onClick={() => selectBookingTab('show past bookings', messageIndex)} disabled={isLoading}>
               Past {mode === 'past' ? `(${total})` : ''}
             </button>
-            <button className={`booking-tab ${mode === 'cancelled' ? 'active' : ''}`} onClick={() => selectBookingTab('show cancelled bookings')} disabled={isLoading}>
+            <button className={`booking-tab ${mode === 'cancelled' ? 'active' : ''}`} onClick={() => selectBookingTab('show cancelled bookings', messageIndex)} disabled={isLoading}>
               Cancelled {mode === 'cancelled' ? `(${total})` : ''}
             </button>
           </div>
-          {bookingTabLoading ? (
+          {listLoading ? (
             <div className="booking-inline-loading" role="status" aria-live="polite">
               <span className="booking-loading-spinner" />
-              Loading {bookingTabLabel(bookingTabLoading)}...
+              Loading {bookingTabLabel(listLoading)}...
             </div>
           ) : null}
           {message.text && !isEmpty ? <p className="booking-list-header">{message.text}</p> : null}
-          {isEmpty && !bookingTabLoading ? (
+          {isEmpty && !listLoading ? (
             <div className="booking-empty-state" role="status">
               <span className="booking-empty-icon"><CalendarMenuIcon /></span>
               <strong>{message.text || `No ${bookingTabLabel(displayedMode)} found.`}</strong>
-              <span>Select another tab to view your booking history.</span>
+              <span>
+                {displayedMode === 'upcoming'
+                  ? 'You have nothing scheduled yet. Reserve a seat for your next office day.'
+                  : 'Select another tab to view your booking history.'}
+              </span>
+              {displayedMode === 'upcoming' ? (
+                <button type="button" className="empty-cta" onClick={() => selectOption('book a seat', 'Book a seat')} disabled={isLoading}>
+                  Book a seat <ArrowRight size={14} aria-hidden="true" />
+                </button>
+              ) : null}
             </div>
           ) : null}
-          <div className={`booking-list ${bookingTabLoading && bookingTabLoading !== displayedMode ? 'booking-list-dimmed' : ''}`}>
+          <div className={`booking-list ${listLoading && listLoading !== displayedMode ? 'booking-list-dimmed' : ''}`}>
             {message.booking_list.bookings.map((booking) => {
               const isPastBooking = displayedMode === 'past';
               const statusLabel = isPastBooking ? 'Expired' : booking.status || 'Confirmed';
@@ -987,9 +1005,19 @@ export function ChatbotPanel() {
 
   function renderActiveFormCard(state: FormCardState) {
     const formComplete = isFormComplete(state);
+    const step = currentNode === 'BOOK_WHEN_WHERE' ? 1 : currentNode === 'BOOK_DETAILS' ? 2 : 0;
     return (
       <div className="active-form-card">
         <div className="form-card-header">
+          {step ? (
+            <div className="form-step">
+              <span className="form-step-label">Step {step} of 2</span>
+              <span className="form-step-bar" aria-hidden="true">
+                <span className="on" />
+                <span className={step === 2 ? 'on' : ''} />
+              </span>
+            </div>
+          ) : null}
           <div className="form-card-title">{state.card.title}</div>
           {state.card.subtitle ? <div className="form-card-subtitle">{state.card.subtitle}</div> : null}
         </div>
@@ -997,7 +1025,10 @@ export function ChatbotPanel() {
           {state.card.fields.map((field) => (
             <div key={field.key} className={`form-field ${state.errors[field.key] ? 'has-error' : ''}`}>
               <label className="field-label">{field.label}{field.required ? <span className="required-star">*</span> : null}</label>
-              {renderFormField(field, state)}
+              <div className={`field-control ${fieldIcon(field) ? 'has-icon' : ''}`}>
+                {fieldIcon(field) ? <span className="field-icon">{fieldIcon(field)}</span> : null}
+                {renderFormField(field, state)}
+              </div>
               {state.errors[field.key] ? <div className="field-error">{state.errors[field.key]}</div> : null}
             </div>
           ))}
@@ -1230,9 +1261,21 @@ function QuickBookRow({ label, value }: { label: string; value: string }) {
   return <div className="qb-detail-row"><span className="qb-label">{label}</span><span className="qb-value">{value}</span></div>;
 }
 
+// The main-menu welcome: "Hello <name>! Welcome to eFACiLiTY Seat Booking."
 function isGreetingMessage(value?: string) {
-  if (!value) return false;
-  return /how can i help/i.test(value) || /hi\s+\w+/i.test(value);
+  return !!value && /^Hello .+! Welcome to /i.test(value);
+}
+
+function greetingDisplayText(value?: string) {
+  return `${(value || '').replace(/^Hello (.+?)!/, 'Hello **$1**!')} What would you like to do?`;
+}
+
+function fieldIcon(field: FormField): ReactNode {
+  if (field.field_type === 'date') return <CalendarDays size={16} aria-hidden="true" />;
+  if (field.key === 'site_id') return <MapPin size={16} aria-hidden="true" />;
+  if (field.key === 'building_id') return <Building2 size={16} aria-hidden="true" />;
+  if (field.key === 'floor_id') return <Layers size={16} aria-hidden="true" />;
+  return null;
 }
 
 function isMainMenuOptions(message: BotMessage) {

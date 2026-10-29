@@ -117,6 +117,14 @@ class ChatEngine:
         if navigation_service.is_main_menu_command(user_text):
             return await self._go_to_main_menu(session, db)
 
+        # A root-menu card ("menu:3") means "that main-menu item" on any screen;
+        # a bare number is only meaningful against the current screen.
+        if user_text and user_text.strip().lower().startswith("menu:"):
+            choice = self._parse_number(user_text.split(":", 1)[1])
+            if choice is not None and choice >= 1:
+                session.current_menu_id = None
+                return await self._navigate_menu_choice(session, None, choice, db)
+
         if user_text and user_text.strip().lower() in ("quit", "exit", "bye"):
             return await self._abandon(session, db)
 
@@ -1057,7 +1065,14 @@ class ChatEngine:
             ChatOption(
                 number=child.display_order,
                 label=child.label,
-                value=str(child.display_order),
+                # Root cards say which menu item they are ("menu:3") so they still
+                # work after the session has moved to another screen; submenu
+                # numbers are only meaningful inside that submenu.
+                value=(
+                    str(child.display_order)
+                    if parent_id is not None
+                    else f"menu:{child.display_order}"
+                ),
             )
             for child in children
         ]
