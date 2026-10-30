@@ -285,6 +285,9 @@ export function useBookingForm() {
   // setFromDate/setToDate below).
   const [dateRangeNotice, setDateRangeNotice] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<CreateBookingResponse | null>(null);
+  // Mirrors `confirmation` for async callbacks that outlive the render they
+  // were created in (the seat re-fetch below can resolve after Confirm).
+  const confirmationRef = useRef<CreateBookingResponse | null>(null);
 
   const [myPreferencesApplied, setMyPreferencesApplied] = useState(false);
   // Selected preferences that don't apply to the currently-selected space
@@ -937,7 +940,11 @@ export function useBookingForm() {
   // link that skipped step 2 entirely — see the conflict check below) ──────
 
   useEffect(() => {
+    // Once the booking is confirmed the user holds a booking for these dates,
+    // so the availability check would 409 ("already has an active booking")
+    // and wrongly bounce them off the confirmation screen.
     if (
+      !confirmationRef.current &&
       (step === 2 || step === 3) &&
       seats.length === 0 &&
       form.floorId &&
@@ -963,6 +970,8 @@ export function useBookingForm() {
       })
         .then(setSeats)
         .catch((e) => {
+          // Request was already in flight when Confirm succeeded.
+          if (confirmationRef.current) return;
           // The availability endpoint can 409 for reasons that have nothing
           // to do with a specific seat -- e.g. the admin already has another
           // active booking in this date range (user_has_active_booking_in_range
@@ -995,7 +1004,7 @@ export function useBookingForm() {
   // conflict explained at the top, same as a conflict caught before ever
   // leaving that page (BookingSidebar's own pre-navigation check).
   useEffect(() => {
-    if (step !== 3 || seats.length === 0 || !form.selectedSeatId) return;
+    if (step !== 3 || confirmationRef.current || seats.length === 0 || !form.selectedSeatId) return;
     const seat = seats.find((s) => s.id === form.selectedSeatId);
     if (seat && seat.status !== "available" && seat.status !== "yours") {
       const clearedForm = { ...form, selectedSeatId: null };
@@ -1209,6 +1218,7 @@ export function useBookingForm() {
         );
       }
 
+      confirmationRef.current = result;
       setConfirmation(result);
       setStepState(3);
     } catch (err) {
@@ -1264,6 +1274,7 @@ export function useBookingForm() {
     setFloors([]);
     setSeats([]);
     setFloorLayoutUrl(null);
+    confirmationRef.current = null;
     setConfirmation(null);
     setError(null);
     // Let the preferences auto-fill effect run again for the next booking —
