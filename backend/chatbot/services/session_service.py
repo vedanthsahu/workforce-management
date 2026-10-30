@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from psycopg2.extensions import connection as PGConnection
 
@@ -11,7 +11,6 @@ from backend.repositories.chatbot_repository import (
     fetch_chatbot_session,
     insert_chatbot_message,
     insert_chatbot_session,
-    update_chatbot_session_state,
 )
 
 
@@ -29,7 +28,6 @@ class SessionService:
         authenticated_tenant_id: str | None = None,
     ) -> ChatbotSession:
         now = _utcnow()
-        expires = now + timedelta(minutes=settings.SESSION_TTL_MINUTES)
         context_data = {}
         if authenticated_user_id is not None:
             context_data["authenticated_user_id"] = authenticated_user_id
@@ -44,7 +42,6 @@ class SessionService:
             current_node="MAIN_MENU",
             created_at=now,
             updated_at=now,
-            expires_at=expires,
             context_data=context_data,
         )
         session = ChatbotSession.from_row(row)
@@ -73,14 +70,6 @@ class SessionService:
                 ownership.get("authenticated_user_id") != authenticated_user_id
                 or ownership.get("authenticated_tenant_id") != authenticated_tenant_id
             ):
-                return None
-        if session and session.expires_at:
-            expires = session.expires_at
-            if expires.tzinfo is None:
-                expires = expires.replace(tzinfo=UTC)
-            if expires < _utcnow():
-                session.state = "EXPIRED"
-                update_chatbot_session_state(conn, session_id=uid, state="EXPIRED")
                 return None
         if session:
             await memory_service.set_session(session)

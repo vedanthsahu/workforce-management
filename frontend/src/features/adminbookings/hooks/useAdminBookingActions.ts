@@ -136,6 +136,35 @@ export function useAdminBookingActions({ onCancelled }: UseAdminBookingActionsPa
     router.push(`/book-for-someone?${params.toString()}`);
   };
 
+  // Add a seat to a visit-only guest invite. Same route and params as the
+  // facilitator's "Book a Space" (bookings/hooks/useBookingActions.ts
+  // handleAddBooking): the shared /book page sees ?visitId and submits
+  // POST /guest-visits/{id}/workflow with action ADD_BOOKING.
+  const addBooking = (booking: AdminBooking) => {
+    const visitId = booking.guest_visit_id ?? booking.booking_id;
+    const params = new URLSearchParams({
+      visitId,
+      fromDate: booking.activity_date,
+      toDate: booking.activity_date,
+      adminFlow: "true",
+    });
+
+    if (booking.site_id) params.set("siteId", booking.site_id);
+    if (booking.building_id) params.set("buildingId", booking.building_id);
+    if (booking.floor_id) params.set("floorId", booking.floor_id);
+    if (booking.site_name) params.set("locationName", booking.site_name);
+    if (booking.building_name) params.set("buildingName", booking.building_name);
+    if (booking.floor_name) params.set("floorName", booking.floor_name);
+    if (booking.booked_for_guest_id) params.set("guestId", booking.booked_for_guest_id);
+    if (booking.person_name) params.set("bookingForName", booking.person_name);
+    if (booking.host_user_id) params.set("hostUserId", booking.host_user_id);
+    if (booking.guest_type) params.set("guestType", booking.guest_type);
+    params.set("isGuestModify", "true");
+
+    sessionStorage.setItem(ADMIN_BOOKINGS_EXPECT_RETURN_KEY, "1");
+    router.push(`/book?${params.toString()}`);
+  };
+
   return {
     cancelTarget,
     cancelMode,
@@ -145,5 +174,6 @@ export function useAdminBookingActions({ onCancelled }: UseAdminBookingActionsPa
     confirmCancel,
     modifySeat,
     modifyVisit,
+    addBooking,
   };
 }

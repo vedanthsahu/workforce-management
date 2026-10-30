@@ -47,4 +47,11 @@ export interface AuthContextType {
   isLoading:       boolean;
   isAuthenticated: boolean;
   logout:          () => Promise<void>;
+  // The first "who am I" check got no usable answer: "unreachable" (no
+  // response at all) or "server" (the server answered with an error). null
+  // otherwise. `retry` runs the check again and resolves when it has finished.
+  connectionError: ConnectionErrorKind | null;
+  retry:           () => Promise<void>;
 }
+
+export type ConnectionErrorKind = "unreachable" | "server";

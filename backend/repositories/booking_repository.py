@@ -18,6 +18,43 @@ _SEAT_DATE_LOCK_CLASS = 1
 _SUBJECT_DATE_LOCK_CLASS = 2
 
 
+def acquire_seat_date_lock(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seat_id: str,
+    booking_date: date,
+) -> None:
+    """Serialize concurrent booking attempts for the same seat+date within
+    this transaction. See acquire_booking_slot_locks for the full rationale;
+    use this directly only when there's no subject to also lock."""
+    seat_key = f"{tenant_id}:seat:{seat_id}:{booking_date.isoformat()}"
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT pg_advisory_xact_lock(%s::int, hashtext(%s))",
+            (_SEAT_DATE_LOCK_CLASS, seat_key),
+        )
+
+
+def acquire_subject_date_lock(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    subject_id: str,
+    booking_date: date,
+) -> None:
+    """Serialize concurrent booking attempts for the same subject
+    (employee or guest)+date within this transaction, e.g. a visit/booking
+    creation path that has no seat yet to also lock. See
+    acquire_booking_slot_locks for the full rationale."""
+    subject_key = f"{tenant_id}:subject:{subject_id}:{booking_date.isoformat()}"
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT pg_advisory_xact_lock(%s::int, hashtext(%s))",
+            (_SUBJECT_DATE_LOCK_CLASS, subject_key),
+        )
+
+
 def acquire_booking_slot_locks(
     conn: PGConnection,
     *,
@@ -41,17 +78,8 @@ def acquire_booking_slot_locks(
     that order, so two transactions racing for different (seat, subject)
     pairs can never deadlock on each other.
     """
-    seat_key = f"{tenant_id}:seat:{seat_id}:{booking_date.isoformat()}"
-    subject_key = f"{tenant_id}:subject:{subject_id}:{booking_date.isoformat()}"
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT pg_advisory_xact_lock(%s::int, hashtext(%s))",
-            (_SEAT_DATE_LOCK_CLASS, seat_key),
-        )
-        cur.execute(
-            "SELECT pg_advisory_xact_lock(%s::int, hashtext(%s))",
-            (_SUBJECT_DATE_LOCK_CLASS, subject_key),
-        )
+    acquire_seat_date_lock(conn, tenant_id=tenant_id, seat_id=seat_id, booking_date=booking_date)
+    acquire_subject_date_lock(conn, tenant_id=tenant_id, subject_id=subject_id, booking_date=booking_date)
 
 
 def _apply_seat_and_date_filters(
@@ -130,6 +158,8 @@ BOOKING_SELECT_FIELDS = """
 
     b.modified_from_booking_id::text AS modified_from_booking_id,
     b.modification_reason,
+
+    gv.modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
 
     b.created_at,
     b.updated_at,

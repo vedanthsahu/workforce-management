@@ -36,7 +36,6 @@ def insert_chatbot_session(
     current_node: str,
     created_at: datetime,
     updated_at: datetime,
-    expires_at: datetime,
     context_data: dict[str, Any],
 ) -> dict[str, Any]:
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -44,15 +43,15 @@ def insert_chatbot_session(
             """
             INSERT INTO chatbot_sessions (
                 id, tenant_id, user_name, state, current_node,
-                created_at, updated_at, expires_at, context_data
+                created_at, updated_at, context_data
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id, tenant_id, user_name, state, current_node,
-                      current_menu_id, context_data, created_at, updated_at, expires_at
+                      current_menu_id, context_data, created_at, updated_at
             """,
             (
                 str(session_id), tenant_id, user_name, state, current_node,
-                created_at, updated_at, expires_at, Json(context_data),
+                created_at, updated_at, Json(context_data),
             ),
         )
         row = cur.fetchone()
@@ -67,7 +66,7 @@ def fetch_chatbot_session(
         cur.execute(
             """
             SELECT id, tenant_id, user_name, state, current_node,
-                   current_menu_id, context_data, created_at, updated_at, expires_at
+                   current_menu_id, context_data, created_at, updated_at
             FROM chatbot_sessions
             WHERE id = %s
             """,
@@ -94,17 +93,6 @@ def update_chatbot_session_node(
             WHERE id = %s
             """,
             (current_node, state, current_menu_id, updated_at, str(session_id)),
-        )
-    conn.commit()
-
-
-def update_chatbot_session_state(
-    conn: PGConnection, *, session_id: uuid.UUID, state: str,
-) -> None:
-    with conn.cursor() as cur:
-        cur.execute(
-            "UPDATE chatbot_sessions SET state = %s WHERE id = %s",
-            (state, str(session_id)),
         )
     conn.commit()
 
