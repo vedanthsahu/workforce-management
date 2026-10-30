@@ -117,7 +117,7 @@ export default function FloorLayoutsPage() {
           ) : (
             <Link
               href={uploadHref}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700 transition-colors"
+              className="inline-flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium shadow-sm transition-colors"
             >
               ⬆ Upload New Layout
             </Link>

@@ -1,5 +1,6 @@
 "use client";
 import { displaySpaceCode } from "@/lib/spaceCode";
+import { getApiErrorMessage } from "@/lib/apiError";
 import { useState, useRef, useEffect } from "react";
 import Select, { type MultiValue } from "react-select";
 import {
@@ -415,7 +416,7 @@ function EditProfileDialog({
       await onSave({ bio, skills });
       onClose();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Something went wrong.");
+      setError(getApiErrorMessage(e, "We couldn't save your changes. Please try again."));
     }
   };
 
@@ -703,7 +704,7 @@ function EditPreferencesDialog({
       });
       onClose();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Something went wrong.");
+      setError(getApiErrorMessage(e, "We couldn't save your preferences. Please try again."));
     }
   };
 

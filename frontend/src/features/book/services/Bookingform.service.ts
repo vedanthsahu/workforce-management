@@ -1,5 +1,5 @@
-import axios from "axios";
 import { axiosInstance } from "@/lib/http/axios";
+import { getApiErrorMessage } from "@/lib/apiError";
 import {
   Site,
   Building,
@@ -26,18 +26,7 @@ import {
 // booking) never falls through to Axios's own generic
 // "Request failed with status code {n}".
 export function extractApiErrorMessage(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err)) {
-    const data = err.response?.data as
-      | { detail?: { message?: string } | string; message?: string; error?: { message?: string } }
-      | undefined;
-    const extracted =
-      (typeof data?.detail === "object" ? data?.detail?.message : typeof data?.detail === "string" ? data.detail : null)
-      ?? data?.error?.message
-      ?? data?.message
-      ?? null;
-    return extracted ?? fallback;
-  }
-  return err instanceof Error ? err.message : fallback;
+  return getApiErrorMessage(err, fallback);
 }
 
 // ── Raw API shapes ────────────────────────────────────────────────────────────

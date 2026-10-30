@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getApiErrorMessage } from "@/lib/apiError";
 import { adminService } from "../services/admin.service";
 import type { DashboardFilters, DashboardSummary } from "../types/admin.types";
 
@@ -22,7 +23,7 @@ export function useDashboardSummary(filters: DashboardFilters) {
       })
       .catch((err) => {
         console.error(err);
-        if (!cancelled) setError("Failed to load dashboard data");
+        if (!cancelled) setError(getApiErrorMessage(err, "We couldn't load the dashboard data. Please try again."));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

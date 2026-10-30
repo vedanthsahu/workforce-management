@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { getApiErrorMessage } from "@/lib/apiError";
 import {
   BookingType,
   Building,
@@ -119,8 +120,9 @@ export function useBookingForm() {
         notes: visitDetails.additionalNotes || null,
       });
       return true;
-    } catch {
-      setSubmitError("Failed to send the invite. Please try again.");
+    } catch (err) {
+      // The backend's reason (guest or host problems, validation) when it gave one.
+      setSubmitError(getApiErrorMessage(err, "We couldn't send the invite. Please try again."));
       return false;
     } finally {
       setIsSubmitting(false);

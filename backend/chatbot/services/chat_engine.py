@@ -117,6 +117,14 @@ class ChatEngine:
         if navigation_service.is_main_menu_command(user_text):
             return await self._go_to_main_menu(session, db)
 
+        # A root-menu card ("menu:3") means "that main-menu item" on any screen;
+        # a bare number is only meaningful against the current screen.
+        if user_text and user_text.strip().lower().startswith("menu:"):
+            choice = self._parse_number(user_text.split(":", 1)[1])
+            if choice is not None and choice >= 1:
+                session.current_menu_id = None
+                return await self._navigate_menu_choice(session, None, choice, db)
+
         if user_text and user_text.strip().lower() in ("quit", "exit", "bye"):
             return await self._abandon(session, db)
 
@@ -347,7 +355,7 @@ class ChatEngine:
             parsed = json.loads(payload)
             intent = Intent(parsed.get("intent", "UNKNOWN"))
             entities = parsed.get("entities", {})
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             return await self._go_to_main_menu(session, db)
 
         await self._set_context_bulk(session.id, {"pending_free_text": ""}, db)
@@ -735,7 +743,7 @@ class ChatEngine:
             return "upcoming"
         try:
             booking_date = date.fromisoformat(str(booking_date_str))
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return "upcoming"
         return "past" if booking_date < date.today() else "upcoming"
 
@@ -766,7 +774,7 @@ class ChatEngine:
     ) -> ChatResponse | None:
         try:
             booking_date = date.fromisoformat(booking_date_str)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             await self._set_context_bulk(session.id, {"booking_date": ""}, db)
             await self._update_node(
                 session, Node.BOOK_WHEN_WHERE, "BOOKING_WHEN_WHERE", db
@@ -817,7 +825,7 @@ class ChatEngine:
     ) -> ChatResponse | None:
         try:
             booking_date = date.fromisoformat(booking_date_str)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return None
 
         external_existing = await self._external_booking_for_date(booking_date_str)
@@ -1024,7 +1032,7 @@ class ChatEngine:
     def _requested_multiple_when_disabled(entities: dict[str, Any]) -> bool:
         try:
             requested = int(entities.get("headcount") or 1)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return False
         return not settings.ALLOW_MULTIPLE_SEATS and requested > 1
 
@@ -1057,7 +1065,14 @@ class ChatEngine:
             ChatOption(
                 number=child.display_order,
                 label=child.label,
-                value=str(child.display_order),
+                # Root cards say which menu item they are ("menu:3") so they still
+                # work after the session has moved to another screen; submenu
+                # numbers are only meaningful inside that submenu.
+                value=(
+                    str(child.display_order)
+                    if parent_id is not None
+                    else f"menu:{child.display_order}"
+                ),
             )
             for child in children
         ]
@@ -2659,7 +2674,7 @@ class ChatEngine:
     def _safe_float(value: Any) -> float | None:
         try:
             return float(value) if value is not None else None
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return None
 
     async def _handle_seat_selection(self, session, user_text, form_data, db):
@@ -4041,7 +4056,7 @@ class ChatEngine:
                 continue
             try:
                 booking_date = date.fromisoformat(booking_date_str)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 continue
             if month_start <= booking_date < month_end:
                 dates[booking_date_str] = booking_id
@@ -4053,7 +4068,7 @@ class ChatEngine:
             try:
                 parsed = date.fromisoformat(str(value))
                 return parsed.replace(day=1)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 pass
         return date.today().replace(day=1)
 
@@ -4493,14 +4508,14 @@ class ChatEngine:
             return None
         try:
             return int(text.strip())
-        except ValueError, AttributeError:
+        except (ValueError, AttributeError):
             return None
 
     @staticmethod
     def _safe_int(value) -> int | None:
         try:
             return int(value)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return None
 
 

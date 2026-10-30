@@ -1,4 +1,10 @@
-import { AuditLog, AuditLogDetailRaw, AuditLogFilterOptionRaw, AuditLogListItem, AuditLogListItemRaw } from "../types/audit.types";
+import {
+  AuditLog,
+  AuditLogDetailRaw,
+  AuditLogFilterOptionRaw,
+  AuditLogListItem,
+  AuditLogListItemRaw,
+} from "../types/audit.types";
 
 export function formatAuditDateTime(iso: string): string {
   const d = new Date(iso);
@@ -10,6 +16,8 @@ export function formatAuditDateTime(iso: string): string {
     minute: "2-digit",
     second: "2-digit",
     hour12: true,
+    timeZone: "Asia/Kolkata",
+    timeZoneName: "short",
   });
 }
 
@@ -32,7 +40,10 @@ export function formatActionTitle(action: string): string {
 const AUTH_ACTIONS_WITHOUT_CHANGES = new Set(["user.login", "user.logout"]);
 
 export function hasNoChangesData(module: string, action: string): boolean {
-  return module.toUpperCase() === "AUTH" && AUTH_ACTIONS_WITHOUT_CHANGES.has(action.toLowerCase());
+  return (
+    module.toUpperCase() === "AUTH" &&
+    AUTH_ACTIONS_WITHOUT_CHANGES.has(action.toLowerCase())
+  );
 }
 
 function mapListItemFields(raw: AuditLogListItemRaw) {
@@ -48,19 +59,23 @@ function mapListItemFields(raw: AuditLogListItemRaw) {
     entityType: raw.entity_type ?? "",
     entityId: raw.entity_id ?? "",
     status: raw.event_status,
+    failureSummary: raw.failure_summary ?? "",
     requestMethod: raw.request_method ?? "GET",
     sourceChannel: raw.source_channel ?? "WEB",
     occurredAt: raw.occurred_at,
   };
 }
 
-export function mapAuditLogListItemToUi(raw: AuditLogListItemRaw): AuditLogListItem {
+export function mapAuditLogListItemToUi(
+  raw: AuditLogListItemRaw,
+): AuditLogListItem {
   return mapListItemFields(raw);
 }
 
 export function mapAuditLogDetailToUi(raw: AuditLogDetailRaw): AuditLog {
   return {
     ...mapListItemFields(raw),
+    entityDisplayName: raw.entity_display_name ?? "",
     requestPath: raw.request_path ?? "",
     requestId: raw.request_id ?? "",
     correlationId: raw.correlation_id ?? "",
@@ -69,8 +84,8 @@ export function mapAuditLogDetailToUi(raw: AuditLogDetailRaw): AuditLog {
     oldValues: raw.old_values,
     newValues: raw.new_values,
     changedFields: raw.changed_fields,
-    failureCode: raw.failure_code,
-    failureReason: raw.failure_reason,
+    targetUserId: raw.target_user_id ?? "",
+    targetEmail: raw.target_email ?? "",
     createdAt: raw.created_at,
   };
 }
@@ -79,9 +94,17 @@ export function mapAuditLogDetailToUi(raw: AuditLogDetailRaw): AuditLog {
  * event status and the shape of the old/new-values payload, never by
  * diffing field values ourselves (the backend already tells us what
  * changed via changed_fields). */
-export type AuditEventCategory = "CREATE" | "UPDATE" | "DELETE" | "AUTH" | "FAILED" | "NONE";
+export type AuditEventCategory =
+  | "CREATE"
+  | "UPDATE"
+  | "DELETE"
+  | "AUTH"
+  | "FAILED"
+  | "NONE";
 
-function hasFields(value: Record<string, unknown> | null): value is Record<string, unknown> {
+function hasFields(
+  value: Record<string, unknown> | null,
+): value is Record<string, unknown> {
   return !!value && Object.keys(value).length > 0;
 }
 
@@ -97,12 +120,20 @@ function hasFields(value: Record<string, unknown> | null): value is Record<strin
  * event belongs to.
  */
 export function getAuditEventCategory(
-  log: Pick<AuditLog, "status" | "action" | "oldValues" | "newValues" | "requestMethod">
+  log: Pick<
+    AuditLog,
+    "status" | "action" | "oldValues" | "newValues" | "requestMethod"
+  >,
 ): AuditEventCategory {
   if (log.status !== "SUCCESS") return "FAILED";
 
   const action = log.action.toLowerCase();
-  if (action === "user.login" || action === "user.logout" || action.endsWith(".login") || action.endsWith(".logout")) {
+  if (
+    action === "user.login" ||
+    action === "user.logout" ||
+    action.endsWith(".login") ||
+    action.endsWith(".logout")
+  ) {
     return "AUTH";
   }
 
@@ -117,8 +148,14 @@ export function getAuditEventCategory(
   // create/update/delete action still gets a sensible (empty-state) block
   // instead of silently landing in "NONE".
   if (action.endsWith(".created")) return "CREATE";
-  if (action.endsWith(".deleted") || action.endsWith(".delete")) return "DELETE";
-  if (action.endsWith(".updated") || action.endsWith("_updated") || action.endsWith(".cancel")) return "UPDATE";
+  if (action.endsWith(".deleted") || action.endsWith(".delete"))
+    return "DELETE";
+  if (
+    action.endsWith(".updated") ||
+    action.endsWith("_updated") ||
+    action.endsWith(".cancel")
+  )
+    return "UPDATE";
 
   // Still nothing to go on -- the HTTP method is the last reliable signal.
   switch (log.requestMethod?.toUpperCase()) {
@@ -139,10 +176,64 @@ export function getAuditEventCategory(
 /** Field keys to render for an UPDATE -- changed_fields when the backend
  * provided it, otherwise every key present across old/new (still backend
  * data, not a frontend value comparison). */
-export function updateFieldKeys(log: Pick<AuditLog, "changedFields" | "oldValues" | "newValues">): string[] {
-  if (log.changedFields && log.changedFields.length > 0) return log.changedFields;
-  const keys = new Set<string>([...Object.keys(log.oldValues ?? {}), ...Object.keys(log.newValues ?? {})]);
-  return [...keys];
+export function updateFieldKeys(
+  log: Pick<AuditLog, "changedFields" | "oldValues" | "newValues">,
+): string[] {
+  const keys =
+    log.changedFields && log.changedFields.length > 0
+      ? log.changedFields
+      : [
+          ...new Set([
+            ...Object.keys(log.oldValues ?? {}),
+            ...Object.keys(log.newValues ?? {}),
+          ]),
+        ];
+  return auditDisplayFieldKeys(keys, log.oldValues, log.newValues);
+}
+
+function valuesMatch(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (left == null || right == null) return false;
+  if (typeof left === "object" || typeof right === "object") {
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+  return String(left).trim() === String(right).trim();
+}
+
+/** Collapse redundant aliases such as site/site_name only when their values match. */
+export function auditDisplayFieldKeys(
+  keys: string[],
+  oldValues: Record<string, unknown> | null,
+  newValues: Record<string, unknown> | null,
+): string[] {
+  const keySet = new Set(keys);
+
+  return keys.filter((key) => {
+    if (!key.endsWith("_name")) return true;
+
+    const base = key.slice(0, -"_name".length);
+    const canonicalKey = keySet.has(base)
+      ? base
+      : keySet.has(`${base}_id`)
+        ? `${base}_id`
+        : null;
+    if (!canonicalKey) return true;
+
+    const oldAlias = oldValues?.[key];
+    const oldCanonical = oldValues?.[canonicalKey];
+    const newAlias = newValues?.[key];
+    const newCanonical = newValues?.[canonicalKey];
+    const oldMatches =
+      oldAlias === undefined && oldCanonical === undefined
+        ? true
+        : valuesMatch(oldAlias, oldCanonical);
+    const newMatches =
+      newAlias === undefined && newCanonical === undefined
+        ? true
+        : valuesMatch(newAlias, newCanonical);
+
+    return !(oldMatches && newMatches);
+  });
 }
 
 /** "booking" -> "Booking", "guest_visit" -> "Guest Visit"; falls back to the
@@ -160,10 +251,19 @@ export function formatEntityLabel(entityType: string, module: string): string {
 
 /** "building_code" -> "Building Code", "site_id" -> "Site ID" */
 export function formatFieldLabel(key: string): string {
-  return key
+  const displayKey = key.endsWith("_id")
+    ? key.slice(0, -3)
+    : key.endsWith("_ids")
+      ? key.slice(0, -4)
+      : key;
+  return displayKey
     .split("_")
     .filter(Boolean)
-    .map((word) => (word.toLowerCase() === "id" ? "ID" : word[0].toUpperCase() + word.slice(1)))
+    .map((word) =>
+      word.toLowerCase() === "id"
+        ? "ID"
+        : word[0].toUpperCase() + word.slice(1),
+    )
     .join(" ");
 }
 
@@ -173,20 +273,66 @@ export function formatFieldLabel(key: string): string {
 export function formatFieldValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "Not set";
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
   return JSON.stringify(value);
 }
 
 /** Short human-readable summary shown under the event title in the detail sheet, e.g. "New building has been created". */
-export function describeAuditAction(log: Pick<AuditLogListItem, "action" | "entityType" | "actionLabel">): string {
+export function describeAuditAction(
+  log: Pick<AuditLogListItem, "action" | "entityType" | "actionLabel">,
+): string {
   const entity = log.entityType || "record";
   if (log.action.endsWith(".created")) return `New ${entity} has been created`;
   if (log.action.endsWith(".deleted")) return `A ${entity} has been deleted`;
-  if (log.action.endsWith(".updated") || log.action.endsWith("_updated")) return `The ${entity} has been updated`;
+  if (log.action.endsWith(".updated") || log.action.endsWith("_updated"))
+    return `The ${entity} has been updated`;
   if (log.action.endsWith(".cancel")) return `The ${entity} has been cancelled`;
   if (log.action === "user.login") return "User successfully logged in";
   if (log.action === "user.logout") return "User logged out";
   return `${log.actionLabel} event recorded`;
+}
+
+/** Business-readable activity used in the primary table and drawer. */
+export function auditActivityLabel(
+  log: Pick<AuditLogListItem, "action" | "entityType">,
+): string {
+  const entity = formatEntityLabel(log.entityType, "record").toLowerCase();
+  const verb = log.action.split(".").pop()?.toLowerCase() ?? "updated";
+  const labels: Record<string, string> = {
+    created: `Created a ${entity}`,
+    updated: `Updated ${entity}`,
+    profile_updated: "Updated user profile",
+    preferences_updated: "Updated booking preferences",
+    access_updated: "Changed user access",
+    deleted: `Deleted ${entity}`,
+    delete: `Deleted ${entity}`,
+    cancel: `Cancelled ${entity}`,
+    login: "Signed in",
+    logout: "Signed out",
+  };
+  return labels[verb] ?? formatActionTitle(log.action);
+}
+
+export function affectedResourceLabel(
+  log: Pick<AuditLogListItem, "entityType" | "entityId"> &
+    Partial<Pick<AuditLog, "entityDisplayName">>,
+): string {
+  if (log.entityDisplayName) return log.entityDisplayName;
+  const entity = formatEntityLabel(log.entityType, "record");
+  return log.entityId ? `${entity} #${log.entityId}` : entity;
+}
+
+export function auditStatusLabel(status: AuditLogListItem["status"]): string {
+  return status === "SUCCESS"
+    ? "Completed"
+    : status === "DENIED"
+      ? "Access denied"
+      : "Failed";
+}
+
+export function auditCategoryLabel(module: string): string {
+  return formatEntityLabel(module, "Activity");
 }
 
 export interface AuditCascadingFilterOptions {
@@ -206,25 +352,42 @@ export interface AuditCascadingFilterOptions {
 export function deriveAuditFilterOptions(
   facets: AuditLogFilterOptionRaw[],
   selectedModule: string,
-  selectedEntity: string
+  selectedEntity: string,
 ): AuditCascadingFilterOptions {
   const modules = [...new Set(facets.map((f) => f.module))].sort();
 
-  const entityFacets = selectedModule === "All" ? facets : facets.filter((f) => f.module === selectedModule);
-  const entities = [...new Set(entityFacets.map((f) => f.entity_type).filter((e): e is string => !!e))].sort();
+  const entityFacets =
+    selectedModule === "All"
+      ? facets
+      : facets.filter((f) => f.module === selectedModule);
+  const entities = [
+    ...new Set(
+      entityFacets.map((f) => f.entity_type).filter((e): e is string => !!e),
+    ),
+  ].sort();
 
-  const actionFacets = selectedEntity === "All" ? entityFacets : entityFacets.filter((f) => f.entity_type === selectedEntity);
+  const actionFacets =
+    selectedEntity === "All"
+      ? entityFacets
+      : entityFacets.filter((f) => f.entity_type === selectedEntity);
   const actions = [...new Set(actionFacets.map((f) => f.action))].sort();
 
-  const toOptions = (values: string[], allLabel: string) => [
-    { value: "All", label: allLabel },
-    ...values.map((v) => ({ value: v, label: v })),
-  ];
-
   return {
-    moduleOptions: toOptions(modules, "All Modules"),
-    entityOptions: toOptions(entities, "All Entities"),
-    actionOptions: toOptions(actions, "All Actions"),
+    moduleOptions: [
+      { value: "All", label: "All Categories" },
+      ...modules.map((value) => ({ value, label: auditCategoryLabel(value) })),
+    ],
+    entityOptions: [
+      { value: "All", label: "All Resource Types" },
+      ...entities.map((value) => ({
+        value,
+        label: formatEntityLabel(value, "Resource"),
+      })),
+    ],
+    actionOptions: [
+      { value: "All", label: "All Activities" },
+      ...actions.map((value) => ({ value, label: formatActionTitle(value) })),
+    ],
   };
 }
 
