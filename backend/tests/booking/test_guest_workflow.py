@@ -246,6 +246,9 @@ class GuestWorkflowTests(unittest.TestCase):
             },
         ), patch.object(
             guest_service,
+            "acquire_booking_slot_locks",
+        ), patch.object(
+            guest_service,
             "guest_has_active_booking_on_date",
             return_value=False,
         ), patch.object(
@@ -329,6 +332,9 @@ class GuestWorkflowTests(unittest.TestCase):
             guest_service,
             "_resolve_seat",
             return_value={"seat_id": "31", "site_id": "2", "building_id": "3", "floor_id": "4"},
+        ), patch.object(
+            guest_service,
+            "acquire_booking_slot_locks",
         ), patch.object(
             guest_service, "guest_has_active_booking_on_date", return_value=False,
         ), patch.object(
@@ -563,6 +569,9 @@ class GuestWorkflowTests(unittest.TestCase):
                 "building_id": "6",
                 "floor_id": "7",
             },
+        ), patch.object(
+            guest_service,
+            "acquire_booking_slot_locks",
         ), patch.object(
             guest_service,
             "guest_has_active_booking_on_date",

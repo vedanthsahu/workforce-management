@@ -40,6 +40,7 @@ from backend.core.enums import BookingModificationReason
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.booking_repository import (
     acquire_booking_slot_locks,
+    acquire_subject_date_lock,
     cancel_booking,
     cancel_future_guest_bookings_for_guest,
     count_guest_bookings,
@@ -948,6 +949,17 @@ def create_guest_visit(
                 floor_id=floor_id,
             )
 
+        # Same guest+date race as employee bookings -- no DB constraint
+        # backstops "one active visit per guest per day", so serialize
+        # before checking for conflicts. Covers both this check and (when
+        # a seat is requested) the seat-booking checks below it, since
+        # acquire_booking_slot_locks re-acquires the same subject lock.
+        acquire_subject_date_lock(
+            conn,
+            tenant_id=tenant_id,
+            subject_id=guest_id,
+            booking_date=payload.visit_date,
+        )
         existing_visit = fetch_active_guest_visit_for_date(
             conn,
             tenant_id=tenant_id,
@@ -2371,6 +2383,15 @@ def execute_guest_visit_workflow(
                 booking_date=payload.visit_date,
                 current_user=current_user,
             )
+            # Same seat/subject+date race as employee bookings -- serialize
+            # before checking for conflicts (see create_guest_visit above).
+            acquire_booking_slot_locks(
+                conn,
+                tenant_id=tenant_id,
+                seat_id=seat_id,
+                subject_id=str(visit["guest_id"]),
+                booking_date=payload.visit_date,
+            )
             if guest_has_active_booking_on_date(
                 conn,
                 tenant_id=tenant_id,
@@ -2535,6 +2556,15 @@ def execute_guest_visit_workflow(
                 booking_date=payload.visit_date,
                 seat_id=seat_id,
                 current_user=current_user,
+            )
+            # Same seat/subject+date race as employee bookings -- serialize
+            # before checking for conflicts (see create_guest_visit above).
+            acquire_booking_slot_locks(
+                conn,
+                tenant_id=tenant_id,
+                seat_id=seat_id,
+                subject_id=str(visit["guest_id"]),
+                booking_date=payload.visit_date,
             )
             if guest_has_active_booking_on_date(
                 conn,

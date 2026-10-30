@@ -20,7 +20,10 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     ALLOWED_ORIGINS: str = "http://localhost:4200"
     DEFAULT_TENANT_ID: int = 3
-    SESSION_TTL_MINUTES: int = 30
+    # Redis cache-eviction window only (when ENABLE_REDIS_MEMORY is on) --
+    # not a session/auth lifetime. A chat session's actual validity is the
+    # same as the user's real app login; it has no expiry of its own.
+    CHAT_MEMORY_CACHE_TTL_MINUTES: int = 30
     ALLOW_MULTIPLE_SEATS: bool = False
     MY_BOOKINGS_MAX_RESULTS: int = 7
     PAST_BOOKINGS_PAGE_SIZE: int = 5
