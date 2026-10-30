@@ -204,7 +204,8 @@ export default function MainLayout({
         </div>
         {!showSidebarSkeleton &&
         user?.role?.toUpperCase() === "EMPLOYEE" &&
-        employeeChatbotEnabled ? (
+        employeeChatbotEnabled &&
+        pathname === "/dashboard" ? (
           <ChatbotPanel />
         ) : null}
       </div>
