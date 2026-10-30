@@ -77,6 +77,10 @@ from backend.repositories.guest_visit_repository import (
     fetch_cancelled_guest_visits,
     insert_guest_visit,
 )
+from backend.repositories.idempotency_repository import (
+    mark_idempotent_operation_failed,
+    mark_idempotent_operation_succeeded,
+)
 from backend.repositories.location_repository import (
     fetch_floor_by_id,
     fetch_seat_configuration,
@@ -99,6 +103,7 @@ from backend.schemas.booking import (
 )
 from backend.schemas.pagination import PaginationMetadata
 from backend.services.business_rule_service import resolve_booking_advance_days
+from backend.services.idempotency_service import begin_idempotent_operation
 from backend.services.notification_service import (
     booking_notification_details,
     queue_booking_cancelled_notification,
@@ -432,6 +437,7 @@ def book_seat(
     current_user: dict[str, Any],
     payload: CreateBookingRequest,
     background_tasks: BackgroundTasks | None = None,
+    idempotency_key: str | None = None,
 ) -> BookingResponse:
     """Create one tenant-scoped booking and handle DB constraint failures."""
     tenant_id = str(current_user["tenant_id"])
@@ -479,6 +485,26 @@ def book_seat(
         )
 
     booked_for_user_id = str(effective_booked_for_user_id)
+
+    claim = begin_idempotent_operation(
+        conn,
+        tenant_id=tenant_id,
+        user_id=str(booked_by_user_id),
+        idempotency_key=idempotency_key,
+        operation_type="BOOKING_CREATE",
+        payload=payload,
+    )
+    if claim.replay_response is not None:
+        return BookingResponse(**claim.replay_response)
+    operation_id = claim.operation_id
+    claimed_at = claim.claimed_at
+
+    def _fail(code: str, message: str) -> None:
+        if operation_id is not None:
+            mark_idempotent_operation_failed(
+                conn, operation_id=operation_id, error_code=code, error_message=message,
+                expected_updated_at=claimed_at,
+            )
 
     try:
         booked_for_user = _resolve_booked_for_user(
@@ -606,10 +632,18 @@ def book_seat(
                 "done_by_role": _user_role(current_user),
             },
         )
+        if operation_id is not None:
+            mark_idempotent_operation_succeeded(
+                conn, operation_id=operation_id, resource_type="booking",
+                resource_id=booking.get("booking_id"),
+                response_snapshot=BookingResponse(**booking).model_dump(mode="json"),
+                expected_updated_at=claimed_at,
+            )
         conn.commit()
     except HTTPException as he:
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
+        _fail(_d.get("code") or "booking_create_failed", _d.get("message") or str(he.detail))
         safe_write_audit_log(
             conn, action=BOOKING_CREATED, tenant_id=tenant_id,
             current_user=current_user, resource_type="booking", resource_id=None,
@@ -620,6 +654,7 @@ def book_seat(
         raise
     except ValueError as exc:
         conn.rollback()
+        _fail("invalid_booking_value", str(exc))
         safe_write_audit_log(
             conn, action=BOOKING_CREATED, tenant_id=tenant_id,
             current_user=current_user, resource_type="booking", resource_id=None,
@@ -633,6 +668,7 @@ def book_seat(
         ) from exc
     except LookupError as exc:
         conn.rollback()
+        _fail("booking_create_failed", str(exc))
         safe_write_audit_log(
             conn, action=BOOKING_CREATED, tenant_id=tenant_id,
             current_user=current_user, resource_type="booking", resource_id=None,
@@ -648,6 +684,7 @@ def book_seat(
         conn.rollback()
         if exc.pgcode in {errorcodes.UNIQUE_VIOLATION, errorcodes.EXCLUSION_VIOLATION}:
             _detail = _booking_conflict_detail(getattr(exc.diag, "constraint_name", None))
+            _fail(_detail.get("code"), _detail.get("message"))
             safe_write_audit_log(
                 conn, action=BOOKING_CREATED, tenant_id=tenant_id,
                 current_user=current_user, resource_type="booking", resource_id=None,
@@ -657,6 +694,7 @@ def book_seat(
             )
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_detail) from exc
         if exc.pgcode == errorcodes.FOREIGN_KEY_VIOLATION:
+            _fail("booking_reference_not_found", "Seat or user reference was not found for this tenant.")
             safe_write_audit_log(
                 conn, action=BOOKING_CREATED, tenant_id=tenant_id,
                 current_user=current_user, resource_type="booking", resource_id=None,
@@ -669,6 +707,7 @@ def book_seat(
                 detail={"code": "booking_reference_not_found", "message": "Seat or user reference was not found for this tenant."},
             ) from exc
         if exc.pgcode == errorcodes.CHECK_VIOLATION:
+            _fail("invalid_booking_target", "Booking status or source channel violates the schema checks.")
             safe_write_audit_log(
                 conn, action=BOOKING_CREATED, tenant_id=tenant_id,
                 current_user=current_user, resource_type="booking", resource_id=None,
@@ -680,6 +719,7 @@ def book_seat(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"code": "invalid_booking_target", "message": "Booking status or source channel violates the schema checks."},
             ) from exc
+        _fail("booking_create_failed", "Failed to create booking.")
         safe_write_audit_log(
             conn, action=BOOKING_CREATED, tenant_id=tenant_id,
             current_user=current_user, resource_type="booking", resource_id=None,

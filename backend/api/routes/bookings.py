@@ -9,6 +9,7 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
+    Header,
     Query,
 )
 from psycopg2.extensions import connection as PGConnection
@@ -48,12 +49,17 @@ def create_booking(
     background_tasks: BackgroundTasks,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> BookingResponse:
+    # Idempotency-Key is optional: omitting it keeps today's behaviour
+    # unchanged. Supplying it lets a client safely retry after a timeout
+    # without risking a duplicate booking -- see idempotency_service.py.
     return book_seat(
         conn,
         current_user=current_user,
         payload=payload,
         background_tasks=background_tasks,
+        idempotency_key=idempotency_key,
     )
 
 
