@@ -152,7 +152,7 @@ BOOKING_SELECT_FIELDS = """
 
     b.cancellation_reason,
 
-    b.updated_by_user_id::text AS updated_user_id,
+    COALESCE(b.updated_by_user_id, gv.updated_by_user_id)::text AS updated_user_id,
     updated_by.full_name AS updated_by_name,
     updated_by.email AS updated_by_email,
 
@@ -226,9 +226,26 @@ BOOKING_SELECT_FROM = """
        AND host.tenant_id = b.tenant_id
 
     LEFT JOIN app_users AS updated_by
-        ON updated_by.id = b.updated_by_user_id
+        ON updated_by.id = COALESCE(b.updated_by_user_id, gv.updated_by_user_id)
        AND updated_by.tenant_id = b.tenant_id
 """
+
+# Who last changed a visit-only guest row. A seat cancelled on a visit leaves
+# the visit itself untouched, so fall back to whoever cancelled that seat.
+GUEST_VISIT_UPDATED_BY_SQL = """COALESCE(
+                    gv.updated_by_user_id,
+                    (
+                        SELECT cb.updated_by_user_id
+                        FROM bookings cb
+                        WHERE cb.guest_visit_id = gv.id
+                          AND cb.tenant_id = gv.tenant_id
+                          AND cb.booking_type = 'GUEST'
+                          AND cb.booking_status = 'CANCELLED'
+                        ORDER BY cb.updated_at DESC
+                        LIMIT 1
+                    )
+                )"""
+
 
 def fetch_future_delegated_guest_visits_without_booking(
     conn: PGConnection,
@@ -306,7 +323,7 @@ def fetch_future_delegated_guest_visits_without_booking(
 
                 gv.created_at,
                 gv.updated_at,
-                gv.updated_by_user_id::text AS updated_user_id,
+                {GUEST_VISIT_UPDATED_BY_SQL}::text AS updated_user_id,
                 updated_by.full_name AS updated_by_name,
 
                 g.full_name AS guest_name,
@@ -347,7 +364,7 @@ def fetch_future_delegated_guest_visits_without_booking(
             AND host.tenant_id = gv.tenant_id
 
             LEFT JOIN app_users updated_by
-                ON updated_by.id = gv.updated_by_user_id
+                ON updated_by.id = {GUEST_VISIT_UPDATED_BY_SQL}
             AND updated_by.tenant_id = gv.tenant_id
 
             LEFT JOIN sites si
@@ -455,7 +472,7 @@ def fetch_current_delegated_guest_visits_without_booking(
 
                 gv.created_at,
                 gv.updated_at,
-                gv.updated_by_user_id::text AS updated_user_id,
+                {GUEST_VISIT_UPDATED_BY_SQL}::text AS updated_user_id,
                 updated_by.full_name AS updated_by_name,
 
                 g.full_name AS guest_name,
@@ -495,7 +512,7 @@ def fetch_current_delegated_guest_visits_without_booking(
                AND host.tenant_id = gv.tenant_id
 
             LEFT JOIN app_users updated_by
-                ON updated_by.id = gv.updated_by_user_id
+                ON updated_by.id = {GUEST_VISIT_UPDATED_BY_SQL}
                AND updated_by.tenant_id = gv.tenant_id
 
             LEFT JOIN sites si
@@ -605,7 +622,7 @@ def fetch_past_delegated_guest_visits_without_booking(
 
                 gv.created_at,
                 gv.updated_at,
-                gv.updated_by_user_id::text AS updated_user_id,
+                {GUEST_VISIT_UPDATED_BY_SQL}::text AS updated_user_id,
                 updated_by.full_name AS updated_by_name,
 
                 g.full_name AS guest_name,
@@ -645,7 +662,7 @@ def fetch_past_delegated_guest_visits_without_booking(
                AND host.tenant_id = gv.tenant_id
 
             LEFT JOIN app_users updated_by
-                ON updated_by.id = gv.updated_by_user_id
+                ON updated_by.id = {GUEST_VISIT_UPDATED_BY_SQL}
                AND updated_by.tenant_id = gv.tenant_id
 
             LEFT JOIN sites si
@@ -824,7 +841,7 @@ def fetch_admin_guest_visits_without_booking(
 
                 gv.created_at,
                 gv.updated_at,
-                gv.updated_by_user_id::text AS updated_user_id,
+                {GUEST_VISIT_UPDATED_BY_SQL}::text AS updated_user_id,
                 updated_by.full_name AS updated_by_name,
 
                 g.full_name AS guest_name,
@@ -865,7 +882,7 @@ def fetch_admin_guest_visits_without_booking(
                AND host.tenant_id = gv.tenant_id
 
             LEFT JOIN app_users updated_by
-                ON updated_by.id = gv.updated_by_user_id
+                ON updated_by.id = {GUEST_VISIT_UPDATED_BY_SQL}
                AND updated_by.tenant_id = gv.tenant_id
 
             LEFT JOIN sites si
@@ -1822,6 +1839,49 @@ def fetch_cancelled_delegated_bookings(
         rows = cur.fetchall()
 
     return [dict(row) for row in rows ]
+
+
+def fetch_cancelled_guest_bookings_with_active_visit(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    booking_date: date | None = None,
+) -> list[dict[str, Any]]:
+    """Guest seat bookings cancelled on their own while the guest visit is
+    still active, for the facilitator who booked or created that visit.
+
+    A fully cancelled visit is already listed by fetch_cancelled_guest_visits,
+    so those are left out here. The row carries who cancelled it through the
+    shared BOOKING_SELECT_FIELDS (updated_by_name)."""
+    query = f"""
+        SELECT {BOOKING_SELECT_FIELDS}
+        {BOOKING_SELECT_FROM}
+
+        WHERE b.tenant_id = %s
+          AND (b.booked_by_user_id = %s OR gv.created_by_user_id = %s)
+          AND b.booking_type = 'GUEST'
+          AND b.booking_status = 'CANCELLED'
+          AND gv.visit_status NOT IN ('CANCELLED', 'MODIFIED')
+    """
+    params: list[Any] = [tenant_id, user_id, user_id]
+
+    query, params = _apply_seat_and_date_filters(
+        query,
+        params,
+        seat_id=None,
+        booking_date=booking_date,
+    )
+
+    query += " ORDER BY b.updated_at DESC"
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(query, params)
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
+
+
 def fetch_cancelled_bookings_for_user(
     conn: PGConnection,
     *,
@@ -2737,18 +2797,11 @@ def _build_admin_booking_filters(
     row's own visit_status (see BOOKING_SELECT_FROM's gv join). Since only
     GUEST-type rows have a guest_visit at all, a visit_status filter
     naturally excludes EMPLOYEE rows (gv is NULL for those)."""
-    conditions = [
-        "b.tenant_id = %s",
-        # A seat-only cancellation is represented as one seatless MODIFIED
-        # guest-visit row. Keep the cancelled booking only when its guest
-        # visit was cancelled too, so that row retains the booking details.
-        (
-            "NOT (b.booking_type = 'GUEST' "
-            "AND b.booking_status = 'CANCELLED' "
-            "AND gv.visit_status IS NOT NULL "
-            "AND gv.visit_status <> 'CANCELLED')"
-        ),
-    ]
+    # A seat-only cancellation on a still-active guest visit is two separate
+    # operations, so both rows stay in the list: the cancelled seat booking
+    # ("Cancelled by ...") and the seatless guest-visit row shown as MODIFIED
+    # (see fetch_admin_guest_visits_without_booking).
+    conditions = ["b.tenant_id = %s"]
     params: list[Any] = [tenant_id]
 
     if start_date is not None:
