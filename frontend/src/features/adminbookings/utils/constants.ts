@@ -12,6 +12,15 @@ export const BOOKING_STATUS_STYLES: Record<BookingStatus, string> = {
   "No Show": "bg-orange-100 text-orange-700",
 };
 
+// Row statuses an admin can still modify or cancel (today or later). Any
+// other status is already used (Checked In/Out, Completed, No Show) or closed
+// (Cancelled), which the backend rejects too.
+export const MUTABLE_BOOKING_STATUSES: readonly BookingStatus[] = [
+  "Scheduled",
+  "Confirmed",
+  "Modified",
+];
+
 // "Completed" is intentionally excluded here — it remains a valid computed
 // row status (see mapAdminBooking.ts) with its own badge style below, but is
 // no longer offered as a selectable filter option.

@@ -2617,6 +2617,7 @@ def execute_guest_visit_workflow(
                     requires_seat=True,
                     created_by_user_id=str(visit["created_by_user_id"]),
                     modified_from_guest_visit_id=guest_visit_id,
+                    updated_by_user_id=_current_user_id(current_user),
                 )
                 target_visit_id = str(replacement_visit["guest_visit_id"])
             new_booking = insert_guest_booking(
@@ -2627,6 +2628,9 @@ def execute_guest_visit_workflow(
                 booked_by_user_id=_current_user_id(current_user),
                 seat=seat,
                 booking_date=payload.visit_date,
+                updated_by_user_id=(
+                    _current_user_id(current_user) if visit_changed else None
+                ),
             )
             if not visit_changed:
                 # Only fills a floor the visit left blank; nothing is replaced.

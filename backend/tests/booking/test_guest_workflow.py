@@ -414,6 +414,14 @@ class GuestWorkflowTests(unittest.TestCase):
             mocks["insert_visit"].call_args.kwargs["modified_from_guest_visit_id"],
             "60",
         )
+        # The list shows "Modified by <name>", so the actor is recorded on
+        # both the replacement visit and its booking.
+        self.assertEqual(
+            mocks["insert_visit"].call_args.kwargs["updated_by_user_id"], "10"
+        )
+        self.assertEqual(
+            mocks["insert_booking"].call_args.kwargs["updated_by_user_id"], "10"
+        )
         # The original visit row is never overwritten.
         mocks["update_visit"].assert_not_called()
         self.assertEqual(
