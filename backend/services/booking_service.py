@@ -51,6 +51,7 @@ from backend.repositories.booking_repository import (
     fetch_booking_by_id_for_update,
     fetch_cancelled_bookings_for_user,
     fetch_cancelled_delegated_bookings,
+    fetch_cancelled_guest_bookings_with_active_visit,
     fetch_current_bookings_for_user,
     fetch_current_delegated_bookings,
     fetch_current_delegated_guest_visits_without_booking,
@@ -2302,7 +2303,20 @@ def get_delegated_cancelled_bookings(
         else []
     )
 
-    combined = bookings + guest_visits
+    # A guest seat cancelled on its own (visit still active) is listed here as
+    # its own "Cancelled by ..." row; the visit stays in the active lists.
+    guest_seat_cancellations = (
+        fetch_cancelled_guest_bookings_with_active_visit(
+            conn,
+            tenant_id=str(current_user["tenant_id"]),
+            user_id=str(current_user["user_id"]),
+            booking_date=booking_date,
+        )
+        if seat_id is None
+        else []
+    )
+
+    combined = bookings + guest_visits + guest_seat_cancellations
 
     combined.sort(
         key=lambda row: (
