@@ -929,7 +929,8 @@ def _fetch_guest_cancelled_seat_rows(
     _fetch_guest_activity_rows returns a single row per visit, shown as
     MODIFIED once its seat is cancelled. The cancelled seat itself is a
     separate operation, so it gets its own CANCELLED row here. A visit that
-    was cancelled as a whole is already covered there, so it is skipped."""
+    was cancelled as a whole, with its seat in the same transaction (same
+    cancelled_at), is already covered there, so it is skipped."""
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -1021,7 +1022,13 @@ def _fetch_guest_cancelled_seat_rows(
             WHERE b.tenant_id = %(tenant_id)s
               AND b.booking_type = 'GUEST'
               AND b.booking_status = 'CANCELLED'
-              AND gv.visit_status NOT IN ('CANCELLED', 'MODIFIED')
+              AND (
+                    gv.visit_status NOT IN ('CANCELLED', 'MODIFIED')
+                    OR (
+                        gv.visit_status = 'CANCELLED'
+                        AND b.cancelled_at < gv.cancelled_at
+                    )
+              )
               AND (%(activity_date)s IS NULL OR b.booking_date = %(activity_date)s)
               AND (%(site_id)s IS NULL OR b.site_id = %(site_id)s::bigint)
               AND (%(building_id)s IS NULL OR b.building_id = %(building_id)s::bigint)
