@@ -84,6 +84,7 @@ from backend.repositories.guest_visit_repository import (
     insert_guest_visit,
     mark_guest_visit_modified,
     recalculate_guest_visit_requires_seat,
+    touch_guest_visit_for_booking_change,
     update_guest_visit_booking_details,
 )
 from backend.repositories.location_repository import (
@@ -1465,6 +1466,12 @@ def modify_guest_booking(
             building_id=str(payload.building_id),
             floor_id=str(payload.floor_id),
             visit_date=payload.booking_date,
+            updated_by_user_id=_current_user_id(current_user),
+            modification_reason=(
+                payload.modification_reason.value
+                if payload.modification_reason is not None
+                else "USER_REQUEST"
+            ),
         )
         mark_booking_modified(
             conn,
@@ -2267,6 +2274,7 @@ def execute_guest_visit_workflow(
                 tenant_id=tenant_id,
                 guest_visit_id=guest_visit_id,
                 modification_reason=_enum_value(payload.modification_reason),
+                updated_by_user_id=_current_user_id(current_user),
             )
             new_visit = insert_guest_visit(
                 conn,
@@ -2424,6 +2432,7 @@ def execute_guest_visit_workflow(
                 tenant_id=tenant_id,
                 guest_visit_id=guest_visit_id,
                 modification_reason=_enum_value(payload.modification_reason),
+                updated_by_user_id=_current_user_id(current_user),
             )
 
             new_visit = insert_guest_visit(
@@ -2599,6 +2608,7 @@ def execute_guest_visit_workflow(
                     tenant_id=tenant_id,
                     guest_visit_id=guest_visit_id,
                     modification_reason=_enum_value(payload.modification_reason),
+                    updated_by_user_id=_current_user_id(current_user),
                 )
                 replacement_visit = insert_guest_visit(
                     conn,
@@ -2642,6 +2652,8 @@ def execute_guest_visit_workflow(
                     building_id=str(payload.building_id),
                     floor_id=str(payload.floor_id),
                     visit_date=payload.visit_date,
+                    updated_by_user_id=_current_user_id(current_user),
+                    modification_reason=_enum_value(payload.modification_reason),
                 )
             recalculate_guest_visit_requires_seat(
                 conn,
@@ -2700,6 +2712,17 @@ def execute_guest_visit_workflow(
                 booking_id=str(booking["booking_id"]),
                 cancellation_reason=_booking_cancellation_reason,
                 updated_by_user_id=_current_user_id(current_user),
+            )
+            # The visit itself wasn't cancelled or replaced, but its
+            # requires_seat flips below as a side effect -- same resource,
+            # kept in sync per the agreed rule (see
+            # touch_guest_visit_for_booking_change's docstring).
+            touch_guest_visit_for_booking_change(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=guest_visit_id,
+                updated_by_user_id=_current_user_id(current_user),
+                modification_reason=_booking_cancellation_reason,
             )
             recalculate_guest_visit_requires_seat(
                 conn,

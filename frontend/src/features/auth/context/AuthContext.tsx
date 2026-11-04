@@ -230,6 +230,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         connectionError,
         retry:           checkSession,
+        sessionExpired,
       }}
     >
       {children}

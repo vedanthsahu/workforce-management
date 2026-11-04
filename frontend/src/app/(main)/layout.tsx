@@ -50,7 +50,7 @@ export default function MainLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, isLoading, connectionError, retry } = useAuthContext();
+  const { user, isLoading, connectionError, retry, sessionExpired } = useAuthContext();
   const isMobile = useIsMobile();
   const router = useRouter();
   const pathname = usePathname();
@@ -203,6 +203,7 @@ export default function MainLayout({
           {isLoading && guardedPath ? null : children}
         </div>
         {!showSidebarSkeleton &&
+        !sessionExpired &&
         user?.role?.toUpperCase() === "EMPLOYEE" &&
         employeeChatbotEnabled &&
         pathname === "/dashboard" ? (
