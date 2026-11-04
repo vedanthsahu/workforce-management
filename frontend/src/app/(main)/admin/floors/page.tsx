@@ -14,7 +14,7 @@ import EditFloorModal from "@/features/floor/components/EditFloorModal";
 import { useFloors } from "@/features/floor/hooks/useFloors";
 import { Floor } from "@/features/floor/types/floor.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
-import { searchMatchRank } from "@/lib/searchRank";
+import { searchMatchRank, searchTieBreak } from "@/lib/searchRank";
 
 function FloorsPage() {
   const {
@@ -118,7 +118,11 @@ function FloorsPage() {
         rank: searchMatchRank(floor.floor_name || "", search),
       }))
       .filter((x): x is { floor: Floor; rank: number } => x.rank !== null)
-      .sort((a, b) => a.rank - b.rank)
+      .sort(
+        (a, b) =>
+          a.rank - b.rank ||
+          searchTieBreak(a.floor.floor_name || "", b.floor.floor_name || "", search),
+      )
       .map((x) => x.floor);
 
     if (!pinnedFloorId) return ranked;

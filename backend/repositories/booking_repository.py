@@ -502,6 +502,9 @@ def fetch_current_delegated_guest_visits_without_booking(
                 ON b.guest_visit_id = gv.id
                AND b.booking_type = 'GUEST'
                AND b.tenant_id = gv.tenant_id
+               -- A cancelled space must not hide today's visit; it stays
+               -- listed as a visit-only row (same rule as the future query).
+               AND b.booking_status <> 'CANCELLED'
 
             LEFT JOIN app_users creator
                 ON creator.id = gv.created_by_user_id
@@ -652,6 +655,8 @@ def fetch_past_delegated_guest_visits_without_booking(
                 ON b.guest_visit_id = gv.id
                AND b.booking_type = 'GUEST'
                AND b.tenant_id = gv.tenant_id
+               -- A cancelled space must not hide the visit (see the today query).
+               AND b.booking_status <> 'CANCELLED'
 
             LEFT JOIN app_users creator
                 ON creator.id = gv.created_by_user_id
@@ -1848,12 +1853,14 @@ def fetch_cancelled_guest_bookings_with_active_visit(
     user_id: str,
     booking_date: date | None = None,
 ) -> list[dict[str, Any]]:
-    """Guest seat bookings cancelled on their own while the guest visit is
-    still active, for the facilitator who booked or created that visit.
+    """Guest seat bookings cancelled on their own, for the facilitator who
+    booked or created that visit.
 
-    A fully cancelled visit is already listed by fetch_cancelled_guest_visits,
-    so those are left out here. The row carries who cancelled it through the
-    shared BOOKING_SELECT_FIELDS (updated_by_name)."""
+    Covers a visit that is still active, and a visit cancelled later than its
+    seat. A seat cancelled together with its visit (same transaction, so the
+    same cancelled_at) is already covered by fetch_cancelled_guest_visits and
+    is left out. The row carries who cancelled it through the shared
+    BOOKING_SELECT_FIELDS (updated_by_name)."""
     query = f"""
         SELECT {BOOKING_SELECT_FIELDS}
         {BOOKING_SELECT_FROM}
@@ -1862,7 +1869,13 @@ def fetch_cancelled_guest_bookings_with_active_visit(
           AND (b.booked_by_user_id = %s OR gv.created_by_user_id = %s)
           AND b.booking_type = 'GUEST'
           AND b.booking_status = 'CANCELLED'
-          AND gv.visit_status NOT IN ('CANCELLED', 'MODIFIED')
+          AND (
+                gv.visit_status NOT IN ('CANCELLED', 'MODIFIED')
+                OR (
+                    gv.visit_status = 'CANCELLED'
+                    AND b.cancelled_at < gv.cancelled_at
+                )
+          )
     """
     params: list[Any] = [tenant_id, user_id, user_id]
 
