@@ -58,6 +58,7 @@ function mapListItemFields(raw: AuditLogListItemRaw) {
     module: raw.module,
     entityType: raw.entity_type ?? "",
     entityId: raw.entity_id ?? "",
+    entityDisplayName: raw.entity_display_name ?? "",
     status: raw.event_status,
     failureSummary: raw.failure_summary ?? "",
     requestMethod: raw.request_method ?? "GET",
@@ -75,7 +76,6 @@ export function mapAuditLogListItemToUi(
 export function mapAuditLogDetailToUi(raw: AuditLogDetailRaw): AuditLog {
   return {
     ...mapListItemFields(raw),
-    entityDisplayName: raw.entity_display_name ?? "",
     requestPath: raw.request_path ?? "",
     requestId: raw.request_id ?? "",
     correlationId: raw.correlation_id ?? "",
@@ -315,12 +315,20 @@ export function auditActivityLabel(
 }
 
 export function affectedResourceLabel(
-  log: Pick<AuditLogListItem, "entityType" | "entityId"> &
-    Partial<Pick<AuditLog, "entityDisplayName">>,
+  log: Pick<
+    AuditLogListItem,
+    "action" | "entityType" | "entityId" | "entityDisplayName"
+  >,
 ): string {
+  if (
+    log.entityType.toLowerCase() === "session" ||
+    log.action.toLowerCase() === "user.logout"
+  ) {
+    return "Session";
+  }
   if (log.entityDisplayName) return log.entityDisplayName;
   const entity = formatEntityLabel(log.entityType, "record");
-  return log.entityId ? `${entity} #${log.entityId}` : entity;
+  return entity;
 }
 
 export function auditStatusLabel(status: AuditLogListItem["status"]): string {

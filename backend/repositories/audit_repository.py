@@ -387,15 +387,25 @@ def _build_audit_log_filters(
             conditions.append("al.occurred_at < %s")
             params.append(end_date + timedelta(days=1))
 
-    if search is not None:
-        conditions.append(
-            "(COALESCE(au.display_name, au.full_name, '') ILIKE %s "
-            "OR COALESCE(al.actor_email, '') ILIKE %s "
-            "OR COALESCE(al.entity_id, '') ILIKE %s "
-            "OR COALESCE(al.metadata->>'target_email', '') ILIKE %s)"
+    normalized_search = str(search or "").strip()
+    if normalized_search:
+        # Keep this broad text search consistent with the Offices experience:
+        # any useful identifying field should be discoverable from one input.
+        search_fields = (
+            "COALESCE(au.display_name, au.full_name, '')",
+            "COALESCE(al.actor_email, '')",
+            "COALESCE(al.action, '')",
+            "COALESCE(al.module, '')",
+            "COALESCE(al.entity_type, '')",
+            "COALESCE(al.entity_id, '')",
+            "COALESCE(al.metadata->>'target_email', '')",
+            "COALESCE(al.metadata->>'target_user_id', '')",
         )
-        pattern = f"%{search}%"
-        params.extend([pattern, pattern, pattern, pattern])
+        conditions.append(
+            "(" + " OR ".join(f"{field} ILIKE %s" for field in search_fields) + ")"
+        )
+        pattern = f"%{normalized_search}%"
+        params.extend([pattern] * len(search_fields))
 
     return " AND ".join(conditions), params
 
