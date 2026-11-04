@@ -29,6 +29,25 @@ class FakeConnection:
         pass
 
 
+class TrackingConnection:
+    """Records commit/rollback calls instead of touching a real DB, for
+    tests that need to assert which one happened (and how many times)
+    rather than just that neither crashes."""
+
+    def __init__(self) -> None:
+        self.commits = 0
+        self.rollbacks = 0
+
+    def cursor(self, *args, **kwargs):
+        raise AssertionError("this test mocks every DB-touching call directly")
+
+    def commit(self) -> None:
+        self.commits += 1
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
+
+
 def _payload() -> CreateBookingRequest:
     return CreateBookingRequest(
         site_id=1, building_id=1, floor_id=1, seat_id=1,
@@ -87,6 +106,80 @@ class BookSeatIdempotencyTests(unittest.TestCase):
         self.assertEqual(mock_fail.call_args.kwargs["operation_id"], 42)
         self.assertEqual(mock_fail.call_args.kwargs["error_code"], "boom")
         self.assertEqual(mock_fail.call_args.kwargs["expected_updated_at"], claimed_at)
+
+    def test_a_superseded_claim_rolls_back_instead_of_committing(self) -> None:
+        """If mark_idempotent_operation_succeeded() reports the ledger row
+        no longer matches the version this execution claimed -- someone
+        else (a reconciler, or a retry that reclaimed it as abandoned)
+        already resolved this operation while this execution was still
+        running -- the booking/audit-log writes already made earlier in
+        this same transaction must be rolled back, not committed.
+        See dev-notes/backend/idempotency_recovery_design.md, decisions
+        11-13: this is the actual ownership check, not the earlier claim,
+        precisely because it's the last thing before commit."""
+        claimed_at = datetime.now(UTC)
+        fake_seat = {"tenant_id": "1", "status": "ACTIVE", "is_bookable": True}
+        fake_booking = {
+            "booking_id": "123", "booking_type": "EMPLOYEE",
+            "booking_date": TOMORROW, "seat_code": "A-1",
+        }
+        conn = TrackingConnection()
+
+        with (
+            patch(
+                "backend.services.booking_service.begin_idempotent_operation",
+                return_value=IdempotentClaim(operation_id=42, replay_response=None, claimed_at=claimed_at),
+            ),
+            patch(
+                "backend.services.booking_service.resolve_booking_advance_days",
+                return_value={"employee_max_advance_days": 365},
+            ),
+            patch(
+                "backend.services.booking_service._resolve_booked_for_user",
+                return_value={"email": "x@example.com"},
+            ),
+            patch(
+                "backend.services.booking_service.fetch_seat_for_booking",
+                return_value=fake_seat,
+            ),
+            patch("backend.services.booking_service.acquire_booking_slot_locks"),
+            patch(
+                "backend.services.booking_service.user_has_active_booking_on_date",
+                return_value=False,
+            ),
+            patch(
+                "backend.services.booking_service.has_active_booking_conflict",
+                return_value=False,
+            ),
+            patch(
+                "backend.services.booking_service.seat_has_active_block_in_range",
+                return_value=False,
+            ),
+            patch(
+                "backend.services.booking_service.insert_booking",
+                return_value=fake_booking,
+            ),
+            patch("backend.services.booking_service.write_audit_log"),
+            patch("backend.services.booking_service.safe_write_audit_log"),
+            patch(
+                "backend.services.booking_service.mark_idempotent_operation_succeeded",
+                return_value=False,
+            ) as mock_succeeded,
+            patch("backend.services.booking_service.mark_idempotent_operation_failed") as mock_fail,
+            self.assertRaises(HTTPException) as ctx,
+        ):
+            book_seat(
+                conn=conn,
+                current_user=EMPLOYEE_CALLER,
+                payload=_payload(),
+                idempotency_key="superseded-key",
+            )
+
+        self.assertEqual(ctx.exception.detail["code"], "operation_superseded")
+        mock_succeeded.assert_called_once()
+        mock_fail.assert_called_once()
+        self.assertEqual(conn.commits, 0)
+        self.assertEqual(conn.rollbacks, 1)
 
 
 if __name__ == "__main__":

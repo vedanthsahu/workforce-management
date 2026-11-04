@@ -257,6 +257,29 @@ def _raise_user_booking_conflict(
     )
 
 
+def _raise_operation_superseded() -> None:
+    """The idempotency ledger row for this attempt no longer matches the
+    version this execution claimed -- something else (a reconciler, or a
+    retry that reclaimed it as abandoned) has already resolved this
+    operation while this execution was still in flight. The caller's own
+    HTTPException handler rolls back and marks the attempt failed; the
+    business write already performed earlier in this same transaction is
+    rolled back with it, so it is never committed against a ledger row
+    that says this operation did not succeed.
+    See dev-notes/backend/idempotency_recovery_design.md, decisions 11-13."""
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "operation_superseded",
+            "message": (
+                "This operation was already resolved by another process. "
+                "Check its status via GET /operations/{idempotency_key} "
+                "before retrying."
+            ),
+        },
+    )
+
+
 def _normalize_cancellation_reason(cancellation_reason: str | None) -> str:
     normalized = str(cancellation_reason or "").strip()
     if not normalized:
@@ -634,12 +657,22 @@ def book_seat(
             },
         )
         if operation_id is not None:
-            mark_idempotent_operation_succeeded(
+            # This UPDATE is the real ownership check -- not the earlier
+            # claim -- because it's the last thing that runs before
+            # commit, and it's a row-locking write, not a passive read.
+            # Its result must gate the commit: a False here means someone
+            # else (a reconciler, or a retry that reclaimed this as
+            # abandoned) already resolved this operation while this
+            # execution was still running, so the booking/audit-log
+            # writes already made above must never be committed.
+            claimed_to_the_end = mark_idempotent_operation_succeeded(
                 conn, operation_id=operation_id, resource_type="booking",
                 resource_id=booking.get("booking_id"),
                 response_snapshot=BookingResponse(**booking).model_dump(mode="json"),
                 expected_updated_at=claimed_at,
             )
+            if not claimed_to_the_end:
+                _raise_operation_superseded()
         conn.commit()
     except HTTPException as he:
         conn.rollback()
