@@ -79,6 +79,7 @@ from backend.repositories.guest_visit_repository import (
     insert_guest_visit,
 )
 from backend.repositories.idempotency_repository import (
+    fetch_idempotent_operation,
     mark_idempotent_operation_failed,
     mark_idempotent_operation_succeeded,
 )
@@ -104,7 +105,10 @@ from backend.schemas.booking import (
 )
 from backend.schemas.pagination import PaginationMetadata
 from backend.services.business_rule_service import resolve_booking_advance_days
-from backend.services.idempotency_service import begin_idempotent_operation
+from backend.services.idempotency_service import (
+    ReconciliationOutcome,
+    begin_idempotent_operation,
+)
 from backend.services.notification_service import (
     booking_notification_details,
     queue_booking_cancelled_notification,
@@ -455,6 +459,101 @@ def _booking_list_response(
 
 
 
+def reconcile_stale_booking_create(
+    conn: PGConnection, row: dict[str, Any],
+) -> ReconciliationOutcome:
+    """R2 of the reconciliation protocol (dev-notes/backend/
+    idempotency_recovery_design.md): acquire the exact same locks
+    book_seat() would for this request, re-read the ledger while holding
+    them, and report -- never execute -- the true outcome.
+
+    Getting the lock only proves nobody holds it right now; it does not
+    by itself prove the original committed or rolled back. The mandatory
+    re-read immediately after acquiring it is what actually establishes
+    that: if the original committed in the gap between this reconciler
+    claiming the row (fast, time-based) and acquiring the lock (which
+    blocks for as long as the original still holds it), the ledger will
+    already say SUCCEEDED by the time this function gets the lock, and
+    this must defer to that instead of declaring it failed.
+    """
+    snapshot = row.get("payload_snapshot") or {}
+    seat_id = snapshot.get("seat_id")
+    booking_date_raw = snapshot.get("booking_date")
+    if not seat_id or not booking_date_raw:
+        # Row predates payload_snapshot existing, or it's otherwise
+        # missing -- no way to know which locks to probe. Don't guess.
+        return ReconciliationOutcome(status="UNKNOWN")
+
+    try:
+        booking_date = date.fromisoformat(booking_date_raw)
+    except (TypeError, ValueError):
+        return ReconciliationOutcome(status="UNKNOWN")
+
+    # Mirrors book_seat's own resolution: an unspecified booked_for_user_id
+    # in the original request means "booked for the caller" -- the
+    # ledger's own user_id column is that caller (booked_by_user_id).
+    subject_id = snapshot.get("booked_for_user_id") or row["user_id"]
+
+    try:
+        acquire_booking_slot_locks(
+            conn, tenant_id=str(row["tenant_id"]), seat_id=str(seat_id),
+            subject_id=str(subject_id), booking_date=booking_date,
+        )
+    except psycopg2.errors.LockNotAvailable:
+        # Something is actively holding it right now -- genuinely still
+        # in progress, not abandoned. Never guessed as failed.
+        conn.rollback()
+        return ReconciliationOutcome(status="UNKNOWN")
+
+    current = fetch_idempotent_operation(
+        conn, tenant_id=row["tenant_id"], user_id=row["user_id"],
+        idempotency_key=row["idempotency_key"],
+    )
+    if current is None:
+        conn.rollback()
+        return ReconciliationOutcome(status="UNKNOWN")
+
+    if current["status"] == "SUCCEEDED":
+        conn.rollback()
+        return ReconciliationOutcome(status="SUCCEEDED", response_snapshot=current["response_snapshot"])
+
+    if current["status"] == "FAILED":
+        conn.rollback()
+        return ReconciliationOutcome(
+            status="FAILED", error_code=current["error_code"], error_message=current["error_message"],
+        )
+
+    # Still PENDING, and this function now holds the lock the original
+    # would have needed to commit -- proven, not inferred from elapsed
+    # time, that it never committed: mark_idempotent_operation_succeeded
+    # always commits atomically with the business write that takes this
+    # same lock first, so a free lock plus a non-SUCCEEDED row means
+    # there is nothing left that could still complete it.
+    abandoned_message = (
+        "The original attempt with this idempotency key did not "
+        "complete and was resolved as failed by reconciliation."
+    )
+    marked = mark_idempotent_operation_failed(
+        conn, operation_id=row["id"], error_code="operation_abandoned",
+        error_message=abandoned_message, expected_updated_at=current["updated_at"],
+    )
+    if not marked:
+        # Something else resolved it in the same instant (decision 6
+        # should make this unreachable in practice -- only one reconciler
+        # can ever win the ledger claim for a given row). Re-check rather
+        # than assume either outcome.
+        final = fetch_idempotent_operation(
+            conn, tenant_id=row["tenant_id"], user_id=row["user_id"],
+            idempotency_key=row["idempotency_key"],
+        )
+        conn.rollback()
+        if final is not None and final["status"] == "SUCCEEDED":
+            return ReconciliationOutcome(status="SUCCEEDED", response_snapshot=final["response_snapshot"])
+        return ReconciliationOutcome(status="UNKNOWN")
+
+    return ReconciliationOutcome(status="FAILED", error_code="operation_abandoned", error_message=abandoned_message)
+
+
 def book_seat(
     conn: PGConnection,
     *,
@@ -517,6 +616,7 @@ def book_seat(
         idempotency_key=idempotency_key,
         operation_type="BOOKING_CREATE",
         payload=payload,
+        reconcile=reconcile_stale_booking_create,
     )
     if claim.replay_response is not None:
         return BookingResponse(**claim.replay_response)

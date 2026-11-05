@@ -27,25 +27,37 @@ def claim_idempotent_operation(
     idempotency_key: str,
     operation_type: str,
     payload_hash: str,
+    payload_snapshot: Any = None,
 ) -> dict[str, Any]:
     """Insert a new PENDING claim and commit immediately.
 
     Raises psycopg2.errors.UniqueViolation if the key is already claimed --
     callers must catch that, roll back, and look at the existing row.
+
+    payload_snapshot is write-once: nothing in this module ever includes
+    it in an UPDATE's SET clause, by design -- see mark_idempotent_
+    operation_succeeded/_failed and the two reclaim functions below,
+    none of which touch it. It must stay derived from the exact same
+    canonical payload used for payload_hash (see idempotency_service.
+    canonicalize_payload) so reconciliation can trust it later.
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
             INSERT INTO idempotent_operations (
-                tenant_id, user_id, idempotency_key, operation_type, payload_hash
+                tenant_id, user_id, idempotency_key, operation_type,
+                payload_hash, payload_snapshot
             )
-            VALUES (%s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING id, tenant_id, user_id, idempotency_key, operation_type,
-                      payload_hash, status, resource_type, resource_id,
-                      response_snapshot, error_code, error_message,
-                      created_at, updated_at
+                      payload_hash, payload_snapshot, status, resource_type,
+                      resource_id, response_snapshot, error_code,
+                      error_message, created_at, updated_at
             """,
-            (tenant_id, user_id, idempotency_key, operation_type, payload_hash),
+            (
+                tenant_id, user_id, idempotency_key, operation_type,
+                payload_hash, Json(payload_snapshot) if payload_snapshot is not None else None,
+            ),
         )
         row = cur.fetchone()
     conn.commit()
@@ -59,8 +71,8 @@ def fetch_idempotent_operation(
         cur.execute(
             """
             SELECT id, tenant_id, user_id, idempotency_key, operation_type,
-                   payload_hash, status, resource_type, resource_id,
-                   response_snapshot, error_code, error_message,
+                   payload_hash, payload_snapshot, status, resource_type,
+                   resource_id, response_snapshot, error_code, error_message,
                    created_at, updated_at
             FROM idempotent_operations
             WHERE tenant_id = %s AND user_id = %s AND idempotency_key = %s
@@ -85,33 +97,11 @@ def reclaim_stale_pending_operation(
             SET updated_at = NOW()
             WHERE id = %s AND status = 'PENDING' AND updated_at < %s
             RETURNING id, tenant_id, user_id, idempotency_key, operation_type,
-                      payload_hash, status, resource_type, resource_id,
-                      response_snapshot, error_code, error_message,
-                      created_at, updated_at
+                      payload_hash, payload_snapshot, status, resource_type,
+                      resource_id, response_snapshot, error_code,
+                      error_message, created_at, updated_at
             """,
             (operation_id, stale_before),
-        )
-        row = cur.fetchone()
-    conn.commit()
-    return dict(row) if row else None
-
-
-def reclaim_failed_operation(
-    conn: PGConnection, *, operation_id: int,
-) -> dict[str, Any] | None:
-    """Reset a FAILED claim back to PENDING so its request can be retried."""
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            """
-            UPDATE idempotent_operations
-            SET status = 'PENDING', updated_at = NOW()
-            WHERE id = %s AND status = 'FAILED'
-            RETURNING id, tenant_id, user_id, idempotency_key, operation_type,
-                      payload_hash, status, resource_type, resource_id,
-                      response_snapshot, error_code, error_message,
-                      created_at, updated_at
-            """,
-            (operation_id,),
         )
         row = cur.fetchone()
     conn.commit()
