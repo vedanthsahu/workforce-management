@@ -4,14 +4,15 @@ import sys
 import unittest
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import psycopg2
 from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from backend.schemas.booking import CreateBookingRequest
-from backend.services.booking_service import book_seat
+from backend.services.booking_service import book_seat, reconcile_stale_booking_create
 from backend.services.idempotency_service import IdempotentClaim
 
 TOMORROW = date.today() + timedelta(days=1)
@@ -180,6 +181,193 @@ class BookSeatIdempotencyTests(unittest.TestCase):
         mock_fail.assert_called_once()
         self.assertEqual(conn.commits, 0)
         self.assertEqual(conn.rollbacks, 1)
+
+
+class ReconcileStaleBookingCreateTests(unittest.TestCase):
+    """Task 3: reconciliation for a stale/abandoned BOOKING_CREATE row.
+    See dev-notes/backend/idempotency_recovery_design.md for the full
+    protocol these mirror."""
+
+    ROW = {
+        "id": 42, "tenant_id": "1", "user_id": "7", "idempotency_key": "stale-key",
+        "payload_snapshot": {"seat_id": 2999, "booking_date": "2026-11-05"},
+    }
+
+    def test_missing_snapshot_reports_unknown_without_probing_anything(self) -> None:
+        row = dict(self.ROW, payload_snapshot=None)
+        with patch("backend.services.booking_service.acquire_booking_slot_locks") as mock_lock:
+            outcome = reconcile_stale_booking_create(MagicMock(), row)
+        self.assertEqual(outcome.status, "UNKNOWN")
+        mock_lock.assert_not_called()
+
+    def test_malformed_booking_date_reports_unknown(self) -> None:
+        row = dict(self.ROW, payload_snapshot={"seat_id": 2999, "booking_date": "not-a-date"})
+        with patch("backend.services.booking_service.acquire_booking_slot_locks") as mock_lock:
+            outcome = reconcile_stale_booking_create(MagicMock(), row)
+        self.assertEqual(outcome.status, "UNKNOWN")
+        mock_lock.assert_not_called()
+
+    def test_lock_still_actively_held_reports_unknown_not_failed(self) -> None:
+        """An active holder means genuinely still in progress -- must
+        never be guessed as failed just because reconciliation couldn't
+        get in."""
+        conn = MagicMock()
+        with (
+            patch(
+                "backend.services.booking_service.acquire_booking_slot_locks",
+                side_effect=psycopg2.errors.LockNotAvailable(),
+            ) as mock_lock,
+            patch("backend.services.booking_service.mark_idempotent_operation_failed") as mock_fail,
+        ):
+            outcome = reconcile_stale_booking_create(conn, dict(self.ROW))
+        self.assertEqual(outcome.status, "UNKNOWN")
+        mock_lock.assert_called_once()
+        mock_fail.assert_not_called()
+        conn.rollback.assert_called_once()
+
+    def test_lock_identities_and_order_match_what_book_seat_itself_would_use(self) -> None:
+        """Decision 5: reconciliation must probe the exact same lock
+        identities book_seat() would, via the same shared helper -- not a
+        reimplementation that could drift out of sync with it."""
+        row = dict(self.ROW, payload_snapshot={
+            "seat_id": 2999, "booking_date": "2026-11-05", "booked_for_user_id": "50",
+        })
+        conn = MagicMock()
+        with (
+            patch("backend.services.booking_service.acquire_booking_slot_locks") as mock_lock,
+            patch(
+                "backend.services.booking_service.fetch_idempotent_operation",
+                return_value={"status": "SUCCEEDED", "response_snapshot": {}},
+            ),
+        ):
+            reconcile_stale_booking_create(conn, row)
+        mock_lock.assert_called_once_with(
+            conn, tenant_id="1", seat_id="2999", subject_id="50", booking_date=date(2026, 11, 5),
+        )
+
+    def test_unspecified_subject_falls_back_to_the_ledgers_own_user_id(self) -> None:
+        """The original request left booked_for_user_id unset, meaning
+        "book for the caller" -- book_seat resolves that to current_user,
+        and the ledger's own user_id column is that same caller.
+        Reconciliation must mirror that resolution, not pass None
+        through and probe the wrong lock."""
+        row = dict(self.ROW, payload_snapshot={"seat_id": 2999, "booking_date": "2026-11-05"})
+        conn = MagicMock()
+        with (
+            patch("backend.services.booking_service.acquire_booking_slot_locks") as mock_lock,
+            patch(
+                "backend.services.booking_service.fetch_idempotent_operation",
+                return_value={"status": "SUCCEEDED", "response_snapshot": {}},
+            ),
+        ):
+            reconcile_stale_booking_create(conn, row)
+        self.assertEqual(mock_lock.call_args.kwargs["subject_id"], "7")
+
+    def test_the_ledger_is_re_read_only_after_the_lock_is_acquired(self) -> None:
+        """Decision 7: the re-read must happen after the lock, not
+        before -- proven here by asserting call order, not just that
+        both calls happened."""
+        calls: list[str] = []
+        conn = MagicMock()
+        with (
+            patch(
+                "backend.services.booking_service.acquire_booking_slot_locks",
+                side_effect=lambda *a, **k: calls.append("lock"),
+            ),
+            patch(
+                "backend.services.booking_service.fetch_idempotent_operation",
+                side_effect=lambda *a, **k: calls.append("reread") or {
+                    "status": "SUCCEEDED", "response_snapshot": {},
+                },
+            ),
+        ):
+            reconcile_stale_booking_create(conn, dict(self.ROW))
+        self.assertEqual(calls, ["lock", "reread"])
+
+    def test_commit_right_before_the_lock_probe_is_not_marked_failed(self) -> None:
+        """The core timeline this protocol exists for: the original
+        committed in the gap between the reconciler's ledger-claim and
+        its own lock acquisition. The mandatory re-read after getting
+        the lock must see SUCCEEDED and defer to it instead of declaring
+        the operation failed."""
+        conn = MagicMock()
+        with (
+            patch("backend.services.booking_service.acquire_booking_slot_locks"),
+            patch(
+                "backend.services.booking_service.fetch_idempotent_operation",
+                return_value={"status": "SUCCEEDED", "response_snapshot": {"booking_id": "123"}},
+            ),
+            patch("backend.services.booking_service.mark_idempotent_operation_failed") as mock_fail,
+        ):
+            outcome = reconcile_stale_booking_create(conn, dict(self.ROW))
+        self.assertEqual(outcome.status, "SUCCEEDED")
+        self.assertEqual(outcome.response_snapshot, {"booking_id": "123"})
+        mock_fail.assert_not_called()
+        conn.rollback.assert_called_once()
+
+    def test_already_failed_is_reported_without_re_marking_it(self) -> None:
+        conn = MagicMock()
+        with (
+            patch("backend.services.booking_service.acquire_booking_slot_locks"),
+            patch(
+                "backend.services.booking_service.fetch_idempotent_operation",
+                return_value={"status": "FAILED", "error_code": "boom", "error_message": "already failed"},
+            ),
+            patch("backend.services.booking_service.mark_idempotent_operation_failed") as mock_fail,
+        ):
+            outcome = reconcile_stale_booking_create(conn, dict(self.ROW))
+        self.assertEqual(outcome.status, "FAILED")
+        self.assertEqual(outcome.error_code, "boom")
+        mock_fail.assert_not_called()
+
+    def test_still_pending_with_the_lock_free_is_proven_not_committed_and_marked_failed(self) -> None:
+        """The actual proof, not a guess: the lock is free (nobody holds
+        it) and the ledger still says PENDING -- the atomic succeed-
+        marking design guarantees a real commit would already show as
+        SUCCEEDED, so this combination means it definitely never
+        committed."""
+        conn = MagicMock()
+        updated_at = datetime.now(UTC)
+        with (
+            patch("backend.services.booking_service.acquire_booking_slot_locks"),
+            patch(
+                "backend.services.booking_service.fetch_idempotent_operation",
+                return_value={"status": "PENDING", "updated_at": updated_at},
+            ),
+            patch(
+                "backend.services.booking_service.mark_idempotent_operation_failed",
+                return_value=True,
+            ) as mock_fail,
+        ):
+            outcome = reconcile_stale_booking_create(conn, dict(self.ROW))
+        self.assertEqual(outcome.status, "FAILED")
+        self.assertEqual(outcome.error_code, "operation_abandoned")
+        mock_fail.assert_called_once()
+        self.assertEqual(mock_fail.call_args.kwargs["operation_id"], 42)
+        self.assertEqual(mock_fail.call_args.kwargs["expected_updated_at"], updated_at)
+
+    def test_losing_the_mark_failed_race_rechecks_instead_of_assuming(self) -> None:
+        """Should be unreachable in practice (decision 6 means only one
+        reconciler ever wins the ledger claim for a row), but if it ever
+        happens, re-check reality rather than assume either outcome."""
+        conn = MagicMock()
+        with (
+            patch("backend.services.booking_service.acquire_booking_slot_locks"),
+            patch(
+                "backend.services.booking_service.fetch_idempotent_operation",
+                side_effect=[
+                    {"status": "PENDING", "updated_at": datetime.now(UTC)},
+                    {"status": "SUCCEEDED", "response_snapshot": {"booking_id": "9"}},
+                ],
+            ),
+            patch(
+                "backend.services.booking_service.mark_idempotent_operation_failed",
+                return_value=False,
+            ),
+        ):
+            outcome = reconcile_stale_booking_create(conn, dict(self.ROW))
+        self.assertEqual(outcome.status, "SUCCEEDED")
+        self.assertEqual(outcome.response_snapshot, {"booking_id": "9"})
 
 
 if __name__ == "__main__":

@@ -24,7 +24,6 @@ from backend.repositories.idempotency_repository import (
     fetch_idempotent_operation,
     mark_idempotent_operation_failed,
     mark_idempotent_operation_succeeded,
-    reclaim_failed_operation,
     reclaim_stale_pending_operation,
 )
 
@@ -83,10 +82,76 @@ class IdempotencyRepositoryTests(unittest.TestCase):
         self.assertEqual(len(cursor.executions), 1)
         sql, params = cursor.executions[0]
         self.assertIn("INSERT INTO idempotent_operations", sql)
-        self.assertEqual(params, ("1", "7", "key-1", "BOOKING_CREATE", "abc123"))
+        self.assertEqual(params[:5], ("1", "7", "key-1", "BOOKING_CREATE", "abc123"))
+        self.assertIsNone(params[5])  # no snapshot passed -> NULL, not omitted
         self.assertEqual(conn.commits, 1)
         self.assertEqual(row["id"], 42)
         self.assertIs(conn.cursor_factories[0], RealDictCursor)
+
+    def test_claim_persists_the_payload_snapshot_as_json(self) -> None:
+        """Task 2: reconciliation needs the original resource identities
+        back -- payload_hash alone can't be reversed. The snapshot must
+        actually be bound and sent to Postgres as JSONB, not silently
+        dropped or stringified."""
+        cursor = FakeCursor(row=dict(ROW))
+        conn = FakeConnection(cursor)
+        snapshot = {"seat_id": 2999, "booked_for_user_id": "50", "booking_date": "2026-11-05"}
+
+        claim_idempotent_operation(
+            conn, tenant_id="1", user_id="7", idempotency_key="key-1",
+            operation_type="BOOKING_CREATE", payload_hash="abc123",
+            payload_snapshot=snapshot,
+        )
+
+        _, params = cursor.executions[0]
+        self.assertIsInstance(params[5], Json)
+        self.assertEqual(params[5].adapted, snapshot)
+
+    def test_fetch_returns_the_payload_snapshot_column(self) -> None:
+        row_with_snapshot = dict(ROW, payload_snapshot={"seat_id": 2999})
+        cursor = FakeCursor(row=row_with_snapshot)
+        conn = FakeConnection(cursor)
+
+        result = fetch_idempotent_operation(conn, tenant_id="1", user_id="7", idempotency_key="key-1")
+
+        sql, _ = cursor.executions[0]
+        self.assertIn("payload_snapshot", sql)
+        self.assertEqual(result["payload_snapshot"], {"seat_id": 2999})
+
+    def test_reclaim_stale_pending_never_touches_the_payload_snapshot_column(self) -> None:
+        """Immutability (Task 2): the snapshot is write-once at claim time.
+        The reclaim path may not include it in its SET clause -- if it
+        did, a reclaim could silently replace the original request's
+        recorded identity with whatever the reclaiming caller happened to
+        pass, which is exactly what reconciliation must be able to trust
+        never happens."""
+        stale_before = datetime.now(UTC)
+
+        cursor = FakeCursor(row=dict(ROW))
+        reclaim_stale_pending_operation(
+            FakeConnection(cursor), operation_id=42, stale_before=stale_before,
+        )
+        sql, _ = cursor.executions[0]
+        self.assertIn("SET updated_at = NOW()", sql)
+        self.assertNotIn("payload_snapshot =", sql)
+
+    def test_mark_succeeded_and_failed_never_touch_the_payload_snapshot_column(self) -> None:
+        cursor_a = FakeCursor()
+        mark_idempotent_operation_succeeded(
+            FakeConnection(cursor_a), operation_id=42, resource_type="booking",
+            resource_id=99, response_snapshot={"booking_id": "99"},
+            expected_updated_at=datetime.now(UTC),
+        )
+        sql_a, _ = cursor_a.executions[0]
+        self.assertNotIn("payload_snapshot", sql_a)
+
+        cursor_b = FakeCursor()
+        mark_idempotent_operation_failed(
+            FakeConnection(cursor_b), operation_id=42, error_code="boom",
+            error_message="it broke", expected_updated_at=datetime.now(UTC),
+        )
+        sql_b, _ = cursor_b.executions[0]
+        self.assertNotIn("payload_snapshot", sql_b)
 
     def test_fetch_filters_on_tenant_user_and_key(self) -> None:
         cursor = FakeCursor(row=dict(ROW))
@@ -120,17 +185,6 @@ class IdempotencyRepositoryTests(unittest.TestCase):
         sql, params = cursor.executions[0]
         self.assertIn("status = 'PENDING'", sql)
         self.assertEqual(params, (42, stale_before))
-        self.assertEqual(conn.commits, 1)
-
-    def test_reclaim_failed_scopes_on_id_and_status(self) -> None:
-        cursor = FakeCursor(row=dict(ROW))
-        conn = FakeConnection(cursor)
-
-        reclaim_failed_operation(conn, operation_id=42)
-
-        sql, params = cursor.executions[0]
-        self.assertIn("status = 'FAILED'", sql)
-        self.assertEqual(params, (42,))
         self.assertEqual(conn.commits, 1)
 
     def test_mark_succeeded_binds_json_snapshot_scopes_on_updated_at_and_does_not_commit(self) -> None:
