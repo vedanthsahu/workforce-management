@@ -52,6 +52,10 @@ export interface AuthContextType {
   // otherwise. `retry` runs the check again and resolves when it has finished.
   connectionError: ConnectionErrorKind | null;
   retry:           () => Promise<void>;
+  // True while the "Session expired" dialog is up (a refresh already failed).
+  // Lets pages hide anything that looks interactive but can no longer reach
+  // the API, e.g. the chatbot floating panel.
+  sessionExpired:  boolean;
 }
 
 export type ConnectionErrorKind = "unreachable" | "server";
