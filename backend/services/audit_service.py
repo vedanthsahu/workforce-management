@@ -107,6 +107,44 @@ def _apply_audit_display_names(
     return enriched
 
 
+def _enrich_audit_list_display_names(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    rows: list[dict],
+) -> None:
+    """Attach human-readable affected-resource names to a page of audit rows."""
+    lookup_values: dict[str, list[str]] = {}
+    for row in rows:
+        entity_type = str(row.get("entity_type") or "").lower()
+        if entity_type == "session":
+            row["entity_display_name"] = "Session"
+            continue
+        entity_field = _ENTITY_DISPLAY_FIELDS.get(entity_type)
+        entity_id = row.get("entity_id")
+        if entity_field and entity_id is not None and str(entity_id).isdigit():
+            lookup_values.setdefault(entity_field, []).append(str(entity_id))
+
+    if not lookup_values:
+        return
+
+    display_names = fetch_audit_value_display_names(
+        conn,
+        tenant_id=tenant_id,
+        old_values=None,
+        new_values=lookup_values,
+    )
+    for row in rows:
+        entity_field = _ENTITY_DISPLAY_FIELDS.get(
+            str(row.get("entity_type") or "").lower()
+        )
+        entity_id = row.get("entity_id")
+        if entity_field and entity_id is not None:
+            row["entity_display_name"] = display_names.get(entity_field, {}).get(
+                str(entity_id)
+            )
+
+
 def get_audit_logs(
     conn: PGConnection,
     *,
@@ -166,6 +204,7 @@ def get_audit_logs(
             page=page,
             limit=limit,
         )
+        _enrich_audit_list_display_names(conn, tenant_id=tenant_id, rows=rows)
         # Card counts describe the full currently filtered collection, not
         # just the selected card, so admins can switch categories directly.
         summary_filters = {key: value for key, value in filters.items() if key != "category"}

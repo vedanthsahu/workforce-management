@@ -32,6 +32,7 @@ class AuditLogListItemResponse(BaseModel):
     module: str
     entity_type: str | None = None
     entity_id: str | None = None
+    entity_display_name: str | None = None
     event_status: AuditEventStatus
     failure_summary: str | None = None
     request_method: str | None = None
