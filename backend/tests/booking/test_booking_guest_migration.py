@@ -775,6 +775,10 @@ class GuestBookingMigrationTests(unittest.TestCase):
             )
 
         self.assertEqual(update_visit.call_args.kwargs["guest_visit_id"], "60")
+        self.assertEqual(update_visit.call_args.kwargs["updated_by_user_id"], "10")
+        self.assertEqual(
+            update_visit.call_args.kwargs["modification_reason"], "OTHER"
+        )
         self.assertEqual(mark_modified.call_args.kwargs["booking_id"], "200")
         self.assertEqual(
             mark_modified.call_args.kwargs["modification_reason"],
@@ -817,6 +821,7 @@ class ModificationAuditRepositoryTests(unittest.TestCase):
             tenant_id="1",
             guest_visit_id="60",
             modification_reason="Visit moved",
+            updated_by_user_id="7",
         )
 
         sql, params = conn.executed[-1]
@@ -824,7 +829,52 @@ class ModificationAuditRepositoryTests(unittest.TestCase):
         self.assertIn("cancelled_at = NOW()", sql)
         self.assertIn("cancellation_reason = %s", sql)
         self.assertIn("modification_reason = %s", sql)
-        self.assertEqual(params, ("Visit moved", "Visit moved", "60", "1"))
+        self.assertIn("updated_by_user_id = %s", sql)
+        self.assertEqual(
+            params, ("Visit moved", "Visit moved", "7", "60", "1")
+        )
+
+    def test_guest_visit_in_place_update_writes_updated_by_and_reason(self) -> None:
+        conn = RecordingConnection()
+
+        guest_visit_repository.update_guest_visit_booking_details(
+            conn,
+            tenant_id="1",
+            guest_visit_id="60",
+            site_id="2",
+            building_id="3",
+            floor_id="4",
+            visit_date=_future_date(),
+            updated_by_user_id="7",
+            modification_reason="Booking added",
+        )
+
+        sql, params = conn.executed[-1]
+        self.assertIn("updated_by_user_id = %s", sql)
+        self.assertIn("modification_reason = %s", sql)
+        self.assertNotIn("visit_status", sql)
+        self.assertEqual(
+            params,
+            ("2", "3", "4", _future_date(), "7", "Booking added", "60", "1"),
+        )
+
+    def test_guest_visit_touch_for_booking_change_leaves_status_alone(self) -> None:
+        conn = RecordingConnection()
+
+        guest_visit_repository.touch_guest_visit_for_booking_change(
+            conn,
+            tenant_id="1",
+            guest_visit_id="60",
+            updated_by_user_id="9",
+            modification_reason="Booking cancelled",
+        )
+
+        sql, params = conn.executed[-1]
+        self.assertIn("updated_by_user_id = %s", sql)
+        self.assertIn("modification_reason = %s", sql)
+        self.assertNotIn("visit_status", sql)
+        self.assertNotIn("cancelled_at", sql)
+        self.assertEqual(params, ("9", "Booking cancelled", "60", "1"))
 
     def test_successor_insert_helpers_do_not_accept_modification_reason(self) -> None:
         self.assertNotIn(

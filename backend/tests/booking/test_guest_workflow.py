@@ -175,6 +175,7 @@ class GuestWorkflowTests(unittest.TestCase):
             tenant_id="1",
             guest_visit_id="60",
             modification_reason="OTHER",
+            updated_by_user_id="10",
         )
         self.assertEqual(insert_visit.call_args.kwargs["guest_id"], "50")
         self.assertEqual(insert_visit.call_args.kwargs["site_id"], "5")
@@ -300,6 +301,7 @@ class GuestWorkflowTests(unittest.TestCase):
             tenant_id="1",
             guest_visit_id="60",
             modification_reason="OTHER",
+            updated_by_user_id="10",
         )
         self.assertNotIn("modification_reason", insert_visit.call_args.kwargs)
         self.assertEqual(insert_visit.call_args.kwargs["guest_id"], "50")
@@ -386,6 +388,11 @@ class GuestWorkflowTests(unittest.TestCase):
         self.assertEqual(
             mocks["insert_booking"].call_args.kwargs["guest_visit_id"], "60"
         )
+        # Nothing is replaced, but the visit itself still records who added
+        # the seat -- same resource, kept in sync.
+        self.assertEqual(
+            mocks["update_visit"].call_args.kwargs["updated_by_user_id"], "10"
+        )
         self.assertEqual(response.guest_visit.guest_visit_id, "60")
         self.assertEqual(response.booking.booking_id, "201")
 
@@ -451,6 +458,9 @@ class GuestWorkflowTests(unittest.TestCase):
             "cancel_guest_visit",
         ) as cancel_visit, patch.object(
             guest_service,
+            "touch_guest_visit_for_booking_change",
+        ) as touch_visit, patch.object(
+            guest_service,
             "recalculate_guest_visit_requires_seat",
         ), patch.object(
             guest_service,
@@ -469,6 +479,13 @@ class GuestWorkflowTests(unittest.TestCase):
 
         cancel_booking.assert_called_once()
         cancel_visit.assert_not_called()
+        touch_visit.assert_called_once_with(
+            conn,
+            tenant_id="1",
+            guest_visit_id="60",
+            updated_by_user_id="10",
+            modification_reason="Seat not needed",
+        )
         self.assertEqual(response.guest_visit.guest_visit_id, "60")
         self.assertIsNotNone(response.booking)
         self.assertEqual(response.booking.booking_id, "200")

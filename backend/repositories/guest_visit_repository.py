@@ -251,7 +251,13 @@ def update_guest_visit_booking_details(
     building_id: str,
     floor_id: str,
     visit_date: date,
+    updated_by_user_id: str,
+    modification_reason: str | None = None,
 ) -> None:
+    """Fill in a visit's location/date in place -- this row is not replaced,
+    so modification_reason here is an audit note only (see
+    mark_guest_visit_modified for the superseded-row case); visit_status is
+    untouched."""
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -261,6 +267,8 @@ def update_guest_visit_booking_details(
                 building_id = %s,
                 floor_id = %s,
                 visit_date = %s,
+                updated_by_user_id = %s,
+                modification_reason = %s,
                 updated_at = NOW()
             WHERE id = %s
               AND tenant_id = %s
@@ -270,6 +278,8 @@ def update_guest_visit_booking_details(
                 building_id,
                 floor_id,
                 visit_date,
+                updated_by_user_id,
+                modification_reason,
                 guest_visit_id,
                 tenant_id,
             ),
@@ -952,8 +962,14 @@ def mark_guest_visit_modified(
     tenant_id: str,
     guest_visit_id: str,
     modification_reason: str | None,
+    updated_by_user_id: str,
 ) -> None:
-    """Retain a replaced guest visit as history without cancelling it."""
+    """Retain a replaced guest visit as history without cancelling it.
+
+    The superseded row owns who replaced it, same as mark_booking_modified --
+    once visit_status flips to MODIFIED, _require_workflow_visit's
+    require_scheduled check makes this row immutable, so this is its last
+    write."""
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -963,6 +979,7 @@ def mark_guest_visit_modified(
                 cancelled_at = NOW(),
                 cancellation_reason = %s,
                 modification_reason = %s,
+                updated_by_user_id = %s,
                 updated_at = NOW()
             WHERE id = %s
               AND tenant_id = %s
@@ -970,12 +987,48 @@ def mark_guest_visit_modified(
             (
                 modification_reason,
                 modification_reason,
+                updated_by_user_id,
                 guest_visit_id,
                 tenant_id,
             ),
         )
         if cur.rowcount != 1:
             raise LookupError("Guest visit not found.")
+
+
+def touch_guest_visit_for_booking_change(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    guest_visit_id: str,
+    updated_by_user_id: str,
+    modification_reason: str | None,
+) -> None:
+    """Record who last touched this visit's booking, without changing
+    visit_status -- the visit itself wasn't replaced or cancelled, but its
+    booking was (e.g. a seat cancelled while the visit stays active), which
+    is still a change to this resource (requires_seat moves with it)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE guest_visits
+            SET
+                updated_by_user_id = %s,
+                modification_reason = %s,
+                updated_at = NOW()
+            WHERE id = %s
+              AND tenant_id = %s
+            """,
+            (
+                updated_by_user_id,
+                modification_reason,
+                guest_visit_id,
+                tenant_id,
+            ),
+        )
+        if cur.rowcount != 1:
+            raise LookupError("Guest visit not found.")
+
 
 def sync_booking_from_guest_visit(
     conn: PGConnection,
