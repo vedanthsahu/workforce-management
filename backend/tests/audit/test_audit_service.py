@@ -58,11 +58,13 @@ def test_detail_redacts_sensitive_before_and_after_values_recursively() -> None:
 
 
 @patch("backend.services.audit_service.fetch_audit_log_filter_options", return_value=[])
+@patch("backend.services.audit_service.fetch_audit_value_display_names")
 @patch("backend.services.audit_service.fetch_audit_logs_summary")
 @patch("backend.services.audit_service.fetch_audit_logs")
 def test_admin_listing_enforces_success_for_items_counts_and_pagination(
     fetch_logs: Mock,
     fetch_summary: Mock,
+    fetch_display_names: Mock,
     _fetch_options: Mock,
 ) -> None:
     fetch_logs.return_value = ([_list_row()], 11)
@@ -71,6 +73,7 @@ def test_admin_listing_enforces_success_for_items_counts_and_pagination(
         "successful_events": 0,
         "unique_users": 2,
     }
+    fetch_display_names.return_value = {"building_id": {"84": "Roxana Towers"}}
 
     result = get_audit_logs(
         Mock(), tenant_id="4", category="BUSINESS", search=" admin ", page=2, limit=10
@@ -86,6 +89,16 @@ def test_admin_listing_enforces_success_for_items_counts_and_pagination(
     assert result.pagination.page == 2
     assert result.pagination.total_pages == 2
     assert result.items[0].failure_summary is None
+    assert result.items[0].entity_display_name == "Roxana Towers"
+
+
+def test_list_resource_names_use_session_for_logout_without_an_identifier() -> None:
+    from backend.services.audit_service import _enrich_audit_list_display_names
+
+    row = {**_list_row(), "entity_type": "session", "entity_id": "secret-session-id"}
+    _enrich_audit_list_display_names(Mock(), tenant_id="4", rows=[row])
+
+    assert row["entity_display_name"] == "Session"
 
 
 def test_activity_category_filters_are_mutually_exclusive() -> None:
@@ -97,6 +110,23 @@ def test_activity_category_filters_are_mutually_exclusive() -> None:
     assert "'BOOKING', 'GUEST'" in business_sql
     assert "NOT IN ('user.login', 'user.logout')" in admin_sql
     assert "NOT IN ('BOOKING', 'GUEST')" in admin_sql
+
+
+def test_search_matches_activity_person_and_resource_fields() -> None:
+    sql, params = _build_audit_log_filters(tenant_id="4", search=" booking ")
+
+    for field in (
+        "au.display_name",
+        "al.actor_email",
+        "al.action",
+        "al.module",
+        "al.entity_type",
+        "al.entity_id",
+        "target_email",
+        "target_user_id",
+    ):
+        assert field in sql
+    assert params == ["4", *["%booking%"] * 8]
 
 
 def test_identifier_values_are_replaced_with_display_names_and_keep_fallbacks() -> None:

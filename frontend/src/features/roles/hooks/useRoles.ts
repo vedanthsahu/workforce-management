@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { rolesService } from "../services/roles.service";
 import { mapApiRoleToRole } from "../utils/roles.utils";
 import type { Role } from "../types/roles.types";
-import { searchMatchRank } from "@/lib/searchRank";
+import { searchMatchRank, searchTieBreak } from "@/lib/searchRank";
 
 export const useRoles = () => {
   const [roles, setRoles] = useState<Role[]>([]);
@@ -37,7 +37,10 @@ export const useRoles = () => {
   const filteredRoles = roles
     .map((r) => ({ role: r, rank: searchMatchRank(r.name, search) }))
     .filter((x): x is { role: Role; rank: number } => x.rank !== null)
-    .sort((a, b) => a.rank - b.rank)
+    .sort(
+      (a, b) =>
+        a.rank - b.rank || searchTieBreak(a.role.name, b.role.name, search),
+    )
     .map((x) => x.role);
 
   return {

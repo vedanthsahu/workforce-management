@@ -47,6 +47,7 @@ export interface AuditLogListItemRaw {
   module: AuditModule;
   entity_type: string | null;
   entity_id: string | null;
+  entity_display_name: string | null;
   event_status: AuditEventStatus;
   failure_summary: string | null;
   request_method: AuditRequestMethod | null;
@@ -57,7 +58,6 @@ export interface AuditLogListItemRaw {
 /** GET /admin/audit/{id} response shape -- full audit_logs row (see
  * backend/schemas/audit.py AuditLogDetailResponse). */
 export interface AuditLogDetailRaw extends AuditLogListItemRaw {
-  entity_display_name: string | null;
   request_path: string | null;
   request_id: string | null;
   correlation_id: string | null;
@@ -84,6 +84,7 @@ export interface AuditLogListItem {
   module: AuditModule;
   entityType: string;
   entityId: string;
+  entityDisplayName: string;
   status: AuditEventStatus;
   failureSummary: string;
   requestMethod: AuditRequestMethod;
@@ -93,7 +94,6 @@ export interface AuditLogListItem {
 
 /** UI-shaped full record used by the detail sheet. */
 export interface AuditLog extends AuditLogListItem {
-  entityDisplayName: string;
   requestPath: string;
   requestId: string;
   correlationId: string;

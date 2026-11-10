@@ -398,85 +398,82 @@ function RelativeTimeField({
   );
 }
 
-/** Type-ahead "search as you go" user name search -- same debounced
- * fetch-suggestions-from-the-backend pattern as the employee search on
- * Bookings > Book for Someone (BookingManagementFilters.tsx), just backed by
- * GET /admin/audit's name-only `search` instead of admin bookings. */
-function UserSearchField({
+/** Mirrors the Bookings people search: type to see matching people, select a
+ * suggestion when useful, then apply the complete filter set with Search. */
+function AuditSearchField({
   value,
   onChange,
 }: {
   value: string;
-  onChange: (name: string) => void;
+  onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<AuditLogListItem[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open) return;
-    const onClickOutside = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node))
+    const onClickOutside = (event: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
         setOpen(false);
+      }
     };
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [open]);
+  }, []);
 
   useEffect(() => {
-    const q = value.trim();
-    if (!q) {
+    const query = value.trim();
+    if (!query) {
       setSuggestions([]);
       return;
     }
+
     let cancelled = false;
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       auditService
-        .list({ search: q, page: 1, limit: 8 })
-        .then((res) => {
+        .list({ search: query, page: 1, limit: 20 })
+        .then((response) => {
           if (cancelled) return;
-          const seen = new Set<string>();
-          const matches: AuditLogListItem[] = [];
-          for (const raw of res.items) {
-            const log = mapAuditLogListItemToUi(raw);
-            const key = log.actorUserId || log.actorName;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            matches.push(log);
+          const uniquePeople = new Map<string, AuditLogListItem>();
+          for (const raw of response.items) {
+            const item = mapAuditLogListItemToUi(raw);
+            const key = item.actorUserId || item.actorEmail || item.actorName;
+            if (key && !uniquePeople.has(key)) uniquePeople.set(key, item);
           }
-          setSuggestions(matches);
+          setSuggestions([...uniquePeople.values()].slice(0, 8));
         })
         .catch(() => {
           if (!cancelled) setSuggestions([]);
         });
-    }, 300);
+    }, 250);
+
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      window.clearTimeout(timer);
     };
   }, [value]);
 
   return (
-    <div ref={rootRef} className="relative w-60">
+    <div ref={rootRef} className="relative w-full">
       <Search
         size={14}
-        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
       />
       <input
         type="text"
-        placeholder="Search people or resource ID"
         value={value}
-        onChange={(e) => {
-          onChange(e.target.value);
+        onChange={(event) => {
+          onChange(event.target.value);
           setOpen(true);
         }}
         onFocus={() => {
           if (value.trim()) setOpen(true);
         }}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") setOpen(false);
+        onKeyDown={(event) => {
+          if (event.key === "Escape") setOpen(false);
         }}
-        className="h-10 pl-9 pr-8 w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors placeholder:text-gray-400"
+        placeholder="Search people"
+        className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-8 text-sm text-gray-700 transition-colors placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
       {value && (
         <button
@@ -485,48 +482,46 @@ function UserSearchField({
             onChange("");
             setOpen(false);
           }}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-600"
+          aria-label="Clear audit log search"
         >
           <X size={14} />
         </button>
       )}
 
       {open && value.trim() && (
-        <div className="absolute top-[calc(100%+6px)] left-0 right-0 z-30 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
           {suggestions.length === 0 ? (
-            <p className="px-4 py-3 text-xs text-gray-400 text-center">
-              No matches for &quot;{value}&quot;
+            <p className="px-4 py-3 text-center text-xs text-gray-400">
+              No matching people for &quot;{value}&quot;
             </p>
           ) : (
-            <ul
-              role="listbox"
-              className="py-1 max-h-60 overflow-y-auto divide-y divide-gray-100"
-            >
-              {suggestions.map((log) => (
+            <ul role="listbox" className="max-h-60 divide-y divide-gray-100 overflow-y-auto py-1">
+              {suggestions.map((item) => (
                 <li
-                  key={log.actorUserId || log.actorName}
+                  key={item.actorUserId || item.actorEmail || item.id}
                   role="option"
                   aria-selected={false}
                 >
                   <button
                     type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      onChange(log.actorName);
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      onChange(item.actorName || item.actorEmail);
                       setOpen(false);
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50 transition-colors text-left"
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-indigo-50"
                   >
-                    <span className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 bg-indigo-100 text-indigo-700">
-                      {initialsOf(log.actorName)}
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-semibold text-indigo-700">
+                      {initialsOf(item.actorName || item.actorEmail)}
                     </span>
-                    <span className="flex-1 min-w-0">
-                      <p className="text-[13px] font-medium text-gray-800 truncate">
-                        {log.actorName}
-                      </p>
-                      <p className="text-[11px] text-gray-400 truncate">
-                        {log.actorEmail}
-                      </p>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-medium text-gray-800">
+                        {item.actorName || item.actorEmail}
+                      </span>
+                      <span className="block truncate text-[11px] text-gray-400">
+                        {item.actorEmail}
+                      </span>
                     </span>
                   </button>
                 </li>
@@ -676,11 +671,11 @@ export default function AuditLogFilters({
         </div>
         <div className="flex flex-col gap-1 w-60">
           <label className="text-xs font-medium text-gray-600">
-            People or Resource
+            People
           </label>
-          <UserSearchField
+          <AuditSearchField
             value={filters.search}
-            onChange={(name) => onUpdate("search", name)}
+            onChange={(value) => onUpdate("search", value)}
           />
         </div>
       </div>
