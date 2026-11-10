@@ -1159,10 +1159,31 @@ export function useBookingForm() {
 
   // ── Step 3: confirm ───────────────────────────────────────────────────────
 
+  // Idempotency-Key for createBooking/modifyBooking: reused across retries
+  // of the SAME logical attempt (e.g. the user clicking "try again" after a
+  // timeout with the exact same seat/date/booking still selected), rotated
+  // the instant any of those inputs change -- a stale key reused against a
+  // genuinely different booking intent only costs an extra wasted key, since
+  // the backend's own payload-hash mismatch check rejects it outright rather
+  // than silently misapplying it.
+  const idempotencyKeyRef = useRef<string | null>(null);
+  const idempotencyKeyInputsRef = useRef<string | null>(null);
+
   const confirmBooking = useCallback(async () => {
     if (!form.selectedSeatId) return;
     setSubmitting(true);
     setError(null);
+
+    const idempotencyKeyInputs = JSON.stringify([
+      isModifyMode ? modifyBookingId : "create",
+      form.siteId, form.buildingId, form.floorId,
+      form.selectedSeatId, form.fromDate,
+    ]);
+    if (idempotencyKeyInputsRef.current !== idempotencyKeyInputs) {
+      idempotencyKeyRef.current = crypto.randomUUID();
+      idempotencyKeyInputsRef.current = idempotencyKeyInputs;
+    }
+    const idempotencyKey = idempotencyKeyRef.current;
 
     const basePayload = {
       site_id: Number(form.siteId),
@@ -1180,7 +1201,7 @@ export function useBookingForm() {
         result = await modifyGuestBooking(modifyBookingId, basePayload);
       } else if (isModifyMode && modifyBookingId) {
         console.log("[ConfirmBooking] Branch: MODIFY", { modifyBookingId });
-        result = await modifyBooking(modifyBookingId, basePayload);
+        result = await modifyBooking(modifyBookingId, basePayload, idempotencyKey ?? undefined);
       } else if (isAddBookingToVisit && visitId) {
         const workflowPayload = {
           site_id: Number(form.siteId),
@@ -1214,10 +1235,16 @@ export function useBookingForm() {
         });
       } else {
         result = await createBooking(
-          bookedForUserId ? { ...basePayload, booked_for_user_id: Number(bookedForUserId) } : basePayload
+          bookedForUserId ? { ...basePayload, booked_for_user_id: Number(bookedForUserId) } : basePayload,
+          idempotencyKey ?? undefined
         );
       }
 
+      // Clear it on success so a LATER, genuinely new submission with the
+      // same inputs (e.g. re-booking the same desk/date again after this
+      // one) gets a fresh key instead of replaying this response -- the
+      // key must only be reused across retries of this same attempt.
+      idempotencyKeyInputsRef.current = null;
       confirmationRef.current = result;
       setConfirmation(result);
       setStepState(3);
