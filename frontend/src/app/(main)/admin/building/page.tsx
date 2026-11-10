@@ -12,7 +12,7 @@ import EditBuildingModal from "@/features/building/components/EditBuildingModal"
 import { useBuildings } from "@/features/building/hooks/useBuildings";
 import { Building } from "@/features/building/types/building.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
-import { searchMatchRank } from "@/lib/searchRank";
+import { searchMatchRank, searchTieBreak } from "@/lib/searchRank";
 
 type BannerState = { type: "success" | "error"; message: string } | null;
 
@@ -99,7 +99,10 @@ function BuildingsPage() {
         if (a.building.building_id === highlightedId) return -1;
         if (b.building.building_id === highlightedId) return 1;
       }
-      return a.rank - b.rank;
+      return (
+        a.rank - b.rank ||
+        searchTieBreak(a.building.building_name || "", b.building.building_name || "", search)
+      );
     })
     .map((x) => x.building);
 

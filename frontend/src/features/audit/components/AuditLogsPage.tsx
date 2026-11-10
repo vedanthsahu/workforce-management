@@ -26,11 +26,8 @@ import {
 import { AUDIT_PAGE_SIZES } from "../utils/constants";
 
 export default function AuditLogsPage() {
-  // `filters` is the draft state the filter bar binds to -- editing it
-  // (typing, picking a dropdown, applying a date range) never queries
-  // anything by itself. `appliedFilters` only changes on an explicit Search
-  // click (or Clear), and it alone drives useAuditLogs -- same staged-filter
-  // pattern as AdminBookingsPage/BookingManagementFilters.
+  // `filters` is the draft state the filter bar binds to. Like Bookings, all
+  // fields are applied together only when the administrator selects Search.
   const [filters, setFilters] = useState(defaultAuditLogFilters());
   const [appliedFilters, setAppliedFilters] = useState(
     defaultAuditLogFilters(),

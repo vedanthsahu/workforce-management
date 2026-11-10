@@ -102,7 +102,13 @@ def admin_audit_logs(
     ] = None,
     search: Annotated[
         str | None,
-        Query(min_length=1, description="Partial, case-insensitive match on actor name only -- for the type-ahead search box."),
+        Query(
+            min_length=1,
+            description=(
+                "Partial, case-insensitive match across activity, person, "
+                "email, resource type, and resource identifier."
+            ),
+        ),
     ] = None,
     sort_by: Annotated[
         AuditSortBy,

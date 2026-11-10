@@ -23,3 +23,14 @@ export function searchMatchRank(text: string, query: string): number | null {
   const index = words.findIndex((word) => word.startsWith(q));
   return index === -1 ? null : index;
 }
+
+/**
+ * Tiebreak for results that share the same searchMatchRank: A-Z with numbers
+ * in natural order (1, 2, 10), so "d" lists dd, dl, dx, dz. Only applies while
+ * a search is active -- with no query it returns 0 and the list keeps its
+ * original order.
+ */
+export function searchTieBreak(a: string, b: string, query: string): number {
+  if (!query.trim()) return 0;
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
