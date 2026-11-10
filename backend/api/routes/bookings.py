@@ -159,13 +159,17 @@ def modify_booking_route(
     background_tasks: BackgroundTasks,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     conn: Annotated[PGConnection, Depends(get_db)],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> BookingResponse:
+    # Optional, same as create_booking: omitting it keeps today's
+    # behaviour unchanged.
     return modify_booking(
         conn,
         current_user=current_user,
         booking_id=booking_id,
         payload=payload,
         background_tasks=background_tasks,
+        idempotency_key=idempotency_key,
     )
 
 @router.post("/eligibility",response_model=BookingEligibilityResponse,)
