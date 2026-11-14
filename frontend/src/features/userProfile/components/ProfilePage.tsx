@@ -1,12 +1,8 @@
 "use client";
 import { displaySpaceCode } from "@/lib/spaceCode";
+import { getApiErrorMessage } from "@/lib/apiError";
 import { useState, useRef, useEffect } from "react";
-import Select, {
-  components,
-  type DropdownIndicatorProps,
-  type MultiValue,
-  type SingleValue,
-} from "react-select";
+import Select, { type MultiValue } from "react-select";
 import {
   Mail, Phone, MapPin, Briefcase,
   Building2, UserCheck, BadgeCheck,
@@ -17,11 +13,11 @@ import {
   Sparkles, IdCard, BarChart3, SlidersHorizontal,
 } from "lucide-react";
 
-import { Button }    from "@/components/ui/button";
-import { Skeleton }  from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { Label }     from "@/components/ui/label";
-import { Textarea }  from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -53,11 +49,11 @@ function getInitials(name: string) {
 // (a tinted bg would be invisible there).
 const ROLE_BADGE_ON_BANNER: Record<string, string> = {
   TENANT_ADMIN: "bg-white text-emerald-600",
-  MANAGER:      "bg-white text-violet-600",
-  EMPLOYEE:     "bg-white text-blue-600",
-  FACILITATOR:  "bg-white text-purple-600",
+  MANAGER: "bg-white text-violet-600",
+  EMPLOYEE: "bg-white text-blue-600",
+  FACILITATOR: "bg-white text-purple-600",
   FRONT_OFFICE: "bg-white text-amber-600",
-  FACILITIES:   "bg-white text-orange-600",
+  FACILITIES: "bg-white text-orange-600",
 };
 
 function RolePill({ role, onBanner = false }: { role: string; onBanner?: boolean }) {
@@ -76,7 +72,7 @@ function BookingStatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     CONFIRMED: "bg-emerald-50 text-emerald-700 ring-emerald-200",
     CANCELLED: "bg-red-50 text-red-600 ring-red-200",
-    PENDING:   "bg-amber-50 text-amber-600 ring-amber-200",
+    PENDING: "bg-amber-50 text-amber-600 ring-amber-200",
   };
   const style = map[status?.toUpperCase()] ?? "bg-gray-50 text-gray-600 ring-gray-200";
   const label = status ? status.charAt(0) + status.slice(1).toLowerCase() : "—";
@@ -135,12 +131,12 @@ function SectionHeading({ icon: Icon, title, color = "bg-indigo-100 text-indigo-
 }
 
 const INFO_ROW_COLORS = [
-  { bg: "bg-violet-100",  icon: "text-violet-600"  },
-  { bg: "bg-blue-100",    icon: "text-blue-600"    },
-  { bg: "bg-rose-100",    icon: "text-rose-600"    },
+  { bg: "bg-violet-100", icon: "text-violet-600" },
+  { bg: "bg-blue-100", icon: "text-blue-600" },
+  { bg: "bg-rose-100", icon: "text-rose-600" },
   { bg: "bg-emerald-100", icon: "text-emerald-600" },
-  { bg: "bg-amber-100",   icon: "text-amber-600"   },
-  { bg: "bg-teal-100",    icon: "text-teal-600"    },
+  { bg: "bg-amber-100", icon: "text-amber-600" },
+  { bg: "bg-teal-100", icon: "text-teal-600" },
 ];
 
 function InfoRow({ icon: Icon, label, value, colorIndex = 0 }: { icon: React.ElementType; label: string; value: string; colorIndex?: number }) {
@@ -168,38 +164,22 @@ function SkillTag({ label }: { label: string }) {
 
 // ─── Cascade Select ───────────────────────────────────────────────────────────
 
-type CascadeOption = { value: string; label: string; inactive?: boolean; pillLabel?: string };
-
-// Small amber pill shown after the name of an office/building/floor that can't
-// be booked: "Inactive", or a custom label such as "No layout".
-function InactivePill({ label = "Inactive" }: { label?: string }) {
-  return (
-    <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold leading-none text-amber-700">
-      {label}
-    </span>
-  );
-}
-
-function CascadeChevron(props: DropdownIndicatorProps<CascadeOption, false>) {
-  return (
-    <components.DropdownIndicator {...props}>
-      <ChevronDown className="w-3.5 h-3.5" />
-    </components.DropdownIndicator>
-  );
-}
-
 // A custom (react-select) dropdown rather than a native <select>: a native
 // option can only show plain text, and inactive entries need a real pill.
 function CascadeSelect({
-  label, value, onChange, options, disabled, loading, placeholder, disabledPlaceholder, required,
+  label, value, onChange, options, saved, disabled, loading, placeholder, disabledPlaceholder, required,
 }: {
-  label:        string;
-  required?:    boolean;
-  value:        string;
-  onChange:     (val: string) => void;
-  options:      CascadeOption[];
-  disabled?:    boolean;
-  loading?:     boolean;
+  label: string;
+  required?: boolean;
+  value: string;
+  onChange: (val: string) => void;
+  options: { value: string; label: string }[];
+  // The user's currently saved choice. If it is no longer one of `options`
+  // (e.g. it became inactive) it still shows in the closed field, but as a
+  // hidden option, so it never appears in the dropdown list.
+  saved?: { value: string; label: string } | null;
+  disabled?: boolean;
+  loading?: boolean;
   placeholder?: string;
   // Shown while disabled because the parent field isn't chosen yet
   // (e.g. "Select an office first") -- mirrors the guest booking form.
@@ -211,67 +191,29 @@ function CascadeSelect({
     : disabled && disabledPlaceholder
       ? disabledPlaceholder
       : placeholder ?? "";
-  const selected = loading ? null : options.find((o) => o.value === value) ?? null;
 
   return (
     <div className="space-y-1.5">
       <Label className="text-[12px]">{label}{required && <span className="text-red-500"> *</span>}</Label>
       <div className="relative">
-        <Select<CascadeOption, false>
-          instanceId={label}
-          aria-label={label}
-          options={loading ? [] : options}
-          value={selected}
-          onChange={(opt: SingleValue<CascadeOption>) => onChange(opt?.value ?? "")}
-          isDisabled={disabled || loading}
-          isLoading={loading}
-          isSearchable={false}
-          placeholder={shownPlaceholder}
-          noOptionsMessage={() => "No options available"}
-          formatOptionLabel={(opt) => (
-            <span className="flex items-center">
-              <span className="truncate">{opt.label}</span>
-              {(opt.inactive || opt.pillLabel) && <InactivePill label={opt.inactive ? "Inactive" : opt.pillLabel} />}
-            </span>
+        <select
+          value={loading ? "" : value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled || loading}
+          aria-busy={loading || undefined}
+          className="w-full h-9 rounded-md border border-gray-200 bg-white pl-3 pr-8 text-[13px] text-gray-800 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {(loading || !value) && <option value="" disabled hidden>{shownPlaceholder}</option>}
+          {!loading && saved && saved.value === value && !options.some((o) => o.value === value) && (
+            <option value={saved.value} hidden>{saved.label}</option>
           )}
-          components={{ IndicatorSeparator: null, DropdownIndicator: CascadeChevron }}
-          menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
-          styles={{
-            menuPortal: (base) => ({ ...base, zIndex: 60 }),
-            control: (base, state) => ({
-              ...base,
-              minHeight: 36,
-              borderRadius: 6,
-              backgroundColor: "#ffffff",
-              borderColor: state.isFocused ? "#3b82f6" : "#e5e7eb",
-              boxShadow: state.isFocused ? "0 0 0 2px rgb(59 130 246 / 0.4)" : "none",
-              opacity: state.isDisabled ? 0.5 : 1,
-              cursor: state.isDisabled ? "not-allowed" : "pointer",
-              ":hover": { borderColor: state.isFocused ? "#3b82f6" : "#d1d5db" },
-            }),
-            valueContainer: (base) => ({ ...base, padding: "0 12px" }),
-            singleValue: (base) => ({ ...base, margin: 0, fontSize: 13, color: "#1f2937" }),
-            placeholder: (base) => ({ ...base, margin: 0, fontSize: 13, color: "#6b7280" }),
-            dropdownIndicator: (base) => ({ ...base, padding: "0 10px", color: "#9ca3af" }),
-            menu: (base) => ({
-              ...base,
-              marginTop: 4,
-              border: "1px solid #e5e7eb",
-              borderRadius: 8,
-              boxShadow: "0 4px 10px rgb(0 0 0 / 0.08)",
-              overflow: "hidden",
-            }),
-            option: (base, state) => ({
-              ...base,
-              padding: "8px 12px",
-              fontSize: 13,
-              cursor: "pointer",
-              color: state.isSelected ? "#3730a3" : "#111827",
-              backgroundColor: state.isSelected ? "#eef2ff" : state.isFocused ? "#f3f4f6" : "#ffffff",
-              ":active": { backgroundColor: "#e5e7eb" },
-            }),
-          }}
-        />
+          {!loading && options.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        {loading
+          ? <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 animate-spin pointer-events-none" />
+          : <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />}
       </div>
     </div>
   );
@@ -283,9 +225,9 @@ function AmenitiesCheckboxGroup({
   amenities, selected, onChange, loading,
 }: {
   amenities: ApiAmenity[];
-  selected:  string[];
-  onChange:  (ids: string[]) => void;
-  loading:   boolean;
+  selected: string[];
+  onChange: (ids: string[]) => void;
+  loading: boolean;
 }) {
   const groups = amenities.reduce<Record<string, ApiAmenity[]>>((acc, a) => {
     const cat = a.category || "Other";
@@ -328,15 +270,13 @@ function AmenitiesCheckboxGroup({
                   key={a.id}
                   type="button"
                   onClick={() => toggle(a.id)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left text-[11.5px] font-medium transition-colors ${
-                    on
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left text-[11.5px] font-medium transition-colors ${on
                       ? "bg-indigo-50 border-indigo-300 text-indigo-700"
                       : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                  }`}
+                    }`}
                 >
-                  <span className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
-                    on ? "bg-indigo-600 border-indigo-600" : "border-gray-300"
-                  }`}>
+                  <span className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${on ? "bg-indigo-600 border-indigo-600" : "border-gray-300"
+                    }`}>
                     {on && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                   </span>
                   {/* <span className={`w-2 h-2 rounded-full shrink-0 ${color.dot}`} /> */}
@@ -390,10 +330,10 @@ function BookingHistoryModal({
   current: ApiBooking[]; future: ApiBooking[]; past: ApiBooking[];
 }) {
   const [tab, setTab] = useState<"all" | "upcoming" | "past">("all");
-  const allBookings  = [...current, ...future, ...past];
+  const allBookings = [...current, ...future, ...past];
   const upcomingList = [...current, ...future];
-  const activeList   = tab === "all" ? allBookings : tab === "upcoming" ? upcomingList : past;
-  const grouped      = groupBookingsByMonth(activeList);
+  const activeList = tab === "all" ? allBookings : tab === "upcoming" ? upcomingList : past;
+  const grouped = groupBookingsByMonth(activeList);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -411,9 +351,8 @@ function BookingHistoryModal({
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
-                tab === t ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-              }`}
+              className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${tab === t ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                }`}
             >
               {t.charAt(0).toUpperCase() + t.slice(1)}
               <span className={`ml-1 text-[11px] ${tab === t ? "text-indigo-200" : "text-gray-400"}`}>
@@ -458,9 +397,9 @@ function EditProfileDialog({
   open: boolean; profile: ProfileData;
   onClose: () => void; onSave: (form: EditProfileForm) => Promise<void>; isSaving: boolean;
 }) {
-  const [bio, setBio]           = useState(profile.bio);
-  const [skills, setSkills]     = useState<string[]>(profile.skills);
-  const [error, setError]       = useState("");
+  const [bio, setBio] = useState(profile.bio);
+  const [skills, setSkills] = useState<string[]>(profile.skills);
+  const [error, setError] = useState("");
 
   // Reset when dialog opens with fresh profile
   useEffect(() => {
@@ -477,7 +416,7 @@ function EditProfileDialog({
       await onSave({ bio, skills });
       onClose();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Something went wrong.");
+      setError(getApiErrorMessage(e, "We couldn't save your changes. Please try again."));
     }
   };
 
@@ -510,23 +449,23 @@ function EditProfileDialog({
           <div className="space-y-1.5">
             <Label className="text-[12px]">Skills</Label>
             <Select
-                isMulti
-                isSearchable
-                closeMenuOnSelect={false}
-                maxMenuHeight={360}
-                options={Array.from(new Set([...SKILL_OPTIONS.map((option) => option.value), ...skills])).map((value) => ({
-                  value,
-                  label: value,
-                }))}
-                value={skills.map((value) => ({ value, label: value }))}
-                onChange={(selected: MultiValue<SkillOption>) =>
-                  setSkills(selected.map((option) => option.value))
-                }
-                placeholder="Search skills..."
-                className="text-[13px]"
-                classNamePrefix="skills-select"
-                menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
-                styles={{
+              isMulti
+              isSearchable
+              closeMenuOnSelect={false}
+              maxMenuHeight={360}
+              options={Array.from(new Set([...SKILL_OPTIONS.map((option) => option.value), ...skills])).map((value) => ({
+                value,
+                label: value,
+              }))}
+              value={skills.map((value) => ({ value, label: value }))}
+              onChange={(selected: MultiValue<SkillOption>) =>
+                setSkills(selected.map((option) => option.value))
+              }
+              placeholder="Search skills..."
+              className="text-[13px]"
+              classNamePrefix="skills-select"
+              menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+              styles={{
                 menuPortal: (base) => ({ ...base, zIndex: 50 }),
                 control: (base, state) => ({
                   ...base,
@@ -556,13 +495,13 @@ function EditProfileDialog({
                 }),
                 multiValue: (base) => ({ ...base, backgroundColor: "#eef2ff", borderRadius: 6 }),
                 multiValueLabel: (base) => ({ ...base, color: "#4338ca", fontSize: 11 }),
-                  multiValueRemove: (base) => ({
+                multiValueRemove: (base) => ({
                   ...base,
                   cursor: "pointer",
                   ":hover": { backgroundColor: "#c7d2fe", color: "#3730a3" },
-                  }),
-                }}
-              />
+                }),
+              }}
+            />
           </div>
 
           {error && (
@@ -594,25 +533,25 @@ function EditPreferencesDialog({
   onClose: () => void; onSave: (form: EditPreferencesForm) => Promise<void>; isSaving: boolean;
 }) {
   // ── Cascade state ──────────────────────────────────────────────────────
-  const [sites,     setSites]     = useState<ApiSite[]>([]);
+  const [sites, setSites] = useState<ApiSite[]>([]);
   const [buildings, setBuildings] = useState<ApiBuilding[]>([]);
-  const [floors,    setFloors]    = useState<ApiFloor[]>([]);
+  const [floors, setFloors] = useState<ApiFloor[]>([]);
 
-  const [loadingSites,     setLoadingSites]     = useState(false);
+  const [loadingSites, setLoadingSites] = useState(false);
   const [loadingBuildings, setLoadingBuildings] = useState(false);
-  const [loadingFloors,    setLoadingFloors]    = useState(false);
+  const [loadingFloors, setLoadingFloors] = useState(false);
 
-  const [selectedSiteId,     setSelectedSiteId]     = useState(preferences.preferredOfficeId   ?? "");
+  const [selectedSiteId, setSelectedSiteId] = useState(preferences.preferredOfficeId ?? "");
   const [selectedBuildingId, setSelectedBuildingId] = useState(preferences.preferredBuildingId ?? "");
-  const [selectedFloorId,    setSelectedFloorId]    = useState(preferences.preferredFloorId    ?? "");
+  const [selectedFloorId, setSelectedFloorId] = useState(preferences.preferredFloorId ?? "");
 
   // ── Amenities ──────────────────────────────────────────────────────────
   const [availableAmenities, setAvailableAmenities] = useState<ApiAmenity[]>([]);
   const [selectedAmenityIds, setSelectedAmenityIds] = useState<string[]>([]);
   // Amenity ids as hydrated on open -- the baseline for the "changed?" check.
-  const [initialAmenityIds,  setInitialAmenityIds]  = useState<string[]>([]);
-  const [loadingAmenities,   setLoadingAmenities]   = useState(false);
-  const [amenitiesError,     setAmenitiesError]     = useState(false);
+  const [initialAmenityIds, setInitialAmenityIds] = useState<string[]>([]);
+  const [loadingAmenities, setLoadingAmenities] = useState(false);
+  const [amenitiesError, setAmenitiesError] = useState(false);
 
   const [error, setError] = useState("");
 
@@ -620,9 +559,9 @@ function EditPreferencesDialog({
   useEffect(() => {
     if (!open) return;
 
-    setSelectedSiteId(preferences.preferredOfficeId   ?? "");
+    setSelectedSiteId(preferences.preferredOfficeId ?? "");
     setSelectedBuildingId(preferences.preferredBuildingId ?? "");
-    setSelectedFloorId(preferences.preferredFloorId    ?? "");
+    setSelectedFloorId(preferences.preferredFloorId ?? "");
     setError("");
 
     // Sites
@@ -630,6 +569,8 @@ function EditPreferencesDialog({
     getSites()
       .then((data) => {
         setSites(data);
+        // Only ACTIVE offices are listed. A saved office that is no longer
+        // active stays in the field (see CascadeSelect `saved`), not the list.
         // Only one office -> pick it, unless a saved office is already set.
         if (data.length === 1) setSelectedSiteId((prev) => prev || data[0].site_id);
       })
@@ -679,6 +620,11 @@ function EditPreferencesDialog({
     return () => { active = false; };
   }, [selectedSiteId]);
 
+  // A floor can't outlive its building: no building -> no floor.
+  useEffect(() => {
+    if (!selectedBuildingId) setSelectedFloorId("");
+  }, [selectedBuildingId]);
+
   // Fetch the floor list for the selected building — same rule: no selection
   // resets here beyond dropping a floor that doesn't belong to this building.
   useEffect(() => {
@@ -690,9 +636,11 @@ function EditPreferencesDialog({
         if (!active) return;
         setFloors(data);
         setSelectedFloorId((prev) => {
-          // A floor id left over from a previous building/record must never
-          // survive -- drop it if it isn't one of this building's floors.
-          const kept = prev && data.some((f) => f.floor_id === prev) ? prev : "";
+          // A floor id left over from a previous building must never survive --
+          // drop it unless it is one of this building's floors or the user's
+          // own saved floor (which stays in the field even if now inactive).
+          const isSaved = prev === (preferences.preferredFloorId ?? "");
+          const kept = prev && (isSaved || data.some((f) => f.floor_id === prev)) ? prev : "";
           // Only one floor -> pick it.
           return kept || (data.length === 1 ? data[0].floor_id : "");
         });
@@ -700,6 +648,9 @@ function EditPreferencesDialog({
       .catch(() => { if (active) setFloors([]); })
       .finally(() => { if (active) setLoadingFloors(false); });
     return () => { active = false; };
+    // Intentionally keyed on the building only: re-running when the saved floor
+    // changes would refetch floors and reset the user's in-progress selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBuildingId]);
 
   const handleSiteChange = (id: string) => {
@@ -714,8 +665,14 @@ function EditPreferencesDialog({
   };
 
   // All four are mandatory: office, building, floor and at least one amenity.
+  // The three locations must also be ACTIVE ones from the lists -- a saved
+  // choice that has since become inactive is shown but can't be re-saved.
+  const locationActive =
+    sites.some((s) => s.site_id === selectedSiteId) &&
+    buildings.some((b) => b.building_id === selectedBuildingId) &&
+    floors.some((f) => f.floor_id === selectedFloorId);
   const formComplete =
-    !!selectedSiteId && !!selectedBuildingId && !!selectedFloorId && selectedAmenityIds.length > 0;
+    locationActive && selectedAmenityIds.length > 0;
 
   // Save stays disabled on open and only enables once the user has changed
   // something -- re-saving the stored preferences unchanged is a no-op.
@@ -723,45 +680,48 @@ function EditPreferencesDialog({
     selectedAmenityIds.length !== initialAmenityIds.length ||
     selectedAmenityIds.some((id) => !initialAmenityIds.includes(id));
   const isDirty =
-    selectedSiteId     !== (preferences.preferredOfficeId   ?? "") ||
+    selectedSiteId !== (preferences.preferredOfficeId ?? "") ||
     selectedBuildingId !== (preferences.preferredBuildingId ?? "") ||
-    selectedFloorId    !== (preferences.preferredFloorId    ?? "") ||
+    selectedFloorId !== (preferences.preferredFloorId ?? "") ||
     amenitiesChanged;
 
   const canSave =
     formComplete && isDirty && !loadingAmenities && !amenitiesError &&
-    !loadingBuildings && !loadingFloors;
+    !loadingSites && !loadingBuildings && !loadingFloors;
 
   const handleSubmit = async () => {
     setError("");
     if (!formComplete) {
-      setError("Please select an office, building, floor and at least one amenity.");
+      setError("Please select an active office, building, floor and at least one amenity.");
       return;
     }
     try {
       await onSave({
-        preferredOfficeId:   selectedSiteId,
+        preferredOfficeId: selectedSiteId,
         preferredBuildingId: selectedBuildingId,
-        preferredFloorId:    selectedFloorId,
+        preferredFloorId: selectedFloorId,
         preferredAmenityIds: selectedAmenityIds,
       });
       onClose();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Something went wrong.");
+      setError(getApiErrorMessage(e, "We couldn't save your preferences. Please try again."));
     }
   };
 
-  // Every office/building/floor is listed; inactive ones get a pill.
-  const isInactive = (status: string | null | undefined) => String(status ?? "").toUpperCase() === "INACTIVE";
-  const siteOptions: CascadeOption[]     = sites.map((s) => ({ value: s.site_id,     label: s.site_name,     inactive: isInactive(s.status) }));
-  const buildingOptions: CascadeOption[] = buildings.map((b) => ({ value: b.building_id, label: b.building_name, inactive: isInactive(b.status) }));
-  // An active floor with no published layout can't be booked either, so flag it too.
-  const floorOptions: CascadeOption[]    = floors.map((f) => ({
-    value: f.floor_id,
-    label: f.floor_name,
-    inactive: isInactive(f.status),
-    pillLabel: !f.published_layout_exists ? "No layout" : undefined,
-  }));
+  const savedLabel = (name: string, inactive: boolean) => (inactive ? `${name} (Inactive)` : name);
+  const savedSite = preferences.preferredOfficeId
+    ? { value: preferences.preferredOfficeId, label: savedLabel(preferences.preferredOfficeName, preferences.preferredOfficeInactive) }
+    : null;
+  const savedBuilding = preferences.preferredBuildingId
+    ? { value: preferences.preferredBuildingId, label: savedLabel(preferences.preferredBuildingName, preferences.preferredBuildingInactive) }
+    : null;
+  const savedFloor = preferences.preferredFloorId
+    ? { value: preferences.preferredFloorId, label: savedLabel(preferences.preferredFloorName, preferences.preferredFloorInactive) }
+    : null;
+
+  const siteOptions = sites.map((s) => ({ value: s.site_id, label: s.site_name }));
+  const buildingOptions = buildings.map((b) => ({ value: b.building_id, label: b.building_name }));
+  const floorOptions = floors.map((f) => ({ value: f.floor_id, label: f.floor_name }));
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -783,6 +743,7 @@ function EditPreferencesDialog({
             value={selectedSiteId}
             onChange={handleSiteChange}
             options={siteOptions}
+            saved={savedSite}
             loading={loadingSites}
             placeholder="Select office"
           />
@@ -794,6 +755,7 @@ function EditPreferencesDialog({
             value={selectedBuildingId}
             onChange={handleBuildingChange}
             options={buildingOptions}
+            saved={savedBuilding}
             disabled={!selectedSiteId}
             loading={loadingBuildings}
             placeholder="Select building"
@@ -807,6 +769,7 @@ function EditPreferencesDialog({
             value={selectedFloorId}
             onChange={setSelectedFloorId}
             options={floorOptions}
+            saved={savedFloor}
             disabled={!selectedBuildingId}
             loading={loadingFloors}
             placeholder="Select floor"
@@ -929,10 +892,12 @@ function ProfileSkeleton() {
 // ─── Preference display row ───────────────────────────────────────────────────
 
 function PrefDisplayRow({
-  icon: Icon, label, value,
+  icon: Icon, label, value, inactive,
   color = "bg-gray-50", iconColor = "text-gray-400",
 }: {
   icon: React.ElementType; label: string; value: string;
+  // The saved location has been deactivated since it was chosen.
+  inactive?: boolean;
   color?: string; iconColor?: string;
 }) {
   return (
@@ -942,7 +907,14 @@ function PrefDisplayRow({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[11px] text-gray-400 font-medium leading-none mb-1">{label}</p>
-        <p className="text-[12.5px] text-gray-700 font-medium leading-snug">{value}</p>
+        <p className="text-[12.5px] text-gray-700 font-medium leading-snug">
+          {value}
+          {inactive && (
+            <span className="ml-2 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200 align-middle">
+              Inactive
+            </span>
+          )}
+        </p>
       </div>
     </div>
   );
@@ -974,8 +946,8 @@ export default function ProfilePage() {
   } = useProfile();
 
   const [editProfileOpen, setEditProfileOpen] = useState(false);
-  const [editPrefsOpen,   setEditPrefsOpen]   = useState(false);
-  const [historyOpen,     setHistoryOpen]     = useState(false);
+  const [editPrefsOpen, setEditPrefsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   if (isFatal) {
@@ -1003,7 +975,7 @@ export default function ProfilePage() {
 
   const { profile, preferences, activitySummary, bookings } = data;
   const initials = getInitials(profile.displayName);
-  const prefErr  = errors.find((e) => e.section === "preferences");
+  const prefErr = errors.find((e) => e.section === "preferences");
   // Front office has no bookings of their own, and admins don't book seats
   // for themselves through this app -- Activity Summary doesn't apply to
   // either, so it's dropped for both. When it's gone, Work Details moves
@@ -1019,10 +991,10 @@ export default function ProfilePage() {
         <SectionHeading icon={Briefcase} title="Work Details" color="bg-emerald-100 text-emerald-600" />
       </div>
       <div className="px-4 sm:px-5 py-1">
-        <PrefDisplayRow icon={Building2}  label="Department"    value={profile.department}   color="bg-emerald-100" iconColor="text-emerald-600" />
-        <PrefDisplayRow icon={Briefcase}  label="Designation"   value={profile.jobTitle}     color="bg-blue-100"    iconColor="text-blue-600" />
-        <PrefDisplayRow icon={MapPin}     label="Work Location" value={profile.workLocation} color="bg-rose-100"    iconColor="text-rose-600" />
-        <PrefDisplayRow icon={UserCheck}  label="Manager"       value={profile.reportingManager} color="bg-amber-100" iconColor="text-amber-600" />
+        <PrefDisplayRow icon={Building2} label="Department" value={profile.department} color="bg-emerald-100" iconColor="text-emerald-600" />
+        <PrefDisplayRow icon={Briefcase} label="Designation" value={profile.jobTitle} color="bg-blue-100" iconColor="text-blue-600" />
+        <PrefDisplayRow icon={MapPin} label="Work Location" value={profile.workLocation} color="bg-rose-100" iconColor="text-rose-600" />
+        <PrefDisplayRow icon={UserCheck} label="Manager" value={profile.reportingManager} color="bg-amber-100" iconColor="text-amber-600" />
       </div>
     </Card>
   );
@@ -1066,240 +1038,243 @@ export default function ProfilePage() {
       />
 
       <div className="flex-1 min-h-0 overflow-y-auto bg-gradient-to-b from-indigo-50/40 via-white to-white">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
 
-        {/* Page header */}
-        <div>
-          <h1 className="text-[20px] sm:text-[22px] font-bold text-gray-900 tracking-tight">My Profile</h1>
-          <p className="text-[13px] text-gray-400 mt-0.5">View and manage your personal information.</p>
-        </div>
+          {/* Page header */}
+          <div>
+            <h1 className="text-[20px] sm:text-[22px] font-bold text-gray-900 tracking-tight">My Profile</h1>
+            <p className="text-[13px] text-gray-400 mt-0.5">View and manage your personal information.</p>
+          </div>
 
-        {/* ── Identity card — avatar + info sit directly on the gradient in white ── */}
-        <Card className="overflow-hidden p-0!">
-          <div className="relative bg-gradient-to-br from-indigo-600 via-indigo-600 to-indigo-700 px-5 sm:px-8 py-5 sm:py-6">
-            {/* Decorative wave + glow overlay */}
-            <svg className="absolute inset-0 w-full h-full opacity-10 pointer-events-none" preserveAspectRatio="none" viewBox="0 0 800 200">
-              <path d="M0,110 C150,190 350,30 500,110 C650,190 800,70 800,110 L800,200 L0,200 Z" fill="white" />
-            </svg>
-            <div className="absolute w-56 h-56 rounded-full bg-white/[0.07] -top-20 -right-10 pointer-events-none" />
-            <div className="absolute w-32 h-32 rounded-full bg-white/[0.06] -bottom-10 right-36 pointer-events-none" />
+          {/* ── Identity card — avatar + info sit directly on the gradient in white ── */}
+          <Card className="overflow-hidden p-0!">
+            <div className="relative bg-gradient-to-br from-indigo-600 via-indigo-600 to-indigo-700 px-5 sm:px-8 py-5 sm:py-6">
+              {/* Decorative wave + glow overlay */}
+              <svg className="absolute inset-0 w-full h-full opacity-10 pointer-events-none" preserveAspectRatio="none" viewBox="0 0 800 200">
+                <path d="M0,110 C150,190 350,30 500,110 C650,190 800,70 800,110 L800,200 L0,200 Z" fill="white" />
+              </svg>
+              <div className="absolute w-56 h-56 rounded-full bg-white/[0.07] -top-20 -right-10 pointer-events-none" />
+              <div className="absolute w-32 h-32 rounded-full bg-white/[0.06] -bottom-10 right-36 pointer-events-none" />
 
-            <div className="relative flex flex-col items-center sm:flex-row sm:items-center gap-5 sm:gap-7">
-              {/* Avatar */}
-              <div className="relative shrink-0">
-                {profile.avatarUrl ? (
-                  <img
-                    src={profile.avatarUrl}
-                    alt={profile.displayName}
-                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover ring-4 ring-white/40 shadow-lg"
-                  />
-                ) : (
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white/15 flex items-center justify-center text-[24px] sm:text-[26px] font-bold text-white ring-4 ring-white/40 shadow-lg select-none">
-                    {initials}
-                  </div>
-                )}
-                <button
-                  onClick={() => avatarInputRef.current?.click()}
-                  disabled={isUploadingAvatar}
-                  className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all"
-                >
-                  {isUploadingAvatar
-                    ? <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
-                    : <Camera className="w-3.5 h-3.5 text-gray-600" />}
-                </button>
-              </div>
-
-              {/* Info */}
-              <div className="flex-1 min-w-0 text-center sm:text-left">
-                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-1.5">
-                  <h2 className="text-[19px] sm:text-[21px] font-bold text-white leading-tight">{profile.displayName}</h2>
-                  <RolePill role={profile.role} onBanner />
+              <div className="relative flex flex-col items-center sm:flex-row sm:items-center gap-5 sm:gap-7">
+                {/* Avatar */}
+                <div className="relative shrink-0">
+                  {profile.avatarUrl ? (
+                    <img
+                      src={profile.avatarUrl}
+                      alt={profile.displayName}
+                      className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover ring-4 ring-white/40 shadow-lg"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white/15 flex items-center justify-center text-[24px] sm:text-[26px] font-bold text-white ring-4 ring-white/40 shadow-lg select-none">
+                      {initials}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={isUploadingAvatar}
+                    className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all"
+                  >
+                    {isUploadingAvatar
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
+                      : <Camera className="w-3.5 h-3.5 text-gray-600" />}
+                  </button>
                 </div>
-                <p className="text-[13px] text-white/80 mb-3">
-                  {profile.jobTitle}
-                  {profile.department !== "—" && <> &nbsp;·&nbsp; {profile.department}</>}
-                </p>
-                <div className="flex flex-col sm:flex-row sm:flex-wrap items-center sm:items-center gap-y-1.5 gap-x-5">
-                  <div className="flex items-center gap-1.5 text-[12.5px] text-white/90">
-                    <Mail className="w-3.5 h-3.5 text-white/70 shrink-0" />{profile.email}
+
+                {/* Info */}
+                <div className="flex-1 min-w-0 text-center sm:text-left">
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-1.5">
+                    <h2 className="text-[19px] sm:text-[21px] font-bold text-white leading-tight">{profile.displayName}</h2>
+                    <RolePill role={profile.role} onBanner />
                   </div>
-                  {profile.phone !== "—" && (
+                  <p className="text-[13px] text-white/80 mb-3">
+                    {profile.jobTitle}
+                    {profile.department !== "—" && <> &nbsp;·&nbsp; {profile.department}</>}
+                  </p>
+                  <div className="flex flex-col sm:flex-row sm:flex-wrap items-center sm:items-center gap-y-1.5 gap-x-5">
                     <div className="flex items-center gap-1.5 text-[12.5px] text-white/90">
-                      <Phone className="w-3.5 h-3.5 text-white/70 shrink-0" />{profile.phone}
+                      <Mail className="w-3.5 h-3.5 text-white/70 shrink-0" />{profile.email}
                     </div>
-                  )}
-                  {profile.workLocation !== "—" && (
-                    <div className="flex items-center gap-1.5 text-[12.5px] text-white/90">
-                      <MapPin className="w-3.5 h-3.5 text-white/70 shrink-0" />{profile.workLocation}
-                    </div>
-                  )}
+                    {profile.phone !== "—" && (
+                      <div className="flex items-center gap-1.5 text-[12.5px] text-white/90">
+                        <Phone className="w-3.5 h-3.5 text-white/70 shrink-0" />{profile.phone}
+                      </div>
+                    )}
+                    {profile.workLocation !== "—" && (
+                      <div className="flex items-center gap-1.5 text-[12.5px] text-white/90">
+                        <MapPin className="w-3.5 h-3.5 text-white/70 shrink-0" />{profile.workLocation}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </Card>
+          </Card>
 
-        {/* ── Main grid ─────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          {/* ── Main grid ─────────────────────────────────────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-          {/* ── Left / main column (2 cols) ──────────────────────────────── */}
-          <div className="lg:col-span-2 space-y-5">
+            {/* ── Left / main column (2 cols) ──────────────────────────────── */}
+            <div className="lg:col-span-2 space-y-5">
 
-             {/* About Me */}
-            <Card className="overflow-hidden">
-              <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-indigo-50/60 border-b border-indigo-100">
-                <SectionHeading icon={Sparkles} title="About Me" color="bg-indigo-100 text-indigo-600" />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1.5 text-[12px] text-gray-500 hover:text-gray-800"
-                  onClick={() => setEditProfileOpen(true)}
-                >
-                  <Pencil className="w-3 h-3" />Edit
-                </Button>
-              </div>
-              <div className="p-4 sm:p-5">
-                <p className="text-[12.5px] text-gray-600 leading-relaxed mb-4 pl-3 border-l-2 border-indigo-100">
-                  {profile.bio ||
-                    <span className="text-gray-400 italic">Tell your teammates a bit about yourself.</span>}
-                </p>
-                {profile.skills.length > 0 && (
-                  <>
-                    <p className="text-[12px] font-semibold text-gray-700 mb-2">Skills</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {profile.skills.map((s) => (
-                        <SkillTag key={s} label={s} />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            </Card>
-
-            {/* Personal Information */}
-            <Card className="overflow-hidden">
-              <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-blue-50/60 border-b border-blue-100">
-                <SectionHeading icon={IdCard} title="Personal Information" color="bg-blue-100 text-blue-600" />
-              </div>
-              <div className="px-4 sm:px-5 py-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6">
-                <InfoRow icon={BadgeCheck}  label="Employee ID"       value={profile.employeeId}       colorIndex={0} />
-                <InfoRow icon={UserCheck}   label="Reporting Manager" value={profile.reportingManager} colorIndex={1} />
-                <InfoRow icon={MapPin}      label="Work Location"     value={profile.workLocation}     colorIndex={2} />
-                <InfoRow icon={Building2}   label="Department"        value={profile.department}       colorIndex={3} />
-                <InfoRow icon={Briefcase}   label="Designation"       value={profile.jobTitle}         colorIndex={4} />
-                <InfoRow icon={Phone}       label="Mobile Number"     value={profile.phone}             colorIndex={5} />
-              </div>
-            </Card>
-
-            {/* Work Details -- normally sits in the right column, but when
-               there's no Activity Summary below to fill this column out,
-               it moves up here instead so the two columns end at roughly
-               the same height. */}
-            {!hasActivitySummary && workDetailsCard}
-
-            {/* Activity Summary — moved to left column. */}
-            {hasActivitySummary && (
+              {/* About Me */}
               <Card className="overflow-hidden">
-                <div className="px-4 sm:px-5 py-3 bg-amber-50/60 border-b border-amber-100">
-                  <SectionHeading icon={BarChart3} title="Activity Summary" color="bg-amber-100 text-amber-600" />
-                </div>
-                <div className="p-4 sm:p-5">
-                  <div className="grid grid-cols-3 gap-3 mb-4">
-                    {[
-                      { icon: CalendarCheck2, value: activitySummary.totalBookings,    label: "Total Bookings",    bg: "bg-indigo-100", iconBg: "bg-indigo-500", num: "text-indigo-700", sub: "text-indigo-500" },
-                      { icon: CalendarClock,  value: activitySummary.upcomingBookings, label: "Upcoming Bookings", bg: "bg-amber-100",  iconBg: "bg-amber-500",  num: "text-amber-700",  sub: "text-amber-500" },
-                      { icon: History,        value: activitySummary.pastBookings,     label: "Past Bookings",     bg: "bg-violet-100", iconBg: "bg-violet-500", num: "text-violet-700", sub: "text-violet-500" },
-                    ].map(({ icon: Icon, value, label, bg, iconBg, num, sub }) => (
-                      <div key={label} className={`flex flex-col items-center justify-center p-3 rounded-xl ${bg} text-center hover:shadow-sm transition-shadow duration-200`}>
-                        <div className={`w-8 h-8 rounded-full ${iconBg} flex items-center justify-center mb-2`}>
-                          <Icon className="w-4 h-4 text-white" />
-                        </div>
-                        <p className={`text-[22px] font-bold ${num} leading-none`}>{value}</p>
-                        <p className={`text-[11px] ${sub} font-medium mt-1 leading-tight`}>{label}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setHistoryOpen(true)}
-                    className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 active:scale-[0.99] transition-all duration-200 group"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center shrink-0">
-                      <History className="w-4 h-4 text-white" />
-                    </div>
-                    <span className="flex-1 text-left text-[12.5px] font-semibold text-indigo-600">View Booking History</span>
-                    <ChevronRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-0.5 group-hover:text-indigo-600 transition-all shrink-0" />
-                  </button>
-                </div>
-              </Card>
-            )}
-          </div>
-
-          {/* ── Right column ─────────────────────────────────────────────── */}
-          <div className="space-y-5">
-
-            {hasActivitySummary && workDetailsCard}
-
-            {/* Preferences — moved to right column */}
-            <Card className="overflow-hidden">
-              <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-violet-50/60 border-b border-violet-100">
-                <SectionHeading icon={SlidersHorizontal} title="Preferences" color="bg-violet-100 text-violet-600" />
-                {prefErr ? (
-                  <span className="text-[11px] text-amber-500 flex items-center gap-1">
-                    <TriangleAlert className="w-3 h-3" />{prefErr.message}
-                  </span>
-                ) : (
+                <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-indigo-50/60 border-b border-indigo-100">
+                  <SectionHeading icon={Sparkles} title="About Me" color="bg-indigo-100 text-indigo-600" />
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-7 gap-1.5 text-[12px] text-gray-500 hover:text-gray-800"
-                    onClick={() => setEditPrefsOpen(true)}
+                    onClick={() => setEditProfileOpen(true)}
                   >
                     <Pencil className="w-3 h-3" />Edit
                   </Button>
-                )}
-              </div>
-              <div className="px-4 sm:px-5 py-1">
-                <PrefDisplayRow
-                  icon={Building}
-                  label="Default Office"
-                  value={preferences.preferredOfficeName}
-                  color="bg-blue-100"
-                  iconColor="text-blue-600"
-                />
-                <PrefDisplayRow
-                  icon={Building2}
-                  label="Default Building"
-                  value={preferences.preferredBuildingName}
-                  color="bg-indigo-100"
-                  iconColor="text-indigo-600"
-                />
-                <PrefDisplayRow
-                  icon={Layers}
-                  label="Default Floor"
-                  value={preferences.preferredFloorName}
-                  color="bg-violet-100"
-                  iconColor="text-violet-600"
-                />
-              </div>
-              <div className="px-4 sm:px-5 pb-4">
-                <p className="text-[11px] text-gray-400 font-medium mb-2">Default Amenity Preferences</p>
-                {preferences.preferredAmenities.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {preferences.preferredAmenities.map((a) => (
-                      <AmenityChip key={a.id} name={a.name} category={a.category} />
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-[12px] text-gray-400 italic border border-dashed border-gray-200 rounded-lg px-3 py-2.5 text-center">
-                    No amenities selected.
+                </div>
+                <div className="p-4 sm:p-5">
+                  <p className="text-[12.5px] text-gray-600 leading-relaxed mb-4 pl-3 border-l-2 border-indigo-100">
+                    {profile.bio ||
+                      <span className="text-gray-400 italic">Tell your teammates a bit about yourself.</span>}
                   </p>
-                )}
-              </div>
-            </Card>
+                  {profile.skills.length > 0 && (
+                    <>
+                      <p className="text-[12px] font-semibold text-gray-700 mb-2">Skills</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {profile.skills.map((s) => (
+                          <SkillTag key={s} label={s} />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </Card>
 
+              {/* Personal Information */}
+              <Card className="overflow-hidden">
+                <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-blue-50/60 border-b border-blue-100">
+                  <SectionHeading icon={IdCard} title="Personal Information" color="bg-blue-100 text-blue-600" />
+                </div>
+                <div className="px-4 sm:px-5 py-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+                  <InfoRow icon={BadgeCheck} label="Employee ID" value={profile.employeeId} colorIndex={0} />
+                  <InfoRow icon={UserCheck} label="Reporting Manager" value={profile.reportingManager} colorIndex={1} />
+                  <InfoRow icon={MapPin} label="Work Location" value={profile.workLocation} colorIndex={2} />
+                  <InfoRow icon={Building2} label="Department" value={profile.department} colorIndex={3} />
+                  <InfoRow icon={Briefcase} label="Designation" value={profile.jobTitle} colorIndex={4} />
+                  <InfoRow icon={Phone} label="Mobile Number" value={profile.phone} colorIndex={5} />
+                </div>
+              </Card>
+
+              {/* Work Details -- normally sits in the right column, but when
+               there's no Activity Summary below to fill this column out,
+               it moves up here instead so the two columns end at roughly
+               the same height. */}
+              {!hasActivitySummary && workDetailsCard}
+
+              {/* Activity Summary — moved to left column. */}
+              {hasActivitySummary && (
+                <Card className="overflow-hidden">
+                  <div className="px-4 sm:px-5 py-3 bg-amber-50/60 border-b border-amber-100">
+                    <SectionHeading icon={BarChart3} title="Activity Summary" color="bg-amber-100 text-amber-600" />
+                  </div>
+                  <div className="p-4 sm:p-5">
+                    <div className="grid grid-cols-3 gap-3 mb-4">
+                      {[
+                        { icon: CalendarCheck2, value: activitySummary.totalBookings, label: "Total Bookings", bg: "bg-indigo-100", iconBg: "bg-indigo-500", num: "text-indigo-700", sub: "text-indigo-500" },
+                        { icon: CalendarClock, value: activitySummary.upcomingBookings, label: "Upcoming Bookings", bg: "bg-amber-100", iconBg: "bg-amber-500", num: "text-amber-700", sub: "text-amber-500" },
+                        { icon: History, value: activitySummary.pastBookings, label: "Past Bookings", bg: "bg-violet-100", iconBg: "bg-violet-500", num: "text-violet-700", sub: "text-violet-500" },
+                      ].map(({ icon: Icon, value, label, bg, iconBg, num, sub }) => (
+                        <div key={label} className={`flex flex-col items-center justify-center p-3 rounded-xl ${bg} text-center hover:shadow-sm transition-shadow duration-200`}>
+                          <div className={`w-8 h-8 rounded-full ${iconBg} flex items-center justify-center mb-2`}>
+                            <Icon className="w-4 h-4 text-white" />
+                          </div>
+                          <p className={`text-[22px] font-bold ${num} leading-none`}>{value}</p>
+                          <p className={`text-[11px] ${sub} font-medium mt-1 leading-tight`}>{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => setHistoryOpen(true)}
+                      className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 active:scale-[0.99] transition-all duration-200 group"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center shrink-0">
+                        <History className="w-4 h-4 text-white" />
+                      </div>
+                      <span className="flex-1 text-left text-[12.5px] font-semibold text-indigo-600">View Booking History</span>
+                      <ChevronRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-0.5 group-hover:text-indigo-600 transition-all shrink-0" />
+                    </button>
+                  </div>
+                </Card>
+              )}
+            </div>
+
+            {/* ── Right column ─────────────────────────────────────────────── */}
+            <div className="space-y-5">
+
+              {hasActivitySummary && workDetailsCard}
+
+              {/* Preferences — moved to right column */}
+              <Card className="overflow-hidden">
+                <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-violet-50/60 border-b border-violet-100">
+                  <SectionHeading icon={SlidersHorizontal} title="Preferences" color="bg-violet-100 text-violet-600" />
+                  {prefErr ? (
+                    <span className="text-[11px] text-amber-500 flex items-center gap-1">
+                      <TriangleAlert className="w-3 h-3" />{prefErr.message}
+                    </span>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 text-[12px] text-gray-500 hover:text-gray-800"
+                      onClick={() => setEditPrefsOpen(true)}
+                    >
+                      <Pencil className="w-3 h-3" />Edit
+                    </Button>
+                  )}
+                </div>
+                <div className="px-4 sm:px-5 py-1">
+                  <PrefDisplayRow
+                    icon={Building}
+                    label="Default Office"
+                    value={preferences.preferredOfficeName}
+                    inactive={preferences.preferredOfficeInactive}
+                    color="bg-blue-100"
+                    iconColor="text-blue-600"
+                  />
+                  <PrefDisplayRow
+                    icon={Building2}
+                    label="Default Building"
+                    value={preferences.preferredBuildingName}
+                    inactive={preferences.preferredBuildingInactive}
+                    color="bg-indigo-100"
+                    iconColor="text-indigo-600"
+                  />
+                  <PrefDisplayRow
+                    icon={Layers}
+                    label="Default Floor"
+                    value={preferences.preferredFloorName}
+                    inactive={preferences.preferredFloorInactive}
+                    color="bg-violet-100"
+                    iconColor="text-violet-600"
+                  />
+                </div>
+                <div className="px-4 sm:px-5 pb-4">
+                  <p className="text-[11px] text-gray-400 font-medium mb-2">Default Amenity Preferences</p>
+                  {preferences.preferredAmenities.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {preferences.preferredAmenities.map((a) => (
+                        <AmenityChip key={a.id} name={a.name} category={a.category} />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[12px] text-gray-400 italic border border-dashed border-gray-200 rounded-lg px-3 py-2.5 text-center">
+                      No amenities selected.
+                    </p>
+                  )}
+                </div>
+              </Card>
+
+            </div>
           </div>
         </div>
-      </div>
       </div>
     </>
   );

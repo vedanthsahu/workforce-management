@@ -49,7 +49,6 @@ class MemoryService:
             "current_menu_id": session.current_menu_id,
             "created_at": self._iso(session.created_at),
             "updated_at": self._iso(session.updated_at),
-            "expires_at": self._iso(session.expires_at),
         }
         await self._set_json(self._session_key(session.id), payload)
 
@@ -150,7 +149,7 @@ class MemoryService:
 
     @staticmethod
     def _ttl_seconds() -> int:
-        return max(60, settings.SESSION_TTL_MINUTES * 60)
+        return max(60, settings.CHAT_MEMORY_CACHE_TTL_MINUTES * 60)
 
     @staticmethod
     def _iso(value: Any) -> str | None:

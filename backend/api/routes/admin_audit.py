@@ -11,6 +11,7 @@ from psycopg2.extensions import connection as PGConnection
 from backend.api.deps import require_any_permission
 from backend.db.connection import get_db
 from backend.schemas.audit import (
+    AuditCategory,
     AuditLogDetailResponse,
     AuditLogListResponse,
     AuditSortBy,
@@ -27,10 +28,10 @@ router = APIRouter(prefix="/admin", tags=["admin-audit"])
     summary="Search the tenant-wide audit log",
     description=(
         "Admin Audit Logs listing: tenant-scoped audit_logs rows with optional "
-        "action, module, entity type, status, date range (or relative "
+        "action, module, entity type, date range (or relative "
         "lastSeconds window), and actor-name search filters, plus sorting and "
         "pagination -- all applied server-side -- and a summary of counts "
-        "(total/successful/failed events, unique actors) over the filtered "
+        "(total/successful events and unique actors) over the filtered "
         "dataset for the page's summary cards. lastSeconds, when given, takes "
         "precedence over startDate/endDate. Also returns filter_options -- "
         "every distinct (module, entity_type, action) triple that exists for "
@@ -74,9 +75,9 @@ def admin_audit_logs(
         str | None,
         Query(description="Exact match on audit_logs.entity_type, e.g. 'building'."),
     ] = None,
-    event_status: Annotated[
-        str | None,
-        Query(alias="status", description="Exact match on audit_logs.event_status: SUCCESS, FAILURE, or DENIED."),
+    category: Annotated[
+        AuditCategory | None,
+        Query(description="Successful activity category selected from a summary card."),
     ] = None,
     start_date: Annotated[
         date | None,
@@ -101,7 +102,13 @@ def admin_audit_logs(
     ] = None,
     search: Annotated[
         str | None,
-        Query(min_length=1, description="Partial, case-insensitive match on actor name only -- for the type-ahead search box."),
+        Query(
+            min_length=1,
+            description=(
+                "Partial, case-insensitive match across activity, person, "
+                "email, resource type, and resource identifier."
+            ),
+        ),
     ] = None,
     sort_by: Annotated[
         AuditSortBy,
@@ -120,7 +127,7 @@ def admin_audit_logs(
         action=action,
         module=module,
         entity_type=entity,
-        event_status=event_status,
+        category=category,
         start_date=start_date,
         end_date=end_date,
         last_seconds=last_seconds,
@@ -138,8 +145,9 @@ def admin_audit_logs(
     summary="Get one audit log entry",
     description=(
         "Return the full detail of a single tenant-scoped audit_logs row -- "
-        "including the old/new-values JSON diff, request metadata, IP address "
-        "and user agent -- for the admin Audit Logs detail drawer. "
+        "including a redacted old/new-values diff and request/correlation "
+        "identifiers -- for the admin Audit Logs detail drawer. Raw failure "
+        "details and technical request payloads are not returned. "
         "Requires admin_dashboard:view or an admin role."
     ),
     responses={

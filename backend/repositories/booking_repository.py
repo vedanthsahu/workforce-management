@@ -18,6 +18,43 @@ _SEAT_DATE_LOCK_CLASS = 1
 _SUBJECT_DATE_LOCK_CLASS = 2
 
 
+def acquire_seat_date_lock(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    seat_id: str,
+    booking_date: date,
+) -> None:
+    """Serialize concurrent booking attempts for the same seat+date within
+    this transaction. See acquire_booking_slot_locks for the full rationale;
+    use this directly only when there's no subject to also lock."""
+    seat_key = f"{tenant_id}:seat:{seat_id}:{booking_date.isoformat()}"
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT pg_advisory_xact_lock(%s::int, hashtext(%s))",
+            (_SEAT_DATE_LOCK_CLASS, seat_key),
+        )
+
+
+def acquire_subject_date_lock(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    subject_id: str,
+    booking_date: date,
+) -> None:
+    """Serialize concurrent booking attempts for the same subject
+    (employee or guest)+date within this transaction, e.g. a visit/booking
+    creation path that has no seat yet to also lock. See
+    acquire_booking_slot_locks for the full rationale."""
+    subject_key = f"{tenant_id}:subject:{subject_id}:{booking_date.isoformat()}"
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT pg_advisory_xact_lock(%s::int, hashtext(%s))",
+            (_SUBJECT_DATE_LOCK_CLASS, subject_key),
+        )
+
+
 def acquire_booking_slot_locks(
     conn: PGConnection,
     *,
@@ -41,17 +78,8 @@ def acquire_booking_slot_locks(
     that order, so two transactions racing for different (seat, subject)
     pairs can never deadlock on each other.
     """
-    seat_key = f"{tenant_id}:seat:{seat_id}:{booking_date.isoformat()}"
-    subject_key = f"{tenant_id}:subject:{subject_id}:{booking_date.isoformat()}"
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT pg_advisory_xact_lock(%s::int, hashtext(%s))",
-            (_SEAT_DATE_LOCK_CLASS, seat_key),
-        )
-        cur.execute(
-            "SELECT pg_advisory_xact_lock(%s::int, hashtext(%s))",
-            (_SUBJECT_DATE_LOCK_CLASS, subject_key),
-        )
+    acquire_seat_date_lock(conn, tenant_id=tenant_id, seat_id=seat_id, booking_date=booking_date)
+    acquire_subject_date_lock(conn, tenant_id=tenant_id, subject_id=subject_id, booking_date=booking_date)
 
 
 def _apply_seat_and_date_filters(
@@ -131,6 +159,8 @@ BOOKING_SELECT_FIELDS = """
     b.modified_from_booking_id::text AS modified_from_booking_id,
     b.modification_reason,
 
+    gv.modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
+
     b.created_at,
     b.updated_at,
 
@@ -199,6 +229,7 @@ BOOKING_SELECT_FROM = """
         ON updated_by.id = b.updated_by_user_id
        AND updated_by.tenant_id = b.tenant_id
 """
+
 
 def fetch_future_delegated_guest_visits_without_booking(
     conn: PGConnection,
@@ -455,6 +486,9 @@ def fetch_current_delegated_guest_visits_without_booking(
                 ON b.guest_visit_id = gv.id
                AND b.booking_type = 'GUEST'
                AND b.tenant_id = gv.tenant_id
+               -- A cancelled space must not hide today's visit; it stays
+               -- listed as a visit-only row (same rule as the future query).
+               AND b.booking_status <> 'CANCELLED'
 
             LEFT JOIN app_users creator
                 ON creator.id = gv.created_by_user_id
@@ -605,6 +639,8 @@ def fetch_past_delegated_guest_visits_without_booking(
                 ON b.guest_visit_id = gv.id
                AND b.booking_type = 'GUEST'
                AND b.tenant_id = gv.tenant_id
+               -- A cancelled space must not hide the visit (see the today query).
+               AND b.booking_status <> 'CANCELLED'
 
             LEFT JOIN app_users creator
                 ON creator.id = gv.created_by_user_id
@@ -1792,6 +1828,57 @@ def fetch_cancelled_delegated_bookings(
         rows = cur.fetchall()
 
     return [dict(row) for row in rows ]
+
+
+def fetch_cancelled_guest_bookings_with_active_visit(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    user_id: str,
+    booking_date: date | None = None,
+) -> list[dict[str, Any]]:
+    """Guest seat bookings cancelled on their own, for the facilitator who
+    booked or created that visit.
+
+    Covers a visit that is still active, and a visit cancelled later than its
+    seat. A seat cancelled together with its visit (same transaction, so the
+    same cancelled_at) is already covered by fetch_cancelled_guest_visits and
+    is left out. The row carries who cancelled it through the shared
+    BOOKING_SELECT_FIELDS (updated_by_name)."""
+    query = f"""
+        SELECT {BOOKING_SELECT_FIELDS}
+        {BOOKING_SELECT_FROM}
+
+        WHERE b.tenant_id = %s
+          AND (b.booked_by_user_id = %s OR gv.created_by_user_id = %s)
+          AND b.booking_type = 'GUEST'
+          AND b.booking_status = 'CANCELLED'
+          AND (
+                gv.visit_status NOT IN ('CANCELLED', 'MODIFIED')
+                OR (
+                    gv.visit_status = 'CANCELLED'
+                    AND b.cancelled_at < gv.cancelled_at
+                )
+          )
+    """
+    params: list[Any] = [tenant_id, user_id, user_id]
+
+    query, params = _apply_seat_and_date_filters(
+        query,
+        params,
+        seat_id=None,
+        booking_date=booking_date,
+    )
+
+    query += " ORDER BY b.updated_at DESC"
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(query, params)
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
+
+
 def fetch_cancelled_bookings_for_user(
     conn: PGConnection,
     *,
@@ -2707,18 +2794,11 @@ def _build_admin_booking_filters(
     row's own visit_status (see BOOKING_SELECT_FROM's gv join). Since only
     GUEST-type rows have a guest_visit at all, a visit_status filter
     naturally excludes EMPLOYEE rows (gv is NULL for those)."""
-    conditions = [
-        "b.tenant_id = %s",
-        # A seat-only cancellation is represented as one seatless MODIFIED
-        # guest-visit row. Keep the cancelled booking only when its guest
-        # visit was cancelled too, so that row retains the booking details.
-        (
-            "NOT (b.booking_type = 'GUEST' "
-            "AND b.booking_status = 'CANCELLED' "
-            "AND gv.visit_status IS NOT NULL "
-            "AND gv.visit_status <> 'CANCELLED')"
-        ),
-    ]
+    # A seat-only cancellation on a still-active guest visit is two separate
+    # operations, so both rows stay in the list: the cancelled seat booking
+    # ("Cancelled by ...") and the seatless guest-visit row shown as MODIFIED
+    # (see fetch_admin_guest_visits_without_booking).
+    conditions = ["b.tenant_id = %s"]
     params: list[Any] = [tenant_id]
 
     if start_date is not None:

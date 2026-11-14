@@ -74,8 +74,9 @@ class AdminBookingsRepositoryFilterTests(unittest.TestCase):
         sql, params = cursor.executions[0]
         self.assertIn("WHERE b.tenant_id = %s", sql)
         self.assertIn("b.booking_status <> 'MODIFIED'", sql)
-        self.assertIn("b.booking_status = 'CANCELLED'", sql)
-        self.assertIn("gv.visit_status <> 'CANCELLED'", sql)
+        # A cancelled seat on a still-active guest visit stays in the list as
+        # its own row, next to the MODIFIED visit row.
+        self.assertNotIn("gv.visit_status <> 'CANCELLED'", sql)
         self.assertNotIn("AND b.site_id", sql)
         self.assertNotIn("ILIKE", sql)
         self.assertNotIn("LIMIT", sql)

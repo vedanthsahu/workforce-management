@@ -175,6 +175,7 @@ class GuestWorkflowTests(unittest.TestCase):
             tenant_id="1",
             guest_visit_id="60",
             modification_reason="OTHER",
+            updated_by_user_id="10",
         )
         self.assertEqual(insert_visit.call_args.kwargs["guest_id"], "50")
         self.assertEqual(insert_visit.call_args.kwargs["site_id"], "5")
@@ -246,6 +247,9 @@ class GuestWorkflowTests(unittest.TestCase):
             },
         ), patch.object(
             guest_service,
+            "acquire_booking_slot_locks",
+        ), patch.object(
+            guest_service,
             "guest_has_active_booking_on_date",
             return_value=False,
         ), patch.object(
@@ -297,6 +301,7 @@ class GuestWorkflowTests(unittest.TestCase):
             tenant_id="1",
             guest_visit_id="60",
             modification_reason="OTHER",
+            updated_by_user_id="10",
         )
         self.assertNotIn("modification_reason", insert_visit.call_args.kwargs)
         self.assertEqual(insert_visit.call_args.kwargs["guest_id"], "50")
@@ -311,57 +316,45 @@ class GuestWorkflowTests(unittest.TestCase):
         self.assertEqual(response.booking.guest_visit_id, "61")
         self.assertEqual(conn.commits, 1)
 
-    def test_add_booking_uses_existing_visit_as_source_of_truth(self) -> None:
+    def _run_add_booking(self, payload, visit, new_booking, replacement_visit=None):
+        """Run ADD_BOOKING with collaborators patched; returns (response, mocks)."""
         conn = FakeConnection()
-        visit = _visit()
-        new_booking = _booking(booking_id="201")
-        payload = _payload(GuestWorkflowAction.ADD_BOOKING)
+        fetches = [visit, replacement_visit or visit]
         with patch.object(
             guest_service,
             "fetch_guest_visit_by_id_for_update",
-            side_effect=[visit, visit],
+            side_effect=fetches,
         ), patch.object(
-            guest_service,
-            "fetch_active_booking_for_guest_visit",
-            return_value=None,
+            guest_service, "fetch_active_booking_for_guest_visit", return_value=None,
         ), patch.object(
-            guest_service,
-            "_resolve_guest",
-            return_value={},
+            guest_service, "_resolve_guest", return_value={},
         ), patch.object(
-            guest_service,
-            "_validate_visit_location",
+            guest_service, "_validate_visit_location",
         ), patch.object(
             guest_service,
             "_resolve_seat",
-            return_value={
-                "seat_id": "31",
-                "site_id": "2",
-                "building_id": "3",
-                "floor_id": "4",
-            },
-        ) as resolve_seat, patch.object(
-            guest_service,
-            "guest_has_active_booking_on_date",
-            return_value=False,
+            return_value={"seat_id": "31", "site_id": "2", "building_id": "3", "floor_id": "4"},
         ), patch.object(
             guest_service,
-            "has_active_booking_conflict",
-            return_value=False,
+            "acquire_booking_slot_locks",
         ), patch.object(
-            guest_service,
-            "insert_guest_booking",
-            return_value=new_booking,
+            guest_service, "guest_has_active_booking_on_date", return_value=False,
+        ), patch.object(
+            guest_service, "has_active_booking_conflict", return_value=False,
+        ), patch.object(
+            guest_service, "insert_guest_booking", return_value=new_booking,
         ) as insert_booking, patch.object(
+            guest_service, "update_guest_visit_booking_details",
+        ) as update_visit, patch.object(
+            guest_service, "mark_guest_visit_modified",
+        ) as mark_visit, patch.object(
             guest_service,
-            "update_guest_visit_booking_details",
+            "insert_guest_visit",
+            return_value=replacement_visit,
+        ) as insert_visit, patch.object(
+            guest_service, "recalculate_guest_visit_requires_seat",
         ), patch.object(
-            guest_service,
-            "recalculate_guest_visit_requires_seat",
-        ), patch.object(
-            guest_service,
-            "fetch_booking_by_id",
-            return_value=new_booking,
+            guest_service, "fetch_booking_by_id", return_value=new_booking,
         ):
             response = guest_service.execute_guest_visit_workflow(
                 conn,
@@ -369,17 +362,79 @@ class GuestWorkflowTests(unittest.TestCase):
                 guest_visit_id="60",
                 payload=payload,
             )
+        mocks = {
+            "insert_booking": insert_booking,
+            "update_visit": update_visit,
+            "mark_visit": mark_visit,
+            "insert_visit": insert_visit,
+        }
+        return response, mocks
 
-        self.assertEqual(resolve_seat.call_args.kwargs["site_id"], "5")
-        self.assertEqual(resolve_seat.call_args.kwargs["floor_id"], "7")
+    def test_add_booking_same_date_and_location_keeps_visit(self) -> None:
+        visit = _visit()
+        payload = _payload(
+            GuestWorkflowAction.ADD_BOOKING,
+            site_id=2,
+            building_id=3,
+            floor_id=4,
+            visit_date=visit["visit_date"],
+        )
+        response, mocks = self._run_add_booking(
+            payload, visit, _booking(booking_id="201")
+        )
+
+        mocks["mark_visit"].assert_not_called()
+        mocks["insert_visit"].assert_not_called()
         self.assertEqual(
-            insert_booking.call_args.kwargs["booking_date"],
-            payload.visit_date,
+            mocks["insert_booking"].call_args.kwargs["guest_visit_id"], "60"
+        )
+        # Nothing is replaced, but the visit itself still records who added
+        # the seat -- same resource, kept in sync.
+        self.assertEqual(
+            mocks["update_visit"].call_args.kwargs["updated_by_user_id"], "10"
         )
         self.assertEqual(response.guest_visit.guest_visit_id, "60")
-        self.assertIsNotNone(response.booking)
         self.assertEqual(response.booking.booking_id, "201")
-        self.assertEqual(conn.commits, 1)
+
+    def test_add_booking_with_changed_date_or_location_modifies_visit(self) -> None:
+        visit = _visit()
+        replacement = _visit(
+            guest_visit_id="61",
+            site_id="5",
+            building_id="6",
+            floor_id="7",
+            visit_date=_future_date(20),
+        )
+        payload = _payload(GuestWorkflowAction.ADD_BOOKING)
+        response, mocks = self._run_add_booking(
+            payload,
+            visit,
+            _booking(booking_id="201", guest_visit_id="61"),
+            replacement_visit={**replacement, "guest_visit_id": "61"},
+        )
+
+        mocks["mark_visit"].assert_called_once()
+        self.assertEqual(
+            mocks["mark_visit"].call_args.kwargs["guest_visit_id"], "60"
+        )
+        self.assertEqual(
+            mocks["insert_visit"].call_args.kwargs["modified_from_guest_visit_id"],
+            "60",
+        )
+        # The list shows "Modified by <name>", so the actor is recorded on
+        # both the replacement visit and its booking.
+        self.assertEqual(
+            mocks["insert_visit"].call_args.kwargs["updated_by_user_id"], "10"
+        )
+        self.assertEqual(
+            mocks["insert_booking"].call_args.kwargs["updated_by_user_id"], "10"
+        )
+        # The original visit row is never overwritten.
+        mocks["update_visit"].assert_not_called()
+        self.assertEqual(
+            mocks["insert_booking"].call_args.kwargs["guest_visit_id"], "61"
+        )
+        self.assertEqual(response.guest_visit.guest_visit_id, "61")
 
     def test_cancel_booking_keeps_visit_active(self) -> None:
         conn = FakeConnection()
@@ -403,6 +458,9 @@ class GuestWorkflowTests(unittest.TestCase):
             "cancel_guest_visit",
         ) as cancel_visit, patch.object(
             guest_service,
+            "touch_guest_visit_for_booking_change",
+        ) as touch_visit, patch.object(
+            guest_service,
             "recalculate_guest_visit_requires_seat",
         ), patch.object(
             guest_service,
@@ -421,6 +479,13 @@ class GuestWorkflowTests(unittest.TestCase):
 
         cancel_booking.assert_called_once()
         cancel_visit.assert_not_called()
+        touch_visit.assert_called_once_with(
+            conn,
+            tenant_id="1",
+            guest_visit_id="60",
+            updated_by_user_id="10",
+            modification_reason="Seat not needed",
+        )
         self.assertEqual(response.guest_visit.guest_visit_id, "60")
         self.assertIsNotNone(response.booking)
         self.assertEqual(response.booking.booking_id, "200")
@@ -529,6 +594,9 @@ class GuestWorkflowTests(unittest.TestCase):
                 "building_id": "6",
                 "floor_id": "7",
             },
+        ), patch.object(
+            guest_service,
+            "acquire_booking_slot_locks",
         ), patch.object(
             guest_service,
             "guest_has_active_booking_on_date",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuthContext } from "@/features/auth/context/AuthContext";
 import { securityService } from "../services/security.service";
 import { mapApiGuestVisitToVisitor, mapApiSummary } from "../utils/security.utils";
@@ -74,7 +75,7 @@ export const useSecurityDashboard = () => {
       setVisitors(res.items.map(mapApiGuestVisitToVisitor));
     } catch (err) {
       console.error("Error fetching guest visits", err);
-      setError("Failed to load dashboard data");
+      setError(getApiErrorMessage(err, "We couldn't load the visitor dashboard. Please try again."));
     } finally {
       if (!silent) setLoading(false);
     }

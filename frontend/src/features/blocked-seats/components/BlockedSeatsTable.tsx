@@ -1,5 +1,5 @@
 import { displaySpaceCode } from "@/lib/spaceCode";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import Pagination from "@/features/offices/components/OfficePagination";
 import type { BlockedSeat } from "../types/blockedSeats.types";
 import BlockedSeatActionMenu, {
   type BlockedSeatAction,
@@ -229,27 +229,9 @@ export default function BlockedSeatsTable({
           {total ? Math.min(start + rows.length - 1, total) : 0} of {total}{" "}
           entries
         </span>
-        {total > pageSize && (
-          <div className="flex items-center gap-2 self-center sm:self-auto">
-            <button
-              disabled={page <= 1}
-              onClick={() => onPageChange(page - 1)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
-            >
-              <ChevronLeft size={15} />
-            </button>
-            <button className="h-8 min-w-8 rounded-lg border border-indigo-600 bg-indigo-50 font-semibold text-indigo-600">
-              {page}
-            </button>
-            <button
-              disabled={page >= totalPages}
-              onClick={() => onPageChange(page + 1)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
-            >
-              <ChevronRight size={15} />
-            </button>
-          </div>
-        )}
+        <div className="self-center sm:self-auto">
+          <Pagination currentPage={page} totalPages={totalPages} onPageChange={onPageChange} />
+        </div>
       </footer>
     </section>
   );

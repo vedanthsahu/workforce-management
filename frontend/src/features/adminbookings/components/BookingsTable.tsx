@@ -1,13 +1,13 @@
 "use client";
 
 import { displaySpaceCode } from "@/lib/spaceCode";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Eye, MoreVertical, Pencil, XCircle } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarPlus, ChevronLeft, ChevronRight, Eye, MoreVertical, Pencil, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { todayIsoInIndia } from "@/lib/indiaDate";
 import { AdminBooking } from "../types/adminBooking.types";
-import { BOOKING_STATUS_STYLES } from "../utils/constants";
+import { BOOKING_STATUS_STYLES, MUTABLE_BOOKING_STATUSES } from "../utils/constants";
 import { getBookingRowKey } from "../utils/mapAdminBooking";
 
 type Props = {
@@ -22,6 +22,8 @@ type Props = {
   onView: (booking: AdminBooking) => void;
   onModifySeat: (booking: AdminBooking) => void;
   onModifyVisit: (booking: AdminBooking) => void;
+  /** Adds a seat to a visit-only guest invite. */
+  onAddBooking: (booking: AdminBooking) => void;
   onCancelSeat: (booking: AdminBooking) => void;
   onCancelVisit: (booking: AdminBooking) => void;
 };
@@ -31,6 +33,7 @@ function RowMenu({
   onView,
   onModifySeat,
   onModifyVisit,
+  onAddBooking,
   onCancelSeat,
   onCancelVisit,
 }: {
@@ -38,6 +41,7 @@ function RowMenu({
   onView: (b: AdminBooking) => void;
   onModifySeat: (b: AdminBooking) => void;
   onModifyVisit: (b: AdminBooking) => void;
+  onAddBooking: (b: AdminBooking) => void;
   onCancelSeat: (b: AdminBooking) => void;
   onCancelVisit: (b: AdminBooking) => void;
 }) {
@@ -50,7 +54,12 @@ function RowMenu({
   const isGuest = booking.person_type === "Guest";
   const hasVisit = isGuest && !!booking.guest_visit_id;
   const hasBooking = !!booking.booking_id;
-  const canMutate = booking.status !== "Cancelled" && booking.activity_date > todayIsoInIndia();
+  // Same rule the backend enforces for facilitators: today's rows can still
+  // be changed until they are used (checked in, completed, no-show) or
+  // cancelled; only past dates are locked.
+  const canMutate =
+    MUTABLE_BOOKING_STATUSES.includes(booking.status) &&
+    booking.activity_date >= todayIsoInIndia();
   const hasBothActions = canMutate && hasVisit && hasBooking;
 
   const openMenu = () => {
@@ -100,7 +109,7 @@ function RowMenu({
     items = [
       { label: "Back", onClick: () => setSubmenu("root"), icon: ChevronLeft },
       { label: "Cancel Visit", onClick: () => onCancelVisit(booking), icon: XCircle, variant: "danger" },
-      { label: "Cancel Booking", onClick: () => onCancelSeat(booking), icon: XCircle, variant: "danger" },
+      { label: "Cancel Space", onClick: () => onCancelSeat(booking), icon: XCircle, variant: "danger" },
     ];
   } else {
     items.push({ label: "View Details", onClick: () => onView(booking), icon: Eye });
@@ -115,6 +124,8 @@ function RowMenu({
           trailingIcon: ChevronRight,
         });
       } else if (hasVisit) {
+        // Visit-only guest (no seat yet): a space can still be added later.
+        items.push({ label: "Book a Space", onClick: () => onAddBooking(booking), icon: CalendarPlus });
         items.push({ label: "Edit Visit", onClick: () => onModifyVisit(booking), icon: Pencil });
         items.push({ label: "Cancel Visit", onClick: () => onCancelVisit(booking), icon: XCircle, variant: "danger" });
       } else if (hasBooking) {
@@ -219,6 +230,7 @@ export default function BookingsTable({
   onView,
   onModifySeat,
   onModifyVisit,
+  onAddBooking,
   onCancelSeat,
   onCancelVisit,
 }: Props) {
@@ -301,6 +313,7 @@ export default function BookingsTable({
                       onView={onView}
                       onModifySeat={onModifySeat}
                       onModifyVisit={onModifyVisit}
+                      onAddBooking={onAddBooking}
                       onCancelSeat={onCancelSeat}
                       onCancelVisit={onCancelVisit}
                     />

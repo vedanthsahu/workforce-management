@@ -1,4 +1,5 @@
 import { axiosInstance } from "@/lib/http/axios";
+import { getApiErrorMessage } from "@/lib/apiError";
 import type {
   ApiBooking,
   ApiDashboardMe,
@@ -221,7 +222,9 @@ function classifyError(
       return { section, code: detail.code, message: detail.message ?? "An error occurred.", status };
     }
     if (status) {
-      return { section, code: `http_${status}`, message: `Request failed (${status}). Please try again.`, status };
+      // The backend's { error: { message } } envelope (or a status-based
+      // message) instead of a bare "Request failed (500)".
+      return { section, code: `http_${status}`, message: getApiErrorMessage(err), status };
     }
   }
   return { section, code: "network_error", message: "Could not connect to the server. Check your connection." };

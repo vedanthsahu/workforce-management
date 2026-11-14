@@ -12,6 +12,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { BookOpen } from "lucide-react";
 import { ChatbotPanel } from "@/features/chatbot/components/ChatbotPanel";
 import { fetchChatbotPolicy } from "@/features/configuration/services/configuration.service";
+import { ErrorScreen } from "@/components/layout/ErrorScreen";
 
 
 function SidebarSkeleton() {
@@ -49,7 +50,7 @@ export default function MainLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, isLoading } = useAuthContext();
+  const { user, isLoading, connectionError, retry, sessionExpired } = useAuthContext();
   const isMobile = useIsMobile();
   const router = useRouter();
   const pathname = usePathname();
@@ -116,6 +117,27 @@ export default function MainLayout({
     };
   }, [user]);
 
+  // The first "who am I" check got no usable answer: say so, instead of
+  // sitting on the loading skeleton forever.
+  if (connectionError) {
+    return (
+      <ErrorScreen
+        title={
+          connectionError === "unreachable"
+            ? "We can't connect right now."
+            : "Sorry, something went wrong on our end."
+        }
+        description={
+          connectionError === "unreachable"
+            ? "We can't reach the service. Please check your internet connection and try again."
+            : "We're having trouble loading the app right now. Please try again in a moment."
+        }
+        onRetry={retry}
+        showHome={false}
+      />
+    );
+  }
+
   if (!isLoading && (!user || !roleAllowed)) return null;
 
   const showSidebarSkeleton = isLoading || user === undefined;
@@ -181,8 +203,10 @@ export default function MainLayout({
           {isLoading && guardedPath ? null : children}
         </div>
         {!showSidebarSkeleton &&
+        !sessionExpired &&
         user?.role?.toUpperCase() === "EMPLOYEE" &&
-        employeeChatbotEnabled ? (
+        employeeChatbotEnabled &&
+        pathname === "/dashboard" ? (
           <ChatbotPanel />
         ) : null}
       </div>

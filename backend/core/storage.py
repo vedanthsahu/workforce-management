@@ -4,13 +4,20 @@ S3 storage helpers for floor layout uploads.
 
 from __future__ import annotations
 
+import io
 import logging
+import re
 from functools import lru_cache
+from xml.etree.ElementTree import (
+    Element,
+    ParseError,
+)
 
 import boto3
 from boto3.exceptions import S3UploadFailedError
 from botocore.client import BaseClient
 from botocore.exceptions import BotoCoreError, ClientError
+from defusedxml.ElementTree import fromstring
 from fastapi import HTTPException, UploadFile, status
 
 from backend.core.app_logging import LOGGER_NAME
@@ -30,25 +37,79 @@ def get_s3_client() -> BaseClient:
 
 
 
-# SVG is rendered inline by the frontend viewer, so any of these constructs
-# would execute in the context of an authenticated user's session (stored
-# XSS). A legitimate floor-plan export from a design tool never needs them.
-_DISALLOWED_SVG_PATTERNS: tuple[bytes, ...] = (
-    b"<script",
-    b"javascript:",
-    b"<foreignobject",
-    b"<iframe",
-    b"<embed",
-    b"<object",
-    b"onload=",
-    b"onerror=",
-    b"onclick=",
-    b"onmouseover=",
-    b"onfocus=",
+# SVG is rendered inline by the frontend viewer (dangerouslySetInnerHTML), so
+# any element/attribute capable of running script would execute in the
+# context of an authenticated user's session (stored XSS). Rather than
+# denylisting known-bad patterns -- which an attacker can route around with
+# event handlers or elements not on the list -- this parses the SVG and keeps
+# only an explicit allowlist of elements/attributes a floor-plan export from
+# a design tool actually needs, dropping everything else.
+_SVG_NS = "http://www.w3.org/2000/svg"
+
+_ALLOWED_TAGS: frozenset[str] = frozenset(
+    {
+        "svg", "g", "defs", "title", "desc", "symbol", "style",
+        "path", "rect", "circle", "ellipse", "line", "polyline", "polygon",
+        "text", "tspan", "use", "linearGradient", "radialGradient", "stop",
+        "clipPath", "mask", "pattern", "image",
+    }
 )
 
+# Any attribute matching this is an event handler (onload, onclick, onbegin,
+# onmouseenter, ...) -- there is no legitimate reason for a static floor-plan
+# SVG to carry one.
+_EVENT_ATTR_RE = re.compile(r"^on", re.IGNORECASE)
 
-def validate_svg_file(file: UploadFile) -> None:
+_HREF_ATTRS = frozenset({"href", "{http://www.w3.org/1999/xlink}href"})
+_SAFE_HREF_RE = re.compile(r"^(#|data:image/)", re.IGNORECASE)
+
+
+def _local_tag(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _check_element(element: Element) -> None:
+    """Raise ValueError the moment anything not on the allowlist is found,
+    anywhere in the tree. The upload is rejected outright rather than
+    silently stripped, so an admin never ends up publishing a floor layout
+    that silently renders differently than the file they picked."""
+    if _local_tag(element.tag) not in _ALLOWED_TAGS:
+        raise ValueError(f"disallowed element <{_local_tag(element.tag)}>")
+
+    for attr_name, value in element.attrib.items():
+        local = _local_tag(attr_name)
+        if _EVENT_ATTR_RE.match(local):
+            raise ValueError(f"disallowed event-handler attribute {local!r}")
+        if attr_name in _HREF_ATTRS and not _SAFE_HREF_RE.match(value):
+            raise ValueError(f"disallowed href value {value!r}")
+
+    for child in element:
+        _check_element(child)
+
+
+def _sanitize_svg(content: bytes) -> bytes:
+    """Parse `content` with a hardened XML parser (no external entities, no
+    DTD expansion), reject it outright if anything outside the allowlist is
+    present anywhere in the tree, and otherwise return it re-serialized from
+    the parsed tree. Raises ValueError on unparseable or unsafe XML."""
+    try:
+        root = fromstring(content)
+    except (ParseError, ValueError) as exc:
+        raise ValueError("not well-formed XML") from exc
+
+    if _local_tag(root.tag) != "svg":
+        raise ValueError("root element is not <svg>")
+    _check_element(root)
+
+    from xml.etree.ElementTree import register_namespace, tostring
+
+    register_namespace("", _SVG_NS)
+    return tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def validate_svg_file(file: UploadFile) -> bytes:
+    """Validate and sanitize an uploaded SVG, returning the cleaned bytes
+    that should actually be stored (never the caller's original bytes)."""
     filename = (file.filename or "").lower()
 
     if not filename.endswith(".svg"):
@@ -76,15 +137,16 @@ def validate_svg_file(file: UploadFile) -> None:
     content = file.file.read()
     file.file.seek(0)
 
-    lowered = content.lower()
-    if any(pattern in lowered for pattern in _DISALLOWED_SVG_PATTERNS):
+    try:
+        return _sanitize_svg(content)
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "unsafe_svg_content",
-                "message": "The uploaded SVG contains disallowed executable content.",
+                "message": "The uploaded SVG could not be safely parsed or contains disallowed content.",
             },
-        )
+        ) from None
 
 
 def resolve_layout_file_url(stored_url: str | None) -> str | None:
@@ -159,7 +221,7 @@ def upload_svg_to_s3(
     floor_id: str,
     version_no: int,
 ) -> str:
-    validate_svg_file(file)
+    sanitized_content = validate_svg_file(file)
     settings = get_settings()
 
     object_key = build_layout_object_key(
@@ -180,9 +242,10 @@ def upload_svg_to_s3(
         max_delay_seconds=settings.aws_retry_max_delay_seconds,
     )
     def upload_with_retry() -> None:
-        file.file.seek(0)
+        # Upload the sanitized bytes (see validate_svg_file / _sanitize_svg),
+        # never the caller-supplied original content.
         s3_client.upload_fileobj(
-            Fileobj=file.file,
+            Fileobj=io.BytesIO(sanitized_content),
             Bucket=settings.aws_s3_bucket_name,
             Key=object_key,
             ExtraArgs={

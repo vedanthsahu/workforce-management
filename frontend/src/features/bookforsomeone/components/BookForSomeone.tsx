@@ -363,9 +363,9 @@ export function BookingTypeSelector({ selected, onChange, disabledType }: Bookin
                 alignItems: "flex-start",
                 gap: "0.75rem",
                 padding: "1rem",
-                border: `1.5px solid ${disabled ? "#e5e7eb" : active ? "#4f46e5" : "#e5e7eb"}`,
+                border: `1.5px solid ${disabled ? "#e5e7eb" : active ? "#2563eb" : "#e5e7eb"}`,
                 borderRadius: 10,
-                background: disabled ? "#f9fafb" : active ? "#eef2ff" : "#fff",
+                background: disabled ? "#f9fafb" : active ? "#eff6ff" : "#fff",
                 textAlign: "left",
                 cursor: disabled ? "not-allowed" : "pointer",
                 opacity: disabled ? 0.55 : 1,
@@ -373,7 +373,7 @@ export function BookingTypeSelector({ selected, onChange, disabledType }: Bookin
                 width: "100%",
               }}
             >
-              <span style={{ color: disabled ? "#9ca3af" : active ? "#4f46e5" : "#9ca3af", marginTop: 1, flexShrink: 0 }}>
+              <span style={{ color: disabled ? "#9ca3af" : active ? "#2563eb" : "#9ca3af", marginTop: 1, flexShrink: 0 }}>
                 <Icon />
               </span>
               <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
@@ -386,8 +386,8 @@ export function BookingTypeSelector({ selected, onChange, disabledType }: Bookin
                   width: 16,
                   height: 16,
                   borderRadius: "50%",
-                  border: `2px solid ${disabled ? "#d1d5db" : active ? "#4f46e5" : "#d1d5db"}`,
-                  background: !disabled && active ? "radial-gradient(circle, #4f46e5 45%, transparent 46%)" : "transparent",
+                  border: `2px solid ${disabled ? "#d1d5db" : active ? "#2563eb" : "#d1d5db"}`,
+                  background: !disabled && active ? "radial-gradient(circle, #2563eb 45%, transparent 46%)" : "transparent",
                 }} />
               </span>
             </button>
@@ -593,8 +593,8 @@ export function FormFooter({ onSubmit, onBack, submitLabel = "Book a Space", sub
               height: 40,
               padding: "0 1.25rem",
               borderRadius: 8,
-              border: "1.5px solid #4f46e5",
-              background: submitDisabled ? "#a5b4fc" : "#4f46e5",
+              border: "1.5px solid #2563eb",
+              background: submitDisabled ? "#93c5fd" : "#2563eb",
               fontSize: "0.875rem",
               fontWeight: 600,
               color: "#fff",

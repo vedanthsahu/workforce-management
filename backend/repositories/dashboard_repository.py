@@ -848,8 +848,16 @@ def _fetch_guest_activity_rows(
                 LIMIT 1
             ) b ON TRUE
 
+            -- Booked By is whoever created this row's own record. Once only the
+            -- seat was cancelled, this row stands for the visit (the cancelled
+            -- seat has its own row), so it shows the visit's creator.
             LEFT JOIN app_users booked_by
-                ON booked_by.id = COALESCE(b.booked_by_user_id, gv.created_by_user_id)
+                ON booked_by.id = CASE
+                    WHEN b.booking_status = 'CANCELLED'
+                     AND gv.visit_status <> 'CANCELLED'
+                        THEN gv.created_by_user_id
+                    ELSE COALESCE(b.booked_by_user_id, gv.created_by_user_id)
+                END
                AND booked_by.tenant_id = gv.tenant_id
 
             LEFT JOIN seats s
@@ -906,6 +914,142 @@ def _fetch_guest_activity_rows(
 
     return [dict(row) for row in rows]
 
+
+def _fetch_guest_cancelled_seat_rows(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    activity_date: date | None = None,
+    site_id: str | None = None,
+    building_id: str | None = None,
+    floor_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Fetch one row per guest seat booking cancelled on its own.
+
+    _fetch_guest_activity_rows returns a single row per visit, shown as
+    MODIFIED once its seat is cancelled. The cancelled seat itself is a
+    separate operation, so it gets its own CANCELLED row here. A visit that
+    was cancelled as a whole, with its seat in the same transaction (same
+    cancelled_at), is already covered there, so it is skipped."""
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                CONCAT('guest-booking-', b.id::text) AS activity_id,
+                'GUEST_BOOKING' AS activity_type,
+                TRUE AS has_booking,
+
+                b.id::text AS booking_id,
+                gv.id::text AS guest_visit_id,
+                b.booking_status AS activity_status,
+
+                b.modified_from_booking_id::text AS modified_from_booking_id,
+                gv.modified_from_guest_visit_id::text AS modified_from_guest_visit_id,
+
+                b.booking_date AS activity_date,
+
+                booked_by.id::text AS booked_by_id,
+                booked_by.full_name AS booked_by_name,
+                booked_by.email AS booked_by_email,
+                UPPER(REPLACE(booked_by.role_name, ' ', '_')) AS booked_by_role,
+                booked_by.department AS booked_by_department,
+                booked_by.job_title AS booked_by_job_title,
+
+                g.id::text AS booked_for_id,
+                g.full_name AS booked_for_name,
+                g.email AS booked_for_email,
+                NULL::text AS booked_for_role,
+                NULL::text AS booked_for_department,
+                NULL::text AS booked_for_job_title,
+                gv.guest_type AS booked_for_guest_type,
+
+                s.id::text AS seat_id,
+                s.seat_code,
+                s.seat_type,
+                s.seat_neighborhood,
+
+                si.id::text AS site_id,
+                si.site_code,
+                si.site_name,
+
+                bu.id::text AS building_id,
+                bu.building_code,
+                bu.building_name,
+
+                fl.id::text AS floor_id,
+                fl.floor_code,
+                fl.floor_name,
+
+                b.check_in_at,
+                b.checked_out_at,
+                b.created_at,
+                b.updated_at
+
+            FROM bookings b
+
+            INNER JOIN guest_visits gv
+                ON gv.id = b.guest_visit_id
+               AND gv.tenant_id = b.tenant_id
+
+            INNER JOIN guests g
+                ON g.id = gv.guest_id
+               AND g.tenant_id = gv.tenant_id
+
+            LEFT JOIN app_users booked_by
+                ON booked_by.id = b.booked_by_user_id
+               AND booked_by.tenant_id = b.tenant_id
+
+            LEFT JOIN seats s
+                ON s.id = b.seat_id
+               AND s.tenant_id = b.tenant_id
+
+            INNER JOIN sites si
+                ON si.id = b.site_id
+               AND si.tenant_id = b.tenant_id
+
+            INNER JOIN buildings bu
+                ON bu.id = b.building_id
+               AND bu.tenant_id = b.tenant_id
+               AND bu.site_id = si.id
+
+            LEFT JOIN floors fl
+                ON fl.id = b.floor_id
+               AND fl.tenant_id = b.tenant_id
+               AND fl.site_id = si.id
+               AND fl.building_id = bu.id
+
+            WHERE b.tenant_id = %(tenant_id)s
+              AND b.booking_type = 'GUEST'
+              AND b.booking_status = 'CANCELLED'
+              AND (
+                    gv.visit_status NOT IN ('CANCELLED', 'MODIFIED')
+                    OR (
+                        gv.visit_status = 'CANCELLED'
+                        AND b.cancelled_at < gv.cancelled_at
+                    )
+              )
+              AND (%(activity_date)s IS NULL OR b.booking_date = %(activity_date)s)
+              AND (%(site_id)s IS NULL OR b.site_id = %(site_id)s::bigint)
+              AND (%(building_id)s IS NULL OR b.building_id = %(building_id)s::bigint)
+              AND (%(floor_id)s IS NULL OR b.floor_id = %(floor_id)s::bigint)
+
+            ORDER BY b.updated_at DESC, b.id DESC
+            LIMIT 100
+            """,
+            {
+                "tenant_id": tenant_id,
+                "activity_date": activity_date,
+                "site_id": site_id,
+                "building_id": building_id,
+                "floor_id": floor_id,
+            },
+        )
+        rows = cur.fetchall()
+
+    return [dict(row) for row in rows]
+
+
 def fetch_admin_activity_list(
     conn: PGConnection,
     *,
@@ -935,7 +1079,16 @@ def fetch_admin_activity_list(
         floor_id=floor_id,
     )
 
-    activities = employee_rows + guest_rows
+    guest_cancelled_seat_rows = _fetch_guest_cancelled_seat_rows(
+        conn,
+        tenant_id=tenant_id,
+        activity_date=activity_date,
+        site_id=site_id,
+        building_id=building_id,
+        floor_id=floor_id,
+    )
+
+    activities = employee_rows + guest_rows + guest_cancelled_seat_rows
     activities.sort(
         key=lambda row: (row.get("updated_at") is not None, row.get("updated_at")),
         reverse=True,

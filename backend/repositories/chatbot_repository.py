@@ -3,6 +3,17 @@ chatbot_messages). Same connection/cursor/%s-param style as every other
 repository in this codebase -- the chatbot used to run its own, separate
 SQLAlchemy async stack against these tables; this is that access folded
 onto the main app's shared psycopg2 connection instead.
+
+Every uuid.UUID parameter below is cast to str() right at the query
+boundary. Unlike every other UUID primary key in this codebase (which the
+database generates via a column default and the app only ever reads back
+through RETURNING), these two tables' ids are generated in Python
+(session_service.py's uuid.uuid4()) and passed in as insert/lookup
+values -- and plain psycopg2 does not adapt uuid.UUID objects unless
+psycopg2.extras.register_uuid() has been called somewhere, which this
+codebase never does. Passing the string form sidesteps that entirely
+(Postgres casts a UUID-shaped string to its uuid columns implicitly) and
+matches how every other id in this codebase is already passed to psycopg2.
 """
 
 from __future__ import annotations
@@ -25,7 +36,6 @@ def insert_chatbot_session(
     current_node: str,
     created_at: datetime,
     updated_at: datetime,
-    expires_at: datetime,
     context_data: dict[str, Any],
 ) -> dict[str, Any]:
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -33,15 +43,15 @@ def insert_chatbot_session(
             """
             INSERT INTO chatbot_sessions (
                 id, tenant_id, user_name, state, current_node,
-                created_at, updated_at, expires_at, context_data
+                created_at, updated_at, context_data
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id, tenant_id, user_name, state, current_node,
-                      current_menu_id, context_data, created_at, updated_at, expires_at
+                      current_menu_id, context_data, created_at, updated_at
             """,
             (
-                session_id, tenant_id, user_name, state, current_node,
-                created_at, updated_at, expires_at, Json(context_data),
+                str(session_id), tenant_id, user_name, state, current_node,
+                created_at, updated_at, Json(context_data),
             ),
         )
         row = cur.fetchone()
@@ -56,11 +66,11 @@ def fetch_chatbot_session(
         cur.execute(
             """
             SELECT id, tenant_id, user_name, state, current_node,
-                   current_menu_id, context_data, created_at, updated_at, expires_at
+                   current_menu_id, context_data, created_at, updated_at
             FROM chatbot_sessions
             WHERE id = %s
             """,
-            (session_id,),
+            (str(session_id),),
         )
         row = cur.fetchone()
     return dict(row) if row else None
@@ -82,18 +92,7 @@ def update_chatbot_session_node(
             SET current_node = %s, state = %s, current_menu_id = %s, updated_at = %s
             WHERE id = %s
             """,
-            (current_node, state, current_menu_id, updated_at, session_id),
-        )
-    conn.commit()
-
-
-def update_chatbot_session_state(
-    conn: PGConnection, *, session_id: uuid.UUID, state: str,
-) -> None:
-    with conn.cursor() as cur:
-        cur.execute(
-            "UPDATE chatbot_sessions SET state = %s WHERE id = %s",
-            (state, session_id),
+            (current_node, state, current_menu_id, updated_at, str(session_id)),
         )
     conn.commit()
 
@@ -112,7 +111,7 @@ def update_chatbot_session_context(
             SET context_data = %s, updated_at = %s
             WHERE id = %s
             """,
-            (Json(context_data), updated_at, session_id),
+            (Json(context_data), updated_at, str(session_id)),
         )
     conn.commit()
 
@@ -136,6 +135,6 @@ def insert_chatbot_message(
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            (message_id, session_id, direction, message_text, message_type, node_id, created_at),
+            (str(message_id), str(session_id), direction, message_text, message_type, node_id, created_at),
         )
     conn.commit()

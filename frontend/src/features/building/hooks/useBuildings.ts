@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import axios from "axios";
+import { getApiErrorMessage } from "@/lib/apiError";
 
 import { buildingService } from "../services/buildingService";
 
@@ -78,8 +78,7 @@ export const useBuildings = () => {
     setBuildings(data);
   } catch (err) {
     if (requestId !== latestBuildingsRequest.current) return;
-    const message = axios.isAxiosError(err) ? err.message : undefined;
-    setError(message || "Failed to fetch buildings");
+    setError(getApiErrorMessage(err, "We couldn't load the buildings. Please try again."));
   } finally {
     if (requestId === latestBuildingsRequest.current) setLoading(false);
   }

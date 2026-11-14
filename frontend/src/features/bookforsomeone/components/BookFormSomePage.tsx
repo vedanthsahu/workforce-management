@@ -142,48 +142,86 @@ export default function BookForSomeonePage() {
   // delegation path for prefilling someone else's booking).
   // A guest has no preferences of its own, so the host's location stands in
   // for it — this covers the Guest path for both Admin and Facilitator,
-  // since they share this same wizard. Only fills in when the fields are
-  // still blank, so it never clobbers a location already chosen (manually,
-  // or via editVisitId's own prefill above); re-fetches if a different host
-  // is picked while the fields are still blank.
+  // since they share this same wizard.
+  //
+  // The host's preference is the first priority, every time the host changes:
+  // the location is replaced with the new host's (or cleared if their saved
+  // office/building/floor is missing or inactive, so the user picks manually).
+  // The user can still edit it by hand afterwards. The location set by
+  // editVisitId's own prefill above is never overwritten.
   const hostPrefsAppliedForId = useRef<string | null>(null);
+  const autoFilledLocation = useRef<{ siteId: string; buildingId: string; floorId: string } | null>(null);
+  const currentHostId = useRef<string | undefined>(undefined);
+  currentHostId.current = visitDetails.hostEmployee?.id;
+
   useEffect(() => {
     const hostId = visitDetails.hostEmployee?.id;
-    if (bookingType !== "visitor" || editVisitId || !hostId) return;
-    if (hostPrefsAppliedForId.current === hostId) return;
-    if (visitDetails.siteId || visitDetails.buildingId || visitDetails.floorId) return;
+    if (bookingType !== "visitor" || editVisitId) return;
+    if (hostPrefsAppliedForId.current === (hostId ?? null)) return;
 
-    hostPrefsAppliedForId.current = hostId;
-    // Fill only the levels that are still bookable (same lists the dropdowns
-    // use). An inactive/unbookable saved office, building or floor is left
-    // blank -- never filled in, and never swapped for the first list entry.
-    fetchEmployeeWorkPreferences(hostId)
-      .then(async (prefs) => {
-        if (!prefs?.siteId) return;
-        const siteList = await fetchSites();
-        if (!siteList.some((s) => s.id === prefs.siteId)) return;
+    const previouslyFilled = autoFilledLocation.current;
+    hostPrefsAppliedForId.current = hostId ?? null;
+    const blank = { siteId: "", buildingId: "", floorId: "" };
+    // The host's preference always takes priority on every host change: it
+    // replaces the location (even one picked by hand) with the new host's, or
+    // blanks it if the new host has no usable preference, so the user picks.
+    const apply = (loc: { siteId: string; buildingId: string; floorId: string }) => {
+      if (currentHostId.current !== hostId) return; // host changed again while loading
+      autoFilledLocation.current = loc;
+      updateVisitDetails(loc);
+    };
 
-        const fill: Partial<VisitDetails> = { siteId: prefs.siteId };
-        if (prefs.buildingId) {
-          const buildingList = await fetchBuildings(prefs.siteId);
-          if (buildingList.some((b) => b.id === prefs.buildingId)) {
-            fill.buildingId = prefs.buildingId;
-            if (prefs.floorId) {
-              const floorList = await fetchFloors(prefs.buildingId);
-              if (floorList.some((f) => f.id === prefs.floorId)) fill.floorId = prefs.floorId;
-            }
-          }
-        }
-        updateVisitDetails(fill);
+    // Host cleared -> drop the location that host filled in, but keep one the
+    // user has since changed by hand.
+    if (!hostId) {
+      const { siteId, buildingId, floorId } = visitDetails;
+      const untouched =
+        !!previouslyFilled &&
+        siteId === previouslyFilled.siteId &&
+        buildingId === previouslyFilled.buildingId &&
+        floorId === previouslyFilled.floorId;
+      autoFilledLocation.current = null;
+      if (untouched) updateVisitDetails(blank);
+      return;
+    }
+
+    // Fill the location only if every saved level is still bookable (same
+    // lists the dropdowns use). If any saved office, building or floor is
+    // inactive/unbookable, all three stay blank for a manual pick -- nothing is
+    // partly filled, and nothing is swapped for the first list entry.
+    //
+    // The lookups are independent, so they run in parallel (two round trips
+    // instead of four in a row): preferences + offices first, then the
+    // preferred office's buildings + the preferred building's floors.
+    Promise.all([fetchEmployeeWorkPreferences(hostId), fetchSites()])
+      .then(async ([prefs, siteList]) => {
+        if (!prefs?.siteId || !siteList.some((s) => s.id === prefs.siteId)) { apply(blank); return; }
+
+        const [buildingList, floorList] = await Promise.all([
+          prefs.buildingId ? fetchBuildings(prefs.siteId) : Promise.resolve([]),
+          prefs.buildingId && prefs.floorId ? fetchFloors(prefs.buildingId) : Promise.resolve([]),
+        ]);
+        // All or nothing: if any saved level is inactive, none of them is filled.
+        const buildingOk = !prefs.buildingId || buildingList.some((b) => b.id === prefs.buildingId);
+        const floorOk = !prefs.floorId || floorList.some((f) => f.id === prefs.floorId);
+        apply(
+          buildingOk && floorOk
+            ? { siteId: prefs.siteId, buildingId: prefs.buildingId ?? "", floorId: prefs.floorId ?? "" }
+            : blank,
+        );
       })
-      .catch(() => {});
-  }, [visitDetails.hostEmployee?.id, bookingType, editVisitId, visitDetails.siteId, visitDetails.buildingId, visitDetails.floorId, updateVisitDetails]);
+      .catch(() => { apply(blank); });
+    // Keyed on the host only: the current location is read just to decide
+    // whether a host-cleared reset is safe, never to re-run on every edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visitDetails.hostEmployee?.id, bookingType, editVisitId, updateVisitDetails]);
 
   // Auto-select the only building/floor when there's nothing else to choose
   // from — same "don't make them pick between one thing" pattern used in
   // the admin Blocked Spaces flow (BlockedSeatsPage/BlockSeatsPage). Guarded
-  // on the field still being blank so this never overrides a location the
-  // host-prefs prefill above (or a manual pick) already set.
+  // on the field still being blank, and skipped while the form is still on the
+  // host's preferred office/building so a substitute is never picked for an
+  // inactive host preference.
   //
   // The `siteId`/`buildingId` ownership checks are required, not optional:
   // switching Office clears the building in the same commit that this effect
@@ -193,12 +231,34 @@ export default function BookForSomeonePage() {
   // holds ids from two different offices while the dropdowns just display
   // each list's first option.
   useEffect(() => {
+    // While the office is the host's preferred one, their saved preference
+    // decides the building; if it is inactive the user picks by hand rather
+    // than getting a substitute. Once the user switches office, a lone
+    // building is selected for them again.
+    const hostSite = autoFilledLocation.current?.siteId;
+    if (hostSite && visitDetails.siteId === hostSite) return;
     if (visitDetails.buildingId || isLoadingBuildings || buildings.length !== 1) return;
     if (buildings[0].siteId !== visitDetails.siteId) return;
     updateVisitDetails({ buildingId: buildings[0].id, floorId: "" });
   }, [visitDetails.buildingId, visitDetails.siteId, isLoadingBuildings, buildings, updateVisitDetails]);
 
+  // The host-prefs prefill above can set a floor id that isn't in the ACTIVE
+  // floors list (e.g. the host's saved floor was deactivated since). A native
+  // <select> with a value matching no option silently displays its first
+  // option, so the form looks fine while the stale (inactive) id is what gets
+  // submitted -- the backend then rejects it as "location inactive". Drop any
+  // floor that isn't one of the loaded active floors for the current building.
   useEffect(() => {
+    if (editVisitId || !visitDetails.floorId || isLoadingFloors || floors.length === 0) return;
+    if (floors[0].buildingId !== visitDetails.buildingId) return;
+    if (floors.some((f) => f.id === visitDetails.floorId)) return;
+    updateVisitDetails({ floorId: "" });
+  }, [editVisitId, visitDetails.floorId, visitDetails.buildingId, isLoadingFloors, floors, updateVisitDetails]);
+
+  useEffect(() => {
+    // Same rule as the building effect: hands off while on the host's building.
+    const hostBuilding = autoFilledLocation.current?.buildingId;
+    if (hostBuilding && visitDetails.buildingId === hostBuilding) return;
     if (visitDetails.floorId || isLoadingFloors || floors.length !== 1) return;
     if (floors[0].buildingId !== visitDetails.buildingId) return;
     updateVisitDetails({ floorId: floors[0].id });
@@ -579,14 +639,14 @@ export default function BookForSomeonePage() {
                         ? (step === 4
                           ? () => setFormState((prev) => ({ ...prev, step: 2 }))
                           : () => {
-                              // Return to wherever the user came from (admin bookings
-                              // or my bookings); fall back if opened directly.
-                              if (window.history.length > 1) {
-                                router.back();
-                              } else {
-                                router.push(isAdminFlow ? "/admin/bookings" : "/mybookings?tab=bookedForSomeone");
-                              }
-                            })
+                            // Return to wherever the user came from (admin bookings
+                            // or my bookings); fall back if opened directly.
+                            if (window.history.length > 1) {
+                              router.back();
+                            } else {
+                              router.push(isAdminFlow ? "/admin/bookings" : "/mybookings?tab=bookedForSomeone");
+                            }
+                          })
                         : step > 1
                           ? goBack
                           : undefined

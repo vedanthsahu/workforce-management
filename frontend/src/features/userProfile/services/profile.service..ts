@@ -66,7 +66,7 @@ function classifyError(
     const status = axiosErr.response?.status;
     const detail = axiosErr.response?.data?.detail;
     if (status === 401) return { section, code: "unauthenticated", message: "Session expired. Please log in again.", status };
-    if (status === 403) return { section, code: "forbidden",       message: "You don't have permission to view this.", status };
+    if (status === 403) return { section, code: "forbidden", message: "You don't have permission to view this.", status };
     if (detail && typeof detail === "object" && detail.code) {
       return { section, code: detail.code, message: detail.message ?? "An error occurred.", status };
     }
@@ -79,52 +79,60 @@ function classifyError(
 
 function mapDashboardMe(api: ApiDashboardMe, authMe?: ApiAuthMe): ProfileData {
   return {
-    displayName:      safeStr(api.display_name ?? api.full_name),
-    email:            safeStr(api.email),
-    phone:            safeStr(api.mobile_phone),
-    role:             safeStr(api.profile_metadata?.role_name ?? authMe?.role_name),
-    jobTitle:         safeStr(api.title ?? api.job_title),
-    department:       safeStr(api.department),
-    workLocation:     safeStr(api.office_info ?? authMe?.office_location),
-    avatarUrl:        null,
-    employeeId:       safeStr(api.profile_metadata?.employee_id ?? authMe?.employee_id),
+    displayName: safeStr(api.display_name ?? api.full_name),
+    email: safeStr(api.email),
+    phone: safeStr(api.mobile_phone),
+    role: safeStr(api.profile_metadata?.role_name ?? authMe?.role_name),
+    jobTitle: safeStr(api.title ?? api.job_title),
+    department: safeStr(api.department),
+    workLocation: safeStr(api.office_info ?? authMe?.office_location),
+    avatarUrl: null,
+    employeeId: safeStr(api.profile_metadata?.employee_id ?? authMe?.employee_id),
     reportingManager: safeStr(api.manager),
-    dateOfJoining:    formatDate(api.profile_metadata?.created_at ?? authMe?.created_at),
-    bio:            safeStr(authMe?.bio),
-    skills:         authMe?.skills ?? [],
+    dateOfJoining: formatDate(api.profile_metadata?.created_at ?? authMe?.created_at),
+    bio: safeStr(authMe?.bio),
+    skills: authMe?.skills ?? [],
     status: safeStr(api.profile_metadata?.status ?? authMe?.status),
   };
 }
 
 function mapAuthMe(api: ApiAuthMe): AccountInfo {
   return {
-    username:          api.display_name || api.full_name || api.email,
-    role:              api.role_name || api.role,
-    lastLogin:         formatDateTime(api.updated_at),
+    username: api.display_name || api.full_name || api.email,
+    role: api.role_name || api.role,
+    lastLogin: formatDateTime(api.updated_at),
     userPrincipalName: api.user_principal_name || api.email,
   };
 }
 
-function mapPreferences(api: ApiDashboardMe): SeatPreferences {
-  const wp = api.work_preferences;
+const isInactive = (status: string | null | undefined) => !!status && status !== "ACTIVE";
+
+function mapWorkPreferences(wp: ApiWorkPreferences | null | undefined): SeatPreferences {
   return {
-    preferredOfficeId:     wp?.site_id       ?? "",
-    preferredOfficeName:   wp?.site_name     ?? "—",
-    preferredBuildingId:   wp?.building_id   ?? "",
+    preferredOfficeId: wp?.site_id ?? "",
+    preferredOfficeName: wp?.site_name ?? "—",
+    preferredOfficeInactive: isInactive(wp?.site_status),
+    preferredBuildingId: wp?.building_id ?? "",
     preferredBuildingName: wp?.building_name ?? "—",
-    preferredFloorId:      wp?.floor_id      ?? "",
-    preferredFloorName:    wp?.floor_name    ?? "—",
-    preferredSeatType:     wp?.seat_type     ?? null,
-    preferredAmenities:    (wp?.amenities ?? []).map((a) => ({ id: a.id, name: a.name, category: a.category })),
+    preferredBuildingInactive: isInactive(wp?.building_status),
+    preferredFloorId: wp?.floor_id ?? "",
+    preferredFloorName: wp?.floor_name ?? "—",
+    preferredFloorInactive: isInactive(wp?.floor_status),
+    preferredSeatType: wp?.seat_type ?? null,
+    preferredAmenities: (wp?.amenities ?? []).map((a) => ({ id: a.id, name: a.name, category: a.category })),
   };
+}
+
+function mapPreferences(api: ApiDashboardMe): SeatPreferences {
+  return mapWorkPreferences(api.work_preferences);
 }
 
 function computeActivitySummary(bookings: BookingData): ActivitySummary {
   const total = bookings.current.length + bookings.future.length + bookings.past.length;
   return {
-    totalBookings:    total,
+    totalBookings: total,
     upcomingBookings: bookings.future.length + bookings.current.length,
-    pastBookings:     bookings.past.length,
+    pastBookings: bookings.past.length,
   };
 }
 
@@ -147,7 +155,7 @@ export async function getProfileData(): Promise<ProfileResult> {
 
     const dashboardData = dashboardResult.value.data;
 
-    const authData      = authResult.status === "fulfilled" ? authResult.value.data : undefined;
+    const authData = authResult.status === "fulfilled" ? authResult.value.data : undefined;
 
     const errors: ProfileSectionError[] = [];
 
@@ -156,16 +164,16 @@ export async function getProfileData(): Promise<ProfileResult> {
     }
     if (
       currentResult.status === "rejected" ||
-      futureResult.status  === "rejected" ||
-      pastResult.status    === "rejected"
+      futureResult.status === "rejected" ||
+      pastResult.status === "rejected"
     ) {
       errors.push({ section: "bookings", code: "fetch_failed", message: "Could not load booking data." });
     }
 
     const bookings: BookingData = {
       current: currentResult.status === "fulfilled" ? (currentResult.value.data ?? []) : [],
-      future:  futureResult.status  === "fulfilled" ? (futureResult.value.data  ?? []) : [],
-      past:    pastResult.status    === "fulfilled" ? (pastResult.value.data    ?? []) : [],
+      future: futureResult.status === "fulfilled" ? (futureResult.value.data ?? []) : [],
+      past: pastResult.status === "fulfilled" ? (pastResult.value.data ?? []) : [],
     };
 
     const bestStr = (...vals: (string | null | undefined)[]): string => {
@@ -177,31 +185,31 @@ export async function getProfileData(): Promise<ProfileResult> {
 
     const mergedProfile: ProfileData = {
       ...mapDashboardMe(dashboardData, authData),
-      workLocation:  bestStr(authData?.office_location, dashboardData.office_info),
-      employeeId:    bestStr(authData?.employee_id,     dashboardData.profile_metadata?.employee_id),
-      jobTitle:      bestStr(authData?.job_title,       dashboardData.job_title,  dashboardData.title),
-      department:    bestStr(authData?.department,      dashboardData.department),
-      phone:         bestStr(authData?.mobile_phone,    dashboardData.mobile_phone),
-      status:        bestStr(authData?.status,          dashboardData.profile_metadata?.status),
+      workLocation: bestStr(authData?.office_location, dashboardData.office_info),
+      employeeId: bestStr(authData?.employee_id, dashboardData.profile_metadata?.employee_id),
+      jobTitle: bestStr(authData?.job_title, dashboardData.job_title, dashboardData.title),
+      department: bestStr(authData?.department, dashboardData.department),
+      phone: bestStr(authData?.mobile_phone, dashboardData.mobile_phone),
+      status: bestStr(authData?.status, dashboardData.profile_metadata?.status),
       dateOfJoining: formatDate(authData?.created_at ?? dashboardData.profile_metadata?.created_at),
-      bio:           authData?.bio ?? "",
-      skills:        authData?.skills ?? [],
+      bio: authData?.bio ?? "",
+      skills: authData?.skills ?? [],
     };
 
     const accountInfo: AccountInfo = authData
       ? mapAuthMe(authData)
       : {
-          username:          mergedProfile.displayName,
-          role:              mergedProfile.role,
-          lastLogin:         "—",
-          userPrincipalName: mergedProfile.email,
-        };
+        username: mergedProfile.displayName,
+        role: mergedProfile.role,
+        lastLogin: "—",
+        userPrincipalName: mergedProfile.email,
+      };
 
     return {
       ok: true,
       data: {
-        profile:         mergedProfile,
-        preferences:     mapPreferences(dashboardData),
+        profile: mergedProfile,
+        preferences: mapPreferences(dashboardData),
         accountInfo,
         activitySummary: computeActivitySummary(bookings),
         bookings,
@@ -230,16 +238,7 @@ export async function updatePreferences(
     payload,
   );
 
-  return {
-    preferredOfficeId:     data.site_id       ?? "",
-    preferredOfficeName:   data.site_name     ?? "—",
-    preferredBuildingId:   data.building_id   ?? "",
-    preferredBuildingName: data.building_name ?? "—",
-    preferredFloorId:      data.floor_id      ?? "",
-    preferredFloorName:    data.floor_name    ?? "—",
-    preferredSeatType:     data.seat_type     ?? null,
-    preferredAmenities:    (data.amenities ?? []).map((a) => ({ id: a.id, name: a.name, category: a.category })),
-  };
+  return mapWorkPreferences(data);
 }
 
 export async function uploadAvatar(_file: File): Promise<string> {
@@ -278,8 +277,7 @@ export async function getAvailableAmenities(): Promise<ApiAmenity[]> {
 
 export async function getSites(): Promise<ApiSite[]> {
   try {
-    // Every office, active or not -- the dialog marks inactive ones with a pill.
-    const { data } = await axiosInstance.get<ApiSite[]>("/sites?page=1&limit=200");
+    const { data } = await axiosInstance.get<ApiSite[]>("/sites?page=1&limit=200&status=ACTIVE&bookable_only=true");
     return data ?? [];
   } catch {
     return [];
@@ -289,7 +287,7 @@ export async function getSites(): Promise<ApiSite[]> {
 export async function getBuildingsBySite(siteId: string): Promise<ApiBuilding[]> {
   try {
     const { data } = await axiosInstance.get<ApiBuilding[]>(
-      `/buildings?site_id=${siteId}&page=1&limit=200`,
+      `/buildings?site_id=${siteId}&page=1&limit=200&status=ACTIVE&bookable_only=true`,
     );
     return data ?? [];
   } catch {
@@ -300,7 +298,7 @@ export async function getBuildingsBySite(siteId: string): Promise<ApiBuilding[]>
 export async function getFloorsByBuilding(buildingId: string): Promise<ApiFloor[]> {
   try {
     const { data } = await axiosInstance.get<ApiFloor[]>(
-      `/buildings/${buildingId}/floors?page=1&limit=200`,
+      `/buildings/${buildingId}/floors?page=1&limit=200&status=ACTIVE`,
     );
     return data ?? [];
   } catch {

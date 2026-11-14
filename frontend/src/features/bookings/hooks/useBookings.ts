@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { getApiErrorMessage } from "@/lib/apiError";
 import {
   fetchCurrentBookings,
   fetchFutureBookings,
@@ -123,7 +124,7 @@ export function useBookings(): UseBookingsReturn {
       setDelegatedBookings(merged);
       setCancelledDelegatedBookings(delCancelled);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load bookings");
+      setError(getApiErrorMessage(err, "We couldn't load your bookings. Please try again."));
     } finally {
       setIsLoading(false);
     }
