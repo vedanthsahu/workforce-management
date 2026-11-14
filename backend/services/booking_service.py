@@ -78,6 +78,11 @@ from backend.repositories.guest_visit_repository import (
     fetch_cancelled_guest_visits,
     insert_guest_visit,
 )
+from backend.repositories.idempotency_repository import (
+    fetch_idempotent_operation,
+    mark_idempotent_operation_failed,
+    mark_idempotent_operation_succeeded,
+)
 from backend.repositories.location_repository import (
     fetch_floor_by_id,
     fetch_seat_configuration,
@@ -100,6 +105,10 @@ from backend.schemas.booking import (
 )
 from backend.schemas.pagination import PaginationMetadata
 from backend.services.business_rule_service import resolve_booking_advance_days
+from backend.services.idempotency_service import (
+    ReconciliationOutcome,
+    begin_idempotent_operation,
+)
 from backend.services.notification_service import (
     booking_notification_details,
     queue_booking_cancelled_notification,
@@ -248,6 +257,29 @@ def _raise_user_booking_conflict(
         detail={
             "code": "booking_user_conflict",
             "message": message,
+        },
+    )
+
+
+def _raise_operation_superseded() -> None:
+    """The idempotency ledger row for this attempt no longer matches the
+    version this execution claimed -- something else (a reconciler, or a
+    retry that reclaimed it as abandoned) has already resolved this
+    operation while this execution was still in flight. The caller's own
+    HTTPException handler rolls back and marks the attempt failed; the
+    business write already performed earlier in this same transaction is
+    rolled back with it, so it is never committed against a ledger row
+    that says this operation did not succeed.
+    See dev-notes/backend/idempotency_recovery_design.md, decisions 11-13."""
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "operation_superseded",
+            "message": (
+                "This operation was already resolved by another process. "
+                "Check its status via GET /operations/{idempotency_key} "
+                "before retrying."
+            ),
         },
     )
 
@@ -482,12 +514,114 @@ def validate_booking_window(
         )
 
 
+def reconcile_stale_booking_create(
+    conn: PGConnection, row: dict[str, Any],
+) -> ReconciliationOutcome:
+    """R2 of the reconciliation protocol (dev-notes/backend/
+    idempotency_recovery_design.md): acquire the exact same locks
+    book_seat() would for this request, re-read the ledger while holding
+    them, and report -- never execute -- the true outcome.
+
+    Getting the lock only proves nobody holds it right now; it does not
+    by itself prove the original committed or rolled back. The mandatory
+    re-read immediately after acquiring it is what actually establishes
+    that: if the original committed in the gap between this reconciler
+    claiming the row (fast, time-based) and acquiring the lock (which
+    blocks for as long as the original still holds it), the ledger will
+    already say SUCCEEDED by the time this function gets the lock, and
+    this must defer to that instead of declaring it failed.
+    """
+    snapshot = row.get("payload_snapshot") or {}
+    seat_id = snapshot.get("seat_id")
+    booking_date_raw = snapshot.get("booking_date")
+    if not seat_id or not booking_date_raw:
+        # Row predates payload_snapshot existing, or it's otherwise
+        # missing -- no way to know which locks to probe. Don't guess.
+        return ReconciliationOutcome(status="UNKNOWN")
+
+    try:
+        booking_date = date.fromisoformat(booking_date_raw)
+    except (TypeError, ValueError):
+        return ReconciliationOutcome(status="UNKNOWN")
+
+    # Mirrors book_seat's own resolution: an unspecified booked_for_user_id
+    # in the original request means "booked for the caller" -- the
+    # ledger's own user_id column is that caller (booked_by_user_id).
+    subject_id = snapshot.get("booked_for_user_id") or row["user_id"]
+
+    try:
+        acquire_booking_slot_locks(
+            conn, tenant_id=str(row["tenant_id"]), seat_id=str(seat_id),
+            subject_id=str(subject_id), booking_date=booking_date,
+        )
+        current = fetch_idempotent_operation(
+            conn, tenant_id=row["tenant_id"], user_id=row["user_id"],
+            idempotency_key=row["idempotency_key"],
+        )
+    except psycopg2.Error:
+        # Covers both LockNotAvailable (something is actively holding it
+        # right now -- genuinely still in progress) and any other DB-level
+        # failure that interrupts the probe or the re-read before either
+        # one could establish anything. Neither case is proof of failure --
+        # see test scenario 7, dev-notes/backend/
+        # idempotency_recovery_design.md: an interrupted probe must leave
+        # the row exactly as found, never guessed as resolved in either
+        # direction.
+        conn.rollback()
+        return ReconciliationOutcome(status="UNKNOWN")
+
+    if current is None:
+        conn.rollback()
+        return ReconciliationOutcome(status="UNKNOWN")
+
+    if current["status"] == "SUCCEEDED":
+        conn.rollback()
+        return ReconciliationOutcome(status="SUCCEEDED", response_snapshot=current["response_snapshot"])
+
+    if current["status"] == "FAILED":
+        conn.rollback()
+        return ReconciliationOutcome(
+            status="FAILED", error_code=current["error_code"], error_message=current["error_message"],
+        )
+
+    # Still PENDING, and this function now holds the lock the original
+    # would have needed to commit -- proven, not inferred from elapsed
+    # time, that it never committed: mark_idempotent_operation_succeeded
+    # always commits atomically with the business write that takes this
+    # same lock first, so a free lock plus a non-SUCCEEDED row means
+    # there is nothing left that could still complete it.
+    abandoned_message = (
+        "The original attempt with this idempotency key did not "
+        "complete and was resolved as failed by reconciliation."
+    )
+    marked = mark_idempotent_operation_failed(
+        conn, operation_id=row["id"], error_code="operation_abandoned",
+        error_message=abandoned_message, expected_updated_at=current["updated_at"],
+    )
+    if not marked:
+        # Something else resolved it in the same instant (decision 6
+        # should make this unreachable in practice -- only one reconciler
+        # can ever win the ledger claim for a given row). Re-check rather
+        # than assume either outcome.
+        final = fetch_idempotent_operation(
+            conn, tenant_id=row["tenant_id"], user_id=row["user_id"],
+            idempotency_key=row["idempotency_key"],
+        )
+        conn.rollback()
+        if final is not None and final["status"] == "SUCCEEDED":
+            return ReconciliationOutcome(status="SUCCEEDED", response_snapshot=final["response_snapshot"])
+        return ReconciliationOutcome(status="UNKNOWN")
+
+    return ReconciliationOutcome(status="FAILED", error_code="operation_abandoned", error_message=abandoned_message)
+
+
 def book_seat(
     conn: PGConnection,
     *,
     current_user: dict[str, Any],
     payload: CreateBookingRequest,
     background_tasks: BackgroundTasks | None = None,
+    idempotency_key: str | None = None,
 ) -> BookingResponse:
     """Create one tenant-scoped booking and handle DB constraint failures."""
     tenant_id = str(current_user["tenant_id"])
@@ -506,6 +640,27 @@ def book_seat(
         )
 
     booked_for_user_id = str(effective_booked_for_user_id)
+
+    claim = begin_idempotent_operation(
+        conn,
+        tenant_id=tenant_id,
+        user_id=str(booked_by_user_id),
+        idempotency_key=idempotency_key,
+        operation_type="BOOKING_CREATE",
+        payload=payload,
+        reconcile=reconcile_stale_booking_create,
+    )
+    if claim.replay_response is not None:
+        return BookingResponse(**claim.replay_response)
+    operation_id = claim.operation_id
+    claimed_at = claim.claimed_at
+
+    def _fail(code: str, message: str) -> None:
+        if operation_id is not None:
+            mark_idempotent_operation_failed(
+                conn, operation_id=operation_id, error_code=code, error_message=message,
+                expected_updated_at=claimed_at,
+            )
 
     try:
         booked_for_user = _resolve_booked_for_user(
@@ -633,10 +788,28 @@ def book_seat(
                 "done_by_role": _user_role(current_user),
             },
         )
+        if operation_id is not None:
+            # This UPDATE is the real ownership check -- not the earlier
+            # claim -- because it's the last thing that runs before
+            # commit, and it's a row-locking write, not a passive read.
+            # Its result must gate the commit: a False here means someone
+            # else (a reconciler, or a retry that reclaimed this as
+            # abandoned) already resolved this operation while this
+            # execution was still running, so the booking/audit-log
+            # writes already made above must never be committed.
+            claimed_to_the_end = mark_idempotent_operation_succeeded(
+                conn, operation_id=operation_id, resource_type="booking",
+                resource_id=booking.get("booking_id"),
+                response_snapshot=BookingResponse(**booking).model_dump(mode="json"),
+                expected_updated_at=claimed_at,
+            )
+            if not claimed_to_the_end:
+                _raise_operation_superseded()
         conn.commit()
     except HTTPException as he:
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
+        _fail(_d.get("code") or "booking_create_failed", _d.get("message") or str(he.detail))
         safe_write_audit_log(
             conn, action=BOOKING_CREATED, tenant_id=tenant_id,
             current_user=current_user, resource_type="booking", resource_id=None,
@@ -647,6 +820,7 @@ def book_seat(
         raise
     except ValueError as exc:
         conn.rollback()
+        _fail("invalid_booking_value", str(exc))
         safe_write_audit_log(
             conn, action=BOOKING_CREATED, tenant_id=tenant_id,
             current_user=current_user, resource_type="booking", resource_id=None,
@@ -660,6 +834,7 @@ def book_seat(
         ) from exc
     except LookupError as exc:
         conn.rollback()
+        _fail("booking_create_failed", str(exc))
         safe_write_audit_log(
             conn, action=BOOKING_CREATED, tenant_id=tenant_id,
             current_user=current_user, resource_type="booking", resource_id=None,
@@ -675,6 +850,7 @@ def book_seat(
         conn.rollback()
         if exc.pgcode in {errorcodes.UNIQUE_VIOLATION, errorcodes.EXCLUSION_VIOLATION}:
             _detail = _booking_conflict_detail(getattr(exc.diag, "constraint_name", None))
+            _fail(_detail.get("code"), _detail.get("message"))
             safe_write_audit_log(
                 conn, action=BOOKING_CREATED, tenant_id=tenant_id,
                 current_user=current_user, resource_type="booking", resource_id=None,
@@ -684,6 +860,7 @@ def book_seat(
             )
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_detail) from exc
         if exc.pgcode == errorcodes.FOREIGN_KEY_VIOLATION:
+            _fail("booking_reference_not_found", "Seat or user reference was not found for this tenant.")
             safe_write_audit_log(
                 conn, action=BOOKING_CREATED, tenant_id=tenant_id,
                 current_user=current_user, resource_type="booking", resource_id=None,
@@ -696,6 +873,7 @@ def book_seat(
                 detail={"code": "booking_reference_not_found", "message": "Seat or user reference was not found for this tenant."},
             ) from exc
         if exc.pgcode == errorcodes.CHECK_VIOLATION:
+            _fail("invalid_booking_target", "Booking status or source channel violates the schema checks.")
             safe_write_audit_log(
                 conn, action=BOOKING_CREATED, tenant_id=tenant_id,
                 current_user=current_user, resource_type="booking", resource_id=None,
@@ -707,6 +885,7 @@ def book_seat(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"code": "invalid_booking_target", "message": "Booking status or source channel violates the schema checks."},
             ) from exc
+        _fail("booking_create_failed", "Failed to create booking.")
         safe_write_audit_log(
             conn, action=BOOKING_CREATED, tenant_id=tenant_id,
             current_user=current_user, resource_type="booking", resource_id=None,
@@ -953,8 +1132,20 @@ def cancel_booking_by_id(
                 },
             )
 
+        if booking["booking_status"] == "CANCELLED":
+            # Idempotent retry: this cancellation already happened (e.g. the
+            # client timed out waiting for a response to a call that
+            # actually succeeded). Cancelling twice is a no-op by
+            # construction -- see dev-notes/backend/
+            # idempotency_recovery_design.md, Business recovery policies
+            # and Implementation tasks #7: re-fetch and report the real
+            # current state truthfully instead of raising, so a caller
+            # never has to infer success/failure from an error code alone.
+            # No re-audit, no re-notification -- nothing new happened.
+            conn.rollback()
+            return BookingResponse(**booking)
+
         if booking["booking_status"] in {
-            "CANCELLED",
             "COMPLETED",
             "MODIFIED",
             "NO_SHOW",
@@ -1128,10 +1319,28 @@ def modify_booking(
     booking_id: str,
     payload: ModifyBookingRequest,
     background_tasks: BackgroundTasks | None = None,
+    idempotency_key: str | None = None,
 ) -> BookingResponse:
     """Modify a future booking by cancelling old booking and creating a new one."""
     tenant_id = str(current_user["tenant_id"])
- 
+
+    # Set once the no-op check below has passed and the ledger claim (if
+    # any) succeeds. No-op requests never claim at all -- they have no
+    # side effect to protect, so there is nothing for a retry to
+    # duplicate. See dev-notes/backend/idempotency_recovery_design.md,
+    # Implementation tasks #6: no reconciler is wired for BOOKING_MODIFY
+    # yet, so an ambiguous retry reports "still in progress," never a
+    # guessed outcome -- same fallback CREATE used before Task 3.
+    operation_id: int | None = None
+    claimed_at = None
+
+    def _fail(code: str, message: str) -> None:
+        if operation_id is not None:
+            mark_idempotent_operation_failed(
+                conn, operation_id=operation_id, error_code=code, error_message=message,
+                expected_updated_at=claimed_at,
+            )
+
     try:
         booking = fetch_booking_by_id_for_update(
             conn,
@@ -1234,6 +1443,29 @@ def modify_booking(
             current_user=current_user,
             action=BOOKING_MODIFIED,
         )
+
+        # Claimed here, not at the top of the function: booking_id isn't
+        # in ModifyBookingRequest's body (it's a path param) and
+        # booked_for_user_id isn't either (it's resolved from the
+        # existing booking above) -- both are folded into the hashed/
+        # snapshotted payload explicitly so two modify requests that
+        # target different bookings can never collide on the same key.
+        claim = begin_idempotent_operation(
+            conn,
+            tenant_id=tenant_id,
+            user_id=_current_user_id(current_user),
+            idempotency_key=idempotency_key,
+            operation_type="BOOKING_MODIFY",
+            payload={
+                **payload.model_dump(mode="json"),
+                "booking_id": booking_id,
+                "booked_for_user_id": str(booked_for_user_id),
+            },
+        )
+        if claim.replay_response is not None:
+            return BookingResponse(**claim.replay_response)
+        operation_id = claim.operation_id
+        claimed_at = claim.claimed_at
 
         old_booking_for_email = fetch_booking_by_id(
             conn,
@@ -1353,6 +1585,18 @@ def modify_booking(
             updated_by_user_id=_current_user_id(current_user),
         )
 
+        if operation_id is not None:
+            # Same ownership check as book_seat (dev-notes/backend/
+            # idempotency_recovery_design.md, decisions 11-13): the last
+            # thing before commit, gating it, not the earlier claim.
+            claimed_to_the_end = mark_idempotent_operation_succeeded(
+                conn, operation_id=operation_id, resource_type="booking",
+                resource_id=new_booking.get("booking_id"),
+                response_snapshot=BookingResponse(**new_booking).model_dump(mode="json"),
+                expected_updated_at=claimed_at,
+            )
+            if not claimed_to_the_end:
+                _raise_operation_superseded()
         conn.commit()
 
         _old_vals = {
@@ -1409,6 +1653,7 @@ def modify_booking(
     except HTTPException as he:
         conn.rollback()
         _d = he.detail if isinstance(he.detail, dict) else {}
+        _fail(_d.get("code") or "booking_modify_failed", _d.get("message") or str(he.detail))
         safe_write_audit_log(
             conn, action=BOOKING_MODIFIED, tenant_id=tenant_id,
             current_user=current_user, resource_type="booking", resource_id=booking_id,
@@ -1420,6 +1665,7 @@ def modify_booking(
 
     except ValueError as exc:
         conn.rollback()
+        _fail("invalid_booking_value", str(exc))
         safe_write_audit_log(
             conn, action=BOOKING_MODIFIED, tenant_id=tenant_id,
             current_user=current_user, resource_type="booking", resource_id=booking_id,
@@ -1434,6 +1680,7 @@ def modify_booking(
 
     except LookupError as exc:
         conn.rollback()
+        _fail("booking_modify_failed", str(exc))
         safe_write_audit_log(
             conn, action=BOOKING_MODIFIED, tenant_id=tenant_id,
             current_user=current_user, resource_type="booking", resource_id=booking_id,
@@ -1450,6 +1697,7 @@ def modify_booking(
         conn.rollback()
         if exc.pgcode in {errorcodes.UNIQUE_VIOLATION, errorcodes.EXCLUSION_VIOLATION}:
             _detail = _booking_conflict_detail(getattr(exc.diag, "constraint_name", None))
+            _fail(_detail.get("code"), _detail.get("message"))
             safe_write_audit_log(
                 conn, action=BOOKING_MODIFIED, tenant_id=tenant_id,
                 current_user=current_user, resource_type="booking", resource_id=booking_id,
@@ -1458,6 +1706,7 @@ def modify_booking(
                 failure_reason=_detail.get("message"),
             )
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_detail) from exc
+        _fail("booking_modify_failed", "Failed to modify booking.")
         safe_write_audit_log(
             conn, action=BOOKING_MODIFIED, tenant_id=tenant_id,
             current_user=current_user, resource_type="booking", resource_id=booking_id,
