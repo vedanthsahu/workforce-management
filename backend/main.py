@@ -48,6 +48,7 @@ from backend.core.app_logging import (
     enable_backend_function_trace,
 )
 from backend.core.config import get_settings
+from backend.core.csrf_protection import enforce_same_origin_for_mutations
 from backend.core.error_diagnostics import print_error_diagnostic
 from backend.db.connection import get_db_connection
 from backend.repositories.token_repository import (
@@ -85,6 +86,8 @@ _layout_cutover_thread: threading.Thread | None = None
 # The application exposes a single frontend origin and composes feature routers
 # from the authentication, SSO, booking, and location modules.
 app = FastAPI(title="Seat Management Backend")
+app.state.cors_allowed_origins = set(settings.cors_allowed_origins)
+app.middleware("http")(enforce_same_origin_for_mutations)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_allowed_origins),
