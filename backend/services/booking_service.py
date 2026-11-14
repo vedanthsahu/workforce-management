@@ -427,6 +427,61 @@ def _booking_list_response(
 
 
 
+def validate_booking_window(
+    conn: PGConnection,
+    *,
+    tenant_id: str,
+    booking_date: date,
+    current_user: dict[str, Any],
+    action: str,
+) -> None:
+    """Enforce "not in the past" / "within max advance days" on every path
+    that can set or change a booking's date.
+
+    Audit finding S-05: create enforced this, but every modify path (direct
+    employee modify, the three guest-booking/visit modify paths) used
+    `payload.booking_date` unchecked, letting a booking be moved to an
+    arbitrary past or far-future date after creation. Call this from every
+    such path instead of re-deriving the policy locally.
+    """
+    if booking_date < date.today():
+        safe_write_audit_log(
+            conn, action=action, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=None,
+            event_status="FAILURE",
+            failure_code="booking_date_in_past",
+            failure_reason="Bookings cannot be set for a past date.",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "booking_date_in_past",
+                "message": "Bookings cannot be set for a past date.",
+            },
+        )
+    employee_max_advance_days = resolve_booking_advance_days(
+        conn, tenant_id=tenant_id,
+    )["employee_max_advance_days"]
+    if booking_date > date.today() + timedelta(days=employee_max_advance_days):
+        safe_write_audit_log(
+            conn, action=action, tenant_id=tenant_id,
+            current_user=current_user, resource_type="booking", resource_id=None,
+            event_status="FAILURE",
+            failure_code="booking_date_too_far_in_advance",
+            failure_reason=f"Bookings can only be set up to {employee_max_advance_days} days in advance.",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "booking_date_too_far_in_advance",
+                "message": (
+                    f"Bookings can only be set up to {employee_max_advance_days} days "
+                    f"in advance. Please select a date within the next {employee_max_advance_days} days."
+                ),
+            },
+        )
+
+
 def book_seat(
     conn: PGConnection,
     *,
@@ -436,42 +491,13 @@ def book_seat(
 ) -> BookingResponse:
     """Create one tenant-scoped booking and handle DB constraint failures."""
     tenant_id = str(current_user["tenant_id"])
-    if payload.booking_date < date.today():
-        safe_write_audit_log(
-            conn, action=BOOKING_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="booking", resource_id=None,
-            event_status="FAILURE",
-            failure_code="booking_date_in_past",
-            failure_reason="Bookings cannot be created for a past date.",
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "booking_date_in_past",
-                "message": "Bookings cannot be created for a past date.",
-            },
-        )
-    employee_max_advance_days = resolve_booking_advance_days(
-        conn, tenant_id=tenant_id,
-    )["employee_max_advance_days"]
-    if payload.booking_date > date.today() + timedelta(days=employee_max_advance_days):
-        safe_write_audit_log(
-            conn, action=BOOKING_CREATED, tenant_id=tenant_id,
-            current_user=current_user, resource_type="booking", resource_id=None,
-            event_status="FAILURE",
-            failure_code="booking_date_too_far_in_advance",
-            failure_reason=f"Bookings can only be made up to {employee_max_advance_days} days in advance.",
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "booking_date_too_far_in_advance",
-                "message": (
-                    f"Bookings can only be made up to {employee_max_advance_days} days "
-                    f"in advance. Please select a date within the next {employee_max_advance_days} days."
-                ),
-            },
-        )
+    validate_booking_window(
+        conn,
+        tenant_id=tenant_id,
+        booking_date=payload.booking_date,
+        current_user=current_user,
+        action=BOOKING_CREATED,
+    )
     booked_by_user_id = _current_user_id(current_user)
     effective_booked_for_user_id = (
             payload.booked_for_user_id
@@ -1200,6 +1226,14 @@ def modify_booking(
             # booking as-is without writing, re-auditing, or re-notifying.
             conn.rollback()
             return BookingResponse(**booking)
+
+        validate_booking_window(
+            conn,
+            tenant_id=tenant_id,
+            booking_date=payload.booking_date,
+            current_user=current_user,
+            action=BOOKING_MODIFIED,
+        )
 
         old_booking_for_email = fetch_booking_by_id(
             conn,

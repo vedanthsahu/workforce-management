@@ -112,7 +112,7 @@ export function LoginForm() {
           <Input
             id="email"
             type="email"
-            placeholder="abc@solugenix.com"
+            placeholder="abc@example.com"
             className="pl-9 h-11 text-sm border-gray-200 focus-visible:ring-indigo-500"
             {...emailRegistration}
             onChange={(event) => {

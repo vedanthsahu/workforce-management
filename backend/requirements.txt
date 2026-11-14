@@ -32,6 +32,8 @@ colorama==0.4.6 ; sys_platform == 'win32'
     # via click
 cryptography==46.0.7
     # via python-jose
+defusedxml==0.7.1
+    # via seat-management
 ecdsa==0.19.2
     # via python-jose
 fastapi==0.136.0
