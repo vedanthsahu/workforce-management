@@ -7,6 +7,8 @@ Seat booking and workspace management system with an integrated chatbot assistan
 - Frontend: Next.js 15, React 19, TypeScript
 - Backend: FastAPI, PostgreSQL, JWT authentication
 - Chatbot: mounted inside the same backend (`backend/chatbot`) and frontend — no separate service, no second login
+- Concurrency-safe writes: booking create/modify go through an idempotency ledger (`backend/services/idempotency_service.py`) with claim/replay/reconcile semantics — a retried request with the same `Idempotency-Key` header replays the original outcome instead of double-booking, and an interrupted attempt is actively reconciled (lock-probed, never guessed) rather than left ambiguous
+- Database schema: a real Alembic baseline lives at `backend/db/migrations/` (36 tables) — not yet the system of record for applying changes; see that directory's own files before assuming migrations run automatically anywhere
 
 ## Project structure
 
