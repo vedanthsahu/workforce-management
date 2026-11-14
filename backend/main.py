@@ -39,6 +39,7 @@ from backend.api.routes.guest_bookings import router as guest_bookings_router
 from backend.api.routes.guest_visits import router as guest_visits_router
 from backend.api.routes.guests import router as guests_router
 from backend.api.routes.locations import router as locations_router
+from backend.api.routes.operations import router as operations_router
 from backend.api.routes.preferences import router as preferences_router
 from backend.api.routes.sso import router as sso_router
 from backend.api.routes.user_management import router as user_management_router
@@ -111,6 +112,7 @@ app.include_router(admin_bookings_router)
 app.include_router(admin_blocked_seats_router)
 app.include_router(admin_audit_router)
 app.include_router(preferences_router)
+app.include_router(operations_router)
 app.include_router(floor_layout_router)
 app.include_router(user_management_router)
 

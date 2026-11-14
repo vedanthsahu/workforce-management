@@ -448,11 +448,13 @@ export async function fetchSeatsWithAvailability(
 // ── Create booking — POST /bookings ───────────────────────────────────────────
 
 export async function createBooking(
-  payload: CreateBookingPayload
+  payload: CreateBookingPayload,
+  idempotencyKey?: string
 ): Promise<CreateBookingResponse> {
   const { data } = await axiosInstance.post<CreateBookingResponse>(
     "/bookings",
-    payload
+    payload,
+    idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined
   );
   return data;
 }
@@ -484,11 +486,13 @@ export interface ModifyBookingPayload {
 
 export async function modifyBooking(
   bookingId: string,
-  payload: ModifyBookingPayload
+  payload: ModifyBookingPayload,
+  idempotencyKey?: string
 ): Promise<CreateBookingResponse> {
   const { data } = await axiosInstance.post<CreateBookingResponse>(
     `/bookings/${bookingId}/modify`,
-    payload
+    payload,
+    idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined
   );
   return data;
 }
