@@ -40,6 +40,7 @@ from backend.core.enums import BookingModificationReason
 from backend.repositories.audit_repository import safe_write_audit_log
 from backend.repositories.booking_repository import (
     acquire_booking_slot_locks,
+    acquire_subject_date_lock,
     cancel_booking,
     cancel_future_guest_bookings_for_guest,
     count_guest_bookings,
@@ -83,6 +84,7 @@ from backend.repositories.guest_visit_repository import (
     insert_guest_visit,
     mark_guest_visit_modified,
     recalculate_guest_visit_requires_seat,
+    touch_guest_visit_for_booking_change,
     update_guest_visit_booking_details,
 )
 from backend.repositories.location_repository import (
@@ -948,6 +950,17 @@ def create_guest_visit(
                 floor_id=floor_id,
             )
 
+        # Same guest+date race as employee bookings -- no DB constraint
+        # backstops "one active visit per guest per day", so serialize
+        # before checking for conflicts. Covers both this check and (when
+        # a seat is requested) the seat-booking checks below it, since
+        # acquire_booking_slot_locks re-acquires the same subject lock.
+        acquire_subject_date_lock(
+            conn,
+            tenant_id=tenant_id,
+            subject_id=guest_id,
+            booking_date=payload.visit_date,
+        )
         existing_visit = fetch_active_guest_visit_for_date(
             conn,
             tenant_id=tenant_id,
@@ -1453,6 +1466,12 @@ def modify_guest_booking(
             building_id=str(payload.building_id),
             floor_id=str(payload.floor_id),
             visit_date=payload.booking_date,
+            updated_by_user_id=_current_user_id(current_user),
+            modification_reason=(
+                payload.modification_reason.value
+                if payload.modification_reason is not None
+                else "USER_REQUEST"
+            ),
         )
         mark_booking_modified(
             conn,
@@ -1591,13 +1610,15 @@ def _validate_mutable_guest_booking(
                 "message": "Guest booking is missing its guest or visit reference.",
             },
         )
-    if booking["booking_date"] <= date.today():
+    # Today's guest booking can still be changed until it is used -- the status
+    # check below already rejects CHECKED_IN/COMPLETED and the like.
+    if booking["booking_date"] < date.today():
         action_phrase = "cancelled" if action == "cancel" else "modified"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "booking_not_mutable",
-                "message": f"Only future guest bookings can be {action_phrase}.",
+                "message": f"Past guest bookings can no longer be {action_phrase}.",
             },
         )
     if booking["booking_status"] in {
@@ -2208,8 +2229,13 @@ def execute_guest_visit_workflow(
     """Execute one explicit guest visit/booking workflow atomically."""
     _require_guest_operator(current_user)
     tenant_id = str(current_user["tenant_id"])
-    _iso = lambda v: v.isoformat() if v is not None else None
-    _s = lambda v: str(v) if v is not None else None
+
+    def _iso(value: Any) -> str | None:
+        return value.isoformat() if value is not None else None
+
+    def _s(value: Any) -> str | None:
+        return str(value) if value is not None else None
+
     _aud_old: dict | None = None
     _aud_new: dict | None = None
     _aud_changed: list | None = None
@@ -2248,6 +2274,7 @@ def execute_guest_visit_workflow(
                 tenant_id=tenant_id,
                 guest_visit_id=guest_visit_id,
                 modification_reason=_enum_value(payload.modification_reason),
+                updated_by_user_id=_current_user_id(current_user),
             )
             new_visit = insert_guest_visit(
                 conn,
@@ -2269,6 +2296,7 @@ def execute_guest_visit_workflow(
                 # booking_service.modify_booking.
                 created_by_user_id=str(visit["created_by_user_id"]),
                 modified_from_guest_visit_id=guest_visit_id,
+                updated_by_user_id=_current_user_id(current_user),
             )
             result = _build_guest_workflow_response(
                 conn,
@@ -2363,6 +2391,15 @@ def execute_guest_visit_workflow(
                 booking_date=payload.visit_date,
                 current_user=current_user,
             )
+            # Same seat/subject+date race as employee bookings -- serialize
+            # before checking for conflicts (see create_guest_visit above).
+            acquire_booking_slot_locks(
+                conn,
+                tenant_id=tenant_id,
+                seat_id=seat_id,
+                subject_id=str(visit["guest_id"]),
+                booking_date=payload.visit_date,
+            )
             if guest_has_active_booking_on_date(
                 conn,
                 tenant_id=tenant_id,
@@ -2395,6 +2432,7 @@ def execute_guest_visit_workflow(
                 tenant_id=tenant_id,
                 guest_visit_id=guest_visit_id,
                 modification_reason=_enum_value(payload.modification_reason),
+                updated_by_user_id=_current_user_id(current_user),
             )
 
             new_visit = insert_guest_visit(
@@ -2417,6 +2455,7 @@ def execute_guest_visit_workflow(
                 # booking_service.modify_booking.
                 created_by_user_id=str(visit["created_by_user_id"]),
                 modified_from_guest_visit_id=guest_visit_id,
+                updated_by_user_id=_current_user_id(current_user),
             )
             new_visit_id = str(new_visit["guest_visit_id"])
             new_booking = insert_guest_booking(
@@ -2527,6 +2566,15 @@ def execute_guest_visit_workflow(
                 seat_id=seat_id,
                 current_user=current_user,
             )
+            # Same seat/subject+date race as employee bookings -- serialize
+            # before checking for conflicts (see create_guest_visit above).
+            acquire_booking_slot_locks(
+                conn,
+                tenant_id=tenant_id,
+                seat_id=seat_id,
+                subject_id=str(visit["guest_id"]),
+                booking_date=payload.visit_date,
+            )
             if guest_has_active_booking_on_date(
                 conn,
                 tenant_id=tenant_id,
@@ -2541,36 +2589,89 @@ def execute_guest_visit_workflow(
                 booking_date=payload.visit_date,
             ):
                 _raise_seat_booking_conflict()
+            # Same date/site/building (and floor, when the visit has one) is
+            # the normal flow. Anything else is a modification: the original
+            # visit is retained as MODIFIED and replaced by a new visit.
+            visit_changed = (
+                visit.get("visit_date") != payload.visit_date
+                or str(visit.get("site_id")) != str(payload.site_id)
+                or str(visit.get("building_id")) != str(payload.building_id)
+                or (
+                    visit.get("floor_id") is not None
+                    and str(visit.get("floor_id")) != str(payload.floor_id)
+                )
+            )
+            target_visit_id = guest_visit_id
+            if visit_changed:
+                mark_guest_visit_modified(
+                    conn,
+                    tenant_id=tenant_id,
+                    guest_visit_id=guest_visit_id,
+                    modification_reason=_enum_value(payload.modification_reason),
+                    updated_by_user_id=_current_user_id(current_user),
+                )
+                replacement_visit = insert_guest_visit(
+                    conn,
+                    tenant_id=tenant_id,
+                    guest_id=str(visit["guest_id"]),
+                    host_user_id=str(visit["host_user_id"]),
+                    site_id=str(payload.site_id),
+                    building_id=str(payload.building_id),
+                    floor_id=str(payload.floor_id),
+                    visit_date=payload.visit_date,
+                    guest_type=_enum_value(visit["guest_type"]),
+                    purpose_of_visit=_enum_value(visit.get("purpose_of_visit")),
+                    start_time=visit.get("start_time"),
+                    end_time=visit.get("end_time"),
+                    notes=visit.get("notes"),
+                    requires_seat=True,
+                    created_by_user_id=str(visit["created_by_user_id"]),
+                    modified_from_guest_visit_id=guest_visit_id,
+                    updated_by_user_id=_current_user_id(current_user),
+                )
+                target_visit_id = str(replacement_visit["guest_visit_id"])
             new_booking = insert_guest_booking(
                 conn,
                 tenant_id=tenant_id,
                 guest_id=str(visit["guest_id"]),
-                guest_visit_id=guest_visit_id,
+                guest_visit_id=target_visit_id,
                 booked_by_user_id=_current_user_id(current_user),
                 seat=seat,
                 booking_date=payload.visit_date,
+                updated_by_user_id=(
+                    _current_user_id(current_user) if visit_changed else None
+                ),
             )
-            update_guest_visit_booking_details(
-                conn,
-                tenant_id=tenant_id,
-                guest_visit_id=guest_visit_id,
-                site_id=str(payload.site_id),
-                building_id=str(payload.building_id),
-                floor_id=str(payload.floor_id),
-                visit_date=payload.visit_date,
-            )
+            if not visit_changed:
+                # Only fills a floor the visit left blank; nothing is replaced.
+                update_guest_visit_booking_details(
+                    conn,
+                    tenant_id=tenant_id,
+                    guest_visit_id=guest_visit_id,
+                    site_id=str(payload.site_id),
+                    building_id=str(payload.building_id),
+                    floor_id=str(payload.floor_id),
+                    visit_date=payload.visit_date,
+                    updated_by_user_id=_current_user_id(current_user),
+                    modification_reason=_enum_value(payload.modification_reason),
+                )
             recalculate_guest_visit_requires_seat(
                 conn,
                 tenant_id=tenant_id,
-                guest_visit_id=guest_visit_id,
+                guest_visit_id=target_visit_id,
             )
             result = _build_guest_workflow_response(
                 conn,
                 tenant_id=tenant_id,
                 action=payload.action,
-                guest_visit_id=guest_visit_id,
+                guest_visit_id=target_visit_id,
                 booking_id=str(new_booking["booking_id"]),
-                message="Booking added to guest visit.",
+                message=(
+                    "Guest visit modified and booking added; "
+                    "the prior visit was retained."
+                    if visit_changed
+                    else "Booking added to guest visit."
+                ),
             )
             _aud_new = {
                 "guest_id": visit.get("guest_id"),
@@ -2611,6 +2712,17 @@ def execute_guest_visit_workflow(
                 booking_id=str(booking["booking_id"]),
                 cancellation_reason=_booking_cancellation_reason,
                 updated_by_user_id=_current_user_id(current_user),
+            )
+            # The visit itself wasn't cancelled or replaced, but its
+            # requires_seat flips below as a side effect -- same resource,
+            # kept in sync per the agreed rule (see
+            # touch_guest_visit_for_booking_change's docstring).
+            touch_guest_visit_for_booking_change(
+                conn,
+                tenant_id=tenant_id,
+                guest_visit_id=guest_visit_id,
+                updated_by_user_id=_current_user_id(current_user),
+                modification_reason=_booking_cancellation_reason,
             )
             recalculate_guest_visit_requires_seat(
                 conn,

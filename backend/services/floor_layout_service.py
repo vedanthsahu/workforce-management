@@ -57,9 +57,20 @@ from backend.repositories.floor_layout_repository import (
 from backend.repositories.layout_seat_mapping_repository import (
     bulk_insert_layout_seat_mappings,
 )
+from backend.schemas.floor_layout import (
+    CreateFloorLayoutRequest,
+    FloorLayoutResponse,
+    LayoutSeatListResponse,
+    LayoutSeatResponse,
+)
 from backend.services.business_rule_service import (
     resolve_layout_scheduling_gap,
     resolve_layout_visibility_days,
+)
+from backend.services.notification_service import (
+    format_notification_value,
+    queue_floor_layout_uploaded_notification,
+    resolve_admin_notification_recipients,
 )
 
 # Floors enrolled in the age-based list-visibility rule when
@@ -90,17 +101,6 @@ LAYOUT_VISIBILITY_APPLY_TO_ALL_FLOORS: bool = True
 # this goes anywhere near production. Nothing else about the code changes
 # between the two.
 LAYOUT_VISIBILITY_INTERVAL_UNIT: str = "days"
-from backend.schemas.floor_layout import (
-    CreateFloorLayoutRequest,
-    FloorLayoutResponse,
-    LayoutSeatListResponse,
-    LayoutSeatResponse,
-)
-from backend.services.notification_service import (
-    format_notification_value,
-    queue_floor_layout_uploaded_notification,
-    resolve_admin_notification_recipients,
-)
 
 logger = logging.getLogger(f"{LOGGER_NAME}.floor_layouts")
 

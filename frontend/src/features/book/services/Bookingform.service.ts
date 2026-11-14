@@ -1,5 +1,5 @@
-import axios from "axios";
 import { axiosInstance } from "@/lib/http/axios";
+import { getApiErrorMessage } from "@/lib/apiError";
 import {
   Site,
   Building,
@@ -26,18 +26,7 @@ import {
 // booking) never falls through to Axios's own generic
 // "Request failed with status code {n}".
 export function extractApiErrorMessage(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err)) {
-    const data = err.response?.data as
-      | { detail?: { message?: string } | string; message?: string; error?: { message?: string } }
-      | undefined;
-    const extracted =
-      (typeof data?.detail === "object" ? data?.detail?.message : typeof data?.detail === "string" ? data.detail : null)
-      ?? data?.error?.message
-      ?? data?.message
-      ?? null;
-    return extracted ?? fallback;
-  }
-  return err instanceof Error ? err.message : fallback;
+  return getApiErrorMessage(err, fallback);
 }
 
 // ── Raw API shapes ────────────────────────────────────────────────────────────
@@ -459,11 +448,13 @@ export async function fetchSeatsWithAvailability(
 // ── Create booking — POST /bookings ───────────────────────────────────────────
 
 export async function createBooking(
-  payload: CreateBookingPayload
+  payload: CreateBookingPayload,
+  idempotencyKey?: string
 ): Promise<CreateBookingResponse> {
   const { data } = await axiosInstance.post<CreateBookingResponse>(
     "/bookings",
-    payload
+    payload,
+    idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined
   );
   return data;
 }
@@ -495,11 +486,13 @@ export interface ModifyBookingPayload {
 
 export async function modifyBooking(
   bookingId: string,
-  payload: ModifyBookingPayload
+  payload: ModifyBookingPayload,
+  idempotencyKey?: string
 ): Promise<CreateBookingResponse> {
   const { data } = await axiosInstance.post<CreateBookingResponse>(
     `/bookings/${bookingId}/modify`,
-    payload
+    payload,
+    idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined
   );
   return data;
 }
@@ -551,10 +544,13 @@ export async function fetchPreferences(): Promise<Preference[]> {
 interface RawWorkPreferences {
   site_id?: string | null;
   site_name?: string | null;
+  site_status?: string | null;
   building_id?: string | null;
   building_name?: string | null;
+  building_status?: string | null;
   floor_id?: string | null;
   floor_name?: string | null;
+  floor_status?: string | null;
   amenities?: { id: string }[];
 }
 
@@ -569,6 +565,8 @@ export interface MyWorkPreferences {
   buildingName: string | null;
   floorId: string | null;
   floorName: string | null;
+  // False when the saved office, building or floor has since been deactivated.
+  locationActive: boolean;
   amenityIds: string[];
 }
 
@@ -583,6 +581,9 @@ function parseWorkPreferences(data: RawDashboardMe): MyWorkPreferences | null {
     buildingName: wp.building_name ?? null,
     floorId: wp.floor_id ?? null,
     floorName: wp.floor_name ?? null,
+    locationActive: [wp.site_status, wp.building_status, wp.floor_status].every(
+      (status) => !status || status === "ACTIVE",
+    ),
     amenityIds: (wp.amenities ?? []).map((a) => a.id),
   };
 }

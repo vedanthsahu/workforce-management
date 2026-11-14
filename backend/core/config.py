@@ -58,6 +58,21 @@ class Settings(BaseSettings):
     db_port: int = 5432
     db_sslmode: str = "require"
     db_connect_timeout: int = 10
+    # Bound how long any one session can hold locks, in milliseconds.
+    # Without these, the server defaults leave a stuck-but-TCP-alive
+    # connection free to hold row/advisory locks for up to a day
+    # (idle_in_transaction_session_timeout) or forever (statement_timeout/
+    # lock_timeout = 0, disabled) -- see dev-notes/backend/
+    # idempotency_recovery_design.md. transaction_timeout (PG17+) is the
+    # one that bounds the whole transaction span regardless of whether
+    # it's busy, idle, or aborted-but-not-rolled-back; the others layer
+    # under it. Values are starting hypotheses, not yet validated against
+    # real traffic -- kept well under Lambda's 30s invocation ceiling and
+    # the idempotency ledger's 60s staleness window.
+    db_lock_timeout_ms: int = 5_000
+    db_statement_timeout_ms: int = 10_000
+    db_transaction_timeout_ms: int = 20_000
+    db_idle_in_transaction_session_timeout_ms: int = 20_000
 
     jwt_secret: str
     jwt_algorithm: str = "HS256"
@@ -262,6 +277,15 @@ class Settings(BaseSettings):
             "port": self.db_port,
             "sslmode": self.db_sslmode,
             "connect_timeout": self.db_connect_timeout,
+            # Session-level GUCs applied at connection startup, before any
+            # statement runs -- see the db_*_timeout_ms fields above.
+            "options": (
+                f"-c lock_timeout={self.db_lock_timeout_ms} "
+                f"-c statement_timeout={self.db_statement_timeout_ms} "
+                f"-c transaction_timeout={self.db_transaction_timeout_ms} "
+                f"-c idle_in_transaction_session_timeout="
+                f"{self.db_idle_in_transaction_session_timeout_ms}"
+            ),
         }
 
 

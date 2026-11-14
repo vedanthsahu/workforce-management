@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { getApiErrorMessage } from "@/lib/apiError";
 import {
   cancelBooking,
   cancelGuestBooking,
@@ -51,19 +52,6 @@ const displayDate = (value: string) =>
 const CONFLICT_PAGE_SIZE = 10;
 const inputClass =
   "mt-1.5 h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-[12.5px] text-gray-900 outline-none transition-colors focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400 sm:h-10 sm:text-[13px]";
-const apiErrorMessage = (error: unknown, fallback: string) => {
-  const data = (
-    error as {
-      response?: {
-        data?: { detail?: { message?: string }; error?: { message?: string } };
-      };
-    }
-  ).response?.data;
-  return data?.detail?.message ?? data?.error?.message ??
-    (error instanceof Error && error.message.startsWith("The blocked-seat API is outdated.")
-      ? error.message
-      : fallback);
-};
 const isActiveConflictBooking = (booking: BlockedSeatConflict) =>
   ["CONFIRMED", "CHECKED_IN", "COMPLETED"].includes(
     booking.booking_status ?? "",
@@ -171,7 +159,7 @@ export default function BlockSeatsPage() {
         setLayoutSchedule([]);
         setLayoutEndDate("");
         setLayoutDateError(
-          apiErrorMessage(
+          getApiErrorMessage(
             requestError,
             "Unable to load current and future floor-layout details.",
           ),
@@ -275,7 +263,7 @@ export default function BlockSeatsPage() {
       })
       .catch((requestError: unknown) => {
         if (controller.signal.aborted || version !== loadVersion.current) return;
-        setError(apiErrorMessage(requestError, "Unable to load booking conflicts for the selected seats."));
+        setError(getApiErrorMessage(requestError, "Unable to load booking conflicts for the selected seats."));
       })
       .finally(() => {
         conflictRequests.current.delete(controller);
@@ -349,7 +337,7 @@ export default function BlockSeatsPage() {
       setBookings([]);
       setSelected([]);
       setError(
-        apiErrorMessage(
+        getApiErrorMessage(
           requestError,
           "Unable to load the floor layout and bookings for this period.",
         ),
@@ -378,7 +366,7 @@ export default function BlockSeatsPage() {
       await action(b.booking_id, "Space required for an administrative block");
       resolveBooking(b);
     } catch (requestError: unknown) {
-      setError(apiErrorMessage(requestError, "Unable to cancel this booking."));
+      setError(getApiErrorMessage(requestError, "Unable to cancel this booking."));
     } finally {
       setCancelling(false);
       setCancelTarget(null);
@@ -408,7 +396,7 @@ export default function BlockSeatsPage() {
       resolveBooking(b);
     } catch (requestError: unknown) {
       setError(
-        apiErrorMessage(
+        getApiErrorMessage(
           requestError,
           "Unable to modify this booking; reload availability and try again.",
         ),
@@ -428,7 +416,7 @@ export default function BlockSeatsPage() {
       router.push("/admin/blocked-seats");
     } catch (requestError: unknown) {
       setError(
-        apiErrorMessage(
+        getApiErrorMessage(
           requestError,
           "Unable to block seats; reload to check for new conflicts.",
         ),

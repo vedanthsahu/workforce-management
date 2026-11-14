@@ -2,6 +2,7 @@
  
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
+import { getApiErrorMessage } from "@/lib/apiError";
 import { useRouter } from "next/navigation";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -321,8 +322,9 @@ export default function LayoutForm({ formData, setFormData, onFloorLayoutInfo }:
         ? err.response?.data || err.message
         : err;
       console.error("[LayoutForm] Upload error:", message);
-      const serverMessage = axios.isAxiosError(err) ? err.response?.data?.message : undefined;
-      setSubmitError(serverMessage || "Failed to save layout. Please try again.");
+      // The backend puts its reason under error.message; the old lookup read
+      // data.message, so the generic text was always shown.
+      setSubmitError(getApiErrorMessage(err, "We couldn't save the layout. Please try again."));
       setIsSubmitting(false);
     }
   };

@@ -26,7 +26,6 @@ class ChatbotSession:
     current_node: str
     created_at: datetime
     updated_at: datetime
-    expires_at: datetime
     current_menu_id: int | None = None
     context_data: dict[str, Any] = field(default_factory=dict)
 
@@ -42,7 +41,6 @@ class ChatbotSession:
             context_data=dict(row.get("context_data") or {}),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
-            expires_at=row["expires_at"],
         )
 
 

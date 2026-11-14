@@ -11,7 +11,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { CheckCircle2, XCircle, X, Plus } from "lucide-react";
 import { Office } from "@/features/offices/types/office.types";
 import { TableSkeleton, TableBodySkeleton, StatCardsSkeleton } from "@/components/ui/table-skeleton";
-import { searchMatchRank } from "@/lib/searchRank";
+import { searchMatchRank, searchTieBreak } from "@/lib/searchRank";
 
 type BannerState = {
   type: "success" | "error";
@@ -74,7 +74,10 @@ function OfficesPage() {
         if (b.office.site_id === highlightedId) return 1;
       }
       // Otherwise, the closer the match (starts-with > contains > fuzzy), the higher it ranks
-      return a.rank - b.rank;
+      return (
+        a.rank - b.rank ||
+        searchTieBreak(a.office.site_name || "", b.office.site_name || "", search)
+      );
     })
     .map((x) => x.office);
 

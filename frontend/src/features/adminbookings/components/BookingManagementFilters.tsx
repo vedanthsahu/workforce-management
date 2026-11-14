@@ -144,7 +144,7 @@ function DateRangeField({
                 onChange(draftFrom, draftTo);
                 setOpen(false);
               }}
-              className="h-8 px-3 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+              className="h-8 px-3 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
             >
               Apply
             </button>
@@ -526,7 +526,7 @@ export default function BookingManagementFilters({
           <div className="relative h-10 flex items-center bg-gray-100 p-1 rounded-full w-56">
             <div
               aria-hidden
-              className="absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-full bg-indigo-700 shadow-sm transition-transform duration-300 ease-out"
+              className="absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-full bg-blue-600 shadow-sm transition-transform duration-300 ease-out"
               style={{ transform: filters.bookingType === "Guest" ? "translateX(100%)" : "translateX(0%)" }}
             />
             {(["Employee", "Guest"] as const).map((opt) => {
@@ -537,7 +537,7 @@ export default function BookingManagementFilters({
                   key={opt}
                   type="button"
                   onClick={() => onUpdate("bookingType", opt)}
-                  className={`relative z-10 flex-1 inline-flex items-center justify-center gap-1.5 h-full px-2 text-[12px] font-medium rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 ${active ? "text-white" : "text-gray-500 hover:text-gray-700"}`}
+                  className={`relative z-10 flex-1 inline-flex items-center justify-center gap-1.5 h-full px-2 text-[12px] font-medium rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 ${active ? "text-white" : "text-gray-500 hover:text-gray-700"}`}
                 >
                   <Icon size={13} />
                   {opt}
@@ -695,7 +695,7 @@ export default function BookingManagementFilters({
           <button
             type="button"
             onClick={onSearch}
-            className="h-10 px-5 flex items-center gap-1.5 text-sm font-medium text-white bg-indigo-700 hover:bg-indigo-800 rounded-lg transition-colors shadow-sm"
+            className="h-10 px-5 flex items-center gap-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-sm"
           >
             <Search size={14} />
             Search
