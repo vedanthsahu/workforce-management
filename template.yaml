@@ -87,8 +87,8 @@ Parameters:
 
   GatewaySsoHostname:
     Type: String
-    Description: Optional email domain that routes login through the apps.solugenix.com SSO gateway instead of direct Microsoft OAuth
-    Default: "solugenix.com"
+    Description: Optional email domain that routes login through an SSO gateway instead of direct Microsoft OAuth
+    Default: "example.com"
 
   JwtRefreshTokenTtl:
     Type: Number
